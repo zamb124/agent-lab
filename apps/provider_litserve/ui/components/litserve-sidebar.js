@@ -65,30 +65,6 @@ export class LitserveSidebar extends PlatformElement {
                 padding: var(--space-3);
             }
             platform-service-sidebar[collapsed] .nav-item:hover { transform: none; }
-            .services-launch-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-                margin-bottom: var(--space-3);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-            .services-launch-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-            platform-service-sidebar[collapsed] .services-launch-btn {
-                width: 40px;
-                margin-left: auto;
-                margin-right: auto;
-                padding: var(--space-2);
-            }
         `,
     ];
 
@@ -145,21 +121,12 @@ export class LitserveSidebar extends PlatformElement {
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/frontend_logo.svg"
                 logo-text=${this.t('sidebar.title')}
+                ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
                 @collapse-change=${(event) => { this.collapsed = event.detail.collapsed; }}
                 @mobile-change=${(event) => { this.mobileOpen = event.detail.open; }}
             >
-                <div slot="header">
-                    <button
-                        type="button"
-                        class="services-launch-btn"
-                        aria-label=${this.t('services_switch.aria', null, 'platform')}
-                        @click=${() => this.openModal('platform.services', {})}
-                    >
-                        <platform-icon name="layout-grid" size="20"></platform-icon>
-                    </button>
-                </div>
                 <nav>
                     ${NAV_ITEMS.map((item) => this._renderNavItem(item))}
                 </nav>

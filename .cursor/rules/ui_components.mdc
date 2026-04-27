@@ -167,7 +167,10 @@ timeline, локальный поиск, выбор span для детализа
 прокидывать `healthByServiceId` / `includeServiceIds` в лаунчер с родителя (например
 `dashboard-services-grid`).
 
-**Открытие модалки:** `this.openModal('platform.services', {})` (см. сайдбары сервисов).
+**Открытие модалки:** `this.openModal('platform.services', {})` — из меню пользователя
+(пункт «Apps»), с дашборда, со страницы `platform_services` и **по клику на зону
+логотипа** в `platform-service-sidebar` (`logo-opens-services` → `platform-sidebar`
+оборачивает иконку + название сервиса в кнопку).
 
 ## Modal canon (registry + stack + dispatch)
 

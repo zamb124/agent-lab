@@ -26,6 +26,7 @@ export class PlatformServiceSidebar extends PlatformElement {
         width: { type: String },
         collapsedWidth: { type: String, attribute: 'collapsed-width' },
         mobileBreakpoint: { type: Number, attribute: 'mobile-breakpoint' },
+        logoOpensServices: { type: Boolean, attribute: 'logo-opens-services' },
     };
 
     static styles = [
@@ -50,6 +51,7 @@ export class PlatformServiceSidebar extends PlatformElement {
         this.width = '280px';
         this.collapsedWidth = '72px';
         this.mobileBreakpoint = 768;
+        this.logoOpensServices = false;
     }
 
     _innerSidebar() {
@@ -97,6 +99,7 @@ export class PlatformServiceSidebar extends PlatformElement {
             <platform-sidebar
                 logo-src=${this.logoSrc}
                 logo-text=${this.logoText}
+                ?logo-opens-services=${this.logoOpensServices}
                 width=${this.width}
                 collapsed-width=${this.collapsedWidth}
                 mobile-breakpoint=${this.mobileBreakpoint}

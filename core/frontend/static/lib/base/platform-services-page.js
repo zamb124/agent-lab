@@ -15,9 +15,13 @@ export class PlatformServicesPage extends PlatformPage {
         css`
             :host {
                 display: block;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
             }
             .wrap {
                 padding: 0;
+                min-width: 0;
             }
             .intro {
                 margin-bottom: var(--space-4);

@@ -31,21 +31,35 @@ export class PlatformServicesLauncher extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host {
+                display: block;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
             :host([layout="menu"]) .grid,
             :host([layout="compact"]) .grid {
                 display: grid;
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(3, minmax(0, 1fr));
                 gap: var(--space-2);
+                min-width: 0;
+                width: 100%;
             }
             :host([layout="page"]) .grid {
                 display: grid;
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(3, minmax(0, 1fr));
                 gap: var(--space-3);
+                min-width: 0;
+                width: 100%;
+            }
+            @media (max-width: 600px) {
+                :host([layout="page"]) .grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
             }
             @media (min-width: 900px) {
                 :host([layout="page"]) .grid {
-                    grid-template-columns: repeat(4, 1fr);
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
                 }
             }
             .tile {
@@ -58,7 +72,10 @@ export class PlatformServicesLauncher extends PlatformElement {
                 color: inherit;
                 padding: var(--space-2);
                 border-radius: var(--radius-xl);
-                transition: transform var(--duration-normal) var(--easing-default);
+                transition:
+                    transform var(--duration-normal) var(--easing-default),
+                    box-shadow var(--duration-normal) var(--easing-default),
+                    background var(--duration-normal) var(--easing-default);
                 border: none;
                 background: transparent;
                 font: inherit;
@@ -68,9 +85,20 @@ export class PlatformServicesLauncher extends PlatformElement {
             a.tile {
                 text-decoration: none;
             }
+            @media (hover: hover) {
+                a.tile:not(:active):hover,
+                button.tile:not(:active):hover {
+                    transform: translateY(-4px);
+                    background: color-mix(in srgb, var(--glass-solid-medium) 65%, transparent);
+                    box-shadow:
+                        0 1px 0 0 color-mix(in srgb, var(--text-primary) 12%, transparent),
+                        0 8px 20px -4px color-mix(in srgb, var(--text-primary) 18%, transparent),
+                        0 16px 40px -12px color-mix(in srgb, var(--accent) 25%, transparent);
+                }
+            }
             a.tile:active,
             button.tile:active {
-                transform: scale(0.96);
+                transform: scale(0.97) translateY(0);
             }
             .icon-wrap {
                 position: relative;
@@ -88,6 +116,39 @@ export class PlatformServicesLauncher extends PlatformElement {
                 align-items: center;
                 justify-content: center;
                 padding: var(--space-2);
+                transition:
+                    transform var(--duration-normal) var(--easing-default),
+                    box-shadow var(--duration-normal) var(--easing-default),
+                    border-color var(--duration-normal) var(--easing-default);
+            }
+            @media (hover: hover) {
+                a.tile:not(:active):hover .icon-wrap,
+                button.tile:not(:active):hover .icon-wrap {
+                    transform: translateY(-2px) scale(1.04);
+                    border-color: color-mix(in srgb, var(--brand-from) 40%, var(--glass-border-medium));
+                    box-shadow:
+                        var(--glass-inner-glow-medium),
+                        0 1px 2px color-mix(in srgb, var(--text-primary) 12%, transparent),
+                        0 6px 14px -2px color-mix(in srgb, var(--text-primary) 20%, transparent),
+                        0 12px 28px -8px color-mix(in srgb, var(--brand-from) 35%, transparent);
+                }
+            }
+            a.tile:focus-visible,
+            button.tile:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 3px;
+            }
+            a.tile:focus-visible:not(:active),
+            button.tile:focus-visible:not(:active) {
+                transform: translateY(-2px);
+                background: color-mix(in srgb, var(--glass-solid-medium) 55%, transparent);
+            }
+            a.tile:focus-visible:not(:active) .icon-wrap,
+            button.tile:focus-visible:not(:active) .icon-wrap {
+                transform: translateY(-1px) scale(1.02);
+                box-shadow:
+                    var(--glass-inner-glow-subtle),
+                    0 4px 12px -2px color-mix(in srgb, var(--text-primary) 16%, transparent);
             }
             :host([layout="menu"]) .icon-wrap,
             :host([layout="compact"]) .icon-wrap {

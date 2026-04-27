@@ -100,6 +100,7 @@ export function resolveFileIconKey(filename = '', mimeType = '') {
 /** UI-иконки: имя -> файл. Используется icon.effect. */
 export const UI_ICON_MAP = Object.freeze({
     send: 'send', close: 'close', edit: 'edit', trash: 'trash', delete: 'trash',
+    apps: 'apps', 'layout-grid': 'apps',
     copy: 'copy', check: 'check', info: 'info', agent: 'agent', llm_node: 'agent',
     plus: 'plus', chat: 'chat', folder: 'folder', code: 'code', terminal: 'terminal',
     play: 'play', stop: 'stop', sun: 'sun', moon: 'moon', 'theme-auto': 'theme-auto',

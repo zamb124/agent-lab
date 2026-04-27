@@ -35,8 +35,14 @@ export class DashboardServiceCard extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host {
+                display: block;
+                min-width: 0;
+                max-width: 100%;
+            }
             .card {
+                max-width: 100%;
+                box-sizing: border-box;
                 position: relative;
                 display: flex;
                 flex-direction: column;

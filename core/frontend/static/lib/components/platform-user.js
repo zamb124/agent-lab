@@ -8,7 +8,7 @@
  *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → подписка на
  *     AUTH_COMPANY_SWITCHED → редирект на subdomain выбранной компании.
  *     Cross-tab синхронизация через localStorage 'platform:company-switch'.
- *   - меню: витрина сервисов (platform-services-launcher), затем Профиль,
+ *   - меню: пункт Apps (модалка `platform.services`), затем Профиль,
  *     Профиль (открывает `platform.user_info` модалку с формой профиля),
  *     Компания (если их > 1), Календарь, Документация, язык (en|ru),
  *     переключатель темы, Выйти.
@@ -29,8 +29,6 @@ import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-icon.js';
 import './platform-calendar-modal.js';
-import './platform-services-launcher.js';
-
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
 
 export class PlatformUser extends PlatformElement {
@@ -228,6 +226,12 @@ export class PlatformUser extends PlatformElement {
         window.open(url, '_blank', 'noopener,noreferrer');
     }
 
+    _openServicesHub(e) {
+        e.stopPropagation();
+        this._menuOpen = false;
+        this.openModal('platform.services', {});
+    }
+
     _logout() {
         this._menuOpen = false;
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
@@ -320,7 +324,7 @@ export class PlatformUser extends PlatformElement {
         if (!button) return;
         const rect = button.getBoundingClientRect();
         const margin = 8;
-        const maxW = Math.min(300, window.innerWidth - 2 * margin);
+        const maxW = Math.min(280, window.innerWidth - 2 * margin);
         let left = rect.left;
         if (left + maxW > window.innerWidth - margin) left = window.innerWidth - maxW - margin;
         if (left < margin) left = margin;
@@ -381,10 +385,10 @@ export class PlatformUser extends PlatformElement {
 
             ${this._menuOpen ? html`
                 <div class="user-menu" @click=${(e) => e.stopPropagation()}>
-                    <div class="user-menu-services">
-                        <div class="user-menu-services-title">${this.t('menu.services')}</div>
-                        <platform-services-launcher layout="menu"></platform-services-launcher>
-                    </div>
+                    <button class="menu-item" type="button" @click=${this._openServicesHub}>
+                        <platform-icon class="menu-icon" name="apps" size="18"></platform-icon>
+                        <span class="menu-item-label">${this.t('menu.apps')}</span>
+                    </button>
 
                     <div class="menu-divider"></div>
 
@@ -506,7 +510,7 @@ export class PlatformUser extends PlatformElement {
                 bottom: var(--user-menu-fixed-bottom, auto);
                 right: auto;
                 top: auto;
-                width: var(--user-menu-fixed-width, min(300px, calc(100vw - 16px)));
+                width: var(--user-menu-fixed-width, min(280px, calc(100vw - 16px)));
                 z-index: var(--z-modal, 5000);
             }
 
@@ -602,7 +606,7 @@ export class PlatformUser extends PlatformElement {
                 box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0, 0, 0, 0.2);
                 z-index: var(--z-dropdown, 1000);
                 padding: var(--space-1) 0;
-                min-width: min(300px, calc(100vw - 16px));
+                min-width: min(280px, calc(100vw - 16px));
                 max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));
                 overflow-y: auto;
                 animation: pmu-slide-up 0.18s ease;
@@ -630,18 +634,6 @@ export class PlatformUser extends PlatformElement {
             .menu-item.danger { color: var(--error); }
             .menu-item.danger:hover { background: var(--error-bg); }
             .menu-item.company-selector { justify-content: space-between; }
-
-            .user-menu-services {
-                padding: var(--space-2) var(--space-2) var(--space-1);
-            }
-            .user-menu-services-title {
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                color: var(--text-tertiary);
-                margin: 0 0 var(--space-2) var(--space-1);
-            }
 
             .menu-icon {
                 min-width: 20px;

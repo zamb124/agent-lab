@@ -204,31 +204,6 @@ export class CRMSidebar extends PlatformElement {
             platform-service-sidebar[collapsed] .nav-label,
             platform-service-sidebar[collapsed] .nav-title { display: none; }
             platform-service-sidebar[collapsed] .nav-item { justify-content: center; padding: var(--space-3); }
-
-            .services-launch-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-                margin-bottom: var(--space-3);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-            .services-launch-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-            platform-service-sidebar[collapsed] .services-launch-btn {
-                width: 40px;
-                margin-left: auto;
-                margin-right: auto;
-                padding: var(--space-2);
-            }
         `,
     ];
 
@@ -312,20 +287,13 @@ export class CRMSidebar extends PlatformElement {
             <platform-service-sidebar
                 logo-src="/crm/ui/static/assets/icons/networkle_logo.svg"
                 logo-text="NetWorkle"
+                ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
                 <div slot="header">
-                    <button
-                        type="button"
-                        class="services-launch-btn"
-                        aria-label=${this.t('services_switch.aria', null, 'platform')}
-                        @click=${() => this.openModal('platform.services', {})}
-                    >
-                        <platform-icon name="layout-grid" size="20"></platform-icon>
-                    </button>
                     <div class="ns-section">
                         <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
                         <select class="ns-select" .value=${selectValue} @change=${this._onNamespaceChange}>

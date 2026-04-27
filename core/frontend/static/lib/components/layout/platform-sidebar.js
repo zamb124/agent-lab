@@ -16,6 +16,8 @@ export class PlatformSidebar extends PlatformElement {
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
         logoSrc: { type: String, attribute: 'logo-src' },
         logoText: { type: String, attribute: 'logo-text' },
+        /** Клик по блоку лого (иконка + название) открывает витрину `platform.services`. */
+        logoOpensServices: { type: Boolean, attribute: 'logo-opens-services' },
         width: { type: String },
         collapsedWidth: { type: String, attribute: 'collapsed-width' },
         mobileBreakpoint: { type: Number, attribute: 'mobile-breakpoint' },
@@ -40,6 +42,7 @@ export class PlatformSidebar extends PlatformElement {
         this.mobileOpen = false;
         this.logoSrc = '';
         this.logoText = '';
+        this.logoOpensServices = false;
         this.width = '280px';
         this.collapsedWidth = '72px';
         this.mobileBreakpoint = 768;
@@ -183,6 +186,14 @@ export class PlatformSidebar extends PlatformElement {
         `;
     }
 
+    _onLogoServicesClick(e) {
+        e.stopPropagation();
+        this.openModal('platform.services', {});
+        if (this.mobileOpen) {
+            this.closeMobile();
+        }
+    }
+
     _renderLogo() {
         const hasLogoSlot = this.querySelector('[slot="logo"]');
 
@@ -195,18 +206,39 @@ export class PlatformSidebar extends PlatformElement {
             `;
         }
 
+        const ariaLabel = this.t('services_switch.aria', null, 'platform');
+        const logoBody = html`
+            ${this.logoSrc
+                ? html`
+                    <div class="sidebar-logo-icon">
+                        <img src="${this.logoSrc}" alt="">
+                    </div>
+                `
+                : ''}
+            ${this.logoText
+                ? html`<span class="sidebar-logo-text">${this.logoText}</span>`
+                : ''}
+        `;
+
+        if (this.logoOpensServices && (this.logoSrc || this.logoText)) {
+            return html`
+                <div class="sidebar-logo">
+                    <button
+                        type="button"
+                        class="sidebar-logo-hit"
+                        aria-label=${ariaLabel}
+                        @click=${this._onLogoServicesClick}
+                    >
+                        ${logoBody}
+                    </button>
+                    ${this._inlineCollapseIfExpanded()}
+                </div>
+            `;
+        }
+
         return html`
             <div class="sidebar-logo">
-                ${this.logoSrc
-                    ? html`
-                        <div class="sidebar-logo-icon">
-                            <img src="${this.logoSrc}" alt="${this.logoText || 'Logo'}">
-                        </div>
-                    `
-                    : ''}
-                ${this.logoText
-                    ? html`<span class="sidebar-logo-text">${this.logoText}</span>`
-                    : ''}
+                ${logoBody}
                 ${this._inlineCollapseIfExpanded()}
             </div>
         `;

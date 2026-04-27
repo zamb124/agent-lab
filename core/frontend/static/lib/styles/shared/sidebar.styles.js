@@ -42,6 +42,10 @@ export const sidebarHostStyles = css`
         padding: var(--space-3) var(--space-2);
     }
 
+    :host([collapsed]) .sidebar-logo-hit {
+        flex: 0 1 auto;
+    }
+
     :host([collapsed]) .sidebar-collapse-row {
         justify-content: center;
     }
@@ -179,6 +183,33 @@ export const sidebarStyles = css`
         gap: var(--space-3);
         padding: var(--space-4) var(--space-3);
         margin-bottom: var(--space-2);
+    }
+
+    .sidebar-logo-hit {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        flex: 1;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+        border-radius: var(--radius-lg);
+        transition: background var(--duration-fast);
+    }
+
+    .sidebar-logo-hit:hover {
+        background: var(--glass-solid-subtle);
+    }
+
+    .sidebar-logo-hit:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
     }
 
     .sidebar-logo > .collapse-btn {

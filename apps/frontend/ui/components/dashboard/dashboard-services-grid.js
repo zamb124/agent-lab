@@ -22,7 +22,7 @@ function descriptionKeyFromNameKey(nameKey) {
     if (typeof nameKey !== 'string' || !nameKey.endsWith('.name')) {
         throw new Error('dashboard-services-grid: nameKey must end with .name');
     }
-    return `${nameKey.slice(0, -5)}description`;
+    return nameKey.replace(/\.name$/, '.description');
 }
 
 export class DashboardServicesGrid extends PlatformElement {
@@ -31,7 +31,12 @@ export class DashboardServicesGrid extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
+            :host {
+                display: block;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
             .header { margin-bottom: var(--space-5); }
             .title {
                 font-size: var(--text-2xl);
@@ -46,8 +51,10 @@ export class DashboardServicesGrid extends PlatformElement {
             }
             .cards-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
                 gap: var(--space-5);
+                min-width: 0;
+                width: 100%;
             }
             .launchers {
                 display: none;

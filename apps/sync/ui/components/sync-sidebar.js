@@ -75,25 +75,6 @@ export class SyncSidebar extends PlatformElement {
                 box-sizing: border-box;
             }
 
-            .services-launch-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-                margin-bottom: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-            .services-launch-btn:hover {
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-            }
-
             .header-adhoc {
                 display: flex;
                 flex-direction: column;
@@ -495,14 +476,6 @@ export class SyncSidebar extends PlatformElement {
         const scope = this._searchScope();
         return html`
             <div class="sync-sidebar-header-inner">
-                <button
-                    type="button"
-                    class="services-launch-btn"
-                    aria-label=${this.t('services_switch.aria', null, 'platform')}
-                    @click=${() => this.openModal('platform.services', {})}
-                >
-                    <platform-icon name="layout-grid" size="20"></platform-icon>
-                </button>
                 <div class="header-adhoc">
                     <button
                         class="adhoc-btn"
@@ -612,6 +585,7 @@ export class SyncSidebar extends PlatformElement {
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/sync_logo.svg"
                 logo-text="Sync"
+                ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
