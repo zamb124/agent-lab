@@ -31,7 +31,6 @@ export class SyncChannelRow extends PlatformElement {
         :host {
             display: flex;
             align-items: center;
-            gap: var(--space-3);
             padding: var(--space-3);
             margin: 0;
             border-radius: var(--radius-xl);
@@ -59,6 +58,13 @@ export class SyncChannelRow extends PlatformElement {
         :host([data-selected]) .preview.typing { color: var(--text-inverse, #fff); font-weight: var(--font-medium); }
         :host([data-mention]:not([data-selected])) .title { color: var(--accent); font-weight: var(--font-semibold); }
 
+        .row-body {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
         .avatar {
             width: 48px;
             height: 48px;
@@ -249,8 +255,11 @@ export class SyncChannelRow extends PlatformElement {
                 max-width: 100%;
                 margin: 0 0 var(--space-2) 0;
                 padding: var(--space-2);
-                gap: 0;
                 box-sizing: border-box;
+            }
+            :host-context(platform-service-sidebar[collapsed]) .row-body {
+                justify-content: center;
+                gap: 0;
             }
             :host-context(platform-service-sidebar[collapsed]) .text {
                 display: none;
@@ -442,8 +451,9 @@ export class SyncChannelRow extends PlatformElement {
         const kindAria = isDirectType ? this.t('sidebar.meta_direct') : this.t('sidebar.meta_group');
         const kindIconName = isDirectType ? 'user' : 'users';
         return html`
+            <div class="row-body" @click=${this._onClick}>
             ${this._renderAvatar()}
-            <div class="text" @click=${this._onClick}>
+            <div class="text">
                 <div class="row-top">
                     <span class="title">${channelDisplayTitle(this.channel)}</span>
                     ${timeLabel !== '' ? html`<span class="time">${timeLabel}</span>` : ''}
@@ -483,6 +493,7 @@ export class SyncChannelRow extends PlatformElement {
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
         `;
     }

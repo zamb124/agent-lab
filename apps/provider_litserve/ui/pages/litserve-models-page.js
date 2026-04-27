@@ -11,6 +11,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import '@platform/lib/components/layout/page-header.js';
 
 const KIND_OPTIONS = ['llm', 'embedding', 'rerank'];
 
@@ -32,23 +33,6 @@ export class LitserveModelsPage extends PlatformPage {
                 flex-direction: column;
                 gap: var(--space-5);
                 padding: var(--space-4);
-            }
-            .header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-            }
-            .title {
-                margin: 0;
-                font-size: var(--text-2xl);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-            }
-            .subtitle {
-                margin: var(--space-2) 0 0 0;
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
             }
             .add-card {
                 background: var(--glass-solid-medium);
@@ -248,12 +232,10 @@ export class LitserveModelsPage extends PlatformPage {
         const loading = this._models.loading;
         return html`
             <section class="page">
-                <header class="header">
-                    <div>
-                        <h1 class="title">${this.t('models.title')}</h1>
-                        <p class="subtitle">${this.t('models.subtitle')}</p>
-                    </div>
-                </header>
+                <page-header
+                    title=${this.t('models.title')}
+                    subtitle=${this.t('models.subtitle')}
+                ></page-header>
 
                 <section class="add-card">
                     <div class="add-grid">

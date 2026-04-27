@@ -1,6 +1,8 @@
 /**
  * sync-chat-header — шапка чата и единая шапка экранов Sync:
  *   - `header-mode="channel"` (по умолчанию): аватар, заголовок, подзаголовок, звонок/настройки/⋯
+ *     На ширине ≤767px в строке действий только кнопка звонка; видео, участники,
+ *     настройки и статус WebSocket — под меню ⋯.
  *   - `header-mode="list"`: тот же ряд (меню, иконка, title/subtitle), без действий канала — список каналов, встречи, настройки
  *   - баннер активного звонка (свёрнутого) — открывает overlay.
  *
@@ -33,6 +35,8 @@ export class SyncChatHeader extends PlatformElement {
         channelId: { type: String },
         _menuOpen: { state: true },
         _headerAvatarFailed: { state: true },
+        /** Узкий экран: в строке только звонок, остальные действия — под ⋯ */
+        _headerMobile: { state: true },
     };
 
     static styles = css`
@@ -253,6 +257,10 @@ export class SyncChatHeader extends PlatformElement {
         .avatar.list-mark platform-icon {
             display: block;
         }
+        .overflow-anchor {
+            position: relative;
+            flex-shrink: 0;
+        }
     `;
 
     constructor() {
@@ -262,6 +270,10 @@ export class SyncChatHeader extends PlatformElement {
         this.listSubtitle = '';
         this.channelId = '';
         this._menuOpen = false;
+        this._headerMobile =
+            typeof window !== 'undefined'
+            && typeof window.matchMedia === 'function'
+            && window.matchMedia('(max-width: 767px)').matches;
         this._headerAvatarFailed = false;
         this._headerAvatarSig = '';
         this._channels = this.useResource('sync/channels', { autoload: true });
@@ -278,14 +290,41 @@ export class SyncChatHeader extends PlatformElement {
             if (e.composedPath().some((n) => n === this)) return;
             this._menuOpen = false;
         };
+        this._onHeaderMqlChange = () => {
+            const next =
+                typeof window !== 'undefined'
+                && typeof window.matchMedia === 'function'
+                && window.matchMedia('(max-width: 767px)').matches;
+            if (next !== this._headerMobile) {
+                this._headerMobile = next;
+                if (!next) {
+                    this._menuOpen = false;
+                }
+                this.requestUpdate();
+            }
+        };
+        /** @type {MediaQueryList | null} */
+        this._headerMql = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
         document.addEventListener('pointerdown', this._onDocClick);
+        if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+            this._headerMql = window.matchMedia('(max-width: 767px)');
+            this._headerMql.addEventListener('change', this._onHeaderMqlChange);
+            const next = this._headerMql.matches;
+            if (next !== this._headerMobile) {
+                this._headerMobile = next;
+            }
+        }
     }
 
     disconnectedCallback() {
+        if (this._headerMql) {
+            this._headerMql.removeEventListener('change', this._onHeaderMqlChange);
+            this._headerMql = null;
+        }
         document.removeEventListener('pointerdown', this._onDocClick);
         super.disconnectedCallback();
     }
@@ -511,6 +550,44 @@ export class SyncChatHeader extends PlatformElement {
                     <button class="icon-btn" @click=${this._onHangupCall} title=${this.t('chat_view.call_banner_hangup_aria')}>
                         <platform-icon name="phone-off" size="18"></platform-icon>
                     </button>
+                ` : this._headerMobile ? html`
+                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')}>
+                        <platform-icon name="phone" size="20"></platform-icon>
+                    </button>
+                    <div class="overflow-anchor">
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            aria-expanded=${String(this._menuOpen)}
+                            aria-haspopup="true"
+                            @click=${this._onMoreToggle}
+                            title=${this.t('chat_view.more_title')}
+                        >
+                            <platform-icon name="more-vertical" size="20"></platform-icon>
+                        </button>
+                        ${this._menuOpen ? html`
+                            <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>
+                                <button type="button" @click=${() => { this._menuOpen = false; void this._onInviteCall(); }}>
+                                    <platform-icon name="video" size="14"></platform-icon>
+                                    ${this.t('chat_header.action_video_call')}
+                                </button>
+                                <button type="button" @click=${() => { this._menuOpen = false; this._onMembers(); }}>
+                                    <platform-icon name="users" size="14"></platform-icon>
+                                    ${this.t('chat_header.action_members')}
+                                </button>
+                                <button type="button" @click=${() => { this._menuOpen = false; this._onSettings(); }}>
+                                    <platform-icon name="settings" size="14"></platform-icon>
+                                    ${this.t('chat_header.action_settings')}
+                                </button>
+                                <div class="ws-row">
+                                    <span class=${wsConnected ? 'ws-dot connected' : (wsConnecting ? 'ws-dot connecting' : 'ws-dot')}></span>
+                                    ${wsConnected
+                                        ? this.t('chat_header.ws_status_connected')
+                                        : (wsConnecting ? this.t('chat_header.ws_status_connecting') : this.t('chat_header.ws_status_disconnected'))}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
                 ` : html`
                     <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')}>
                         <platform-icon name="phone" size="20"></platform-icon>
@@ -522,16 +599,16 @@ export class SyncChatHeader extends PlatformElement {
                     <button class="icon-btn" @click=${this._onSettings} title=${this.t('chat_header.action_settings')}>
                         <platform-icon name="settings" size="20"></platform-icon>
                     </button>
-                    <button class="icon-btn" @click=${this._onMoreToggle} title=${this.t('chat_view.more_title')}>
+                    <button type="button" class="icon-btn" @click=${this._onMoreToggle} title=${this.t('chat_view.more_title')}>
                         <platform-icon name="more-vertical" size="20"></platform-icon>
                     </button>
                     ${this._menuOpen ? html`
                         <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>
-                            <button @click=${() => { this._menuOpen = false; this._onMembers(); }}>
+                            <button type="button" @click=${() => { this._menuOpen = false; this._onMembers(); }}>
                                 <platform-icon name="users" size="14"></platform-icon>
                                 ${this.t('chat_header.action_members')}
                             </button>
-                            <button @click=${() => { this._menuOpen = false; this._onSettings(); }}>
+                            <button type="button" @click=${() => { this._menuOpen = false; this._onSettings(); }}>
                                 <platform-icon name="settings" size="14"></platform-icon>
                                 ${this.t('chat_header.action_settings')}
                             </button>

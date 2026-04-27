@@ -86,6 +86,13 @@ export class SyncMessageBubble extends PlatformElement {
             gap: var(--space-2);
             align-items: flex-end;
         }
+        @media (max-width: 767px) {
+            .row {
+                -webkit-user-select: none;
+                user-select: none;
+                -webkit-touch-callout: none;
+            }
+        }
         :host([data-own]) .row { justify-content: flex-end; }
         .row.row-call-boundary {
             box-sizing: border-box;
@@ -591,6 +598,7 @@ export class SyncMessageBubble extends PlatformElement {
         this._longPressTriggered = false;
         this._longPressTimer = window.setTimeout(() => {
             this._longPressTriggered = true;
+            this._clearTextSelection();
             this._showContextMenu(e.clientX, e.clientY);
         }, LONG_PRESS_MS);
     }
@@ -617,7 +625,25 @@ export class SyncMessageBubble extends PlatformElement {
         });
     }
 
-    _onBubbleClick() {
+    _clearTextSelection() {
+        const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+        if (sel && typeof sel.removeAllRanges === 'function') {
+            sel.removeAllRanges();
+        }
+    }
+
+    _onSelectStart(e) {
+        if (!window.matchMedia || !window.matchMedia('(max-width: 767px)').matches) return;
+        e.preventDefault();
+    }
+
+    _onBubbleClick(e) {
+        if (this._longPressTriggered) {
+            this._longPressTriggered = false;
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
         const slice = this._chatUi.value;
         if (!(slice && slice.selectionMode === true)) return;
         const messageId = this.message && this.message.message_id;
@@ -1148,6 +1174,7 @@ export class SyncMessageBubble extends PlatformElement {
                  @pointerdown=${this._onPointerDown}
                  @pointerup=${this._onPointerUp}
                  @pointercancel=${this._onPointerUp}
+                 @selectstart=${this._onSelectStart}
                  @click=${this._onBubbleClick}
             >
                 ${selectionMode ? html`<span class="check"><input type="checkbox" .checked=${!!selected} /></span>` : ''}

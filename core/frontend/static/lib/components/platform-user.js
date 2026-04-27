@@ -14,6 +14,7 @@
  *     переключатель темы, Выйти.
  *   - в свернутом sidebar (`platform-sidebar[collapsed]`) меню переходит
  *     в `position: fixed` через CSS-переменные `--user-menu-fixed-*`.
+ *   - z-index панели при открытии: `nextModalLayerZIndex()` (modal-z-stack.js), inline на `.user-menu`.
  *
  * i18n namespace: 'platform' (см. core/i18n/translations/{ru,en}/platform.json).
  */
@@ -27,6 +28,7 @@ import { redirectToLogin } from '../utils/auth-redirect.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
+import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import './platform-icon.js';
 import './platform-calendar-modal.js';
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
@@ -38,6 +40,7 @@ export class PlatformUser extends PlatformElement {
         block: { type: Boolean, reflect: true },
         documentationTag: { type: String, attribute: 'documentation-tag' },
         _menuOpen: { state: true },
+        _menuZIndex: { state: true },
         _companySelectorOpen: { state: true },
         _avatarFallbackLevel: { state: true },
     };
@@ -47,6 +50,7 @@ export class PlatformUser extends PlatformElement {
         this.block = false;
         this.documentationTag = null;
         this._menuOpen = false;
+        this._menuZIndex = 0;
         this._companySelectorOpen = false;
         this._avatarFallbackLevel = 0;
         this._menuAvatarSig = '';
@@ -128,6 +132,9 @@ export class PlatformUser extends PlatformElement {
         e.stopPropagation();
         const next = !this._menuOpen;
         this._menuOpen = next;
+        if (next) {
+            this._menuZIndex = nextModalLayerZIndex();
+        }
         if (!next) {
             this._companySelectorOpen = false;
         }
@@ -384,7 +391,11 @@ export class PlatformUser extends PlatformElement {
             </button>
 
             ${this._menuOpen ? html`
-                <div class="user-menu" @click=${(e) => e.stopPropagation()}>
+                <div
+                    class="user-menu"
+                    style=${`z-index:${this._menuZIndex}`}
+                    @click=${(e) => e.stopPropagation()}
+                >
                     <button class="menu-item" type="button" @click=${this._openServicesHub}>
                         <platform-icon class="menu-icon" name="apps" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.apps')}</span>
@@ -511,7 +522,6 @@ export class PlatformUser extends PlatformElement {
                 right: auto;
                 top: auto;
                 width: var(--user-menu-fixed-width, min(280px, calc(100vw - 16px)));
-                z-index: var(--z-modal, 5000);
             }
 
             .user-button {
@@ -604,7 +614,6 @@ export class PlatformUser extends PlatformElement {
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-xl);
                 box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0, 0, 0, 0.2);
-                z-index: var(--z-dropdown, 1000);
                 padding: var(--space-1) 0;
                 min-width: min(280px, calc(100vw - 16px));
                 max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));

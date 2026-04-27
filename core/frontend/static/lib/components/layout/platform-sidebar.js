@@ -247,21 +247,18 @@ export class PlatformSidebar extends PlatformElement {
     render() {
         return html`
             <div class="mobile-backdrop" @click=${this._handleBackdropClick}></div>
-            
             <div class="sidebar-content">
                 ${this._renderLogo()}
                 ${this._renderCollapseRowBetweenLogoAndNav()}
                 <div class="sidebar-header">
                     <slot name="header"></slot>
                 </div>
-                
                 <nav class="sidebar-nav">
                     <slot></slot>
                 </nav>
-                
-                <div class="sidebar-footer">
-                    <slot name="footer"></slot>
-                </div>
+            </div>
+            <div class="sidebar-footer">
+                <slot name="footer"></slot>
             </div>
         `;
     }

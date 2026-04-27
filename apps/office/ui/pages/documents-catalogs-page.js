@@ -21,6 +21,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '../components/office-catalog-card.js';
 
@@ -37,20 +38,6 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
         css`
             :host { display: block; width: 100%; padding: var(--space-4); }
             .breadcrumbs-wrap { margin-bottom: var(--space-3); }
-            .page-head {
-                display: flex; align-items: center; justify-content: space-between;
-                gap: var(--space-3);
-                margin-bottom: var(--space-5);
-            }
-            .page-title {
-                font-size: var(--text-3xl);
-                font-weight: 700;
-                color: var(--text-primary);
-                background: var(--documents-title-gradient);
-                -webkit-background-clip: text;
-                background-clip: text;
-                color: transparent;
-            }
             .grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -163,12 +150,13 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
             <div class="breadcrumbs-wrap">
                 <platform-breadcrumbs current-label=${crumbLabel}></platform-breadcrumbs>
             </div>
-            <div class="page-head">
-                <h1 class="page-title">${this.t('catalogs.heading')}</h1>
-                <button class="btn btn-primary" @click=${this._onCreateCatalog}>
-                    ${this.t('catalogs.create')}
-                </button>
-            </div>
+            <page-header title=${this.t('catalogs.heading')} actions-overflow="visible">
+                <div slot="actions">
+                    <button class="btn btn-primary" @click=${this._onCreateCatalog}>
+                        ${this.t('catalogs.create')}
+                    </button>
+                </div>
+            </page-header>
             ${loading ? html`<div class="loading">${this.t('list.loading')}</div>` : ''}
             ${!loading && items.length === 0 ? this._renderEmpty() : ''}
             ${!loading && items.length > 0 ? html`

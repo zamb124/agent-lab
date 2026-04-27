@@ -170,11 +170,13 @@ export const sidebarHostStyles = css`
 export const sidebarStyles = css`
     .sidebar-content {
         flex: 1;
+        min-height: 0;
         display: flex;
         flex-direction: column;
         padding: var(--space-4);
+        padding-bottom: 0;
         overflow-y: auto;
-        overflow-x: clip;
+        overflow-x: visible;
     }
 
     .sidebar-logo {
@@ -331,8 +333,8 @@ export const sidebarStyles = css`
     }
 
     .sidebar-footer {
-        margin-top: auto;
-        padding: var(--space-4) 0;
+        flex-shrink: 0;
+        padding: var(--space-4);
         border-top: 1px solid var(--glass-border-subtle);
         overflow: visible;
     }

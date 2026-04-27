@@ -425,6 +425,7 @@
     "stream_incomplete": "The response stream ended without a final status. Try sending your message again."
   },
   "flows_empty_state": {
+    "header_title": "Flows",
     "title": "Select a flow",
     "body": "Pick a flow in the sidebar to open chat or editor, or create a new one."
   },

@@ -28,6 +28,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/layout/page-header.js';
 import '../components/office-integration-banner.js';
 import '../components/office-document-row.js';
 
@@ -45,21 +46,12 @@ export class OfficeDocumentsListPage extends PlatformPage {
         buttonStyles,
         css`
             :host { display: block; width: 100%; padding: var(--space-4); }
-            .page-head {
-                display: flex; align-items: center; justify-content: space-between;
-                gap: var(--space-3);
-                margin-bottom: var(--space-4);
+            .head-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--space-2);
+                justify-content: flex-end;
             }
-            .page-title {
-                font-size: var(--text-3xl);
-                font-weight: 700;
-                color: var(--text-primary);
-                background: var(--documents-title-gradient);
-                -webkit-background-clip: text;
-                background-clip: text;
-                color: transparent;
-            }
-            .head-actions { display: flex; gap: var(--space-2); }
             .catalog-filter {
                 display: flex; align-items: center; flex-wrap: wrap;
                 gap: var(--space-2);
@@ -305,10 +297,12 @@ export class OfficeDocumentsListPage extends PlatformPage {
         const docsLoading = this._documents.busy;
         return html`
             <office-integration-banner></office-integration-banner>
-            <div class="page-head">
-                <h1 class="page-title">${this.t('list.heading')}</h1>
+            <page-header
+                title=${this.t('list.heading')}
+                actions-overflow="visible"
+            >
                 ${noCatalogs ? '' : html`
-                    <div class="head-actions">
+                    <div slot="actions" class="head-actions">
                         <button class="btn btn-primary"
                                 ?disabled=${!this._activeCatalogId()}
                                 @click=${this._openCreateEmpty}>
@@ -321,7 +315,7 @@ export class OfficeDocumentsListPage extends PlatformPage {
                         </button>
                     </div>
                 `}
-            </div>
+            </page-header>
 
             ${noCatalogs ? this._renderEmptyNoCatalogs() : html`
                 ${this._renderCatalogFilter()}

@@ -249,24 +249,32 @@ export class SyncApp extends PlatformApp {
         PlatformApp.styles,
         css`
             :host {
+                box-sizing: border-box;
                 display: flex;
                 flex-direction: row;
                 width: var(--app-vw, 100vw);
-                height: var(--app-vh, 100vh);
+                min-height: 100vh;
+                min-height: 100dvh;
+                height: 100vh;
+                height: 100dvh;
+                max-height: 100vh;
+                max-height: 100dvh;
                 overflow: hidden;
                 background: var(--bg-gradient);
                 padding-top: env(safe-area-inset-top, 0);
                 padding-bottom: env(safe-area-inset-bottom, 0);
             }
             .sidebar {
-                height: var(--app-vh, 100vh);
                 flex-shrink: 0;
+                align-self: stretch;
+                min-height: 0;
                 background: transparent;
             }
             .main {
                 flex: 1;
                 min-width: 0;
-                height: var(--app-vh, 100vh);
+                min-height: 0;
+                align-self: stretch;
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
@@ -287,9 +295,6 @@ export class SyncApp extends PlatformApp {
                 overflow: auto;
             }
             @media (max-width: 767px) {
-                :host {
-                    height: 100dvh;
-                }
                 .sidebar { position: absolute; width: 0; height: 0; overflow: visible; }
             }
         `,
