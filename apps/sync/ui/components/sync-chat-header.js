@@ -22,6 +22,7 @@ import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
+import { mobileStickyHeaderSyncChatHostStyles } from '@platform/lib/styles/shared/mobile-sticky-header.styles.js';
 
 export class SyncChatHeader extends PlatformElement {
     static properties = {
@@ -39,7 +40,9 @@ export class SyncChatHeader extends PlatformElement {
         _headerMobile: { state: true },
     };
 
-    static styles = css`
+    static styles = [
+        PlatformElement.styles,
+        css`
         :host {
             display: flex;
             align-items: center;
@@ -261,7 +264,9 @@ export class SyncChatHeader extends PlatformElement {
             position: relative;
             flex-shrink: 0;
         }
-    `;
+    `,
+        mobileStickyHeaderSyncChatHostStyles,
+    ];
 
     constructor() {
         super();

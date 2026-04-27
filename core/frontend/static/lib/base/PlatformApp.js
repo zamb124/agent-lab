@@ -198,7 +198,9 @@ export class PlatformApp extends PlatformElement {
         if (!auth) return;
         if (auth.status === 'authenticated' && auth.user) {
             const id = serviceIdFromBaseUrl(this.getBaseUrl());
-            if (id) setLastVisitedService(id);
+            if (id && id !== 'frontend') {
+                setLastVisitedService(id);
+            }
         }
         if (auth.status === 'unauthenticated' && !this.rendersUnauthenticated()) {
             redirectToLogin();

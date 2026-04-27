@@ -24,15 +24,28 @@ export class LitserveModelsPage extends PlatformPage {
         formStyles,
         css`
             :host {
-                display: block;
-                height: 100%;
-                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                flex: 1;
             }
-            .page {
+            .page-body {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-5);
+                box-sizing: border-box;
                 padding: var(--space-4);
+                flex: 1;
+                min-height: 0;
+            }
+            @media (max-width: 767px) {
+                .page-body {
+                    padding: var(--space-2);
+                    padding-top: 0;
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    padding-bottom: var(--space-2);
+                }
             }
             .add-card {
                 background: var(--glass-solid-medium);
@@ -231,12 +244,11 @@ export class LitserveModelsPage extends PlatformPage {
         const items = this._models.items;
         const loading = this._models.loading;
         return html`
-            <section class="page">
-                <page-header
-                    title=${this.t('models.title')}
-                    subtitle=${this.t('models.subtitle')}
-                ></page-header>
-
+            <page-header
+                title=${this.t('models.title')}
+                subtitle=${this.t('models.subtitle')}
+            ></page-header>
+            <div class="page-body">
                 <section class="add-card">
                     <div class="add-grid">
                         <div class="form-group">
@@ -280,7 +292,7 @@ export class LitserveModelsPage extends PlatformPage {
                 <section class="models-grid">
                     ${repeat(items, (item) => item.model_id, (item) => this._renderModelCard(item))}
                 </section>
-            </section>
+            </div>
         `;
     }
 }

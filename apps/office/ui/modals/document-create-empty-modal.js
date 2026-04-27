@@ -56,7 +56,13 @@ export class OfficeDocumentCreateEmptyModal extends PlatformFormModal {
             }
             .type-card:hover { border-color: var(--accent); transform: translateY(-1px); }
             .type-card.active { border-color: var(--accent); background: var(--accent-subtle); color: var(--accent); }
-            .type-card .label { font-size: var(--text-xs); font-weight: 500; }
+            .type-card .label {
+                font-size: var(--text-xs);
+                font-weight: 500;
+                color: var(--text-secondary);
+            }
+            .type-card.active .label { color: var(--accent); }
+            .form-grid .form-input { color: var(--text-secondary); }
             .footer-actions {
                 display: flex; gap: var(--space-3);
                 justify-content: flex-end;

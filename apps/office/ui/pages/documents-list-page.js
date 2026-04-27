@@ -45,7 +45,28 @@ export class OfficeDocumentsListPage extends PlatformPage {
         PlatformPage.styles,
         buttonStyles,
         css`
-            :host { display: block; width: 100%; padding: var(--space-4); }
+            :host {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                flex: 1;
+                width: 100%;
+            }
+            .page-body {
+                box-sizing: border-box;
+                padding: var(--space-4);
+                flex: 1;
+                min-height: 0;
+            }
+            @media (max-width: 767px) {
+                .page-body {
+                    padding: var(--space-2);
+                    padding-top: 0;
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    padding-bottom: var(--space-2);
+                }
+            }
             .head-actions {
                 display: flex;
                 flex-wrap: wrap;
@@ -317,6 +338,7 @@ export class OfficeDocumentsListPage extends PlatformPage {
                 `}
             </page-header>
 
+            <div class="page-body">
             ${noCatalogs ? this._renderEmptyNoCatalogs() : html`
                 ${this._renderCatalogFilter()}
                 ${docsLoading ? html`<div class="loading">${this.t('list.loading')}</div>` : ''}
@@ -334,6 +356,7 @@ export class OfficeDocumentsListPage extends PlatformPage {
                     </div>
                 ` : ''}
             `}
+            </div>
         `;
     }
 }

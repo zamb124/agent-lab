@@ -81,4 +81,28 @@ describe('routerEffect: NAVIGATE_REQUESTED', () => {
             buildCtx(() => ({}), []),
         )).rejects.toThrow(/missing param/);
     });
+
+    it('search добавляет query к pushState', async () => {
+        const dispatched = [];
+        await createRouterEffect({ baseUrl: '/sync', routes })(
+            ev(CoreEvents.ROUTER_NAVIGATE_REQUESTED, {
+                routeKey: 'dashboard',
+                params: {},
+                search: '?redirect_uri=%2Fsync',
+            }),
+            buildCtx(() => ({}), dispatched),
+        );
+        expect(history._calls[0][2]).toBe('/sync/dashboard?redirect_uri=%2Fsync');
+    });
+
+    it('search без ведущего ? — throw', async () => {
+        await expect(createRouterEffect({ baseUrl: '/sync', routes })(
+            ev(CoreEvents.ROUTER_NAVIGATE_REQUESTED, {
+                routeKey: 'dashboard',
+                params: {},
+                search: 'bad=1',
+            }),
+            buildCtx(() => ({}), []),
+        )).rejects.toThrow(/search must start/);
+    });
 });

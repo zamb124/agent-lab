@@ -6,6 +6,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendCreateEmbedModal } from '../modals/create-embed-modal.js';
@@ -75,6 +76,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
                 margin-bottom: var(--space-4);
             }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     constructor() {
@@ -145,9 +147,8 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
                     ${this.t('embed_page.create')}
                 </button>
             </page-header>
-
+            <div class="page-body">
             <div class="info-banner">${this.t('embed_page.external_wizard_note')}</div>
-
             ${loading && configs.length === 0
                 ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
                 : configs.length === 0
@@ -169,6 +170,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
                         </table>
                     `
             }
+            </div>
         `;
     }
 }

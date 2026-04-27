@@ -11,6 +11,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendCreateSchedulerTaskModal } from '../modals/create-scheduler-task-modal.js';
@@ -99,6 +100,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
             }
             .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     static properties = {
@@ -280,9 +282,8 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
                     ${this.t('scheduler_page.create')}
                 </button>
             </page-header>
-
+            <div class="page-body">
             ${this._renderFilters()}
-
             ${loading && list.length === 0
                 ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
                 : list.length === 0
@@ -304,6 +305,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
                         </table>
                     `
             }
+            </div>
         `;
     }
 }

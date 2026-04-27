@@ -11,6 +11,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 
@@ -132,6 +133,7 @@ export class FrontendSettingsPage extends PlatformPage {
                 border-radius: var(--radius-md);
             }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     static properties = {
@@ -378,15 +380,19 @@ export class FrontendSettingsPage extends PlatformPage {
         if (!company) {
             return html`
                 <page-header title=${this.t('settings_page.title')}></page-header>
+                <div class="page-body">
                 <div class="empty"><glass-spinner></glass-spinner></div>
+                </div>
             `;
         }
         return html`
             <page-header title=${this.t('settings_page.title')}></page-header>
+            <div class="page-body">
             ${this._renderTabs()}
             ${this._activeTab === 'company' ? this._renderCompanyTab(company) : ''}
             ${this._activeTab === 'security' ? this._renderSecurityTab() : ''}
             ${this._activeTab === 'integrations' ? this._renderIntegrationsTab() : ''}
+            </div>
         `;
     }
 }

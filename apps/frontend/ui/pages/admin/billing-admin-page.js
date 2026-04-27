@@ -6,6 +6,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendSystemAccessModal } from '../../modals/system-access-modal.js';
@@ -163,6 +164,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 box-sizing: border-box;
             }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     constructor() {
@@ -698,9 +700,11 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 title=${this.t('platform_billing_page.title')}
                 subtitle=${this.t('platform_billing_page.subtitle')}
             ></page-header>
+            <div class="page-body">
             ${this._renderTabs()}
             ${this._tab !== 'companies' ? this._renderScopeBanner() : null}
             ${content}
+            </div>
         `;
     }
 }

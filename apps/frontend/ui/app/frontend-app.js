@@ -197,6 +197,33 @@ export class FrontendApp extends PlatformApp {
         super();
         this._companiesSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._frontendMql = null;
+        this._onFrontendMobileMql = null;
+        this._frontendMobile =
+            typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(max-width: 767px)').matches;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+        this._frontendMql = window.matchMedia('(max-width: 767px)');
+        this._onFrontendMobileMql = () => {
+            const next = this._frontendMql.matches;
+            if (next !== this._frontendMobile) {
+                this._frontendMobile = next;
+                this.requestUpdate();
+            }
+        };
+        this._frontendMql.addEventListener('change', this._onFrontendMobileMql);
+        const next = this._frontendMql.matches;
+        if (next !== this._frontendMobile) {
+            this._frontendMobile = next;
+            this.requestUpdate();
+        }
     }
 
     static styles = [
@@ -269,7 +296,12 @@ export class FrontendApp extends PlatformApp {
             auth && auth.status === 'unauthenticated'
             && routeKey && !PUBLIC_ROUTE_KEYS.has(routeKey)
         ) {
-            this.navigate('login');
+            if (typeof window !== 'undefined') {
+                const href = window.location.origin + window.location.pathname + window.location.search;
+                this.navigate('login', {}, { search: `?redirect_uri=${encodeURIComponent(href)}` });
+            } else {
+                this.navigate('login');
+            }
         }
 
         if (
@@ -285,6 +317,9 @@ export class FrontendApp extends PlatformApp {
     }
 
     disconnectedCallback() {
+        if (this._frontendMql && this._onFrontendMobileMql) {
+            this._frontendMql.removeEventListener('change', this._onFrontendMobileMql);
+        }
         super.disconnectedCallback();
         if (typeof document !== 'undefined' && document.documentElement) {
             document.documentElement.classList.remove('frontend-landing-public');
@@ -338,12 +373,17 @@ export class FrontendApp extends PlatformApp {
         const shellHeader = FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
             ? ''
             : html`<frontend-mobile-app-header></frontend-mobile-app-header>`;
+        const islandOwnHeaderMobile =
+            FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey) && this._frontendMobile;
         return html`
             <div class="console">
                 <div class="sidebar"><frontend-sidebar></frontend-sidebar></div>
                 <div class="main">
                     ${shellHeader}
-                    <platform-island>${content}</platform-island>
+                    <platform-island
+                        padding=${islandOwnHeaderMobile ? 'none' : 'md'}
+                        ?safe-bottom=${islandOwnHeaderMobile}
+                    >${content}</platform-island>
                 </div>
             </div>
         `;

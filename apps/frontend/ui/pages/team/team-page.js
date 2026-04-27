@@ -15,6 +15,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -186,6 +187,7 @@ export class FrontendTeamPage extends PlatformPage {
             }
             .empty .empty-title { color: var(--text-primary); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     static properties = {
@@ -392,17 +394,16 @@ export class FrontendTeamPage extends PlatformPage {
                 title=${this.t('team_page.title')}
                 subtitle=${this.t('team_page.subtitle')}
             ></page-header>
-
+            <div class="page-body">
             ${this._renderInviteToolbar()}
-
             ${this._renderRoleFilters()}
-
             ${loading && members.length === 0
                 ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
                 : members.length === 0
                     ? this._renderEmpty()
                     : this._renderMemberList(members)
             }
+            </div>
         `;
     }
 }

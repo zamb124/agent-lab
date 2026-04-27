@@ -13,6 +13,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { CoreEvents } from '../../events/contract.js';
+import { mobileStickyHeaderPageHeaderShellStyles } from '../../styles/shared/mobile-sticky-header.styles.js';
 import '../platform-icon.js';
 
 export class PageHeader extends PlatformElement {
@@ -31,6 +32,7 @@ export class PageHeader extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        mobileStickyHeaderPageHeaderShellStyles,
         css`
             :host {
                 display: block;
@@ -94,32 +96,9 @@ export class PageHeader extends PlatformElement {
                     margin-bottom: var(--space-2);
                 }
 
-                .header-wrap {
-                    position: sticky;
-                    top: 0;
-                    z-index: 30;
-                    margin: 0 0 var(--space-2);
-                    padding: max(var(--space-1), var(--platform-safe-top))
-                        max(var(--space-1), env(safe-area-inset-right, 0px))
-                        var(--space-2)
-                        max(var(--space-1), env(safe-area-inset-left, 0px));
-                    background: var(--glass-solid-strong);
-                    backdrop-filter: blur(var(--glass-blur-medium));
-                    -webkit-backdrop-filter: blur(var(--glass-blur-medium));
-                    border-bottom: 1px solid var(--glass-border-subtle);
-                    box-sizing: border-box;
-                }
-
-                .header {
-                    align-items: center;
-                    flex-wrap: nowrap;
-                    min-height: 44px;
-                    gap: var(--space-1);
-                }
-
+                .header,
                 .header-left {
                     align-items: center;
-                    min-width: 0;
                 }
 
                 .menu-btn {
@@ -184,7 +163,7 @@ export class PageHeader extends PlatformElement {
                 .toolbar-search-host ::slotted(*) {
                     flex: 1 1 0%;
                     min-width: 0;
-                    min-height: 44px;
+                    min-height: var(--platform-mobile-sticky-header-row-min-height);
                     display: grid;
                     grid-template-columns: auto minmax(0, 1fr);
                     align-items: center;

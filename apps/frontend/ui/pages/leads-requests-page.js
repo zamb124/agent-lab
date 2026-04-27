@@ -9,6 +9,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 
@@ -67,6 +68,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                 padding: var(--space-3);
             }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     constructor() {
@@ -170,6 +172,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                 title=${this.t('leads_page.title')}
                 subtitle=${this.t('leads_page.subtitle')}
             ></page-header>
+            <div class="page-body">
             <div class="toolbar">
                 <button class="btn"
                     ?disabled=${loading}
@@ -179,6 +182,7 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                 </button>
             </div>
             ${body}
+            </div>
         `;
     }
 }

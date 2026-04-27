@@ -5,6 +5,7 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { replaceLocationToLastVisitedNonFrontendService } from '@platform/lib/utils/last-visited-service.js';
 import '../components/dashboard/dashboard-hero.js';
 import '../components/dashboard/dashboard-stat-strip.js';
 import '../components/dashboard/dashboard-services-grid.js';
@@ -39,6 +40,11 @@ export class DashboardPage extends PlatformPage {
             }
         `,
     ];
+
+    connectedCallback() {
+        super.connectedCallback();
+        replaceLocationToLastVisitedNonFrontendService();
+    }
 
     render() {
         return html`

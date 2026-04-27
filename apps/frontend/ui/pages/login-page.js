@@ -21,8 +21,42 @@ export class LoginPage extends PlatformPage {
         `,
     ];
 
+    /**
+     * Путь для OAuth return_path из ?redirect_uri= (тот же origin, только path+search).
+     * @returns {string|null}
+     */
+    _loginReturnPathFromAddress() {
+        if (typeof window === 'undefined') {
+            return null;
+        }
+        const pageUrl = new URL(window.location.href);
+        const raw = pageUrl.searchParams.get('redirect_uri');
+        if (raw === null || raw === '') {
+            return null;
+        }
+        let target;
+        try {
+            target = new URL(raw);
+        } catch {
+            return null;
+        }
+        if (target.origin !== window.location.origin) {
+            return null;
+        }
+        const path = `${target.pathname}${target.search}`;
+        if (!path.startsWith('/')) {
+            return null;
+        }
+        return path;
+    }
+
     connectedCallback() {
         super.connectedCallback();
+        const returnPath = this._loginReturnPathFromAddress();
+        if (returnPath !== null) {
+            this.openModal('auth.login', { returnPath });
+            return;
+        }
         this.openModal('auth.login');
     }
 

@@ -9,6 +9,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
@@ -98,6 +99,7 @@ export class FrontendApiKeysPage extends PlatformPage {
                 font-size: var(--text-xs); color: var(--text-secondary);
             }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     constructor() {
@@ -216,6 +218,7 @@ export class FrontendApiKeysPage extends PlatformPage {
                     ${this.t('api_keys_page.create')}
                 </button>
             </page-header>
+            <div class="page-body">
             ${this._renderInfoBanner()}
             ${this._renderSecretBanner(lastSecret)}
             ${loading && list.length === 0
@@ -237,6 +240,7 @@ export class FrontendApiKeysPage extends PlatformPage {
                         </table>
                     `
             }
+            </div>
         `;
     }
 }

@@ -94,7 +94,7 @@ export const sidebarHostStyles = css`
             -webkit-backdrop-filter: blur(var(--glass-blur-strong));
             border-right: 1px solid var(--glass-border-subtle);
             transition: left var(--duration-normal) ease;
-            padding-bottom: env(safe-area-inset-bottom, 0px);
+            padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
         }
 
         :host([mobile-open]) {

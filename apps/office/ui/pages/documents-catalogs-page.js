@@ -36,8 +36,34 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
         PlatformPage.styles,
         buttonStyles,
         css`
-            :host { display: block; width: 100%; padding: var(--space-4); }
+            :host {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                flex: 1;
+                width: 100%;
+            }
+            .page-body {
+                box-sizing: border-box;
+                padding: var(--space-4);
+                flex: 1;
+                min-height: 0;
+            }
+            @media (max-width: 767px) {
+                .page-body {
+                    padding: var(--space-2);
+                    padding-top: 0;
+                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+                    padding-bottom: var(--space-2);
+                }
+            }
             .breadcrumbs-wrap { margin-bottom: var(--space-3); }
+            @media (max-width: 767px) {
+                .breadcrumbs-wrap {
+                    display: none;
+                }
+            }
             .grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -147,9 +173,6 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
             ? focusedCatalog.title
             : '';
         return html`
-            <div class="breadcrumbs-wrap">
-                <platform-breadcrumbs current-label=${crumbLabel}></platform-breadcrumbs>
-            </div>
             <page-header title=${this.t('catalogs.heading')} actions-overflow="visible">
                 <div slot="actions">
                     <button class="btn btn-primary" @click=${this._onCreateCatalog}>
@@ -157,6 +180,10 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
                     </button>
                 </div>
             </page-header>
+            <div class="page-body">
+            <div class="breadcrumbs-wrap">
+                <platform-breadcrumbs current-label=${crumbLabel}></platform-breadcrumbs>
+            </div>
             ${loading ? html`<div class="loading">${this.t('list.loading')}</div>` : ''}
             ${!loading && items.length === 0 ? this._renderEmpty() : ''}
             ${!loading && items.length > 0 ? html`
@@ -172,6 +199,7 @@ export class OfficeDocumentsCatalogsPage extends PlatformPage {
                     `)}
                 </div>
             ` : ''}
+            </div>
         `;
     }
 }

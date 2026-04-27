@@ -109,7 +109,19 @@ export function createRouterEffect({ baseUrl, routes }) {
                 }
                 const path = _buildPath(route, p.params || {});
                 const fullPath = `${base}/${path}`;
-                history.pushState({}, '', fullPath);
+                let search = '';
+                if (Object.prototype.hasOwnProperty.call(p, 'search')) {
+                    const s = p.search;
+                    if (typeof s !== 'string') {
+                        throw new Error('router.effect: search must be a string');
+                    }
+                    if (s.length > 0 && !s.startsWith('?')) {
+                        throw new Error('router.effect: search must start with ?');
+                    }
+                    search = s;
+                }
+                const urlForHistory = fullPath + search;
+                history.pushState({}, '', urlForHistory);
                 ctx.dispatch(
                     CoreEvents.ROUTER_ROUTE_CHANGED,
                     { routeKey: route.key, params: p.params || {}, pathname: fullPath },

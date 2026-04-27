@@ -144,6 +144,10 @@
         "label_title": "Название",
         "title_placeholder": "Например, отчёт за квартал",
         "section_type": "Тип файла",
+        "type_word": "Текст",
+        "type_cell": "Таблица",
+        "type_csv": "CSV",
+        "type_slide": "Презентация",
         "cancel": "Отмена",
         "submit": "Создать",
         "saving": "Создаём…"

@@ -12,6 +12,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -125,6 +126,7 @@ export class FrontendBillingPage extends PlatformPage {
                 border-radius: var(--radius-lg);
             }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     constructor() {
@@ -371,7 +373,7 @@ export class FrontendBillingPage extends PlatformPage {
                     ${this.t('frontend_console.top_up')}
                 </button>
             </page-header>
-
+            <div class="page-body">
             ${loading
                 ? html`<div class="empty"><glass-spinner></glass-spinner></div>`
                 : html`
@@ -380,6 +382,7 @@ export class FrontendBillingPage extends PlatformPage {
                     ${this._renderHistory(history)}
                 `
             }
+            </div>
         `;
     }
 }

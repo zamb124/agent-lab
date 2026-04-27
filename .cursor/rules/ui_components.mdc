@@ -391,6 +391,11 @@ namespace `platform`, секции `user_chip` и `user_info_modal`.
 - При переполнении иконок в `actions` допустим горизонтальный скролл у контейнера действий.
 - Для списковых экранов с несколькими иконками рекомендуемый порядок в разметке слота `actions` слева направо: сводка, период/даты, создание (`+`), поиск.
 
+### Мобильная липкая полоса: единая высота (≤767px)
+
+- Токены: `core/frontend/static/assets/css/tokens.css` — `--platform-mobile-sticky-header-z-index`, `--platform-mobile-sticky-header-padding-top` / `-bottom` / `-right` / `-left`, `--platform-mobile-sticky-header-row-min-height` (одинаковый safe area и минимальная строка, что у `page-header`, что у мобильного `sync-chat-header`).
+- Общий CSS: `core/frontend/static/lib/styles/shared/mobile-sticky-header.styles.js` (импортируется в `page-header` и `sync-chat-header`).
+
 ### Breadcrumbs
 
 - `platform-breadcrumbs` слушает `CoreEvents.ROUTER_ROUTE_CHANGED` и читает

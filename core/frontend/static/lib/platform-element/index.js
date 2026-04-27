@@ -24,7 +24,7 @@
  *   this.closeModal(kind?)                             — UI_MODAL_CLOSE
  *   this.openSidebar()                                 — UI_SIDEBAR_OPEN_REQUESTED
  *   this.closeSidebar()                                — UI_SIDEBAR_CLOSE_REQUESTED
- *   this.navigate(routeKey, params?)                   — ROUTER_NAVIGATE_REQUESTED
+ *   this.navigate(routeKey, params?, navigationOptions?) — ROUTER_NAVIGATE_REQUESTED (options.search: ?query)
  *   this.copyToClipboard(text, {success_i18n_key, error_i18n_key}) — UI_CLIPBOARD_COPY_REQUESTED
  *   this.setLocale(locale)                              — I18N_LOCALE_REQUESTED
  *   this.setTheme(name)                                 — THEME_SET_REQUESTED
@@ -231,17 +231,28 @@ export class PlatformElement extends LitElement {
         this.dispatch(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, null);
     }
 
-    navigate(routeKey, params) {
+    navigate(routeKey, params, navigationOptions) {
         if (typeof routeKey !== 'string' || routeKey.length === 0) {
             throw new Error('PlatformElement.navigate: routeKey required (non-empty string)');
         }
         if (params !== undefined && (params === null || typeof params !== 'object')) {
             throw new Error('PlatformElement.navigate: params must be plain object or omitted');
         }
-        this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, {
+        if (navigationOptions !== undefined && (navigationOptions === null || typeof navigationOptions !== 'object')) {
+            throw new Error('PlatformElement.navigate: navigationOptions must be plain object or omitted');
+        }
+        const payload = {
             routeKey,
             params: params === undefined ? {} : params,
-        });
+        };
+        if (navigationOptions !== undefined && Object.prototype.hasOwnProperty.call(navigationOptions, 'search')) {
+            const s = navigationOptions.search;
+            if (typeof s !== 'string') {
+                throw new Error('PlatformElement.navigate: navigationOptions.search must be a string');
+            }
+            payload.search = s;
+        }
+        this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, payload);
     }
 
     copyToClipboard(text, options) {

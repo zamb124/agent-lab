@@ -17,6 +17,14 @@
     --platform-safe-right: env(safe-area-inset-right, 0px);
     --platform-safe-bottom: env(safe-area-inset-bottom, 0px);
     --platform-safe-left: env(safe-area-inset-left, 0px);
+
+    /* Липкая полоса мобильного хедера: page-header, sync-chat-header (ширина <= 767px) */
+    --platform-mobile-sticky-header-z-index: 30;
+    --platform-mobile-sticky-header-padding-top: max(var(--space-2), var(--platform-safe-top));
+    --platform-mobile-sticky-header-padding-bottom: var(--space-2);
+    --platform-mobile-sticky-header-padding-right: max(var(--space-3), env(safe-area-inset-right, 0px));
+    --platform-mobile-sticky-header-padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));
+    --platform-mobile-sticky-header-row-min-height: 44px;
     
     /* ========== ЦВЕТОВАЯ ПАЛИТРА ========== */
     

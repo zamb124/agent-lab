@@ -93,10 +93,14 @@ export class LitserveApp extends PlatformApp {
                 content = html`<litserve-models-page></litserve-models-page>`;
                 break;
         }
+        const useIslandFullBleed = _key === 'models';
         return html`
             <div class="sidebar"><litserve-sidebar></litserve-sidebar></div>
             <div class="main">
-                <platform-island>${content}</platform-island>
+                <platform-island
+                    padding=${useIslandFullBleed ? 'none' : 'md'}
+                    ?safe-bottom=${useIslandFullBleed}
+                >${content}</platform-island>
             </div>
         `;
     }

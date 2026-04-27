@@ -6,6 +6,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-trace-viewer.js';
@@ -204,6 +205,7 @@ export class FrontendTracingPage extends PlatformPage {
                 max-height: 36vh;
             }
         `,
+        frontendIslandPageBodyStyles,
     ];
 
     constructor() {
@@ -518,9 +520,11 @@ export class FrontendTracingPage extends PlatformPage {
                 title=${this.t('tracing_page.title')}
                 subtitle=${this.t('tracing_page.subtitle')}
             ></page-header>
+            <div class="page-body">
             ${this._renderFilters()}
             ${body}
             ${this._renderTraceDrawer()}
+            </div>
         `;
     }
 }

@@ -194,13 +194,15 @@ export class OfficeApp extends PlatformApp {
             default:
                 content = html`<office-documents-list-page></office-documents-list-page>`;
         }
-        const islandPadding = editorMode ? 'none' : '';
+        const listOrCatalogs = routeKey === 'documents_list' || routeKey === 'documents_catalogs';
         const islandContentNoScroll = editorMode;
+        const islandFullBleedHeader = listOrCatalogs;
         return html`
             <div class="sidebar"><office-sidebar></office-sidebar></div>
             <div class="main ${editorMode ? 'main--bleed' : ''}">
                 <platform-island
-                    padding=${islandPadding}
+                    padding=${islandContentNoScroll || islandFullBleedHeader ? 'none' : 'md'}
+                    ?safe-bottom=${!editorMode && (islandContentNoScroll || islandFullBleedHeader)}
                     ?content-no-scroll=${islandContentNoScroll}
                 >${content}</platform-island>
             </div>
