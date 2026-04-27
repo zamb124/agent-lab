@@ -46,13 +46,13 @@ def get_interaction_profile(name: InteractionProfileName) -> InteractionProfile:
     if name == "fast":
         return InteractionProfile(
             name="fast",
-            pre_action_mouse_moves=1,
-            mouse_x_range=(120, 520),
-            mouse_y_range=(140, 420),
-            pause_before_action_ms_range=(15, 45),
-            pause_after_action_ms_range=(20, 65),
-            pause_after_focus_ms_range=(10, 35),
-            typing_delay_ms_range=(8, 20),
+            pre_action_mouse_moves=0,
+            mouse_x_range=(0, 0),
+            mouse_y_range=(0, 0),
+            pause_before_action_ms_range=(0, 2),
+            pause_after_action_ms_range=(0, 2),
+            pause_after_focus_ms_range=(0, 1),
+            typing_delay_ms_range=(1, 1),
         )
     if name == "human":
         return InteractionProfile(

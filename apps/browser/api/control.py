@@ -280,14 +280,10 @@ class ControlObserveBody(BaseModel):
     """
     HTTP-модель входа для `observe`.
 
-    Связи:
-    - Управляет параметрами построения snapshot для ответа.
-
-    Мотивация:
-    - Дать клиенту стабильный формат refs для snapshot.
-
-    Переиспользование:
-    - Стоит: как универсальная модель observe-запроса.
+    `include_snapshot_refs`: включить объект `snapshot.refs` в теле ответа.
+    Маппинг ref -> (role, name, nth) для click/fill всегда сохраняется на сервере
+    после observe; без дубля в JSON ответ меньше по токенам, refs в тексте
+    snapshot достаточно модели для выбора @eN.
     """
     model_config = ConfigDict(extra="forbid")
     include_snapshot_refs: bool = True
@@ -537,9 +533,9 @@ async def control_observe(
         "mode": "interactive",
         "text": snap_text,
     }
+    runtime.observe_store.update_refs(session_id, refs)
     if body.include_snapshot_refs:
         payload["snapshot"]["refs"] = refs
-        runtime.observe_store.update_refs(session_id, refs)
 
     event_path = _write_session_event(
         runtime=runtime,

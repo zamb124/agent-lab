@@ -19,6 +19,7 @@ import asyncio
 import importlib
 import inspect
 import json
+import time
 import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
@@ -27,6 +28,7 @@ from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
+from apps.flows.src.runtime.node_run_logging import log_node_event
 from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from core.clients.llm import get_llm
@@ -570,7 +572,26 @@ class LlmNode(BaseNode):
         _copy_state_back мержит все изменения из рабочей копии state обратно в state.
         При structured_output возвращает dict с полями из JSON ответа.
         """
+        started_at = time.time()
+        log_node_event(
+            event="node_start",
+            node_id=self.node_id,
+            node_type="llm_node",
+            details={
+                "incoming_policy": getattr(self._node_config, "incoming_policy", None),
+                "structured_output": bool(getattr(self._node_config, "structured_output", False)),
+                "tools_count": len(self.tool_refs or []),
+                "inputs_keys": sorted(list(inputs.keys())),
+            },
+        )
         runner_state = self._prepare_llm_runner_state(state, inputs)
+
+        # structured_output_result используется как одноразовый канал передачи
+        # JSON-ответа structured ноды в output_mapping. Его нельзя переносить
+        # между нодами — иначе следующая нода "наследует" результат и будет
+        # выглядеть как будто вернула structured output, даже если это не так.
+        if getattr(runner_state, "structured_output_result", None) is not None:
+            delattr(runner_state, "structured_output_result")
 
         if self.tool_refs and self._loaded_tools is None:
             self._loaded_tools = await self._load_tools(runner_state)
@@ -584,14 +605,41 @@ class LlmNode(BaseNode):
             runner = await self.get_runner(runner_state)
             async for _ in runner.run(input_data, runner_state):
                 pass
+        except BaseException as e:
+            duration_ms = int((time.time() - started_at) * 1000)
+            log_node_event(
+                event="node_error",
+                node_id=self.node_id,
+                node_type="llm_node",
+                duration_ms=duration_ms,
+                details={"exc_type": type(e).__name__, "exc": str(e)},
+            )
+            raise
         finally:
             self._copy_state_back(runner_state, state)
 
         # При structured output возвращаем dict для записи в state через output_mapping
         structured_result = getattr(state, "structured_output_result", None)
         if structured_result is not None:
+            delattr(state, "structured_output_result")
+            duration_ms = int((time.time() - started_at) * 1000)
+            log_node_event(
+                event="node_finish",
+                node_id=self.node_id,
+                node_type="llm_node",
+                duration_ms=duration_ms,
+                details={"result_kind": "structured_output"},
+            )
             return structured_result
         
+        duration_ms = int((time.time() - started_at) * 1000)
+        log_node_event(
+            event="node_finish",
+            node_id=self.node_id,
+            node_type="llm_node",
+            duration_ms=duration_ms,
+            details={"result_kind": "response" if bool(state.response) else "empty"},
+        )
         return {"response": state.response} if state.response else None
 
     async def get_runner(self, state: Optional[ExecutionState] = None):

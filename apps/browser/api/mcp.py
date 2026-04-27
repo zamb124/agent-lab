@@ -139,7 +139,7 @@ class ToolObserveArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: str
-    include_snapshot_refs: bool = True
+    include_snapshot_refs: bool = False
 
 
 class ToolClickArgs(BaseModel):
@@ -200,7 +200,12 @@ def _tools() -> list[McpToolInfo]:
         ),
         McpToolInfo(
             name="browser_observe",
-            description="Получить LLM-friendly snapshot страницы. Для взаимодействий используй только refs из snapshot.refs.",
+            description=(
+                "Получить LLM-friendly snapshot страницы: snapshot.text со строками вида "
+                '- role "Name" [ref=eN]. Для click/fill передавай ref как @eN из этого текста. '
+                "Поле include_snapshot_refs=true дублирует маппинг в snapshot.refs (лишние токены); "
+                "по умолчанию false — сервер всё равно помнит refs для действий."
+            ),
             inputSchema=_schema_for_model(ToolObserveArgs),
         ),
         McpToolInfo(

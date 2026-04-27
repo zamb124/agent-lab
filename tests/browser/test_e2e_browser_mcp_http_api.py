@@ -10,6 +10,7 @@ E2E: Browser MCP HTTP API (JSON-RPC 2.0) по реальному CDP (Lightpanda
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import uuid
 
@@ -157,6 +158,10 @@ async def test_mcp_http_api_initialize_list_and_call() -> None:
             assert obs_result["isError"] is False
             obs_text = obs_result["content"][0]["text"]
             assert isinstance(obs_text, str) and obs_text
+            obs_payload = json.loads(obs_text)
+            snap = obs_payload["snapshot"]
+            assert isinstance(snap.get("text"), str) and snap["text"]
+            assert "refs" not in snap
 
             # tools/call: close session
             r5 = await ac.post(

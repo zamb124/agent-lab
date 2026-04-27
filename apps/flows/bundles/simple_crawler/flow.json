@@ -1,0 +1,722 @@
+{
+  "id": "simple_crawler",
+  "name": "Simple crawler (parallel, LLM + MCP browser)",
+  "description": "Простой краулер: LLM генерирует 3 поисковых запроса -> 3 параллельные LLM-ноды открывают поиск через MCP browser и достают до 3 URL каждая -> до 9 параллельных LLM-нод читают страницы (пустые слоты пропускаются) -> финальная LLM отвечает на исходный запрос.",
+  "tags": [
+    "crawler",
+    "browser",
+    "mcp",
+    "parallel",
+    "snapshot_first",
+    "example"
+  ],
+  "permission": [],
+  "entry": "plan_queries",
+  "nodes": {
+    "plan_queries": {
+      "type": "llm_node",
+      "prompt": "По сообщению пользователя придумай ровно 3 коротких поисковых запроса для веб-поиска (разные углы темы). Ответь только одним JSON-объектом без markdown-ограждений и без текста до или после. Формат строго: {\"queries\":[\"...\",\"...\",\"...\"]}"
+    },
+    "prepare_search_urls": {
+      "type": "code",
+      "code": "import json\nimport re\nimport urllib.parse\n\nDEFAULT_LR = 213\n\n\ndef _ya_search_url(query: str, *, lr: int) -> str:\n    q = urllib.parse.quote_plus(query.strip())\n    return f\"https://ya.ru/search/?text={q}&lr={lr}&search_source=yaru_desktop_common&search_domain=yaru\"\n\n\ndef _parse_queries_from_llm(text: str) -> tuple[str, str, str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError('plan_queries: пустой ответ LLM')\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError('plan_queries: в ответе нет JSON-объекта')\n        blob = t[i:].strip()\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError('plan_queries: корень JSON должен быть объектом')\n    queries = obj.get(\"queries\")\n    if not isinstance(queries, list) or len(queries) != 3:\n        raise ValueError('plan_queries: поле queries должно быть списком из 3 строк')\n    q1, q2, q3 = [str(x).strip() for x in queries]\n    if not q1 or not q2 or not q3:\n        raise ValueError('plan_queries: каждый запрос — непустая строка')\n    return q1, q2, q3\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError('plan_queries: ожидается state.response со строкой от LLM')\n    q1, q2, q3 = _parse_queries_from_llm(text)\n\n    u1 = _ya_search_url(q1, lr=DEFAULT_LR)\n    u2 = _ya_search_url(q2, lr=DEFAULT_LR)\n    u3 = _ya_search_url(q3, lr=DEFAULT_LR)\n\n    state[\"search_query_1\"] = q1\n    state[\"search_query_2\"] = q2\n    state[\"search_query_3\"] = q3\n\n    state[\"search_url_1\"] = u1\n    state[\"search_url_2\"] = u2\n    state[\"search_url_3\"] = u3\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search_query_1\"] = q1\n    merged_vars[\"search_query_2\"] = q2\n    merged_vars[\"search_query_3\"] = q3\n    merged_vars[\"search_url_1\"] = u1\n    merged_vars[\"search_url_2\"] = u2\n    merged_vars[\"search_url_3\"] = u3\n    state.variables = merged_vars\n\n    sid = getattr(state, \"session_id\", None) or \"session\"\n    state[\"rag_namespace_id\"] = f\"crawl_{sid}_simple\"\n    return state\n"
+    },
+    "ensure_rag_namespace": {
+      "type": "code",
+      "code": "from __future__ import annotations\n\nfrom typing import Any\n\nfrom core.clients.rag_client import RagClient\nfrom core.clients.service_client import ServiceClientError\n\n\nasync def run(state: Any):\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or not namespace_id.strip():\n        raise ValueError(\"ensure_rag_namespace: state.rag_namespace_id обязателен\")\n\n    client = RagClient()\n    try:\n        raw = await client.create_namespace(namespace_id, description=\"simple_crawler session namespace\")\n    except ServiceClientError as exc:\n        state[\"rag_namespace_created\"] = False\n        state[\"rag_namespace_error\"] = str(exc)\n        return state\n\n    state[\"rag_namespace_created\"] = True\n    state[\"rag_namespace\"] = raw\n    return state\n"
+    },
+    "search_1": {
+      "type": "llm_node",
+      "prompt": "Только Ya.ru. Цель: минимизировать риск капчи. Не открывай выдачу через browser_navigate на URL с /search/ и query в адресе — только через UI главной: клик по полю поиска, затем browser_fill, затем отправка.\n\nОбязательный порядок MCP (все шаги только инструментами user-browser, без code):\n\n1) browser_create_session (anti_bot_tier=\"black\", interaction_profile=\"human\").\n2) browser_navigate: session_id из п.1, url=\"https://ya.ru\", wait_policy=\"domcontentloaded\".\n3) browser_observe: session_id. Найди в snapshot.text поле ввода поиска по строке с [ref=eN] (только из этого observe).\n4) browser_click: session_id, ref — ref поля поиска из п.3, timeout_ms по умолчанию или 10000.\n5) browser_fill: session_id, ref — тот же ref поля поиска, text — ровно одна строка без правок и без кавычек: {search_query_1}, timeout_ms по умолчанию или 10000.\n6) browser_press: session_id, key=\"Enter\".\n7) browser_wait: session_id, load_state=\"domcontentloaded\", timeout_ms=30000 (или selector, если виден стабильный блок результатов).\n8) browser_observe: session_id — снимок страницы выдачи.\n9) При необходимости browser_close_session.\n\nИз snapshot п.8 выбери до 3 лучших HTTP URL статей/источников (не URL страницы поиска). Если нет — {\"top_urls\": []}. Иначе {\"top_urls\": [u1,...]} без других полей.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_click",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_click",
+          "description": "Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_fill",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_fill",
+          "description": "Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_press",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_press",
+          "description": "Нажать клавишу (например Enter, Tab).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_wait",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_wait",
+          "description": "Ожидание selector и/или load_state в рамках сессии.",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "description": "Закрыть сессию и освободить ресурсы.",
+          "type": "mcp"
+        }
+      ]
+    },
+    "parse_search_1": {
+      "type": "code",
+      "code": "import json\nimport re\nfrom urllib.parse import urlparse\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in (\"http\", \"https\") and bool(p.netloc)\n\n\ndef _parse_top_urls(text: str) -> list[str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError(\"search_1: пустой ответ LLM\")\n\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError(\"search_1: в ответе нет JSON-объекта\")\n        blob = t[i:].strip()\n\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError(\"search_1: корень JSON должен быть объектом\")\n\n    top_urls = obj.get(\"top_urls\")\n    if not isinstance(top_urls, list):\n        raise ValueError(\"search_1: поле top_urls должно быть списком\")\n\n    picked: list[str] = []\n    for x in top_urls:\n        u = str(x).strip()\n        if not u:\n            continue\n        if not _is_http_url(u):\n            continue\n        picked.append(u)\n        if len(picked) >= 3:\n            break\n\n    return picked\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError(\"search_1: ожидается state.response со строкой от LLM\")\n\n    state[\"search1_urls\"] = _parse_top_urls(text)\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search1_urls\"] = state[\"search1_urls\"]\n    state.variables = merged_vars\n    return state\n"
+    },
+    "search_2": {
+      "type": "llm_node",
+      "prompt": "Только Ya.ru. Цель: минимизировать риск капчи. Не открывай выдачу через browser_navigate на URL с /search/ и query в адресе — только через UI главной: клик по полю поиска, затем browser_fill, затем отправка.\n\nОбязательный порядок MCP (все шаги только инструментами user-browser, без code):\n\n1) browser_create_session (anti_bot_tier=\"black\", interaction_profile=\"human\").\n2) browser_navigate: session_id из п.1, url=\"https://ya.ru\", wait_policy=\"domcontentloaded\".\n3) browser_observe: session_id. Найди в snapshot.text поле поиска по строке с [ref=eN].\n4) browser_click: session_id, ref поля поиска из п.3.\n5) browser_fill: session_id, ref тот же, text ровно: {search_query_2}.\n6) browser_press: session_id, key=\"Enter\".\n7) browser_wait: session_id, load_state=\"domcontentloaded\", timeout_ms=30000.\n8) browser_observe: session_id — выдача.\n9) При необходимости browser_close_session.\n\nИз snapshot п.8 — до 3 лучших HTTP URL. Если нет — {\"top_urls\": []}. Иначе {\"top_urls\": [...]} без других полей.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_click",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_click",
+          "description": "Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_fill",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_fill",
+          "description": "Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_press",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_press",
+          "description": "Нажать клавишу (например Enter, Tab).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_wait",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_wait",
+          "description": "Ожидание selector и/или load_state в рамках сессии.",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "description": "Закрыть сессию и освободить ресурсы.",
+          "type": "mcp"
+        }
+      ]
+    },
+    "parse_search_2": {
+      "type": "code",
+      "code": "import json\nimport re\nfrom urllib.parse import urlparse\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in (\"http\", \"https\") and bool(p.netloc)\n\n\ndef _parse_top_urls(text: str) -> list[str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError(\"search_2: пустой ответ LLM\")\n\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError(\"search_2: в ответе нет JSON-объекта\")\n        blob = t[i:].strip()\n\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError(\"search_2: корень JSON должен быть объектом\")\n\n    top_urls = obj.get(\"top_urls\")\n    if not isinstance(top_urls, list):\n        raise ValueError(\"search_2: поле top_urls должно быть списком\")\n\n    picked: list[str] = []\n    for x in top_urls:\n        u = str(x).strip()\n        if not u:\n            continue\n        if not _is_http_url(u):\n            continue\n        picked.append(u)\n        if len(picked) >= 3:\n            break\n\n    return picked\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError(\"search_2: ожидается state.response со строкой от LLM\")\n\n    state[\"search2_urls\"] = _parse_top_urls(text)\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search2_urls\"] = state[\"search2_urls\"]\n    state.variables = merged_vars\n    return state\n"
+    },
+    "search_3": {
+      "type": "llm_node",
+      "prompt": "Только Ya.ru. Цель: минимизировать риск капчи. Не открывай выдачу через browser_navigate на URL с /search/ и query в адресе — только через UI главной: клик по полю поиска, затем browser_fill, затем отправка.\n\nОбязательный порядок MCP (все шаги только инструментами user-browser, без code):\n\n1) browser_create_session (anti_bot_tier=\"black\", interaction_profile=\"human\").\n2) browser_navigate: session_id из п.1, url=\"https://ya.ru\", wait_policy=\"domcontentloaded\".\n3) browser_observe: session_id. Найди в snapshot.text поле поиска по строке с [ref=eN].\n4) browser_click: session_id, ref поля поиска из п.3.\n5) browser_fill: session_id, ref тот же, text ровно: {search_query_3}.\n6) browser_press: session_id, key=\"Enter\".\n7) browser_wait: session_id, load_state=\"domcontentloaded\", timeout_ms=30000.\n8) browser_observe: session_id — выдача.\n9) При необходимости browser_close_session.\n\nИз snapshot п.8 — до 3 лучших HTTP URL. Если нет — {\"top_urls\": []}. Иначе {\"top_urls\": [...]} без других полей.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_click",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_click",
+          "description": "Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_fill",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_fill",
+          "description": "Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_press",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_press",
+          "description": "Нажать клавишу (например Enter, Tab).",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_wait",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_wait",
+          "description": "Ожидание selector и/или load_state в рамках сессии.",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "description": "Закрыть сессию и освободить ресурсы.",
+          "type": "mcp"
+        }
+      ]
+    },
+    "parse_search_3": {
+      "type": "code",
+      "code": "import json\nimport re\nfrom urllib.parse import urlparse\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in (\"http\", \"https\") and bool(p.netloc)\n\n\ndef _parse_top_urls(text: str) -> list[str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError(\"search_3: пустой ответ LLM\")\n\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError(\"search_3: в ответе нет JSON-объекта\")\n        blob = t[i:].strip()\n\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError(\"search_3: корень JSON должен быть объектом\")\n\n    top_urls = obj.get(\"top_urls\")\n    if not isinstance(top_urls, list):\n        raise ValueError(\"search_3: поле top_urls должно быть списком\")\n\n    picked: list[str] = []\n    for x in top_urls:\n        u = str(x).strip()\n        if not u:\n            continue\n        if not _is_http_url(u):\n            continue\n        picked.append(u)\n        if len(picked) >= 3:\n            break\n\n    return picked\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError(\"search_3: ожидается state.response со строкой от LLM\")\n\n    state[\"search3_urls\"] = _parse_top_urls(text)\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search3_urls\"] = state[\"search3_urls\"]\n    state.variables = merged_vars\n    return state\n"
+    },
+    "collect_9_urls": {
+      "type": "code",
+      "incoming_policy": "all",
+      "code": "from urllib.parse import urlparse\n\nMAX_SLOTS = 9\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in ('http', 'https') and bool(p.netloc)\n\n\nasync def run(state):\n    urls = []\n    for k in ('search1_urls', 'search2_urls', 'search3_urls'):\n        part = state.get(k)\n        if not isinstance(part, list):\n            continue\n        for x in part:\n            urls.append(str(x).strip())\n\n    seen = set()\n    picked = []\n    for u in urls:\n        if not u or not _is_http_url(u):\n            continue\n        if u in seen:\n            continue\n        seen.add(u)\n        picked.append(u)\n        if len(picked) >= MAX_SLOTS:\n            break\n\n    state['crawl_target_count'] = len(picked)\n    state['crawl_target_urls'] = list(picked)\n    for i in range(1, MAX_SLOTS + 1):\n        if i <= len(picked):\n            state[f'target_url_{i}'] = picked[i - 1]\n        else:\n            state[f'target_url_{i}'] = ''\n    return state\n"
+    },
+    "page_1": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_1 отсутствует или пустая строка — не вызывай browser tools и rag_add_text; ответь одним коротким предложением что источник для слота 1 недоступен. Иначе открой target_url_1 через MCP browser tools, получи snapshot, сформируй markdown (коротко) и положи в RAG через rag_add_text. document_id: 'simple_crawler:1'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_2": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_2 пустой — не вызывай инструменты; одно предложение про пропуск слота 2. Иначе открой URL через MCP browser, snapshot -> markdown в RAG. document_id: 'simple_crawler:2'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_3": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_3 пустой — не вызывай инструменты; кратко пропуск слота 3. Иначе MCP browser + RAG. document_id: 'simple_crawler:3'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_4": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_4 пустой — без инструментов, пропуск слота 4. Иначе MCP browser + RAG. document_id: 'simple_crawler:4'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_5": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_5 пустой — без инструментов, пропуск слота 5. Иначе MCP browser + RAG. document_id: 'simple_crawler:5'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_6": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_6 пустой — без инструментов, пропуск слота 6. Иначе MCP browser + RAG. document_id: 'simple_crawler:6'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_7": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_7 пустой — без инструментов, пропуск слота 7. Иначе MCP browser + RAG. document_id: 'simple_crawler:7'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_8": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_8 пустой — без инструментов, пропуск слота 8. Иначе MCP browser + RAG. document_id: 'simple_crawler:8'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "page_9": {
+      "type": "llm_node",
+      "prompt": "Если state.target_url_9 пустой — без инструментов, пропуск слота 9. Иначе MCP browser + RAG. document_id: 'simple_crawler:9'.",
+      "tools": [
+        {
+          "tool_id": "mcp:user-browser:browser_create_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_create_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_navigate",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_navigate",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_observe",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_observe",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "mcp:user-browser:browser_close_session",
+          "code_mode": "mcp_tool",
+          "mcp_server_id": "user-browser",
+          "mcp_tool_name": "browser_close_session",
+          "type": "mcp"
+        },
+        {
+          "tool_id": "rag_add_text"
+        }
+      ]
+    },
+    "final_answer": {
+      "type": "llm_node",
+      "incoming_policy": "all",
+      "prompt": "Используй RAG namespace_id=state.rag_namespace_id. Если state.crawl_target_count равен 0 — ответь по общим знаниям и явно скажи, что веб-источники не собраны. Иначе выполни rag_search по запросу пользователя, укажи что ответ опирается на найденные страницы и кратко перечисли URL из metadata где возможно.",
+      "tools": [
+        {
+          "tool_id": "rag_search"
+        }
+      ]
+    }
+  },
+  "edges": [
+    {
+      "from": "plan_queries",
+      "to": "prepare_search_urls"
+    },
+    {
+      "from": "prepare_search_urls",
+      "to": "ensure_rag_namespace"
+    },
+    {
+      "from": "ensure_rag_namespace",
+      "to": "search_1"
+    },
+    {
+      "from": "ensure_rag_namespace",
+      "to": "search_2"
+    },
+    {
+      "from": "ensure_rag_namespace",
+      "to": "search_3"
+    },
+    {
+      "from": "search_1",
+      "to": "parse_search_1"
+    },
+    {
+      "from": "search_2",
+      "to": "parse_search_2"
+    },
+    {
+      "from": "search_3",
+      "to": "parse_search_3"
+    },
+    {
+      "from": "parse_search_1",
+      "to": "collect_9_urls"
+    },
+    {
+      "from": "parse_search_2",
+      "to": "collect_9_urls"
+    },
+    {
+      "from": "parse_search_3",
+      "to": "collect_9_urls"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_1"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_2"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_3"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_4"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_5"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_6"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_7"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_8"
+    },
+    {
+      "from": "collect_9_urls",
+      "to": "page_9"
+    },
+    {
+      "from": "page_1",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_2",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_3",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_4",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_5",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_6",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_7",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_8",
+      "to": "final_answer"
+    },
+    {
+      "from": "page_9",
+      "to": "final_answer"
+    },
+    {
+      "from": "final_answer",
+      "to": null
+    }
+  ],
+  "variables": {}
+}

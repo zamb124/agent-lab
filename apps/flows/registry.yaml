@@ -52,6 +52,14 @@ flows:
     public: true
     description: "Серия «Универсальный агент»: общий ассистент с калькулятором, уточнениями и мета-тулом sandbox_codegen; навыки RAG и упор на код"
 
+  - id: simple_crawler
+    public: true
+    description: "Простой краулер snapshot-first через MCP browser: 3 search URL -> top-3 links -> дедуп -> обход 9 URL. Чтение/markdown/RAG ingestion — отдельный шаг."
+
+  - id: browser_agent
+    public: true
+    description: "Интерактивный агент управления браузером через MCP Browser Runtime (multi-turn): хранит browser_session_id в state, выполняет произвольные команды пользователя (navigate/observe/click/fill) и закрывает сессию по явной команде."
+
 
 # Тулы
 # ВСЕ тулы загружаются в system namespace при старте

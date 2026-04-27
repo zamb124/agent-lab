@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from core.logging import get_logger
 from apps.flows.src.models import ToolReference
+from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.models.enums import CodeMode, NodeType
 from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.models.enums import ReactToolRole
@@ -24,6 +25,48 @@ logger = get_logger(__name__)
 # Тулы, чей исходник кладётся в tool_repository для документации/шаблона, но исполнять
 # их как CodeTool нельзя: тело опирается на модули вне sandbox (импорты режутся).
 _TOOL_IDS_PROCESS_BUILTIN_ONLY = frozenset({"sandbox_codegen"})
+
+
+def _browser_runtime_mcp_tool_parameters_schema(
+    server_config: MCPServerConfig,
+    mcp_tool_name: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    JSON Schema аргументов MCP tools Browser Runtime для подсказки LLM.
+
+    Применяется только если URL MCP указывает на HTTP-эндпоинт browser-сервиса.
+    """
+    if "/browser/" not in (server_config.url or ""):
+        return None
+    try:
+        from apps.browser.api.mcp import (
+            ToolCloseSessionArgs,
+            ToolCreateSessionArgs,
+            ToolNavigateArgs,
+            ToolObserveArgs,
+        )
+    except ImportError:
+        return None
+
+    model_by_name: Dict[str, Any] = {
+        "browser_create_session": ToolCreateSessionArgs,
+        "browser_navigate": ToolNavigateArgs,
+        "browser_observe": ToolObserveArgs,
+        "browser_close_session": ToolCloseSessionArgs,
+    }
+    model = model_by_name.get(mcp_tool_name)
+    if model is None:
+        return None
+    schema = model.model_json_schema()
+    schema.pop("title", None)
+    if mcp_tool_name == "browser_navigate":
+        wp = schema.get("properties", {}).get("wait_policy")
+        if isinstance(wp, dict):
+            wp["description"] = (
+                "Строка: domcontentloaded, networkidle либо selector:<css>. "
+                "Не используй load и не передавай объект {\"event\": ...}."
+            )
+    return schema
 
 
 class ToolRegistry:
@@ -391,10 +434,19 @@ class ToolRegistry:
         
         if not server_config:
             raise ValueError(f"MCP server '{mcp_server_id}' not found")
-        
-        parameters = None
+
+        parameters_schema: Optional[Dict[str, Any]] = None
+        ps_raw = config.get("parameters_schema")
+        if isinstance(ps_raw, dict) and ps_raw.get("type") == "object":
+            parameters_schema = ps_raw
+        if parameters_schema is None:
+            parameters_schema = _browser_runtime_mcp_tool_parameters_schema(
+                server_config, mcp_tool_name
+            )
+
+        parameters: Optional[Dict[str, CallParameter]] = None
         args_schema = config.get("args_schema")
-        if args_schema:
+        if args_schema and parameters_schema is None:
             parameters = {}
             for name, schema in args_schema.items():
                 if isinstance(schema, CallParameter):
@@ -404,13 +456,14 @@ class ToolRegistry:
                         type=schema.get("type", "string"),
                         description=schema.get("description", ""),
                     )
-        
+
         tool = MCPTool(
             tool_id=tool_id,
             mcp_server_config=server_config,
             mcp_tool_name=mcp_tool_name,
             description=config.get("description"),
             parameters=parameters,
+            parameters_schema=parameters_schema,
             tags=config.get("tags"),
         )
         

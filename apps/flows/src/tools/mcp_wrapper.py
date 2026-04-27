@@ -33,6 +33,7 @@ class MCPTool(BaseTool):
         mcp_tool_name: str,
         description: Optional[str] = None,
         parameters: Optional[Dict[str, CallParameter]] = None,
+        parameters_schema: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
     ):
         self.name = sanitize_tool_name(tool_id)
@@ -40,11 +41,14 @@ class MCPTool(BaseTool):
         self._mcp_server_config = mcp_server_config
         self._mcp_tool_name = mcp_tool_name
         self._parameters = parameters or {}
+        self._parameters_schema = parameters_schema
         self.tags = tags or ["mcp"]
     
     @property
     def parameters(self) -> Dict[str, Any]:
         """JSON Schema параметров."""
+        if self._parameters_schema is not None:
+            return self._parameters_schema
         if not self._parameters:
             return {"type": "object", "properties": {}, "required": []}
         
