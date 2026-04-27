@@ -66,6 +66,7 @@ import '../modals/document-upload-modal.js';
 
 const OFFICE_ROUTES = [
     { key: 'documents_list',     path: '' },
+    { key: 'platform_services', path: 'services', parent: 'documents_list' },
     { key: 'documents_catalogs', path: 'catalogs',                parent: 'documents_list' },
     { key: 'documents_catalogs', path: 'catalog/:catalogId',      parent: 'documents_list' },
     { key: 'document_editor',    path: 'edit/:bindingId',         parent: 'documents_list' },
@@ -173,6 +174,9 @@ export class OfficeApp extends PlatformApp {
         let content;
         let editorMode = false;
         switch (routeKey) {
+            case 'platform_services':
+                content = html`<platform-services-page></platform-services-page>`;
+                break;
             case 'documents_list':
                 content = html`<office-documents-list-page></office-documents-list-page>`;
                 break;

@@ -92,6 +92,25 @@ export class OfficeSidebar extends PlatformElement {
                 font-weight: 600;
             }
             .nav-item:disabled { opacity: 0.4; cursor: not-allowed; }
+            .services-launch-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                margin-bottom: var(--space-3);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all var(--duration-fast);
+            }
+            .services-launch-btn:hover {
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+            }
+            platform-service-sidebar[collapsed] [data-services-launch-wrap] { display: none; }
             .nav-label {
                 flex: 1;
                 font-size: var(--text-base);
@@ -272,6 +291,16 @@ export class OfficeSidebar extends PlatformElement {
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
                 <div slot="header">
+                    <div data-services-launch-wrap data-hide-collapsed>
+                        <button
+                            type="button"
+                            class="services-launch-btn"
+                            aria-label=${this.t('services_switch.aria', null, 'platform')}
+                            @click=${() => this.openModal('platform.services', {})}
+                        >
+                            <platform-icon name="layout-grid" size="20"></platform-icon>
+                        </button>
+                    </div>
                     <div class="namespace-selector" data-hide-collapsed>
                         <span class="namespace-label">${this.t('sidebar.namespace_label')}</span>
                         <select

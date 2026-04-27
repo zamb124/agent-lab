@@ -1,91 +1,29 @@
 /**
  * dashboard-services-grid — витрина из сервисных карточек.
  *
- * Container: дёргает counts ops по каждому сервису и общий health,
- * собирает props для пресентейшнл-карточек. Сервисы и их бренд-цвета —
- * константный массив локально, чтобы каждая правка дизайна была
- * сконцентрирована в одном файле.
+ * Список сервисов и бренд — единый каталог platform-services-catalog;
+ * метрики и health — фабрики frontend.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PLATFORM_SERVICES } from '@platform/lib/utils/platform-services-catalog.js';
+import { buildServiceEntryUrl } from '@platform/lib/utils/build-service-entry-url.js';
+import '@platform/lib/components/platform-services-launcher.js';
 import './dashboard-service-card.js';
-import './dashboard-service-launcher.js';
 
-const SERVICES = Object.freeze([
-    Object.freeze({
-        svcId: 'flows',
-        nameKey: 'apps.flows.name',
-        descriptionKey: 'apps.flows.description',
-        logoSrc: '/static/core/assets/service_logos/agents_logo.svg',
-        href: '/flows',
-        brandFrom: '#7c3aed',
-        brandTo: '#0ea5e9',
-        countOp: 'frontend/dashboard_flows_count',
-        metricKey: 'console_home.stat_flows_count',
-        healthName: 'flows',
-    }),
-    Object.freeze({
-        svcId: 'crm',
-        nameKey: 'apps.crm.name',
-        descriptionKey: 'apps.crm.description',
-        logoSrc: '/static/core/assets/service_logos/crm_logo.svg',
-        href: '/crm',
-        brandFrom: '#ec4899',
-        brandTo: '#f97316',
-        countOp: 'frontend/dashboard_crm_namespaces_count',
-        metricKey: 'console_home.stat_namespaces_count',
-        healthName: 'crm',
-    }),
-    Object.freeze({
-        svcId: 'rag',
-        nameKey: 'apps.rag.name',
-        descriptionKey: 'apps.rag.description',
-        logoSrc: '/static/core/assets/service_logos/rag_logo.svg',
-        href: '/rag',
-        brandFrom: '#10b981',
-        brandTo: '#0ea5e9',
-        countOp: 'frontend/dashboard_rag_namespaces_count',
-        metricKey: 'console_home.stat_namespaces_count',
-        healthName: 'rag',
-    }),
-    Object.freeze({
-        svcId: 'sync',
-        nameKey: 'apps.sync.name',
-        descriptionKey: 'apps.sync.description',
-        logoSrc: '/static/core/assets/service_logos/sync_logo.svg',
-        href: '/sync',
-        brandFrom: '#0ea5e9',
-        brandTo: '#6366f1',
-        countOp: 'frontend/dashboard_sync_spaces_count',
-        metricKey: 'console_home.stat_spaces_count',
-        healthName: 'sync',
-    }),
-    Object.freeze({
-        svcId: 'documents',
-        nameKey: 'apps.documents.name',
-        descriptionKey: 'apps.documents.description',
-        logoSrc: '/static/core/assets/service_logos/documents_logo.svg',
-        href: '/documents',
-        brandFrom: '#f59e0b',
-        brandTo: '#ef4444',
-        countOp: 'frontend/dashboard_documents_files_count',
-        metricKey: 'console_home.stat_files_count',
-        healthName: 'office',
-    }),
-    Object.freeze({
-        svcId: 'litserve',
-        nameKey: 'apps.litserve.name',
-        descriptionKey: 'apps.litserve.description',
-        logoSrc: '/static/core/assets/service_logos/rag_logo.svg',
-        href: '/litserve',
-        brandFrom: '#8b5cf6',
-        brandTo: '#d946ef',
-        countOp: 'frontend/dashboard_litserve_models_count',
-        metricKey: 'console_home.stat_models_count',
-        healthName: 'provider_litserve',
-    }),
-]);
+const DASHBOARD_SERVICES = PLATFORM_SERVICES.filter((s) => s.id !== 'frontend');
+
+/**
+ * @param {string} nameKey
+ * @returns {string}
+ */
+function descriptionKeyFromNameKey(nameKey) {
+    if (typeof nameKey !== 'string' || !nameKey.endsWith('.name')) {
+        throw new Error('dashboard-services-grid: nameKey must end with .name');
+    }
+    return `${nameKey.slice(0, -5)}description`;
+}
 
 export class DashboardServicesGrid extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -124,10 +62,7 @@ export class DashboardServicesGrid extends PlatformElement {
                 }
                 .cards-grid { display: none; }
                 .launchers {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: var(--space-3);
-                    row-gap: var(--space-4);
+                    display: block;
                 }
             }
         `,
@@ -136,7 +71,7 @@ export class DashboardServicesGrid extends PlatformElement {
     constructor() {
         super();
         this._status = this.useOp('frontend/services_status_load');
-        this._countOps = SERVICES.map((svc) => this.useOp(svc.countOp));
+        this._countOps = DASHBOARD_SERVICES.map((svc) => this.useOp(svc.countOp));
         this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
         this._countsBootstrapped = false;
         this._prevCompanyId = null;
@@ -148,8 +83,8 @@ export class DashboardServicesGrid extends PlatformElement {
             this._countsBootstrapped = true;
             this._status.run(null);
             for (let i = 0; i < this._countOps.length; i++) {
-                const svc = SERVICES[i];
-                if (svc.svcId === 'litserve' && cid !== 'system') {
+                const svc = DASHBOARD_SERVICES[i];
+                if (svc.id === 'litserve' && cid !== 'system') {
                     continue;
                 }
                 this._countOps[i].run(null);
@@ -159,7 +94,7 @@ export class DashboardServicesGrid extends PlatformElement {
         }
         if (cid !== this._prevCompanyId) {
             this._prevCompanyId = cid;
-            const litIdx = SERVICES.findIndex((s) => s.svcId === 'litserve');
+            const litIdx = DASHBOARD_SERVICES.findIndex((s) => s.id === 'litserve');
             if (litIdx >= 0 && cid === 'system') {
                 this._countOps[litIdx].run(null);
             }
@@ -184,19 +119,20 @@ export class DashboardServicesGrid extends PlatformElement {
     }
 
     _serviceTiles(statusResult, activeCompanyId) {
-        return SERVICES.map((svc, idx) => {
+        return DASHBOARD_SERVICES.map((svc, idx) => {
             const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
-            const litserveLocked = svc.svcId === 'litserve' && activeCompanyId !== 'system';
+            const litserveLocked = svc.id === 'litserve' && activeCompanyId !== 'system';
+            const descriptionKey = descriptionKeyFromNameKey(svc.nameKey);
             return html`
                 <dashboard-service-card
-                    svc-id=${svc.svcId}
+                    svc-id=${svc.id}
                     name-key=${svc.nameKey}
-                    description-key=${svc.descriptionKey}
+                    description-key=${descriptionKey}
                     logo-src=${svc.logoSrc}
-                    href=${svc.href}
+                    href=${buildServiceEntryUrl(svc.id)}
                     brand-from=${svc.brandFrom}
                     brand-to=${svc.brandTo}
-                    metric-value=${this._metricValue(idx, svc.metricKey, svc.svcId, activeCompanyId)}
+                    metric-value=${this._metricValue(idx, svc.metricKey, svc.id, activeCompanyId)}
                     health-state=${health.state}
                     latency-ms=${health.latencyMs}
                     ?disabled=${litserveLocked}
@@ -205,27 +141,20 @@ export class DashboardServicesGrid extends PlatformElement {
         });
     }
 
-    _serviceLaunchers(statusResult, activeCompanyId) {
-        return SERVICES.map((svc) => {
-            const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
-            const litserveLocked = svc.svcId === 'litserve' && activeCompanyId !== 'system';
-            return html`
-                <dashboard-service-launcher
-                    name-key=${svc.nameKey}
-                    logo-src=${svc.logoSrc}
-                    href=${svc.href}
-                    brand-from=${svc.brandFrom}
-                    brand-to=${svc.brandTo}
-                    health-state=${health.state}
-                    ?disabled=${litserveLocked}
-                ></dashboard-service-launcher>
-            `;
-        });
+    _serviceLaunchersHealthMap(statusResult, activeCompanyId) {
+        const healthMap = Object.create(null);
+        for (const svc of DASHBOARD_SERVICES) {
+            const h = this._healthForService(statusResult, svc.healthName, activeCompanyId);
+            healthMap[svc.id] = h.state;
+        }
+        return healthMap;
     }
 
     render() {
         const statusResult = this._status.lastResult;
         const activeCompanyId = this._activeCompanyId.value;
+        const ids = DASHBOARD_SERVICES.map((s) => s.id);
+        const healthByServiceId = this._serviceLaunchersHealthMap(statusResult, activeCompanyId);
         return html`
             <div class="header">
                 <h2 class="title">${this.t('console_home.services_title')}</h2>
@@ -235,7 +164,11 @@ export class DashboardServicesGrid extends PlatformElement {
                 ${this._serviceTiles(statusResult, activeCompanyId)}
             </div>
             <div class="launchers">
-                ${this._serviceLaunchers(statusResult, activeCompanyId)}
+                <platform-services-launcher
+                    layout="compact"
+                    .includeServiceIds=${ids}
+                    .healthByServiceId=${healthByServiceId}
+                ></platform-services-launcher>
             </div>
         `;
     }

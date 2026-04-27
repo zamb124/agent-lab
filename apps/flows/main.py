@@ -273,6 +273,7 @@ app = create_service_app(
     service_name="flows",
     settings_class=FlowSettings,
     get_container=get_container,
+    services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=[
         api_v1_router,
         registry_router,

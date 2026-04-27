@@ -18,7 +18,18 @@
         "theme_dark": "Тёмная тема",
         "logout": "Выйти",
         "language": "Язык",
-        "user_fallback": "Пользователь"
+        "user_fallback": "Пользователь",
+        "services": "Сервисы"
+    },
+    "services_page": {
+        "title": "Сервисы платформы",
+        "subtitle": "Быстрый переход между продуктами Humanitec"
+    },
+    "services_modal": {
+        "title": "Сервисы"
+    },
+    "services_switch": {
+        "aria": "Открыть витрину сервисов"
     },
     "apps": {
         "flows": {

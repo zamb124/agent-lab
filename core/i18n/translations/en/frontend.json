@@ -1,4 +1,8 @@
 {
+    "routes": {
+        "dashboard": "Dashboard",
+        "platform_services": "Services"
+    },
     "title": "Dashboard",
     "console_sidebar": {
         "dashboard": "Dashboard",

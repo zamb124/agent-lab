@@ -154,6 +154,7 @@ app = create_service_app(
     get_container=get_frontend_container,
     on_startup=on_startup,
     routers=[],
+    services_spa_index=Path(__file__).parent / "ui" / "index.html",
     pages_routers=[
         auth_router,
         companies_router,

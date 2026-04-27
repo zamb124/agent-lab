@@ -17,6 +17,7 @@
         }
     },
     "routes": {
+        "platform_services": "Services",
         "notes": "Notes",
         "settings": "Settings",
         "note": "Note",

@@ -17,7 +17,19 @@ export class LandingPage extends PlatformPage {
     static styles = [
         PlatformPage.styles,
         css`
-            :host { display: block; width: 100%; background: var(--landing-bg, #0F0F0F); color: var(--landing-text, #FFFFFF); }
+            :host {
+                display: block;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                background: var(--landing-bg, #0F0F0F);
+                color: var(--landing-text, #FFFFFF);
+            }
+            .landing-container {
+                max-width: 100%;
+                overflow-x: clip;
+                box-sizing: border-box;
+            }
             section { position: relative; scroll-margin-top: 88px; }
         `,
     ];

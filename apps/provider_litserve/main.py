@@ -424,6 +424,7 @@ def build_app() -> FastAPI:
         service_name="provider_litserve",
         settings_class=ProviderLitserveServiceSettings,
         get_container=get_provider_litserve_container,
+        services_spa_index=UI_INDEX_PATH,
         routers=[],
         on_startup=_on_startup,
         on_shutdown=_on_shutdown,

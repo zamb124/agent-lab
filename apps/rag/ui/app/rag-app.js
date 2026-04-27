@@ -40,6 +40,7 @@ import '../modals/namespace-create-modal.js';
 
 const RAG_ROUTES = [
     { key: 'namespaces',       path: '' },
+    { key: 'platform_services', path: 'services', parent: 'namespaces' },
     { key: 'namespace_detail', path: 'namespaces/:namespaceId', parent: 'namespaces' },
     { key: 'search',           path: 'search' },
     { key: 'settings',         path: 'settings' },
@@ -128,6 +129,9 @@ export class RagApp extends PlatformApp {
     renderRoute(routeKey, params) {
         let content;
         switch (routeKey) {
+            case 'platform_services':
+                content = html`<platform-services-page></platform-services-page>`;
+                break;
             case 'namespaces':
                 content = html`<rag-namespaces-page></rag-namespaces-page>`;
                 break;

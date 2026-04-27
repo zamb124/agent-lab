@@ -146,6 +146,7 @@ import '@platform/lib/components/layout/platform-island.js';
 
 const CRM_ROUTES = [
     { key: 'notes',               path: '' },
+    { key: 'platform_services',   path: 'services', parent: 'notes' },
     { key: 'settings',            path: 'settings' },
     { key: 'notes',               path: 'notes' },
     { key: 'note',                path: 'notes/:itemId',     parent: 'notes' },
@@ -392,6 +393,9 @@ export class CRMApp extends PlatformApp {
     renderRoute(routeKey, params) {
         let content;
         switch (routeKey) {
+            case 'platform_services':
+                content = html`<platform-services-page></platform-services-page>`;
+                break;
             case 'settings':            content = html`<crm-settings-hub-page></crm-settings-hub-page>`; break;
             case 'notes':               content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
             case 'note':                content = html`<crm-note-page .noteId=${params.itemId}></crm-note-page>`; break;

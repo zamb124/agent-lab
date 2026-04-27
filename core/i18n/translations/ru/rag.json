@@ -1,4 +1,11 @@
 {
+    "routes": {
+        "namespaces": "Неймспейсы",
+        "platform_services": "Сервисы",
+        "namespace_detail": "Неймспейс",
+        "search": "Поиск",
+        "settings": "Настройки"
+    },
     "sidebar": {
         "title": "RAG Service",
         "provider_label": "Провайдер",

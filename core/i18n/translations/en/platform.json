@@ -18,7 +18,18 @@
         "theme_dark": "Dark theme",
         "logout": "Log out",
         "language": "Language",
-        "user_fallback": "User"
+        "user_fallback": "User",
+        "services": "Services"
+    },
+    "services_page": {
+        "title": "Platform services",
+        "subtitle": "Quick access to Humanitec products"
+    },
+    "services_modal": {
+        "title": "Services"
+    },
+    "services_switch": {
+        "aria": "Open services launcher"
     },
     "apps": {
         "flows": {

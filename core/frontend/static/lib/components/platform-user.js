@@ -8,7 +8,7 @@
  *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → подписка на
  *     AUTH_COMPANY_SWITCHED → редирект на subdomain выбранной компании.
  *     Cross-tab синхронизация через localStorage 'platform:company-switch'.
- *   - меню: Apps grid (Flows, NetWorkle, RAG, Sync, Documents, Console),
+ *   - меню: витрина сервисов (platform-services-launcher), затем Профиль,
  *     Профиль (открывает `platform.user_info` модалку с формой профиля),
  *     Компания (если их > 1), Календарь, Документация, язык (en|ru),
  *     переключатель темы, Выйти.
@@ -29,27 +29,9 @@ import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-icon.js';
 import './platform-calendar-modal.js';
+import './platform-services-launcher.js';
 
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
-const SERVICE_LOGO_BASE = '/static/core/assets/service_logos';
-
-const SERVICE_APPS = Object.freeze([
-    { id: 'flows',     logo: `${SERVICE_LOGO_BASE}/agents_logo.svg`,    i18n: 'apps.flows' },
-    { id: 'crm',       logo: `${SERVICE_LOGO_BASE}/crm_logo.svg`,       i18n: 'apps.crm' },
-    { id: 'rag',       logo: `${SERVICE_LOGO_BASE}/rag_logo.svg`,       i18n: 'apps.rag' },
-    { id: 'sync',      logo: `${SERVICE_LOGO_BASE}/sync_logo.svg`,      i18n: 'apps.sync' },
-    { id: 'documents', logo: `${SERVICE_LOGO_BASE}/documents_logo.svg`, i18n: 'apps.documents' },
-    { id: 'frontend',  logo: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,  i18n: 'apps.frontend' },
-]);
-
-const SERVICE_DEV_PORTS = Object.freeze({
-    flows: '8001',
-    frontend: '8002',
-    crm: '8003',
-    rag: '8004',
-    sync: '8005',
-    documents: '8008',
-});
 
 export class PlatformUser extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -59,7 +41,6 @@ export class PlatformUser extends PlatformElement {
         documentationTag: { type: String, attribute: 'documentation-tag' },
         _menuOpen: { state: true },
         _companySelectorOpen: { state: true },
-        _appsMenuOpen: { state: true },
         _avatarFallbackLevel: { state: true },
     };
 
@@ -69,7 +50,6 @@ export class PlatformUser extends PlatformElement {
         this.documentationTag = null;
         this._menuOpen = false;
         this._companySelectorOpen = false;
-        this._appsMenuOpen = false;
         this._avatarFallbackLevel = 0;
         this._menuAvatarSig = '';
 
@@ -143,7 +123,6 @@ export class PlatformUser extends PlatformElement {
         if (!path.includes(this)) {
             this._menuOpen = false;
             this._companySelectorOpen = false;
-            this._appsMenuOpen = false;
         }
     }
 
@@ -153,13 +132,7 @@ export class PlatformUser extends PlatformElement {
         this._menuOpen = next;
         if (!next) {
             this._companySelectorOpen = false;
-            this._appsMenuOpen = false;
         }
-    }
-
-    _toggleAppsMenu(e) {
-        e.stopPropagation();
-        this._appsMenuOpen = !this._appsMenuOpen;
     }
 
     _toggleCompanySelector(e) {
@@ -255,40 +228,6 @@ export class PlatformUser extends PlatformElement {
         window.open(url, '_blank', 'noopener,noreferrer');
     }
 
-    _openServiceApp(serviceId, event) {
-        event.stopPropagation();
-        const url = this._buildServiceUrl(serviceId);
-        if (PlatformUser._isStandalonePwaMode()) {
-            window.location.href = url;
-            return;
-        }
-        window.open(url, '_blank', 'noopener,noreferrer');
-    }
-
-    _buildServiceUrl(serviceId) {
-        // Консоль (apps/frontend) монтируется в корне сервиса: /dashboard, а не /frontend.
-        const servicePath = serviceId === 'frontend' ? '/dashboard' : `/${serviceId}`;
-        const hostname = window.location.hostname;
-        if (!PlatformUser._isLocalHost(hostname)) {
-            return servicePath;
-        }
-        const targetPort = SERVICE_DEV_PORTS[serviceId];
-        if (!targetPort) {
-            throw new Error(`platform-user: unknown service id "${serviceId}"`);
-        }
-        if (window.location.port === targetPort) {
-            return servicePath;
-        }
-        return `${window.location.protocol}//${hostname}:${targetPort}${servicePath}`;
-    }
-
-    static _isLocalHost(hostname) {
-        return hostname === 'localhost'
-            || hostname === '127.0.0.1'
-            || hostname.endsWith('.localhost')
-            || hostname.endsWith('.lvh.me');
-    }
-
     _logout() {
         this._menuOpen = false;
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
@@ -381,7 +320,7 @@ export class PlatformUser extends PlatformElement {
         if (!button) return;
         const rect = button.getBoundingClientRect();
         const margin = 8;
-        const maxW = Math.min(260, window.innerWidth - 2 * margin);
+        const maxW = Math.min(300, window.innerWidth - 2 * margin);
         let left = rect.left;
         if (left + maxW > window.innerWidth - margin) left = window.innerWidth - maxW - margin;
         if (left < margin) left = margin;
@@ -389,12 +328,6 @@ export class PlatformUser extends PlatformElement {
         this.style.setProperty('--user-menu-fixed-left', `${left}px`);
         this.style.setProperty('--user-menu-fixed-bottom', `${bottom}px`);
         this.style.setProperty('--user-menu-fixed-width', `${maxW}px`);
-    }
-
-    static _isStandalonePwaMode() {
-        const mq = window.matchMedia('(display-mode: standalone)');
-        if (mq && mq.matches) return true;
-        return window.navigator.standalone === true;
     }
 
     render() {
@@ -448,30 +381,10 @@ export class PlatformUser extends PlatformElement {
 
             ${this._menuOpen ? html`
                 <div class="user-menu" @click=${(e) => e.stopPropagation()}>
-                    <button class="menu-item apps-item" @click=${this._toggleAppsMenu}>
-                        <img class="apps-menu-logo" src="${SERVICE_LOGO_BASE}/agents_logo.svg" alt="" />
-                        <span class="menu-item-label">${this.t('menu.apps')}</span>
-                        <platform-icon
-                            class=${classMap({ 'expand-icon': true, open: this._appsMenuOpen })}
-                            name="chevron-right"
-                            size="12"
-                        ></platform-icon>
-                    </button>
-
-                    ${this._appsMenuOpen ? html`
-                        <div class="apps-grid">
-                            ${SERVICE_APPS.map((service) => html`
-                                <button class="app-card" @click=${(e) => this._openServiceApp(service.id, e)}>
-                                    <span class="app-card-header">
-                                        <img class="app-logo" src=${service.logo} alt="" />
-                                        <platform-icon class="app-go-icon" name="arrow-right" size="16"></platform-icon>
-                                    </span>
-                                    <span class="app-card-name">${this.t(`${service.i18n}.name`)}</span>
-                                    <span class="app-card-description">${this.t(`${service.i18n}.menu_description`)}</span>
-                                </button>
-                            `)}
-                        </div>
-                    ` : ''}
+                    <div class="user-menu-services">
+                        <div class="user-menu-services-title">${this.t('menu.services')}</div>
+                        <platform-services-launcher layout="menu"></platform-services-launcher>
+                    </div>
 
                     <div class="menu-divider"></div>
 
@@ -593,7 +506,7 @@ export class PlatformUser extends PlatformElement {
                 bottom: var(--user-menu-fixed-bottom, auto);
                 right: auto;
                 top: auto;
-                width: var(--user-menu-fixed-width, min(260px, calc(100vw - 16px)));
+                width: var(--user-menu-fixed-width, min(300px, calc(100vw - 16px)));
                 z-index: var(--z-modal, 5000);
             }
 
@@ -689,6 +602,7 @@ export class PlatformUser extends PlatformElement {
                 box-shadow: var(--glass-shadow-medium), 0 8px 32px rgba(0, 0, 0, 0.2);
                 z-index: var(--z-dropdown, 1000);
                 padding: var(--space-1) 0;
+                min-width: min(300px, calc(100vw - 16px));
                 max-height: min(70vh, calc(var(--app-vh, 100vh) - 24px));
                 overflow-y: auto;
                 animation: pmu-slide-up 0.18s ease;
@@ -717,18 +631,17 @@ export class PlatformUser extends PlatformElement {
             .menu-item.danger:hover { background: var(--error-bg); }
             .menu-item.company-selector { justify-content: space-between; }
 
-            .menu-item.apps-item {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                border: 1px solid var(--accent);
-                border-radius: var(--radius-lg);
-                margin: var(--space-2);
-                width: calc(100% - var(--space-4));
-                padding: var(--space-2) var(--space-3);
+            .user-menu-services {
+                padding: var(--space-2) var(--space-2) var(--space-1);
             }
-            .menu-item.apps-item .menu-item-label { color: var(--accent); }
-            .menu-item.apps-item .expand-icon { color: var(--accent); }
-            .menu-item.apps-item:hover { background: var(--accent-subtle); }
+            .user-menu-services-title {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: var(--text-tertiary);
+                margin: 0 0 var(--space-2) var(--space-1);
+            }
 
             .menu-icon {
                 min-width: 20px;
@@ -749,60 +662,6 @@ export class PlatformUser extends PlatformElement {
                 height: 1px;
                 background: var(--glass-border-subtle);
                 margin: var(--space-1) 0;
-            }
-
-            .apps-menu-logo {
-                width: 18px;
-                height: 18px;
-                min-width: 18px;
-                object-fit: contain;
-                display: block;
-            }
-
-            .apps-grid {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr);
-                gap: var(--space-2);
-                padding: 0 var(--space-2) var(--space-2);
-            }
-            @media (min-width: 380px) {
-                .apps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            }
-
-            .app-card {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
-                padding: var(--space-2);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-medium);
-                cursor: pointer;
-                color: var(--text-primary);
-                text-align: left;
-                transition: all var(--duration-fast);
-            }
-            .app-card:hover {
-                border-color: var(--border-default);
-                background: var(--glass-solid-strong);
-                transform: translateY(-1px);
-            }
-            .app-card-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-            }
-            .app-logo { width: 20px; height: 20px; object-fit: contain; }
-            .app-go-icon { color: var(--text-tertiary); }
-            .app-card-name {
-                font-size: var(--text-base);
-                font-weight: var(--font-semibold);
-                color: var(--text-primary);
-            }
-            .app-card-description {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                line-height: 1.4;
             }
 
             .company-list {

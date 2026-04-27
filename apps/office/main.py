@@ -28,6 +28,7 @@ app = create_service_app(
     service_name="office",
     settings_class=OfficeSettings,
     get_container=get_office_container,
+    services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=_api_routers(),
     title="Documents",
     description="Документы Office через OnlyOffice Document Server",

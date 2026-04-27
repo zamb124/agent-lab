@@ -103,6 +103,7 @@ const FRONTEND_ROUTES = [
     { key: 'join',              path: 'join' },
     { key: 'select-company',    path: 'select-company' },
     { key: 'dashboard',         path: 'dashboard' },
+    { key: 'platform_services', path: 'services', parent: 'dashboard' },
     { key: 'team',              path: 'team' },
     { key: 'api-keys',          path: 'api-keys' },
     { key: 'embed-configs',     path: 'embed-configs' },
@@ -322,6 +323,7 @@ export class FrontendApp extends PlatformApp {
         let content;
         switch (routeKey) {
             case 'dashboard':         content = html`<dashboard-page></dashboard-page>`; break;
+            case 'platform_services': content = html`<platform-services-page></platform-services-page>`; break;
             case 'team':              content = html`<frontend-team-page></frontend-team-page>`; break;
             case 'api-keys':          content = html`<frontend-api-keys-page></frontend-api-keys-page>`; break;
             case 'embed-configs':     content = html`<frontend-embed-configs-page></frontend-embed-configs-page>`; break;

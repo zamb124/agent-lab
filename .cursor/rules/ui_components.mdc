@@ -151,6 +151,24 @@ timeline, локальный поиск, выбор span для детализа
 
 **См. также:** `tracing.mdc` (запись spans, API чтения, админ-страница).
 
+## Витрина сервисов (launcher + модалка)
+
+**Файлы:** `core/frontend/static/lib/utils/platform-services-catalog.js` (список
+продуктов, бренд, ключи `apps.*.name`), `core/frontend/static/lib/utils/build-service-entry-url.js`,
+`core/frontend/static/lib/components/platform-services-launcher.js`,
+`core/frontend/static/lib/components/platform-services-modal.js` (`modalKind: 'platform.services'`),
+`core/frontend/static/lib/base/platform-services-page.js` (страница маршрута
+`platform_services`).
+
+**Назначение:** единая сетка плиток для перехода между сервисами (localhost с портами
+как в `buildServiceEntryUrl`, иначе путь; в PWA/standalone — `location.href`).
+Список сервисов не дублировать в `apps/**` — только каталог в core. Метрики и health
+с эндпоинтов **консоли** (`frontend/*` фабрики) в core не вызывать: опционально
+прокидывать `healthByServiceId` / `includeServiceIds` в лаунчер с родителя (например
+`dashboard-services-grid`).
+
+**Открытие модалки:** `this.openModal('platform.services', {})` (см. сайдбары сервисов).
+
 ## Modal canon (registry + stack + dispatch)
 
 Все модалки — через события и реестр:

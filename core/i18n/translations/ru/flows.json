@@ -1,4 +1,14 @@
 {
+  "routes": {
+    "list": "Обзор",
+    "operator": "Оператор",
+    "platform_services": "Сервисы",
+    "flow_chat": "Flow",
+    "flow_chat_skill": "Flow",
+    "flow_chat_session": "Сессия",
+    "flow_editor": "Редактор",
+    "flow_editor_skill": "Редактор"
+  },
   "flow_create_modal": {
     "title": "Создать flow",
     "mode_empty_title": "Пустой flow",

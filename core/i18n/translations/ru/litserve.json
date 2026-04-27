@@ -4,7 +4,8 @@
         "models": "Модели"
     },
     "routes": {
-        "models": "Модели"
+        "models": "Модели",
+        "platform_services": "Сервисы"
     },
     "models": {
         "title": "Реестр моделей",

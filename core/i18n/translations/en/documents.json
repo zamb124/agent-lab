@@ -1,4 +1,10 @@
 {
+    "routes": {
+        "documents_list": "Documents",
+        "platform_services": "Services",
+        "documents_catalogs": "Catalogs",
+        "document_editor": "Editor"
+    },
     "sidebar": {
         "title": "Documents",
         "namespace_label": "Workspace",

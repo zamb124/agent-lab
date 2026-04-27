@@ -1,4 +1,8 @@
 {
+    "routes": {
+        "dashboard": "Панель",
+        "platform_services": "Сервисы"
+    },
     "title": "Панель управления",
     "console_sidebar": {
         "dashboard": "Dashboard",

@@ -17,6 +17,7 @@
         }
     },
     "routes": {
+        "platform_services": "Сервисы",
         "notes": "Заметки",
         "settings": "Настройки",
         "note": "Заметка",

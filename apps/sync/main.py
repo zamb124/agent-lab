@@ -43,6 +43,7 @@ app = create_service_app(
     service_name="sync",
     settings_class=SyncSettings,
     get_container=get_sync_container,
+    services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=[
         get_api_router(),
     ],

@@ -57,6 +57,7 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 const SYNC_ROUTES = [
     { key: 'shell',           path: '' },
+    { key: 'platform_services', path: 'services', parent: 'shell' },
     { key: 'channel',         path: 'c/:channelId' },
     { key: 'calls_scheduled', path: 'calls/scheduled' },
     { key: 'settings',        path: 'settings' },
@@ -339,6 +340,8 @@ export class SyncApp extends PlatformApp {
 
     _renderInner(routeKey, params) {
         switch (routeKey) {
+            case 'platform_services':
+                return html`<platform-services-page></platform-services-page>`;
             case 'shell':
                 return html`<sync-shell-page></sync-shell-page>`;
             case 'channel':

@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
         get_container=get_crm_container,
         routers=[api_router],
         on_startup=on_startup,
+        services_spa_index=Path(__file__).parent / "ui" / "index.html",
         title="CRM Service",
         description="API для управления CRM: сущности, заметки, задачи, связи",
         include_crud_routers=False,

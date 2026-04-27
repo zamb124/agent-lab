@@ -21,6 +21,7 @@ import '../pages/litserve-models-page.js';
 
 const LITSERVE_ROUTES = [
     { key: 'models', path: '' },
+    { key: 'platform_services', path: 'services', parent: 'models' },
 ];
 
 export class LitserveApp extends PlatformApp {
@@ -82,6 +83,9 @@ export class LitserveApp extends PlatformApp {
         const _key = routeKey === 'models' || !routeKey ? 'models' : routeKey;
         let content;
         switch (_key) {
+            case 'platform_services':
+                content = html`<platform-services-page></platform-services-page>`;
+                break;
             case 'models':
                 content = html`<litserve-models-page></litserve-models-page>`;
                 break;

@@ -1,4 +1,10 @@
 {
+    "routes": {
+        "documents_list": "Документы",
+        "platform_services": "Сервисы",
+        "documents_catalogs": "Каталоги",
+        "document_editor": "Редактор"
+    },
     "sidebar": {
         "title": "Документы",
         "namespace_label": "Пространство",

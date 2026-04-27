@@ -18,6 +18,9 @@ export class LandingHero extends PlatformElement {
         css`
             :host {
                 display: block;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
                 min-height: var(--app-vh, 100vh);
                 position: relative;
                 overflow: hidden;
@@ -26,8 +29,10 @@ export class LandingHero extends PlatformElement {
             
             .hero-container {
                 max-width: 1440px;
+                width: 100%;
                 margin: 0 auto;
                 padding: 0;
+                box-sizing: border-box;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -123,8 +128,11 @@ export class LandingHero extends PlatformElement {
             
             @media (max-width: 768px) {
                 .hero-title {
-                    font-size: 80px;
-            }
+                    font-size: min(80px, calc((100vw - 32px) / 5.2));
+                    line-height: 1.05;
+                    max-width: calc(100% - 16px);
+                    box-sizing: border-box;
+                }
             
                 .hero-image-wrapper {
                     max-width: 350px;
@@ -137,13 +145,21 @@ export class LandingHero extends PlatformElement {
                     text-align: center;
                     margin: 20px;
                     font-size: 18px;
-            }
+                }
             
                 .hero-cta {
                     position: static;
                     transform: none;
                     margin: 20px auto;
                     display: block;
+                    white-space: normal;
+                    max-width: min(100%, calc(100vw - 32px));
+                    box-sizing: border-box;
+                    padding: 12px 16px;
+                }
+                
+                .hero-cta:hover {
+                    transform: translateY(-2px);
                 }
                 
                 .hero-container {
@@ -155,8 +171,8 @@ export class LandingHero extends PlatformElement {
             
             @media (min-width: 769px) and (max-width: 1439px) {
                 .hero-title {
-                    font-size: 200px;
-                    line-height: 224px;
+                    font-size: min(200px, calc((100vw - 64px) / 5.2));
+                    line-height: 1.1;
                 }
                 
                 .hero-image-wrapper {

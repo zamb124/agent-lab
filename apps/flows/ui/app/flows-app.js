@@ -57,6 +57,7 @@ import '@platform/lib/components/layout/platform-island.js';
 const FLOWS_ROUTES = [
     { key: 'list',                path: '' },
     { key: 'operator',            path: 'operator' },
+    { key: 'platform_services',   path: 'services', parent: 'list' },
     { key: 'flow_chat',           path: ':flowId' },
     { key: 'flow_chat_skill',     path: ':flowId/skill/:skillId' },
     { key: 'flow_chat_session',   path: ':flowId/session/:sessionId' },
@@ -286,6 +287,18 @@ export class FlowsApp extends PlatformApp {
 
     renderRoute(routeKey, params) {
         switch (routeKey) {
+            case 'platform_services':
+                return html`
+                    <div class="sidebar">
+                        <flows-list-page></flows-list-page>
+                    </div>
+                    <div class="main">
+                        <platform-island padding=${this._flowsMobile ? 'none' : 'md'} ?safe-bottom=${this._flowsMobile}>
+                            <platform-services-page></platform-services-page>
+                        </platform-island>
+                    </div>
+                    ${this._renderLara()}
+                `;
             case 'operator':
                 return html`<operator-page></operator-page>`;
             case 'flow_chat':

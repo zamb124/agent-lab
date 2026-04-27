@@ -1,4 +1,11 @@
 {
+    "routes": {
+        "namespaces": "Namespaces",
+        "platform_services": "Services",
+        "namespace_detail": "Namespace",
+        "search": "Search",
+        "settings": "Settings"
+    },
     "sidebar": {
         "title": "RAG Service",
         "provider_label": "Provider",

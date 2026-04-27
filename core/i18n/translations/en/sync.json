@@ -1,4 +1,12 @@
 {
+    "routes": {
+        "shell": "Sync",
+        "platform_services": "Services",
+        "channel": "Channel",
+        "calls_scheduled": "Calls",
+        "settings": "Settings",
+        "call_join": "Join link"
+    },
     "close": "Close",
     "call_aggregate_empty_body": "Nothing to summarize: this call lane has no text messages or finished audio/video transcripts. Room audio is not posted to the chat — send messages in the channel, start a call recording, or enable voice transcription in channel settings.",
     "recording_error_default": "Recording error",

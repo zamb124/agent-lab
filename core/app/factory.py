@@ -114,6 +114,7 @@ def create_service_app(
     mount_repo_documentation: bool = True,
     documentation_gateway_prefix: Optional[str] = None,
     include_platform_pwa: Optional[bool] = None,
+    services_spa_index: Optional[Path] = None,
 ) -> FastAPI:
     """
     Создает FastAPI приложение для сервиса.
@@ -138,6 +139,8 @@ def create_service_app(
         mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
         documentation_gateway_prefix: Если задан (например ``documents`` для office), первый сегмент публичных путей HTTP API и платформенных роутеров (team, ws, auth, …); плюс дублирование документации на ``/{prefix}/documentation/`` за ingress.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
+        services_spa_index: Путь к ``index.html`` SPA; если файл существует, регистрируются
+            ``GET /{public_segment}/services`` и ``GET /{public_segment}/services/`` с тем же HTML.
         
     Returns:
         Настроенное FastAPI приложение
@@ -423,6 +426,21 @@ def create_service_app(
 
     register_platform_file_types_route(app)
     logger.info("FileTypes: GET /api/platform/file-types")
+
+    if services_spa_index is not None and services_spa_index.is_file():
+        _services_spa_html = services_spa_index.read_text(encoding="utf-8")
+
+        @app.get(f"/{public_segment}/services", response_class=HTMLResponse)
+        @app.get(f"/{public_segment}/services/", response_class=HTMLResponse)
+        async def platform_services_spa():
+            return HTMLResponse(content=_services_spa_html)
+
+        logger.info(
+            "Platform services SPA: GET /%s/services, /%s/services/ -> %s",
+            public_segment,
+            public_segment,
+            services_spa_index,
+        )
 
     # Health endpoints
     @app.get("/health")

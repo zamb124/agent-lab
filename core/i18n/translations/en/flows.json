@@ -1,4 +1,14 @@
 {
+  "routes": {
+    "list": "Overview",
+    "operator": "Operator",
+    "platform_services": "Services",
+    "flow_chat": "Flow",
+    "flow_chat_skill": "Flow",
+    "flow_chat_session": "Session",
+    "flow_editor": "Editor",
+    "flow_editor_skill": "Editor"
+  },
   "flow_create_modal": {
     "title": "Create flow",
     "mode_empty_title": "Empty flow",

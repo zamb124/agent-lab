@@ -4,7 +4,8 @@
         "models": "Models"
     },
     "routes": {
-        "models": "Models"
+        "models": "Models",
+        "platform_services": "Services"
     },
     "models": {
         "title": "Model registry",

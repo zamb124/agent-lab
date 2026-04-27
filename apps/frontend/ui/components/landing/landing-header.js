@@ -27,6 +27,10 @@ export class LandingHeader extends PlatformElement {
                 position: sticky;
                 top: 0;
                 z-index: 100;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow-x: clip;
                 background: rgba(15, 15, 15, 0.9);
                 backdrop-filter: blur(10px);
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -34,6 +38,8 @@ export class LandingHeader extends PlatformElement {
             
             .header-container {
                 max-width: 1440px;
+                width: 100%;
+                min-width: 0;
                 margin: 0 auto;
                 padding: max(20px, var(--platform-safe-top)) max(20px, var(--platform-safe-right))
                     max(20px, var(--platform-safe-bottom)) max(20px, var(--platform-safe-left));
@@ -50,7 +56,9 @@ export class LandingHeader extends PlatformElement {
                 gap: 10px;
                 text-decoration: none;
                 white-space: nowrap;
-                flex-shrink: 0;
+                flex: 1 1 0;
+                min-width: 0;
+                overflow: hidden;
             }
             
             .logo-icon {
@@ -72,6 +80,8 @@ export class LandingHeader extends PlatformElement {
                 font-size: 18px;
                 font-weight: 500;
                 color: var(--landing-secondary, #E8E8E8);
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             
             .nav {
@@ -199,7 +209,8 @@ export class LandingHeader extends PlatformElement {
                 display: flex;
                 align-items: center;
                 gap: 16px;
-                flex-shrink: 0;
+                flex: 0 0 auto;
+                min-width: 0;
             }
             
             .lang-switcher {
@@ -335,6 +346,24 @@ export class LandingHeader extends PlatformElement {
                 padding: 16px;
                 font-size: 18px;
                 text-align: center;
+            }
+            
+            @media (max-width: 480px) {
+                .header-container {
+                    gap: 8px;
+                    padding: max(16px, var(--platform-safe-top)) max(12px, var(--platform-safe-right))
+                        max(16px, var(--platform-safe-bottom)) max(12px, var(--platform-safe-left));
+                }
+            
+                .header-actions {
+                    gap: 6px;
+                }
+            
+                .login-btn,
+                .dashboard-btn {
+                    padding: 6px 12px;
+                    font-size: 12px;
+                }
             }
             
             @media (min-width: 768px) {
