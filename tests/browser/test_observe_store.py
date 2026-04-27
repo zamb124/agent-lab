@@ -1,28 +1,26 @@
-"""ControlObserveStore: diff visibility refs."""
+"""ControlObserveStore: refs и interaction nonce."""
 
 from __future__ import annotations
 
-from apps.browser.control.observe_store import ControlObserveStore
+import pytest
+
+from apps.browser.observe.observe_store import ControlObserveStore
 
 
-def test_diff_visibility_first_call_returns_none() -> None:
-    st = ControlObserveStore()
-    vis = {
-        "schema": "browser.control.visibility.v1",
-        "nodes": [
-            {"ref": "0", "role": "button", "name": "A"},
-        ],
-    }
-    assert st.diff_visibility("s1", vis) is None
-    d2 = st.diff_visibility(
-        "s1",
-        {
-            "nodes": [
-                {"ref": "0", "role": "button", "name": "B"},
-                {"ref": "1", "role": "link", "name": "C"},
-            ],
-        },
-    )
-    assert d2 is not None
-    assert "1" in d2["added_refs"]
-    assert len(d2["changed"]) >= 1
+def test_get_refs_raises_without_observe() -> None:
+    store = ControlObserveStore()
+    with pytest.raises(KeyError):
+        store.get_refs("s1")
+
+
+def test_refs_saved_and_cleared_with_forget() -> None:
+    store = ControlObserveStore()
+    store.set_interaction_config("s1", profile="human", seed=101)
+    refs = {"0": {"role": "combobox", "name": "Search", "nth": 0}}
+
+    store.update_refs("s1", refs)
+    assert store.get_refs("s1") == refs
+
+    store.forget("s1")
+    with pytest.raises(KeyError):
+        store.get_refs("s1")

@@ -8,7 +8,7 @@ import secrets
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from apps.browser.runtime.types import SessionStateBlob
+from apps.browser.engine.types import SessionStateBlob
 
 
 class SessionStateStore:

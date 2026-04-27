@@ -7,8 +7,8 @@ from __future__ import annotations
 import asyncio
 import time
 
-from apps.browser.runtime.cdp_pool import CDPConnectionPool
-from apps.browser.runtime.page_lease_manager import PageLeaseManager
+from apps.browser.engine.cdp_pool import CDPConnectionPool
+from apps.browser.engine.page_lease_manager import PageLeaseManager
 
 
 class CDPLifecycleManagerImpl:

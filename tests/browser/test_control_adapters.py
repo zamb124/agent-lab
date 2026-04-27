@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from apps.browser.control.stub_adapters import AgentBrowserAdapter, BrowserUseAdapter
-from apps.browser.control.types import BrowserCapabilityError
-from apps.browser.runtime.facade import BrowserRuntimeFacade
-from apps.browser.runtime.types import (
+from apps.browser.adapters.stub_control_adapters import AgentBrowserAdapter, BrowserUseAdapter
+from apps.browser.contracts.control_types import BrowserCapabilityError
+from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserRuntimeSettingsView,
     ContextSignature,
 )
+from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 
 
 def _minimal_view() -> BrowserRuntimeSettingsView:

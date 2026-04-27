@@ -9,8 +9,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from apps.browser.runtime.context_factory import ContextFactory
-from apps.browser.runtime.types import ContextSignature, SessionMode
+from apps.browser.engine.context_factory import ContextFactory
+from apps.browser.engine.types import ContextSignature, SessionMode
 
 
 @dataclass

@@ -4,22 +4,25 @@ Browser Control HTTP API (§17.3): сессии, navigate, observe, action.
 
 from __future__ import annotations
 
-import hashlib
+import random
 import uuid
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.browser.control.ax_snapshot import dom_accessibility_tree_dict_from_page
-from apps.browser.control.snapshot_refs import build_interactive_snapshot_with_refs, parse_ref
-from apps.browser.control.types import BrowserCapabilityError
+from apps.browser.contracts.control_types import BrowserCapabilityError
 from apps.browser.dependencies import ContainerDep
-from apps.browser.runtime.types import (
+from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
     ContextSignature,
 )
+from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
+from apps.browser.interaction.interaction_profiles import InteractionProfileName
+from apps.browser.interaction.interaction_profiles import get_interaction_profile
+from apps.browser.observe.ax_snapshot import dom_accessibility_tree_dict_from_page
+from apps.browser.observe.snapshot_refs import build_interactive_snapshot_with_refs, parse_ref
 
 router = APIRouter(prefix="/control", tags=["browser-control"])
 
@@ -53,6 +56,8 @@ class ContextSignatureBody(BaseModel):
     page_mode: Literal["interactive", "crawl", "lite"] = "interactive"
     permissions_fingerprint: str = "default"
     emulate_locale_timezone_via_cdp: bool = True
+    interaction_profile: InteractionProfileName = "human"
+    interaction_seed: Optional[int] = None
 
 
 class ControlSessionCreateBody(BaseModel):
@@ -138,7 +143,7 @@ class ControlNavigateBody(BaseModel):
     screenshot: bool = False
     snapshot: bool = False
     capture_pdf: bool = False
-    navigation_timeout_ms: int = Field(default=60_000, ge=1000)
+    navigation_timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 class ControlObserveBody(BaseModel):
@@ -146,13 +151,13 @@ class ControlObserveBody(BaseModel):
     HTTP-модель входа для `observe`.
 
     Связи:
-    - Управляет тем, какие проекции состояния страницы формируются в ответе.
+    - Управляет параметрами построения snapshot для ответа.
 
     Инварианты:
     - `budget` ограничен диапазоном `1..5000`.
 
     Мотивация:
-    - Дать клиенту управляемый профиль наблюдения без отдельных endpoint-ов.
+    - Дать клиенту контролируемый бюджет и формат refs для snapshot.
 
     Переиспользование:
     - Стоит: как универсальная модель observe-запроса.
@@ -160,14 +165,7 @@ class ControlObserveBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     budget: int = Field(default=80, ge=1, le=5000)
-    include_html: bool = False
-    include_visibility: bool = True
-    include_ax: bool = False
-    include_snapshot: bool = False
     include_snapshot_refs: bool = True
-    include_listeners: bool = False
-    include_dom_diff: bool = False
-    emit_generic_role: bool = False
 
 
 class ControlActionBody(BaseModel):
@@ -189,14 +187,14 @@ class ControlActionBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     code: str
-    timeout_ms: int = Field(default=30_000, ge=1000)
+    timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 class ControlClickBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ref: str
-    timeout_ms: int = Field(default=20_000, ge=1000)
+    timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 class ControlFillBody(BaseModel):
@@ -204,7 +202,7 @@ class ControlFillBody(BaseModel):
 
     ref: str
     text: str
-    timeout_ms: int = Field(default=20_000, ge=1000)
+    timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 class ControlPressBody(BaseModel):
@@ -218,7 +216,7 @@ class ControlWaitBody(BaseModel):
 
     selector: Optional[str] = None
     load_state: Optional[Literal["domcontentloaded", "networkidle"]] = None
-    timeout_ms: int = Field(default=60_000, ge=1000)
+    timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 def _features_dict(runtime: Any) -> dict[str, bool]:
@@ -249,6 +247,7 @@ async def create_control_session(
             status_code=422,
             detail="context.page_mode должен совпадать с page_mode",
         )
+    get_interaction_profile(ctx.interaction_profile)
     sig = ContextSignature(
         proxy_policy=ctx.proxy_policy,
         shared_storage_key=ctx.shared_storage_key,
@@ -279,6 +278,11 @@ async def create_control_session(
         res = await runtime.control_adapter.start(req)
     except BrowserCapabilityError as exc:
         raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+    runtime.observe_store.set_interaction_config(
+        sid,
+        profile=ctx.interaction_profile,
+        seed=ctx.interaction_seed,
+    )
     return ControlSessionCreateResponse(
         session_id=sid,
         run_id=run_id,
@@ -339,63 +343,21 @@ async def control_observe(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    adapter = runtime.control_adapter
     payload: dict[str, Any] = {"session_id": session_id, "url": page.url}
-    vis: dict[str, Any] | None = None
-    if body.include_visibility:
-        try:
-            vis = await adapter.get_visibility_tree(
-                page,
-                budget=body.budget,
-                emit_generic_role=body.emit_generic_role,
-            )
-        except BrowserCapabilityError as exc:
-            raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
-        payload["visibility"] = vis
-    if body.include_ax:
-        try:
-            payload["accessibility"] = await adapter.get_accessibility_tree(
-                page,
-                emit_generic_role=body.emit_generic_role,
-            )
-        except BrowserCapabilityError as exc:
-            raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
-    if body.include_snapshot:
-        # Snapshot для LLM строим преимущественно на JS-дереве (page.evaluate),
-        # без зависимости от Playwright accessibility API.
-        ax = await dom_accessibility_tree_dict_from_page(
-            page,
-            emit_generic_role=body.emit_generic_role,
-        )
-        snap_text, refs = build_interactive_snapshot_with_refs(ax)
-        payload["snapshot"] = {
-            "schema": "browser.control.snapshot.v1",
-            "mode": "interactive",
-            "text": snap_text,
-        }
-        if body.include_snapshot_refs:
-            payload["snapshot"]["refs"] = refs
-            runtime.observe_store.update_refs(session_id, refs)
-    if body.include_listeners:
-        payload["dom_event_listeners"] = await adapter.get_dom_event_listeners(page)
-    if body.include_html:
-        html = await page.content()
-        payload["html"] = html
-        fp = hashlib.sha256(html.encode("utf-8", errors="replace")).hexdigest()
-        html_changed = runtime.observe_store.html_changed(session_id, fp)
-        payload["html_fingerprint_sha256"] = fp
-        payload["html_changed"] = html_changed
-    if body.include_dom_diff:
-        if vis is None:
-            try:
-                vis = await adapter.get_visibility_tree(page, budget=body.budget)
-                payload["visibility"] = vis
-            except BrowserCapabilityError as exc:
-                raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
-        diff = runtime.observe_store.diff_visibility(session_id, vis)
-        payload["visibility_diff"] = diff
-    elif body.include_visibility and vis is not None:
-        runtime.observe_store.diff_visibility(session_id, vis)
+
+    # Каноничный LLM-friendly snapshot: строим строго через JS в странице (page.evaluate),
+    # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
+    ax = await dom_accessibility_tree_dict_from_page(page)
+    snap_text, refs = build_interactive_snapshot_with_refs(ax)
+    payload["snapshot"] = {
+        "schema": "browser.control.snapshot.v1",
+        "mode": "interactive",
+        "text": snap_text,
+    }
+    if body.include_snapshot_refs:
+        payload["snapshot"]["refs"] = refs
+        runtime.observe_store.update_refs(session_id, refs)
+
     return payload
 
 
@@ -442,6 +404,19 @@ def _locator_from_ref(page: Any, refs: dict[str, dict[str, object]], raw_ref: st
     return loc
 
 
+def _interaction_for_session(runtime: Any, session_id: str) -> tuple[HumanInteraction, object, InteractionRng]:
+    try:
+        profile_name = runtime.observe_store.get_interaction_profile(session_id)
+        profile = get_interaction_profile(profile_name)
+        seed, step = runtime.observe_store.next_interaction_nonce(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # Детерминированный RNG: одна сессия -> одна последовательность, отличная между действиями.
+    mixed = (seed + (step + 1) * 1_000_003) & ((1 << 64) - 1)
+    rnd = InteractionRng(random.Random(mixed))
+    return HumanInteraction(), profile, rnd
+
+
 @router.post("/sessions/{session_id}/click")
 async def control_click(
     session_id: str,
@@ -461,7 +436,8 @@ async def control_click(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     loc = _locator_from_ref(page, refs, body.ref)
     await loc.wait_for(state="visible", timeout=body.timeout_ms)
-    await loc.click(timeout=body.timeout_ms)
+    inter, profile, rnd = _interaction_for_session(runtime, session_id)
+    await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
     return {"ok": True}
 
 
@@ -484,7 +460,8 @@ async def control_fill(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     loc = _locator_from_ref(page, refs, body.ref)
     await loc.wait_for(state="visible", timeout=body.timeout_ms)
-    await loc.fill(body.text, timeout=body.timeout_ms)
+    inter, profile, rnd = _interaction_for_session(runtime, session_id)
+    await inter.type_text(page, loc, body.text, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
     return {"ok": True}
 
 
@@ -501,7 +478,8 @@ async def control_press(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await page.keyboard.press(body.key)
+    inter, profile, rnd = _interaction_for_session(runtime, session_id)
+    await inter.press(page, body.key, profile=profile, rnd=rnd)
     return {"ok": True}
 
 

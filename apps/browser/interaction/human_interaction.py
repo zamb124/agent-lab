@@ -1,0 +1,141 @@
+"""
+Human-like слой действий для Browser Control.
+
+Зона ответственности:
+- имитировать "пользовательские" сигналы (mouse move / паузы);
+- обеспечивать "человеческий" ввод (type-by-char с delay);
+- НЕ хранить состояние сессии; state (profile/seed) хранится внешним store.
+"""
+
+from __future__ import annotations
+
+import random
+from dataclasses import dataclass
+from typing import Any
+
+from apps.browser.interaction.interaction_profiles import InteractionProfile
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+
+@dataclass(frozen=True)
+class InteractionRng:
+    rng: random.Random
+
+    def randint_range(self, bounds: tuple[int, int]) -> int:
+        lo, hi = bounds
+        if lo > hi:
+            raise ValueError("Некорректный диапазон")
+        if lo == hi:
+            return lo
+        return self.rng.randint(lo, hi)
+
+
+class HumanInteraction:
+    """
+    Stateless исполнитель действий, параметризованный профилем и RNG.
+    """
+
+    @staticmethod
+    async def _ensure_in_viewport(locator: Any) -> None:
+        """
+        Довести элемент до viewport перед кликом/вводом.
+
+        Причина:
+        - Playwright может успешно завершить `scroll_into_view_if_needed()`, но всё равно
+          считать элемент "outside of the viewport" (особенно на страницах со сложной
+          раскладкой и sticky-элементами).
+        """
+        await locator.scroll_into_view_if_needed()
+        # Центрируем элемент в viewport, чтобы стабилизировать hit target.
+        await locator.evaluate(
+            "(el) => el.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'})"
+        )
+
+    @staticmethod
+    async def _pause_ms(page: Any, ms: int) -> None:
+        if ms <= 0:
+            return
+        # Playwright: page.wait_for_timeout(ms)
+        await page.wait_for_timeout(ms)
+
+    async def pre_action_signals(
+        self,
+        page: Any,
+        *,
+        profile: InteractionProfile,
+        rnd: InteractionRng,
+    ) -> None:
+        if profile.name == "off":
+            return
+
+        await self._pause_ms(page, rnd.randint_range(profile.pause_before_action_ms_range))
+
+        # Mouse moves (без кликов по координатам).
+        for _ in range(profile.pre_action_mouse_moves):
+            x = rnd.randint_range(profile.mouse_x_range)
+            y = rnd.randint_range(profile.mouse_y_range)
+            await page.mouse.move(x, y)
+
+    async def click(
+        self,
+        page: Any,
+        locator: Any,
+        *,
+        profile: InteractionProfile,
+        rnd: InteractionRng,
+        timeout_ms: int,
+    ) -> None:
+        if profile.name != "off":
+            await self.pre_action_signals(page, profile=profile, rnd=rnd)
+        await self._ensure_in_viewport(locator)
+        try:
+            await locator.click(timeout=timeout_ms)
+        except PlaywrightTimeoutError:
+            # Для некоторых CDP-движков (Lightpanda) Playwright может оставаться в состоянии
+            # "outside of the viewport" даже после scrollIntoView. В этом случае разрешаем
+            # форсированный клик как last resort для целевых контролов (input/button).
+            await locator.click(timeout=timeout_ms, force=True)
+        if profile.name != "off":
+            await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))
+
+    async def type_text(
+        self,
+        page: Any,
+        locator: Any,
+        text: str,
+        *,
+        profile: InteractionProfile,
+        rnd: InteractionRng,
+        timeout_ms: int,
+    ) -> None:
+        if not isinstance(text, str) or text == "":
+            raise ValueError("text должен быть непустой строкой")
+        if profile.name == "off":
+            # Быстрый путь: программное заполнение.
+            await locator.fill(text, timeout=timeout_ms)
+            return
+
+        await self.pre_action_signals(page, profile=profile, rnd=rnd)
+        await self._ensure_in_viewport(locator)
+        try:
+            await locator.click(timeout=timeout_ms)
+        except PlaywrightTimeoutError:
+            # Если клик не проходит (viewport), фокусируем элемент и используем fill+type.
+            await locator.evaluate("(el) => el.focus()")
+            await locator.fill("", timeout=timeout_ms)
+        await self._pause_ms(page, rnd.randint_range(profile.pause_after_focus_ms_range))
+
+        delay = rnd.randint_range(profile.typing_delay_ms_range)
+        # Playwright: locator.type(text, delay=ms)
+        await locator.type(text, delay=delay, timeout=timeout_ms)
+        await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))
+
+    async def press(self, page: Any, key: str, *, profile: InteractionProfile, rnd: InteractionRng) -> None:
+        if not key:
+            raise ValueError("key обязателен")
+        if profile.name != "off":
+            await self.pre_action_signals(page, profile=profile, rnd=rnd)
+        await page.keyboard.press(key)
+        if profile.name != "off":
+            await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))
+

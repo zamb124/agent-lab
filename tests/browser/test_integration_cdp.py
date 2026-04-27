@@ -1,28 +1,23 @@
 """
-Интеграция с реальным CDP (Lightpanda/Chromium). Требуется BROWSER__CDP_URL.
+Интеграция с реальным CDP (Lightpanda). В тестах CDP поднимается через Docker.
 """
 
 from __future__ import annotations
 
-import os
 import uuid
 
 import pytest
 
-from apps.browser.runtime.facade import BrowserRuntimeFacade
-from apps.browser.runtime.types import (
+from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
     BrowserRuntimeSettingsView,
     ContextSignature,
 )
+from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
+from tests.browser.cdp_local import ensure_cdp_url
 
-
-def _cdp_url() -> str | None:
-    v = os.environ.get("BROWSER__CDP_URL", "").strip()
-    if v:
-        return v
-    return None
+pytestmark = pytest.mark.timeout(60)
 
 
 def _sig() -> ContextSignature:
@@ -61,127 +56,129 @@ def _acquire_req(*, session_id: str, restore_key: str | None) -> BrowserAcquireR
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_acquire_fetch_release() -> None:
-    url = _cdp_url()
-    if not url:
-        pytest.skip("BROWSER__CDP_URL не задан")
     uid = uuid.uuid4().hex
-    view = BrowserRuntimeSettingsView(
-        default_endpoint_key="default",
-        cdp_urls_by_endpoint={"default": url},
-        artifacts_dir=f"artifacts/browser_runtime_test_{uid}",
-        default_page_ttl_sec=3600,
-        warm_idle_sec=0,
-        init_scripts_version="v1",
-        control_backend="playwright",
-    )
-    facade = BrowserRuntimeFacade(view)
-    session_id = f"sess-{uid}"
-    res = await facade.interactor.acquire(_acquire_req(session_id=session_id, restore_key=None))
-    try:
-        fr = BrowserFetchRequest(
-            url="https://example.com",
-            wait_policy="domcontentloaded",
-            screenshot=False,
-            snapshot=False,
-            capture_pdf=False,
-            navigation_timeout_ms=60_000,
+    async with ensure_cdp_url() as url:
+        view = BrowserRuntimeSettingsView(
+            default_endpoint_key="default",
+            cdp_urls_by_endpoint={"default": url},
+            artifacts_dir=f"artifacts/browser_runtime_test_{uid}",
+            default_page_ttl_sec=3600,
+            warm_idle_sec=0,
+            init_scripts_version="v1",
+            control_backend="playwright",
         )
-        out = await facade.interactor.fetch(res.page, fr)
-        assert out.status_code == 200
-        assert "example.com" in out.final_url
-    finally:
-        await facade.interactor.release(res.page)
-        await facade.stop()
+        facade = BrowserRuntimeFacade(view)
+        session_id = f"sess-{uid}"
+        res = await facade.interactor.acquire(
+            _acquire_req(session_id=session_id, restore_key=None)
+        )
+        try:
+            fr = BrowserFetchRequest(
+                url="https://example.com",
+                wait_policy="domcontentloaded",
+                screenshot=False,
+                snapshot=False,
+                capture_pdf=False,
+                navigation_timeout_ms=60_000,
+            )
+            out = await facade.interactor.fetch(res.page, fr)
+            assert out.status_code == 200
+            assert "example.com" in out.final_url
+        finally:
+            await facade.interactor.release(res.page)
+            await facade.stop()
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_control_adapter_visibility_after_fetch() -> None:
-    url = _cdp_url()
-    if not url:
-        pytest.skip("BROWSER__CDP_URL не задан")
+async def test_control_adapter_navigate_and_run_action_after_fetch() -> None:
     uid = uuid.uuid4().hex
-    view = BrowserRuntimeSettingsView(
-        default_endpoint_key="default",
-        cdp_urls_by_endpoint={"default": url},
-        artifacts_dir=f"artifacts/browser_runtime_test_{uid}",
-        default_page_ttl_sec=3600,
-        warm_idle_sec=0,
-        init_scripts_version="v1",
-        control_backend="playwright",
-    )
-    facade = BrowserRuntimeFacade(view)
-    session_id = f"sess-vis-{uid}"
-    res = await facade.interactor.acquire(_acquire_req(session_id=session_id, restore_key=None))
-    try:
-        fr = BrowserFetchRequest(
-            url="https://example.com",
-            wait_policy="domcontentloaded",
-            screenshot=False,
-            snapshot=False,
-            capture_pdf=False,
-            navigation_timeout_ms=60_000,
+    async with ensure_cdp_url() as url:
+        view = BrowserRuntimeSettingsView(
+            default_endpoint_key="default",
+            cdp_urls_by_endpoint={"default": url},
+            artifacts_dir=f"artifacts/browser_runtime_test_{uid}",
+            default_page_ttl_sec=3600,
+            warm_idle_sec=0,
+            init_scripts_version="v1",
+            control_backend="playwright",
         )
-        await facade.interactor.fetch(res.page, fr)
-        tree = await facade.control_adapter.get_visibility_tree(res.page, budget=30)
-        assert tree["node_count"] <= 30
-        assert tree["schema"].startswith("browser.control.visibility")
-        listeners = await facade.control_adapter.get_dom_event_listeners(res.page)
-        assert "supported" in listeners
-        assert "items" in listeners
-    finally:
-        await facade.interactor.release(res.page)
-        await facade.stop()
+        facade = BrowserRuntimeFacade(view)
+        session_id = f"sess-vis-{uid}"
+        res = await facade.interactor.acquire(
+            _acquire_req(session_id=session_id, restore_key=None)
+        )
+        try:
+            fr = BrowserFetchRequest(
+                url="https://example.com",
+                wait_policy="domcontentloaded",
+                screenshot=False,
+                snapshot=False,
+                capture_pdf=False,
+                navigation_timeout_ms=60_000,
+            )
+            await facade.interactor.fetch(res.page, fr)
+            out = await facade.control_adapter.navigate(res.page, fr)
+            assert out.status_code == 200
+            assert "example.com" in out.final_url
+            r = await facade.control_adapter.run_action(res.page, "return 1;", timeout_ms=5_000)
+            assert r["ok"] is True
+        finally:
+            await facade.interactor.release(res.page)
+            await facade.stop()
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_save_restore_roundtrip() -> None:
-    url = _cdp_url()
-    if not url:
-        pytest.skip("BROWSER__CDP_URL не задан")
     uid = uuid.uuid4().hex
-    view = BrowserRuntimeSettingsView(
-        default_endpoint_key="default",
-        cdp_urls_by_endpoint={"default": url},
-        artifacts_dir=f"artifacts/browser_runtime_test_{uid}",
-        default_page_ttl_sec=3600,
-        warm_idle_sec=0,
-        init_scripts_version="v1",
-        control_backend="playwright",
-    )
-    facade = BrowserRuntimeFacade(view)
-    session_id = f"sess-{uid}"
-    res = await facade.interactor.acquire(_acquire_req(session_id=session_id, restore_key=None))
-    state_key: str | None = None
-    try:
-        fr = BrowserFetchRequest(
-            url="https://example.com",
-            wait_policy="domcontentloaded",
-            screenshot=False,
-            snapshot=False,
-            capture_pdf=False,
-            navigation_timeout_ms=60_000,
+    async with ensure_cdp_url() as url:
+        view = BrowserRuntimeSettingsView(
+            default_endpoint_key="default",
+            cdp_urls_by_endpoint={"default": url},
+            artifacts_dir=f"artifacts/browser_runtime_test_{uid}",
+            default_page_ttl_sec=3600,
+            warm_idle_sec=0,
+            init_scripts_version="v1",
+            control_backend="playwright",
         )
-        await facade.interactor.fetch(res.page, fr)
-        state_key = await facade.interactor.save_state(res.context, "bucket-test")
-    finally:
-        await facade.interactor.release(res.page)
+        facade = BrowserRuntimeFacade(view)
+        session_id = f"sess-{uid}"
+        res = await facade.interactor.acquire(
+            _acquire_req(session_id=session_id, restore_key=None)
+        )
+        state_key: str | None = None
+        try:
+            page0 = res.context.pages[0]
+            fr = BrowserFetchRequest(
+                url="https://example.com",
+                wait_policy="domcontentloaded",
+                screenshot=False,
+                snapshot=False,
+                capture_pdf=False,
+                navigation_timeout_ms=60_000,
+            )
+            out = await facade.control_adapter.navigate(page0, fr)
+            assert out.status_code == 200
+            assert "example.com" in out.final_url
+            state_key = await facade.interactor.save_state(res.context, "bucket-test")
+        finally:
+            await facade.interactor.release(res.page)
 
-    res2 = await facade.interactor.acquire(
-        _acquire_req(session_id=f"{session_id}-b", restore_key=state_key)
-    )
-    try:
-        fr2 = BrowserFetchRequest(
-            url="https://example.com",
-            wait_policy="domcontentloaded",
-            screenshot=False,
-            snapshot=False,
-            capture_pdf=False,
-            navigation_timeout_ms=60_000,
+        res2 = await facade.interactor.acquire(
+            _acquire_req(session_id=f"{session_id}-b", restore_key=state_key)
         )
-        out2 = await facade.interactor.fetch(res2.page, fr2)
-        assert out2.status_code == 200
-    finally:
-        await facade.interactor.release(res2.page)
-        await facade.stop()
+        try:
+            fr2 = BrowserFetchRequest(
+                url="https://example.com",
+                wait_policy="domcontentloaded",
+                screenshot=False,
+                snapshot=False,
+                capture_pdf=False,
+                navigation_timeout_ms=60_000,
+            )
+            out2 = await facade.interactor.fetch(res2.page, fr2)
+            assert out2.status_code == 200
+        finally:
+            await facade.interactor.release(res2.page)
+            await facade.stop()

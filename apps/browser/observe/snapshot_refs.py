@@ -10,15 +10,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Iterable
-
-
-@dataclass(frozen=True)
-class SnapshotRef:
-    role: str
-    name: str
-    nth: int
 
 
 def parse_ref(value: str) -> str:

@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from apps.browser.control.types import BrowserControlFeatures
-from apps.browser.runtime.types import (
+from apps.browser.contracts.control_types import BrowserControlFeatures
+from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserAcquireResult,
     BrowserFetchRequest,
@@ -37,18 +37,6 @@ class BrowserControlAdapter(Protocol):
     async def navigate(self, page: Any, req: BrowserFetchRequest) -> BrowserFetchResult: ...
 
     async def run_action(self, page: Any, code: str, *, timeout_ms: int) -> dict[str, Any]: ...
-
-    async def get_visibility_tree(
-        self,
-        page: Any,
-        *,
-        budget: int,
-        emit_generic_role: bool,
-    ) -> dict[str, Any]: ...
-
-    async def get_accessibility_tree(self, page: Any, *, emit_generic_role: bool) -> dict[str, Any]: ...
-
-    async def get_dom_event_listeners(self, page: Any) -> dict[str, Any]: ...
 
     async def stop(self, page: Any) -> None: ...
 

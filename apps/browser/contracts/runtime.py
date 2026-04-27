@@ -1,12 +1,10 @@
-"""
-Протоколы Browser Runtime (§17, §30.5).
-"""
+"""Протоколы Browser Runtime (§17)."""
 
 from __future__ import annotations
 
 from typing import Any, Protocol
 
-from apps.browser.runtime.types import (
+from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserAcquireResult,
     BrowserFetchRequest,
@@ -43,28 +41,3 @@ class BrowserInteractor(Protocol):
     async def restore_state(self, context: Any, state_key: str) -> None: ...
 
     async def release(self, page: Any) -> None: ...
-
-
-class CDPLifecycleManager(Protocol):
-    """
-    Контракт lifecycle-операций над CDP endpoint-ами и сессиями.
-
-    Мотивация:
-    - Вынести операции обслуживания из бизнес-логики interactor/API.
-
-    Связи:
-    - Реализуется `CDPLifecycleManagerImpl` и вызывается фасадом/runtime-операциями обслуживания.
-
-    Инварианты:
-    - Операции должны быть безопасны при повторном вызове и не нарушать консистентность lease-учёта.
-
-    Переиспользование:
-    - Стоит: как общий интерфейс для альтернативных lifecycle-реализаций.
-    """
-    async def drain(self, endpoint_key: str, timeout_sec: int) -> bool: ...
-
-    async def kill_session(self, session_id: str) -> None: ...
-
-    async def disconnect(self, endpoint_key: str) -> None: ...
-
-    async def terminate_browser(self, endpoint_key: str) -> None: ...

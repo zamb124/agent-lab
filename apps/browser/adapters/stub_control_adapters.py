@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from apps.browser.control.types import BrowserCapabilityError, BrowserControlFeatures
-from apps.browser.runtime.types import (
+from apps.browser.contracts.control_types import BrowserCapabilityError, BrowserControlFeatures
+from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserAcquireResult,
     BrowserFetchRequest,
@@ -62,27 +62,6 @@ class BrowserUseAdapter:
         self._raise()
         raise AssertionError("unreachable")
 
-    async def get_visibility_tree(
-        self,
-        page: Any,
-        *,
-        budget: int,
-        emit_generic_role: bool,
-    ) -> dict[str, Any]:
-        _ = page, budget, emit_generic_role
-        self._raise()
-        raise AssertionError("unreachable")
-
-    async def get_accessibility_tree(self, page: Any, *, emit_generic_role: bool) -> dict[str, Any]:
-        _ = page, emit_generic_role
-        self._raise()
-        raise AssertionError("unreachable")
-
-    async def get_dom_event_listeners(self, page: Any) -> dict[str, Any]:
-        _ = page
-        self._raise()
-        raise AssertionError("unreachable")
-
     async def stop(self, page: Any) -> None:
         _ = page
 
@@ -131,27 +110,6 @@ class AgentBrowserAdapter:
 
     async def run_action(self, page: Any, code: str, *, timeout_ms: int) -> dict[str, Any]:
         _ = page, code, timeout_ms
-        self._raise()
-        raise AssertionError("unreachable")
-
-    async def get_visibility_tree(
-        self,
-        page: Any,
-        *,
-        budget: int,
-        emit_generic_role: bool,
-    ) -> dict[str, Any]:
-        _ = page, budget, emit_generic_role
-        self._raise()
-        raise AssertionError("unreachable")
-
-    async def get_accessibility_tree(self, page: Any, *, emit_generic_role: bool) -> dict[str, Any]:
-        _ = page, emit_generic_role
-        self._raise()
-        raise AssertionError("unreachable")
-
-    async def get_dom_event_listeners(self, page: Any) -> dict[str, Any]:
-        _ = page
         self._raise()
         raise AssertionError("unreachable")
 

@@ -12,10 +12,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Optional
 
-from apps.browser.runtime.cdp_pool import CDPConnectionPool
-from apps.browser.runtime.page_lease_manager import PageLeaseManager
-from apps.browser.runtime.session_store import SessionStateStore, origin_from_url
-from apps.browser.runtime.types import (
+from apps.browser.engine.cdp_pool import CDPConnectionPool
+from apps.browser.engine.page_lease_manager import PageLeaseManager
+from apps.browser.engine.session_store import SessionStateStore, origin_from_url
+from apps.browser.engine.types import (
     SELECTOR_PREFIX,
     BrowserAcquireRequest,
     BrowserAcquireResult,

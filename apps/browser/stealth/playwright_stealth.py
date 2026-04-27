@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from apps.browser.runtime.types import ContextSignature
+from apps.browser.engine.types import ContextSignature
 
 
 @dataclass(frozen=True)

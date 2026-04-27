@@ -7,13 +7,13 @@ import uuid
 
 import pytest
 
-from apps.browser.runtime.facade import BrowserRuntimeFacade
-from apps.browser.runtime.types import (
+from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
     BrowserRuntimeSettingsView,
     ContextSignature,
 )
+from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 
 
 def _cdp_url() -> str | None:

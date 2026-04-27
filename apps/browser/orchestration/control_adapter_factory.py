@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from apps.browser.control.contracts import BrowserControlAdapter
-from apps.browser.control.playwright_adapter import PlaywrightAdapter
-from apps.browser.control.stub_adapters import AgentBrowserAdapter, BrowserUseAdapter
+from apps.browser.adapters.playwright_control_adapter import PlaywrightAdapter
+from apps.browser.adapters.stub_control_adapters import AgentBrowserAdapter, BrowserUseAdapter
+from apps.browser.contracts.control import BrowserControlAdapter
 
 if TYPE_CHECKING:
-    from apps.browser.runtime.facade import BrowserRuntimeFacade
+    from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 
 ControlBackendName = Literal["playwright", "browser_use", "agent_browser"]
 

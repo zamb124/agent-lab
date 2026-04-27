@@ -6,15 +6,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from apps.browser.control.contracts import BrowserControlAdapter
-from apps.browser.control.observe_store import ControlObserveStore
-from apps.browser.runtime.cdp_pool import CDPConnectionPool
-from apps.browser.runtime.context_factory import ContextFactory
-from apps.browser.runtime.interactor import PlaywrightBrowserInteractor
-from apps.browser.runtime.lifecycle import CDPLifecycleManagerImpl
-from apps.browser.runtime.page_lease_manager import PageLeaseManager
-from apps.browser.runtime.session_store import SessionStateStore
-from apps.browser.runtime.types import BrowserRuntimeSettingsView
+from apps.browser.contracts.control import BrowserControlAdapter
+from apps.browser.engine.cdp_pool import CDPConnectionPool
+from apps.browser.engine.context_factory import ContextFactory
+from apps.browser.engine.lifecycle import CDPLifecycleManagerImpl
+from apps.browser.engine.page_lease_manager import PageLeaseManager
+from apps.browser.engine.playwright_interactor import PlaywrightBrowserInteractor
+from apps.browser.engine.session_store import SessionStateStore
+from apps.browser.engine.types import BrowserRuntimeSettingsView
+from apps.browser.observe.observe_store import ControlObserveStore
 
 
 class BrowserRuntimeFacade:
@@ -64,7 +64,9 @@ class BrowserRuntimeFacade:
     @property
     def control_adapter(self) -> BrowserControlAdapter:
         if self._control_adapter is None:
-            from apps.browser.control.factory import build_browser_control_adapter
+            from apps.browser.orchestration.control_adapter_factory import (
+                build_browser_control_adapter,
+            )
 
             self._control_adapter = build_browser_control_adapter(
                 backend=self.settings.control_backend,

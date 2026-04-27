@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.browser.runtime.interactor import _assert_no_imports
+from apps.browser.engine.playwright_interactor import _assert_no_imports
 
 
 def test_exec_rejects_import() -> None:

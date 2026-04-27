@@ -37,7 +37,7 @@ class BrowserContainer(BaseContainer):
     @lazy
     def browser_runtime(self):
         from apps.browser.config import get_browser_settings, settings_to_runtime_view
-        from apps.browser.runtime.facade import BrowserRuntimeFacade
+        from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 
         return BrowserRuntimeFacade(settings_to_runtime_view(get_browser_settings()))
 

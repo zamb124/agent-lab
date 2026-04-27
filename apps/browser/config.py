@@ -8,7 +8,7 @@ from typing import Literal, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.browser.runtime.types import BrowserRuntimeSettingsView
+from apps.browser.engine.types import BrowserRuntimeSettingsView
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
 

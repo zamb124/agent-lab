@@ -7,10 +7,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-
-VISIBILITY_TREE_SCHEMA_VERSION = "browser.control.visibility.v1"
-
-
 @dataclass(frozen=True)
 class BrowserControlFeatures:
     """

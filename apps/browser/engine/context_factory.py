@@ -8,7 +8,7 @@ import asyncio
 import json
 from typing import Any, Optional
 
-from apps.browser.runtime.types import ContextSignature
+from apps.browser.engine.types import ContextSignature
 from apps.browser.stealth.playwright_stealth import apply_stealth_to_context
 
 

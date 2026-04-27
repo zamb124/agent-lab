@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from apps.browser.runtime.context_factory import ContextFactory
-from apps.browser.runtime.types import ContextSignature
+from apps.browser.engine.context_factory import ContextFactory
+from apps.browser.engine.types import ContextSignature
 
 
 class _FailingClosePage:
