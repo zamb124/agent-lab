@@ -43,6 +43,18 @@ describe('pwaEffect: bootstrap', () => {
         const afterCount = dispatched.filter((d) => d.type === CoreEvents.PWA_PUSH_PERMISSION_REQUESTED).length;
         expect(afterCount).toBe(beforeCount);
     });
+
+    it('первый bootstrap вызывает serviceWorker.register', async () => {
+        fetchMock.respondJson('GET', '/svc/health', { deployment_version: 'v1' });
+        const register = vi.fn(() => Promise.resolve({}));
+        dom.window.navigator.serviceWorker = { register };
+        const dispatched = [];
+        await createPwaEffect({ baseUrl: '/svc' })(
+            ev(CoreEvents.APP_BOOTSTRAP_STARTED),
+            buildCtx(() => ({ pwa: { deploymentVersion: null } }), dispatched),
+        );
+        expect(register).toHaveBeenCalledWith('/sw.js', { scope: '/' });
+    });
 });
 
 describe('pwaEffect: DEPLOYMENT_VERSION_CHECK_REQUESTED', () => {
@@ -56,15 +68,62 @@ describe('pwaEffect: DEPLOYMENT_VERSION_CHECK_REQUESTED', () => {
         expect(dispatched.find((d) => d.type === PWA_EVENTS.DEPLOYMENT_VERSION_LOADED).payload.version).toBe('v2');
     });
 
-    it('новая версия → дополнительно UPDATE_AVAILABLE', async () => {
+    it('новая версия → UPDATE_AVAILABLE, очистка humanitec-кэшей, update SW и reload', async () => {
         fetchMock.respondJson('GET', '/svc/health', { deployment_version: 'v2' });
         const dispatched = [];
+        const deleted = [];
+        globalThis.caches = {
+            keys: async () => ['humanitec-static-v5', 'other-cache'],
+            delete: async (name) => {
+                deleted.push(name);
+                return true;
+            },
+        };
+        const postMessage = vi.fn();
+        const update = vi.fn(async () => {});
+        dom.window.navigator.serviceWorker = {
+            register: vi.fn(() => Promise.resolve({})),
+            getRegistration: async () => ({
+                update,
+                waiting: { postMessage },
+            }),
+        };
+        const reload = vi.fn();
+        dom.window.location.reload = reload;
+
         await createPwaEffect({ baseUrl: '/svc' })(
             ev(PWA_EVENTS.DEPLOYMENT_VERSION_CHECK_REQUESTED),
             buildCtx(() => ({ pwa: { deploymentVersion: 'v1' } }), dispatched),
         );
         const upd = dispatched.find((d) => d.type === CoreEvents.PWA_UPDATE_AVAILABLE);
         expect(upd.payload).toEqual({ from: 'v1', to: 'v2' });
+        expect(deleted).toEqual(['humanitec-static-v5']);
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(postMessage).toHaveBeenCalledWith({ type: 'skipWaiting' });
+        expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('новая версия без waiting worker — только update и reload', async () => {
+        fetchMock.respondJson('GET', '/svc/health', { deployment_version: 'v2' });
+        const dispatched = [];
+        globalThis.caches = {
+            keys: async () => [],
+            delete: async () => true,
+        };
+        const update = vi.fn(async () => {});
+        dom.window.navigator.serviceWorker = {
+            register: vi.fn(() => Promise.resolve({})),
+            getRegistration: async () => ({ update, waiting: null }),
+        };
+        const reload = vi.fn();
+        dom.window.location.reload = reload;
+
+        await createPwaEffect({ baseUrl: '/svc' })(
+            ev(PWA_EVENTS.DEPLOYMENT_VERSION_CHECK_REQUESTED),
+            buildCtx(() => ({ pwa: { deploymentVersion: 'v1' } }), dispatched),
+        );
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(reload).toHaveBeenCalledTimes(1);
     });
 
     it('ошибка → DEPLOYMENT_VERSION_LOAD_FAILED', async () => {

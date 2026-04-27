@@ -103,7 +103,10 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
-    deployment_version: Optional[str] = None
+    deployment_version: Optional[str] = Field(
+        default=None,
+        description="Уникальная метка релиза для /health и сброса PWA-кэша в браузере; в проде задавать на каждый выкат (ENV SERVER__DEPLOYMENT_VERSION или server.deployment_version в JSON).",
+    )
 
     # URL сервисов для межсервисного взаимодействия
     flows_service_url: Optional[str] = Field(

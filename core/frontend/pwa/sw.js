@@ -157,9 +157,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Статика - Cache First
+  // Статика: отдаём кэш сразу, параллельно обновляем из сети (новый релиз подтягивается без «вечного» stale)
   if (url.pathname.startsWith('/static/')) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(staleWhileRevalidateStatic(request));
     return;
   }
 
@@ -191,6 +191,30 @@ async function cacheFirst(request) {
     console.error('[SW] Cache first failed:', error);
     return new Response('', { status: 504, statusText: 'Gateway Timeout' });
   }
+}
+
+async function staleWhileRevalidateStatic(request) {
+  const cached = await caches.match(request);
+  const networkPromise = fetch(request)
+    .then(async (response) => {
+      await putInStaticCache(request, response);
+      return response;
+    })
+    .catch((error) => {
+      console.error('[SW] staleWhileRevalidateStatic fetch failed:', error);
+      return null;
+    });
+
+  if (cached) {
+    void networkPromise;
+    return cached;
+  }
+
+  const response = await networkPromise;
+  if (response) {
+    return response;
+  }
+  return new Response('', { status: 504, statusText: 'Gateway Timeout' });
 }
 
 /**

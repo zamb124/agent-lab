@@ -17,6 +17,7 @@ import { CoreEvents } from '../contract.js';
 import { httpRequest } from '../http.js';
 
 const VERSION_POLL_MS = 60_000;
+const HUMANITEC_CACHE_PREFIX = 'humanitec-';
 
 function _isCapacitorNative() {
     if (typeof window === 'undefined' || typeof window.Capacitor === 'undefined') {
@@ -127,6 +128,50 @@ async function _registerWebPush(base) {
     return { transport: 'web_vapid', endpoint: subscription.endpoint };
 }
 
+async function _deleteHumanitecCaches() {
+    if (typeof caches === 'undefined') {
+        return;
+    }
+    const names = await caches.keys();
+    const toDelete = names.filter((name) => name.startsWith(HUMANITEC_CACHE_PREFIX));
+    await Promise.all(toDelete.map((name) => caches.delete(name)));
+}
+
+async function _reloadAfterDeployment() {
+    await _deleteHumanitecCaches();
+    const sw = typeof navigator !== 'undefined' && navigator.serviceWorker;
+    if (sw && typeof sw.getRegistration === 'function') {
+        const reg = await sw.getRegistration();
+        if (reg) {
+            if (typeof reg.update === 'function') {
+                await reg.update();
+            }
+            if (reg.waiting && typeof reg.waiting.postMessage === 'function') {
+                reg.waiting.postMessage({ type: 'skipWaiting' });
+            }
+        }
+    }
+    if (typeof location !== 'undefined' && typeof location.reload === 'function') {
+        location.reload();
+    }
+}
+
+function _registerServiceWorker() {
+    if (_isCapacitorNative()) {
+        return;
+    }
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+        return;
+    }
+    const sw = navigator.serviceWorker;
+    if (!sw || typeof sw.register !== 'function') {
+        return;
+    }
+    void sw.register('/sw.js', { scope: '/' }).catch((err) => {
+        console.error('[PWA] service worker register failed', err);
+    });
+}
+
 export const PWA_EVENTS = Object.freeze({
     INSTALL_PROMPT_REQUESTED:        'pwa/install/prompt_requested',
     PUSH_PERMISSION_REQUEST_REQUESTED:'pwa/push/permission_request_requested',
@@ -168,6 +213,7 @@ export function createPwaEffect({ baseUrl } = {}) {
                     window.addEventListener('appinstalled', () => {
                         ctx.dispatch(CoreEvents.PWA_INSTALLED, null, { source: 'system' });
                     });
+                    _registerServiceWorker();
                 }
                 _scheduleVersionCheck(ctx);
                 return;
@@ -261,6 +307,7 @@ export function createPwaEffect({ baseUrl } = {}) {
                     ctx.dispatch(PWA_EVENTS.DEPLOYMENT_VERSION_LOADED, { version }, { causation_id: event.id, source: 'http' });
                     if (cur && version && cur !== version) {
                         ctx.dispatch(CoreEvents.PWA_UPDATE_AVAILABLE, { from: cur, to: version }, { causation_id: event.id });
+                        await _reloadAfterDeployment();
                     }
                 } catch (err) {
                     ctx.dispatch(
