@@ -4,7 +4,9 @@ Browser Control HTTP API (§17.3): сессии, navigate, observe, action.
 
 from __future__ import annotations
 
+import json
 import random
+import re
 import uuid
 from typing import Any, Literal, Optional
 
@@ -25,6 +27,135 @@ from apps.browser.observe.ax_snapshot import dom_accessibility_tree_dict_from_pa
 from apps.browser.observe.snapshot_refs import build_interactive_snapshot_with_refs, parse_ref
 
 router = APIRouter(prefix="/control", tags=["browser-control"])
+
+
+def _format_console_events_text(events: list[dict[str, object]]) -> str:
+    lines: list[str] = []
+    for e in events:
+        kind = str(e.get("kind", "") or "")
+        if kind == "console":
+            t = str(e.get("type", "") or "")
+            text = str(e.get("text", "") or "")
+            loc = e.get("location")
+            loc_s = ""
+            if isinstance(loc, dict):
+                url = loc.get("url")
+                line = loc.get("line")
+                col = loc.get("column")
+                if isinstance(url, str) and url:
+                    loc_s = url
+                    if isinstance(line, int):
+                        loc_s += f":{line}"
+                        if isinstance(col, int):
+                            loc_s += f":{col}"
+            if loc_s:
+                lines.append(f"[console.{t}] {text} ({loc_s})")
+            else:
+                lines.append(f"[console.{t}] {text}")
+            continue
+        if kind == "pageerror":
+            msg = str(e.get("message", "") or "")
+            stack = str(e.get("stack", "") or "")
+            lines.append(f"[pageerror] {msg}")
+            if stack:
+                lines.append(stack)
+            continue
+        if kind == "requestfailed":
+            url = str(e.get("url", "") or "")
+            method = str(e.get("method", "") or "")
+            failure = str(e.get("failure", "") or "")
+            if method and url:
+                lines.append(f"[requestfailed] {method} {url} ({failure})" if failure else f"[requestfailed] {method} {url}")
+            elif url:
+                lines.append(f"[requestfailed] {url} ({failure})" if failure else f"[requestfailed] {url}")
+            else:
+                lines.append(json.dumps(e, ensure_ascii=False))
+            continue
+        if kind == "http_error":
+            url = str(e.get("url", "") or "")
+            status = e.get("status")
+            if isinstance(status, int) and url:
+                lines.append(f"[http.{status}] {url}")
+            else:
+                lines.append(json.dumps(e, ensure_ascii=False))
+            continue
+        lines.append(json.dumps(e, ensure_ascii=False))
+    return "\n".join(lines).strip() + ("\n" if len(lines) else "")
+
+
+def _write_console_sidecars(*, runtime: Any, session_id: str, event_path: str) -> None:
+    events = runtime.lease_manager.drain_console_events(session_id)
+    json_path = runtime.session_artifacts.write_sidecar_text_for_event(
+        event_json_path=event_path,
+        ext=".console.json",
+        content=json.dumps(events, ensure_ascii=False, indent=2),
+    )
+    txt_path = runtime.session_artifacts.write_sidecar_text_for_event(
+        event_json_path=event_path,
+        ext=".console.txt",
+        content=_format_console_events_text(events),
+    )
+    page_events_log_ref = runtime.session_artifacts.append_jsonl_for_session(
+        session_id=session_id,
+        filename="page_events.jsonl",
+        record={"kind": "checkpoint", "op": "drain_console_events", "count": len(events)},
+    )
+    runtime.session_artifacts.patch_event_meta(
+        event_json_path=event_path,
+        meta_patch={
+            "console_events": {
+                "count": len(events),
+                "json_ref": json_path,
+                "text_ref": txt_path,
+            },
+            "page_events_log_ref": page_events_log_ref,
+        },
+    )
+
+
+def _extract_page_error_from_html(html: str) -> dict[str, str] | None:
+    """
+    Лучшее усилие: вытащить "ошибку страницы" из HTML.
+
+    Это не CDP exception, а диагностический маркер, когда сайт отдаёт error-screen
+    (например Habr: tm-error-message / "Internal error").
+    """
+    if not html:
+        return None
+    if "tm-error-message__title" not in html:
+        return None
+    title_m = re.search(r'tm-error-message__title"\s*>\s*([^<]+)\s*<', html)
+    body_m = re.search(r'tm-error-message__body"\s*>\s*<p[^>]*>\s*([^<]+)\s*<', html)
+    title = title_m.group(1).strip() if title_m else ""
+    body = body_m.group(1).strip() if body_m else ""
+    if not title and not body:
+        return None
+    out: dict[str, str] = {}
+    if title:
+        out["title"] = title
+    if body:
+        out["message"] = body
+    return out if out else None
+
+
+def _write_session_event(
+    *,
+    runtime: Any,
+    session_id: str,
+    op: str,
+    request: Any,
+    response: Any,
+    error: Any,
+    meta: dict[str, Any],
+) -> str:
+    return runtime.session_artifacts.write_event(
+        session_id=session_id,
+        op=op,
+        request=request,
+        response=response,
+        error=error,
+        meta=meta,
+    )
 
 
 class ContextSignatureBody(BaseModel):
@@ -55,7 +186,6 @@ class ContextSignatureBody(BaseModel):
     user_agent: Optional[str] = None
     page_mode: Literal["interactive", "crawl", "lite"] = "interactive"
     permissions_fingerprint: str = "default"
-    emulate_locale_timezone_via_cdp: bool = True
     interaction_profile: InteractionProfileName = "human"
     interaction_seed: Optional[int] = None
 
@@ -153,18 +283,13 @@ class ControlObserveBody(BaseModel):
     Связи:
     - Управляет параметрами построения snapshot для ответа.
 
-    Инварианты:
-    - `budget` ограничен диапазоном `1..5000`.
-
     Мотивация:
-    - Дать клиенту контролируемый бюджет и формат refs для snapshot.
+    - Дать клиенту стабильный формат refs для snapshot.
 
     Переиспользование:
     - Стоит: как универсальная модель observe-запроса.
     """
     model_config = ConfigDict(extra="forbid")
-
-    budget: int = Field(default=80, ge=1, le=5000)
     include_snapshot_refs: bool = True
 
 
@@ -258,7 +383,6 @@ async def create_control_session(
         user_agent=ctx.user_agent,
         page_mode=ctx.page_mode,
         permissions_fingerprint=ctx.permissions_fingerprint,
-        emulate_locale_timezone_via_cdp=ctx.emulate_locale_timezone_via_cdp,
     )
     req = BrowserAcquireRequest(
         run_id=run_id,
@@ -277,13 +401,23 @@ async def create_control_session(
     try:
         res = await runtime.control_adapter.start(req)
     except BrowserCapabilityError as exc:
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=sid,
+            op="control.create_session",
+            request=body,
+            response=None,
+            error={"kind": "capability_error", "detail": exc.to_dict()},
+            meta={"transport": "http", "path": "/control/sessions"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=sid, event_path=event_path)
         raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
     runtime.observe_store.set_interaction_config(
         sid,
         profile=ctx.interaction_profile,
         seed=ctx.interaction_seed,
     )
-    return ControlSessionCreateResponse(
+    out = ControlSessionCreateResponse(
         session_id=sid,
         run_id=run_id,
         task_id=task_id,
@@ -292,6 +426,17 @@ async def create_control_session(
         context_signature_hash=res.context_signature_hash,
         features=_features_dict(runtime),
     )
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=sid,
+        op="control.create_session",
+        request=body,
+        response=out,
+        error=None,
+        meta={"transport": "http", "path": "/control/sessions"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=sid, event_path=event_path)
+    return out
 
 
 @router.post("/sessions/{session_id}/navigate")
@@ -318,8 +463,30 @@ async def control_navigate(
     try:
         out = await runtime.control_adapter.navigate(page, req)
     except BrowserCapabilityError as exc:
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.navigate",
+            request=body,
+            response=None,
+            error={"kind": "capability_error", "detail": exc.to_dict()},
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
-    return {
+
+    # После навигации даём небольшой "поведенческий" шум в профилях human/fast,
+    # чтобы приближать сессию к пользовательской (crawl4ai-like simulate_user).
+    try:
+        inter, profile, rnd = _interaction_for_session(runtime, session_id)
+        await inter.post_navigate_signals(page, profile=profile, rnd=rnd)
+    except HTTPException:
+        raise
+    except Exception:
+        # Поведенческий слой не должен ломать навигацию: это best-effort сигнал,
+        # а не обязательная часть контракта navigate.
+        pass
+    payload = {
         "final_url": out.final_url,
         "status_code": out.status_code,
         "response_headers": out.response_headers,
@@ -328,6 +495,17 @@ async def control_navigate(
         "snapshot_ref": out.snapshot_ref,
         "anti_bot_signals": out.anti_bot_signals,
     }
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.navigate",
+        request=body,
+        response=payload,
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return payload
 
 
 @router.post("/sessions/{session_id}/observe")
@@ -345,6 +523,11 @@ async def control_observe(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     payload: dict[str, Any] = {"session_id": session_id, "url": page.url}
 
+    # Observe должен работать на "готовой" странице: domcontentloaded достаточно.
+    # `networkidle` на Lightpanda и на сайтах с трекерами может не наступать (или падать),
+    # а observe не должен зависеть от аналитики/рекламы.
+    await page.wait_for_load_state("domcontentloaded", timeout=10_000)
+
     # Каноничный LLM-friendly snapshot: строим строго через JS в странице (page.evaluate),
     # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
     ax = await dom_accessibility_tree_dict_from_page(page)
@@ -358,6 +541,38 @@ async def control_observe(
         payload["snapshot"]["refs"] = refs
         runtime.observe_store.update_refs(session_id, refs)
 
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.observe",
+        request=body,
+        response=payload,
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/observe"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    html = await page.content()
+    html_path = runtime.session_artifacts.write_sidecar_text_for_event(
+        event_json_path=event_path,
+        ext=".html",
+        content=html,
+    )
+    runtime.session_artifacts.patch_event_meta(
+        event_json_path=event_path,
+        meta_patch={"html_ref": html_path},
+    )
+
+    page_err = _extract_page_error_from_html(html)
+    if page_err is not None:
+        page_err_path = runtime.session_artifacts.write_sidecar_text_for_event(
+            event_json_path=event_path,
+            ext=".page_error.json",
+            content=json.dumps(page_err, ensure_ascii=False, indent=2),
+        )
+        runtime.session_artifacts.patch_event_meta(
+            event_json_path=event_path,
+            meta_patch={"page_error": page_err, "page_error_ref": page_err_path},
+        )
     return payload
 
 
@@ -375,12 +590,33 @@ async def control_action(
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
-        return await runtime.control_adapter.run_action(
+        out = await runtime.control_adapter.run_action(
             page,
             body.code,
             timeout_ms=body.timeout_ms,
         )
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.action",
+            request=body,
+            response=out,
+            error=None,
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+        return out
     except BrowserCapabilityError as exc:
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.action",
+            request=body,
+            response=None,
+            error={"kind": "capability_error", "detail": exc.to_dict()},
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
 
 
@@ -438,7 +674,18 @@ async def control_click(
     await loc.wait_for(state="visible", timeout=body.timeout_ms)
     inter, profile, rnd = _interaction_for_session(runtime, session_id)
     await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
-    return {"ok": True}
+    out = {"ok": True}
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.click",
+        request=body,
+        response=out,
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/click"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
 
 
 @router.post("/sessions/{session_id}/fill")
@@ -462,7 +709,18 @@ async def control_fill(
     await loc.wait_for(state="visible", timeout=body.timeout_ms)
     inter, profile, rnd = _interaction_for_session(runtime, session_id)
     await inter.type_text(page, loc, body.text, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
-    return {"ok": True}
+    out = {"ok": True}
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.fill",
+        request=body,
+        response=out,
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/fill"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
 
 
 @router.post("/sessions/{session_id}/press")
@@ -480,7 +738,18 @@ async def control_press(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     inter, profile, rnd = _interaction_for_session(runtime, session_id)
     await inter.press(page, body.key, profile=profile, rnd=rnd)
-    return {"ok": True}
+    out = {"ok": True}
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.press",
+        request=body,
+        response=out,
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/press"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
 
 
 @router.post("/sessions/{session_id}/wait")
@@ -502,7 +771,18 @@ async def control_wait(
         await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
     if body.load_state is None and body.selector is None:
         raise HTTPException(status_code=422, detail="Нужно задать selector и/или load_state")
-    return {"ok": True}
+    out = {"ok": True}
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.wait",
+        request=body,
+        response=out,
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}/wait"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out
 
 
 @router.delete("/sessions/{session_id}")
@@ -516,4 +796,16 @@ async def delete_control_session(
         warm_idle_sec=runtime.settings.warm_idle_sec,
     )
     runtime.observe_store.forget(session_id)
-    return {"status": "closed"}
+    runtime.session_artifacts.forget(session_id)
+    out = {"status": "closed"}
+    event_path = _write_session_event(
+        runtime=runtime,
+        session_id=session_id,
+        op="control.close_session",
+        request={"session_id": session_id},
+        response=out,
+        error=None,
+        meta={"transport": "http", "path": f"/control/sessions/{session_id}"},
+    )
+    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+    return out

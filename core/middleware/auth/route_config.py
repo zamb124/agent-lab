@@ -18,6 +18,7 @@ SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/sync/",
     "/documents/",
     "/frontend/",
+    "/browser/",
     "/static/",
     "/assets/",
     "/src/",
@@ -151,6 +152,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
     # Browser Runtime control-plane (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
     RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/browser/api/v1/mcp*", auth_required=False, context_type="anonymous"),
     
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),

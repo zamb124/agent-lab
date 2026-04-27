@@ -1,5 +1,5 @@
 """
-AX-снимок для control: строим дерево accessibility через JS в странице (page.evaluate).
+AX-снимок для control: строим компактный интерактивный снимок через JS.
 
 Fallback-режимы запрещены: при недоступности источника поднимается `BrowserCapabilityError`.
 """
@@ -15,152 +15,112 @@ async def dom_accessibility_tree_dict_from_page(
     page: Any,
 ) -> dict[str, Any]:
     """
-    Accessibility-подобное дерево, построенное внутри страницы.
+    Построить browser-use-подобный snapshot интерактивных элементов.
 
-    Цель: работать на CDP-движках.
-    Дерево опирается на DOM + ARIA атрибуты и возвращает минимально полезные узлы:
-    role/name/value/children.
+    Возвращает компактное дерево:
+    - root role/name
+    - children: только интерактивные элементы (link/button/input/...).
     """
-    def _is_context_destroyed_error(exc: Exception) -> bool:
-        msg = str(exc)
-        return "Execution context was destroyed" in msg
-
-    async def _eval_once() -> dict[str, Any]:
-        return await page.evaluate(
+    try:
+        data = await page.evaluate(
             """() => {
-  const MAX_NODES = 2500;
-  let n = 0;
-
-  const normalize = (s) => String(s || '').trim().replace(/\\s+/g, ' ').slice(0, 400);
+  const normalize = (s) => String(s).trim().replace(/\\s+/g, ' ').slice(0, 300);
 
   const roleOf = (el) => {
-    const r = el.getAttribute && el.getAttribute('role');
-    if (r) return String(r).toLowerCase();
+    const explicit = normalize(el.getAttribute('role') || '').toLowerCase();
+    if (explicit) return explicit;
     const tag = (el.tagName || '').toLowerCase();
     if (tag === 'a' && el.getAttribute('href')) return 'link';
     if (tag === 'button') return 'button';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'textarea') return 'textbox';
     if (tag === 'input') {
-      const t = (el.getAttribute('type') || 'text').toLowerCase();
+      const t = normalize(el.getAttribute('type') || 'text').toLowerCase();
       if (t === 'checkbox') return 'checkbox';
       if (t === 'radio') return 'radio';
       if (t === 'range') return 'slider';
       if (t === 'button' || t === 'submit' || t === 'reset') return 'button';
       return 'textbox';
     }
-    if (tag === 'textarea') return 'textbox';
-    if (tag === 'select') return 'combobox';
-    if (tag === 'option') return 'option';
-    if (tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || tag === 'h5' || tag === 'h6') return 'heading';
+    if (el.isContentEditable) return 'textbox';
+    return '';
+  };
+
+  const nameOf = (el) => {
+    const aria = normalize(el.getAttribute('aria-label') || '');
+    if (aria) return aria;
+    const title = normalize(el.getAttribute('title') || '');
+    if (title) return title;
+    const alt = normalize(el.getAttribute('alt') || '');
+    if (alt) return alt;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      const placeholder = normalize(el.getAttribute('placeholder') || '');
+      if (placeholder) return placeholder;
+    }
+    const text = normalize(el.innerText || el.textContent || '');
+    if (text) return text;
     return '';
   };
 
   const valueOf = (el) => {
     const tag = (el.tagName || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-      const v = el.value;
-      if (v == null) return null;
-      const s = normalize(v);
-      return s ? s : null;
-    }
-    return null;
+    if (tag === 'a') return normalize(el.getAttribute('href') || '');
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return normalize(el.value || '');
+    return '';
   };
 
-  const nameOf = (el) => {
-    const aria = el.getAttribute && el.getAttribute('aria-label');
-    if (aria) return normalize(aria);
-    const labelledBy = el.getAttribute && el.getAttribute('aria-labelledby');
-    if (labelledBy) {
-      const ids = labelledBy.split(/\\s+/g).filter(Boolean);
-      const parts = [];
-      for (const id of ids) {
-        const ref = document.getElementById(id);
-        if (ref) parts.push(normalize(ref.textContent));
-      }
-      const joined = normalize(parts.filter(Boolean).join(' '));
-      if (joined) return joined;
-    }
-    if (el.tagName && el.tagName.toLowerCase() === 'img') {
-      const alt = el.getAttribute('alt');
-      if (alt) return normalize(alt);
-    }
-    return normalize(el.textContent);
+  const isDisabled = (el) => {
+    if (el.hasAttribute('disabled')) return true;
+    return normalize(el.getAttribute('aria-disabled') || '').toLowerCase() === 'true';
   };
 
-  const visible = (el) => {
-    try {
-      const style = window.getComputedStyle(el);
-      if (!style) return true;
-      if (style.display === 'none' || style.visibility === 'hidden') return false;
-      const rect = el.getBoundingClientRect();
-      return !(rect.width === 0 || rect.height === 0);
-    } catch (_) {
-      return true;
-    }
-  };
+  const nodes = Array.from(document.querySelectorAll(
+    'a[href],button,input,textarea,select,[role],[tabindex],[contenteditable="true"]'
+  ));
 
-  const pickChildren = (el) => {
-    const out = [];
-    for (const ch of el.children || []) {
-      if (n >= MAX_NODES) break;
-      if (!ch || !ch.tagName) continue;
-      out.push(ch);
-      if (out.length >= 40) break;
-    }
-    return out;
-  };
+  const children = [];
+  const seen = new Set();
+  for (let i = 0; i < nodes.length; i += 1) {
+    const el = nodes[i];
+    if (!el || !el.tagName) continue;
+    if (isDisabled(el)) continue;
 
-  const build = (el) => {
-    if (!el || !el.tagName) return null;
-    if (n >= MAX_NODES) return null;
-    n += 1;
-    const node = { name: nameOf(el) };
-    const r = roleOf(el);
-    if (r) node.role = r;
-    const v = valueOf(el);
-    if (v !== null) node.value = v;
-    const children = [];
-    for (const ch of pickChildren(el)) {
-      if (!visible(ch)) continue;
-      const sub = build(ch);
-      if (sub) children.push(sub);
-      if (children.length >= 40) break;
-    }
-    if (children.length) node.children = children;
-    return node;
-  };
+    const role = roleOf(el);
+    if (!role) continue;
 
-  const root = document.documentElement || document.body;
-  const tree = root ? build(root) : { role: 'WebArea', name: '' };
-  const title = normalize(document.title);
-  const out = tree || { role: 'WebArea', name: '' };
-  if (!out.name && title) out.name = title;
-  return out;
+    const name = nameOf(el);
+    if (!name) continue;
+
+    const value = valueOf(el);
+    const dedupe = `${role}|${name}|${value}`;
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+
+    const node = { role, name };
+    if (value) node.value = value;
+    children.push(node);
+    if (children.length >= 500) break;
+  }
+
+  return {
+    role: 'WebArea',
+    name: normalize(document.title || ''),
+    children,
+  };
 }""",
         )
-
-    try:
-        data = await _eval_once()
     except Exception as exc:
-        if _is_context_destroyed_error(exc):
-            try:
-                await page.wait_for_load_state("domcontentloaded", timeout=5_000)
-                data = await _eval_once()
-            except Exception as exc2:
-                raise BrowserCapabilityError(
-                    "dom_accessibility_unavailable",
-                    "Не удалось построить accessibility дерево через page.evaluate",
-                    details={"error": str(exc2)},
-                ) from exc2
-        else:
-            raise BrowserCapabilityError(
-                "dom_accessibility_unavailable",
-                "Не удалось построить accessibility дерево через page.evaluate",
-                details={"error": str(exc)},
-            ) from exc
+        raise BrowserCapabilityError(
+            "dom_accessibility_unavailable",
+            "Не удалось построить интерактивный snapshot через page.evaluate",
+            details={"error": str(exc)},
+        ) from exc
+
     if not isinstance(data, dict):
         raise BrowserCapabilityError(
             "ax_snapshot_invalid",
-            "DOM accessibility tree вернул не dict",
+            "DOM snapshot вернул не dict",
             details={"type": type(data).__name__},
         )
     return data

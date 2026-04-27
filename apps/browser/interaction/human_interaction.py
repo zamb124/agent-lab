@@ -91,9 +91,8 @@ class HumanInteraction:
         try:
             await locator.click(timeout=timeout_ms)
         except PlaywrightTimeoutError:
-            # Для некоторых CDP-движков (Lightpanda) Playwright может оставаться в состоянии
-            # "outside of the viewport" даже после scrollIntoView. В этом случае разрешаем
-            # форсированный клик как last resort для целевых контролов (input/button).
+            # Playwright может оставаться в состоянии "outside of the viewport" даже после scrollIntoView.
+            # В этом случае разрешаем форсированный клик как last resort для целевых контролов (input/button).
             await locator.click(timeout=timeout_ms, force=True)
         if profile.name != "off":
             await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))
@@ -138,4 +137,27 @@ class HumanInteraction:
         await page.keyboard.press(key)
         if profile.name != "off":
             await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))
+
+    async def post_navigate_signals(self, page: Any, *, profile: InteractionProfile, rnd: InteractionRng) -> None:
+        """
+        Имитация "чтения" и лёгкой прокрутки после navigate.
+
+        Используется как best-effort поведенческий шум (crawl4ai-like) и не должен
+        ломать контрольный поток выполнения: только простые actions и паузы.
+        """
+        if profile.name == "off":
+            return
+
+        await self._pause_ms(page, rnd.randint_range(profile.post_navigate_pause_ms_range))
+
+        steps = rnd.randint_range(profile.post_navigate_scroll_steps_range)
+        for _ in range(steps):
+            dx = rnd.randint_range((-2, 2))
+            dy = rnd.randint_range(profile.post_navigate_scroll_px_per_step_range)
+            # Playwright: page.mouse.wheel(delta_x, delta_y)
+            await page.mouse.wheel(dx, dy)
+            await self._pause_ms(
+                page,
+                rnd.randint_range(profile.post_navigate_pause_between_scroll_steps_ms_range),
+            )
 

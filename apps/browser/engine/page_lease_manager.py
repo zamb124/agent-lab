@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from apps.browser.engine.context_factory import ContextFactory
 from apps.browser.engine.types import ContextSignature, SessionMode
@@ -111,7 +111,12 @@ class PageLeaseManager:
     - Не стоит: в одноразовых скриптах без сессионного API, где lifecycle страницы
       полностью локален и не требует общего учёта.
     """
-    def __init__(self, context_factory: ContextFactory) -> None:
+    def __init__(
+        self,
+        context_factory: ContextFactory,
+        *,
+        page_event_logger: Callable[[str, dict[str, object]], None] | None = None,
+    ) -> None:
         self._factory = context_factory
         self._lock = asyncio.Lock()
         self._leases: dict[int, LeaseRecord] = {}
@@ -119,6 +124,170 @@ class PageLeaseManager:
         self._allow_acquire = True
         self._draining_endpoints: set[str] = set()
         self._session_contexts: dict[str, SessionContextRecord] = {}
+        # События для дебага страницы: console/pageerror/network.
+        # Пишутся в artifacts как sidecar и используются для triage.
+        self._console_events_by_session: dict[str, list[dict[str, object]]] = {}
+        self._console_listeners_by_page: dict[int, tuple[object, object, object, object]] = {}
+        self._page_event_logger = page_event_logger
+
+    @staticmethod
+    def _console_location(msg: Any) -> dict[str, object]:
+        """
+        Нормализовать location console-msg, если движок поддерживает.
+        """
+        loc: Any = None
+        try:
+            loc = msg.location()  # type: ignore[attr-defined]
+        except Exception:
+            loc = None
+        if not isinstance(loc, dict):
+            return {}
+        out: dict[str, object] = {}
+        url = loc.get("url")
+        line = loc.get("lineNumber")
+        col = loc.get("columnNumber")
+        if isinstance(url, str) and url:
+            out["url"] = url
+        if isinstance(line, int) and line >= 0:
+            out["line"] = line
+        if isinstance(col, int) and col >= 0:
+            out["column"] = col
+        return out
+
+    def _append_console_event(self, session_id: str, event: dict[str, object]) -> None:
+        if not session_id:
+            raise ValueError("session_id обязателен")
+        self._console_events_by_session.setdefault(session_id, []).append(event)
+        if self._page_event_logger is not None:
+            payload = dict(event)
+            payload["ts_ms"] = int(time.time() * 1000)
+            self._page_event_logger(session_id, payload)
+
+    def _attach_console_listeners(self, *, session_id: str, page: Any) -> None:
+        pid = id(page)
+        if pid in self._console_listeners_by_page:
+            raise RuntimeError("Console listeners уже зарегистрированы для страницы")
+
+        def on_console(msg: Any) -> None:
+            try:
+                msg_type = str(getattr(msg, "type", "") or "")
+            except Exception:
+                msg_type = ""
+            try:
+                text = str(getattr(msg, "text", "") or "")
+            except Exception:
+                text = ""
+            self._append_console_event(
+                session_id,
+                {
+                    "kind": "console",
+                    "type": msg_type,
+                    "text": text,
+                    "location": self._console_location(msg),
+                },
+            )
+
+        def on_page_error(err: Any) -> None:
+            try:
+                message = str(err)
+            except Exception:
+                message = ""
+            stack = ""
+            try:
+                stack = str(getattr(err, "stack", "") or "")
+            except Exception:
+                stack = ""
+            payload: dict[str, object] = {"kind": "pageerror", "message": message}
+            if stack:
+                payload["stack"] = stack
+            self._append_console_event(session_id, payload)
+
+        def on_request_failed(req: Any) -> None:
+            url = ""
+            method = ""
+            failure = ""
+            try:
+                url = str(getattr(req, "url", "") or "")
+            except Exception:
+                url = ""
+            try:
+                method = str(getattr(req, "method", "") or "")
+            except Exception:
+                method = ""
+            try:
+                failure_obj = req.failure()  # type: ignore[attr-defined]
+                if isinstance(failure_obj, dict):
+                    failure = str(failure_obj.get("errorText", "") or "")
+                else:
+                    failure = str(failure_obj or "")
+            except Exception:
+                failure = ""
+            self._append_console_event(
+                session_id,
+                {
+                    "kind": "requestfailed",
+                    "url": url,
+                    "method": method,
+                    "failure": failure,
+                },
+            )
+
+        def on_response(resp: Any) -> None:
+            url = ""
+            status: int | None = None
+            try:
+                url = str(getattr(resp, "url", "") or "")
+            except Exception:
+                url = ""
+            try:
+                status = int(getattr(resp, "status", 0) or 0)
+            except Exception:
+                status = None
+            if status is None or status < 400:
+                return
+            self._append_console_event(
+                session_id,
+                {
+                    "kind": "http_error",
+                    "url": url,
+                    "status": status,
+                },
+            )
+
+        page.on("console", on_console)
+        page.on("pageerror", on_page_error)
+        page.on("requestfailed", on_request_failed)
+        page.on("response", on_response)
+        self._console_listeners_by_page[pid] = (on_console, on_page_error, on_request_failed, on_response)
+
+    def _detach_console_listeners(self, page: Any) -> None:
+        pid = id(page)
+        listeners = self._console_listeners_by_page.pop(pid, None)
+        if listeners is None:
+            return
+        on_console, on_page_error, on_request_failed, on_response = listeners
+        page.remove_listener("console", on_console)
+        page.remove_listener("pageerror", on_page_error)
+        page.remove_listener("requestfailed", on_request_failed)
+        page.remove_listener("response", on_response)
+
+    def drain_console_events(self, session_id: str) -> list[dict[str, object]]:
+        """
+        Слить накопленные debug-события страницы для session_id и очистить буфер.
+
+        События включают:
+        - console
+        - pageerror
+        - requestfailed
+        - http_error (status >= 400)
+        """
+        if not session_id:
+            raise ValueError("session_id обязателен")
+        events = self._console_events_by_session.get(session_id)
+        if events is None or len(events) == 0:
+            return []
+        self._console_events_by_session[session_id] = []
+        return events
 
     def set_allow_acquire(self, value: bool) -> None:
         self._allow_acquire = value
@@ -164,6 +333,7 @@ class PageLeaseManager:
         if ctx_rec is None:
             context = await self._factory.new_context(
                 browser,
+                endpoint_key,
                 signature,
                 storage_state,
             )
@@ -193,6 +363,7 @@ class PageLeaseManager:
             context = ctx_rec.context
 
         page = await self._factory.new_page(context)
+        self._attach_console_listeners(session_id=session_id, page=page)
         rec = LeaseRecord(
             session_id=session_id,
             endpoint_key=endpoint_key,
@@ -234,6 +405,7 @@ class PageLeaseManager:
                 else:
                     ctx_to_close = ctx_rec.context
                     self._session_contexts.pop(rec.session_id, None)
+        self._detach_console_listeners(page)
         await self._factory.close_page(page)
         if ctx_to_close is not None:
             await self._factory.close_context(ctx_to_close)
@@ -276,6 +448,7 @@ class PageLeaseManager:
             ctx_rec = self._session_contexts.pop(session_id, None)
         if ctx_rec is not None:
             await self._factory.close_context(ctx_rec.context)
+        self._console_events_by_session.pop(session_id, None)
 
     async def close_all(self) -> None:
         """

@@ -5,11 +5,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any, Optional
 
 from apps.browser.engine.types import ContextSignature
-from apps.browser.stealth.playwright_stealth import apply_stealth_to_context
+from apps.browser.stealth.playwright_stealth import apply_stealth_to_context, build_stealth_plan
 
 
 def _playwright_transport_gone(exc: BaseException) -> bool:
@@ -101,69 +100,40 @@ class ContextFactory:
     async def new_context(
         self,
         browser: Any,
+        endpoint_key: str,
         signature: ContextSignature,
         storage_state: Optional[dict[str, Any]],
     ) -> Any:
         async with self._lock:
-            proxy = self._proxy_config(signature.proxy_policy)
-            kwargs: dict[str, Any] = {}
-            if signature.emulate_locale_timezone_via_cdp is False:
-                # Некоторые CDP-движки (Lightpanda) не поддерживают создание отдельных
-                # browser contexts (Target.createBrowserContext). В этом режиме используем
-                # единственный уже существующий контекст.
-                if storage_state is not None:
-                    raise ValueError(
-                        "storage_state не поддерживается, когда emulate_locale_timezone_via_cdp=False"
-                    )
-                contexts = getattr(browser, "contexts", None)
-                if not isinstance(contexts, list) or len(contexts) == 0:
-                    raise RuntimeError(
-                        "Движок не поддерживает new_context и не предоставляет browser.contexts"
-                    )
-                context = contexts[0]
-                try:
-                    setattr(context, "_browser_runtime_shared_context", True)
-                except Exception:
-                    pass
-                try:
-                    setattr(context, "_browser_runtime_signature", signature)
-                except Exception:
-                    pass
-                await apply_stealth_to_context(context, signature)
-                return context
-            if signature.emulate_locale_timezone_via_cdp:
-                kwargs["locale"] = signature.locale
-                kwargs["timezone_id"] = signature.timezone_id
-            # Иначе не передаём locale/timezone: CDP (например Lightpanda) может не
-            # поддерживать Emulation.setLocaleOverride / setTimezoneOverride.
-            if proxy is not None:
-                kwargs["proxy"] = proxy
-            if signature.user_agent:
-                kwargs["user_agent"] = signature.user_agent
             if storage_state is not None:
-                kwargs["storage_state"] = storage_state
-            context = await browser.new_context(**kwargs)
+                raise ValueError("storage_state не поддерживается в текущей модели контекста")
+            contexts = getattr(browser, "contexts", None)
+            if not isinstance(contexts, list) or len(contexts) == 0:
+                raise RuntimeError("Движок не предоставляет browser.contexts")
+            context = contexts[0]
+            try:
+                setattr(context, "_browser_runtime_shared_context", True)
+            except Exception:
+                pass
             try:
                 setattr(context, "_browser_runtime_signature", signature)
             except Exception:
                 pass
+            try:
+                setattr(context, "_browser_runtime_endpoint_key", endpoint_key)
+            except Exception:
+                pass
             await apply_stealth_to_context(context, signature)
-            if signature.stealth_init_version:
-                marker = json.dumps(signature.stealth_init_version)
-                if signature.emulate_locale_timezone_via_cdp:
-                    await context.add_init_script(
-                        f"window.__browser_runtime_stealth = {marker};"
-                    )
             return context
 
     async def new_page(self, context: Any) -> Any:
         async with self._lock:
-            return await context.new_page()
+            page = await context.new_page()
+
+            return page
 
     async def close_page(self, page: Any) -> None:
         await _safe_page_close(page)
 
     async def close_context(self, context: Any) -> None:
-        if getattr(context, "_browser_runtime_shared_context", False) is True:
-            return
-        await _safe_context_close(context)
+        return

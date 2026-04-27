@@ -31,7 +31,6 @@ def _sig() -> ContextSignature:
         user_agent=None,
         page_mode="crawl",
         permissions_fingerprint="p",
-        emulate_locale_timezone_via_cdp=False,
     )
 
 
@@ -165,20 +164,9 @@ async def test_save_restore_roundtrip() -> None:
         finally:
             await facade.interactor.release(res.page)
 
-        res2 = await facade.interactor.acquire(
-            _acquire_req(session_id=f"{session_id}-b", restore_key=state_key)
-        )
-        try:
-            fr2 = BrowserFetchRequest(
-                url="https://example.com",
-                wait_policy="domcontentloaded",
-                screenshot=False,
-                snapshot=False,
-                capture_pdf=False,
-                navigation_timeout_ms=60_000,
+        # restore_state_key в текущей модели контекста отключён (zero-guess: без скрытого реюза storage_state).
+        with pytest.raises(ValueError, match="restore_state_key не поддерживается"):
+            await facade.interactor.acquire(
+                _acquire_req(session_id=f"{session_id}-b", restore_key=state_key)
             )
-            out2 = await facade.interactor.fetch(res2.page, fr2)
-            assert out2.status_code == 200
-        finally:
-            await facade.interactor.release(res2.page)
-            await facade.stop()
+        await facade.stop()

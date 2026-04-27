@@ -89,15 +89,21 @@ def build_interactive_snapshot_with_refs(ax_tree: dict[str, Any]) -> tuple[str, 
     def walk(n: dict[str, Any]) -> None:
         role = _str(n.get("role")).lower()
         name = _str(n.get("name")).strip()
+        value = _str(n.get("value")).strip()
         if role in _INTERACTIVE_ROLES:
             key = (role, name)
             nth = seen_counts.get(key, 0)
             seen_counts[key] = nth + 1
             ref = next_ref()
             refs[ref] = {"role": role, "name": name, "nth": nth}
+            if value:
+                refs[ref]["value"] = value
             # agent-browser style: "- role "Name" [ref=eN]"
             if name:
-                lines.append(f'- {role} "{name}" [ref={ref}]')
+                if value:
+                    lines.append(f'- {role} "{name}" [ref={ref}] ({value})')
+                else:
+                    lines.append(f'- {role} "{name}" [ref={ref}]')
             else:
                 lines.append(f"- {role} [ref={ref}]")
         for c in _iter_children(n):

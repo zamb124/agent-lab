@@ -38,9 +38,6 @@ class ContextSignature:
     user_agent: Optional[str]
     page_mode: PageMode
     permissions_fingerprint: str
-    # Если False, locale/timezone не уходят в Playwright new_context: нужно для
-    # движков без Emulation.setLocaleOverride в CDP (например Lightpanda).
-    emulate_locale_timezone_via_cdp: bool = True
 
     def stable_hash(self) -> str:
         payload = json.dumps(
@@ -54,7 +51,6 @@ class ContextSignature:
                 "user_agent": self.user_agent,
                 "page_mode": self.page_mode,
                 "permissions_fingerprint": self.permissions_fingerprint,
-                "emulate_locale_timezone_via_cdp": self.emulate_locale_timezone_via_cdp,
             },
             sort_keys=True,
             ensure_ascii=False,

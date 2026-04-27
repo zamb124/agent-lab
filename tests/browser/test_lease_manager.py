@@ -14,6 +14,14 @@ class _FakePage:
     def __init__(self, ctx: _FakeContext) -> None:
         self.context = ctx
 
+    def on(self, event: str, handler: Any) -> None:
+        _ = event
+        _ = handler
+
+    def remove_listener(self, event: str, handler: Any) -> None:
+        _ = event
+        _ = handler
+
 
 class _FakeContext:
     def __init__(self) -> None:
@@ -30,10 +38,12 @@ class FakeContextFactory:
     async def new_context(
         self,
         browser: Any,
+        endpoint_key: str,
         signature: ContextSignature,
         storage_state: Optional[dict[str, Any]],
     ) -> Any:
         _ = browser
+        _ = endpoint_key
         _ = signature
         _ = storage_state
         self.new_context_count += 1

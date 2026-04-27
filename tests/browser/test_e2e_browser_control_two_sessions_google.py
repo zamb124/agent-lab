@@ -188,7 +188,6 @@ async def test_browser_control_http_two_sessions_google_search_artifacts() -> No
                         "session_mode": "warm",
                         "context": {
                             "page_mode": "interactive",
-                            "emulate_locale_timezone_via_cdp": False,
                             "anti_bot_tier": "gray",
                             "stealth_init_version": "v1",
                             "interaction_profile": "human",
@@ -203,7 +202,6 @@ async def test_browser_control_http_two_sessions_google_search_artifacts() -> No
                     json={
                         "url": URL,
                         "wait_policy": "domcontentloaded",
-                        "screenshot": True,
                         "snapshot": True,
                         "capture_pdf": False,
                         "navigation_timeout_ms": WAIT_TIMEOUT_MS,
@@ -268,3 +266,9 @@ async def test_browser_control_http_two_sessions_google_search_artifacts() -> No
                 close_res = await ac.delete(f"/browser/api/v1/control/sessions/{sid}")
                 assert close_res.status_code == 200, close_res.text
                 _write_json(step_dir / "S99_close.json", close_res.json())
+
+                # Артефакты runtime: service-side лог вызовов по шагам.
+                events_dir = Path(artifacts_dir) / "sessions" / sid / "events"
+                assert events_dir.exists(), f"events_dir отсутствует: {events_dir}"
+                events = sorted(p for p in events_dir.iterdir() if p.suffix == ".json")
+                assert len(events) >= 6, f"Ожидались event artifacts, найдено: {len(events)}"

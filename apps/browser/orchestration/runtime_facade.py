@@ -14,6 +14,7 @@ from apps.browser.engine.page_lease_manager import PageLeaseManager
 from apps.browser.engine.playwright_interactor import PlaywrightBrowserInteractor
 from apps.browser.engine.session_store import SessionStateStore
 from apps.browser.engine.types import BrowserRuntimeSettingsView
+from apps.browser.observe.session_artifacts import ControlSessionArtifactsWriter
 from apps.browser.observe.observe_store import ControlObserveStore
 
 
@@ -47,7 +48,13 @@ class BrowserRuntimeFacade:
         self.pool = CDPConnectionPool()
         self.context_factory = ContextFactory()
         self.session_store = SessionStateStore()
-        self.lease_manager = PageLeaseManager(self.context_factory)
+        self.session_artifacts = ControlSessionArtifactsWriter(
+            artifacts_dir=settings.artifacts_dir,
+        )
+        self.lease_manager = PageLeaseManager(
+            self.context_factory,
+            page_event_logger=self._log_page_event,
+        )
         self.lifecycle = CDPLifecycleManagerImpl(
             self.pool,
             self.lease_manager,
@@ -60,6 +67,13 @@ class BrowserRuntimeFacade:
         )
         self.observe_store = ControlObserveStore()
         self._control_adapter: Optional[BrowserControlAdapter] = None
+
+    def _log_page_event(self, session_id: str, event: dict[str, object]) -> None:
+        self.session_artifacts.append_jsonl_for_session(
+            session_id=session_id,
+            filename="page_events.jsonl",
+            record=event,
+        )
 
     @property
     def control_adapter(self) -> BrowserControlAdapter:

@@ -17,10 +17,15 @@ class _FailingClosePage:
     async def close(self) -> None:
         raise RuntimeError("close failed")
 
+    async def evaluate(self, script: str) -> None:
+        _ = script
+        return None
+
 
 class _FakeContext:
     def __init__(self) -> None:
         self.pages: list[Any] = []
+        self._routes: list[tuple[str, object]] = []
 
     async def new_page(self) -> _FailingClosePage:
         page = _FailingClosePage(self)
@@ -38,11 +43,14 @@ class _FakeContext:
         _ = headers
         return None
 
+    async def route(self, pattern: str, handler: object) -> None:
+        self._routes.append((pattern, handler))
+        return None
+
 
 class _FakeBrowser:
-    async def new_context(self, **kwargs: Any) -> _FakeContext:
-        _ = kwargs
-        return _FakeContext()
+    def __init__(self) -> None:
+        self.contexts: list[Any] = [_FakeContext()]
 
 
 def _sig() -> ContextSignature:
@@ -65,6 +73,6 @@ async def test_close_page_raises_when_page_close_fails() -> None:
     browser = _FakeBrowser()
     sig = _sig()
     with pytest.raises(RuntimeError, match="close failed"):
-        ctx = await factory.new_context(browser, sig, None)
+        ctx = await factory.new_context(browser, "chromium", sig, None)
         page = await factory.new_page(ctx)
         await factory.close_page(page)

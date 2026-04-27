@@ -96,7 +96,7 @@ class PlaywrightBrowserInteractor:
         browser = await self._pool.acquire_browser(req.endpoint_key, cdp_url)
         storage_state: Optional[dict[str, Any]] = None
         if req.restore_state_key is not None:
-            storage_state = self._store.storage_state_for_new_context(req.restore_state_key)
+            raise ValueError("restore_state_key не поддерживается текущей моделью контекста")
         _context, page, cold_start = await self._leases.lease_page(
             browser,
             req.endpoint_key,
@@ -107,8 +107,6 @@ class PlaywrightBrowserInteractor:
             page_ttl_sec=self._settings.default_page_ttl_sec,
             warm_idle_sec=self._settings.warm_idle_sec,
         )
-        if req.restore_state_key is not None:
-            await self.restore_state(page.context, req.restore_state_key)
         return BrowserAcquireResult(
             page=page,
             context=page.context,
@@ -166,15 +164,7 @@ class PlaywrightBrowserInteractor:
         snap_ref: Optional[str] = None
         token = uuid.uuid4().hex
         if req.screenshot:
-            shot_path = artifacts_root / f"screenshot-{token}.png"
-            sig = getattr(page.context, "_browser_runtime_signature", None)
-            if sig is not None and getattr(sig, "emulate_locale_timezone_via_cdp", True) is False:
-                # Lightpanda CDP часто не реализует Page.captureScreenshot и может падать.
-                # В этом режиме пропускаем screenshot-артефакт.
-                shot_ref = None
-            else:
-                await page.screenshot(path=str(shot_path), full_page=True)
-                shot_ref = str(shot_path)
+            shot_ref = None
         if req.capture_pdf:
             pdf_path = artifacts_root / f"page-{token}.pdf"
             await page.pdf(path=str(pdf_path))

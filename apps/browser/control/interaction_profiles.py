@@ -31,12 +31,6 @@ class InteractionProfile:
     # Набор текста: задержка между символами.
     typing_delay_ms_range: tuple[int, int]
 
-    # Post-navigate имитация "чтения" и прокрутки (crawl4ai-like).
-    post_navigate_pause_ms_range: tuple[int, int]
-    post_navigate_scroll_steps_range: tuple[int, int]
-    post_navigate_scroll_px_per_step_range: tuple[int, int]
-    post_navigate_pause_between_scroll_steps_ms_range: tuple[int, int]
-
 def get_interaction_profile(name: InteractionProfileName) -> InteractionProfile:
     if name == "off":
         return InteractionProfile(
@@ -48,10 +42,6 @@ def get_interaction_profile(name: InteractionProfileName) -> InteractionProfile:
             pause_after_action_ms_range=(0, 0),
             pause_after_focus_ms_range=(0, 0),
             typing_delay_ms_range=(0, 0),
-            post_navigate_pause_ms_range=(0, 0),
-            post_navigate_scroll_steps_range=(0, 0),
-            post_navigate_scroll_px_per_step_range=(0, 0),
-            post_navigate_pause_between_scroll_steps_ms_range=(0, 0),
         )
     if name == "fast":
         return InteractionProfile(
@@ -63,25 +53,17 @@ def get_interaction_profile(name: InteractionProfileName) -> InteractionProfile:
             pause_after_action_ms_range=(20, 65),
             pause_after_focus_ms_range=(10, 35),
             typing_delay_ms_range=(8, 20),
-            post_navigate_pause_ms_range=(120, 450),
-            post_navigate_scroll_steps_range=(0, 2),
-            post_navigate_scroll_px_per_step_range=(120, 280),
-            post_navigate_pause_between_scroll_steps_ms_range=(120, 350),
         )
     if name == "human":
         return InteractionProfile(
             name="human",
-            pre_action_mouse_moves=2,
-            mouse_x_range=(80, 920),
-            mouse_y_range=(80, 620),
-            pause_before_action_ms_range=(120, 520),
-            pause_after_action_ms_range=(150, 650),
-            pause_after_focus_ms_range=(80, 260),
-            typing_delay_ms_range=(15, 55),
-            post_navigate_pause_ms_range=(900, 2600),
-            post_navigate_scroll_steps_range=(1, 6),
-            post_navigate_scroll_px_per_step_range=(120, 420),
-            post_navigate_pause_between_scroll_steps_ms_range=(450, 1400),
+            pre_action_mouse_moves=0,
+            mouse_x_range=(0, 0),
+            mouse_y_range=(0, 0),
+            pause_before_action_ms_range=(0, 15),
+            pause_after_action_ms_range=(0, 20),
+            pause_after_focus_ms_range=(0, 10),
+            typing_delay_ms_range=(3, 9),
         )
     raise ValueError(f"Неизвестный interaction profile: {name!r}")
 

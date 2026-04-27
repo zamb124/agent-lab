@@ -513,9 +513,12 @@
         "permissions_enabled": false
       },
       "browser": {
-        "default_endpoint_key": "default",
+        "default_endpoint_key": "chromium",
         "cdp_url": "",
-        "cdp_endpoints": {},
+        "cdp_endpoints": {
+           "chromium": "http://127.0.0.1:9222",
+           "lightpanda": "ws://127.0.0.1:9223"
+        },
         "artifacts_dir": "artifacts/browser_runtime",
         "default_page_ttl_sec": 3600,
         "warm_idle_sec": 300,
