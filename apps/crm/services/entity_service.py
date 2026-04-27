@@ -4539,6 +4539,55 @@ class EntityService:
             merged_description=result_data.get("merged_description")
         )
 
+    @staticmethod
+    def _normalize_deduplicate_batch_dict(result_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Приводит ответ skill deduplicate_batch к виду с ключом decisions: list у корня.
+
+        Structured output и A2A могут дать вложенные structured_output или JSON-строку в decisions.
+        """
+        if not isinstance(result_data, dict):
+            raise ValueError("deduplicate_batch: тело ответа агента должно быть объектом")
+
+        cur: Dict[str, Any] = result_data
+        for _ in range(8):
+            if "decisions" in cur:
+                break
+            nested = cur.get("structured_output")
+            if isinstance(nested, dict):
+                cur = nested
+                continue
+            break
+
+        if "decisions" not in cur:
+            raise ValueError(
+                "deduplicate_batch: нет поля decisions (проверьте structured_output и артефакты A2A)"
+            )
+
+        decisions = cur["decisions"]
+        if isinstance(decisions, str) and decisions.strip():
+            try:
+                parsed = json.loads(decisions)
+            except (json.JSONDecodeError, TypeError) as e:
+                raise ValueError(
+                    "deduplicate_batch: поле decisions — невалидная JSON-строка"
+                ) from e
+            if isinstance(parsed, dict) and "pair_index" in parsed:
+                parsed = [parsed]
+            elif not isinstance(parsed, list):
+                raise ValueError(
+                    "deduplicate_batch: после разбора JSON поле decisions должно быть массивом"
+                )
+            out = dict(cur)
+            out["decisions"] = parsed
+            cur = out
+
+        decisions = cur["decisions"]
+        if isinstance(decisions, dict) and "pair_index" in decisions:
+            cur = {**cur, "decisions": [decisions]}
+
+        return cur
+
     async def _call_deduplicate_batch_agent(
         self,
         chunk: List[Tuple[int, AIExtractedEntity, CRMEntity, float]],
@@ -4583,8 +4632,9 @@ class EntityService:
             metadata={"variables": variables},
         )
 
-        result_data = self._extract_data_from_a2a_response(response)
-        decisions = result_data.get("decisions")
+        raw = self._extract_data_from_a2a_response(response)
+        result_data = self._normalize_deduplicate_batch_dict(raw)
+        decisions = result_data["decisions"]
         if not isinstance(decisions, list):
             raise ValueError("deduplicate_batch: поле decisions должно быть массивом")
         if len(decisions) != len(chunk):

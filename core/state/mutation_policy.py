@@ -52,6 +52,22 @@ FIELDS_COPY_FROM_USER_RETURNED_STATE: frozenset[str] = frozenset(
     }
 )
 
+# Поля из FROZEN_STATE_FIELDS, которые user/eval и платформенные reason-тулзы
+# могут присваивать (interrupt из code-node; reasoning из inline tool / субагента).
+USER_CODE_OVERRIDABLE_FROZEN_FIELDS: frozenset[str] = (
+    FIELDS_COPY_FROM_USER_RETURNED_STATE
+    | {
+        "reasoning_history",
+        "pending_reasoning",
+    }
+)
+
+# Снимок после user/eval-кода: не сравниваем поля, которые inline-код и тулзы
+# вправе выставлять (interrupt), дополнять (reasoning_history) и т.д.
+FROZEN_STATE_SNAPSHOT_FIELDS: frozenset[str] = frozenset(
+    FROZEN_STATE_FIELDS - USER_CODE_OVERRIDABLE_FROZEN_FIELDS
+)
+
 USER_TOOL_PARALLEL_STATE_MERGE_FIELDS: frozenset[str] = frozenset(
     {
         "content",
@@ -92,10 +108,14 @@ def raise_if_frozen_field(name: str, *, reason: str = "assign") -> None:
 def guard_setattr_if_user_code(name: str) -> None:
     if is_runtime_state_mutation_allowed():
         return
+    if name in USER_CODE_OVERRIDABLE_FROZEN_FIELDS:
+        return
     raise_if_frozen_field(name, reason="assign")
 
 
 def forbid_frozen_update_key(key: str, *, reason: str = "update") -> None:
+    if key in USER_CODE_OVERRIDABLE_FROZEN_FIELDS:
+        return
     if key in FROZEN_STATE_FIELDS:
         raise FrozenStateFieldError(field=key, reason=reason)
 
@@ -106,7 +126,7 @@ def snapshot_frozen_fields(state: ExecutionState) -> dict[str, Any]:
     if not isinstance(state, ES):
         return {}
     out: dict[str, Any] = {}
-    for k in FROZEN_STATE_FIELDS:
+    for k in FROZEN_STATE_SNAPSHOT_FIELDS:
         out[k] = deepcopy(getattr(state, k, None))
     return out
 
@@ -133,6 +153,8 @@ def should_skip_field_on_user_returned_state_copy(field_name: str) -> bool:
 
 __all__ = [
     "FROZEN_STATE_FIELDS",
+    "FROZEN_STATE_SNAPSHOT_FIELDS",
+    "USER_CODE_OVERRIDABLE_FROZEN_FIELDS",
     "USER_TOOL_PARALLEL_STATE_MERGE_FIELDS",
     "assert_frozen_fields_unchanged",
     "forbid_frozen_update_key",
