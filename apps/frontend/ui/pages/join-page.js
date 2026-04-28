@@ -9,6 +9,7 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-user-chip.js';
 
 export class JoinPage extends PlatformPage {
     static properties = {
@@ -54,15 +55,34 @@ export class JoinPage extends PlatformPage {
             .provider-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
             .provider-icon { width: 24px; height: 24px; }
             .checking { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); }
+            .invite-preview {
+                text-align: left;
+                margin-bottom: var(--space-6);
+                padding: var(--space-4);
+                border-radius: var(--radius-lg);
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid var(--glass-border-subtle);
+            }
+            .invite-preview p { margin: 0 0 var(--space-2); color: var(--text-primary); }
+            .invite-preview p:last-child { margin-bottom: 0; }
+            .preview-label { color: var(--text-secondary); font-size: var(--text-sm); display: block; margin-bottom: var(--space-1); }
+            .logged-in {
+                text-align: left;
+                margin: var(--space-6) 0;
+                display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
+            }
         `,
     ];
 
     constructor() {
         super();
         this._invite = this.useOp('frontend/invite_accept');
+        this._preview = this.useOp('frontend/invite_preview');
         this._authStatus = this.select((s) => s.auth.status);
+        this._authUser = this.select((s) => s.auth.user);
         this._oauthLoading = false;
         this._oauthError = '';
+        this._previewRanFor = null;
         this.useEvent('auth/oauth/failed', (event) => {
             this._oauthLoading = false;
             const p = event.payload;
@@ -71,9 +91,22 @@ export class JoinPage extends PlatformPage {
         });
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._maybeLoadPreview();
+    }
+
     _shortCode() {
         const u = new URL(window.location.href);
         return u.searchParams.get('c');
+    }
+
+    _maybeLoadPreview() {
+        const code = this._shortCode();
+        if (!code) return;
+        if (this._previewRanFor === code) return;
+        this._previewRanFor = code;
+        this._preview.run({ short_code: code });
     }
 
     _inviteReturnPath() {
@@ -94,6 +127,69 @@ export class JoinPage extends PlatformPage {
         this.startOAuth(provider, { returnPath: this._inviteReturnPath() });
     }
 
+    _renderInvitePreview() {
+        const code = this._shortCode();
+        if (!code) return html``;
+
+        const busy = this._preview.busy;
+        const err = this._preview.error;
+        const res = this._preview.lastResult;
+
+        if (busy && !res) {
+            return html`
+                <div class="checking">
+                    <glass-spinner></glass-spinner>
+                    <p>${this.t('join_page.preview_loading')}</p>
+                </div>
+            `;
+        }
+        if (err) {
+            return html`<p class="err">${err}</p>`;
+        }
+        if (!res) {
+            return html``;
+        }
+        if (
+            typeof res.company_name !== 'string'
+            || typeof res.role !== 'string'
+            || typeof res.invited_by_name !== 'string'
+            || typeof res.invited_by_user_id !== 'string'
+        ) {
+            throw new Error('join_page: preview response shape');
+        }
+        return html`
+            <div class="invite-preview">
+                <p>
+                    <span class="preview-label">${this.t('join_page.preview_company')}</span>
+                    ${res.company_name}
+                </p>
+                <p>
+                    <span class="preview-label">${this.t('join_page.preview_role')}</span>
+                    ${res.role}
+                </p>
+                <p>
+                    <span class="preview-label">${this.t('join_page.preview_inviter')}</span>
+                    ${res.invited_by_name}
+                </p>
+            </div>
+        `;
+    }
+
+    _renderLoggedInUser() {
+        const authStatus = this._authStatus.value;
+        if (authStatus !== 'authenticated') return html``;
+        const user = this._authUser.value;
+        if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
+            return html``;
+        }
+        return html`
+            <div class="logged-in">
+                <span class="preview-label">${this.t('join_page.logged_in_as')}</span>
+                <platform-user-chip .userId=${user.user_id}></platform-user-chip>
+            </div>
+        `;
+    }
+
     render() {
         const authStatus = this._authStatus.value;
         const codeMissing = !this._shortCode();
@@ -104,6 +200,7 @@ export class JoinPage extends PlatformPage {
         if (authStatus === 'unknown' || authStatus === 'validating') {
             return html`
                 <div class="card">
+                    ${this._renderInvitePreview()}
                     <div class="checking">
                         <glass-spinner></glass-spinner>
                         <p>${this.t('join_page.session_checking')}</p>
@@ -115,6 +212,7 @@ export class JoinPage extends PlatformPage {
         if (authStatus === 'unauthenticated' || authStatus === 'error') {
             return html`
                 <div class="card">
+                    ${this._renderInvitePreview()}
                     <h1>${this.t('join_page.needs_auth_title')}</h1>
                     <p>${this.t('join_page.needs_auth_subtitle')}</p>
                     ${this._oauthError ? html`<p class="err">${this._oauthError}</p>` : ''}
@@ -160,6 +258,8 @@ export class JoinPage extends PlatformPage {
         return html`
             <div class="card">
                 <h1>${this.t('join_page.title')}</h1>
+                ${this._renderInvitePreview()}
+                ${this._renderLoggedInUser()}
                 <p>${this.t('join_page.text')}</p>
                 ${errorMessage ? html`<p class="err">${errorMessage}</p>` : ''}
                 <button class="btn" ?disabled=${busy || codeMissing} @click=${() => this._accept()}>

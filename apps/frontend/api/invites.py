@@ -2,7 +2,8 @@
 API для приглашений в компанию по ссылке.
 
 Генерация: POST /api/invites/generate — owner/admin компании.
-Принятие:  POST /api/invites/accept   — любой авторизованный пользователь.
+Просмотр: POST /api/invites/preview  — публично, по short_code (компания, роль, пригласивший).
+Принятие: POST /api/invites/accept   — любой авторизованный пользователь.
 """
 
 import logging
@@ -21,6 +22,7 @@ from core.utils.invite_tokens import (
     INVITE_EXPIRES_SECONDS,
     burn_invite_token,
     get_invite_token_service,
+    invite_jti_already_used,
 )
 from core.utils.tokens import TokenService, get_token_service
 
@@ -50,6 +52,18 @@ class AcceptInviteResponse(BaseModel):
     company_name: str
     role: list[str]
     already_member: bool
+
+
+class PreviewInviteRequest(BaseModel):
+    short_code: str
+
+
+class PreviewInviteResponse(BaseModel):
+    company_id: str
+    company_name: str
+    role: str
+    invited_by_user_id: str
+    invited_by_name: str
 
 
 def _require_user(request: Request):
@@ -92,7 +106,11 @@ async def generate_invite(
         )
 
     svc = get_invite_token_service()
-    token, _ = svc.create(company_id=company.company_id, role=body.role)
+    token, _ = svc.create(
+        company_id=company.company_id,
+        role=body.role,
+        invited_by=user.user_id,
+    )
 
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=INVITE_EXPIRES_SECONDS)
     short = container.short_link_service
@@ -107,6 +125,54 @@ async def generate_invite(
         invite_url=invite_url,
         role=body.role,
         expires_in_seconds=INVITE_EXPIRES_SECONDS,
+    )
+
+
+@router.post("/preview", response_model=PreviewInviteResponse)
+async def preview_invite(
+    body: PreviewInviteRequest,
+    container: ContainerDep,
+):
+    """
+    Возвращает данные приглашения для экрана /join без авторизации.
+    Не расходует одноразовый токен.
+    """
+    code = body.short_code.strip()
+    if code == "":
+        raise HTTPException(status_code=400, detail="Код приглашения не задан")
+
+    short = container.short_link_service
+    jwt_str = await short.get_invite_jwt_by_code(code)
+    if jwt_str is None:
+        raise HTTPException(status_code=404, detail="Ссылка-приглашение не найдена или истекла")
+
+    svc = get_invite_token_service()
+    try:
+        invite = svc.validate(jwt_str)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=410, detail="Ссылка-приглашение устарела")
+    except (jwt.InvalidTokenError, ValueError):
+        raise HTTPException(status_code=403, detail="Недействительная ссылка-приглашение")
+
+    if await invite_jti_already_used(invite.jti):
+        raise HTTPException(status_code=410, detail="Ссылка-приглашение уже была использована")
+
+    company_repo = container.company_repository
+    company = await company_repo.get(invite.company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена или была удалена")
+
+    user_repo = container.user_repository
+    inviter = await user_repo.get(invite.invited_by)
+    if not inviter:
+        raise HTTPException(status_code=404, detail="Инициатор приглашения не найден")
+
+    return PreviewInviteResponse(
+        company_id=company.company_id,
+        company_name=company.name,
+        role=invite.role,
+        invited_by_user_id=inviter.user_id,
+        invited_by_name=inviter.name,
     )
 
 

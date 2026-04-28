@@ -211,6 +211,8 @@ ROUTE_RULES: List[RouteRule] = [
     # Принятие инвайта (auth, но без субдомена — пользователь ещё может не иметь компании)
     RouteRule("/api/invites/accept", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/invites/accept", context_type="frontend", auth_required=True),
+    RouteRule("/api/invites/preview", context_type="anonymous", auth_required=False),
+    RouteRule("/frontend/api/invites/preview", context_type="anonymous", auth_required=False),
     # Генерация инвайта (auth + субдомен — только owner/admin действующей компании)
     RouteRule("/api/invites/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/invites/*", context_type="api", auth_required=True),
@@ -420,6 +422,8 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/frontend/api/companies/*/system-access",
     "/api/invites/accept",
     "/frontend/api/invites/accept",
+    "/api/invites/preview",
+    "/frontend/api/invites/preview",
     "/*/test",  # E2E тестовые страницы (TESTING mode only)
 ]
 

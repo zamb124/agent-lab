@@ -289,6 +289,8 @@ help:
 	@echo "Локальные процессы (без Docker), все сервисы:"
 	@echo "  make app             - flows, frontend, crm, rag, sync, provider_litserve, workers, scheduler (см. scripts/run.py all)"
 	@echo "  make app APP_KILL=1  - то же, сначала kill -9 по PID на портах 8001–8006 и 8014 (зависший uvicorn)"
+	@echo "  make app ex flows_worker        - all без этих сервисов (ex|x, затем имя; на macOS: не «--ex» без «make --»)"
+	@echo "  make app APP_EXCLUDE=…          - то же, список через запятую (см. mk/app.mk)"
 	@echo "  MinIO Console (dev): http://localhost:19011 (minioadmin/minioadmin)"
 	@echo ""
 	@echo "Testing (порты: 54322, 63792, 19002-19012) см. mk/test.mk:"

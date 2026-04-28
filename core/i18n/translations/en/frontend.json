@@ -281,7 +281,12 @@
         "processing": "Joining...",
         "done": "You are now a member of the company.",
         "toast_accepted": "Invitation accepted",
-        "toast_failed": "Failed to accept invitation"
+        "toast_failed": "Failed to accept invitation",
+        "preview_company": "Company",
+        "preview_role": "Role",
+        "preview_inviter": "Invited you",
+        "preview_loading": "Loading invitation…",
+        "logged_in_as": "Signed in as"
     },
     "api_keys_page": {
         "title": "API keys",

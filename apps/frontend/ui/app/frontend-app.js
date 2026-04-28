@@ -53,7 +53,7 @@ import {
     systemAccessEnterOp,
     systemAccessLeaveOp,
 } from '../events/resources/billing-admin.resource.js';
-import { acceptInviteOp } from '../events/resources/invites.resource.js';
+import { acceptInviteOp, previewInviteOp } from '../events/resources/invites.resource.js';
 import { servicesStatusLoadOp } from '../events/resources/services-status.resource.js';
 import {
     dashboardFlowsCountOp,
@@ -184,6 +184,7 @@ export class FrontendApp extends PlatformApp {
         systemAccessEnterOp,
         systemAccessLeaveOp,
         acceptInviteOp,
+        previewInviteOp,
         servicesStatusLoadOp,
         dashboardFlowsCountOp,
         dashboardCrmNamespacesCountOp,

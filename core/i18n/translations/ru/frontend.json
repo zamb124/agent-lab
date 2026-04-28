@@ -281,7 +281,12 @@
         "processing": "Принимаем...",
         "done": "Вы теперь участник компании.",
         "toast_accepted": "Приглашение принято",
-        "toast_failed": "Не удалось принять приглашение"
+        "toast_failed": "Не удалось принять приглашение",
+        "preview_company": "Компания",
+        "preview_role": "Роль",
+        "preview_inviter": "Вас пригласил",
+        "preview_loading": "Загрузка приглашения…",
+        "logged_in_as": "Вы вошли как"
     },
     "api_keys_page": {
         "title": "API Ключи",

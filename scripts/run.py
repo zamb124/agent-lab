@@ -20,7 +20,12 @@
     python scripts/run.py idle_worker # Запуск Idle worker
     python scripts/run.py all         # Все сервисы параллельно (make app)
     python scripts/run.py all --kill  # то же, после SIGKILL процессов на портах HTTP-сервисов
+    python scripts/run.py all -e flows_worker  # all без перечисленных сервисов (см. --exclude)
+    python scripts/run.py from-make app --ex flows_worker  # вызывается из make app --ex ... (см. mk/app.mk)
     python scripts/run.py kill-ports  # только освободить порты HTTP-сервисов
+
+Исключение из all: --exclude / -e / --ex, либо ex|x (следом имя), либо APP_EXCLUDE=… .
+    make: «make app ex flows_worker»; с «--ex» на macOS см. «make -- app --ex …» в mk/app.mk.
 
 Конфигурация загружается из conf.json и conf.local.json.
 Переменные окружения имеют приоритет над конфигами.
@@ -207,8 +212,95 @@ def _prefix_stream(stream, prefix: str) -> None:
     stream.close()
 
 
-def run_all() -> None:
-    names = list(SERVICES.keys())
+def _parse_exclude_from_argv(argv: list[str]) -> set[str]:
+    out: set[str] = set()
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--exclude", "-e", "--ex"):
+            if i + 1 >= len(argv):
+                print(
+                    "Ошибка: после --exclude / -e / --ex нужно имя сервиса.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                sys.exit(1)
+            out.add(argv[i + 1])
+            i += 2
+        elif a in ("ex", "x"):
+            if i + 1 >= len(argv):
+                print(
+                    "Ошибка: после ex / x (короткий синтаксис для make) нужно имя сервиса.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                sys.exit(1)
+            out.add(argv[i + 1])
+            i += 2
+        else:
+            i += 1
+    return out
+
+
+def _exclude_from_env() -> set[str]:
+    raw = os.environ.get("APP_EXCLUDE", "").strip()
+    if not raw:
+        return set()
+    return {p.strip() for p in raw.split(",") if p.strip()}
+
+
+def _validate_exclude(exclude: set[str]) -> None:
+    for name in exclude:
+        if name not in SERVICES:
+            print(
+                f"Неизвестный сервис для исключения: {name}. "
+                f"Доступно: {', '.join(SERVICES.keys())}",
+                file=sys.stderr,
+                flush=True,
+            )
+            sys.exit(1)
+
+
+def _run_from_make() -> None:
+    goals = sys.argv[2:]
+    if not goals or goals[0] != "app":
+        print(
+            "from-make: первый аргумент — app, как в «make app …» ($MAKECMDGOALS).",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    rest: list[str] = list(goals[1:])
+    if rest and rest[-1] == "--from-make-kill":
+        from_make_kill = True
+        rest = rest[:-1]
+    else:
+        from_make_kill = False
+    if "--kill" in rest:
+        from_make_kill = True
+        rest = [t for t in rest if t != "--kill"]
+    if from_make_kill or os.environ.get("APP_KILL") == "1":
+        kill_ports()
+    exclude = _parse_exclude_from_argv(rest) | _exclude_from_env()
+    _validate_exclude(exclude)
+    run_all(exclude=exclude)
+
+
+def run_all(exclude: set[str] | None = None) -> None:
+    skip = set(exclude) if exclude else set()
+    names = [n for n in SERVICES.keys() if n not in skip]
+    if not names:
+        print(
+            "Ошибка: после исключения не осталось сервисов для запуска.",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    if skip:
+        print(
+            f"Пропуск сервисов: {', '.join(sorted(skip))}",
+            flush=True,
+        )
     children: list[tuple[str, subprocess.Popen[str]]] = []
 
     def terminate_children() -> None:
@@ -276,7 +368,9 @@ def run_all() -> None:
 def main() -> None:
     if len(sys.argv) < 2:
         print("Использование: python scripts/run.py <service>")
-        print(f"Доступные сервисы: {', '.join(SERVICES.keys())}, all, kill-ports")
+        print(
+            f"Доступные сервисы: {', '.join(SERVICES.keys())}, all, from-make, kill-ports"
+        )
         sys.exit(1)
 
     service = sys.argv[1]
@@ -285,16 +379,22 @@ def main() -> None:
         kill_ports()
         return
 
+    if service == "from-make":
+        _run_from_make()
+        return
+
     if service == "all":
         rest = sys.argv[2:]
         if "--kill" in rest or os.environ.get("APP_KILL") == "1":
             kill_ports()
-        run_all()
+        exclude = _parse_exclude_from_argv(rest) | _exclude_from_env()
+        _validate_exclude(exclude)
+        run_all(exclude=exclude)
         return
 
     if service not in SERVICES:
         print(f"Неизвестный сервис: {service}")
-        print(f"Доступные: {', '.join(SERVICES.keys())}, all, kill-ports")
+        print(f"Доступные: {', '.join(SERVICES.keys())}, all, from-make, kill-ports")
         sys.exit(1)
 
     cmd = build_command(service)

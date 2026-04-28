@@ -23,6 +23,7 @@ from core.utils.invite_tokens import (
     INVITE_REDIS_KEY_PREFIX,
     INVITE_TOKEN_AUDIENCE,
     INVITE_TOKEN_TYPE,
+    get_invite_token_service,
 )
 from core.short_links.kinds import SHORT_LINK_KIND_COMPANY_INVITE
 from core.short_links.repository import ShortLinkRepository
@@ -99,7 +100,23 @@ async def _redis_delete(key: str) -> None:
         await client.aclose()
 
 
-def _build_expired_invite_jwt(company_id: str, role: str, jti: str) -> str:
+async def _redis_set(key: str, value: str, ex: int) -> None:
+    import redis.asyncio as aioredis
+
+    settings = get_settings()
+    client = aioredis.from_url(
+        settings.database.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
+    )
+    try:
+        await client.set(key, value, ex=ex)
+    finally:
+        await client.aclose()
+
+
+def _build_expired_invite_jwt(company_id: str, role: str, jti: str, invited_by: str) -> str:
     settings = get_settings()
     secret = settings.auth.jwt_secret_key
     if not secret:
@@ -110,6 +127,7 @@ def _build_expired_invite_jwt(company_id: str, role: str, jti: str) -> str:
         "aud": INVITE_TOKEN_AUDIENCE,
         "company_id": company_id,
         "role": role,
+        "invited_by": invited_by,
         "jti": jti,
         "iat": int((now - timedelta(days=2)).timestamp()),
         "exp": int((now - timedelta(hours=1)).timestamp()),
@@ -124,6 +142,7 @@ def _build_wrong_signature_invite_jwt(company_id: str) -> str:
         "aud": INVITE_TOKEN_AUDIENCE,
         "company_id": company_id,
         "role": "developer",
+        "invited_by": "user_inviter_placeholder",
         "jti": str(uuid.uuid4()),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(hours=1)).timestamp()),
@@ -174,8 +193,13 @@ class TestInvitesGenerateAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers: dict[str, str],
+        auth_token: str,
         frontend_container,
     ):
+        token_service = get_token_service()
+        owner_data = token_service.validate_token(auth_token)
+        assert owner_data is not None
+
         response = await frontend_client.post(
             "/frontend/api/invites/generate",
             headers=auth_headers,
@@ -191,6 +215,13 @@ class TestInvitesGenerateAPI:
         assert "/l/" in invite_url
         jwt_str = await _jwt_from_invite_url(frontend_container, invite_url)
         assert len(jwt_str) > 20
+        decoded = jwt.decode(
+            jwt_str,
+            get_settings().auth.jwt_secret_key,
+            algorithms=["HS256"],
+            audience=INVITE_TOKEN_AUDIENCE,
+        )
+        assert decoded.get("invited_by") == owner_data.user_id
 
     async def test_generate_unauthorized(self, frontend_client: AsyncClient):
         response = await frontend_client.post(
@@ -394,7 +425,7 @@ class TestInvitesAcceptAPI:
         assert owner_data is not None
         cid = owner_data.company_id
         jti = f"exp_jti_{uuid.uuid4().hex[:12]}"
-        expired = _build_expired_invite_jwt(cid, "developer", jti)
+        expired = _build_expired_invite_jwt(cid, "developer", jti, owner_data.user_id)
         row_expires = datetime.now(timezone.utc) + timedelta(hours=24)
         short_code = await _insert_invite_short_link_row(expired, row_expires)
 
@@ -429,18 +460,22 @@ class TestInvitesAcceptAPI:
     async def test_accept_company_missing_404(
         self,
         frontend_client: AsyncClient,
-        auth_headers: dict[str, str],
+        auth_token: str,
         frontend_container,
     ):
         missing_id = f"missing_co_{uuid.uuid4().hex[:16]}"
         jti = f"jti_miss_{uuid.uuid4().hex[:12]}"
         settings = get_settings()
         now = datetime.now(timezone.utc)
+        token_service = get_token_service()
+        owner_data = token_service.validate_token(auth_token)
+        assert owner_data is not None
         payload: dict[str, Any] = {
             "typ": INVITE_TOKEN_TYPE,
             "aud": INVITE_TOKEN_AUDIENCE,
             "company_id": missing_id,
             "role": "developer",
+            "invited_by": owner_data.user_id,
             "jti": jti,
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(hours=1)).timestamp()),
@@ -521,6 +556,133 @@ class TestInvitesAcceptAPI:
         assert foreign_loaded.company_id in user.companies
 
 
+@pytest.mark.asyncio
+class TestInvitesPreviewAPI:
+    async def test_preview_success_without_auth(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers: dict[str, str],
+        auth_token: str,
+        frontend_container,
+    ):
+        token_service = get_token_service()
+        owner_data = token_service.validate_token(auth_token)
+        assert owner_data is not None
+        owner_user = await frontend_container.user_repository.get(owner_data.user_id)
+        assert owner_user is not None
+
+        gen = await frontend_client.post(
+            "/frontend/api/invites/generate",
+            headers=auth_headers,
+            json={"role": "developer"},
+        )
+        assert gen.status_code == 200
+        invite_url = gen.json()["invite_url"]
+        short_code = _short_code_from_invite_url(invite_url)
+
+        preview = await frontend_client.post(
+            "/frontend/api/invites/preview",
+            json={"short_code": short_code},
+        )
+        assert preview.status_code == 200
+        body = preview.json()
+        assert body["company_id"] == owner_data.company_id
+        assert body["role"] == "developer"
+        assert body["invited_by_user_id"] == owner_data.user_id
+        assert body["invited_by_name"] == owner_user.name
+        assert len(body["company_name"]) > 0
+
+    async def test_preview_unknown_short_code_404(self, frontend_client: AsyncClient):
+        response = await frontend_client.post(
+            "/frontend/api/invites/preview",
+            json={"short_code": f"unknown_{uuid.uuid4().hex}"},
+        )
+        assert response.status_code == 404
+
+    async def test_preview_expired_token_410(
+        self,
+        frontend_client: AsyncClient,
+        auth_token: str,
+        frontend_container,
+    ):
+        token_service = get_token_service()
+        owner_data = token_service.validate_token(auth_token)
+        assert owner_data is not None
+        cid = owner_data.company_id
+        jti = f"exp_prev_{uuid.uuid4().hex[:12]}"
+        expired = _build_expired_invite_jwt(cid, "developer", jti, owner_data.user_id)
+        row_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        short_code = await _insert_invite_short_link_row(expired, row_expires)
+
+        response = await frontend_client.post(
+            "/frontend/api/invites/preview",
+            json={"short_code": short_code},
+        )
+        assert response.status_code == 410
+
+    async def test_preview_inviter_missing_404(
+        self,
+        frontend_client: AsyncClient,
+        auth_token: str,
+        frontend_container,
+    ):
+        token_service = get_token_service()
+        owner_data = token_service.validate_token(auth_token)
+        assert owner_data is not None
+        cid = owner_data.company_id
+        fake_inviter = f"no_such_user_{uuid.uuid4().hex[:12]}"
+        jti = f"jti_prev_{uuid.uuid4().hex[:12]}"
+        settings = get_settings()
+        now = datetime.now(timezone.utc)
+        payload: dict[str, Any] = {
+            "typ": INVITE_TOKEN_TYPE,
+            "aud": INVITE_TOKEN_AUDIENCE,
+            "company_id": cid,
+            "role": "developer",
+            "invited_by": fake_inviter,
+            "jti": jti,
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=1)).timestamp()),
+        }
+        raw = jwt.encode(payload, settings.auth.jwt_secret_key, algorithm="HS256")
+        row_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        short_code = await _insert_invite_short_link_row(raw, row_expires)
+
+        response = await frontend_client.post(
+            "/frontend/api/invites/preview",
+            json={"short_code": short_code},
+        )
+        assert response.status_code == 404
+
+    async def test_preview_jti_already_used_410(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers: dict[str, str],
+        frontend_container,
+    ):
+        gen = await frontend_client.post(
+            "/frontend/api/invites/generate",
+            headers=auth_headers,
+            json={"role": "viewer"},
+        )
+        assert gen.status_code == 200
+        invite_url = gen.json()["invite_url"]
+        short_code = _short_code_from_invite_url(invite_url)
+        jwt_str = await _jwt_from_invite_url(frontend_container, invite_url)
+        invite_data = get_invite_token_service().validate(jwt_str)
+        await _redis_set(
+            f"{INVITE_REDIS_KEY_PREFIX}{invite_data.jti}",
+            "1",
+            ex=86400,
+        )
+
+        response = await frontend_client.post(
+            "/frontend/api/invites/preview",
+            json={"short_code": short_code},
+        )
+        assert response.status_code == 410
+
+
 class TestShortLinkResolveInviteAPI:
     @pytest.mark.asyncio
     async def test_get_l_redirects_to_join_with_same_code(
@@ -562,8 +724,10 @@ class TestInviteTokenServiceUnit:
 
         svc = get_invite_token_service()
         cid = f"co_{uuid.uuid4().hex[:8]}"
-        jwt_str, jti = svc.create(cid, "admin")
+        inviter = f"user_{uuid.uuid4().hex[:10]}"
+        jwt_str, jti = svc.create(cid, "admin", invited_by=inviter)
         data = svc.validate(jwt_str)
         assert data.company_id == cid
         assert data.role == "admin"
+        assert data.invited_by == inviter
         assert data.jti == jti

@@ -28,6 +28,7 @@ class InviteTokenData(BaseModel):
 
     company_id: str = Field(description="ID компании")
     role: str = Field(description="Роль приглашённого в компании")
+    invited_by: str = Field(description="user_id инициатора приглашения")
     jti: str = Field(description="Уникальный ID токена (для одноразовости)")
     exp: datetime = Field(description="Время истечения")
     iat: datetime = Field(description="Время создания")
@@ -45,13 +46,16 @@ class InviteTokenService:
             raise ValueError("JWT secret key не настроен (auth.jwt_secret_key)")
         self._algorithm = "HS256"
 
-    def create(self, company_id: str, role: str) -> tuple[str, str]:
+    def create(self, company_id: str, role: str, *, invited_by: str) -> tuple[str, str]:
         """
         Создаёт одноразовый инвайт-токен.
 
         Returns:
             (jwt_string, jti) — строка токена и его уникальный ID
         """
+        if not isinstance(invited_by, str) or invited_by == "":
+            raise ValueError("invited_by must be non-empty string")
+
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=INVITE_EXPIRES_SECONDS)
         jti = str(uuid.uuid4())
@@ -61,13 +65,16 @@ class InviteTokenService:
             "aud": INVITE_TOKEN_AUDIENCE,
             "company_id": company_id,
             "role": role,
+            "invited_by": invited_by,
             "jti": jti,
             "iat": int(now.timestamp()),
             "exp": int(expires_at.timestamp()),
         }
 
         token = jwt.encode(payload, self._secret, algorithm=self._algorithm)
-        logger.info(f"Создан инвайт-токен jti={jti} для компании {company_id}, роль={role}")
+        logger.info(
+            f"Создан инвайт-токен jti={jti} для компании {company_id}, роль={role}, invited_by={invited_by}"
+        )
         return token, jti
 
     def validate(self, token: str) -> InviteTokenData:
@@ -77,7 +84,7 @@ class InviteTokenService:
         Raises:
             jwt.ExpiredSignatureError: токен истёк
             jwt.InvalidTokenError: неверная подпись или формат
-            ValueError: неверный typ/aud
+            ValueError: неверный typ/aud или нет invited_by
         """
         payload = jwt.decode(
             token,
@@ -89,9 +96,14 @@ class InviteTokenService:
         if payload.get("typ") != INVITE_TOKEN_TYPE:
             raise ValueError(f"Неверный тип токена: {payload.get('typ')!r}")
 
+        raw_inv = payload.get("invited_by")
+        if not isinstance(raw_inv, str) or raw_inv == "":
+            raise ValueError("Инвайт-токен без invited_by")
+
         return InviteTokenData(
             company_id=payload["company_id"],
             role=payload["role"],
+            invited_by=raw_inv,
             jti=payload["jti"],
             exp=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
             iat=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
@@ -125,6 +137,28 @@ async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
     try:
         result = await client.set(key, "1", nx=True, ex=ttl_seconds)
         return result is True
+    finally:
+        await client.aclose()
+
+
+async def invite_jti_already_used(jti: str) -> bool:
+    """True, если jti отмечен использованным в Redis (одноразовый инвайт израсходован)."""
+    try:
+        import redis.asyncio as aioredis
+    except ImportError as exc:
+        raise RuntimeError("redis не установлен") from exc
+
+    settings = get_settings()
+    key = f"{INVITE_REDIS_KEY_PREFIX}{jti}"
+    client = aioredis.from_url(
+        settings.database.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
+    )
+    try:
+        val = await client.get(key)
+        return val is not None
     finally:
         await client.aclose()
 

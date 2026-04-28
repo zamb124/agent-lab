@@ -14,6 +14,21 @@ import { httpRequest } from '@platform/lib/events/http.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
 
+export const previewInviteOp = createAsyncOp({
+    name: 'frontend/invite_preview',
+    silent: true,
+    restMirror: { method: 'POST', path: '/frontend/api/invites/preview' },
+    request: async ({ payload }) => {
+        const shortCode = payload && payload.short_code;
+        if (!shortCode) throw new Error('invite_preview: short_code required');
+        return await httpRequest({
+            method: 'POST',
+            url: '/frontend/api/invites/preview',
+            body: { short_code: shortCode },
+        });
+    },
+});
+
 export const acceptInviteOp = createAsyncOp({
     name: 'frontend/invite_accept',
     successToastKey: 'frontend:join_page.toast_accepted',
