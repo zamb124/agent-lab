@@ -11,6 +11,7 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 import { buildCompanySubdomainUrl } from '@platform/lib/utils/tenant-url.js';
+import { INVITE_DASHBOARD_QUERY } from '@platform/lib/utils/last-visited-service.js';
 
 export const previewInviteOp = createAsyncOp({
     name: 'frontend/invite_preview',
@@ -45,6 +46,7 @@ export const acceptInviteOp = createAsyncOp({
         if (!result || typeof result.subdomain !== 'string' || result.subdomain.trim() === '') {
             throw new Error('invite_accept: subdomain required in result');
         }
-        window.location.replace(buildCompanySubdomainUrl(result.subdomain.trim(), '/dashboard'));
+        const path = `/dashboard?${INVITE_DASHBOARD_QUERY}=1`;
+        window.location.replace(buildCompanySubdomainUrl(result.subdomain.trim(), path));
     },
 });

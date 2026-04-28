@@ -13,7 +13,6 @@
 import { html, css } from 'lit';
 import { PlatformApp, renderPlatformAppShell } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
-import '@platform/lib/components/app-loader.js';
 import '@platform/lib/embed-chat/platform-lara-assistant.js';
 
 import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
@@ -419,7 +418,14 @@ export class FlowsApp extends PlatformApp {
     render() {
         const shell = renderPlatformAppShell(this);
         if (shell !== null) return shell;
-        if (!this._bootstrapped) return html`<app-loader></app-loader>`;
+        if (!this._bootstrapped) {
+            return html`
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">${this.t('loading', {}, 'common')}</div>
+                </div>
+            `;
+        }
         return super.render();
     }
 }

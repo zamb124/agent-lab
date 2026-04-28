@@ -98,6 +98,22 @@ export function buildShellOriginPathUrl(path) {
 }
 
 /**
+ * @param {string | null} hostSub
+ * @param {string} activeSub
+ * @returns {boolean}
+ */
+function _tenantSlugMatchesHost(hostSub, activeSub) {
+    const want = String(activeSub).trim().toLowerCase();
+    if (want.length === 0) {
+        return false;
+    }
+    if (hostSub === null) {
+        return false;
+    }
+    return String(hostSub).trim().toLowerCase() === want;
+}
+
+/**
  * @param {{ status: string, user: object | null }} auth
  * @param {ReadonlyArray<{ company_id: string, subdomain?: string }>} companiesList
  * @param {boolean} companiesLoading
@@ -121,9 +137,7 @@ export function applyTenantHostRedirectIfNeeded(
     if (typeof window === 'undefined') {
         return 'ok';
     }
-    if (extractSubdomainFromHostname(window.location.hostname) !== null) {
-        return 'ok';
-    }
+    const hostSub = extractSubdomainFromHostname(window.location.hostname);
     if (companiesLoading) {
         return 'wait';
     }
@@ -133,18 +147,23 @@ export function applyTenantHostRedirectIfNeeded(
         }
         return 'wait';
     }
-    const sub = resolveActiveCompanySubdomain(auth.user, companiesList);
-    if (sub) {
-        const rawPath =
-            typeof pathForTenant === 'string' && pathForTenant.length > 0
-                ? pathForTenant
-                : `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        const pathNorm = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
-        const next = buildCompanySubdomainUrl(sub, pathNorm);
-        if (next !== window.location.href) {
-            window.location.replace(next);
-            return 'replaced';
+    const activeSub = resolveActiveCompanySubdomain(auth.user, companiesList);
+    if (activeSub) {
+        if (!_tenantSlugMatchesHost(hostSub, activeSub)) {
+            const rawPath =
+                typeof pathForTenant === 'string' && pathForTenant.length > 0
+                    ? pathForTenant
+                    : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            const pathNorm = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+            const next = buildCompanySubdomainUrl(activeSub, pathNorm);
+            if (next !== window.location.href) {
+                window.location.replace(next);
+                return 'replaced';
+            }
         }
+        return 'ok';
+    }
+    if (hostSub !== null) {
         return 'ok';
     }
     if (window.location.pathname === '/select-company' || window.location.pathname.startsWith('/select-company?')) {

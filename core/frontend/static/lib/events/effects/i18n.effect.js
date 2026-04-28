@@ -7,22 +7,10 @@
 
 import { CoreEvents } from '../contract.js';
 import { httpRequest } from '../http.js';
+import { PLATFORM_LOCALE_STORAGE_KEY, resolveInitialUiLocale } from '../../utils/i18n-initial-locale.js';
 import { i18nDefaultNamespaceForBaseUrl } from '../../utils/i18n-namespace.js';
 
-const LOCALE_STORAGE_KEY = 'platform_locale';
 const LOCALE_COOKIE = 'language';
-
-function _detectInitialLocale() {
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored) return stored;
-    const cookie = document.cookie
-        .split(';')
-        .map((c) => c.trim())
-        .find((c) => c.startsWith(`${LOCALE_COOKIE}=`));
-    if (cookie) return cookie.split('=')[1];
-    const nav = (navigator.language || 'ru').split('-')[0].toLowerCase();
-    return nav;
-}
 
 function _writeLocaleCookie(locale) {
     const oneYear = 60 * 60 * 24 * 365;
@@ -35,7 +23,7 @@ export function createI18nEffect({ baseUrl } = {}) {
     return async function i18nEffect(event, ctx) {
         switch (event.type) {
             case CoreEvents.APP_BOOTSTRAP_STARTED: {
-                const locale = _detectInitialLocale();
+                const locale = resolveInitialUiLocale();
                 ctx.dispatch(CoreEvents.I18N_LOCALE_REQUESTED, { locale }, { causation_id: event.id });
                 return;
             }
@@ -47,7 +35,7 @@ export function createI18nEffect({ baseUrl } = {}) {
                 try {
                     const bundle = await httpRequest({ method: 'GET', url: `/api/i18n/${encodeURIComponent(locale)}` });
                     ctx.dispatch(CoreEvents.I18N_LOCALE_LOADED, { locale, bundle }, { causation_id: event.id, source: 'http' });
-                    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+                    localStorage.setItem(PLATFORM_LOCALE_STORAGE_KEY, locale);
                     _writeLocaleCookie(locale);
                     ctx.dispatch(
                         CoreEvents.I18N_LOCALE_CHANGED,

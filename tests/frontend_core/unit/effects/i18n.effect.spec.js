@@ -34,12 +34,20 @@ describe('createI18nEffect: bootstrap', () => {
         expect(req.payload.locale).toBe('en');
     });
 
-    it('без сохранённого locale — берёт из navigator.language', async () => {
+    it('без сохранённого locale — en из navigator.language', async () => {
+        Object.defineProperty(globalThis.navigator, 'language', { value: 'en-US', configurable: true });
+        const dispatched = [];
+        await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({}), dispatched));
+        const req = dispatched.find((d) => d.type === CoreEvents.I18N_LOCALE_REQUESTED);
+        expect(req.payload.locale).toBe('en');
+    });
+
+    it('без сохранённого locale — не-en язык браузера даёт ru', async () => {
         Object.defineProperty(globalThis.navigator, 'language', { value: 'fr-FR', configurable: true });
         const dispatched = [];
         await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({}), dispatched));
         const req = dispatched.find((d) => d.type === CoreEvents.I18N_LOCALE_REQUESTED);
-        expect(req.payload.locale).toBe('fr');
+        expect(req.payload.locale).toBe('ru');
     });
 });
 

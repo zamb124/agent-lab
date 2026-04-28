@@ -178,10 +178,10 @@ async def test_flows_path_wrong_tenant_403(
 
 
 @pytest.mark.asyncio
-async def test_session_active_company_mismatch_redirect_307(
+async def test_session_host_mismatch_rebinds_200_and_set_cookie(
     frontend_client, auth_token, frontend_container, unique_id: str
 ) -> None:
-    """Сессия с активной компанией A, Host — субдомен B; пользователь в обеих — редирект на A."""
+    """JWT с компанией A, Host — субдомен B; пользователь в обеих — перевыпуск сессии под B (без 307)."""
     token_service = get_token_service()
     td = token_service.validate_token(auth_token)
     if td is None:
@@ -217,12 +217,13 @@ async def test_session_active_company_mismatch_redirect_307(
             },
             follow_redirects=False,
         )
-        assert response.status_code == 307
-        loc = response.headers.get("location")
-        assert loc is not None
-        assert home.subdomain in loc
-        assert "localhost:8002" in loc
-        assert "/frontend/api/auth/me" in loc
+        assert response.status_code == 200
+        data = response.json()
+        assert data["company_id"] == other_cid
+        set_cookie_vals = [
+            v for k, v in response.headers.multi_items() if k.lower() == "set-cookie"
+        ]
+        assert any("auth_token=" in v for v in set_cookie_vals)
     finally:
         restored = await frontend_container.user_repository.get(td.user_id)
         if restored is not None and other_cid in restored.companies:
@@ -233,37 +234,40 @@ async def test_session_active_company_mismatch_redirect_307(
 
 
 @pytest.mark.asyncio
-async def test_session_active_company_mismatch_redirect_307(
-    frontend_client, auth_token, frontend_container, unique_id: str
+async def test_stale_session_company_rebinds_to_host(
+    frontend_client, frontend_container, unique_id: str
 ) -> None:
-    """Сессия с активной компанией A, Host — субдомен B; пользователь в обеих — редирект на A."""
-    token_service = get_token_service()
-    td = token_service.validate_token(auth_token)
-    if td is None:
-        raise AssertionError("token")
-    home = await frontend_container.company_repository.get(td.company_id)
-    if home is None or not home.subdomain:
-        raise AssertionError("home company subdomain")
+    """JWT с company_id вне user.companies; Host — компания из membership — rebind на тенант Host."""
+    from core.models.identity_models import User
 
-    other_slug = f"dual-{unique_id}"
-    other_cid = f"co_dual_{unique_id}"
+    user_id = f"u_stale_{unique_id}"
+    other_slug = f"stalehost-{unique_id}"
+    other_cid = f"co_stale_{unique_id}"
+    stale_cid = f"co_removed_{unique_id}"
+
     other = Company(
         company_id=other_cid,
-        name="Dual tenant",
-        owner_user_id=td.user_id,
-        members={td.user_id: ["member"]},
+        name="Host tenant",
+        owner_user_id=user_id,
+        members={user_id: ["member"]},
         subdomain=other_slug,
     )
     await frontend_container.company_repository.set(other)
     await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
-    try:
-        user = await frontend_container.user_repository.get(td.user_id)
-        if user is None:
-            raise AssertionError("user")
-        user.companies[other_cid] = ["member"]
-        await frontend_container.user_repository.set(user)
 
-        frontend_client.cookies.set("auth_token", auth_token)
+    user = User(
+        user_id=user_id,
+        name="Stale Session User",
+        companies={other_cid: ["member"]},
+        active_company_id=stale_cid,
+    )
+    await frontend_container.user_repository.set(user)
+
+    token_service = get_token_service()
+    bad_token = token_service.create_token(user_id, stale_cid, roles=["member"])
+
+    try:
+        frontend_client.cookies.set("auth_token", bad_token)
         response = await frontend_client.get(
             "/frontend/api/auth/me",
             headers={
@@ -272,16 +276,13 @@ async def test_session_active_company_mismatch_redirect_307(
             },
             follow_redirects=False,
         )
-        assert response.status_code == 307
-        loc = response.headers.get("location")
-        assert loc is not None
-        assert home.subdomain in loc
-        assert "localhost:8002" in loc
-        assert "/frontend/api/auth/me" in loc
+        assert response.status_code == 200
+        data = response.json()
+        assert data["company_id"] == other_cid
+        set_cookie_vals = [
+            v for k, v in response.headers.multi_items() if k.lower() == "set-cookie"
+        ]
+        assert any("auth_token=" in v for v in set_cookie_vals)
     finally:
-        restored = await frontend_container.user_repository.get(td.user_id)
-        if restored is not None and other_cid in restored.companies:
-            del restored.companies[other_cid]
-            await frontend_container.user_repository.set(restored)
         await frontend_container.subdomain_repository.delete(other_slug)
         await frontend_container.company_repository.delete(other_cid)

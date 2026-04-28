@@ -2,8 +2,12 @@
  * tenant-host-guard: согласованность с core.utils.domain (extract_subdomain).
  */
 
-import { describe, it, expect } from 'vitest';
-import { extractSubdomainFromHostname, resolveActiveCompanySubdomain } from '@platform/lib/utils/tenant-host-guard.js';
+import { describe, it, expect, vi } from 'vitest';
+import {
+    extractSubdomainFromHostname,
+    resolveActiveCompanySubdomain,
+    applyTenantHostRedirectIfNeeded,
+} from '@platform/lib/utils/tenant-host-guard.js';
 
 describe('extractSubdomainFromHostname', () => {
     it('humanitec.ru -> null (apex)', () => {
@@ -44,5 +48,88 @@ describe('resolveActiveCompanySubdomain', () => {
             [{ company_id: 'c1' }],
         );
         expect(sub).toBeNull();
+    });
+});
+
+describe('applyTenantHostRedirectIfNeeded', () => {
+    const withWindow = (loc, fn) => {
+        const prev = globalThis.window;
+        const replace = loc.replace ?? vi.fn();
+        globalThis.window = { location: { ...loc, replace } };
+        try {
+            return fn(replace);
+        } finally {
+            globalThis.window = prev;
+        }
+    };
+
+    it('demo.lvh.me + активная компания system -> replace на system (тот же path)', () => {
+        withWindow(
+            {
+                hostname: 'demo.lvh.me',
+                port: '8002',
+                protocol: 'http:',
+                pathname: '/dashboard',
+                search: '',
+                hash: '',
+                href: 'http://demo.lvh.me:8002/dashboard',
+            },
+            (replace) => {
+                const auth = { status: 'authenticated', user: { company_id: 'sys' } };
+                const companies = [
+                    { company_id: 'sys', subdomain: 'system' },
+                    { company_id: 'd1', subdomain: 'demo' },
+                ];
+
+                const r = applyTenantHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
+                expect(r).toBe('replaced');
+                expect(replace).toHaveBeenCalledTimes(1);
+                expect(replace.mock.calls[0][0]).toBe('http://system.lvh.me:8002/dashboard');
+            },
+        );
+    });
+
+    it('system.lvh.me + активная компания system -> без replace', () => {
+        withWindow(
+            {
+                hostname: 'system.lvh.me',
+                port: '8002',
+                protocol: 'http:',
+                pathname: '/dashboard',
+                search: '',
+                hash: '',
+                href: 'http://system.lvh.me:8002/dashboard',
+            },
+            (replace) => {
+                const auth = { status: 'authenticated', user: { company_id: 'sys' } };
+                const companies = [{ company_id: 'sys', subdomain: 'system' }];
+
+                const r = applyTenantHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
+                expect(r).toBe('ok');
+                expect(replace).not.toHaveBeenCalled();
+            },
+        );
+    });
+
+    it('lvh.me (apex) + активная компания acme -> replace на acme', () => {
+        withWindow(
+            {
+                hostname: 'lvh.me',
+                port: '8002',
+                protocol: 'http:',
+                pathname: '/team',
+                search: '',
+                hash: '',
+                href: 'http://lvh.me:8002/team',
+            },
+            (replace) => {
+                const auth = { status: 'authenticated', user: { company_id: 'c2' } };
+                const companies = [{ company_id: 'c2', subdomain: 'acme' }];
+
+                const r = applyTenantHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
+                expect(r).toBe('replaced');
+                expect(replace.mock.calls[0][0]).toBe('http://acme.lvh.me:8002/team');
+            },
+        );
     });
 });

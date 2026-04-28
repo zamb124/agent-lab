@@ -16,16 +16,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
-from core.config import get_settings
-from core.utils.domain import get_cookie_domain
+from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.invite_tokens import (
     INVITE_EXPIRES_SECONDS,
     burn_invite_token,
     get_invite_token_service,
     invite_jti_already_used,
 )
-from core.utils.tokens import TokenService, get_token_service
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/invites", tags=["invites"])
@@ -223,19 +220,32 @@ async def accept_invite(
     if not company:
         raise HTTPException(status_code=404, detail="Компания не найдена или была удалена")
 
-    # Если пользователь уже участник — идемпотентный успех без расхода токена
+    # Уже участник: не расходуем одноразовый токен; активная компания и JWT
+    # совпадают с компанией приглашения (тот же перевыпуск, что host-wins в middleware).
     if user.user_id in company.members:
         existing_roles = company.members[user.user_id]
+        roles_list = existing_roles if isinstance(existing_roles, list) else [existing_roles]
         logger.info(
             f"Пользователь {user.user_id} уже участник компании {company.company_id}"
         )
-        return AcceptInviteResponse(
-            company_id=company.company_id,
-            company_name=company.name,
-            role=existing_roles if isinstance(existing_roles, list) else [existing_roles],
-            already_member=True,
-            subdomain=_company_subdomain_for_response(company),
+        new_session_token, _ = await rebind_session_to_company(
+            container=container,
+            user=user,
+            company=company,
+            roles=roles_list,
         )
+
+        response = JSONResponse(
+            content=AcceptInviteResponse(
+                company_id=company.company_id,
+                company_name=company.name,
+                role=roles_list,
+                already_member=True,
+                subdomain=_company_subdomain_for_response(company),
+            ).model_dump()
+        )
+        attach_session_auth_cookie(response, request, new_session_token)
+        return response
 
     # Сжигаем токен атомарно
     remaining_seconds = max(
@@ -263,13 +273,12 @@ async def accept_invite(
 
     await short.delete_by_code(code)
 
-    # Перевыпускаем сессионный токен с новым company_id
-    token_service = get_token_service()
-    new_session_token = token_service.create_token(user.user_id, company.company_id, roles=roles)
-
-    settings = get_settings()
-    cookie_domain = get_cookie_domain(request.headers.get("host", ""))
-    is_production = settings.server.env == "production"
+    new_session_token, _ = await rebind_session_to_company(
+        container=container,
+        user=user,
+        company=company,
+        roles=roles,
+    )
 
     response = JSONResponse(
         content=AcceptInviteResponse(
@@ -280,13 +289,5 @@ async def accept_invite(
             subdomain=_company_subdomain_for_response(company),
         ).model_dump()
     )
-    response.set_cookie(
-        key="auth_token",
-        value=new_session_token,
-        domain=cookie_domain,
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
-        max_age=TokenService.SESSION_EXPIRES,
-    )
+    attach_session_auth_cookie(response, request, new_session_token)
     return response

@@ -420,6 +420,8 @@ class TestInvitesAcceptAPI:
         body_accept = accept.json()
         assert body_accept["already_member"] is True
         assert body_accept["subdomain"] == owner_co.subdomain
+        set_cookie_vals = [v for k, v in accept.headers.multi_items() if k.lower() == "set-cookie"]
+        assert any(v.startswith("auth_token=") for v in set_cookie_vals)
 
         after = await _redis_get(key)
         assert after is None

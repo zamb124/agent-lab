@@ -64,8 +64,17 @@ export class PlatformApp extends PlatformElement {
         PlatformElement.styles,
         css`
             .loading-container {
-                display: flex; flex-direction: column; align-items: center; justify-content: center;
-                min-height: var(--app-vh, 100vh); padding: 40px;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                align-self: stretch;
+                flex: 1 1 auto;
+                width: 100%;
+                min-width: 0;
+                min-height: var(--app-vh, 100vh);
+                padding: 40px;
             }
             .loading-spinner {
                 width: 48px; height: 48px;
@@ -218,7 +227,7 @@ export class PlatformApp extends PlatformElement {
             return html`
                 <div class="loading-container">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text">${this.t('common.loading') || 'Loading...'}</div>
+                    <div class="loading-text">${this.t('loading', {}, 'common')}</div>
                 </div>
             `;
         }

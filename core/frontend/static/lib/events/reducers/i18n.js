@@ -10,11 +10,27 @@
  */
 
 import { CoreEvents } from '../contract.js';
+import { resolveInitialUiLocale } from '../../utils/i18n-initial-locale.js';
+
+const BOOTSTRAP_COMMON_STUB_RU = Object.freeze({
+    common: Object.freeze({
+        loading: 'Загрузка...',
+    }),
+});
+
+const BOOTSTRAP_COMMON_STUB_EN = Object.freeze({
+    common: Object.freeze({
+        loading: 'Loading...',
+    }),
+});
 
 export const initialI18nState = Object.freeze({
-    locale: 'ru',
+    locale: resolveInitialUiLocale(),
     defaultNamespace: null,
-    translations: {},
+    translations: Object.freeze({
+        ru: BOOTSTRAP_COMMON_STUB_RU,
+        en: BOOTSTRAP_COMMON_STUB_EN,
+    }),
     loading: false,
     error: null,
 });

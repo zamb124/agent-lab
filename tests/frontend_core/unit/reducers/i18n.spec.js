@@ -1,14 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { i18nReducer, initialI18nState, I18N_NAMESPACE_SET_REQUESTED } from '@platform/lib/events/reducers/i18n.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
+import { resolveInitialUiLocale } from '@platform/lib/utils/i18n-initial-locale.js';
 
 const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'local' } });
 
 describe('i18nReducer', () => {
-    it('initial: ru, default ns null', () => {
-        expect(initialI18nState.locale).toBe('ru');
+    it('initial: locale из resolveInitialUiLocale, default ns null', () => {
+        expect(initialI18nState.locale).toBe(resolveInitialUiLocale());
         expect(initialI18nState.defaultNamespace).toBeNull();
-        expect(initialI18nState.translations).toEqual({});
+        expect(initialI18nState.translations).toEqual({
+            ru: { common: { loading: 'Загрузка...' } },
+            en: { common: { loading: 'Loading...' } },
+        });
     });
 
     it('I18N_LOCALE_REQUESTED → loading=true', () => {

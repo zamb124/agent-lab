@@ -30,7 +30,8 @@ from .tenant_access_error_page import (
 )
 from .context_factory import ContextFactory
 from .platform_handlers import get_platform_handler
-from core.utils.domain import build_company_tenant_absolute_url, extract_subdomain
+from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
+from core.utils.domain import extract_subdomain
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +42,6 @@ EMBED_SESSION_TOKEN_REQUIRED_SCOPES = {"agents:read", "agents:write"}
 class CompanyCreationRequired(Exception):
     """Пользователю нужно создать или выбрать компанию"""
     pass
-
-
-class ActiveCompanyHostMismatch(Exception):
-    """Активная компания в сессии не совпадает с субдоменом Host; редирект на URL тенанта из JWT."""
-
-    def __init__(self, redirect_url: str) -> None:
-        if not redirect_url or not str(redirect_url).strip():
-            raise ValueError("ActiveCompanyHostMismatch: redirect_url required")
-        self.redirect_url = str(redirect_url).strip()
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -122,7 +114,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             
             # Сохраняем token_data для эндпоинтов типа /auth/me
             token_data, _ = await self._extract_token(request, container)
-            
+            session_td = getattr(request.state, "session_token_data", None)
+            if session_td is not None:
+                token_data = session_td
+
             set_context(context)
             request.state.context = context
             request.state.user = context.user
@@ -144,12 +139,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     )
             
             response = await call_next(request)
+            reissue = getattr(request.state, "reissue_auth_token", None)
+            if reissue is not None:
+                attach_session_auth_cookie(response, request, reissue)
             return response
             
         except CompanyCreationRequired:
             return RedirectResponse(url="/select-company", status_code=307)
-        except ActiveCompanyHostMismatch as mismatch:
-            return RedirectResponse(url=mismatch.redirect_url, status_code=307)
         except HTTPException as e:
             accept = request.headers.get("accept", "")
             if e.status_code == 401 and "text/html" in accept:
@@ -244,34 +240,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
             and token_data.company_id != company.company_id
             and extract_subdomain(request.headers.get("host", "")) is not None
         ):
-            if token_data.company_id not in user.companies:
+            if company.company_id not in user.companies:
                 raise HTTPException(
                     status_code=403,
                     detail="У вас нет доступа к компании с этим адресом (субдомен).",
                 )
-            token_company = await container.company_repository.get(token_data.company_id)
-            if not token_company:
-                raise HTTPException(status_code=403, detail="Компания сессии не найдена.")
-            if not token_company.subdomain or not str(token_company.subdomain).strip():
-                raise HTTPException(
-                    status_code=403,
-                    detail="У активной компании не задан субдомен для входа.",
-                )
-            host_header = request.headers.get("host", "")
-            try:
-                target = build_company_tenant_absolute_url(
-                    host_header=host_header,
-                    url_scheme=str(request.url.scheme),
-                    path=request.url.path,
-                    query=request.url.query,
-                    tenant_subdomain=str(token_company.subdomain).strip(),
-                )
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Активная компания в сессии не совпадает с субдоменом. Откройте приложение с адреса вашей компании.",
-                ) from exc
-            raise ActiveCompanyHostMismatch(target)
+            jwt_str, session_td = await rebind_session_to_company(
+                container=container,
+                user=user,
+                company=company,
+            )
+            request.state.reissue_auth_token = jwt_str
+            request.state.session_token_data = session_td
+            token_data = session_td
+            auth_token = jwt_str
 
         # Синхронизация активной компании (для всех типов контекста)
         if user and company:
