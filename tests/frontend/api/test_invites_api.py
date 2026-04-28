@@ -315,6 +315,9 @@ class TestInvitesAcceptAPI:
         assert body["company_id"] == target_company_id
         assert body["already_member"] is False
         assert "developer" in body["role"]
+        target_company = await frontend_container.company_repository.get(target_company_id)
+        assert target_company is not None
+        assert body["subdomain"] == target_company.subdomain
 
         invitee_id = token_service.validate_token(
             invitee_headers["Authorization"].replace("Bearer ", "")
@@ -363,6 +366,10 @@ class TestInvitesAcceptAPI:
             json={"short_code": short_code},
         )
         assert r1.status_code == 200
+        b1 = r1.json()
+        co = await frontend_container.company_repository.get(b1["company_id"])
+        assert co is not None
+        assert b1["subdomain"] == co.subdomain
 
         r2 = await frontend_client.post(
             "/frontend/api/invites/accept",
@@ -408,7 +415,11 @@ class TestInvitesAcceptAPI:
             json={"short_code": short_code},
         )
         assert accept.status_code == 200
-        assert accept.json()["already_member"] is True
+        owner_co = await frontend_container.company_repository.get(owner_data.company_id)
+        assert owner_co is not None
+        body_accept = accept.json()
+        assert body_accept["already_member"] is True
+        assert body_accept["subdomain"] == owner_co.subdomain
 
         after = await _redis_get(key)
         assert after is None
@@ -545,6 +556,9 @@ class TestInvitesAcceptAPI:
         body = accept.json()
         assert body["company_id"] == target_id
         assert "viewer" in body["role"]
+        target_co = await frontend_container.company_repository.get(target_id)
+        assert target_co is not None
+        assert body["subdomain"] == target_co.subdomain
 
         uid = token_service.validate_token(
             invitee_headers["Authorization"].replace("Bearer ", "")

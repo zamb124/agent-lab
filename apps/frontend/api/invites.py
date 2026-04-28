@@ -33,6 +33,16 @@ router = APIRouter(prefix="/api/invites", tags=["invites"])
 VALID_ROLES = ["owner", "admin", "developer", "viewer"]
 
 
+def _company_subdomain_for_response(company) -> str:
+    raw = company.subdomain
+    if raw is None or not isinstance(raw, str) or raw.strip() == "":
+        raise HTTPException(
+            status_code=403,
+            detail="У компании не задан субдомен для входа.",
+        )
+    return raw.strip()
+
+
 class GenerateInviteRequest(BaseModel):
     role: str = "developer"
 
@@ -52,6 +62,7 @@ class AcceptInviteResponse(BaseModel):
     company_name: str
     role: list[str]
     already_member: bool
+    subdomain: str
 
 
 class PreviewInviteRequest(BaseModel):
@@ -223,6 +234,7 @@ async def accept_invite(
             company_name=company.name,
             role=existing_roles if isinstance(existing_roles, list) else [existing_roles],
             already_member=True,
+            subdomain=_company_subdomain_for_response(company),
         )
 
     # Сжигаем токен атомарно
@@ -265,6 +277,7 @@ async def accept_invite(
             company_name=company.name,
             role=roles,
             already_member=False,
+            subdomain=_company_subdomain_for_response(company),
         ).model_dump()
     )
     response.set_cookie(

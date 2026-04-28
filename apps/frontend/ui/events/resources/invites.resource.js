@@ -2,17 +2,15 @@
  * Invites resource — приём инвайта по короткой ссылке.
  *
  * API: POST /frontend/api/invites/accept { short_code }
- *      → { company_id, company_name, role, already_member }
+ *      → { company_id, company_name, role, already_member, subdomain }
  *
- * onSuccess: перевыпуск сессионного cookie выполнен на бэке (active_company_id
- * указывает на новую компанию). Перезагружаем текущего пользователя через
- * core auth-effect и переходим на dashboard.
+ * onSuccess: cookie перевыпущен на бэке; полная перезагрузка на dashboard субдомена
+ * приглашённой компании (согласовано с JWT и Host-тенантом).
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
-import { CoreEvents } from '@platform/lib/events/contract.js';
-import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
+import { buildCompanySubdomainUrl } from '@platform/lib/utils/tenant-url.js';
 
 export const previewInviteOp = createAsyncOp({
     name: 'frontend/invite_preview',
@@ -43,12 +41,10 @@ export const acceptInviteOp = createAsyncOp({
             body: { short_code: shortCode },
         });
     },
-    onSuccess: (ctx) => {
-        ctx.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null, { source: 'local' });
-        ctx.dispatch(
-            CoreEvents.ROUTER_NAVIGATE_REQUESTED,
-            { routeKey: 'dashboard' },
-            { source: 'local' },
-        );
+    onSuccess: (_ctx, result) => {
+        if (!result || typeof result.subdomain !== 'string' || result.subdomain.trim() === '') {
+            throw new Error('invite_accept: subdomain required in result');
+        }
+        window.location.replace(buildCompanySubdomainUrl(result.subdomain.trim(), '/dashboard'));
     },
 });

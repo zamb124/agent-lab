@@ -175,3 +175,113 @@ async def test_flows_path_wrong_tenant_403(
     finally:
         await frontend_container.subdomain_repository.delete(other_slug)
         await frontend_container.company_repository.delete(other_cid)
+
+
+@pytest.mark.asyncio
+async def test_session_active_company_mismatch_redirect_307(
+    frontend_client, auth_token, frontend_container, unique_id: str
+) -> None:
+    """Сессия с активной компанией A, Host — субдомен B; пользователь в обеих — редирект на A."""
+    token_service = get_token_service()
+    td = token_service.validate_token(auth_token)
+    if td is None:
+        raise AssertionError("token")
+    home = await frontend_container.company_repository.get(td.company_id)
+    if home is None or not home.subdomain:
+        raise AssertionError("home company subdomain")
+
+    other_slug = f"dual-{unique_id}"
+    other_cid = f"co_dual_{unique_id}"
+    other = Company(
+        company_id=other_cid,
+        name="Dual tenant",
+        owner_user_id=td.user_id,
+        members={td.user_id: ["member"]},
+        subdomain=other_slug,
+    )
+    await frontend_container.company_repository.set(other)
+    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    try:
+        user = await frontend_container.user_repository.get(td.user_id)
+        if user is None:
+            raise AssertionError("user")
+        user.companies[other_cid] = ["member"]
+        await frontend_container.user_repository.set(user)
+
+        frontend_client.cookies.set("auth_token", auth_token)
+        response = await frontend_client.get(
+            "/frontend/api/auth/me",
+            headers={
+                "Host": f"{other_slug}.localhost:8002",
+                "Accept": "application/json",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 307
+        loc = response.headers.get("location")
+        assert loc is not None
+        assert home.subdomain in loc
+        assert "localhost:8002" in loc
+        assert "/frontend/api/auth/me" in loc
+    finally:
+        restored = await frontend_container.user_repository.get(td.user_id)
+        if restored is not None and other_cid in restored.companies:
+            del restored.companies[other_cid]
+            await frontend_container.user_repository.set(restored)
+        await frontend_container.subdomain_repository.delete(other_slug)
+        await frontend_container.company_repository.delete(other_cid)
+
+
+@pytest.mark.asyncio
+async def test_session_active_company_mismatch_redirect_307(
+    frontend_client, auth_token, frontend_container, unique_id: str
+) -> None:
+    """Сессия с активной компанией A, Host — субдомен B; пользователь в обеих — редирект на A."""
+    token_service = get_token_service()
+    td = token_service.validate_token(auth_token)
+    if td is None:
+        raise AssertionError("token")
+    home = await frontend_container.company_repository.get(td.company_id)
+    if home is None or not home.subdomain:
+        raise AssertionError("home company subdomain")
+
+    other_slug = f"dual-{unique_id}"
+    other_cid = f"co_dual_{unique_id}"
+    other = Company(
+        company_id=other_cid,
+        name="Dual tenant",
+        owner_user_id=td.user_id,
+        members={td.user_id: ["member"]},
+        subdomain=other_slug,
+    )
+    await frontend_container.company_repository.set(other)
+    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    try:
+        user = await frontend_container.user_repository.get(td.user_id)
+        if user is None:
+            raise AssertionError("user")
+        user.companies[other_cid] = ["member"]
+        await frontend_container.user_repository.set(user)
+
+        frontend_client.cookies.set("auth_token", auth_token)
+        response = await frontend_client.get(
+            "/frontend/api/auth/me",
+            headers={
+                "Host": f"{other_slug}.localhost:8002",
+                "Accept": "application/json",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 307
+        loc = response.headers.get("location")
+        assert loc is not None
+        assert home.subdomain in loc
+        assert "localhost:8002" in loc
+        assert "/frontend/api/auth/me" in loc
+    finally:
+        restored = await frontend_container.user_repository.get(td.user_id)
+        if restored is not None and other_cid in restored.companies:
+            del restored.companies[other_cid]
+            await frontend_container.user_repository.set(restored)
+        await frontend_container.subdomain_repository.delete(other_slug)
+        await frontend_container.company_repository.delete(other_cid)

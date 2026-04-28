@@ -180,6 +180,37 @@ def get_protocol(host: str) -> str:
     return "http" if is_local(host) else "https"
 
 
+def build_company_tenant_absolute_url(
+    *,
+    host_header: str,
+    url_scheme: str,
+    path: str,
+    query: str,
+    tenant_subdomain: str,
+) -> str:
+    """
+    Полный URL с тем же path/query и портом Host, на DNS-субдомене tenant_subdomain.
+    Согласовано с core/frontend/static/lib/utils/tenant-url.js (buildCompanySubdomainUrl).
+
+    Raises:
+        ValueError: пустой tenant_subdomain или базовый хост — IP (нет foo.<IP> в DNS).
+    """
+    if not tenant_subdomain or not str(tenant_subdomain).strip():
+        raise ValueError("tenant_subdomain must be non-empty")
+    tenant_subdomain = str(tenant_subdomain).strip()
+    base = extract_base_domain(host_header)
+    if _ip_dev_base(base) is not None:
+        raise ValueError("tenant URL cannot be built for IP-only base host")
+    _, port_part = split_host_port(host_header)
+    scheme = url_scheme if url_scheme in ("http", "https") else get_protocol(host_header)
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    netloc = f"{tenant_subdomain}.{base}"
+    if port_part:
+        netloc = f"{netloc}:{port_part}"
+    qs = f"?{query}" if query else ""
+    return f"{scheme}://{netloc}{normalized_path}{qs}"
+
+
 def get_host_with_port(host: str) -> str:
     """
     Базовый хост с портом для локальных origin (OAuth redirect_uri, ссылки).

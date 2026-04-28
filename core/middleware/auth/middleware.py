@@ -13,8 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.context import set_context, clear_context
 from core.config import get_settings
-from core.models.identity_models import User, Company
-from core.models.context_models import Context, Language
+from core.models.identity_models import User
 from core.utils.tokens import get_token_service, TokenData, TokenType
 
 from .route_config import (
@@ -31,7 +30,7 @@ from .tenant_access_error_page import (
 )
 from .context_factory import ContextFactory
 from .platform_handlers import get_platform_handler
-from core.utils.domain import extract_subdomain
+from core.utils.domain import build_company_tenant_absolute_url, extract_subdomain
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +41,15 @@ EMBED_SESSION_TOKEN_REQUIRED_SCOPES = {"agents:read", "agents:write"}
 class CompanyCreationRequired(Exception):
     """Пользователю нужно создать или выбрать компанию"""
     pass
+
+
+class ActiveCompanyHostMismatch(Exception):
+    """Активная компания в сессии не совпадает с субдоменом Host; редирект на URL тенанта из JWT."""
+
+    def __init__(self, redirect_url: str) -> None:
+        if not redirect_url or not str(redirect_url).strip():
+            raise ValueError("ActiveCompanyHostMismatch: redirect_url required")
+        self.redirect_url = str(redirect_url).strip()
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -140,6 +148,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             
         except CompanyCreationRequired:
             return RedirectResponse(url="/select-company", status_code=307)
+        except ActiveCompanyHostMismatch as mismatch:
+            return RedirectResponse(url=mismatch.redirect_url, status_code=307)
         except HTTPException as e:
             accept = request.headers.get("accept", "")
             if e.status_code == 401 and "text/html" in accept:
@@ -223,7 +233,46 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if company.company_id not in user.companies:
                 if not self.route_matcher.allows_no_subdomain(request.url.path):
                     raise CompanyCreationRequired()
-        
+
+        if (
+            user
+            and company
+            and rule.context_type in ("frontend", "api")
+            and token_data
+            and token_data.token_type == TokenType.SESSION
+            and token_data.company_id
+            and token_data.company_id != company.company_id
+            and extract_subdomain(request.headers.get("host", "")) is not None
+        ):
+            if token_data.company_id not in user.companies:
+                raise HTTPException(
+                    status_code=403,
+                    detail="У вас нет доступа к компании с этим адресом (субдомен).",
+                )
+            token_company = await container.company_repository.get(token_data.company_id)
+            if not token_company:
+                raise HTTPException(status_code=403, detail="Компания сессии не найдена.")
+            if not token_company.subdomain or not str(token_company.subdomain).strip():
+                raise HTTPException(
+                    status_code=403,
+                    detail="У активной компании не задан субдомен для входа.",
+                )
+            host_header = request.headers.get("host", "")
+            try:
+                target = build_company_tenant_absolute_url(
+                    host_header=host_header,
+                    url_scheme=str(request.url.scheme),
+                    path=request.url.path,
+                    query=request.url.query,
+                    tenant_subdomain=str(token_company.subdomain).strip(),
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Активная компания в сессии не совпадает с субдоменом. Откройте приложение с адреса вашей компании.",
+                ) from exc
+            raise ActiveCompanyHostMismatch(target)
+
         # Синхронизация активной компании (для всех типов контекста)
         if user and company:
                 await self._sync_active_company(container, user, company)
