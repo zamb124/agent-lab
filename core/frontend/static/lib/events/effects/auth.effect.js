@@ -3,7 +3,7 @@
  *
  * Слушает (полный набор):
  *   auth/user/load_requested              → GET  /api/auth/me                     → AUTH_USER_LOADED|_FAILED
- *   auth/session/logout_requested         → POST /api/auth/logout                 → AUTH_LOGGED_OUT
+ *   auth/session/logout_requested         → POST /api/auth/logout                 → AUTH_LOGGED_OUT → редирект на корень платформы (apex)
  *   auth/company/switch_requested         → POST /api/auth/switch-company         → AUTH_COMPANY_SWITCHED
  *   auth/oauth/start_requested            → GET  /api/auth/login/<provider>       → AUTH_OAUTH_REDIRECTED
  *   auth/providers/load_requested         → GET  /api/auth/providers              → AUTH_PROVIDERS_LOADED|_FAILED
@@ -16,6 +16,7 @@
 
 import { CoreEvents } from '../contract.js';
 import { httpRequest, HttpError } from '../http.js';
+import { getPlatformApexOriginUrl } from '../../utils/tenant-url.js';
 
 export const CoreAuthEvents = Object.freeze({
     USER_LOAD_REQUESTED:           'auth/user/load_requested',
@@ -76,6 +77,9 @@ export function createAuthEffect({ baseUrl }) {
                     console.warn('[auth.effect] logout HTTP failed', err);
                 }
                 ctx.dispatch(CoreEvents.AUTH_LOGGED_OUT, null, { causation_id: event.id, source: 'http' });
+                if (typeof globalThis.window !== 'undefined' && globalThis.window.location) {
+                    globalThis.window.location.href = getPlatformApexOriginUrl();
+                }
                 return;
             }
 

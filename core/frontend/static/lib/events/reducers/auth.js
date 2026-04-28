@@ -10,6 +10,7 @@
  *   providers:     { list, loading, error }
  *   demo:          { enabled, email }
  *   serviceAttrs:  { [service]: object }
+ *   sessionEndCause: null | 'logout' | 'lost_session' — последняя причина unauthenticated (для UX редиректа)
  */
 
 import { CoreEvents } from '../contract.js';
@@ -24,6 +25,7 @@ export const initialAuthState = Object.freeze({
     providers: { list: [], loading: false, error: null },
     demo: { enabled: false, email: null },
     serviceAttrs: {},
+    sessionEndCause: null,
 });
 
 export function authReducer(state = initialAuthState, event) {
@@ -42,6 +44,7 @@ export function authReducer(state = initialAuthState, event) {
                 activeCompanyId: user ? (user.company_id || null) : state.activeCompanyId,
                 error: null,
                 lastValidatedAt: event.meta.ts,
+                sessionEndCause: null,
             };
         }
 
@@ -53,11 +56,14 @@ export function authReducer(state = initialAuthState, event) {
                 user: null,
                 activeCompanyId: null,
                 error: event.payload && event.payload.message ? event.payload.message : 'auth_error',
+                sessionEndCause: null,
             };
 
         case CoreEvents.AUTH_UNAUTHORIZED:
+            return { ...initialAuthState, status: 'unauthenticated', sessionEndCause: 'lost_session' };
+
         case CoreEvents.AUTH_LOGGED_OUT:
-            return { ...initialAuthState, status: 'unauthenticated' };
+            return { ...initialAuthState, status: 'unauthenticated', sessionEndCause: 'logout' };
 
         case CoreEvents.AUTH_COMPANY_SWITCHED: {
             const companyId = event.payload && event.payload.company_id ? event.payload.company_id : null;

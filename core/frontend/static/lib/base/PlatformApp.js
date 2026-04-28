@@ -142,7 +142,11 @@ export class PlatformApp extends PlatformElement {
         this._renderedToastIds = new Set();
 
         this._toastsSelect = this.select((s) => s.notify.toasts);
-        this._authSelect = this.select((s) => ({ status: s.auth.status, user: s.auth.user }));
+        this._authSelect = this.select((s) => ({
+            status: s.auth.status,
+            user: s.auth.user,
+            sessionEndCause: s.auth.sessionEndCause,
+        }));
         this._routerSelect = this.select((s) => ({
             routeKey: s.router.routeKey,
             params: s.router.params,
@@ -211,7 +215,11 @@ export class PlatformApp extends PlatformElement {
                 setLastVisitedService(id);
             }
         }
-        if (auth.status === 'unauthenticated' && !this.rendersUnauthenticated()) {
+        if (
+            auth.status === 'unauthenticated'
+            && !this.rendersUnauthenticated()
+            && auth.sessionEndCause !== 'logout'
+        ) {
             redirectToLogin();
         }
     }

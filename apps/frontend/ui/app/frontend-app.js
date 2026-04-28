@@ -295,6 +295,7 @@ export class FrontendApp extends PlatformApp {
         const auth = this._authSelect ? this._authSelect.value : null;
         if (
             auth && auth.status === 'unauthenticated'
+            && auth.sessionEndCause !== 'logout'
             && routeKey && !PUBLIC_ROUTE_KEYS.has(routeKey)
         ) {
             if (typeof window !== 'undefined') {

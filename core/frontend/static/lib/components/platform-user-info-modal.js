@@ -48,7 +48,6 @@ import { hasFactory } from '../events/factory-registry.js';
 
 const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team_members';
 import { CoreEvents } from '../events/contract.js';
-import { redirectToLogin } from '../utils/auth-redirect.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-button.js';
 import './platform-icon.js';
@@ -646,7 +645,6 @@ export class PlatformUserInfoModal extends PlatformFormModal {
     _logout() {
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
         super.close();
-        redirectToLogin();
     }
 
     _openSync() {

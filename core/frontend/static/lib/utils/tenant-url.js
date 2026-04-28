@@ -95,3 +95,13 @@ export function formatCompanySubdomainLabel(subdomain) {
     const ctx = getCompanyTenantHostContext();
     return `${subdomain}.${ctx.baseDomain}${ctx.portSuffix}`;
 }
+
+/**
+ * Публичная «вершина» платформы без поддомена компании (лендинг после выхода и т.п.).
+ *
+ * @returns {string}
+ */
+export function getPlatformApexOriginUrl() {
+    const ctx = getCompanyTenantHostContext();
+    return `${ctx.protocol}://${ctx.baseDomain}${ctx.portSuffix}/`;
+}

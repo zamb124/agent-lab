@@ -24,7 +24,6 @@ import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
 import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
-import { redirectToLogin } from '../utils/auth-redirect.js';
 import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
@@ -242,7 +241,6 @@ export class PlatformUser extends PlatformElement {
     _logout() {
         this._menuOpen = false;
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
-        redirectToLogin();
     }
 
     _currentCompanyId(auth) {

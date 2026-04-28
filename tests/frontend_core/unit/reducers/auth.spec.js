@@ -12,6 +12,7 @@ describe('authReducer: initialAuthState', () => {
         expect(initialAuthState.user).toBeNull();
         expect(initialAuthState.activeCompanyId).toBeNull();
         expect(initialAuthState.providers).toEqual({ list: [], loading: false, error: null });
+        expect(initialAuthState.sessionEndCause).toBeNull();
     });
 });
 
@@ -37,11 +38,27 @@ describe('authReducer: events', () => {
         expect(next.error).toBe('nope');
     });
 
-    it('AUTH_UNAUTHORIZED сбрасывает state в unauthenticated', () => {
+    it('AUTH_UNAUTHORIZED сбрасывает state в unauthenticated с lost_session', () => {
         const seeded = authReducer(initialAuthState, ev(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'u' } }));
         const next = authReducer(seeded, ev(CoreEvents.AUTH_UNAUTHORIZED));
         expect(next.status).toBe('unauthenticated');
         expect(next.user).toBeNull();
+        expect(next.sessionEndCause).toBe('lost_session');
+    });
+
+    it('AUTH_LOGGED_OUT сбрасывает state с logout', () => {
+        const seeded = authReducer(initialAuthState, ev(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'u' } }));
+        const next = authReducer(seeded, ev(CoreEvents.AUTH_LOGGED_OUT));
+        expect(next.status).toBe('unauthenticated');
+        expect(next.sessionEndCause).toBe('logout');
+    });
+
+    it('AUTH_USER_LOADED сбрасывает sessionEndCause', () => {
+        const loggedOut = authReducer(initialAuthState, ev(CoreEvents.AUTH_LOGGED_OUT));
+        expect(loggedOut.sessionEndCause).toBe('logout');
+        const user = { user_id: 'u1', name: 'Alice', company_id: 'c1' };
+        const recovered = authReducer(loggedOut, ev(CoreEvents.AUTH_USER_LOADED, { user }, 999));
+        expect(recovered.sessionEndCause).toBeNull();
     });
 
     it('AUTH_COMPANY_SWITCHED меняет activeCompanyId', () => {
