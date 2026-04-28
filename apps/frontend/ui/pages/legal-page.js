@@ -9,6 +9,8 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-icon.js';
 const PRIVACY_SECTIONS = 14;
 const TERMS_SECTIONS = 13;
 const PARAGRAPH_KEYS = ['p1', 'p2', 'p3'];
@@ -27,6 +29,11 @@ export class LegalPage extends PlatformPage {
                 margin: 0 auto;
                 padding: var(--space-12) var(--space-6);
                 color: var(--text-primary);
+            }
+            .back-row {
+                margin-bottom: var(--space-8);
+                display: flex;
+                justify-content: flex-start;
             }
             h1 { font-size: var(--text-3xl); margin-bottom: var(--space-2); }
             .updated { color: var(--text-secondary); font-size: var(--text-sm); margin-bottom: var(--space-8); }
@@ -60,6 +67,10 @@ export class LegalPage extends PlatformPage {
         return bundle[ns][`section_${index}`] || null;
     }
 
+    _goHome() {
+        this.navigate('landing', {});
+    }
+
     _renderSection(index) {
         const ns = this._ns();
         const data = this._bundleSection(index);
@@ -88,6 +99,12 @@ export class LegalPage extends PlatformPage {
         const total = this._sectionsCount();
         const indices = Array.from({ length: total }, (_v, i) => i + 1);
         return html`
+            <div class="back-row">
+                <glass-button variant="ghost" @click=${this._goHome}>
+                    <platform-icon name="arrow-left" size="18"></platform-icon>
+                    ${this.t('support_page.back_home')}
+                </glass-button>
+            </div>
             <h1>${this.t('title', undefined, ns)}</h1>
             <p class="updated">
                 ${this.t('updated', undefined, ns)} ${this.t('updated_at', undefined, ns)}

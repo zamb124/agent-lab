@@ -495,6 +495,7 @@
         "submitting": "Creating payment..."
     },
     "support_page": {
+        "back_home": "Back to home",
         "title": "Support",
         "lede": "Email us or use the form below: your mail app will open with a message addressed to our support inbox.",
         "email_section_title": "Email",

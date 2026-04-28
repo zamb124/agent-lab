@@ -56,8 +56,7 @@ export class LandingFooter extends PlatformElement {
                 color: var(--landing-primary);
                 margin: 0;
                 text-transform: capitalize;
-                max-width: 100%;
-                overflow-wrap: break-word;
+                white-space: nowrap;
             }
             
             .footer-right {

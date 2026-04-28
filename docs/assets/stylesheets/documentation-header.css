@@ -1,0 +1,8 @@
+/* Дом — тот же размер/цвет, что у .md-header__button.md-icon (меню, поиск). */
+
+[data-md-component="header"] .docs-platform-home svg {
+  display: block;
+  width: 1.125rem;
+  height: 1.125rem;
+  fill: currentColor;
+}

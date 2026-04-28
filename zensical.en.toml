@@ -10,13 +10,20 @@ use_directory_urls = true
 
 copyright = "Humanitec"
 
+extra_css = [
+  "assets/stylesheets/documentation-header.css",
+]
+
 [project.extra]
+homepage = "/"
+platform_home_title = "Home"
 alternate = [
     { name = "English", link = "/documentation/en/", lang = "en" },
     { name = "Русский", link = "/documentation/", lang = "ru" },
 ]
 
 [project.theme]
+custom_dir = "docs/theme-overrides"
 variant = "classic"
 language = "en"
 

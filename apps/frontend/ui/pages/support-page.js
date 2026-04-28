@@ -39,6 +39,11 @@ export class SupportPage extends PlatformPage {
                 color: var(--text-primary);
                 background: var(--bg-gradient);
             }
+            .back-row {
+                margin-bottom: var(--space-6);
+                display: flex;
+                justify-content: flex-start;
+            }
             .page-head {
                 margin-bottom: var(--space-10);
                 text-align: center;
@@ -171,6 +176,10 @@ export class SupportPage extends PlatformPage {
         this._message = e.target.value;
     }
 
+    _goHome() {
+        this.navigate('landing', {});
+    }
+
     _validate() {
         const s = this._subject.trim();
         const m = this._message.trim();
@@ -220,6 +229,12 @@ export class SupportPage extends PlatformPage {
         const st = this._status;
         const statusText = st.i18nKey.length > 0 ? this.t(st.i18nKey) : '';
         return html`
+            <div class="back-row">
+                <glass-button variant="ghost" @click=${this._goHome}>
+                    <platform-icon name="arrow-left" size="18"></platform-icon>
+                    ${this.t('support_page.back_home')}
+                </glass-button>
+            </div>
             <div class="page-head">
                 <h1>${this.t('support_page.title')}</h1>
                 <p class="lede">${this.t('support_page.lede')}</p>
