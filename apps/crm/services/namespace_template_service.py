@@ -3,14 +3,18 @@
 from typing import Any, Optional
 
 from core.context import get_context
-from core.models.identity_models import Namespace
+from core.models.identity_models import Namespace, NamespaceCRMSettings
 
-from apps.crm.constants_graph import NOTE_FAMILY_ENTITY_TYPE_IDS
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID
 from apps.crm.db.models import EntityType
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
 from apps.crm.services.company_init_service import CompanyInitService
+from apps.crm.system_templates import (
+    NAMESPACE_TEMPLATE_CORE_NOTE_TASK,
+    REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS,
+)
 from core.db.repositories.namespace_repository import NamespaceRepository
 
 
@@ -46,6 +50,66 @@ class NamespaceTemplateService:
                 return items
             offset += self._PAGE_LIMIT
 
+    async def _ensure_template_db_core_note_task_rows(self, template_key: str) -> None:
+        """Идемпотентно добавляет в шаблон строки note и task, если их ещё нет."""
+        existing = await self._template_repo.list_types(template_key)
+        present = {t.type_id for t in existing}
+        for row in NAMESPACE_TEMPLATE_CORE_NOTE_TASK:
+            tid = row["type_id"]
+            if not isinstance(tid, str) or len(tid) == 0:
+                raise ValueError("NAMESPACE_TEMPLATE_CORE_NOTE_TASK: type_id required")
+            if tid in present:
+                continue
+            await self._template_repo.upsert_type(
+                template_key=template_key,
+                type_id=tid,
+                parent_type_id=row.get("parent_type_id"),
+                name=row["name"],
+                description=row.get("description"),
+                prompt=row.get("prompt"),
+                required_fields=row.get("required_fields") or {},
+                optional_fields=row.get("optional_fields") or {},
+                icon=row.get("icon"),
+                color=row.get("color"),
+                is_event=bool(row.get("is_event", False)),
+                check_duplicates=bool(row.get("check_duplicates", True)),
+                weight_coefficient=float(row.get("weight_coefficient", 1.0)),
+                namespace_ids=list(row.get("namespace_ids") or []),
+                is_context_anchor=bool(row.get("is_context_anchor", False)),
+                is_voice_target=bool(row.get("is_voice_target", False)),
+            )
+        final_ids = {t.type_id for t in await self._template_repo.list_types(template_key)}
+        missing = REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS - final_ids
+        if missing:
+            raise ValueError(
+                "Шаблон пространства обязан содержать типы note и task; "
+                f"в шаблоне отсутствуют: {', '.join(sorted(missing))}"
+            )
+
+    async def ensure_core_workspace_types_linked_to_namespace(self, namespace_name: str) -> None:
+        """
+        Корневые типы note и task привязаны к пространству.
+
+        Подтипы task и подтипы заметок (meeting, call и др.) не подмешиваются: их добавляют шаблон или настройки типов.
+        Без привязок note и task списки и сайдбар по разрешённым типам обрезаются.
+        """
+        name = namespace_name.strip()
+        if not name:
+            raise ValueError("namespace_name is required")
+        all_types = await self._load_company_types()
+        for tid in (NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID):
+            row = next((t for t in all_types if t.type_id == tid), None)
+            if row is None:
+                raise ValueError(f"System entity type {tid!r} is required")
+            if name not in row.namespace_ids_list():
+                await self._entity_type_repo.add_namespace_ids(tid, [name])
+
+    async def expanded_allowed_type_ids_for_namespace_update(
+        self, allowed_type_ids: list[str]
+    ) -> set[str]:
+        """Множество типов при сохранении списка разрешённых (корни note и task не снимаются)."""
+        return set(allowed_type_ids) | {NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID}
+
     async def create_namespace_from_template(
         self,
         namespace_name: str,
@@ -63,6 +127,8 @@ class NamespaceTemplateService:
         if template is None:
             raise ValueError(f"Template {template_id} not found")
 
+        await self._ensure_template_db_core_note_task_rows(template.template_key)
+
         template_types = await self._template_repo.list_types(template.template_key)
         if not template_types:
             raise ValueError(f"Template {template_id} has no types")
@@ -73,6 +139,9 @@ class NamespaceTemplateService:
             description=namespace_description,
             is_default=False,
         )
+        raw_tpl_crm = getattr(template, "crm_settings", None)
+        if raw_tpl_crm is not None and isinstance(raw_tpl_crm, dict) and len(raw_tpl_crm) > 0:
+            namespace.crm_settings = NamespaceCRMSettings.model_validate(raw_tpl_crm)
         await self._namespace_repo.set(namespace)
 
         existing_types = await self._load_company_types()
@@ -121,18 +190,13 @@ class NamespaceTemplateService:
                     is_voice_target=item.is_voice_target,
                 )
 
-            current_namespaces = runtime_type.namespace_ids or []
+            current_namespaces = runtime_type.namespace_ids_list()
             if namespace_name not in current_namespaces:
                 await self._entity_type_repo.add_namespace_ids(
                     runtime_type.type_id, [namespace_name],
                 )
 
-        note_type = existing_types_map.get("note")
-        if note_type is None:
-            raise ValueError("System entity type 'note' is required")
-        note_namespaces = note_type.namespace_ids or []
-        if namespace_name not in note_namespaces:
-            await self._entity_type_repo.add_namespace_ids("note", [namespace_name])
+        await self.ensure_core_workspace_types_linked_to_namespace(namespace_name)
 
         await self._company_init_service._ensure_namespace_entity(company_id, namespace_name)
 
@@ -142,7 +206,7 @@ class NamespaceTemplateService:
         all_types = await self._load_company_types()
 
         cross_namespace_type_ids = {
-            t.type_id for t in all_types if "*" in (t.namespace_ids or [])
+            t.type_id for t in all_types if "*" in t.namespace_ids_list()
         }
 
         entity_count = await self._entity_repo.count_by_namespace(
@@ -152,7 +216,7 @@ class NamespaceTemplateService:
         used_type_ids_set = set(used_type_ids) - cross_namespace_type_ids
 
         def _type_linked_to_namespace(row: EntityType) -> bool:
-            ns = row.namespace_ids or []
+            ns = row.namespace_ids_list()
             return namespace_name in ns or "*" in ns
 
         current_allowed_type_ids = sorted(
@@ -193,7 +257,7 @@ class NamespaceTemplateService:
         if allowed_type_ids is not None:
             editability = await self.get_namespace_editability(namespace_name)
             locked_type_ids = set(editability["locked_type_ids"])
-            requested_set = set(allowed_type_ids) | set(NOTE_FAMILY_ENTITY_TYPE_IDS)
+            requested_set = await self.expanded_allowed_type_ids_for_namespace_update(allowed_type_ids)
             missing_locked = locked_type_ids - requested_set
             if missing_locked:
                 raise ValueError(
@@ -204,7 +268,7 @@ class NamespaceTemplateService:
             if requested_set != current_allowed_type_ids:
                 all_types = await self._load_company_types()
                 for item in all_types:
-                    current_ns = set(item.namespace_ids or [])
+                    current_ns = set(item.namespace_ids_list())
                     has_namespace = namespace_name in current_ns
                     should_have_namespace = item.type_id in requested_set
                     if has_namespace == should_have_namespace:

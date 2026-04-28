@@ -1,7 +1,7 @@
 """API для управления namespaces и их шаблонами в CRM."""
 
 import asyncio
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -25,8 +25,17 @@ from apps.crm.models.api import (
     NamespaceTemplateTypeResponse,
     NamespaceTemplateTypeUpsertRequest,
     NamespaceTemplateUpdateRequest,
+    TaskBoardEditorBoardResponse,
+    TaskBoardEditorStateResponse,
+    TaskBoardStagesApiResponse,
     NamespaceUpdateRequest,
 )
+from apps.crm.services.task_board_presets import (
+    build_task_board_editor_boards,
+    resolve_task_board_stages,
+    task_board_key,
+)
+from apps.crm.system_templates import REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS
 
 logger = get_logger(__name__)
 
@@ -231,6 +240,33 @@ async def create_namespace_template(
     )
 
 
+@router.get(
+    "/templates/{template_id}/task-board-editor-state",
+    response_model=TaskBoardEditorStateResponse,
+)
+async def get_template_task_board_editor_state(
+    template_id: str,
+    container: ContainerDep,
+) -> TaskBoardEditorStateResponse:
+    template_repo = container.namespace_template_repository
+    template = await template_repo.get_by_template_id(template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
+    template_types = await template_repo.list_types(template.template_key)
+    allowed = [item.type_id for item in template_types if isinstance(item.type_id, str) and item.type_id]
+    crm = NamespaceCRMSettings()
+    raw_crm = getattr(template, "crm_settings", None)
+    if raw_crm is not None and isinstance(raw_crm, dict) and len(raw_crm) > 0:
+        crm = NamespaceCRMSettings.model_validate(raw_crm)
+    raw_boards = build_task_board_editor_boards(
+        allowed_type_ids=allowed,
+        entity_types=template_types,
+        crm=crm,
+    )
+    boards = [TaskBoardEditorBoardResponse.model_validate(row) for row in raw_boards]
+    return TaskBoardEditorStateResponse(boards=boards)
+
+
 @router.get("/templates/{template_id}", response_model=NamespaceTemplateDetailsResponse)
 async def get_namespace_template(
     template_id: str,
@@ -241,6 +277,10 @@ async def get_namespace_template(
     if template is None:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
     template_types = await template_repo.list_types(template.template_key)
+    crm_detail: NamespaceCRMSettings | None = None
+    raw_crm = getattr(template, "crm_settings", None)
+    if raw_crm is not None and isinstance(raw_crm, dict) and len(raw_crm) > 0:
+        crm_detail = NamespaceCRMSettings.model_validate(raw_crm)
     return NamespaceTemplateDetailsResponse(
         template_id=template.template_id,
         name=template.name,
@@ -248,6 +288,7 @@ async def get_namespace_template(
         icon=template.icon,
         is_system=template.is_system,
         entity_type_ids=[item.type_id for item in template_types],
+        crm_settings=crm_detail,
         types=[
             NamespaceTemplateTypeResponse(
                 type_id=item.type_id,
@@ -287,6 +328,17 @@ async def update_namespace_template(
         template.description = request.description
     if request.icon is not None:
         template.icon = request.icon
+    if request.crm_settings is not None:
+        prev = NamespaceCRMSettings()
+        raw_existing = getattr(template, "crm_settings", None)
+        if raw_existing is not None and isinstance(raw_existing, dict) and len(raw_existing) > 0:
+            prev = NamespaceCRMSettings.model_validate(raw_existing)
+        incoming = request.crm_settings
+        data = prev.model_dump()
+        for field_name in incoming.model_fields_set:
+            data[field_name] = getattr(incoming, field_name)
+        merged = NamespaceCRMSettings.model_validate(data)
+        template.crm_settings = merged.model_dump(mode="json")
     updated = await template_repo.update(template)
     template_types = await template_repo.list_types(updated.template_key)
     return NamespaceTemplateResponse(
@@ -370,6 +422,13 @@ async def delete_template_type(
     template = await template_repo.get_by_template_id(template_id)
     if template is None:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
+    current_ids = {t.type_id for t in await template_repo.list_types(template.template_key)}
+    after_remove = current_ids - {type_id}
+    if not REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS <= after_remove:
+        raise HTTPException(
+            status_code=422,
+            detail="Нельзя удалить тип: у шаблона пространства всегда должны оставаться note и task.",
+        )
     deleted = await template_repo.delete_type(template.template_key, type_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Template type {type_id} not found")
@@ -396,6 +455,74 @@ async def create_namespace(
 
     logger.info(f"Создан namespace {request.name}")
     return await _namespace_response(container, namespace)
+
+
+@router.get(
+    "/{namespace_name}/task-board-stages",
+    response_model=TaskBoardStagesApiResponse,
+)
+async def get_namespace_task_board_stages(
+    namespace_name: str,
+    container: ContainerDep,
+    entity_subtype: Optional[str] = Query(None),
+) -> TaskBoardStagesApiResponse:
+    normalized_namespace_name = namespace_name.strip()
+    if not normalized_namespace_name:
+        raise HTTPException(status_code=422, detail="Namespace name is required")
+
+    existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
+    if existing_namespace is None:
+        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+
+    crm = (
+        existing_namespace.crm_settings
+        if existing_namespace.crm_settings is not None
+        else NamespaceCRMSettings()
+    )
+    sub = entity_subtype.strip() if isinstance(entity_subtype, str) else None
+    if sub == "":
+        sub = None
+    key = task_board_key("task", sub)
+    stages = resolve_task_board_stages(crm, key)
+    return TaskBoardStagesApiResponse(board_key=key, stages=stages)
+
+
+@router.get(
+    "/{namespace_name}/task-board-editor-state",
+    response_model=TaskBoardEditorStateResponse,
+)
+async def get_namespace_task_board_editor_state(
+    namespace_name: str,
+    container: ContainerDep,
+) -> TaskBoardEditorStateResponse:
+    normalized_namespace_name = namespace_name.strip()
+    if not normalized_namespace_name:
+        raise HTTPException(status_code=422, detail="Namespace name is required")
+
+    existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
+    if existing_namespace is None:
+        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+
+    service = container.namespace_template_service
+    payload = await service.get_namespace_editability(normalized_namespace_name)
+    allowed = payload["current_allowed_type_ids"]
+    types = await container.entity_type_repository.get_all_for_company(
+        namespace=normalized_namespace_name,
+        limit=500,
+        offset=0,
+    )
+    crm = (
+        existing_namespace.crm_settings
+        if existing_namespace.crm_settings is not None
+        else NamespaceCRMSettings()
+    )
+    raw_boards = build_task_board_editor_boards(
+        allowed_type_ids=allowed,
+        entity_types=types,
+        crm=crm,
+    )
+    boards = [TaskBoardEditorBoardResponse.model_validate(row) for row in raw_boards]
+    return TaskBoardEditorStateResponse(boards=boards)
 
 
 @router.get("/{namespace_name}/editability", response_model=NamespaceEditabilityResponse)
@@ -444,8 +571,10 @@ async def update_namespace(
     editability = await container.namespace_template_service.get_namespace_editability(normalized_namespace_name)
     if allowed_type_ids is not None:
         locked_type_ids = set(editability["locked_type_ids"])
-        requested_set = set(allowed_type_ids)
-        missing_locked = locked_type_ids - requested_set
+        expanded = await container.namespace_template_service.expanded_allowed_type_ids_for_namespace_update(
+            allowed_type_ids,
+        )
+        missing_locked = locked_type_ids - expanded
         if missing_locked:
             raise HTTPException(
                 status_code=422,
@@ -464,7 +593,12 @@ async def update_namespace(
         ns = await container.namespace_repository.get(normalized_namespace_name)
         if ns is None:
             raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
-        ns.crm_settings = request.crm_settings
+        prev = ns.crm_settings or NamespaceCRMSettings()
+        incoming = request.crm_settings
+        data = prev.model_dump()
+        for field_name in incoming.model_fields_set:
+            data[field_name] = getattr(incoming, field_name)
+        ns.crm_settings = NamespaceCRMSettings.model_validate(data)
         await container.namespace_repository.set(ns)
         updated_namespace = ns
 

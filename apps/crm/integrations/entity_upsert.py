@@ -9,6 +9,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.db.models import CRMEntity
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.integrations.external_ref import external_ref_now, merge_external_refs
@@ -65,7 +66,7 @@ async def upsert_canonical_by_external_ref(
             ent.description = description
         if note_date is not None:
             ent.note_date = note_date
-        elif entity_type == "note" and ent.note_date is None:
+        elif entity_type == NOTE_ROOT_ENTITY_TYPE_ID and ent.note_date is None:
             ent.note_date = datetime.now(timezone.utc).date()
         if due_date is not None:
             ent.due_date = due_date
@@ -76,7 +77,7 @@ async def upsert_canonical_by_external_ref(
     for key, value in patch_attributes.items():
         initial_attrs[key] = value
     effective_note_date = note_date
-    if entity_type == "note" and effective_note_date is None:
+    if entity_type == NOTE_ROOT_ENTITY_TYPE_ID and effective_note_date is None:
         effective_note_date = datetime.now(timezone.utc).date()
     ent = CRMEntity(
         entity_id=uuid.uuid4().hex,

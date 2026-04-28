@@ -4,9 +4,16 @@
 При создании компании эти шаблоны копируются с company_id новой компании.
 """
 
+from apps.crm.constants_graph import (
+    CALL_ENTITY_TYPE_ID,
+    MEETING_ENTITY_TYPE_ID,
+    NOTE_ROOT_ENTITY_TYPE_ID,
+    TASK_ROOT_ENTITY_TYPE_ID,
+)
+
 SYSTEM_ENTITY_TYPE_TEMPLATES = [
     {
-        "type_id": "note",
+        "type_id": NOTE_ROOT_ENTITY_TYPE_ID,
         "parent_type_id": None,
         "name": "Заметка",
         "description": "Базовый системный тип заметки",
@@ -24,8 +31,8 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "is_context_anchor": False,
     },
     {
-        "type_id": "meeting",
-        "parent_type_id": "note",
+        "type_id": MEETING_ENTITY_TYPE_ID,
+        "parent_type_id": NOTE_ROOT_ENTITY_TYPE_ID,
         "name": "Встреча",
         "description": "Запись о встрече с участниками и договоренностями",
         "is_system": True,
@@ -43,8 +50,8 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "is_context_anchor": False,
     },
     {
-        "type_id": "call",
-        "parent_type_id": "note",
+        "type_id": CALL_ENTITY_TYPE_ID,
+        "parent_type_id": NOTE_ROOT_ENTITY_TYPE_ID,
         "name": "Звонок",
         "description": "Запись телефонного разговора",
         "is_system": True,
@@ -62,7 +69,7 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "is_context_anchor": False,
     },
     {
-        "type_id": "task",
+        "type_id": TASK_ROOT_ENTITY_TYPE_ID,
         "parent_type_id": None,
         "name": "Задача",
         "description": "Базовый системный тип задачи",
@@ -157,6 +164,61 @@ SYSTEM_ENTITY_TYPE_TEMPLATES = [
         "namespace_ids": ["*"],
     },
 ]
+
+REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS: frozenset[str] = frozenset(
+    {NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID}
+)
+
+
+def _namespace_template_row_from_system_spec(spec: dict) -> dict:
+    parent = spec.get("parent_type_id")
+    return {
+        "type_id": spec["type_id"],
+        "parent_type_id": parent if isinstance(parent, str) and len(parent) > 0 else None,
+        "name": spec["name"],
+        "description": spec.get("description"),
+        "prompt": spec.get("prompt"),
+        "required_fields": spec.get("required_fields") or {},
+        "optional_fields": spec.get("optional_fields") or {},
+        "icon": spec.get("icon"),
+        "color": spec.get("color"),
+        "is_event": spec.get("is_event", False),
+        "check_duplicates": spec.get("check_duplicates", True),
+        "weight_coefficient": spec.get("weight_coefficient", 1.0),
+        "namespace_ids": spec.get("namespace_ids") or [],
+        "is_context_anchor": spec.get("is_context_anchor", False),
+        "is_voice_target": spec.get("is_voice_target", False),
+    }
+
+
+def _build_namespace_template_core_note_task_rows() -> list[dict]:
+    by_id = {item["type_id"]: item for item in SYSTEM_ENTITY_TYPE_TEMPLATES}
+    rows: list[dict] = []
+    for tid in sorted(REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS):
+        spec = by_id.get(tid)
+        if spec is None:
+            raise ValueError(f"SYSTEM_ENTITY_TYPE_TEMPLATES must include type_id={tid}")
+        rows.append(_namespace_template_row_from_system_spec(spec))
+    return rows
+
+
+NAMESPACE_TEMPLATE_CORE_NOTE_TASK: list[dict] = _build_namespace_template_core_note_task_rows()
+
+
+def _ensure_namespace_template_seeds_contain_core_note_task(seeds: list) -> None:
+    """В каждом сиде шаблона должны быть типы note и task (если не было — добавляются)."""
+    core = NAMESPACE_TEMPLATE_CORE_NOTE_TASK
+    for seed in seeds:
+        types_list = seed.get("types")
+        if not isinstance(types_list, list):
+            raise ValueError(f"namespace template seed {seed.get('template_id')} must have types: list")
+        present = {t.get("type_id") for t in types_list if isinstance(t, dict)}
+        for row in core:
+            tid = row["type_id"]
+            if tid not in present:
+                types_list.append(dict(row))
+                present.add(tid)
+
 
 COMMON_NAMESPACE_ANCHOR_TYPES = [
     {
@@ -804,4 +866,6 @@ NAMESPACE_TEMPLATE_SEEDS = [
         + COMMON_NAMESPACE_ANCHOR_TYPES,
     },
 ]
+
+_ensure_namespace_template_seeds_contain_core_note_task(NAMESPACE_TEMPLATE_SEEDS)
 

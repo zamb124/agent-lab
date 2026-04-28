@@ -25,7 +25,12 @@ describe('PlatformPage', () => {
 
     it('реагирует на ROUTER_ROUTE_CHANGED', async () => {
         const el = await fixture(html`<frontend-core-test-page></frontend-core-test-page>`);
-        getPlatformBus().dispatch(CoreEvents.ROUTER_ROUTE_CHANGED, { routeKey: 'home', params: { id: 'x' }, pathname: '/home' });
+        getPlatformBus().dispatch(CoreEvents.ROUTER_ROUTE_CHANGED, {
+            routeKey: 'home',
+            params: { id: 'x' },
+            pathname: '/home',
+            search: '',
+        });
         await elementUpdated(el);
         expect(el.routeKey).to.equal('home');
         expect(el.routeParams).to.deep.equal({ id: 'x' });

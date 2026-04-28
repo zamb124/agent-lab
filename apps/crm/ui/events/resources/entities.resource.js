@@ -200,6 +200,9 @@ export const entitiesLookupOp = createAsyncOp({
         const body = {};
         if (typeof payload.namespace === 'string' && payload.namespace.length > 0) body.namespace = payload.namespace;
         if (typeof payload.entity_type === 'string' && payload.entity_type.length > 0) body.entity_type = payload.entity_type;
+        if (typeof payload.entity_subtype === 'string' && payload.entity_subtype.length > 0) {
+            body.entity_subtype = payload.entity_subtype;
+        }
         if (typeof payload.limit === 'number') body.limit = payload.limit;
         const dateLeaves = [];
         if (typeof payload.created_at_from === 'string' && payload.created_at_from.length > 0) {

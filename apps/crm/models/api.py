@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Dict, Any, List, Optional, Literal
 from datetime import date, datetime
 
-from core.models.identity_models import NamespaceCRMSettings
+from core.models.identity_models import NamespaceCRMSettings, BoardStage
 
 
 class EntityCreate(BaseModel):
@@ -47,6 +47,8 @@ class EntityUpdate(BaseModel):
 
     voice_entity_id: Optional[str] = None
     context_entity_id: Optional[str] = None
+
+    entity_subtype: Optional[str] = None
 
     note_date: Optional[date] = None
     due_date: Optional[date] = None
@@ -271,6 +273,8 @@ class EntityTypeResponse(BaseModel):
     is_voice_target: bool
     extractable: bool
     created_at: datetime
+    list_entity_type: str
+    list_entity_subtype: Optional[str] = None
 
 
 class RelationshipTypeCreate(BaseModel):
@@ -392,6 +396,28 @@ class NamespaceUpdateRequest(BaseModel):
     crm_settings: Optional[NamespaceCRMSettings] = None
 
 
+class TaskBoardStagesApiResponse(BaseModel):
+    """Стадии доски задач для namespace и текущего фильтра подтипа."""
+
+    board_key: str
+    stages: List[BoardStage]
+
+
+class TaskBoardEditorBoardResponse(BaseModel):
+    """Одна доска в редакторе стадий пространства."""
+
+    board_key: str
+    label: str
+    stages: List[BoardStage]
+    uses_custom_preset: bool
+
+
+class TaskBoardEditorStateResponse(BaseModel):
+    """Сводка досок задач для экрана настройки namespace."""
+
+    boards: List[TaskBoardEditorBoardResponse]
+
+
 class NamespaceEditabilityResponse(BaseModel):
     """Ограничения редактирования namespace."""
     namespace: str
@@ -427,6 +453,7 @@ class NamespaceTemplateUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     icon: Optional[str] = None
+    crm_settings: Optional[NamespaceCRMSettings] = None
 
 
 class NamespaceTemplateTypeUpsertRequest(BaseModel):
@@ -473,6 +500,7 @@ class NamespaceTemplateDetailsResponse(BaseModel):
     is_system: bool
     types: List[NamespaceTemplateTypeResponse]
     entity_type_ids: List[str]
+    crm_settings: Optional[NamespaceCRMSettings] = None
 
 
 class NamespaceTemplateSchemaFieldType(BaseModel):

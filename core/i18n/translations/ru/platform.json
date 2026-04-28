@@ -174,5 +174,8 @@
         "preset_monthly_1_midnight": "1-го числа в полночь",
         "preset_custom": "Свой cron (5 полей)…",
         "custom_help": "Пять полей: минута, час, день месяца, месяц, день недели — как в crontab. Точная проверка при сохранении."
+    },
+    "palette_color_picker": {
+        "clear": "Сбросить"
     }
 }

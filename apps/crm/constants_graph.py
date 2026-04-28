@@ -11,6 +11,13 @@ PLATFORM_NAMESPACE_ATTR = "platform_namespace"
 CONTACT_ENTITY_TYPE = "contact"
 MEMBER_ENTITY_TYPE = "member"
 
-NOTE_FAMILY_ENTITY_TYPE_IDS: frozenset[str] = frozenset({"note", "meeting", "call"})
+NOTE_ROOT_ENTITY_TYPE_ID = "note"
+TASK_ROOT_ENTITY_TYPE_ID = "task"
+MEETING_ENTITY_TYPE_ID = "meeting"
+CALL_ENTITY_TYPE_ID = "call"
+
+NOTE_FAMILY_ENTITY_TYPE_IDS: frozenset[str] = frozenset(
+    {NOTE_ROOT_ENTITY_TYPE_ID, MEETING_ENTITY_TYPE_ID, CALL_ENTITY_TYPE_ID}
+)
 COMPANY_ENTITY_TYPE = "company"
 NAMESPACE_ENTITY_TYPE = "namespace"

@@ -35,10 +35,12 @@
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import './entity-hover-preview.js';
+import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_UPDATE_OP = 'crm/entity_update';
@@ -47,6 +49,8 @@ const ATTACHMENT_UPLOAD_OP = 'crm/attachment_upload';
 const ATTACHMENT_DELETE_OP = 'crm/attachment_delete';
 const VOICE_OP = 'crm/note_voice_input';
 const ENTITY_SEARCH_OP = 'crm/entity_search';
+const ENTITY_TYPES_NAME = 'crm/entity_types';
+const NAMESPACES_NAME = 'crm/namespaces';
 let NOTE_ATTACHMENT_INPUT_SEQ = 0;
 
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
@@ -234,6 +238,17 @@ export class CRMNoteCardView extends PlatformElement {
         _mentionPreviewOpen: { state: true },
         _attachmentsPopoverOpen: { state: true },
         _attachmentsPopoverMode: { state: true },
+        _editSubtype: { state: true },
+        _editVoiceEntityId: { state: true },
+        _editContextEntityId: { state: true },
+        _voiceSearchQuery: { state: true },
+        _voiceSearchOpen: { state: true },
+        _voiceSearchResults: { state: true },
+        _voiceSearchLoading: { state: true },
+        _contextSearchQuery: { state: true },
+        _contextSearchOpen: { state: true },
+        _contextSearchResults: { state: true },
+        _contextSearchLoading: { state: true },
     };
 
     static styles = [
@@ -907,6 +922,118 @@ export class CRMNoteCardView extends PlatformElement {
                 flex-direction: column;
                 gap: var(--space-2);
             }
+            .note-semantics-edit {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+                margin-bottom: var(--space-2);
+            }
+            .note-semantics-edit.semantics-toolbar {
+                flex-direction: column;
+            }
+            @media (min-width: 901px) {
+                .note-semantics-edit.semantics-toolbar {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+                    gap: var(--space-3);
+                    align-items: end;
+                }
+                .note-semantics-edit.semantics-toolbar .semantics-field {
+                    min-width: 0;
+                }
+                .note-semantics-edit.semantics-toolbar .semantics-input,
+                .note-semantics-edit.semantics-toolbar .subtype-select {
+                    padding: 8px 34px 8px 10px;
+                    font-size: 13px;
+                    line-height: 18px;
+                }
+                .note-semantics-edit.semantics-toolbar .subtype-select {
+                    padding-right: 10px;
+                }
+            }
+            .semantics-hint {
+                margin: 0;
+                font-size: 11px;
+                line-height: 14px;
+                color: var(--crm-note-text-muted);
+                font-weight: 400;
+            }
+            .note-semantics-edit .semantics-field.picker-field .entity-search-wrap {
+                position: relative;
+            }
+            .semantics-input,
+            .subtype-select {
+                width: 100%;
+                box-sizing: border-box;
+                padding: 10px 36px 10px 14px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-lg);
+                background: var(--crm-note-input-bg);
+                color: var(--text-primary);
+                font-size: 15px;
+                line-height: 20px;
+                font-family: inherit;
+                outline: none;
+            }
+            .semantics-input:focus,
+            .subtype-select:focus {
+                border-color: var(--accent);
+            }
+            .subtype-select {
+                padding-right: 14px;
+            }
+            .semantics-clear {
+                position: absolute;
+                right: 8px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: var(--radius-full);
+                background: transparent;
+                color: var(--crm-note-text-muted);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+            }
+            .semantics-clear:hover {
+                background: var(--crm-note-action-bg);
+                color: var(--text-primary);
+            }
+            .view-meta-ribbon {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--space-2);
+                margin-top: var(--space-2);
+            }
+            .meta-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 10px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-note-action-bg);
+                color: var(--text-primary);
+                font-size: 13px;
+                line-height: 18px;
+                font-weight: 500;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .meta-pill:hover {
+                background: var(--crm-note-action-bg-hover);
+            }
+            .meta-pill.kind-pill {
+                cursor: default;
+                background: var(--glass-tint-medium);
+            }
+            .meta-pill.context-pill {
+                border-color: var(--glass-border-medium);
+            }
             .edit-label {
                 font-size: 12px;
                 line-height: 15px;
@@ -1115,6 +1242,10 @@ export class CRMNoteCardView extends PlatformElement {
         this._mentionTriggerIndex = -1;
         this._mentionDebounce = null;
         this._mentionRequestId = null;
+        this._entitySearchPurpose = 'mention';
+
+        this._voiceSearchRequestId = null;
+        this._contextSearchRequestId = null;
         this._mentionPreviewCloseTimer = null;
         this._mentionPreviewPinned = false;
         this._attachmentsPopoverOpen = false;
@@ -1123,7 +1254,23 @@ export class CRMNoteCardView extends PlatformElement {
         NOTE_ATTACHMENT_INPUT_SEQ += 1;
         this._attachmentInputId = `crm-note-attachment-input-${NOTE_ATTACHMENT_INPUT_SEQ}`;
 
+        this._editSubtype = '';
+        this._editVoiceEntityId = '';
+        this._editContextEntityId = '';
+        this._voiceSearchQuery = '';
+        this._voiceSearchOpen = false;
+        this._voiceSearchResults = [];
+        this._voiceSearchLoading = false;
+        this._contextSearchQuery = '';
+        this._contextSearchOpen = false;
+        this._contextSearchResults = [];
+        this._contextSearchLoading = false;
+        this._voiceSearchDeb = null;
+        this._contextSearchDeb = null;
+
         this._entities = this.useResource(ENTITIES_NAME);
+        this._entityTypes = this.useResource(ENTITY_TYPES_NAME, { autoload: false });
+        this._namespacesRes = this.useResource(NAMESPACES_NAME, { autoload: true });
         this._updateOp = this.useOp(ENTITY_UPDATE_OP);
         this._fileUpload = this.useOp(FILE_UPLOAD_OP);
         this._attachmentUpload = this.useOp(ATTACHMENT_UPLOAD_OP);
@@ -1135,12 +1282,25 @@ export class CRMNoteCardView extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+
+        this._crmNamespaceSel = this.select((st) => {
+            const u = st.auth.user;
+            if (!u || typeof u.company_id !== 'string' || u.company_id.length === 0) {
+                return 'default';
+            }
+            const raw = getEffectiveCrmNamespaceApiFilter(u.company_id, st.ui.namespace.selectionByCompany);
+            if (typeof raw === 'string' && raw.length > 0) {
+                return raw;
+            }
+            return 'default';
+        });
+
         this._hydrateEditFromNote();
 
         this.useEvent(this._entities.resource.events.CREATED, (event) => {
             const created = event.payload && event.payload.item;
             if (!created || typeof created !== 'object') return;
-            if (created.entity_type !== 'note') return;
+            if (created.entity_type !== NOTE_ROOT_ENTITY_TYPE_ID) return;
             if (this.note !== null) return;
             this.emit('created', { entity: created });
         });
@@ -1208,17 +1368,58 @@ export class CRMNoteCardView extends PlatformElement {
 
         this.useEvent(this._entitySearch.op.events.SUCCEEDED, (event) => {
             const meta = event && event.meta;
-            if (this._mentionRequestId === null || (meta && meta.causation_id !== this._mentionRequestId)) return;
+            const cid = meta && typeof meta.causation_id === 'string' ? meta.causation_id : null;
+            const purpose = this._entitySearchPurpose;
             const result = event && event.payload && event.payload.result;
-            const items = result && Array.isArray(result.items) ? result.items : [];
-            this._mentionResults = items.filter((it) => this.note === null || it.entity_id !== this.note.entity_id);
-            this._mentionLoading = false;
+            const rawItems = result && Array.isArray(result.items) ? result.items : [];
+
+            if (purpose === 'mention') {
+                if (this._mentionRequestId === null || cid !== this._mentionRequestId) return;
+                this._mentionResults = rawItems.filter(
+                    (it) => this.note === null || it.entity_id !== this.note.entity_id,
+                );
+                this._mentionLoading = false;
+                return;
+            }
+            if (purpose === 'voice') {
+                if (this._voiceSearchRequestId === null || cid !== this._voiceSearchRequestId) return;
+                const allow = this._voiceTargetTypeIdSet();
+                this._voiceSearchResults = rawItems.filter(
+                    (it) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
+                );
+                this._voiceSearchLoading = false;
+                return;
+            }
+            if (purpose === 'context') {
+                if (this._contextSearchRequestId === null || cid !== this._contextSearchRequestId) return;
+                const allow = this._contextAnchorTypeIdSet();
+                this._contextSearchResults = rawItems.filter(
+                    (it) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
+                );
+                this._contextSearchLoading = false;
+            }
         });
         this.useEvent(this._entitySearch.op.events.FAILED, (event) => {
             const meta = event && event.meta;
-            if (this._mentionRequestId === null || (meta && meta.causation_id !== this._mentionRequestId)) return;
-            this._mentionResults = [];
-            this._mentionLoading = false;
+            const cid = meta && typeof meta.causation_id === 'string' ? meta.causation_id : null;
+            const purpose = this._entitySearchPurpose;
+            if (purpose === 'mention') {
+                if (this._mentionRequestId === null || cid !== this._mentionRequestId) return;
+                this._mentionResults = [];
+                this._mentionLoading = false;
+                return;
+            }
+            if (purpose === 'voice') {
+                if (this._voiceSearchRequestId === null || cid !== this._voiceSearchRequestId) return;
+                this._voiceSearchResults = [];
+                this._voiceSearchLoading = false;
+                return;
+            }
+            if (purpose === 'context') {
+                if (this._contextSearchRequestId === null || cid !== this._contextSearchRequestId) return;
+                this._contextSearchResults = [];
+                this._contextSearchLoading = false;
+            }
         });
     }
 
@@ -1226,6 +1427,14 @@ export class CRMNoteCardView extends PlatformElement {
         if (this._mentionDebounce !== null) {
             clearTimeout(this._mentionDebounce);
             this._mentionDebounce = null;
+        }
+        if (this._voiceSearchDeb !== null) {
+            clearTimeout(this._voiceSearchDeb);
+            this._voiceSearchDeb = null;
+        }
+        if (this._contextSearchDeb !== null) {
+            clearTimeout(this._contextSearchDeb);
+            this._contextSearchDeb = null;
         }
         if (this._mentionPreviewCloseTimer !== null) {
             clearTimeout(this._mentionPreviewCloseTimer);
@@ -1240,14 +1449,253 @@ export class CRMNoteCardView extends PlatformElement {
 
     willUpdate(changed) {
         super.willUpdate(changed);
-        if (changed.has('note')) {
-            this._hydrateEditFromNote();
+        if (
+            changed.has('note')
+            || changed.has('card')
+            || changed.has('defaultNamespace')
+            || changed.has('mode')
+        ) {
+            this._reloadNoteEntityTypesList();
+            if (this.mode === 'edit') {
+                this._hydrateEditFromNote();
+            }
         }
         if (this.note === null && this.mode !== 'edit') {
             this.mode = 'edit';
         }
     }
 
+    _reloadNoteEntityTypesList() {
+        const ns = this._effectiveNamespace();
+        if (typeof ns !== 'string' || ns.length === 0) {
+            return;
+        }
+        this._entityTypes.load({ namespace: ns, limit: 200, offset: 0 });
+    }
+
+    _effectiveNamespace() {
+        if (this.note !== null && typeof this.note.namespace === 'string' && this.note.namespace.length > 0) {
+            return this.note.namespace;
+        }
+        if (typeof this.defaultNamespace === 'string' && this.defaultNamespace.trim().length > 0) {
+            return this.defaultNamespace.trim();
+        }
+        const sel = this._crmNamespaceSel;
+        if (sel && typeof sel.value === 'string' && sel.value.length > 0) {
+            return sel.value;
+        }
+        return 'default';
+    }
+
+    _namespaceRecord() {
+        const ns = this._effectiveNamespace();
+        if (typeof ns !== 'string' || ns.length === 0) {
+            return undefined;
+        }
+        const res = this._namespacesRes;
+        if (res === undefined || res === null || typeof res.byId !== 'object' || res.byId === null) {
+            return undefined;
+        }
+        return res.byId[ns];
+    }
+
+    _namespaceCrmSettings() {
+        const row = this._namespaceRecord();
+        if (row === undefined || row === null) {
+            return null;
+        }
+        const cs = row.crm_settings;
+        if (cs === undefined || cs === null || typeof cs !== 'object') {
+            return null;
+        }
+        return cs;
+    }
+
+    _showNoteVoiceAuthorUi() {
+        const cs = this._namespaceCrmSettings();
+        if (cs !== null && cs.show_note_voice_ui === false) {
+            return false;
+        }
+        return true;
+    }
+
+    _entityTypeItems() {
+        const ctrl = this._entityTypes;
+        if (
+            ctrl === undefined
+            || ctrl === null
+            || ctrl.items === undefined
+            || !Array.isArray(ctrl.items)
+        ) {
+            return [];
+        }
+        return ctrl.items;
+    }
+
+    _voiceTargetTypeIdSet() {
+        const ids = new Set();
+        const items = this._entityTypeItems();
+        for (const row of items) {
+            if (typeof row !== 'object' || row === null) continue;
+            if (typeof row.type_id !== 'string' || row.type_id.length === 0) continue;
+            if (row.is_voice_target === true) {
+                ids.add(row.type_id);
+            }
+        }
+        return ids;
+    }
+
+    _contextAnchorTypeIdSet() {
+        const ids = new Set();
+        const items = this._entityTypeItems();
+        for (const row of items) {
+            if (typeof row !== 'object' || row === null) continue;
+            if (typeof row.type_id !== 'string' || row.type_id.length === 0) continue;
+            if (row.is_context_anchor === true) {
+                ids.add(row.type_id);
+            }
+        }
+        return ids;
+    }
+
+    _contextAnchorSearchPlaceholder() {
+        const ids = [...this._contextAnchorTypeIdSet()];
+        if (ids.length === 0) {
+            return this.t('note_edit.context_anchor_search');
+        }
+        const parts = ids
+            .map((typeId) => this._subtypeNameByTypeId(typeId))
+            .filter((label) => label.length > 0);
+        if (parts.length === 0) {
+            return this.t('note_edit.context_anchor_search');
+        }
+        const typesLabel = parts.slice(0, 16).join(', ');
+        return this.t('note_edit.context_anchor_search_types', { types: typesLabel });
+    }
+
+    _noteFamilySubtypeSelectableIdsSorted() {
+        const types = this._entityTypeItems();
+        if (types.length === 0) {
+            return [];
+        }
+        const noteRow = types.find(
+            (row) => typeof row === 'object' && row !== null && row.type_id === NOTE_ROOT_ENTITY_TYPE_ID,
+        );
+        if (noteRow === undefined) {
+            return [];
+        }
+        const childrenByParent = new Map();
+        for (const row of types) {
+            if (typeof row !== 'object' || row === null) continue;
+            if (typeof row.type_id !== 'string' || row.type_id.length === 0) continue;
+            const p =
+                typeof row.parent_type_id === 'string' && row.parent_type_id.length > 0
+                    ? row.parent_type_id
+                    : '';
+            const list = childrenByParent.has(p) ? childrenByParent.get(p) : [];
+            list.push(row.type_id);
+            childrenByParent.set(p, list);
+        }
+        const out = [];
+        const queue = [NOTE_ROOT_ENTITY_TYPE_ID];
+        while (queue.length > 0) {
+            const cur = queue.shift();
+            const rawKids = childrenByParent.get(cur);
+            const kids =
+                rawKids !== undefined && Array.isArray(rawKids) ? rawKids : [];
+            for (const k of kids) {
+                if (k !== NOTE_ROOT_ENTITY_TYPE_ID) {
+                    out.push(k);
+                }
+                queue.push(k);
+            }
+        }
+        const nameById = new Map();
+        for (const row of types) {
+            if (typeof row !== 'object' || row === null) continue;
+            if (typeof row.type_id !== 'string') continue;
+            const label = typeof row.name === 'string' && row.name.length > 0 ? row.name : row.type_id;
+            nameById.set(row.type_id, label.toLowerCase());
+        }
+        out.sort((a, b) => {
+            const la = nameById.has(a) ? nameById.get(a) : a;
+            const lb = nameById.has(b) ? nameById.get(b) : b;
+            if (la < lb) return -1;
+            if (la > lb) return 1;
+            return a.localeCompare(b);
+        });
+        return out;
+    }
+
+    _subtypeNameByTypeId(typeId) {
+        if (typeof typeId !== 'string' || typeId.length === 0) {
+            return '';
+        }
+        const items = this._entityTypeItems();
+        for (const row of items) {
+            if (typeof row !== 'object' || row === null) continue;
+            if (row.type_id === typeId) {
+                if (typeof row.name === 'string' && row.name.length > 0) {
+                    return row.name;
+                }
+                return typeId;
+            }
+        }
+        return typeId;
+    }
+
+    _hydrateGraphEditorsFromCard() {
+        if (this.note === null) {
+            this._editVoiceEntityId = '';
+            this._editContextEntityId = '';
+            return;
+        }
+        const relationships = Array.isArray(this.card?.relationships) ? this.card.relationships : [];
+        const noteId = this.note.entity_id;
+        const v = relationships.find(
+            (r) => r.relationship_type === 'note_voice' && r.source_entity_id === noteId,
+        );
+        this._editVoiceEntityId =
+            typeof v?.target_entity_id === 'string' && v.target_entity_id.length > 0
+                ? v.target_entity_id
+                : '';
+        const c = relationships.find(
+            (r) => r.relationship_type === 'in_context' && r.source_entity_id === noteId,
+        );
+        this._editContextEntityId =
+            typeof c?.target_entity_id === 'string' && c.target_entity_id.length > 0
+                ? c.target_entity_id
+                : '';
+
+        const cardRelated = this.card !== null && Array.isArray(this.card.related_entities)
+            ? this.card.related_entities
+            : [];
+        let voiceLabel = '';
+        if (this._editVoiceEntityId.length > 0) {
+            const row = cardRelated.find((x) => x.entity_id === this._editVoiceEntityId);
+            voiceLabel =
+                row !== null && row !== undefined && typeof row.name === 'string' && row.name.length > 0
+                    ? row.name
+                    : this._editVoiceEntityId;
+        }
+        let ctxLabel = '';
+        if (this._editContextEntityId.length > 0) {
+            const rowCtx = cardRelated.find((x) => x.entity_id === this._editContextEntityId);
+            ctxLabel =
+                rowCtx !== null
+                && rowCtx !== undefined
+                && typeof rowCtx.name === 'string'
+                && rowCtx.name.length > 0
+                    ? rowCtx.name
+                    : this._editContextEntityId;
+        }
+        if (voiceLabel.length > 0) {
+            this._voiceSearchQuery = voiceLabel;
+        }
+        if (ctxLabel.length > 0) {
+            this._contextSearchQuery = ctxLabel;
+        }
+    }
     _hydrateEditFromNote() {
         const note = this.note;
         if (note === null) {
@@ -1259,6 +1707,13 @@ export class CRMNoteCardView extends PlatformElement {
             this._editAttachmentsMeta = {};
             this._mentionedEntityIds = new Set();
             this._formError = '';
+            this._editSubtype = '';
+            this._editVoiceEntityId = '';
+            this._editContextEntityId = '';
+            this._voiceSearchQuery = '';
+            this._contextSearchQuery = '';
+            this._voiceSearchOpen = false;
+            this._contextSearchOpen = false;
             return;
         }
         this._editName = typeof note.name === 'string' ? note.name : '';
@@ -1275,6 +1730,9 @@ export class CRMNoteCardView extends PlatformElement {
         this._editAttachmentsMeta = {};
         this._mentionedEntityIds = this._extractMentionedIds(this._editDescription);
         this._formError = '';
+        const subRaw = typeof note.entity_subtype === 'string' ? note.entity_subtype.trim() : '';
+        this._editSubtype = subRaw.length > 0 ? subRaw : '';
+        this._hydrateGraphEditorsFromCard();
     }
 
     _formatNoteDate(value) {
@@ -1349,11 +1807,18 @@ export class CRMNoteCardView extends PlatformElement {
             const rel = relationships.find(
                 (r) => r.relationship_type === typeId && r.source_entity_id === noteId,
             );
-            if (!rel) return null;
+            if (!rel || typeof rel.target_entity_id !== 'string' || rel.target_entity_id.length === 0) {
+                return null;
+            }
             const targetId = rel.target_entity_id;
             const related = cardRelated.find((e) => e.entity_id === targetId);
-            if (!related) return null;
-            return related.name && related.name.length > 0 ? related.name : targetId;
+            const label =
+                related !== undefined
+                && typeof related.name === 'string'
+                && related.name.length > 0
+                    ? related.name
+                    : targetId;
+            return { entity_id: targetId, label };
         };
         return {
             voice: findOutgoingTarget('note_voice'),
@@ -1568,6 +2033,7 @@ export class CRMNoteCardView extends PlatformElement {
             if (typeof namespace === 'string' && namespace.length > 0) {
                 payload.namespace = namespace;
             }
+            this._entitySearchPurpose = 'mention';
             this._mentionRequestId = this._entitySearch.run(payload);
         }, 200);
     }
@@ -1613,6 +2079,302 @@ export class CRMNoteCardView extends PlatformElement {
             return this.defaultNamespace;
         }
         return null;
+    }
+
+    _renderEntityPickerPopover(kind, loading, queryMinLen, emptyKey, rows, onPick) {
+        if (loading === true) {
+            return html`
+                <div class="mention-popover">
+                    <div class="mention-empty">${this.t('note_edit.mention_searching')}</div>
+                </div>
+            `;
+        }
+        if (typeof queryMinLen === 'number' && queryMinLen > 0) {
+            const q = kind === 'voice'
+                ? (typeof this._voiceSearchQuery === 'string' ? this._voiceSearchQuery.trim() : '')
+                : (typeof this._contextSearchQuery === 'string' ? this._contextSearchQuery.trim() : '');
+            if (q.length < queryMinLen) {
+                return html`
+                    <div class="mention-popover">
+                        <div class="mention-empty">${this.t(emptyKey)}</div>
+                    </div>
+                `;
+            }
+        }
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return html`
+                <div class="mention-popover">
+                    <div class="mention-empty">${this.t('note_edit.entity_search_none')}</div>
+                </div>
+            `;
+        }
+        return html`
+            <div class="mention-popover">
+                ${rows.map(
+                    (item) => html`
+                        <button type="button" class="mention-row" @click=${() => onPick(item)}>
+                            <platform-icon name="link" size="12"></platform-icon>
+                            <span class="mention-name">${item.name}</span>
+                            <span class="mention-type">${typeof item.entity_type === 'string'
+                                ? item.entity_type
+                                : ''}</span>
+                        </button>
+                    `,
+                )}
+            </div>
+        `;
+    }
+
+    _runVoiceEntitySearch() {
+        const q = typeof this._voiceSearchQuery === 'string' ? this._voiceSearchQuery.trim() : '';
+        if (q.length === 0) {
+            this._voiceSearchResults = [];
+            this._voiceSearchLoading = false;
+            return;
+        }
+        this._voiceSearchLoading = true;
+        const payload = { q, limit: 22 };
+        const ns = this._currentNamespaceForSearch();
+        if (typeof ns === 'string' && ns.length > 0) {
+            payload.namespace = ns;
+        }
+        this._entitySearchPurpose = 'voice';
+        this._voiceSearchRequestId = this._entitySearch.run(payload);
+    }
+
+    _runContextEntitySearch() {
+        const q = typeof this._contextSearchQuery === 'string' ? this._contextSearchQuery.trim() : '';
+        if (q.length === 0) {
+            this._contextSearchResults = [];
+            this._contextSearchLoading = false;
+            return;
+        }
+        this._contextSearchLoading = true;
+        const payload = { q, limit: 22 };
+        const ns = this._currentNamespaceForSearch();
+        if (typeof ns === 'string' && ns.length > 0) {
+            payload.namespace = ns;
+        }
+        this._entitySearchPurpose = 'context';
+        this._contextSearchRequestId = this._entitySearch.run(payload);
+    }
+
+    _onVoiceSearchInput(e) {
+        const value = e.target instanceof HTMLInputElement ? e.target.value : '';
+        this._voiceSearchQuery = value;
+        this._voiceSearchOpen = true;
+        if (this._voiceSearchDeb !== null) {
+            clearTimeout(this._voiceSearchDeb);
+            this._voiceSearchDeb = null;
+        }
+        this._voiceSearchDeb = window.setTimeout(() => {
+            this._voiceSearchDeb = null;
+            this._runVoiceEntitySearch();
+        }, 220);
+    }
+
+    _onContextSearchInput(e) {
+        const value = e.target instanceof HTMLInputElement ? e.target.value : '';
+        this._contextSearchQuery = value;
+        this._contextSearchOpen = true;
+        if (this._contextSearchDeb !== null) {
+            clearTimeout(this._contextSearchDeb);
+            this._contextSearchDeb = null;
+        }
+        this._contextSearchDeb = window.setTimeout(() => {
+            this._contextSearchDeb = null;
+            this._runContextEntitySearch();
+        }, 220);
+    }
+
+    _onPickVoiceSearchItem(item) {
+        if (!item || typeof item.entity_id !== 'string' || item.entity_id.length === 0) {
+            return;
+        }
+        this._editVoiceEntityId = item.entity_id;
+        const label = typeof item.name === 'string' && item.name.length > 0 ? item.name : item.entity_id;
+        this._voiceSearchQuery = label;
+        this._voiceSearchOpen = false;
+    }
+
+    _onPickContextSearchItem(item) {
+        if (!item || typeof item.entity_id !== 'string' || item.entity_id.length === 0) {
+            return;
+        }
+        this._editContextEntityId = item.entity_id;
+        const label = typeof item.name === 'string' && item.name.length > 0 ? item.name : item.entity_id;
+        this._contextSearchQuery = label;
+        this._contextSearchOpen = false;
+    }
+
+    _onClearVoicePick() {
+        this._editVoiceEntityId = '';
+        this._voiceSearchQuery = '';
+        this._voiceSearchResults = [];
+        this._voiceSearchOpen = false;
+    }
+
+    _onClearContextPick() {
+        this._editContextEntityId = '';
+        this._contextSearchQuery = '';
+        this._contextSearchResults = [];
+        this._contextSearchOpen = false;
+    }
+
+    _onSubtypeChange(e) {
+        const el = e.target;
+        if (!(el instanceof HTMLSelectElement)) {
+            return;
+        }
+        this._editSubtype = el.value;
+    }
+
+    _renderEditNoteSemantics() {
+        const subtypes = this._noteFamilySubtypeSelectableIdsSorted();
+        const showVoice = this._showNoteVoiceAuthorUi() === true && this._voiceTargetTypeIdSet().size > 0;
+        const showContext = this._contextAnchorTypeIdSet().size > 0;
+        if (subtypes.length === 0 && !showVoice && !showContext) {
+            return html``;
+        }
+        return html`
+            <div class="note-semantics-edit semantics-toolbar">
+                ${subtypes.length > 0
+                    ? html`
+                        <div class="edit-field semantics-field">
+                            <label class="edit-label">${this.t('note_edit.field_note_kind')}</label>
+                            <select class="subtype-select" .value=${this._editSubtype} @change=${this._onSubtypeChange}>
+                                <option value="">${this.t('note_edit.subtype_plain')}</option>
+                                ${subtypes.map(
+                                    (tid) => html`
+                                        <option value=${tid}>${this._subtypeNameByTypeId(tid)}</option>
+                                    `,
+                                )}
+                            </select>
+                        </div>
+                    `
+                    : ''}
+                ${showVoice
+                    ? html`
+                        <div class="edit-field semantics-field picker-field">
+                            <label class="edit-label">${this.t('note_edit.field_voice_author')}</label>
+                            <div class="entity-search-wrap">
+                                <input
+                                    type="text"
+                                    class="semantics-input"
+                                    placeholder=${this.t('note_edit.voice_author_search')}
+                                    .value=${this._voiceSearchQuery}
+                                    @focus=${() => { this._voiceSearchOpen = true; this._runVoiceEntitySearch(); }}
+                                    @input=${this._onVoiceSearchInput}
+                                />
+                                ${this._editVoiceEntityId.length > 0
+                                    ? html`
+                                        <button type="button" class="semantics-clear" @click=${this._onClearVoicePick}>
+                                            <platform-icon name="close" size="12"></platform-icon>
+                                        </button>
+                                    `
+                                    : ''}
+                                ${this._voiceSearchOpen
+                                    ? this._renderEntityPickerPopover(
+                                        'voice',
+                                        this._voiceSearchLoading,
+                                        0,
+                                        'note_edit.entity_search_min',
+                                        this._voiceSearchResults,
+                                        (it) => this._onPickVoiceSearchItem(it),
+                                    )
+                                    : ''}
+                            </div>
+                        </div>
+                    `
+                    : ''}
+                ${showContext
+                    ? html`
+                        <div class="edit-field semantics-field picker-field">
+                            <label class="edit-label">${this.t('note_edit.field_context_anchor')}</label>
+                            <div class="entity-search-wrap">
+                                <input
+                                    type="text"
+                                    class="semantics-input"
+                                    placeholder=${this._contextAnchorSearchPlaceholder()}
+                                    .value=${this._contextSearchQuery}
+                                    @focus=${() => {
+                                        this._contextSearchOpen = true;
+                                        this._runContextEntitySearch();
+                                    }}
+                                    @input=${this._onContextSearchInput}
+                                />
+                                ${this._editContextEntityId.length > 0
+                                    ? html`
+                                        <button type="button" class="semantics-clear" @click=${this._onClearContextPick}>
+                                            <platform-icon name="close" size="12"></platform-icon>
+                                        </button>
+                                    `
+                                    : ''}
+                                ${this._contextSearchOpen
+                                    ? this._renderEntityPickerPopover(
+                                        'context',
+                                        this._contextSearchLoading,
+                                        0,
+                                        'note_edit.entity_search_min',
+                                        this._contextSearchResults,
+                                        (it) => this._onPickContextSearchItem(it),
+                                    )
+                                    : ''}
+                            </div>
+                        </div>
+                    `
+                    : ''}
+            </div>
+        `;
+    }
+
+    _renderViewNoteMetaRibbon() {
+        const chipsData = this._voiceContextChips();
+        const subtypeId =
+            this.note !== null && typeof this.note.entity_subtype === 'string' && this.note.entity_subtype.length > 0
+                ? this.note.entity_subtype
+                : '';
+        const subtypeReadable = subtypeId.length > 0 ? this._subtypeNameByTypeId(subtypeId) : '';
+        const hasChips =
+            chipsData.voice !== null
+            || chipsData.context !== null
+            || subtypeReadable.length > 0;
+        if (!hasChips) {
+            return html``;
+        }
+        return html`
+            <div class="view-meta-ribbon">
+                ${subtypeReadable.length > 0
+                    ? html`<span class="meta-pill kind-pill">${subtypeReadable}</span>`
+                    : ''}
+                ${chipsData.voice !== null
+                    ? html`
+                        <button
+                            type="button"
+                            class="meta-pill"
+                            @click=${() => this._emitEntityOpen(chipsData.voice.entity_id)}
+                            title=${this.t('note_edit.field_voice_author')}
+                        >
+                            <platform-icon name="user" size="12"></platform-icon>
+                            ${chipsData.voice.label}
+                        </button>
+                    `
+                    : ''}
+                ${chipsData.context !== null
+                    ? html`
+                        <button
+                            type="button"
+                            class="meta-pill context-pill"
+                            @click=${() => this._emitEntityOpen(chipsData.context.entity_id)}
+                            title=${this.t('note_edit.field_context_anchor')}
+                        >
+                            <platform-icon name="anchor" size="12"></platform-icon>
+                            ${chipsData.context.label}
+                        </button>
+                    `
+                    : ''}
+            </div>
+        `;
     }
 
     _renderMentionPopover() {
@@ -2023,7 +2785,25 @@ export class CRMNoteCardView extends PlatformElement {
         return null;
     }
 
-    _buildEditBody() {
+    _attachNoteSemanticsToBody(body, isCreate) {
+        const st = typeof this._editSubtype === 'string' ? this._editSubtype.trim() : '';
+        if (!isCreate) {
+            body.entity_subtype = st.length > 0 ? st : null;
+        } else if (st.length > 0) {
+            body.entity_subtype = st;
+        }
+        const allowVoice = this._showNoteVoiceAuthorUi() === true && this._voiceTargetTypeIdSet().size > 0;
+        if (allowVoice) {
+            const v = typeof this._editVoiceEntityId === 'string' ? this._editVoiceEntityId.trim() : '';
+            body.voice_entity_id = v.length > 0 ? v : null;
+        }
+        if (this._contextAnchorTypeIdSet().size > 0) {
+            const c = typeof this._editContextEntityId === 'string' ? this._editContextEntityId.trim() : '';
+            body.context_entity_id = c.length > 0 ? c : null;
+        }
+    }
+
+    _buildEditBody(isCreate) {
         const noteDate = this._editDate.length > 0 ? this._editDate : _todayDateInput();
         const body = {
             name: this._editName.trim().length > 0 ? this._editName.trim() : this.t('note_page.untitled'),
@@ -2037,6 +2817,7 @@ export class CRMNoteCardView extends PlatformElement {
         if (mentionedIds.length > 0) {
             body.mentioned_entity_ids = mentionedIds;
         }
+        this._attachNoteSemanticsToBody(body, Boolean(isCreate));
         return body;
     }
 
@@ -2047,20 +2828,21 @@ export class CRMNoteCardView extends PlatformElement {
             return;
         }
         this._formError = '';
-        const body = this._buildEditBody();
         if (this.note === null) {
             const namespace = this.defaultNamespace;
             if (typeof namespace !== 'string' || namespace.length === 0) {
                 this._formError = this.t('note_edit.err_namespace_required');
                 return;
             }
+            const body = this._buildEditBody(true);
             this._entities.create({
-                entity_type: 'note',
+                entity_type: NOTE_ROOT_ENTITY_TYPE_ID,
                 namespace,
                 ...body,
             });
             return;
         }
+        const body = this._buildEditBody(false);
         this._updateOp.run({
             id: this.note.entity_id,
             body,
@@ -2118,14 +2900,14 @@ export class CRMNoteCardView extends PlatformElement {
     _relatedTone(entity) {
         const type = this._entityKind(entity);
         if (type === 'company' || type === 'organization' || type === 'team') return 'yellow';
-        if (type === 'note' || type === 'event' || type === 'meeting' || type === 'document') return 'orange';
+        if (type === NOTE_ROOT_ENTITY_TYPE_ID || type === 'event' || type === 'meeting' || type === 'document') return 'orange';
         return 'violet';
     }
 
     _relatedIcon(entity) {
         const type = this._entityKind(entity);
         if (type === 'company' || type === 'organization' || type === 'team') return 'building';
-        if (type === 'note') return 'note';
+        if (type === NOTE_ROOT_ENTITY_TYPE_ID) return 'note';
         if (type === 'event' || type === 'meeting') return 'calendar';
         if (type === 'document') return 'folder';
         if (type === 'task') return 'check';
@@ -2295,6 +3077,7 @@ export class CRMNoteCardView extends PlatformElement {
                     <header class="header">
                         <div class="title-block">
                             <h1 class="title">${title}</h1>
+                            ${this._renderViewNoteMetaRibbon()}
                             ${dateText
                                 ? html`<span class="note-date">${this.t('note_view.date_prefix', { date: dateText })}</span>`
                                 : ''}
@@ -2567,6 +3350,8 @@ export class CRMNoteCardView extends PlatformElement {
                         </div>
                     </header>
 
+                    ${this._renderEditNoteSemantics()}
+
                     <div class="edit-field">
                         <label class="edit-label">${this.t('note_edit.field_description')}</label>
                         <div class="description-edit-wrap">
@@ -2581,8 +3366,8 @@ export class CRMNoteCardView extends PlatformElement {
                                 type="button"
                                 class="voice-btn ${this._voiceState}"
                                 title=${this._voiceState === 'recording'
-                                    ? this.t('note_edit.voice_stop')
-                                    : this.t('note_edit.voice_start')}
+                                    ? this.t('note_edit.voice_dictation_stop')
+                                    : this.t('note_edit.voice_dictation_start')}
                                 @click=${() => this._onVoiceToggle()}
                                 ?disabled=${this._voiceState === 'processing'}
                             >

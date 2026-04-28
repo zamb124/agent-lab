@@ -616,6 +616,7 @@ export class CRMNotePage extends PlatformPage {
                 <div class="body edit">
                     <crm-note-card-view
                         .note=${note}
+                        .card=${this._card}
                         mode="edit"
                         @cancel=${this._onEditCancel}
                         @saved=${this._onEditSaved}

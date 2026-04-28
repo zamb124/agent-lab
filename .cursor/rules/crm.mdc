@@ -31,6 +31,31 @@ description: "CRM NetWorkle система управления сущностя
 - Набор типов сущностей в каждом пространстве задаётся бизнес-задачей.
 - **Каждая сущность жёстко принадлежит одному `namespace` внутри `company_id`.**
 
+## Терминология и продуктовая модель
+
+- **Тип сущности (`EntityType` / `entity_type`)** — запись в каталоге: поля, иерархия подтипов (`parent_type_id`), привязка к пространствам через `namespace_ids`.
+- **Задача в узком CRM-смысле (activity)** — to-do с дедлайном и исполнителями; в платформе это по-прежнему **запись `CRMEntity`**, часто с `entity_type=task` и подтипами от `task`.
+- **Объект воронки (deal/lead и т.д.)** — тоже **сущность** с соответствующим типом; «воронка» и стадии описываются отдельно от слова «задача» как activity, чтобы не смешивать канбан сделок и список поручений.
+- **Стадии / pipeline** — не сводятся к одной строке `status` на сущности; расширяемая модель задаётся в настройках пространства (`NamespaceCRMSettings.pipeline_stage_presets` и связанные правила). События переходов стадий — контракт для триггеров автоматизации.
+
+## Навигация сайдбара и настройки пространства
+
+- Дерево основного меню CRM для выбранного `namespace` хранится в **`NamespaceCRMSettings.sidebar_navigation`** (список `SidebarNavEntry`). Значение **`null`** означает: клиент строит меню из разрешённых в пространстве типов (автоветка).
+- Лист задаёт **`route_key`** CRM (`notes`, `entities`, `tasks`, `graph`) и опционально **`search`** (query с `?`) для фильтров `entity_type` / `entity_subtype` на целевых страницах.
+- Редактирование состава меню выполняется **только в карточке пространства** (`space-detail-page`): снимок текущего автодерева или сброс на автоматический режим через **`PUT /crm/api/v1/namespaces/{name}`** с частичным `crm_settings`.
+
+## Доска задач (колонки канбана и `attributes.status`)
+
+- **Источник стадий:** `NamespaceCRMSettings.pipeline_stage_presets` — словарь **`TaskBoardPreset`** по ключу доски (строка). Схема стадии — **`BoardStage`**: `id` (стабильный, в `attributes.status`), `label`, опционально `color`. Типы описаны в **`core/models/identity_models.py`**.
+- **Ключ доски (`board_key`):** единственная реализация — **`apps/crm/services/task_board_presets.task_board_key(entity_type, entity_subtype)`**. Значение: `"task"` или `"task:<entity_subtype>"` при `entity_type=task` и подтипе с родителем `task`. Пресеты в JSON namespace должны использовать те же строки ключей.
+- **Резолвер:** **`resolve_task_board_stages(crm_settings, board_key)`** возвращает упорядоченный список стадий; если ключа нет в `pipeline_stage_presets`, подставляется **`default_task_board_stages()`** только на бэкенде. Валидация **`attributes.status`** при создании/обновлении сущности-задачи выполняется тем же контуром (**`EntityService`**, допустимые id — **`resolve_allowed_task_status_ids`**); неверный id → **422**.
+- **API:** **`GET .../namespaces/{name}/task-board-stages`** (query `entity_subtype`) — стадии для канбана; **`GET .../namespaces/{name}/task-board-editor-state`** — список досок для UI настроек пространства. Сохранение пресетов — **`PUT .../namespaces/{name}`** с `crm_settings.pipeline_stage_presets` (частичный merge полей `crm_settings`, см. **`apps/crm/api/namespaces.py`**).
+- **Фронтенд:** канбан **`tasks-page`** и редактор в **`space-detail-page`** не содержат каноничных списков стадий и не дублируют алгоритм `board_key` / дефолтных колонок; данные — только из ответов API / фабрик (`crm/task_board_stages`, `crm/task_board_editor_state`).
+
+## Автоматизация и привязка flow (контракт хранения)
+
+- Поля **`default_flow_by_entity_type`**, **`automation_rules`** (`NamespaceAutomationRule`: `entity_type`, `trigger`, `action`, опционально `flow_id`) и **`pipeline_stage_presets`** в `NamespaceCRMSettings` задают конфигурацию уровня пространства. Исполнение команд (запуск flow, уведомления, смена полей) согласуется с **`flows`** / **TaskIQ** и правами доступа; отдельный рантайм-триггер в CRM подключается при реализации сценариев.
+
 ## Модель данных
 
 ### CRMEntity (`apps/crm/db/models.py`)
@@ -143,16 +168,17 @@ EntityType(
 AI использует только типы с `prompt != None` (`mentions`, `related_to`, `parent_of`, `assigned_to`, `belongs_to`, `follows_up`, `blocks`).
 `POST /relationships` валидирует `relationship_type` — несуществующий → 422.
 
-Константы в `apps/crm/constants_graph.py`: `NOTE_VOICE_RELATIONSHIP_TYPE`, `IN_CONTEXT_RELATIONSHIP_TYPE`, `BELONGS_TO_RELATIONSHIP_TYPE`, `NOTE_FAMILY_ENTITY_TYPE_IDS`, `PLATFORM_USER_ID_ATTR`, `PLATFORM_COMPANY_ID_ATTR`, `PLATFORM_NAMESPACE_ATTR`.
+Константы в `apps/crm/constants_graph.py`: `NOTE_ROOT_ENTITY_TYPE_ID`, `TASK_ROOT_ENTITY_TYPE_ID`, `MEETING_ENTITY_TYPE_ID`, `CALL_ENTITY_TYPE_ID`, `NOTE_FAMILY_ENTITY_TYPE_IDS`, `NOTE_VOICE_RELATIONSHIP_TYPE`, `IN_CONTEXT_RELATIONSHIP_TYPE`, `BELONGS_TO_RELATIONSHIP_TYPE`, `PLATFORM_USER_ID_ATTR`, `PLATFORM_COMPANY_ID_ATTR`, `PLATFORM_NAMESPACE_ATTR`. На фронте CRM корни типов: `apps/crm/ui/constants/entity-type-ids.js`.
 
 ## Namespace и пространства
 
 - `namespace` = строковый идентификатор области данных внутри компании; дефолт `"default"`.
-- Каждый `EntityType` содержит `namespace_ids` — список разрешённых пространств; `"*"` = все. Проверяется при создании/обновлении сущности.
-- Системное семейство заметок `note` / `meeting` / `call` (`NOTE_FAMILY_ENTITY_TYPE_IDS`) считается разрешённым в **любом** namespace: проверки `EntityService._ensure_entity_type_allowed_in_namespace` и `resolve_filter_field_types` для этих `type_id` не опираются на `namespace_ids`. При `PUT /namespaces/{name}` с `allowed_type_ids` множество запроса дополняется этими `type_id`, чтобы их нельзя было убрать из пространства через API.
+- Каждый `EntityType` содержит `namespace_ids` — список разрешённых пространств; `"*"` = все; доступ к списку для логики без неявных дефолтов — метод `namespace_ids_list()` в [`apps/crm/db/models.py`](apps/crm/db/models.py) (`list[str]`, иначе `ValueError`). Проверяется при создании/обновлении сущности.
+- Корневой тип `NOTE_ROOT_ENTITY_TYPE_ID` при создании сущности **без** `entity_subtype` не проверяется по `namespace_ids` в `EntityService._ensure_entity_type_allowed_in_namespace`. Подтипы заметок и сущности с `entity_type` не равным корню заметки проверяются по `namespace_ids`. В `resolve_filter_field_types` исключение по `namespace_ids` только для `type_id == NOTE_ROOT_ENTITY_TYPE_ID`. При `PUT /namespaces/{name}` к `allowed_type_ids` добавляются `NOTE_ROOT_ENTITY_TYPE_ID` и `TASK_ROOT_ENTITY_TYPE_ID`, чтобы их нельзя было снять через API; подтипы task и семейства заметок в это ядро не входят.
 - `vector_documents` фильтруется по `namespace_id = "{company_id}_{namespace}"`.
 - Модалка создания пространства (`namespace-modal`): имя + описание + `template_id` (список из БД, дефолт `'sales'`). `POST /namespaces` требует `template_id`.
 - `spaces-page`: редактирование описания, разрешённых типов, CRM-настроек, грантов. Добавление типов — всегда; удаление — только если нет сущностей (`locked_type_ids`).
+- Поля голоса заметки из `NamespaceCRMSettings` (`show_note_voice_ui`, `default_note_voice`) редактируются общим блоком `apps/crm/ui/components/namespace-note-defaults-fields.js`; парсинг значений из ответа API — `apps/crm/ui/utils/namespace-crm-note-defaults.js`; i18n секция `namespace_note_defaults` в `crm.json`; страницы `space-detail-page` и `templates-page` (метаданные шаблона сохраняют тем же телом через `crm_settings`).
 - `NamespaceCRMSettings` (в `core/models/identity_models.py`): `show_note_voice_ui`, `default_note_voice: "self"|"none"|"last"`, `default_context_entity_id`.
 
 ### note_voice и in_context

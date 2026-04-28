@@ -10,7 +10,16 @@ let history;
 beforeEach(() => {
     dom = installDomShim();
     const calls = [];
-    history = { _calls: calls, pushState(...args) { calls.push(args); dom.window.location.pathname = String(args[2]); } };
+    history = {
+        _calls: calls,
+        pushState(...args) {
+            calls.push(args);
+            const url = String(args[2]);
+            const q = url.indexOf('?');
+            dom.window.location.pathname = q >= 0 ? url.slice(0, q) : url;
+            dom.window.location.search = q >= 0 ? url.slice(q) : '';
+        },
+    };
     globalThis.history = history;
 });
 afterEach(() => {
@@ -40,6 +49,7 @@ describe('routerEffect: bootstrap', () => {
         await createRouterEffect({ baseUrl: '/sync', routes })(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({}), dispatched));
         const changed = dispatched.find((d) => d.type === CoreEvents.ROUTER_ROUTE_CHANGED);
         expect(changed.payload.routeKey).toBe('dashboard');
+        expect(changed.payload.search).toBe('');
     });
 
     it('match с параметром', async () => {
@@ -65,6 +75,7 @@ describe('routerEffect: NAVIGATE_REQUESTED', () => {
         expect(history._calls[0][2]).toBe('/sync/c/c1');
         const changed = dispatched.find((d) => d.type === CoreEvents.ROUTER_ROUTE_CHANGED);
         expect(changed.payload.routeKey).toBe('channel');
+        expect(changed.payload.search).toBe('');
     });
 
     it('неизвестный routeKey — throw', async () => {
@@ -93,6 +104,8 @@ describe('routerEffect: NAVIGATE_REQUESTED', () => {
             buildCtx(() => ({}), dispatched),
         );
         expect(history._calls[0][2]).toBe('/sync/dashboard?redirect_uri=%2Fsync');
+        const changed = dispatched.find((d) => d.type === CoreEvents.ROUTER_ROUTE_CHANGED);
+        expect(changed.payload.search).toBe('?redirect_uri=%2Fsync');
     });
 
     it('search без ведущего ? — throw', async () => {

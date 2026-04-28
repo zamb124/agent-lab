@@ -119,7 +119,7 @@ async def login_demo(
     target_host = request.headers.get("host", "")
     redirect_url = build_url(
         target_host,
-        "/dashboard",
+        "/dashboard?post_login=1",
         settings.auth.demo.subdomain,
     )
 
@@ -325,13 +325,13 @@ async def _complete_oauth_callback(
         if not company or not company.subdomain:
             redirect_url = build_url(target_host, "/select-company?action=create")
         else:
-            redirect_url = build_url(target_host, "/dashboard", company.subdomain)
+            redirect_url = build_url(target_host, "/dashboard?post_login=1", company.subdomain)
     else:
         active_company_id = result.user.active_company_id
         if active_company_id and active_company_id in result.user.companies:
             company = await auth_service._company_repository.get(active_company_id)
             if company and company.subdomain:
-                redirect_url = build_url(target_host, "/dashboard", company.subdomain)
+                redirect_url = build_url(target_host, "/dashboard?post_login=1", company.subdomain)
             else:
                 redirect_url = build_url(target_host, "/select-company")
         else:

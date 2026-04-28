@@ -16,14 +16,6 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/layout/page-header.js';
 
 const TASK_DND_MIME = 'application/x-crm-task-id';
-const VALID_STATUSES = ['todo', 'in_progress', 'done'];
-
-function _normalizeStatus(value) {
-    if (typeof value === 'string' && VALID_STATUSES.includes(value)) {
-        return value;
-    }
-    return 'todo';
-}
 
 export class CRMTasksPage extends PlatformPage {
     static i18nNamespace = 'crm';
@@ -40,6 +32,7 @@ export class CRMTasksPage extends PlatformPage {
         _dndSourceStatus: { state: true },
         _boardBusy: { state: true },
         _mobileHeaderSearch: { state: true },
+        _boardStages: { state: true },
     };
 
     static styles = [
@@ -195,7 +188,6 @@ export class CRMTasksPage extends PlatformPage {
                 flex: 1;
                 min-height: 0;
                 display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
                 gap: var(--space-3);
                 overflow: auto;
                 transition: filter 0.2s ease, opacity 0.2s ease;
@@ -499,7 +491,7 @@ export class CRMTasksPage extends PlatformPage {
         this._loading = false;
         this._filter = '';
         this._isMobile = false;
-        this._activeStatus = 'todo';
+        this._activeStatus = '';
         this._dragOverStatus = null;
         this._draggingTaskId = null;
         this._dndInsert = null;
@@ -509,15 +501,22 @@ export class CRMTasksPage extends PlatformPage {
         this._suppressTaskClick = false;
         this._mql = null;
         this._onMqlChange = null;
+        this._boardStages = null;
 
         this._lookupOp = this.useOp('crm/entities_lookup');
         this._updateOp = this.useOp('crm/entity_update');
         this._entitiesResource = this.useResource('crm/entities');
+        this._taskBoardOp = this.useOp('crm/task_board_stages');
 
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
             if (!user || typeof user.company_id !== 'string') return null;
             return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
+        });
+        this._routeKeySel = this.select((s) => s.router.routeKey);
+        this._routerSearchSel = this.select((s) => {
+            const raw = s.router.search;
+            return typeof raw === 'string' ? raw : '';
         });
     }
 
@@ -528,9 +527,25 @@ export class CRMTasksPage extends PlatformPage {
         this._onMqlChange = (e) => { this._isMobile = e.matches; };
         this._mql.addEventListener('change', this._onMqlChange);
 
-        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._loadTasks());
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._reloadTasksPage());
+        this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => {
+            if (this._routeKeySel.value !== 'tasks') {
+                return;
+            }
+            this._reloadTasksPage();
+        });
         this.useEvent(this._lookupOp.op.events.SUCCEEDED, (event) => this._onTasksLoaded(event.payload.result));
         this.useEvent(this._lookupOp.op.events.FAILED, () => { this._loading = false; });
+        this.useEvent(this._taskBoardOp.op.events.SUCCEEDED, (event) => {
+            this._onTaskBoardStagesLoaded(event.payload.result);
+        });
+        this.useEvent(this._taskBoardOp.op.events.FAILED, (event) => {
+            this._boardStages = [];
+            this.toast('crm:tasks_page.board_stages_failed', {
+                type: 'error',
+                vars: { message: typeof event.payload.message === 'string' ? event.payload.message : '' },
+            });
+        });
         this.useEvent(this._updateOp.op.events.SUCCEEDED, () => { this._boardBusy = false; this._loadTasks({ silent: true }); });
         this.useEvent(this._updateOp.op.events.FAILED, (event) => {
             this._boardBusy = false;
@@ -539,6 +554,11 @@ export class CRMTasksPage extends PlatformPage {
         });
         this.useEvent(this._entitiesResource.resource.events.CREATED, () => this._loadTasks({ silent: true }));
 
+        this._reloadTasksPage();
+    }
+
+    _reloadTasksPage() {
+        this._loadTaskBoardStages();
         this._loadTasks();
     }
 
@@ -553,6 +573,77 @@ export class CRMTasksPage extends PlatformPage {
         return this._namespaceSel.value;
     }
 
+    /**
+     * Фильтр досок задач по подтипу берётся из query, синхронизированного с роутером
+     * (`state.router.search`), а не из window.location — так create и list используют
+     * один и тот же источник после client-side navigate.
+     */
+    _taskSubtypeFromTasksRouterSearch() {
+        const raw = this._routerSearchSel.value;
+        if (typeof raw !== 'string' || raw.length === 0) {
+            return '';
+        }
+        const sp = new URLSearchParams(raw);
+        const et = sp.get('entity_type');
+        const es = sp.get('entity_subtype');
+        if (es === null || es.length === 0) {
+            return '';
+        }
+        if (et !== null && et.length > 0 && et !== 'task') {
+            return '';
+        }
+        return es;
+    }
+
+    _boardApiNamespace() {
+        const ns = this._currentNamespace();
+        if (ns !== null && typeof ns === 'string' && ns.length > 0) {
+            return ns;
+        }
+        return 'default';
+    }
+
+    _loadTaskBoardStages() {
+        const sub = this._taskSubtypeFromTasksRouterSearch();
+        this._taskBoardOp.run({
+            namespace_name: this._boardApiNamespace(),
+            entity_subtype: sub.length > 0 ? sub : null,
+        });
+    }
+
+    _normalizeStagesFromApi(result) {
+        if (!result || !Array.isArray(result.stages)) {
+            return [];
+        }
+        const out = [];
+        for (const row of result.stages) {
+            if (!row || typeof row !== 'object') {
+                continue;
+            }
+            const id = typeof row.id === 'string' ? row.id.trim() : '';
+            const label = typeof row.label === 'string' ? row.label.trim() : '';
+            if (!id || !label) {
+                continue;
+            }
+            const color = typeof row.color === 'string' && row.color.trim().length > 0 ? row.color.trim() : null;
+            out.push({ id, label, color });
+        }
+        return out;
+    }
+
+    _onTaskBoardStagesLoaded(result) {
+        const stages = this._normalizeStagesFromApi(result);
+        this._boardStages = stages;
+        if (stages.length === 0) {
+            this.toast('crm:tasks_page.board_stages_empty', { type: 'error' });
+            return;
+        }
+        const ids = new Set(stages.map((s) => s.id));
+        if (!ids.has(this._activeStatus)) {
+            this._activeStatus = stages[0].id;
+        }
+    }
+
     _loadTasks(options) {
         const silent = options && options.silent === true;
         if (!silent) {
@@ -565,6 +656,10 @@ export class CRMTasksPage extends PlatformPage {
         };
         if (namespace !== null) {
             payload.namespace = namespace;
+        }
+        const sub = this._taskSubtypeFromTasksRouterSearch();
+        if (sub.length > 0) {
+            payload.entity_subtype = sub;
         }
         this._lookupOp.run(payload);
     }
@@ -592,34 +687,45 @@ export class CRMTasksPage extends PlatformPage {
     }
 
     _taskStatus(task) {
+        const board = this._boardStages;
         const attrs = task && task.attributes;
-        return _normalizeStatus(attrs ? attrs.status : null);
+        const raw = attrs && typeof attrs.status === 'string' ? attrs.status.trim() : '';
+        if (!board || board.length === 0) {
+            return raw.length > 0 ? raw : '';
+        }
+        const allowed = new Set(board.map((s) => s.id));
+        const first = board[0].id;
+        if (raw.length > 0 && allowed.has(raw)) {
+            return raw;
+        }
+        return first;
     }
 
     _nextStatus(status) {
-        if (status === 'todo') return 'in_progress';
-        if (status === 'in_progress') return 'done';
-        return 'todo';
+        const b = this._boardStages;
+        if (!b || b.length === 0) {
+            throw new Error('CRMTasksPage: доска стадий не загружена');
+        }
+        const idx = b.findIndex((s) => s.id === status);
+        const i = idx >= 0 ? idx : 0;
+        const nextIdx = (i + 1) % b.length;
+        return b[nextIdx].id;
     }
 
-    _nextStatusLabel(status) {
-        if (status === 'todo') return this.t('tasks_page.next_to_progress');
-        if (status === 'in_progress') return this.t('tasks_page.next_to_done');
-        return this.t('tasks_page.next_revert');
+    _nextStatusLabel() {
+        return this.t('tasks_page.next_status');
     }
 
-    _nextStatusIcon(status) {
-        if (status === 'todo') return 'play';
-        if (status === 'in_progress') return 'check';
-        return 'refresh';
+    _nextStatusIcon() {
+        return 'arrow-right';
     }
 
     _statusColumns() {
-        return [
-            { id: 'todo', label: this.t('tasks_page.column_todo') },
-            { id: 'in_progress', label: this.t('tasks_page.column_in_progress') },
-            { id: 'done', label: this.t('tasks_page.column_done') },
-        ];
+        const b = this._boardStages;
+        if (!b || b.length === 0) {
+            return [];
+        }
+        return b.map((s) => ({ id: s.id, label: s.label, color: s.color }));
     }
 
     _openTask(taskId) {
@@ -627,6 +733,11 @@ export class CRMTasksPage extends PlatformPage {
     }
 
     _createTask() {
+        const cols = this._statusColumns();
+        if (cols.length === 0) {
+            this.toast('crm:tasks_page.board_not_ready', { type: 'error' });
+            return;
+        }
         const namespace = this._currentNamespace();
         const body = {
             entity_type: 'task',
@@ -634,8 +745,12 @@ export class CRMTasksPage extends PlatformPage {
             description: '',
             namespace: namespace === null ? 'default' : namespace,
             priority: 'medium',
-            attributes: { status: 'todo' },
+            attributes: { status: cols[0].id },
         };
+        const sub = this._taskSubtypeFromTasksRouterSearch();
+        if (sub.length > 0) {
+            body.entity_subtype = sub;
+        }
         this._entitiesResource.create(body);
     }
 
@@ -828,7 +943,7 @@ export class CRMTasksPage extends PlatformPage {
                         <button
                             type="button"
                             class="mobile-header-icon-btn"
-                            @click=${() => this._loadTasks()}
+                            @click=${() => this._reloadTasksPage()}
                             title=${this.t('refresh', {}, 'common')}
                         >
                             <platform-icon name="refresh" size="18"></platform-icon>
@@ -858,11 +973,16 @@ export class CRMTasksPage extends PlatformPage {
     render() {
         const taskStatuses = this._statusColumns();
         const tasks = this._filteredTasks();
-        const tasksByStatus = {
-            todo: tasks.filter((task) => this._taskStatus(task) === 'todo'),
-            in_progress: tasks.filter((task) => this._taskStatus(task) === 'in_progress'),
-            done: tasks.filter((task) => this._taskStatus(task) === 'done'),
-        };
+        const tasksByStatus = {};
+        for (const s of taskStatuses) {
+            tasksByStatus[s.id] = tasks.filter((task) => this._taskStatus(task) === s.id);
+        }
+        const n = taskStatuses.length;
+        const boardGridStyleStr = n > 0
+            ? `grid-template-columns: repeat(${n}, minmax(0, 1fr))`
+            : 'grid-template-columns: minmax(0, 1fr)';
+        const boardGridPlaceholderStr = 'grid-template-columns: minmax(0, 1fr)';
+        const boardBlocked = this._boardStages !== null && taskStatuses.length === 0;
 
         return html`
             ${this._isMobile ? this._renderMobileTasksHeader() : nothing}
@@ -881,12 +1001,15 @@ export class CRMTasksPage extends PlatformPage {
                         />
                     </label>
                     <div class="toolbar-actions">
-                        <button class="icon-btn-toolbar" type="button" @click=${() => this._loadTasks()} title=${this.t('refresh', {}, 'common')}>
+                        <button class="icon-btn-toolbar" type="button" @click=${() => this._reloadTasksPage()} title=${this.t('refresh', {}, 'common')}>
                             <platform-icon name="refresh" size="16"></platform-icon>
                         </button>
                         <button class="cta-btn" type="button" @click=${this._createTask}>${this.t('create', {}, 'common')}</button>
                     </div>
                 </div>
+                ${boardBlocked ? html`
+                    <div class="empty" style="padding:var(--space-3) 0;">${this.t('tasks_page.board_blocked')}</div>
+                ` : html`
                 <div class="status-tabs">
                     ${taskStatuses.map((s) => html`
                         <button
@@ -899,11 +1022,22 @@ export class CRMTasksPage extends PlatformPage {
                         </button>
                     `)}
                 </div>
+                `}
             </div>
 
             <div class="board-shell ${this._boardBusy ? 'busy' : ''}">
+                ${this._boardStages === null ? html`
+                    <div class="board" style=${boardGridPlaceholderStr}>
+                        <div class="empty">${this.t('loading', {}, 'common')}</div>
+                    </div>
+                ` : boardBlocked ? html`
+                    <div class="board" style=${boardGridPlaceholderStr}>
+                        <div class="empty">${this.t('tasks_page.board_blocked')}</div>
+                    </div>
+                ` : html`
                 <div
                     class="board"
+                    style=${boardGridStyleStr}
                     aria-busy=${this._boardBusy ? 'true' : 'false'}
                     aria-live=${this._boardBusy ? 'polite' : 'off'}
                 >
@@ -960,9 +1094,9 @@ export class CRMTasksPage extends PlatformPage {
                                                 </div>
                                                 <div class="task-footer">
                                                     <span class="task-priority">${task.priority ? task.priority : 'medium'}</span>
-                                                    <button class="task-move-btn" type="button" @click=${(e) => { e.stopPropagation(); this._moveTask(task, this._nextStatus(s.id)); }}>
-                                                        <platform-icon name="${this._nextStatusIcon(s.id)}" size="12"></platform-icon>
-                                                        ${this._nextStatusLabel(s.id)}
+                                                    <button class="task-move-btn" type="button" @click=${(e) => { e.stopPropagation(); this._moveTask(task, this._nextStatus(this._taskStatus(task))); }}>
+                                                        <platform-icon name="${this._nextStatusIcon()}" size="12"></platform-icon>
+                                                        ${this._nextStatusLabel()}
                                                     </button>
                                                 </div>
                                             </article>
@@ -983,6 +1117,7 @@ export class CRMTasksPage extends PlatformPage {
                         <glass-spinner size="lg"></glass-spinner>
                     </div>
                 ` : nothing}
+                `}
             </div>
         `;
     }

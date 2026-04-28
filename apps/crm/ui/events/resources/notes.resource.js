@@ -47,6 +47,9 @@ export const notesListResource = createCursorList({
         if (typeof filters.namespace === 'string' && filters.namespace.length > 0) {
             body.namespace = filters.namespace;
         }
+        if (typeof filters.entity_subtype === 'string' && filters.entity_subtype.length > 0) {
+            body.entity_subtype = filters.entity_subtype;
+        }
         if (typeof filters.q === 'string' && filters.q.length > 0) {
             body.query = filters.q;
         }

@@ -1,23 +1,21 @@
 /**
  * CRMSidebar — навигация и SPACE-селектор сервиса CRM на event-driven каноне.
  *
- * Логотип «NetWorkle» с градиентом через CSS-токены core
- * (`--sidebar-logo-text-gradient`, `--sidebar-logo-text-clip`,
- * `--sidebar-logo-text-fill`).
- *
- * SPACE-селектор: <select> со списком namespaces из фабрики `crm/namespaces`
- * (autoload), кнопка `+` открывает модалку `crm.namespace_create`. Выбор
- * пишется в bus через `setPlatformNamespaceSelection`, ui.effect персистит
- * в localStorage и эмитит `UI_NAMESPACE_CHANGED` + `UI_DOCUMENTS_RELOAD_REQUESTED`,
- * на которые подписаны страницы.
- *
- * Навигация: две nav-секции — Notes/Entities/Tasks/Graph и ORGANIZATION с
- * Access requests / AI Analysis / Settings. Подсветка активного по
- * `state.router.routeKey`.
+ * SPACE-селектор: фабрика `crm/namespaces`, выбор через `setPlatformNamespaceSelection`.
+ * При выбранном конкретном пространстве основное меню — дерево из
+ * `crm_settings.sidebar_navigation`: дети секций заметок / задач / сущностей
+ * каждый рендер синхронизируются с каноном (`buildDefaultSidebarNav`), чтобы
+ * новые типы и иерархия `parent_type_id` не терялись в старом снимке.
+ * Порядок «Все …» — `ensureCrmSidebarNavAllLeavesFirst`, иконки —
+ * `enrichSidebarNavWithEntityTypeIcons`.
+ * Режим «Все пространства» — плоский список пунктов (notes / entities / tasks / graph).
+ * Типы для дерева: GET `crm/entity_types` с `?namespace=…`, если в селекторе выбрано
+ * конкретное пространство; в режиме «Все пространства» — без фильтра (типы компании).
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { CoreEvents } from '@platform/lib/events/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import {
@@ -25,25 +23,135 @@ import {
     setPlatformNamespaceSelection,
 } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
+import '@platform/lib/components/layout/platform-sidebar-nav-tree.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-notification-manager.js';
+import {
+    buildDefaultSidebarNav,
+    enrichSidebarNavWithEntityTypeIcons,
+    ensureCrmSidebarNavAllLeavesFirst,
+    mapSidebarNavFromApi,
+    mergeCrmSidebarNavMissingGroups,
+    replaceCrmSidebarGroupChildrenFromCanonical,
+} from '../utils/build-default-sidebar-nav.js';
 
 const PRIMARY_NAV = [
-    { route: 'notes',    icon: 'list',     label_key: 'sidebar.nav.notes' },
+    { route: 'notes', icon: 'list', label_key: 'sidebar.nav.notes' },
     { route: 'entities', icon: 'database', label_key: 'sidebar.nav.entities' },
-    { route: 'tasks',    icon: 'check',    label_key: 'sidebar.nav.tasks' },
-    { route: 'graph',    icon: 'share',    label_key: 'sidebar.nav.graph' },
+    { route: 'tasks', icon: 'check', label_key: 'sidebar.nav.tasks' },
+    { route: 'graph', icon: 'share', label_key: 'sidebar.nav.graph' },
 ];
 
 const ORG_NAV = [
-    { route: 'access_requests',    icon: 'lock',     label_key: 'sidebar.nav.access_requests' },
-    { route: 'namespace_imports',  icon: 'ai',       label_key: 'sidebar.nav.ai_analysis' },
-    { route: 'settings',           icon: 'settings', label_key: 'sidebar.nav.settings' },
+    { route: 'access_requests', icon: 'lock', label_key: 'sidebar.nav.access_requests' },
+    { route: 'namespace_imports', icon: 'ai', label_key: 'sidebar.nav.ai_analysis' },
+    { route: 'settings', icon: 'settings', label_key: 'sidebar.nav.settings' },
 ];
 
 const SETTINGS_ALIASES = new Set(['settings', 'spaces', 'templates', 'relationship_types']);
+
+/**
+ * @param {unknown} user
+ * @param {Record<string, string>} selectionByCompany
+ * @returns {'all' | string}
+ */
+function resolveCrmSidebarNamespaceSelection(user, selectionByCompany) {
+    if (!user || typeof user.company_id !== 'string') {
+        return 'all';
+    }
+    const companyId = user.company_id.trim();
+    if (companyId.length === 0) {
+        return 'all';
+    }
+    if (Object.prototype.hasOwnProperty.call(selectionByCompany, companyId)) {
+        const entry = selectionByCompany[companyId];
+        return entry === 'all' ? 'all' : entry;
+    }
+    return getPlatformNamespaceSidebarSelection(companyId);
+}
+
+/**
+ * @param {string} nsName
+ * @param {Array<Record<string, unknown>>} entityTypesItems
+ * @returns {string[]}
+ */
+function allowedTypeIdsForSpace(nsName, entityTypesItems) {
+    if (typeof nsName !== 'string' || nsName.length === 0) {
+        throw new Error('allowedTypeIdsForSpace: nsName required');
+    }
+    const items = Array.isArray(entityTypesItems) ? entityTypesItems : [];
+    const out = [];
+    for (const t of items) {
+        if (!t || typeof t.type_id !== 'string' || t.type_id.length === 0) {
+            continue;
+        }
+        const ns = t.namespace_ids;
+        if (!Array.isArray(ns)) {
+            continue;
+        }
+        const inThisNamespace = ns.includes(nsName) || ns.includes('*');
+        if (!inThisNamespace) {
+            continue;
+        }
+        out.push(t.type_id);
+    }
+    return out;
+}
+
+/**
+ * @param {string} routeKey
+ * @param {string} locationSearch
+ * @returns {string}
+ */
+function crmNavActiveTail(routeKey, locationSearch) {
+    if (typeof routeKey !== 'string' || routeKey.length === 0) {
+        return '';
+    }
+    let q = typeof locationSearch === 'string' ? locationSearch : '';
+    if (q === '?') {
+        q = '';
+    }
+    if (q.length > 0 && !q.startsWith('?')) {
+        throw new Error('crmNavActiveTail: locationSearch must start with ?');
+    }
+    if (q.length === 0) {
+        return routeKey;
+    }
+    return `${routeKey}${q}`;
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} nodes
+ * @param {string} routeKey
+ * @param {string} searchNormalized
+ * @returns {string}
+ */
+function findNavLeafId(nodes, routeKey, searchNormalized) {
+    const list = Array.isArray(nodes) ? nodes : [];
+    for (const n of list) {
+        const ch = n.children;
+        if (Array.isArray(ch) && ch.length > 0) {
+            const id = findNavLeafId(ch, routeKey, searchNormalized);
+            if (typeof id === 'string' && id.length > 0) {
+                return id;
+            }
+            continue;
+        }
+        if (typeof n.routeKey !== 'string') {
+            continue;
+        }
+        if (n.routeKey !== routeKey) {
+            continue;
+        }
+        const sch = typeof n.search === 'string' ? n.search : '';
+        if (sch === searchNormalized) {
+            return typeof n.id === 'string' ? n.id : '';
+        }
+    }
+    return '';
+}
 
 export class CRMSidebar extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -216,14 +324,55 @@ export class CRMSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
+        this._onPopState = () => this.requestUpdate();
         this._routeKeySel = this.select((s) => s.router.routeKey);
         this._authSel = this.select((s) => s.auth.user);
         this._namespaceSelectionByCompany = this.select((s) => s.ui.namespace.selectionByCompany);
         this._namespaces = this.useResource('crm/namespaces', { autoload: true });
+        this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
     }
 
-    _navigate(routeKey) {
-        this.navigate(routeKey);
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('popstate', this._onPopState);
+        }
+        this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => this.requestUpdate());
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
+            this._reloadEntityTypesForSidebar();
+            this.requestUpdate();
+        });
+        this.useEvent(CoreEvents.AUTH_USER_LOADED, () => this._reloadEntityTypesForSidebar());
+        this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, () => this._reloadEntityTypesForSidebar());
+        this._reloadEntityTypesForSidebar();
+    }
+
+    disconnectedCallback() {
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('popstate', this._onPopState);
+        }
+        super.disconnectedCallback();
+    }
+
+    _navigate(routeKey, navigationOptions) {
+        this.navigate(routeKey, {}, navigationOptions);
+        this.renderRoot?.querySelector('platform-service-sidebar')?.closeMobile?.();
+    }
+
+    _onNavTreePick(e) {
+        const d = e.detail;
+        if (!d || typeof d.routeKey !== 'string' || d.routeKey.length === 0) {
+            throw new Error('CRMSidebar: pick requires routeKey');
+        }
+        const rawSearch = typeof d.search === 'string' ? d.search : '';
+        if (rawSearch.length > 0 && !rawSearch.startsWith('?')) {
+            throw new Error('CRMSidebar: pick.search must start with ?');
+        }
+        const opts = {};
+        if (rawSearch.length > 0) {
+            opts.search = rawSearch;
+        }
+        this.navigate(d.routeKey, {}, Object.keys(opts).length > 0 ? opts : undefined);
         this.renderRoot?.querySelector('platform-service-sidebar')?.closeMobile?.();
     }
 
@@ -234,6 +383,17 @@ export class CRMSidebar extends PlatformElement {
         }
         const value = event.target.value;
         setPlatformNamespaceSelection(user.company_id, value === '' ? null : value);
+    }
+
+    _reloadEntityTypesForSidebar() {
+        const user = this._authSel.value;
+        const map = this._namespaceSelectionByCompany.value;
+        const resolved = resolveCrmSidebarNamespaceSelection(user, map);
+        if (resolved === 'all') {
+            this._entityTypes.load(null);
+            return;
+        }
+        this._entityTypes.load({ namespace: resolved });
     }
 
     _openCreateNamespace() {
@@ -269,19 +429,69 @@ export class CRMSidebar extends PlatformElement {
         `;
     }
 
+    /**
+     * @param {string} spaceName
+     * @returns {Array<Record<string, unknown>>}
+     */
+    _sidebarTreeNodesForSpace(spaceName) {
+        const items = this._namespaces.items;
+        const nsRow = items.find((row) => row && row.name === spaceName);
+        const rawSettings = nsRow && nsRow.crm_settings && typeof nsRow.crm_settings === 'object'
+            ? nsRow.crm_settings
+            : null;
+        const rawNav = rawSettings && Array.isArray(rawSettings.sidebar_navigation)
+            ? rawSettings.sidebar_navigation
+            : null;
+        const fromApi = mapSidebarNavFromApi(rawNav);
+        const allowed = allowedTypeIdsForSpace(spaceName, this._entityTypes.items);
+        const labels = {
+            groupNotes: this.t('sidebar.nav_group_notes'),
+            groupTasks: this.t('sidebar.nav_group_tasks'),
+            groupEntities: this.t('sidebar.nav_group_entities'),
+            allNotes: this.t('sidebar.nav_all_notes'),
+            allTasks: this.t('sidebar.nav_all_tasks'),
+            allEntities: this.t('sidebar.nav_all_entities'),
+            graph: this.t('sidebar.nav.graph'),
+        };
+        const entityTypesItems = this._entityTypes.items;
+        const canonical = buildDefaultSidebarNav({
+            allowedTypeIds: allowed,
+            entityTypes: entityTypesItems,
+            labels,
+        });
+        let base;
+        if (fromApi !== null && fromApi.length > 0) {
+            const patched = replaceCrmSidebarGroupChildrenFromCanonical(fromApi, canonical);
+            base = mergeCrmSidebarNavMissingGroups(patched, canonical);
+        } else {
+            base = canonical;
+        }
+        return enrichSidebarNavWithEntityTypeIcons(
+            ensureCrmSidebarNavAllLeavesFirst(base, labels),
+            entityTypesItems,
+        );
+    }
+
     render() {
         const user = this._authSel.value;
-        const companyId = user && typeof user.company_id === 'string' ? user.company_id : null;
         const map = this._namespaceSelectionByCompany.value;
-        let resolved;
-        if (companyId && Object.prototype.hasOwnProperty.call(map, companyId)) {
-            const entry = map[companyId];
-            resolved = entry === 'all' ? 'all' : entry;
-        } else {
-            resolved = companyId ? getPlatformNamespaceSidebarSelection(companyId) : 'all';
-        }
+        const resolved = resolveCrmSidebarNamespaceSelection(user, map);
         const selectValue = resolved === 'all' ? '' : resolved;
         const items = this._namespaces.items;
+
+        const routeKey = this._routeKeySel.value;
+        const locSearch = typeof window !== 'undefined' ? window.location.search : '';
+        const searchNorm = typeof locSearch === 'string' ? locSearch : '';
+        const activeTail = typeof routeKey === 'string' && routeKey.length > 0
+            ? crmNavActiveTail(routeKey, searchNorm)
+            : '';
+
+        const treeNodes = selectValue !== ''
+            ? this._sidebarTreeNodesForSpace(selectValue)
+            : null;
+        const activeItemId = treeNodes !== null && typeof routeKey === 'string' && routeKey.length > 0
+            ? findNavLeafId(treeNodes, routeKey, searchNorm)
+            : '';
 
         return html`
             <platform-service-sidebar
@@ -300,7 +510,7 @@ export class CRMSidebar extends PlatformElement {
                             <option value="">${this.t('sidebar.all_namespaces')}</option>
                             ${items.map((ns) => html`
                                 <option value=${ns.name} ?selected=${ns.name === selectValue}>
-                                    ${ns.title || ns.name}
+                                    ${typeof ns.title === 'string' && ns.title.length > 0 ? ns.title : ns.name}
                                 </option>
                             `)}
                         </select>
@@ -325,9 +535,21 @@ export class CRMSidebar extends PlatformElement {
                     </div>
                 </div>
 
-                <div class="nav-section">
-                    ${PRIMARY_NAV.map((item) => this._renderNavItem(item))}
-                </div>
+                ${treeNodes === null ? html`
+                    <div class="nav-section">
+                        ${PRIMARY_NAV.map((item) => this._renderNavItem(item))}
+                    </div>
+                ` : html`
+                    <div class="nav-section">
+                        <platform-sidebar-nav-tree
+                            .nodes=${treeNodes}
+                            active-item-id=${activeItemId}
+                            active-path=${activeTail}
+                            ?collapsed=${this.collapsed}
+                            @pick=${this._onNavTreePick}
+                        ></platform-sidebar-nav-tree>
+                    </div>
+                `}
 
                 <div class="nav-section">
                     <div class="nav-title">${this.t('sidebar.org_section')}</div>

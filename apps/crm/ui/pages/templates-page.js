@@ -13,9 +13,11 @@
  *  - useOp('crm/template_schema_options') — загрузка опций схемы (silent).
  *  - useOp('crm/template_type_upsert') — upsert типа в шаблоне.
  *  - useOp('crm/template_type_delete') — удаление типа.
+ *  - useOp('crm/template_task_board_editor_state') — GET состояния редакторов досок (silent).
  *
  * После CREATE/REMOVE/UPSERT/DELETE — перезагружаем детали выбранного
  * шаблона, чтобы отрисовать актуальный список типов.
+ * Стадии досок сохраняются через template_update с body.crm_settings.pipeline_stage_presets.
  */
 
 import { html, css } from 'lit';
@@ -24,14 +26,22 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-palette-color-picker.js';
 import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 import '../components/entity-type-editor.js';
+import '../components/namespace-note-defaults-fields.js';
+import {
+    normalizeDefaultNoteVoiceMode,
+    parseNoteVoiceDefaultsFromCrmSettings,
+} from '../utils/namespace-crm-note-defaults.js';
 import {
     normalizeSchemaRows,
     buildSchemaFromRows,
 } from '../components/schema-field-builder.js';
+import { entityTypeNoteSubtreeLocked } from '../utils/entity-type-note-subtree-lock.js';
 
 const DEFAULT_TYPE_DRAFT = Object.freeze({
     type_id: '',
@@ -46,6 +56,8 @@ const DEFAULT_TYPE_DRAFT = Object.freeze({
     color: '',
     is_event: false,
     check_duplicates: true,
+    is_context_anchor: false,
+    is_voice_target: false,
     weight_coefficient: '1.0',
 });
 
@@ -80,6 +92,8 @@ export class CRMTemplatesPage extends PlatformPage {
         _typeFormOpen: { state: true },
         _metaDraft: { state: true },
         _schemaOptions: { state: true },
+        _taskBoardDraft: { state: true },
+        _taskBoardSaveBusy: { state: true },
     };
 
     static styles = [
@@ -386,6 +400,77 @@ export class CRMTemplatesPage extends PlatformPage {
                     grid-template-columns: 1fr;
                 }
             }
+
+            .center {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-3);
+                padding: var(--space-6);
+                color: var(--text-tertiary);
+            }
+
+            .templates-stack {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
+            }
+
+            .task-board-board {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-md);
+                background: var(--crm-surface-muted);
+            }
+            .task-board-board-head {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .task-board-board-head-top {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+            .task-board-board-title {
+                font-weight: 600;
+                color: var(--text-primary);
+                min-width: 0;
+            }
+            .task-board-add-stage {
+                flex-shrink: 0;
+                padding: var(--space-2);
+                min-width: 40px;
+                min-height: 40px;
+            }
+            .stage-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) auto;
+                gap: var(--space-2);
+                align-items: center;
+            }
+            @media (max-width: 720px) {
+                .stage-row {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .stage-row-actions {
+                display: inline-flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                justify-content: flex-end;
+            }
+            .stage-color-picker {
+                min-width: 0;
+            }
         `,
     ];
 
@@ -399,6 +484,8 @@ export class CRMTemplatesPage extends PlatformPage {
         this._typeFormOpen = false;
         this._metaDraft = null;
         this._schemaOptions = null;
+        this._taskBoardDraft = null;
+        this._taskBoardSaveBusy = false;
         this._creatingTemplate = false;
         this._savingMeta = false;
         this._savingType = false;
@@ -409,6 +496,7 @@ export class CRMTemplatesPage extends PlatformPage {
         this._schemaOptionsOp = this.useOp('crm/template_schema_options');
         this._upsertTypeOp = this.useOp('crm/template_type_upsert');
         this._deleteTypeOp = this.useOp('crm/template_type_delete');
+        this._templateTaskBoardEditorStateOp = this.useOp('crm/template_task_board_editor_state');
     }
 
     connectedCallback() {
@@ -419,6 +507,29 @@ export class CRMTemplatesPage extends PlatformPage {
                 return;
             }
             this._schemaOptions = event.payload.result;
+        });
+        this.useEvent(this._templateTaskBoardEditorStateOp.op.events.SUCCEEDED, (event) => {
+            const r = event.payload.result;
+            const boards = r && Array.isArray(r.boards) ? r.boards : [];
+            this._taskBoardDraft = boards
+                .map((b) => {
+                    const board_key = typeof b.board_key === 'string' ? b.board_key : '';
+                    const label = typeof b.label === 'string' ? b.label : '';
+                    const stagesRaw = Array.isArray(b.stages) ? b.stages : [];
+                    const stages = stagesRaw.map((s) => {
+                        const id = typeof s.id === 'string' ? s.id : '';
+                        const lb = typeof s.label === 'string' ? s.label : '';
+                        const color = typeof s.color === 'string' ? s.color : '';
+                        return { id, label: lb, color };
+                    });
+                    return { board_key, label, stages };
+                })
+                .filter((row) => row.board_key.length > 0);
+        });
+        this.useEvent(this._templateTaskBoardEditorStateOp.op.events.FAILED, (event) => {
+            this._taskBoardDraft = null;
+            const msg = event.payload && typeof event.payload.message === 'string' ? event.payload.message : '';
+            this.toast('crm:space_detail_page.task_board_load_failed', { type: 'error', vars: { message: msg } });
         });
         this.useEvent(this._templates.resource.events.LIST_LOADED, () => {
             this._maybeAutoSelect();
@@ -444,6 +555,8 @@ export class CRMTemplatesPage extends PlatformPage {
                 this._typeDraft = makeTypeDraft();
                 this._editingTypeId = '';
                 this._typeFormOpen = false;
+                this._taskBoardDraft = null;
+                this._taskBoardSaveBusy = false;
             }
             this._deletingTemplate = false;
         });
@@ -452,21 +565,34 @@ export class CRMTemplatesPage extends PlatformPage {
             if (!item || item.template_id !== this._selectedTemplateId) {
                 return;
             }
+            const cs =
+                item.crm_settings !== undefined
+                && item.crm_settings !== null
+                && typeof item.crm_settings === 'object'
+                    ? item.crm_settings
+                    : null;
+            const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
             this._metaDraft = {
                 name: item.name || '',
                 description: item.description || '',
                 icon: item.icon || 'folder',
+                default_note_voice: p.defaultNoteVoiceMode,
+                show_note_voice_ui: p.showNoteVoiceUi,
             };
+            this._loadTemplateTaskBoardEditorState();
         });
         this.useEvent(this._updateMetaOp.op.events.SUCCEEDED, () => {
             this._savingMeta = false;
+            this._taskBoardSaveBusy = false;
             if (this._selectedTemplateId) {
                 this._templates.get(this._selectedTemplateId);
                 this._templates.load(null);
+                this._loadTemplateTaskBoardEditorState();
             }
         });
         this.useEvent(this._updateMetaOp.op.events.FAILED, () => {
             this._savingMeta = false;
+            this._taskBoardSaveBusy = false;
         });
         this.useEvent(this._upsertTypeOp.op.events.SUCCEEDED, () => {
             this._savingType = false;
@@ -475,6 +601,7 @@ export class CRMTemplatesPage extends PlatformPage {
             this._editingTypeId = '';
             if (this._selectedTemplateId) {
                 this._templates.get(this._selectedTemplateId);
+                this._loadTemplateTaskBoardEditorState();
             }
         });
         this.useEvent(this._upsertTypeOp.op.events.FAILED, () => {
@@ -486,6 +613,7 @@ export class CRMTemplatesPage extends PlatformPage {
             this._editingTypeId = '';
             if (this._selectedTemplateId) {
                 this._templates.get(this._selectedTemplateId);
+                this._loadTemplateTaskBoardEditorState();
             }
         });
     }
@@ -509,17 +637,285 @@ export class CRMTemplatesPage extends PlatformPage {
         this._typeFormOpen = false;
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
+        this._taskBoardDraft = null;
         const cached = this._templates.byId[templateId];
         if (cached && Array.isArray(cached.types)) {
+            const cs =
+                cached.crm_settings !== undefined
+                && cached.crm_settings !== null
+                && typeof cached.crm_settings === 'object'
+                    ? cached.crm_settings
+                    : null;
+            const p = parseNoteVoiceDefaultsFromCrmSettings(cs);
             this._metaDraft = {
                 name: cached.name || '',
                 description: cached.description || '',
                 icon: cached.icon || 'folder',
+                default_note_voice: p.defaultNoteVoiceMode,
+                show_note_voice_ui: p.showNoteVoiceUi,
             };
+            this._loadTemplateTaskBoardEditorState();
         } else {
             this._metaDraft = null;
         }
         this._templates.get(templateId);
+    }
+
+    _loadTemplateTaskBoardEditorState() {
+        if (typeof this._selectedTemplateId !== 'string' || this._selectedTemplateId.length === 0) {
+            return;
+        }
+        this._templateTaskBoardEditorStateOp.run({ template_id: this._selectedTemplateId });
+    }
+
+    _taskBoardStageIdValid(raw) {
+        if (typeof raw !== 'string') return false;
+        return /^[a-z][a-z0-9_]*$/.test(raw.trim());
+    }
+
+    _onSaveTemplateTaskBoard() {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || draft.length === 0) return;
+        const presets = {};
+        for (const row of draft) {
+            const board_key = typeof row.board_key === 'string' ? row.board_key : '';
+            if (!board_key) continue;
+            const stages = [];
+            const seen = new Set();
+            for (const st of row.stages) {
+                const id = typeof st.id === 'string' ? st.id.trim() : '';
+                const label = typeof st.label === 'string' ? st.label.trim() : '';
+                if (!id.length || !label.length) continue;
+                if (!this._taskBoardStageIdValid(id)) {
+                    this.toast('crm:space_detail_page.task_board_err_stage_id', { type: 'error' });
+                    return;
+                }
+                if (seen.has(id)) {
+                    this.toast('crm:space_detail_page.task_board_err_duplicate_id', { type: 'error' });
+                    return;
+                }
+                seen.add(id);
+                const cell = { id, label };
+                const color = typeof st.color === 'string' ? st.color.trim() : '';
+                if (color.length > 0) cell.color = color;
+                stages.push(cell);
+            }
+            if (stages.length === 0) {
+                this.toast('crm:space_detail_page.task_board_err_stages', { type: 'error' });
+                return;
+            }
+            presets[board_key] = { stages };
+        }
+        if (Object.keys(presets).length === 0) {
+            this.toast('crm:space_detail_page.task_board_err_stages', { type: 'error' });
+            return;
+        }
+        if (!this._selectedTemplateId) {
+            throw new Error('CRMTemplatesPage._onSaveTemplateTaskBoard: template not selected');
+        }
+        this._taskBoardSaveBusy = true;
+        this._updateMetaOp.run({
+            template_id: this._selectedTemplateId,
+            body: { crm_settings: { pipeline_stage_presets: presets } },
+        });
+    }
+
+    _setTemplateTaskBoardDraft(next) {
+        this._taskBoardDraft = next;
+    }
+
+    _onTaskBoardStageField(boardIdx, stageIdx, field, value) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx] || !draft[boardIdx].stages[stageIdx]) return;
+        const next = draft.map((row, bi) => {
+            if (bi !== boardIdx) return row;
+            return {
+                ...row,
+                stages: row.stages.map((s, si) => (si === stageIdx ? { ...s, [field]: value } : s)),
+            };
+        });
+        this._setTemplateTaskBoardDraft(next);
+    }
+
+    _addTaskBoardStage(boardIdx) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx]) return;
+        const next = draft.map((row, bi) => {
+            if (bi !== boardIdx) return row;
+            return { ...row, stages: [...row.stages, { id: '', label: '', color: '' }] };
+        });
+        this._setTemplateTaskBoardDraft(next);
+    }
+
+    _removeTaskBoardStage(boardIdx, stageIdx) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx]) return;
+        const row = draft[boardIdx];
+        if (row.stages.length <= 1) {
+            this.toast('crm:space_detail_page.task_board_err_min_stages', { type: 'error' });
+            return;
+        }
+        const next = draft.map((r, bi) => {
+            if (bi !== boardIdx) return r;
+            return { ...r, stages: r.stages.filter((_, si) => si !== stageIdx) };
+        });
+        this._setTemplateTaskBoardDraft(next);
+    }
+
+    _moveTaskBoardStage(boardIdx, stageIdx, delta) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx]) return;
+        const stages = draft[boardIdx].stages;
+        const j = stageIdx + delta;
+        if (j < 0 || j >= stages.length) return;
+        const nextStages = stages.slice();
+        const t = nextStages[stageIdx];
+        nextStages[stageIdx] = nextStages[j];
+        nextStages[j] = t;
+        const next = draft.map((row, bi) => (bi === boardIdx ? { ...row, stages: nextStages } : row));
+        this._setTemplateTaskBoardDraft(next);
+    }
+
+    _renderTemplateTaskBoardPanel() {
+        if (!this._selectedTemplateId || !this._metaDraft) {
+            return '';
+        }
+        const tbOp = this._templateTaskBoardEditorStateOp;
+        const draft = this._taskBoardDraft;
+        return html`
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">
+                        <platform-icon name="layers" size="18"></platform-icon>
+                        ${this.t('space_detail_page.task_board_section')}
+                    </span>
+                </div>
+                <p class="hint">${this.t('space_detail_page.task_board_hint')}</p>
+                <p class="hint">${this.t('templates_page.task_board_template_hint')}</p>
+                ${tbOp.busy && !Array.isArray(draft)
+                    ? html`<div class="center" style="padding: var(--space-3);"><glass-spinner size="md"></glass-spinner></div>`
+                    : ''}
+                ${!tbOp.busy && tbOp.error !== null && !Array.isArray(draft)
+                    ? html`
+                        <p class="hint">${this.t('space_detail_page.task_board_retry_hint', {
+                            message:
+                                typeof tbOp.error === 'string' && tbOp.error.length !== 0
+                                    ? tbOp.error
+                                    : '—',
+                        })}</p>
+                        <div class="actions-row">
+                            <button class="btn btn-soft" type="button" @click=${this._loadTemplateTaskBoardEditorState}>
+                                ${this.t('space_detail_page.task_board_retry')}
+                            </button>
+                        </div>
+                    `
+                    : ''}
+                ${Array.isArray(draft) && draft.length === 0
+                    ? html`<p class="hint">${this.t('templates_page.task_board_empty')}</p>`
+                    : ''}
+                ${Array.isArray(draft) && draft.length > 0
+                    ? html`
+                        ${draft.map((board, bi) => html`
+                            <div class="task-board-board">
+                                <div class="task-board-board-head">
+                                    <div class="task-board-board-head-top">
+                                        <div class="task-board-board-title">${board.label}</div>
+                                        <button
+                                            class="btn btn-soft task-board-add-stage"
+                                            type="button"
+                                            title=${this.t('space_detail_page.task_board_add_stage')}
+                                            aria-label=${this.t('space_detail_page.task_board_add_stage')}
+                                            @click=${() => this._addTaskBoardStage(bi)}
+                                        >
+                                            <platform-icon name="plus" size="18"></platform-icon>
+                                        </button>
+                                    </div>
+                                    <div class="hint mono">${board.board_key}</div>
+                                </div>
+                                ${board.stages.map((st, si) => html`
+                                    <div class="stage-row">
+                                        <input
+                                            class="input"
+                                            type="text"
+                                            autocomplete="off"
+                                            spellcheck="false"
+                                            placeholder=${this.t('space_detail_page.task_board_stage_id_ph')}
+                                            .value=${st.id}
+                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'id', e.target.value)}
+                                        />
+                                        <input
+                                            class="input"
+                                            type="text"
+                                            autocomplete="off"
+                                            placeholder=${this.t('space_detail_page.task_board_stage_label_ph')}
+                                            .value=${st.label}
+                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'label', e.target.value)}
+                                        />
+                                        <platform-palette-color-picker
+                                            class="stage-color-picker"
+                                            allow-clear
+                                            .value=${st.color}
+                                            ?disabled=${this._taskBoardSaveBusy
+                                                || this._savingMeta
+                                                || this._savingType
+                                                || this._deletingTemplate}
+                                            @change=${(e) => {
+                                                const v = e.detail && typeof e.detail.value === 'string'
+                                                    ? e.detail.value
+                                                    : '';
+                                                this._onTaskBoardStageField(bi, si, 'color', v);
+                                            }}
+                                        ></platform-palette-color-picker>
+                                        <div class="stage-row-actions">
+                                            <button
+                                                class="btn btn-soft"
+                                                type="button"
+                                                ?disabled=${si === 0}
+                                                @click=${() => this._moveTaskBoardStage(bi, si, -1)}
+                                                title=${this.t('space_detail_page.task_board_move_up')}
+                                            >
+                                                ${this.t('space_detail_page.task_board_move_up')}
+                                            </button>
+                                            <button
+                                                class="btn btn-soft"
+                                                type="button"
+                                                ?disabled=${si >= board.stages.length - 1}
+                                                @click=${() => this._moveTaskBoardStage(bi, si, 1)}
+                                                title=${this.t('space_detail_page.task_board_move_down')}
+                                            >
+                                                ${this.t('space_detail_page.task_board_move_down')}
+                                            </button>
+                                            <button
+                                                class="btn btn-danger"
+                                                type="button"
+                                                @click=${() => this._removeTaskBoardStage(bi, si)}
+                                            >
+                                                ${this.t('space_detail_page.task_board_remove_stage')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                `)}
+                            </div>
+                        `)}
+                        <div class="actions-row">
+                            <button
+                                class="btn btn-primary"
+                                type="button"
+                                ?disabled=${this._taskBoardSaveBusy
+                                    || this._savingMeta
+                                    || this._savingType
+                                    || this._deletingTemplate}
+                                @click=${this._onSaveTemplateTaskBoard}
+                            >
+                                ${this._taskBoardSaveBusy
+                                    ? this.t('space_detail_page.task_board_saving')
+                                    : this.t('space_detail_page.task_board_save')}
+                            </button>
+                        </div>
+                    `
+                    : ''}
+            </div>
+        `;
     }
 
     _resolveIcon(value) {
@@ -597,6 +993,32 @@ export class CRMTemplatesPage extends PlatformPage {
         this._updateMetaField('icon', typeof v === 'string' ? v : '');
     }
 
+    _onTemplateNoteVoiceFromChild(e) {
+        if (!this._metaDraft) {
+            return;
+        }
+        const d = e.detail;
+        if (d === undefined || d === null || typeof d !== 'object' || typeof d.value !== 'string') {
+            return;
+        }
+        const v = d.value;
+        if (v !== 'none' && v !== 'last' && v !== 'self') {
+            return;
+        }
+        this._metaDraft = { ...this._metaDraft, default_note_voice: v };
+    }
+
+    _onTemplateNoteShowUiFromChild(e) {
+        if (!this._metaDraft) {
+            return;
+        }
+        const d = e.detail;
+        if (d === undefined || d === null || typeof d !== 'object' || typeof d.value !== 'boolean') {
+            return;
+        }
+        this._metaDraft = { ...this._metaDraft, show_note_voice_ui: d.value };
+    }
+
     _onNewTemplateIconChange(event) {
         const v = event && event.detail && event.detail.value;
         this._updateNewDraft('icon', typeof v === 'string' ? v : '');
@@ -612,12 +1034,17 @@ export class CRMTemplatesPage extends PlatformPage {
             return;
         }
         this._savingMeta = true;
+        const voiceMode = normalizeDefaultNoteVoiceMode(this._metaDraft.default_note_voice);
         this._updateMetaOp.run({
             template_id: this._selectedTemplateId,
             body: {
                 name,
                 description: this._metaDraft.description.trim() || null,
                 icon: this._metaDraft.icon.trim() || null,
+                crm_settings: {
+                    default_note_voice: voiceMode,
+                    show_note_voice_ui: this._metaDraft.show_note_voice_ui === true,
+                },
             },
         });
     }
@@ -673,12 +1100,30 @@ export class CRMTemplatesPage extends PlatformPage {
         this._typeFormOpen = true;
     }
 
+    _templateDetailTypeCatalogRows() {
+        const detail = this._templates.byId[this._selectedTemplateId];
+        const types = detail && Array.isArray(detail.types) ? detail.types : [];
+        return types.map((row) => ({
+            type_id: row.type_id,
+            parent_type_id:
+                typeof row.parent_type_id === 'string' && row.parent_type_id.length > 0
+                    ? row.parent_type_id
+                    : '',
+        }));
+    }
+
     _editType(item) {
         if (!item || typeof item.type_id !== 'string') {
             throw new Error('CRMTemplatesPage._editType: item.type_id required');
         }
         this._editingTypeId = item.type_id;
         this._typeFormOpen = true;
+        const catalogRows = this._templateDetailTypeCatalogRows();
+        const parentId = typeof item.parent_type_id === 'string' ? item.parent_type_id : '';
+        const noteLocked = entityTypeNoteSubtreeLocked(
+            { type_id: item.type_id, parent_type_id: parentId },
+            catalogRows,
+        );
         this._typeDraft = {
             type_id: item.type_id,
             name: item.name || '',
@@ -687,11 +1132,13 @@ export class CRMTemplatesPage extends PlatformPage {
             required_fields_rows: normalizeSchemaRows(item.required_fields && typeof item.required_fields === 'object' ? item.required_fields : {}),
             optional_fields_rows: normalizeSchemaRows(item.optional_fields && typeof item.optional_fields === 'object' ? item.optional_fields : {}),
             namespace_ids: Array.isArray(item.namespace_ids) ? [...item.namespace_ids] : [],
-            parent_type_id: item.parent_type_id || '',
+            parent_type_id: parentId,
             icon: item.icon || '',
             color: item.color || '',
             is_event: item.is_event === true,
             check_duplicates: item.check_duplicates !== false,
+            is_context_anchor: noteLocked ? false : item.is_context_anchor === true,
+            is_voice_target: noteLocked ? false : item.is_voice_target === true,
             weight_coefficient: String(item.weight_coefficient === undefined ? 1 : item.weight_coefficient),
         };
     }
@@ -749,6 +1196,7 @@ export class CRMTemplatesPage extends PlatformPage {
         const normalizedNamespaceIds = namespaceIds
             .map((item) => (typeof item === 'string' ? item.trim() : ''))
             .filter((item) => item.length > 0);
+        const noteLocked = entityTypeNoteSubtreeLocked(this._typeDraft, this._templateDetailTypeCatalogRows());
         this._savingType = true;
         this._upsertTypeOp.run({
             template_id: this._selectedTemplateId,
@@ -765,6 +1213,8 @@ export class CRMTemplatesPage extends PlatformPage {
                 color: this._typeDraft.color.trim() || null,
                 is_event: this._typeDraft.is_event === true,
                 check_duplicates: this._typeDraft.check_duplicates !== false,
+                is_context_anchor: noteLocked ? false : this._typeDraft.is_context_anchor === true,
+                is_voice_target: noteLocked ? false : this._typeDraft.is_voice_target === true,
                 weight_coefficient: Number.parseFloat(this._typeDraft.weight_coefficient || '1') || 1,
             },
         });
@@ -810,9 +1260,12 @@ export class CRMTemplatesPage extends PlatformPage {
                 subtitle=${this.t('templates_page.subtitle')}
             ></page-header>
             <div class="scroll">
-                <div class="layout">
-                    ${this._renderLeftPanel(templates)}
-                    ${this._renderRightPanel(selectedDetail, types)}
+                <div class="templates-stack">
+                    <div class="layout">
+                        ${this._renderLeftPanel(templates)}
+                        ${this._renderRightPanel(selectedDetail, types)}
+                    </div>
+                    ${this._renderTemplateTaskBoardPanel()}
                 </div>
             </div>
         `;
@@ -1002,6 +1455,13 @@ export class CRMTemplatesPage extends PlatformPage {
                         @input=${(e) => this._updateMetaField('description', e.target.value)}
                     ></textarea>
                 </div>
+                <crm-namespace-note-defaults-fields
+                    .defaultNoteVoiceMode=${normalizeDefaultNoteVoiceMode(this._metaDraft.default_note_voice)}
+                    .showNoteVoiceUi=${this._metaDraft.show_note_voice_ui !== false}
+                    ?disabled=${this._savingMeta || this._deletingTemplate}
+                    @default-note-voice-change=${this._onTemplateNoteVoiceFromChild}
+                    @show-note-voice-ui-change=${this._onTemplateNoteShowUiFromChild}
+                ></crm-namespace-note-defaults-fields>
                 <div class="actions-row">
                     <button
                         class="btn btn-primary"
@@ -1123,6 +1583,7 @@ export class CRMTemplatesPage extends PlatformPage {
                     .typeDraft=${this._typeDraft}
                     .schemaOptions=${this._schemaOptions}
                     .namespaces=${namespaces}
+                    .entityTypeCatalogRows=${this._templateDetailTypeCatalogRows()}
                     .parentTypeOptions=${this._getParentTypeOptions()}
                     editingTypeId=${this._editingTypeId}
                     ?savingType=${this._savingType}

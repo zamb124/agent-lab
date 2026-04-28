@@ -41,6 +41,50 @@ const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 const STATUS_FILTERS = ['active', 'archived'];
 const BULK_STATUSES = ['pending', 'approved', 'rejected'];
 
+function _compareEntityTypesByLabel(a, b) {
+    const an = typeof a.name === 'string' ? a.name : a.type_id;
+    const bn = typeof b.name === 'string' ? b.name : b.type_id;
+    return an.localeCompare(bn, undefined, { sensitivity: 'base' });
+}
+
+function _sortedEntityTypesForChips(items) {
+    if (!Array.isArray(items)) return [];
+    const list = items.filter((t) => t && typeof t.type_id === 'string' && t.type_id.length > 0);
+    const sorted = [...list];
+    sorted.sort(_compareEntityTypesByLabel);
+    return sorted;
+}
+
+function _entityTypeChipGroups(items) {
+    const sorted = _sortedEntityTypesForChips(items);
+    if (sorted.length === 0) return [];
+    const inSet = new Set(sorted.map((t) => t.type_id));
+    const roots = [];
+    for (const t of sorted) {
+        const p = typeof t.parent_type_id === 'string' ? t.parent_type_id : '';
+        if (p.length === 0 || !inSet.has(p)) {
+            roots.push(t);
+        }
+    }
+    roots.sort(_compareEntityTypesByLabel);
+
+    function collectDescendants(parentId) {
+        const direct = sorted.filter((x) => x.parent_type_id === parentId);
+        direct.sort(_compareEntityTypesByLabel);
+        const out = [];
+        for (const c of direct) {
+            out.push(c);
+            out.push(...collectDescendants(c.type_id));
+        }
+        return out;
+    }
+
+    return roots.map((root) => ({
+        root,
+        members: [root, ...collectDescendants(root.type_id)],
+    }));
+}
+
 export class CRMEntitiesPage extends PlatformPage {
     static i18nNamespace = 'crm';
 
@@ -183,6 +227,24 @@ export class CRMEntitiesPage extends PlatformPage {
                 background: var(--crm-selected-bg);
                 border-color: var(--crm-selected-stroke);
                 color: var(--crm-selected-text);
+            }
+
+            .filter-chip-group {
+                display: inline-flex;
+                align-items: stretch;
+                flex-wrap: nowrap;
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-full);
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+            .filter-chip-group .filter-chip {
+                border-radius: 0;
+                border: none;
+                margin: 0;
+            }
+            .filter-chip-group .filter-chip + .filter-chip {
+                border-left: 1px solid var(--crm-stroke);
             }
 
             .filter-divider {
@@ -917,6 +979,7 @@ export class CRMEntitiesPage extends PlatformPage {
         this._bulkUpdate = this.useOp('crm/entity_bulk_update');
 
         this._authSel = this.select((s) => s.auth.user);
+        this._routeKeySel = this.select((s) => s.router.routeKey);
         this._namespaceSel = this.select((s) => {
             const user = s.auth.user;
             if (!user || typeof user.company_id !== 'string') return null;
@@ -934,6 +997,12 @@ export class CRMEntitiesPage extends PlatformPage {
         }
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._reloadAll());
+        this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => {
+            this._applyEntityQueryFromLocation();
+            if (this._routeKeySel.value === 'entities') {
+                this._reloadList();
+            }
+        });
         this.useEvent('crm/entity/updated', () => this._reloadList());
 
         this.useEvent('crm/entity_bulk_delete/succeeded', () => {
@@ -952,6 +1021,7 @@ export class CRMEntitiesPage extends PlatformPage {
         });
 
         this._lastNamespace = this._currentNamespace();
+        this._applyEntityQueryFromLocation();
         this._reloadAll();
     }
 
@@ -1000,6 +1070,21 @@ export class CRMEntitiesPage extends PlatformPage {
         return this._namespaceSel.value;
     }
 
+    _applyEntityQueryFromLocation() {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        const rk = this._routeKeySel.value;
+        if (rk !== 'entities') {
+            return;
+        }
+        const sp = new URLSearchParams(window.location.search);
+        const et = sp.get('entity_type');
+        const es = sp.get('entity_subtype');
+        this._selectedType = et !== null && et.length > 0 ? et : null;
+        this._selectedSubtype = es !== null && es.length > 0 ? es : null;
+    }
+
     _buildFilters() {
         const filters = {};
         const ns = this._currentNamespace();
@@ -1046,20 +1131,56 @@ export class CRMEntitiesPage extends PlatformPage {
         if (this._query.trim().length > 0) this._reloadListDebounced();
     }
 
-    _onTypeSelect(typeId) {
-        this._selectedType = this._selectedType === typeId ? null : typeId;
-        this._selectedSubtype = null;
+    _normalizedListSubtype(typeRow) {
+        const s = typeRow.list_entity_subtype;
+        if (s === undefined || s === null) {
+            return null;
+        }
+        if (typeof s !== 'string') {
+            throw new Error('CRMEntitiesPage: list_entity_subtype must be string or null');
+        }
+        if (s.length === 0) {
+            return null;
+        }
+        return s;
+    }
+
+    _isEntityTypeChipActive(typeRow) {
+        if (typeof typeRow.list_entity_type !== 'string' || typeRow.list_entity_type.length === 0) {
+            throw new Error('CRMEntitiesPage: list_entity_type required on entity type row');
+        }
+        const expSub = this._normalizedListSubtype(typeRow);
+        if (this._selectedType !== typeRow.list_entity_type) {
+            return false;
+        }
+        const selSub = this._selectedSubtype === null || this._selectedSubtype === undefined
+            ? null
+            : this._selectedSubtype;
+        return selSub === expSub;
+    }
+
+    _onEntityTypeChipToggle(typeRow) {
+        if (this._isEntityTypeChipActive(typeRow)) {
+            this._selectedType = null;
+            this._selectedSubtype = null;
+        } else {
+            this._selectedType = typeRow.list_entity_type;
+            this._selectedSubtype = this._normalizedListSubtype(typeRow);
+        }
         this._reloadList();
     }
 
-    _onSubtypeSelect(subtypeId) {
-        this._selectedSubtype = this._selectedSubtype === subtypeId ? null : subtypeId;
-        this._reloadList();
+    _entityTypeChipGroups() {
+        return _entityTypeChipGroups(this._entityTypes.items);
     }
 
     _onStatusSelect(status) {
         this._selectedStatus = this._selectedStatus === status ? null : status;
         this._reloadList();
+    }
+
+    _goToImportWizard() {
+        this.navigate('namespace_imports');
     }
 
     _onClearFilters() {
@@ -1135,17 +1256,13 @@ export class CRMEntitiesPage extends PlatformPage {
         this.openModal('crm.entity', { mode: 'create' });
     }
 
-    _goToImportWizard() {
-        this.navigate('namespace_imports');
-    }
-
     _hasExpandedFilters() {
         return Boolean(
             this._selectedSubtype
             || (this._filterTags && this._filterTags.length > 0)
             || this._dateFrom
             || this._dateTo
-            || this._searchMode !== 'hybrid',
+            || this._searchMode !== 'hybrid'
         );
     }
 
@@ -1154,37 +1271,30 @@ export class CRMEntitiesPage extends PlatformPage {
             this._selectedType
             || this._selectedStatus
             || (this._query && this._query.trim().length > 0)
-            || this._hasExpandedFilters(),
+            || this._hasExpandedFilters()
         );
-    }
-
-    _baseTypes() {
-        const items = this._entityTypes.items;
-        if (!Array.isArray(items)) return [];
-        return items.filter((t) => !t.parent_type_id);
-    }
-
-    _subtypes() {
-        if (!this._selectedType) return [];
-        const items = this._entityTypes.items;
-        if (!Array.isArray(items)) return [];
-        return items.filter((t) => t.parent_type_id === this._selectedType);
     }
 
     _entityTypeConfig(entity) {
         const items = this._entityTypes.items;
         if (Array.isArray(items)) {
-            const typeId = entity.entity_subtype || entity.entity_type;
+            const typeId =
+                typeof entity.entity_subtype === 'string' && entity.entity_subtype.length > 0
+                    ? entity.entity_subtype
+                    : entity.entity_type;
             const match = items.find((t) => t.type_id === typeId);
             if (match) {
+                const nm = typeof match.name === 'string' ? match.name : '';
+                const label = nm.length > 0 ? nm : typeId;
                 return {
                     icon: this._resolveIconName(match.icon),
                     color: typeof match.color === 'string' && match.color.length > 0 ? match.color : 'var(--text-tertiary)',
-                    label: match.name || typeId,
+                    label,
                 };
             }
         }
-        return { icon: 'folder', color: 'var(--text-tertiary)', label: entity.entity_type };
+        const et = typeof entity.entity_type === 'string' ? entity.entity_type : '';
+        return { icon: 'folder', color: 'var(--text-tertiary)', label: et.length > 0 ? et : 'entity' };
     }
 
     _resolveIconName(iconName) {
@@ -1450,7 +1560,7 @@ export class CRMEntitiesPage extends PlatformPage {
     }
 
     _renderToolbar() {
-        const baseTypes = this._baseTypes();
+        const chipGroups = this._entityTypeChipGroups();
         const items = this._entities.items;
         return html`
             <div class="page-toolbar">
@@ -1485,17 +1595,21 @@ export class CRMEntitiesPage extends PlatformPage {
                     </button>
                 </div>
                 <div class="filters-row">
-                    ${baseTypes.map((type) => html`
-                        <button
-                            class="filter-chip ${this._selectedType === type.type_id ? 'active' : ''}"
-                            type="button"
-                            @click=${() => this._onTypeSelect(type.type_id)}
-                        >
-                            <platform-icon name="${this._resolveIconName(type.icon)}" size="14"></platform-icon>
-                            ${type.name}
-                        </button>
+                    ${chipGroups.map((group) => html`
+                        <div class="filter-chip-group" role="group">
+                            ${group.members.map((type) => html`
+                                <button
+                                    type="button"
+                                    class="filter-chip ${this._isEntityTypeChipActive(type) ? 'active' : ''}"
+                                    @click=${() => this._onEntityTypeChipToggle(type)}
+                                >
+                                    <platform-icon name="${this._resolveIconName(type.icon)}" size="14"></platform-icon>
+                                    ${type.name}
+                                </button>
+                            `)}
+                        </div>
                     `)}
-                    ${baseTypes.length > 0 ? html`<div class="filter-divider"></div>` : nothing}
+                    ${chipGroups.length > 0 ? html`<div class="filter-divider"></div>` : nothing}
                     ${STATUS_FILTERS.map((s) => html`
                         <button
                             class="filter-chip ${this._selectedStatus === s ? 'active' : ''}"
@@ -1575,7 +1689,6 @@ export class CRMEntitiesPage extends PlatformPage {
     }
 
     _renderExpandedFilters() {
-        const subtypes = this._subtypes();
         return html`
             <div class="filters-collapsible ${this._showFiltersPanel ? 'open' : ''}">
                 <div class="expanded-filters">
@@ -1593,26 +1706,6 @@ export class CRMEntitiesPage extends PlatformPage {
                             `)}
                         </div>
                     </div>
-
-                    ${subtypes.length > 0
-                        ? html`
-                            <div class="expanded-filter-group">
-                                <span class="expanded-filter-label">${this.t('entity_filters.subtype_label')}</span>
-                                <div class="subtype-chips">
-                                    ${subtypes.map((type) => html`
-                                        <button
-                                            class="filter-chip ${this._selectedSubtype === type.type_id ? 'active' : ''}"
-                                            type="button"
-                                            @click=${() => this._onSubtypeSelect(type.type_id)}
-                                        >
-                                            <platform-icon name="${this._resolveIconName(type.icon)}" size="14"></platform-icon>
-                                            ${type.name}
-                                        </button>
-                                    `)}
-                                </div>
-                            </div>
-                        `
-                        : nothing}
 
                     <div class="expanded-filter-group">
                         <span class="expanded-filter-label">${this.t('entity_filters.tags_label')}</span>

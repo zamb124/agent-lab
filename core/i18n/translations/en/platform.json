@@ -174,5 +174,8 @@
         "preset_monthly_1_midnight": "1st of each month at midnight",
         "preset_custom": "Custom cron (5 fields)…",
         "custom_help": "Five fields: minute, hour, day of month, month, day of week (crontab). Validated on save."
+    },
+    "palette_color_picker": {
+        "clear": "Clear"
     }
 }

@@ -55,6 +55,17 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def get_parent_type_id_map_for_company(self) -> dict[str, Optional[str]]:
+        """Все type_id компании → parent_type_id (для resolve_list_entity_query_pair)."""
+        company_id = self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(EntityType.type_id, EntityType.parent_type_id).where(
+                EntityType.company_id == company_id
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+        return {r.type_id: r.parent_type_id for r in rows}
+
     async def count_all_for_company(
         self,
         namespace: Optional[str] = None,

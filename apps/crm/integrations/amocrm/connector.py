@@ -97,6 +97,7 @@ class AmoCRMConnector:
                     company_id=company_id,
                     extra=extra,
                 )
+        await self._container.namespace_template_service.ensure_core_workspace_types_linked_to_namespace(ns)
 
     async def on_credential_saved(self, credential: IntegrationCredential) -> None:
         if credential.provider != IntegrationProvider.AMOCRM:

@@ -24,6 +24,7 @@ export const entityTypesResource = createResourceCollection({
     baseUrl: '/crm/api/v1/entity-types',
     idField: 'type_id',
     operations: ['list', 'get', 'create'],
+    listFetchAllPages: true,
     listQuery: (payload) => {
         if (!payload || typeof payload !== 'object') {
             return { limit: 200, offset: 0 };
@@ -35,6 +36,28 @@ export const entityTypesResource = createResourceCollection({
             query.namespace = payload.namespace;
         }
         return query;
+    },
+    mapItem: (raw) => {
+        if (!raw || typeof raw !== 'object') {
+            throw new Error('crm/entity_types mapItem: item object required');
+        }
+        const listEntityType = raw.list_entity_type;
+        if (typeof listEntityType !== 'string' || listEntityType.length === 0) {
+            throw new Error('crm/entity_types mapItem: list_entity_type string required');
+        }
+        let listEntitySubtype = raw.list_entity_subtype;
+        if (listEntitySubtype === undefined || listEntitySubtype === null) {
+            listEntitySubtype = null;
+        } else if (typeof listEntitySubtype !== 'string') {
+            throw new Error('crm/entity_types mapItem: list_entity_subtype must be string or null');
+        } else if (listEntitySubtype.length === 0) {
+            listEntitySubtype = null;
+        }
+        return {
+            ...raw,
+            list_entity_type: listEntityType,
+            list_entity_subtype: listEntitySubtype,
+        };
     },
     toastKeys: {
         create: 'crm:toast.entity_type.created',

@@ -9,6 +9,8 @@ import {
     replaceLocationToLastVisitedNonFrontendService,
     hasInviteDashboardQuery,
     stripInviteDashboardQuery,
+    hasPostLoginDashboardQuery,
+    stripPostLoginDashboardQuery,
 } from '@platform/lib/utils/last-visited-service.js';
 import '../components/dashboard/dashboard-hero.js';
 import '../components/dashboard/dashboard-stat-strip.js';
@@ -47,11 +49,20 @@ export class DashboardPage extends PlatformPage {
 
     connectedCallback() {
         super.connectedCallback();
-        if (typeof window !== 'undefined' && hasInviteDashboardQuery(window.location)) {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        if (hasInviteDashboardQuery(window.location)) {
             stripInviteDashboardQuery(window.location);
             return;
         }
-        replaceLocationToLastVisitedNonFrontendService();
+        if (hasPostLoginDashboardQuery(window.location)) {
+            const didRedirect = replaceLocationToLastVisitedNonFrontendService();
+            if (!didRedirect) {
+                stripPostLoginDashboardQuery(window.location);
+            }
+            return;
+        }
     }
 
     render() {

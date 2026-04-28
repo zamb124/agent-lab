@@ -15,6 +15,8 @@ import {
     namespaceEditabilityOp,
     namespaceCreateForm,
     namespaceEditForm,
+    taskBoardStagesOp,
+    taskBoardEditorStateOp,
 } from '../events/resources/namespaces.resource.js';
 import {
     namespaceIntegrationsListOp,
@@ -30,6 +32,7 @@ import {
     templateSchemaOptionsOp,
     templateTypeUpsertOp,
     templateTypeDeleteOp,
+    templateTaskBoardEditorStateOp,
 } from '../events/resources/templates.resource.js';
 import {
     entityTypesResource,
@@ -232,6 +235,8 @@ export class CRMApp extends PlatformApp {
         namespaceEditabilityOp,
         namespaceCreateForm,
         namespaceEditForm,
+        taskBoardStagesOp,
+        taskBoardEditorStateOp,
         namespaceIntegrationsListOp,
         namespaceIntegrationAuthorizeOp,
         namespaceIntegrationEntitiesSyncOp,
@@ -243,6 +248,7 @@ export class CRMApp extends PlatformApp {
         templateSchemaOptionsOp,
         templateTypeUpsertOp,
         templateTypeDeleteOp,
+        templateTaskBoardEditorStateOp,
         entityTypesResource,
         entityTypeUpdateOp,
         entityTypePublicFieldsOp,

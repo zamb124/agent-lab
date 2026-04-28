@@ -12,6 +12,7 @@ import json
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.logging import get_logger
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 
 if TYPE_CHECKING:
@@ -92,7 +93,7 @@ class AttachmentService:
         
         entity.updated_at = datetime.now(timezone.utc)
         await self._entity_repo.update(entity)
-        if entity.entity_type == "note":
+        if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
             await broadcast_crm_note_event(
                 company_id=entity.company_id,
@@ -140,7 +141,7 @@ class AttachmentService:
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(timezone.utc)
         await self._entity_repo.update(entity)
-        if entity.entity_type == "note":
+        if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
             await broadcast_crm_note_event(
                 company_id=entity.company_id,

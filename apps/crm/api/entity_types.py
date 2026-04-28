@@ -13,7 +13,8 @@ from apps.crm.models.api import EntityTypeCreate, EntityTypeUpdate, EntityTypeRe
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.dependencies import ContainerDep
 from apps.crm.db.models import EntityType
-from apps.crm.color_palette import ENTITY_COLOR_PALETTE, assign_color_from_palette
+from apps.crm.color_palette import assign_color_from_palette
+from apps.crm.entity_type_list_filter import resolve_list_entity_query_pair
 from core.context import get_context
 
 router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
@@ -63,6 +64,34 @@ async def _collect_company_types(repo: EntityTypeRepository) -> list[EntityType]
         offset += page_limit
 
 
+def _entity_type_to_response(entity: EntityType, parent_map: dict[str, Optional[str]]) -> EntityTypeResponse:
+    lt, ls = resolve_list_entity_query_pair(entity.type_id, parent_map)
+    return EntityTypeResponse(
+        type_id=entity.type_id,
+        company_id=entity.company_id,
+        parent_type_id=entity.parent_type_id,
+        name=entity.name,
+        description=entity.description,
+        prompt=entity.prompt,
+        required_fields=entity.required_fields,
+        optional_fields=entity.optional_fields,
+        public_fields=entity.public_fields,
+        icon=entity.icon,
+        color=entity.color,
+        is_system=entity.is_system,
+        is_event=entity.is_event,
+        check_duplicates=entity.check_duplicates,
+        weight_coefficient=entity.weight_coefficient,
+        namespace_ids=entity.namespace_ids,
+        is_context_anchor=entity.is_context_anchor,
+        is_voice_target=entity.is_voice_target,
+        extractable=entity.extractable,
+        created_at=entity.created_at,
+        list_entity_type=lt,
+        list_entity_subtype=ls,
+    )
+
+
 @router.get("", response_model=OffsetPage[EntityTypeResponse])
 async def list_entity_types(
     container: ContainerDep,
@@ -71,13 +100,15 @@ async def list_entity_types(
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[EntityTypeResponse]:
     repo = container.entity_type_repository
-    types, total = await asyncio.gather(
+    types, total, parent_map = await asyncio.gather(
         repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset),
         repo.count_all_for_company(namespace=namespace),
+        repo.get_parent_type_id_map_for_company(),
     )
     if await _backfill_missing_colors(types, repo):
         types = await repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset)
-    return OffsetPage[EntityTypeResponse](items=types, total=total, limit=limit, offset=offset)
+    items = [_entity_type_to_response(t, parent_map) for t in types]
+    return OffsetPage[EntityTypeResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/by-namespace/{namespace}", response_model=OffsetPage[EntityTypeResponse])
@@ -91,13 +122,15 @@ async def list_entity_types_by_namespace(
     if not normalized_namespace:
         raise HTTPException(status_code=422, detail="namespace is required")
     repo = container.entity_type_repository
-    types, total = await asyncio.gather(
+    types, total, parent_map = await asyncio.gather(
         repo.get_all_for_company(namespace=normalized_namespace, limit=limit, offset=offset),
-        repo.count_all_for_company(namespace=normalized_namespace),
+        repo.count_all_for_company(normalized_namespace),
+        repo.get_parent_type_id_map_for_company(),
     )
     if await _backfill_missing_colors(types, repo):
         types = await repo.get_all_for_company(namespace=normalized_namespace, limit=limit, offset=offset)
-    return OffsetPage[EntityTypeResponse](items=types, total=total, limit=limit, offset=offset)
+    items = [_entity_type_to_response(t, parent_map) for t in types]
+    return OffsetPage[EntityTypeResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/{type_id}", response_model=EntityTypeResponse)
@@ -114,7 +147,8 @@ async def get_entity_type(
         assigned_color = assign_color_from_palette(set())
         await repo.update_color(type_id, assigned_color)
         entity_type.color = assigned_color
-    return entity_type
+    parent_map = await repo.get_parent_type_id_map_for_company()
+    return _entity_type_to_response(entity_type, parent_map)
 
 
 @router.post("", response_model=EntityTypeResponse)
@@ -159,7 +193,11 @@ async def create_entity_type(
     )
     
     await repo.create_custom_type(entity_type, company_id)
-    return entity_type
+    parent_map = await repo.get_parent_type_id_map_for_company()
+    refreshed = await repo.get_by_type_id(data.type_id)
+    if not refreshed:
+        raise HTTPException(status_code=500, detail="EntityType not found after create")
+    return _entity_type_to_response(refreshed, parent_map)
 
 
 @router.put("/{type_id}", response_model=EntityTypeResponse)
@@ -210,7 +248,10 @@ async def update_entity_type(
     elif fields:
         entity_type = await repo.get_by_type_id(type_id)
 
-    return entity_type
+    parent_map = await repo.get_parent_type_id_map_for_company()
+    if not entity_type:
+        raise HTTPException(status_code=404, detail="EntityType not found")
+    return _entity_type_to_response(entity_type, parent_map)
 
 
 @router.post("/{type_id}/namespaces", response_model=EntityTypeResponse)
@@ -224,9 +265,11 @@ async def add_namespace_ids(
         raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
     repo = container.entity_type_repository
     try:
-        return await repo.add_namespace_ids(type_id, data.namespace_ids)
+        updated = await repo.add_namespace_ids(type_id, data.namespace_ids)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    parent_map = await repo.get_parent_type_id_map_for_company()
+    return _entity_type_to_response(updated, parent_map)
 
 
 @router.put("/{type_id}/public-fields", response_model=EntityTypeResponse)
@@ -243,4 +286,8 @@ async def update_public_fields(
 
     await repo.update_metadata(type_id, public_fields=data.public_fields)
 
-    return await repo.get_by_type_id(type_id)
+    entity_type = await repo.get_by_type_id(type_id)
+    if not entity_type:
+        raise HTTPException(status_code=404, detail="EntityType not found")
+    parent_map = await repo.get_parent_type_id_map_for_company()
+    return _entity_type_to_response(entity_type, parent_map)

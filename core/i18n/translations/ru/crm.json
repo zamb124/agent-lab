@@ -14,7 +14,13 @@
             "access_requests": "Запросы доступа",
             "ai_analysis": "AI-анализ",
             "settings": "Настройки"
-        }
+        },
+        "nav_group_notes": "Заметки",
+        "nav_group_tasks": "Задачи",
+        "nav_group_entities": "Сущности",
+        "nav_all_notes": "Все заметки",
+        "nav_all_tasks": "Все задачи",
+        "nav_all_entities": "Все сущности"
     },
     "routes": {
         "platform_services": "Сервисы",
@@ -325,6 +331,9 @@
         "field_flags": "Флаги",
         "field_is_event": "is_event",
         "field_check_duplicates": "check_duplicates",
+        "field_is_context_anchor": "Якорь контекста (is_context_anchor)",
+        "field_is_voice_target": "Голос заметки (is_voice_target)",
+        "note_semantics_flags_locked_hint": "Для типов в ветке заметки (note и подтипы) эти режимы недоступны.",
         "field_description": "Описание",
         "field_prompt": "AI-промпт извлечения",
         "field_namespaces": "Доступен в пространствах",
@@ -338,7 +347,9 @@
         "preview_optional": "optional_fields (preview)",
         "loading_schema": "Загрузка опций схемы...",
         "save_type": "Сохранить тип",
-        "save_type_changes": "Сохранить изменения"
+        "save_type_changes": "Сохранить изменения",
+        "task_board_template_hint": "При создании пространства из этого шаблона в нём будут те же пресеты колонок (если не переопределить вручную).",
+        "task_board_empty": "В шаблоне нет типов задач (task) — добавьте тип «Задача» или подтип с родителем task."
     },
     "access_request_modal": {
         "how_title": "Как это работает",
@@ -560,6 +571,15 @@
     },
     "note_edit": {
         "field_description": "Текст заметки",
+        "field_voice_author": "От чьего имени",
+        "field_context_anchor": "Якорь контекста",
+        "field_note_kind": "Вид заметки",
+        "subtype_plain": "Без подтипа",
+        "voice_author_search": "Кого указать автором записи",
+        "context_anchor_search": "Поиск сущности якоря",
+        "context_anchor_search_types": "Искать: {{types}}",
+        "entity_search_min": "Введите больше символов для поиска",
+        "entity_search_none": "Ничего не найдено",
         "field_date": "Дата заметки",
         "field_tags": "Теги",
         "placeholder_title": "Название заметки",
@@ -567,6 +587,8 @@
         "placeholder_tag": "Введите тег и нажмите Enter",
         "voice_start": "Голосовой ввод",
         "voice_stop": "Остановить запись",
+        "voice_dictation_start": "Диктовка в текст заметки",
+        "voice_dictation_stop": "Остановить диктовку",
         "attachment_add": "Добавить файл",
         "attachment_remove": "Удалить вложение",
         "action_cancel": "Отмена",
@@ -667,14 +689,14 @@
         "action_undo": "Вернуть"
     },
     "tasks_page": {
-        "column_todo": "Новая",
-        "column_in_progress": "В работе",
-        "column_done": "Готово",
-        "next_to_progress": "В работу",
-        "next_to_done": "Готово",
-        "next_revert": "Вернуть",
+        "next_status": "Следующая стадия",
         "drag_hint": "Перетащить задачу",
-        "board_syncing": "Сохранение статуса задачи"
+        "board_syncing": "Сохранение статуса задачи",
+        "board_blocked": "Доска недоступна в этом режиме",
+        "board_stages_failed": "Не удалось загрузить стадии доски",
+        "board_stages_empty": "Список стадий задачи пуст",
+        "board_not_ready": "Доска задач ещё не готова",
+        "move_failed": "Не удалось переместить: {message}"
     },
     "entities_page": {
         "tab_list": "Список",
@@ -729,6 +751,16 @@
         "empty_message": "Пока нет пространств. Создайте первое.",
         "empty_description": "Описание не задано"
     },
+    "namespace_note_defaults": {
+        "section_title": "Заметки: голос записи",
+        "section_hint": "Если в карточке заметки не выбран автор, применяется правило ниже.",
+        "voice_mode_label": "Поведение по умолчанию",
+        "voice_mode_self": "Персона пользователя",
+        "voice_mode_none": "Не задавать автора",
+        "voice_mode_last": "Последний выбранный автор",
+        "voice_mode_hint": "Сохраняется в настройках этого пространства или шаблона; применяется при сохранении записи без явного автора.",
+        "show_ui_label": "Показывать выбор автора в редакторе заметки"
+    },
     "space_detail_page": {
         "subtitle": "Настройки пространства и его типов",
         "no_id": "Не указано пространство",
@@ -748,7 +780,32 @@
         "amocrm_sync": "Импорт сделок, контактов, компаний, пользователей",
         "amocrm_fields": "Обновить справочник кастомных полей",
         "amocrm_subdomain_required": "Укажите поддомен amo",
-        "link_integrations": "Интеграции"
+        "link_integrations": "Интеграции",
+        "sidebar_menu_section": "Меню сайдбара",
+        "sidebar_menu_hint": "Пункты навигации в левой колонке CRM для этого пространства. По умолчанию дерево строится из разрешённых типов; здесь можно зафиксировать снимок или вернуться к автоматическому режиму.",
+        "sidebar_menu_mode_custom": "Режим: сохранённое дерево",
+        "sidebar_menu_mode_derived": "Режим: автоматически из типов",
+        "sidebar_menu_snapshot": "Сохранить меню из типов",
+        "sidebar_menu_reset": "Сбросить на автоматическое",
+        "task_board_section": "Колонки доски задач",
+        "task_board_hint": "Стадии канбана для задач (тип task) и подтипов с родителем task. Идентификатор стадии (id) хранится в поле attributes.status; латиница, цифры и подчёркивание, с буквы.",
+        "task_board_load_failed": "Не удалось загрузить редактор досок: {message}",
+        "task_board_retry_hint": "Не удалось загрузить: {message}",
+        "task_board_retry": "Повторить загрузку",
+        "task_board_empty": "В пространстве нет типов задач (task) — сначала включите тип «Задача» или подтип с родителем task.",
+        "task_board_stage_id_ph": "id (например todo)",
+        "task_board_stage_label_ph": "Подпись колонки",
+        "task_board_stage_color_ph": "Цвет (опционально)",
+        "task_board_add_stage": "Добавить стадию",
+        "task_board_remove_stage": "Удалить",
+        "task_board_move_up": "Выше",
+        "task_board_move_down": "Ниже",
+        "task_board_save": "Сохранить стадии",
+        "task_board_saving": "Сохранение...",
+        "task_board_err_stages": "У каждой доски должна быть хотя бы одна стадия с заполненными id и подписью",
+        "task_board_err_stage_id": "Некорректный id стадии. Разрешены строчные латинские буквы, цифры и подчёркивание; первый символ — буква.",
+        "task_board_err_duplicate_id": "Повторяющийся id стадии на одной доске",
+        "task_board_err_min_stages": "На доске должна остаться хотя бы одна стадия"
     },
     "integrations_page": {
         "title": "Интеграции",

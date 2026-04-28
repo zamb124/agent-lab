@@ -67,6 +67,41 @@ export const namespaceEditabilityOp = createAsyncOp({
     },
 });
 
+export const taskBoardStagesOp = createAsyncOp({
+    name: 'crm/task_board_stages',
+    silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/namespaces/:namespace_name/task-board-stages' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.namespace_name !== 'string' || payload.namespace_name.length === 0) {
+            throw new Error('taskBoardStagesOp: payload.namespace_name required');
+        }
+        const sub =
+            typeof payload.entity_subtype === 'string' && payload.entity_subtype.length > 0
+                ? payload.entity_subtype
+                : null;
+        const qs = sub !== null ? `?entity_subtype=${encodeURIComponent(sub)}` : '';
+        return await httpRequest({
+            method: 'GET',
+            url: `/crm/api/v1/namespaces/${encodeURIComponent(payload.namespace_name)}/task-board-stages${qs}`,
+        });
+    },
+});
+
+export const taskBoardEditorStateOp = createAsyncOp({
+    name: 'crm/task_board_editor_state',
+    silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/namespaces/:namespace_name/task-board-editor-state' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.namespace_name !== 'string' || payload.namespace_name.length === 0) {
+            throw new Error('taskBoardEditorStateOp: payload.namespace_name required');
+        }
+        return await httpRequest({
+            method: 'GET',
+            url: `/crm/api/v1/namespaces/${encodeURIComponent(payload.namespace_name)}/task-board-editor-state`,
+        });
+    },
+});
+
 export const namespaceCreateForm = createForm({
     name: 'crm/namespace_create_form',
     schema: {

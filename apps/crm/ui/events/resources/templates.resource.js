@@ -10,6 +10,7 @@
  *   DELETE /{template_id}                   → 204                         (remove)
  *   POST   /{template_id}/types             → NamespaceTemplateTypeResponse
  *   DELETE /{template_id}/types/{type_id}   → 204
+ *   GET    /{template_id}/task-board-editor-state → TaskBoardEditorStateResponse
  *
  * `update` идёт отдельным `templateUpdateOp` (PUT) — createResourceCollection
  * шлёт PATCH, который CRM не принимает.
@@ -93,5 +94,23 @@ export const templateTypeDeleteOp = createAsyncOp({
             url: `/crm/api/v1/namespaces/templates/${encodeURIComponent(payload.template_id)}/types/${encodeURIComponent(payload.type_id)}`,
         });
         return { template_id: payload.template_id, type_id: payload.type_id };
+    },
+});
+
+export const templateTaskBoardEditorStateOp = createAsyncOp({
+    name: 'crm/template_task_board_editor_state',
+    silent: true,
+    restMirror: {
+        method: 'GET',
+        path: '/crm/api/v1/namespaces/templates/:template_id/task-board-editor-state',
+    },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.template_id !== 'string' || payload.template_id.length === 0) {
+            throw new Error('templateTaskBoardEditorStateOp: payload.template_id required');
+        }
+        return await httpRequest({
+            method: 'GET',
+            url: `/crm/api/v1/namespaces/templates/${encodeURIComponent(payload.template_id)}/task-board-editor-state`,
+        });
     },
 });

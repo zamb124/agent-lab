@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Literal
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 from enum import Enum
 
 from core.fields import Field
@@ -317,6 +317,78 @@ class AuthRequest(BaseModel):
     )
 
 
+class BoardStage(BaseModel):
+    """Стадия канбана задач: id хранится в attributes.status у CRMEntity с entity_type=task."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        min_length=1,
+        pattern=r"^[a-z][a-z0-9_]*$",
+        description="Стабильный идентификатор стадии (snake_case)",
+    )
+    label: str = Field(min_length=1, description="Подпись колонки в UI")
+    color: Optional[str] = Field(default=None, description="Опциональный CSS-цвет")
+
+
+class TaskBoardPreset(BaseModel):
+    """Набор колонок доски задач для одного ключа доски (см. task_board_key в CRM)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stages: List[BoardStage] = Field(min_length=1, description="Упорядоченные стадии слева направо")
+
+    @model_validator(mode="after")
+    def _unique_stage_ids(self) -> "TaskBoardPreset":
+        ids = [s.id for s in self.stages]
+        if len(ids) != len(set(ids)):
+            raise ValueError("TaskBoardPreset: повторяющиеся id стадий")
+        return self
+
+
+class SidebarNavEntry(BaseModel):
+    """Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, description="Стабильный id для active state и редактора")
+    label: str = Field(description="Подпись пункта")
+    icon: Optional[str] = Field(default=None, description="Имя иконки platform-icon")
+    route_key: Optional[str] = Field(default=None, description="Ключ маршрута SPA (лист)")
+    search: str = Field(
+        default="",
+        description="Query с ведущим ? для history",
+    )
+    children: List["SidebarNavEntry"] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _leaf_or_group(self) -> "SidebarNavEntry":
+        has_children = len(self.children) > 0
+        rk = (self.route_key or "").strip()
+        if bool(has_children):
+            if bool(rk):
+                raise ValueError("SidebarNavEntry: у группы не задают route_key")
+            sch = (self.search or "").strip()
+            if bool(sch):
+                raise ValueError("SidebarNavEntry: у группы не задают search")
+        else:
+            if not bool(rk):
+                raise ValueError("SidebarNavEntry: лист требует непустой route_key")
+        return self
+
+
+class NamespaceAutomationRule(BaseModel):
+    """Правило автоматизации пространства (контракт хранения; исполнитель — flows/scheduler)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str = Field(min_length=1)
+    entity_type: str = Field(min_length=1)
+    trigger: str = Field(min_length=1, description="entity_created | stage_changed | …")
+    action: str = Field(min_length=1, description="run_flow | notify | …")
+    flow_id: Optional[str] = Field(default=None)
+
+
 class NamespaceCRMSettings(BaseModel):
     """Настройки CRM для namespace (заметки: голос, контекст, метаданные интеграций)."""
 
@@ -338,6 +410,45 @@ class NamespaceCRMSettings(BaseModel):
             "auto_sync_timezone, auto_sync_schedule_task_id, auto_sync_oauth_user_id."
         ),
     )
+    sidebar_navigation: Optional[List[SidebarNavEntry]] = Field(
+        default=None,
+        title="Дерево основного меню сайдбара",
+        description="None: клиент строит меню из типов пространства",
+    )
+    default_flow_by_entity_type: Dict[str, str] = Field(
+        default_factory=dict,
+        title="Идентификатор flow по умолчанию для типа сущности",
+    )
+    automation_rules: List[NamespaceAutomationRule] = Field(default_factory=list)
+    pipeline_stage_presets: Dict[str, TaskBoardPreset] = Field(
+        default_factory=dict,
+        title="Пресеты колонок доски задач",
+        description="Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор.",
+    )
+
+    @field_validator("pipeline_stage_presets", mode="before")
+    @classmethod
+    def _coerce_pipeline_stage_presets(cls, value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        out: dict[str, Any] = {}
+        for raw_key, raw_val in value.items():
+            if not isinstance(raw_key, str):
+                continue
+            key = raw_key.strip()
+            if not key:
+                continue
+            if isinstance(raw_val, TaskBoardPreset):
+                out[key] = raw_val
+                continue
+            if isinstance(raw_val, dict):
+                try:
+                    out[key] = TaskBoardPreset.model_validate(raw_val)
+                except Exception:
+                    continue
+        return out
 
     @model_validator(mode="before")
     @classmethod
@@ -430,4 +541,7 @@ class AuthResult(BaseModel):
     token: Optional[str] = Field(default=None, description="JWT токен")
     error_message: Optional[str] = Field(default=None, description="Сообщение об ошибке")
     redirect_url: Optional[str] = Field(default=None, description="URL для редиректа")
+
+
+SidebarNavEntry.model_rebuild()
 

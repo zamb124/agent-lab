@@ -34,6 +34,7 @@ from apps.crm.models.api import (
 )
 from apps.crm.db.models import CRMEntity
 from apps.crm.config import get_crm_settings
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.taskiq_analyze_errors import (
     parse_mentioned_entity_short_description_from_task_message,
     parse_validation_from_task_message,
@@ -526,6 +527,8 @@ async def update_entity(
     updates = data.model_dump(exclude_none=True)
     updates.pop("voice_entity_id", None)
     updates.pop("context_entity_id", None)
+    if "entity_subtype" in data.model_fields_set:
+        updates["entity_subtype"] = data.entity_subtype
     try:
         updated = await container.entity_service.update_entity(
             entity_id,
@@ -772,7 +775,7 @@ async def get_exclusive_related_entities(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     
-    if entity.entity_type != "note":
+    if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
         raise HTTPException(status_code=400, detail="Only notes have exclusive related entities")
     
     ctx = get_context()

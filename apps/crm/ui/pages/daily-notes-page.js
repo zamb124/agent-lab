@@ -795,6 +795,7 @@ export class CRMDailyNotesPage extends PlatformPage {
             if (!user || typeof user.company_id !== 'string') return null;
             return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
         });
+        this._routeKeySel = this.select((s) => s.router.routeKey);
 
         this._mql = null;
         this._mqlListener = null;
@@ -822,6 +823,12 @@ export class CRMDailyNotesPage extends PlatformPage {
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
             this._reloadNotes();
             this._reloadSummary();
+        });
+        this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => {
+            if (this._routeKeySel.value !== 'notes') {
+                return;
+            }
+            this._reloadNotes();
         });
         this.useEvent('crm/note/updated', (event) => this._onNoteWsUpdate(event.payload));
         this.useEvent('crm/daily_summary/updated', (event) => this._onSummaryWsUpdate(event.payload, false));
@@ -880,6 +887,22 @@ export class CRMDailyNotesPage extends PlatformPage {
         return this._namespaceSelectionSel.value;
     }
 
+    _noteSubtypeFromLocationSearch() {
+        if (typeof window === 'undefined') {
+            return '';
+        }
+        const sp = new URLSearchParams(window.location.search);
+        const et = sp.get('entity_type');
+        const es = sp.get('entity_subtype');
+        if (es === null || es.length === 0) {
+            return '';
+        }
+        if (et !== null && et.length > 0 && et !== 'note') {
+            return '';
+        }
+        return es;
+    }
+
     _isPeriod() { return this._dailyNotesUi.value.range.from !== this._dailyNotesUi.value.range.to; }
 
     _reloadNotes() {
@@ -889,6 +912,10 @@ export class CRMDailyNotesPage extends PlatformPage {
         };
         const ns = this._currentNamespace();
         if (typeof ns === 'string' && ns.length > 0) filters.namespace = ns;
+        const sub = this._noteSubtypeFromLocationSearch();
+        if (sub.length > 0) {
+            filters.entity_subtype = sub;
+        }
         this._noteEntitiesByNoteId = {};
         this._notes.load(filters);
         this._loadAnalyzeTasks();

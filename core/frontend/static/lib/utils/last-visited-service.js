@@ -7,6 +7,9 @@ export const LAST_VISITED_SERVICE_STORAGE_KEY = 'platform:last_service';
 /** Query на /dashboard после принятия инвайта: не уходить в last-visited sync/crm и т.д. */
 export const INVITE_DASHBOARD_QUERY = 'from_invite';
 
+/** Query после OAuth/демо-логина: один раз уйти в last-visited не-console сервис, если сохранён. */
+export const POST_LOGIN_DASHBOARD_QUERY = 'post_login';
+
 /** @param {Location | URL} loc */
 export function hasInviteDashboardQuery(loc) {
     if (typeof URL === 'undefined') {
@@ -30,6 +33,33 @@ export function stripInviteDashboardQuery(loc) {
         return;
     }
     u.searchParams.delete(INVITE_DASHBOARD_QUERY);
+    const next = `${u.pathname}${u.search}${u.hash}`;
+    window.history.replaceState(null, '', next);
+}
+
+/** @param {Location | URL} loc */
+export function hasPostLoginDashboardQuery(loc) {
+    if (typeof URL === 'undefined') {
+        return false;
+    }
+    const u = loc instanceof URL ? loc : new URL(loc.href);
+    return u.searchParams.get(POST_LOGIN_DASHBOARD_QUERY) === '1';
+}
+
+/**
+ * Убирает post_login=1 из URL без перезагрузки.
+ * @param {Location} [loc]
+ */
+export function stripPostLoginDashboardQuery(loc) {
+    if (typeof window === 'undefined' || typeof URL === 'undefined') {
+        return;
+    }
+    const ref = loc ?? window.location;
+    const u = new URL(ref.href);
+    if (u.searchParams.get(POST_LOGIN_DASHBOARD_QUERY) !== '1') {
+        return;
+    }
+    u.searchParams.delete(POST_LOGIN_DASHBOARD_QUERY);
     const next = `${u.pathname}${u.search}${u.hash}`;
     window.history.replaceState(null, '', next);
 }
@@ -149,6 +179,7 @@ export function serviceIdFromBaseUrl(baseUrl) {
 
 /**
  * Редирект с /dashboard в последний не-console сервис (flows, crm, rag, sync).
+ * Вызывать только при открытии /dashboard с query post_login=1 после OAuth/демо-логина.
  * @returns {boolean} true если редирект выполнен
  */
 export function replaceLocationToLastVisitedNonFrontendService() {

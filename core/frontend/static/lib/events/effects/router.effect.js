@@ -77,7 +77,12 @@ export function createRouterEffect({ baseUrl, routes }) {
         }
         ctx.dispatch(
             CoreEvents.ROUTER_ROUTE_CHANGED,
-            { routeKey: matched.route.key, params: matched.params, pathname },
+            {
+                routeKey: matched.route.key,
+                params: matched.params,
+                pathname,
+                search: typeof location.search === 'string' ? location.search : '',
+            },
             { source: 'router' },
         );
     }
@@ -124,7 +129,12 @@ export function createRouterEffect({ baseUrl, routes }) {
                 history.pushState({}, '', urlForHistory);
                 ctx.dispatch(
                     CoreEvents.ROUTER_ROUTE_CHANGED,
-                    { routeKey: route.key, params: p.params || {}, pathname: fullPath },
+                    {
+                        routeKey: route.key,
+                        params: p.params || {},
+                        pathname: fullPath,
+                        search,
+                    },
                     { causation_id: event.id, source: 'router' },
                 );
                 return;

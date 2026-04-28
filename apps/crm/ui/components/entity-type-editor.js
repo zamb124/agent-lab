@@ -6,8 +6,10 @@
  *
  * Props:
  *   - typeDraft: { type_id, name, description, prompt, parent_type_id, icon,
- *                  color, is_event, check_duplicates, weight_coefficient,
- *                  required_fields_rows, optional_fields_rows, namespace_ids }
+ *                  color, is_event, check_duplicates, is_context_anchor,
+ *                  is_voice_target, weight_coefficient, required_fields_rows,
+ *                  optional_fields_rows, namespace_ids }
+ *   - entityTypeCatalogRows: { type_id, parent_type_id }[] для определения ветки note
  *   - schemaOptions: { field_types[], enum_sets[], operators[], ... }
  *   - namespaces: list[{ name, description? }]
  *   - parentTypeOptions: string[]
@@ -31,8 +33,14 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-icon-picker.js';
+import '@platform/lib/components/platform-palette-color-picker.js';
+import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import './schema-field-builder.js';
 import { buildSchemaFromRows } from './schema-field-builder.js';
+import { entityTypeNoteSubtreeLocked } from '../utils/entity-type-note-subtree-lock.js';
+
+const ENTITY_TYPE_UI_ICON_NAMES = Object.freeze(listAvailableUiIcons());
 
 export class CRMEntityTypeEditor extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -42,6 +50,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
         schemaOptions: { attribute: false },
         namespaces: { attribute: false },
         parentTypeOptions: { attribute: false },
+        entityTypeCatalogRows: { attribute: false },
         editingTypeId: { type: String },
         savingType: { type: Boolean },
         showNamespaces: { type: Boolean },
@@ -110,20 +119,6 @@ export class CRMEntityTypeEditor extends PlatformElement {
             }
             .input.mono, .select.mono { font-family: var(--font-mono); }
             .textarea { min-height: 76px; resize: vertical; }
-            .icon-row {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-            }
-            .icon-preview {
-                width: 36px;
-                height: 36px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: var(--radius-md);
-                background: var(--glass-tint-medium);
-            }
             .flags-row {
                 display: flex;
                 flex-wrap: wrap;
@@ -231,13 +226,29 @@ export class CRMEntityTypeEditor extends PlatformElement {
         this.schemaOptions = null;
         this.namespaces = [];
         this.parentTypeOptions = [];
+        this.entityTypeCatalogRows = [];
         this.editingTypeId = '';
         this.savingType = false;
         this.showNamespaces = true;
     }
 
     _emitDraftField(field, value) {
+        if (field === 'is_context_anchor' || field === 'is_voice_target') {
+            if (entityTypeNoteSubtreeLocked(this.typeDraft, this.entityTypeCatalogRows)) {
+                return;
+            }
+        }
         const next = { ...this.typeDraft, [field]: value };
+        this.emit('draft-changed', { typeDraft: next });
+    }
+
+    _onParentTypeChange(event) {
+        const value = event && event.target ? String(event.target.value) : '';
+        const next = { ...this.typeDraft, parent_type_id: value };
+        if (entityTypeNoteSubtreeLocked(next, this.entityTypeCatalogRows)) {
+            next.is_context_anchor = false;
+            next.is_voice_target = false;
+        }
         this.emit('draft-changed', { typeDraft: next });
     }
 
@@ -249,9 +260,22 @@ export class CRMEntityTypeEditor extends PlatformElement {
         this.emit('namespace-toggled', { namespaceName: name, enabled });
     }
 
-    _resolveIcon(value) {
-        const trimmed = typeof value === 'string' ? value.trim() : '';
-        return trimmed.length > 0 ? trimmed : 'folder';
+    _iconPickerIcons(current) {
+        const cur = typeof current === 'string' ? current.trim() : '';
+        if (cur.length > 0 && !ENTITY_TYPE_UI_ICON_NAMES.includes(cur)) {
+            return [cur, ...ENTITY_TYPE_UI_ICON_NAMES];
+        }
+        return ENTITY_TYPE_UI_ICON_NAMES;
+    }
+
+    _onIconPickerChange(event) {
+        const v = event && event.detail && event.detail.value;
+        this._emitDraftField('icon', typeof v === 'string' ? v : '');
+    }
+
+    _onPaletteColorChange(event) {
+        const v = event && event.detail && event.detail.value;
+        this._emitDraftField('color', typeof v === 'string' ? v : '');
     }
 
     _getSchemaPreview(sectionKey, sectionLabel) {
@@ -274,6 +298,9 @@ export class CRMEntityTypeEditor extends PlatformElement {
             && Array.isArray(this.schemaOptions.field_types);
         const compact = this.compactChrome === true;
         const rootClass = compact ? 'root-compact' : 'panel';
+        const semanticsLocked = entityTypeNoteSubtreeLocked(this.typeDraft, this.entityTypeCatalogRows);
+        const anchorChecked = semanticsLocked ? false : this.typeDraft.is_context_anchor === true;
+        const voiceChecked = semanticsLocked ? false : this.typeDraft.is_voice_target === true;
         return html`
             <div class=${rootClass}>
                 ${compact
@@ -319,7 +346,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         <select
                             class="select mono"
                             .value=${this.typeDraft.parent_type_id}
-                            @change=${(e) => this._emitDraftField('parent_type_id', e.target.value)}
+                            @change=${this._onParentTypeChange}
                         >
                             <option value="">${this.t('templates_page.field_parent_none')}</option>
                             ${this.parentTypeOptions.map((typeId) => html`
@@ -329,26 +356,22 @@ export class CRMEntityTypeEditor extends PlatformElement {
                     </div>
                     <div class="field">
                         <label class="field-label">${this.t('templates_page.field_icon')}</label>
-                        <div class="icon-row">
-                            <div class="icon-preview">
-                                <platform-icon name=${this._resolveIcon(this.typeDraft.icon)} size="18"></platform-icon>
-                            </div>
-                            <input
-                                class="input mono"
-                                .value=${this.typeDraft.icon}
-                                placeholder=${this.t('templates_page.ph_icon')}
-                                @input=${(e) => this._emitDraftField('icon', e.target.value)}
-                            />
-                        </div>
+                        <platform-icon-picker
+                            .value=${this.typeDraft.icon}
+                            .icons=${this._iconPickerIcons(this.typeDraft.icon)}
+                            placeholder=${this.t('templates_page.icon_picker_placeholder')}
+                            ?disabled=${this.savingType}
+                            @change=${this._onIconPickerChange}
+                        ></platform-icon-picker>
                     </div>
                     <div class="field">
                         <label class="field-label">${this.t('templates_page.field_color')}</label>
-                        <input
-                            class="input"
+                        <platform-palette-color-picker
                             .value=${this.typeDraft.color}
-                            placeholder=${this.t('templates_page.ph_color')}
-                            @input=${(e) => this._emitDraftField('color', e.target.value)}
-                        />
+                            allow-clear
+                            ?disabled=${this.savingType}
+                            @change=${this._onPaletteColorChange}
+                        ></platform-palette-color-picker>
                     </div>
                     <div class="field">
                         <label class="field-label">${this.t('templates_page.field_weight')}</label>
@@ -376,7 +399,24 @@ export class CRMEntityTypeEditor extends PlatformElement {
                                 .checked=${this.typeDraft.check_duplicates}
                                 @change=${(e) => this._emitDraftField('check_duplicates', Boolean(e.detail.value))}
                             ></platform-switch>
+                            <platform-switch
+                                size="sm"
+                                label=${this.t('templates_page.field_is_context_anchor')}
+                                .checked=${anchorChecked}
+                                ?disabled=${semanticsLocked || this.savingType}
+                                @change=${(e) => this._emitDraftField('is_context_anchor', Boolean(e.detail.value))}
+                            ></platform-switch>
+                            <platform-switch
+                                size="sm"
+                                label=${this.t('templates_page.field_is_voice_target')}
+                                .checked=${voiceChecked}
+                                ?disabled=${semanticsLocked || this.savingType}
+                                @change=${(e) => this._emitDraftField('is_voice_target', Boolean(e.detail.value))}
+                            ></platform-switch>
                         </div>
+                        ${semanticsLocked
+                            ? html`<div class="hint">${this.t('templates_page.note_semantics_flags_locked_hint')}</div>`
+                            : ''}
                     </div>
                     <div class="field">
                         <label class="field-label">${this.t('templates_page.field_description')}</label>

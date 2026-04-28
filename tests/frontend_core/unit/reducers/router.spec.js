@@ -11,11 +11,17 @@ describe('routerReducer', () => {
         expect(initialRouterState.notFound).toBe(false);
     });
 
-    it('ROUTER_ROUTE_CHANGED заполняет routeKey/params/pathname', () => {
-        const next = routerReducer(initialRouterState, ev(CoreEvents.ROUTER_ROUTE_CHANGED, { routeKey: 'channel', params: { id: 'c1' }, pathname: '/sync/c/c1' }));
+    it('ROUTER_ROUTE_CHANGED заполняет routeKey/params/pathname/search', () => {
+        const next = routerReducer(initialRouterState, ev(CoreEvents.ROUTER_ROUTE_CHANGED, {
+            routeKey: 'channel',
+            params: { id: 'c1' },
+            pathname: '/sync/c/c1',
+            search: '?tab=main',
+        }));
         expect(next.routeKey).toBe('channel');
         expect(next.params).toEqual({ id: 'c1' });
         expect(next.pathname).toBe('/sync/c/c1');
+        expect(next.search).toBe('?tab=main');
         expect(next.notFound).toBe(false);
     });
 

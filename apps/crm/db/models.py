@@ -201,7 +201,20 @@ class EntityType(Base):
         Index("idx_entity_types_parent", "parent_type_id"),
         Index("idx_entity_types_system", "is_system"),
     )
-    
+
+    def namespace_ids_list(self) -> List[str]:
+        raw = self.namespace_ids
+        if not isinstance(raw, list):
+            raise ValueError(
+                f"EntityType {self.type_id!r}: namespace_ids must be list[str], got {type(raw).__name__}"
+            )
+        for i, item in enumerate(raw):
+            if not isinstance(item, str):
+                raise ValueError(
+                    f"EntityType {self.type_id!r}: namespace_ids[{i}] must be str, got {type(item).__name__}"
+                )
+        return raw
+
     def __repr__(self) -> str:
         return f"<EntityType(type_id='{self.type_id}', name='{self.name}', company='{self.company_id}')>"
 
@@ -514,6 +527,7 @@ class NamespaceTemplate(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    crm_settings: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("company_id", "template_id", name="uq_namespace_template_company"),

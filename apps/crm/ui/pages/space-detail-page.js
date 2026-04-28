@@ -22,6 +22,7 @@
  *   - На load: get(namespace), editability(namespace), load entity_types.
  *   - _allowedTypeIds заполняется из ответа editability (current_allowed_type_ids).
  *   - Toggle типа: добавить/удалить из allowed_type_ids → namespace_update.
+ *   - Стадии канбана задач: панель под сеткой «метаданные + типы», на всю ширину.
  *   - Edit / create типа: <crm-entity-type-editor> в той же правой колонке вместо
  *     сетки карточек; кнопка «назад» возвращает к сетке.
  *   - Create нового типа: entityTypesResource.create + после CREATED —
@@ -35,13 +36,24 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-palette-color-picker.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 import '../components/entity-type-editor.js';
+import '../components/namespace-note-defaults-fields.js';
+import {
+    normalizeDefaultNoteVoiceMode,
+    parseNoteVoiceDefaultsFromCrmSettings,
+} from '../utils/namespace-crm-note-defaults.js';
+import {
+    buildDefaultSidebarNav,
+    sidebarNavTreeToApiPayload,
+} from '../utils/build-default-sidebar-nav.js';
 import {
     normalizeSchemaRows,
     buildSchemaFromRows,
 } from '../components/schema-field-builder.js';
+import { entityTypeNoteSubtreeLocked } from '../utils/entity-type-note-subtree-lock.js';
 
 const DEFAULT_TYPE_DRAFT = Object.freeze({
     type_id: '',
@@ -56,6 +68,8 @@ const DEFAULT_TYPE_DRAFT = Object.freeze({
     color: '',
     is_event: false,
     check_duplicates: true,
+    is_context_anchor: false,
+    is_voice_target: false,
     weight_coefficient: '1.0',
 });
 
@@ -75,6 +89,8 @@ export class CRMSpaceDetailPage extends PlatformPage {
     static properties = {
         itemId: { type: String },
         _description: { state: true },
+        _defaultNoteVoiceMode: { state: true },
+        _showNoteVoiceUi: { state: true },
         _allowedTypeIds: { state: true },
         _typeDraft: { state: true },
         _editingTypeId: { state: true },
@@ -84,6 +100,9 @@ export class CRMSpaceDetailPage extends PlatformPage {
         _savingAllowed: { state: true },
         _savingType: { state: true },
         _creatingType: { state: true },
+        _sidebarMenuBusy: { state: true },
+        _taskBoardDraft: { state: true },
+        _taskBoardSaveBusy: { state: true },
     };
 
     static styles = [
@@ -110,6 +129,12 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 overflow-y: auto;
                 padding: var(--space-2) var(--space-4) var(--space-4);
             }
+            .space-detail-stack {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
+            }
             .layout {
                 display: grid;
                 gap: var(--space-3);
@@ -117,6 +142,13 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 align-items: start;
             }
             @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+            .space-detail-left-col {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+                min-width: 0;
+            }
 
             .panel {
                 background: var(--glass-solid-subtle);
@@ -276,6 +308,59 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 align-items: center;
                 justify-content: center;
             }
+            .task-board-board {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding: var(--space-3);
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-md);
+                background: var(--crm-surface-muted);
+            }
+            .task-board-board-head {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .task-board-board-head-top {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+            .task-board-board-title {
+                font-weight: 600;
+                color: var(--text-primary);
+                min-width: 0;
+            }
+            .task-board-add-stage {
+                flex-shrink: 0;
+                padding: var(--space-2);
+                min-width: 40px;
+                min-height: 40px;
+            }
+            .stage-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) auto;
+                gap: var(--space-2);
+                align-items: center;
+            }
+            @media (max-width: 720px) {
+                .stage-row {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .stage-row-actions {
+                display: inline-flex;
+                flex-wrap: wrap;
+                gap: var(--space-1);
+                justify-content: flex-end;
+            }
+            .stage-color-picker {
+                min-width: 0;
+            }
         `,
     ];
 
@@ -283,6 +368,8 @@ export class CRMSpaceDetailPage extends PlatformPage {
         super();
         this.itemId = '';
         this._description = '';
+        this._defaultNoteVoiceMode = 'self';
+        this._showNoteVoiceUi = true;
         this._allowedTypeIds = [];
         this._typeDraft = makeTypeDraft();
         this._editingTypeId = '';
@@ -292,11 +379,15 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._savingAllowed = false;
         this._savingType = false;
         this._creatingType = false;
+        this._sidebarMenuBusy = false;
+        this._taskBoardDraft = null;
+        this._taskBoardSaveBusy = false;
         this._lastRequestedId = '';
 
         this._namespaces = this.useResource('crm/namespaces');
         this._editabilityOp = this.useOp('crm/namespace_editability');
         this._namespaceUpdateOp = this.useOp('crm/namespace_update');
+        this._taskBoardEditorStateOp = this.useOp('crm/task_board_editor_state');
         this._entityTypes = this.useResource('crm/entity_types', { autoload: true });
         this._entityTypeUpdateOp = this.useOp('crm/entity_type_update');
         this._schemaOptionsOp = this.useOp('crm/template_schema_options');
@@ -328,20 +419,49 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 throw new Error('namespace_editability: current_allowed_type_ids must be an array');
             }
             this._allowedTypeIds = ids.filter((id) => typeof id === 'string' && id.length > 0);
+            this._loadTaskBoardEditorState();
+        });
+        this.useEvent(this._taskBoardEditorStateOp.op.events.SUCCEEDED, (event) => {
+            const r = event.payload.result;
+            const boards = r && Array.isArray(r.boards) ? r.boards : [];
+            this._taskBoardDraft = boards
+                .map((b) => {
+                    const board_key = typeof b.board_key === 'string' ? b.board_key : '';
+                    const label = typeof b.label === 'string' ? b.label : '';
+                    const stagesRaw = Array.isArray(b.stages) ? b.stages : [];
+                    const stages = stagesRaw.map((s) => {
+                        const id = typeof s.id === 'string' ? s.id : '';
+                        const lb = typeof s.label === 'string' ? s.label : '';
+                        const color = typeof s.color === 'string' ? s.color : '';
+                        return { id, label: lb, color };
+                    });
+                    return { board_key, label, stages };
+                })
+                .filter((row) => row.board_key.length > 0);
+        });
+        this.useEvent(this._taskBoardEditorStateOp.op.events.FAILED, (event) => {
+            this._taskBoardDraft = null;
+            const msg = event.payload && typeof event.payload.message === 'string' ? event.payload.message : '';
+            this.toast('crm:space_detail_page.task_board_load_failed', { type: 'error', vars: { message: msg } });
         });
         this.useEvent(this._namespaceUpdateOp.op.events.SUCCEEDED, (event) => {
             this._savingMeta = false;
             this._savingAllowed = false;
+            this._sidebarMenuBusy = false;
+            this._taskBoardSaveBusy = false;
             const result = event && event.payload && event.payload.result;
             if (result && result.name === this.itemId) {
                 this._hydrateFromNamespace(result);
             }
             this._namespaces.load();
             this._editabilityOp.run({ name: this.itemId });
+            this._loadTaskBoardEditorState();
         });
         this.useEvent(this._namespaceUpdateOp.op.events.FAILED, () => {
             this._savingMeta = false;
             this._savingAllowed = false;
+            this._sidebarMenuBusy = false;
+            this._taskBoardSaveBusy = false;
         });
         this.useEvent(this._entityTypeUpdateOp.op.events.SUCCEEDED, () => {
             this._savingType = false;
@@ -392,6 +512,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
         if (this._lastRequestedId === this.itemId) return;
         this._lastRequestedId = this.itemId;
         this._allowedTypeIds = [];
+        this._taskBoardDraft = null;
         this._namespaces.get(this.itemId);
         this._editabilityOp.run({ name: this.itemId });
     }
@@ -403,15 +524,190 @@ export class CRMSpaceDetailPage extends PlatformPage {
 
     _hydrateFromNamespace(item) {
         this._description = typeof item.description === 'string' ? item.description : '';
+        const cs =
+            item.crm_settings !== undefined
+            && item.crm_settings !== null
+            && typeof item.crm_settings === 'object'
+                ? item.crm_settings
+                : null;
+        const parsed = parseNoteVoiceDefaultsFromCrmSettings(cs);
+        this._defaultNoteVoiceMode = parsed.defaultNoteVoiceMode;
+        this._showNoteVoiceUi = parsed.showNoteVoiceUi;
+    }
+
+    _loadTaskBoardEditorState() {
+        if (typeof this.itemId !== 'string' || this.itemId.length === 0) return;
+        this._taskBoardEditorStateOp.run({ namespace_name: this.itemId });
+    }
+
+    _taskBoardStageIdValid(raw) {
+        if (typeof raw !== 'string') return false;
+        return /^[a-z][a-z0-9_]*$/.test(raw.trim());
+    }
+
+    _onSaveTaskBoard() {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || draft.length === 0) return;
+        const presets = {};
+        for (const row of draft) {
+            const board_key = typeof row.board_key === 'string' ? row.board_key : '';
+            if (!board_key) continue;
+            const stages = [];
+            const seen = new Set();
+            for (const st of row.stages) {
+                const id = typeof st.id === 'string' ? st.id.trim() : '';
+                const label = typeof st.label === 'string' ? st.label.trim() : '';
+                if (!id.length || !label.length) continue;
+                if (!this._taskBoardStageIdValid(id)) {
+                    this.toast('crm:space_detail_page.task_board_err_stage_id', { type: 'error' });
+                    return;
+                }
+                if (seen.has(id)) {
+                    this.toast('crm:space_detail_page.task_board_err_duplicate_id', { type: 'error' });
+                    return;
+                }
+                seen.add(id);
+                const cell = { id, label };
+                const color = typeof st.color === 'string' ? st.color.trim() : '';
+                if (color.length > 0) cell.color = color;
+                stages.push(cell);
+            }
+            if (stages.length === 0) {
+                this.toast('crm:space_detail_page.task_board_err_stages', { type: 'error' });
+                return;
+            }
+            presets[board_key] = { stages };
+        }
+        if (Object.keys(presets).length === 0) {
+            this.toast('crm:space_detail_page.task_board_err_stages', { type: 'error' });
+            return;
+        }
+        this._taskBoardSaveBusy = true;
+        this._namespaceUpdateOp.run({
+            name: this.itemId,
+            body: { crm_settings: { pipeline_stage_presets: presets } },
+        });
+    }
+
+    _setTaskBoardDraft(next) {
+        this._taskBoardDraft = next;
+    }
+
+    _onTaskBoardStageField(boardIdx, stageIdx, field, value) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx] || !draft[boardIdx].stages[stageIdx]) return;
+        const next = draft.map((row, bi) => {
+            if (bi !== boardIdx) return row;
+            return {
+                ...row,
+                stages: row.stages.map((s, si) => (si === stageIdx ? { ...s, [field]: value } : s)),
+            };
+        });
+        this._setTaskBoardDraft(next);
+    }
+
+    _addTaskBoardStage(boardIdx) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx]) return;
+        const next = draft.map((row, bi) => {
+            if (bi !== boardIdx) return row;
+            return { ...row, stages: [...row.stages, { id: '', label: '', color: '' }] };
+        });
+        this._setTaskBoardDraft(next);
+    }
+
+    _removeTaskBoardStage(boardIdx, stageIdx) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx]) return;
+        const row = draft[boardIdx];
+        if (row.stages.length <= 1) {
+            this.toast('crm:space_detail_page.task_board_err_min_stages', { type: 'error' });
+            return;
+        }
+        const next = draft.map((r, bi) => {
+            if (bi !== boardIdx) return r;
+            return { ...r, stages: r.stages.filter((_, si) => si !== stageIdx) };
+        });
+        this._setTaskBoardDraft(next);
+    }
+
+    _moveTaskBoardStage(boardIdx, stageIdx, delta) {
+        const draft = this._taskBoardDraft;
+        if (!Array.isArray(draft) || !draft[boardIdx]) return;
+        const stages = draft[boardIdx].stages;
+        const j = stageIdx + delta;
+        if (j < 0 || j >= stages.length) return;
+        const nextStages = stages.slice();
+        const t = nextStages[stageIdx];
+        nextStages[stageIdx] = nextStages[j];
+        nextStages[j] = t;
+        const next = draft.map((row, bi) => (bi === boardIdx ? { ...row, stages: nextStages } : row));
+        this._setTaskBoardDraft(next);
     }
 
     _onDescriptionInput(e) { this._description = e.target.value; }
+
+    _onNoteDefaultVoiceFromChild(e) {
+        const d = e.detail;
+        if (d === undefined || d === null || typeof d !== 'object' || typeof d.value !== 'string') {
+            return;
+        }
+        const v = d.value;
+        if (v === 'none' || v === 'last' || v === 'self') {
+            this._defaultNoteVoiceMode = v;
+        }
+    }
+
+    _onNoteVoiceShowUiFromChild(e) {
+        const d = e.detail;
+        if (d === undefined || d === null || typeof d !== 'object' || typeof d.value !== 'boolean') {
+            return;
+        }
+        this._showNoteVoiceUi = d.value;
+    }
 
     _onSaveMeta() {
         this._savingMeta = true;
         this._namespaceUpdateOp.run({
             name: this.itemId,
-            body: { description: this._description.trim().length > 0 ? this._description.trim() : null },
+            body: {
+                description: this._description.trim().length > 0 ? this._description.trim() : null,
+                crm_settings: {
+                    default_note_voice: normalizeDefaultNoteVoiceMode(this._defaultNoteVoiceMode),
+                    show_note_voice_ui: this._showNoteVoiceUi === true,
+                },
+            },
+        });
+    }
+
+    _onSidebarNavReset() {
+        this._sidebarMenuBusy = true;
+        this._namespaceUpdateOp.run({
+            name: this.itemId,
+            body: { crm_settings: { sidebar_navigation: null } },
+        });
+    }
+
+    _onSidebarNavSnapshot() {
+        const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
+        const tree = buildDefaultSidebarNav({
+            allowedTypeIds: this._allowedTypeIds,
+            entityTypes: items,
+            labels: {
+                groupNotes: this.t('sidebar.nav_group_notes'),
+                groupTasks: this.t('sidebar.nav_group_tasks'),
+                groupEntities: this.t('sidebar.nav_group_entities'),
+                allNotes: this.t('sidebar.nav_all_notes'),
+                allTasks: this.t('sidebar.nav_all_tasks'),
+                allEntities: this.t('sidebar.nav_all_entities'),
+                graph: this.t('sidebar.nav.graph'),
+            },
+        });
+        const payload = sidebarNavTreeToApiPayload(tree);
+        this._sidebarMenuBusy = true;
+        this._namespaceUpdateOp.run({
+            name: this.itemId,
+            body: { crm_settings: { sidebar_navigation: payload } },
         });
     }
 
@@ -434,12 +730,29 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._typeFormOpen = true;
     }
 
+    _spaceEntityTypeCatalogRows() {
+        const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
+        return items.map((row) => ({
+            type_id: row.type_id,
+            parent_type_id:
+                typeof row.parent_type_id === 'string' && row.parent_type_id.length > 0
+                    ? row.parent_type_id
+                    : '',
+        }));
+    }
+
     _editType(item) {
         if (!item || typeof item.type_id !== 'string') {
             throw new Error('CRMSpaceDetailPage._editType: item.type_id required');
         }
         this._editingTypeId = item.type_id;
         this._typeFormOpen = true;
+        const catalogRows = this._spaceEntityTypeCatalogRows();
+        const parentId = typeof item.parent_type_id === 'string' ? item.parent_type_id : '';
+        const noteLocked = entityTypeNoteSubtreeLocked(
+            { type_id: item.type_id, parent_type_id: parentId },
+            catalogRows,
+        );
         this._typeDraft = {
             type_id: item.type_id,
             name: item.name || '',
@@ -448,11 +761,13 @@ export class CRMSpaceDetailPage extends PlatformPage {
             required_fields_rows: normalizeSchemaRows(item.required_fields && typeof item.required_fields === 'object' ? item.required_fields : {}),
             optional_fields_rows: normalizeSchemaRows(item.optional_fields && typeof item.optional_fields === 'object' ? item.optional_fields : {}),
             namespace_ids: Array.isArray(item.namespace_ids) ? [...item.namespace_ids] : [],
-            parent_type_id: item.parent_type_id || '',
+            parent_type_id: parentId,
             icon: item.icon || '',
             color: item.color || '',
             is_event: item.is_event === true,
             check_duplicates: item.check_duplicates !== false,
+            is_context_anchor: noteLocked ? false : item.is_context_anchor === true,
+            is_voice_target: noteLocked ? false : item.is_voice_target === true,
             weight_coefficient: String(item.weight_coefficient === undefined ? 1 : item.weight_coefficient),
         };
     }
@@ -503,6 +818,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 throw new Error(this.t('errors.key_both_sections', { key }));
             }
         }
+        const noteLocked = entityTypeNoteSubtreeLocked(this._typeDraft, this._spaceEntityTypeCatalogRows());
         const body = {
             parent_type_id: this._typeDraft.parent_type_id.trim() || null,
             name,
@@ -514,6 +830,8 @@ export class CRMSpaceDetailPage extends PlatformPage {
             color: this._typeDraft.color.trim() || null,
             is_event: this._typeDraft.is_event === true,
             check_duplicates: this._typeDraft.check_duplicates !== false,
+            is_context_anchor: noteLocked ? false : this._typeDraft.is_context_anchor === true,
+            is_voice_target: noteLocked ? false : this._typeDraft.is_voice_target === true,
             weight_coefficient: Number.parseFloat(this._typeDraft.weight_coefficient || '1') || 1,
         };
         if (this._editingTypeId.length > 0) {
@@ -589,9 +907,15 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 </page-header>
             </div>
             <div class="scroll">
-                <div class="layout">
-                    ${this._renderLeftPanel(ns)}
-                    ${this._renderRightPanel()}
+                <div class="space-detail-stack">
+                    <div class="layout">
+                        <div class="space-detail-left-col">
+                            ${this._renderLeftPanel(ns)}
+                            ${this._renderSidebarMenuPanel(ns)}
+                        </div>
+                        ${this._renderRightPanel()}
+                    </div>
+                    ${this._renderTaskBoardPanel()}
                 </div>
             </div>
         `;
@@ -622,6 +946,14 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         @input=${this._onDescriptionInput}
                     ></textarea>
                 </div>
+
+                <crm-namespace-note-defaults-fields
+                    .defaultNoteVoiceMode=${this._defaultNoteVoiceMode}
+                    .showNoteVoiceUi=${this._showNoteVoiceUi}
+                    ?disabled=${this._savingMeta}
+                    @default-note-voice-change=${this._onNoteDefaultVoiceFromChild}
+                    @show-note-voice-ui-change=${this._onNoteVoiceShowUiFromChild}
+                ></crm-namespace-note-defaults-fields>
 
                 <div class="actions-row">
                     <button
@@ -654,6 +986,200 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         </div>
                     </div>
                 ` : ''}
+            </div>
+        `;
+    }
+
+    _renderSidebarMenuPanel(ns) {
+        const crm = ns && ns.crm_settings && typeof ns.crm_settings === 'object' ? ns.crm_settings : null;
+        const custom = crm !== null
+            && Array.isArray(crm.sidebar_navigation)
+            && crm.sidebar_navigation.length > 0;
+        const modeHint = custom
+            ? this.t('space_detail_page.sidebar_menu_mode_custom')
+            : this.t('space_detail_page.sidebar_menu_mode_derived');
+        return html`
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">
+                        <platform-icon name="menu" size="18"></platform-icon>
+                        ${this.t('space_detail_page.sidebar_menu_section')}
+                    </span>
+                </div>
+                <p class="hint">${this.t('space_detail_page.sidebar_menu_hint')}</p>
+                <p class="hint mono">${modeHint}</p>
+                <div class="actions-row">
+                    <button
+                        class="btn btn-soft"
+                        type="button"
+                        ?disabled=${this._sidebarMenuBusy}
+                        @click=${this._onSidebarNavSnapshot}
+                    >
+                        ${this.t('space_detail_page.sidebar_menu_snapshot')}
+                    </button>
+                    <button
+                        class="btn btn-danger"
+                        type="button"
+                        ?disabled=${this._sidebarMenuBusy || !custom}
+                        @click=${this._onSidebarNavReset}
+                    >
+                        ${this.t('space_detail_page.sidebar_menu_reset')}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderTaskBoardPanel() {
+        const ed = this._editabilityOp.lastResult;
+        if (!ed || typeof ed.namespace !== 'string' || ed.namespace !== this.itemId) {
+            return html`
+                <div class="panel">
+                    <div class="panel-header">
+                        <span class="panel-title">
+                            <platform-icon name="layers" size="18"></platform-icon>
+                            ${this.t('space_detail_page.task_board_section')}
+                        </span>
+                    </div>
+                    <div class="center" style="padding: var(--space-3);">
+                        <glass-spinner size="md"></glass-spinner>
+                    </div>
+                </div>
+            `;
+        }
+        const tbOp = this._taskBoardEditorStateOp;
+        const draft = this._taskBoardDraft;
+        return html`
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">
+                        <platform-icon name="layers" size="18"></platform-icon>
+                        ${this.t('space_detail_page.task_board_section')}
+                    </span>
+                </div>
+                <p class="hint">${this.t('space_detail_page.task_board_hint')}</p>
+                ${tbOp.busy && !Array.isArray(draft)
+                    ? html`<div class="center" style="padding: var(--space-3);"><glass-spinner size="md"></glass-spinner></div>`
+                    : ''}
+                ${!tbOp.busy && tbOp.error !== null && !Array.isArray(draft)
+                    ? html`
+                        <p class="hint">${this.t('space_detail_page.task_board_retry_hint', {
+                            message:
+                                typeof tbOp.error === 'string' && tbOp.error.length !== 0
+                                    ? tbOp.error
+                                    : '—',
+                        })}</p>
+                        <div class="actions-row">
+                            <button class="btn btn-soft" type="button" @click=${this._loadTaskBoardEditorState}>
+                                ${this.t('space_detail_page.task_board_retry')}
+                            </button>
+                        </div>
+                    `
+                    : ''}
+                ${Array.isArray(draft) && draft.length === 0
+                    ? html`<p class="hint">${this.t('space_detail_page.task_board_empty')}</p>`
+                    : ''}
+                ${Array.isArray(draft) && draft.length > 0
+                    ? html`
+                        ${draft.map((board, bi) => html`
+                            <div class="task-board-board">
+                                <div class="task-board-board-head">
+                                    <div class="task-board-board-head-top">
+                                        <div class="task-board-board-title">${board.label}</div>
+                                        <button
+                                            class="btn btn-soft task-board-add-stage"
+                                            type="button"
+                                            title=${this.t('space_detail_page.task_board_add_stage')}
+                                            aria-label=${this.t('space_detail_page.task_board_add_stage')}
+                                            @click=${() => this._addTaskBoardStage(bi)}
+                                        >
+                                            <platform-icon name="plus" size="18"></platform-icon>
+                                        </button>
+                                    </div>
+                                    <div class="hint mono">${board.board_key}</div>
+                                </div>
+                                ${board.stages.map((st, si) => html`
+                                    <div class="stage-row">
+                                        <input
+                                            class="input"
+                                            type="text"
+                                            autocomplete="off"
+                                            spellcheck="false"
+                                            placeholder=${this.t('space_detail_page.task_board_stage_id_ph')}
+                                            .value=${st.id}
+                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'id', e.target.value)}
+                                        />
+                                        <input
+                                            class="input"
+                                            type="text"
+                                            autocomplete="off"
+                                            placeholder=${this.t('space_detail_page.task_board_stage_label_ph')}
+                                            .value=${st.label}
+                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'label', e.target.value)}
+                                        />
+                                        <platform-palette-color-picker
+                                            class="stage-color-picker"
+                                            allow-clear
+                                            .value=${st.color}
+                                            ?disabled=${this._taskBoardSaveBusy
+                                                || this._savingMeta
+                                                || this._savingAllowed
+                                                || this._sidebarMenuBusy}
+                                            @change=${(e) => {
+                                                const v = e.detail && typeof e.detail.value === 'string'
+                                                    ? e.detail.value
+                                                    : '';
+                                                this._onTaskBoardStageField(bi, si, 'color', v);
+                                            }}
+                                        ></platform-palette-color-picker>
+                                        <div class="stage-row-actions">
+                                            <button
+                                                class="btn btn-soft"
+                                                type="button"
+                                                ?disabled=${si === 0}
+                                                @click=${() => this._moveTaskBoardStage(bi, si, -1)}
+                                                title=${this.t('space_detail_page.task_board_move_up')}
+                                            >
+                                                ${this.t('space_detail_page.task_board_move_up')}
+                                            </button>
+                                            <button
+                                                class="btn btn-soft"
+                                                type="button"
+                                                ?disabled=${si >= board.stages.length - 1}
+                                                @click=${() => this._moveTaskBoardStage(bi, si, 1)}
+                                                title=${this.t('space_detail_page.task_board_move_down')}
+                                            >
+                                                ${this.t('space_detail_page.task_board_move_down')}
+                                            </button>
+                                            <button
+                                                class="btn btn-danger"
+                                                type="button"
+                                                @click=${() => this._removeTaskBoardStage(bi, si)}
+                                            >
+                                                ${this.t('space_detail_page.task_board_remove_stage')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                `)}
+                            </div>
+                        `)}
+                        <div class="actions-row">
+                            <button
+                                class="btn btn-primary"
+                                type="button"
+                                ?disabled=${this._taskBoardSaveBusy
+                                    || this._savingMeta
+                                    || this._savingAllowed
+                                    || this._sidebarMenuBusy}
+                                @click=${this._onSaveTaskBoard}
+                            >
+                                ${this._taskBoardSaveBusy
+                                    ? this.t('space_detail_page.task_board_saving')
+                                    : this.t('space_detail_page.task_board_save')}
+                            </button>
+                        </div>
+                    `
+                    : ''}
             </div>
         `;
     }
@@ -779,6 +1305,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
                     .typeDraft=${this._typeDraft}
                     .schemaOptions=${this._schemaOptions}
                     .namespaces=${namespaces}
+                    .entityTypeCatalogRows=${this._spaceEntityTypeCatalogRows()}
                     .parentTypeOptions=${this._getParentTypeOptions()}
                     editingTypeId=${this._editingTypeId}
                     ?savingType=${this._savingType || this._creatingType}

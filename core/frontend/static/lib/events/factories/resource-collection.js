@@ -118,6 +118,7 @@ export function createResourceCollection(options) {
     const sliceKey = options.sliceKey || deriveSliceKey(name);
     const listQuery = options.listQuery || (() => ({ limit: 200 }));
     const mapItem = options.mapItem || ((x) => x);
+    const listFetchAllPages = options.listFetchAllPages === true;
     const buildItemUrl = options.buildItemUrl || ((id) => `${baseUrl}/${encodeURIComponent(id)}`);
     const reloadAfterMutation = options.reloadAfterMutation !== false;
     const requestHeaders = typeof options.requestHeaders === 'function' ? options.requestHeaders : null;
@@ -422,6 +423,46 @@ export function createResourceCollection(options) {
                 const payload = _requestPayload(event);
                 let data;
                 try {
+                    if (listFetchAllPages) {
+                        const baseQuery = listQuery(payload);
+                        if (!baseQuery || typeof baseQuery !== 'object') {
+                            throw new Error(`createResourceCollection(${name}): listQuery must return object`);
+                        }
+                        const pageLimit = typeof baseQuery.limit === 'number' ? baseQuery.limit : 200;
+                        let off = typeof baseQuery.offset === 'number' ? baseQuery.offset : 0;
+                        const mergedItems = [];
+                        let total = 0;
+                        for (;;) {
+                            const pageData = await _doRequest({
+                                commandType: events.LIST_REQUESTED,
+                                succeeded: events.LIST_LOADED,
+                                failed: events.LIST_FAILED,
+                                wsPayload: payload,
+                                method: 'GET',
+                                url: baseUrl,
+                                httpQuery: { ...baseQuery, limit: pageLimit, offset: off },
+                                op: 'list',
+                                headersPayload: payload,
+                            }, event, ctx);
+                            if (!pageData || !Array.isArray(pageData.items)) {
+                                throw new Error(`createResourceCollection(${name}): list response.items missing or not array`);
+                            }
+                            if (typeof pageData.total !== 'number') {
+                                throw new Error(`createResourceCollection(${name}): list response.total must be number when listFetchAllPages is true`);
+                            }
+                            total = pageData.total;
+                            mergedItems.push(...pageData.items);
+                            if (mergedItems.length >= total) {
+                                break;
+                            }
+                            if (pageData.items.length < pageLimit) {
+                                break;
+                            }
+                            off += pageLimit;
+                        }
+                        ctx.dispatch(events.LIST_LOADED, { items: mergedItems }, { causation_id: event.id, source: _transportSource() });
+                        return;
+                    }
                     data = await _doRequest({
                         commandType: events.LIST_REQUESTED,
                         succeeded: events.LIST_LOADED,

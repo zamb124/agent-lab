@@ -14,7 +14,13 @@
             "access_requests": "Access requests",
             "ai_analysis": "AI analysis",
             "settings": "Settings"
-        }
+        },
+        "nav_group_notes": "Notes",
+        "nav_group_tasks": "Tasks",
+        "nav_group_entities": "Entities",
+        "nav_all_notes": "All notes",
+        "nav_all_tasks": "All tasks",
+        "nav_all_entities": "All entities"
     },
     "routes": {
         "platform_services": "Services",
@@ -325,6 +331,9 @@
         "field_flags": "Flags",
         "field_is_event": "is_event",
         "field_check_duplicates": "check_duplicates",
+        "field_is_context_anchor": "Context anchor (is_context_anchor)",
+        "field_is_voice_target": "Note voice target (is_voice_target)",
+        "note_semantics_flags_locked_hint": "Types under the note branch (note and subtypes) cannot use these modes.",
         "field_description": "Description",
         "field_prompt": "AI extraction prompt",
         "field_namespaces": "Available in namespaces",
@@ -338,7 +347,9 @@
         "preview_optional": "optional_fields (preview)",
         "loading_schema": "Loading schema options...",
         "save_type": "Save type",
-        "save_type_changes": "Save changes"
+        "save_type_changes": "Save changes",
+        "task_board_template_hint": "Namespaces created from this template will get these column presets (unless changed later).",
+        "task_board_empty": "This template has no task types — add the Task type or a subtype whose parent is task."
     },
     "access_request_modal": {
         "how_title": "How it works",
@@ -560,6 +571,15 @@
     },
     "note_edit": {
         "field_description": "Note text",
+        "field_voice_author": "On behalf of",
+        "field_context_anchor": "Context anchor",
+        "field_note_kind": "Note kind",
+        "subtype_plain": "No subtype",
+        "voice_author_search": "Search entity for author of record",
+        "context_anchor_search": "Search context anchor entity",
+        "context_anchor_search_types": "Search among: {{types}}",
+        "entity_search_min": "Type more characters to search",
+        "entity_search_none": "No matches",
         "field_date": "Note date",
         "field_tags": "Tags",
         "placeholder_title": "Note title",
@@ -567,6 +587,8 @@
         "placeholder_tag": "Type a tag and press Enter",
         "voice_start": "Voice input",
         "voice_stop": "Stop recording",
+        "voice_dictation_start": "Dictate into note text",
+        "voice_dictation_stop": "Stop dictation",
         "attachment_add": "Attach file",
         "attachment_remove": "Remove attachment",
         "action_cancel": "Cancel",
@@ -667,14 +689,14 @@
         "action_undo": "Undo"
     },
     "tasks_page": {
-        "column_todo": "New",
-        "column_in_progress": "In progress",
-        "column_done": "Done",
-        "next_to_progress": "Start",
-        "next_to_done": "Complete",
-        "next_revert": "Reopen",
+        "next_status": "Next stage",
         "drag_hint": "Drag task",
-        "board_syncing": "Saving task status"
+        "board_syncing": "Saving task status",
+        "board_blocked": "Board is not available in this mode",
+        "board_stages_failed": "Failed to load board stages",
+        "board_stages_empty": "Task stage list is empty",
+        "board_not_ready": "Task board is not ready yet",
+        "move_failed": "Could not move: {message}"
     },
     "entities_page": {
         "tab_list": "List",
@@ -729,6 +751,16 @@
         "empty_message": "No namespaces yet. Create the first one.",
         "empty_description": "No description"
     },
+    "namespace_note_defaults": {
+        "section_title": "Notes: record author",
+        "section_hint": "If no author is selected on the note card, the rule below applies.",
+        "voice_mode_label": "Default behavior",
+        "voice_mode_self": "Your person entity",
+        "voice_mode_none": "Do not set an author",
+        "voice_mode_last": "Last selected author",
+        "voice_mode_hint": "Stored in this namespace or template settings and used when saving without an explicit author.",
+        "show_ui_label": "Show author picker in the note editor"
+    },
     "space_detail_page": {
         "subtitle": "Namespace settings and entity types",
         "no_id": "Namespace not specified",
@@ -748,7 +780,32 @@
         "amocrm_sync": "Import leads, contacts, companies, users",
         "amocrm_fields": "Refresh custom fields catalog",
         "amocrm_subdomain_required": "Enter amo subdomain",
-        "link_integrations": "Integrations"
+        "link_integrations": "Integrations",
+        "sidebar_menu_section": "Sidebar menu",
+        "sidebar_menu_hint": "Navigation items in the CRM left rail for this namespace. By default the tree is built from allowed types; here you can save a snapshot or switch back to automatic layout.",
+        "sidebar_menu_mode_custom": "Mode: saved tree",
+        "sidebar_menu_mode_derived": "Mode: derived from types",
+        "sidebar_menu_snapshot": "Save menu from types",
+        "sidebar_menu_reset": "Reset to automatic",
+        "task_board_section": "Task board columns",
+        "task_board_hint": "Kanban stages for tasks (type task) and subtypes whose parent is task. Stage id is stored in attributes.status: lowercase Latin letters, digits and underscores; must start with a letter.",
+        "task_board_load_failed": "Could not load board editor: {message}",
+        "task_board_retry_hint": "Could not load: {message}",
+        "task_board_retry": "Retry loading",
+        "task_board_empty": "This namespace has no task types yet—enable the Task type or a subtype whose parent is task.",
+        "task_board_stage_id_ph": "id (e.g. todo)",
+        "task_board_stage_label_ph": "Column label",
+        "task_board_stage_color_ph": "Color (optional)",
+        "task_board_add_stage": "Add stage",
+        "task_board_remove_stage": "Remove",
+        "task_board_move_up": "Up",
+        "task_board_move_down": "Down",
+        "task_board_save": "Save stages",
+        "task_board_saving": "Saving...",
+        "task_board_err_stages": "Each board needs at least one stage with both id and label filled in",
+        "task_board_err_stage_id": "Invalid stage id. Use lowercase Latin letters, digits and underscores; first character must be a letter.",
+        "task_board_err_duplicate_id": "Duplicate stage id on the same board",
+        "task_board_err_min_stages": "A board must keep at least one stage"
     },
     "integrations_page": {
         "title": "Integrations",
