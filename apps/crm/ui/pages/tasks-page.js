@@ -769,7 +769,7 @@ export class CRMTasksPage extends CRMNamespacePage {
 
     _boardGridTemplateColumns(taskStatuses) {
         if (this._isMobile) {
-            return taskStatuses.map(() => 'minmax(0, 1fr)').join(' ');
+            return 'minmax(0, 1fr)';
         }
         return taskStatuses
             .map((s) => (this._isColumnCollapsed(s.id) ? 'minmax(36px, 44px)' : 'minmax(0, 1fr)'))

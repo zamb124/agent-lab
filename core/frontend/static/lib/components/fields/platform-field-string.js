@@ -8,6 +8,7 @@ export class PlatformFieldString extends PlatformElement {
         mode: { type: String },
         disabled: { type: Boolean },
         placeholder: { type: String },
+        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -35,6 +36,7 @@ export class PlatformFieldString extends PlatformElement {
         this.mode = 'view';
         this.disabled = false;
         this.placeholder = '';
+        this.flat = false;
     }
 
     _onInput(e) {

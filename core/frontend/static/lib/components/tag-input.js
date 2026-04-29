@@ -73,6 +73,26 @@ export class TagInput extends PlatformElement {
             .tag-input::placeholder {
                 color: var(--text-tertiary);
             }
+
+            :host([flat]) .tag-container {
+                gap: var(--space-1);
+                padding: 0;
+                min-height: 0;
+                background: transparent;
+                border: none;
+                border-radius: 0;
+            }
+
+            :host([flat]) .tag-container:focus-within {
+                border: none;
+                box-shadow: none;
+            }
+
+            :host([flat]) .tag-input {
+                font-size: 16px;
+                font-weight: 500;
+                padding: 2px 0;
+            }
         `
     ];
 
@@ -80,6 +100,7 @@ export class TagInput extends PlatformElement {
         tags: { type: Array },
         placeholder: { type: String },
         readonly: { type: Boolean },
+        flat: { type: Boolean, reflect: true },
     };
 
     constructor() {
@@ -87,6 +108,7 @@ export class TagInput extends PlatformElement {
         this.tags = [];
         this.placeholder = 'Добавить тег...';
         this.readonly = false;
+        this.flat = false;
     }
 
     _getTags() {

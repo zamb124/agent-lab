@@ -41,6 +41,7 @@ export class PlatformField extends PlatformElement {
         disabled: { type: Boolean },
         config: { type: Object },
         placeholder: { type: String },
+        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -52,10 +53,22 @@ export class PlatformField extends PlatformElement {
                 display: block;
                 font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
-                color: var(--text-tertiary);
-                margin-bottom: var(--space-1);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-2);
                 text-transform: uppercase;
                 letter-spacing: 0.06em;
+            }
+
+            :host([flat]) .field-label {
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                margin-bottom: 8px;
+                color: var(--text-secondary);
+            }
+
+            :host-context([data-theme="light"]) :host([flat]) .field-label {
+                color: var(--text-tertiary);
             }
         `,
     ];
@@ -69,6 +82,7 @@ export class PlatformField extends PlatformElement {
         this.disabled = false;
         this.config = {};
         this.placeholder = '';
+        this.flat = false;
     }
 
     _onChange(e) {
@@ -82,12 +96,14 @@ export class PlatformField extends PlatformElement {
 
     _renderField() {
         const tagName = FIELD_TYPE_MAP[this.type];
+        const f = this.flat === true;
         if (!tagName) {
             return html`<platform-field-string
                 .value=${this.value != null ? String(this.value) : ''}
                 .mode=${this.mode}
                 .placeholder=${this.placeholder}
                 ?disabled=${this.disabled}
+                ?flat=${f}
                 @change=${this._onChange}
             ></platform-field-string>`;
         }
@@ -99,6 +115,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-string>`;
 
@@ -108,6 +125,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-text>`;
 
@@ -117,6 +135,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-number>`;
 
@@ -127,6 +146,7 @@ export class PlatformField extends PlatformElement {
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
                     ?integer=${true}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-number>`;
 
@@ -135,6 +155,7 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value}
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-boolean>`;
 
@@ -143,6 +164,7 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value}
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-date>`;
 
@@ -152,6 +174,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
                     ?datetime=${true}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-date>`;
 
@@ -161,6 +184,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .config=${this.config}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-enum>`;
 
@@ -169,6 +193,7 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value}
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-array>`;
 
@@ -177,6 +202,7 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value}
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-object>`;
 
@@ -193,6 +219,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
+                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-string>`;
         }

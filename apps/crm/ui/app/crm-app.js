@@ -176,6 +176,7 @@ const CRM_ROUTES = [
  */
 const CRM_ROUTES_WITH_OWN_PAGE_HEADER = new Set([
     'notes',
+    'note',
     'entities',
     'tasks',
     'settings',
@@ -436,6 +437,7 @@ export class CRMApp extends PlatformApp {
                 <platform-island
                     padding=${mobileIslandFullBleed ? 'none' : 'md'}
                     ?safe-bottom=${mobileIslandFullBleed}
+                    ?content-no-scroll=${routeKey === 'entities'}
                 >${content}</platform-island>
             </div>
             <platform-lara-assistant

@@ -9,6 +9,7 @@ export class PlatformFieldNumber extends PlatformElement {
         disabled: { type: Boolean },
         placeholder: { type: String },
         integer: { type: Boolean },
+        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -37,6 +38,7 @@ export class PlatformFieldNumber extends PlatformElement {
         this.disabled = false;
         this.placeholder = '';
         this.integer = false;
+        this.flat = false;
     }
 
     _onInput(e) {

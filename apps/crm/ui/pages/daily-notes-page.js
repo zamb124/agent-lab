@@ -39,6 +39,14 @@ import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/layout/page-header.js';
+import {
+    buildSummaryEntityLookupFromNoteBuckets,
+    entityDisplayIconName,
+    resolveSummaryChipEntity,
+    summaryChipUnresolvedIconName,
+} from '../utils/related-entity-presenter.js';
+
+const ENTITY_TYPES_RESOURCE = 'crm/entity_types';
 
 function _formatIsoDate(d) {
     const y = d.getFullYear();
@@ -57,15 +65,6 @@ function _formatHHMM(date) {
     return `${hours}:${minutes}`;
 }
 
-function _normalizeChipKey(label) {
-    if (typeof label !== 'string') return null;
-    let s = label.trim();
-    if (!s) return null;
-    if (s.startsWith('@')) s = s.slice(1).trim();
-    s = s.replace(/^["'([{]+|["')\]}.,;:!?]+$/g, '').trim();
-    return s.length === 0 ? null : s.toLowerCase();
-}
-
 const SUMMARY_CHIP_TONES = ['blue', 'cyan', 'orange', 'rose'];
 const ENTITY_TAG_TONES = ['primary', 'secondary', 'accent'];
 const NOTE_SUBTYPE_ICONS = {
@@ -74,13 +73,6 @@ const NOTE_SUBTYPE_ICONS = {
     email: 'mail',
     task: 'tasks',
     note: 'doc-detail',
-};
-const ENTITY_TYPE_ICONS = {
-    member: 'user-shield',
-    contact: 'user',
-    company: 'building',
-    namespace: 'layers',
-    organization: 'database',
 };
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
@@ -788,6 +780,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._analyze = this.useOp('crm/note_analyze_start');
         this._cardsBulk = this.useOp('crm/entity_cards_bulk');
         this._tasks = this.useResource('crm/tasks');
+        this._entityTypes = this.useResource(ENTITY_TYPES_RESOURCE, { autoload: false });
 
         this._routeKeySel = this.select((s) => s.router.routeKey);
 
@@ -815,6 +808,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         }
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
+            this._loadEntityTypesCatalog();
             this._reloadNotes();
             this._reloadSummary();
         });
@@ -856,6 +850,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
         });
 
+        this._loadEntityTypesCatalog();
         this._reloadNotes();
         this._reloadSummary();
         this._loadAnalyzeTasks();
@@ -1324,32 +1319,27 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     }
 
     _buildEntityLookupMap() {
-        const map = new Map();
-        for (const list of Object.values(this._noteEntitiesByNoteId)) {
-            if (!Array.isArray(list)) continue;
-            for (const ent of list) {
-                if (!ent || typeof ent !== 'object' || typeof ent.entity_id !== 'string') continue;
-                if (ent.entity_type === 'note') continue;
-                const rawName = typeof ent.name === 'string' ? ent.name : '';
-                const key = _normalizeChipKey(rawName);
-                if (!key || map.has(key)) continue;
-                map.set(key, ent);
-            }
-        }
-        return map;
+        return buildSummaryEntityLookupFromNoteBuckets(this._noteEntitiesByNoteId);
     }
 
-    _resolveChipEntity(label, lookup) {
-        const key = _normalizeChipKey(label);
-        if (!key) return null;
-        const found = lookup.get(key);
-        return found === undefined ? null : found;
+    _entityTypeItems() {
+        const ctrl = this._entityTypes;
+        if (!ctrl || ctrl.items === undefined || !Array.isArray(ctrl.items)) {
+            return [];
+        }
+        return ctrl.items;
+    }
+
+    _loadEntityTypesCatalog() {
+        const ns = this._currentNamespace();
+        if (typeof ns !== 'string' || ns.length === 0) {
+            return;
+        }
+        this._entityTypes.load({ namespace: ns, limit: 200, offset: 0 });
     }
 
     _getEntityTagIcon(entity) {
-        const t = typeof entity && entity.entity_type === 'string' ? entity.entity_type : '';
-        const icon = ENTITY_TYPE_ICONS[t];
-        return icon === undefined ? 'folder' : icon;
+        return entityDisplayIconName(entity, this._entityTypeItems());
     }
 
     _getNoteSubtypeIcon(note) {
@@ -1441,7 +1431,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             <div class="summary-tags">
                 ${tags.map((tag, i) => {
                     const tone = SUMMARY_CHIP_TONES[i % SUMMARY_CHIP_TONES.length];
-                    const resolved = this._resolveChipEntity(tag, lookup);
+                    const resolved = resolveSummaryChipEntity(tag, lookup);
+                    const chipIcon = resolved
+                        ? entityDisplayIconName(resolved, this._entityTypeItems())
+                        : summaryChipUnresolvedIconName();
                     if (resolved) {
                         return html`
                             <button
@@ -1450,13 +1443,13 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                                 title=${this.t('daily_notes_page.summary_entity_open')}
                                 @click=${(e) => this._openEntity(resolved, e)}
                             >
-                                <platform-icon name="folder" size="14"></platform-icon>${tag}
+                                <platform-icon name=${chipIcon} size="14"></platform-icon>${tag}
                             </button>
                         `;
                     }
                     return html`
                         <span class="summary-chip ${tone}">
-                            <platform-icon name="folder" size="14"></platform-icon>${tag}
+                            <platform-icon name=${chipIcon} size="14"></platform-icon>${tag}
                         </span>
                     `;
                 })}

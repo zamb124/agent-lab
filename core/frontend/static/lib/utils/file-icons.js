@@ -140,6 +140,7 @@ export const UI_ICON_MAP = Object.freeze({
     'check-double': 'done-all', 'done-all': 'done-all', checkall: 'done-all',
     'alert-circle': 'alert-triangle', 'alert-triangle': 'alert-triangle',
     file: 'doc-detail', document: 'doc-detail',
+    note: 'doc-detail',
     image: 'image', picture: 'image', photo: 'image',
     pause: 'pause', 'phone-plus': 'phone-plus', 'screen-share': 'screen-share',
     pin: 'pin', reply: 'reply', forward: 'forward', download: 'download',

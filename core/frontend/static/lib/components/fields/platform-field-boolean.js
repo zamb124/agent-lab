@@ -7,12 +7,17 @@ export class PlatformFieldBoolean extends PlatformElement {
         value: { type: Boolean },
         mode: { type: String },
         disabled: { type: Boolean },
+        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
             :host { display: block; }
+
+            :host([flat]) {
+                padding: 2px 0;
+            }
 
             .view-value {
                 font-size: var(--text-sm);
@@ -34,6 +39,7 @@ export class PlatformFieldBoolean extends PlatformElement {
         this.value = false;
         this.mode = 'view';
         this.disabled = false;
+        this.flat = false;
     }
 
     _onChange(e) {

@@ -217,7 +217,6 @@
         "reset": "Сбросить фильтры"
     },
     "neighbor_row": {
-        "graph_weight": "Вес связи: {{value}}",
         "link_confidence": "Уверенность в связи — {{percent}}%",
         "semantic_match": "Соответствие поиску — {{percent}}%",
         "outgoing_from_object": "Исходящая →",
@@ -601,8 +600,6 @@
         "no_relationships": "Связей не найдено.",
         "no_neighbors": "Связанных объектов нет.",
         "this_note": "Эта заметка",
-        "attachments": "Вложения",
-        "no_attachments": "Вложений нет.",
         "attachments_empty_popover": "Вложения отсутствуют",
         "download": "Скачать",
         "attachment_remove": "Удалить вложение",
@@ -695,7 +692,6 @@
         "action_access_request": "Запросить доступ",
         "action_delete": "Удалить",
         "edit_template": "Изменить шаблон (тип сущности)",
-        "action_download": "Скачать",
         "section_tags": "Теги",
         "section_attributes": "Атрибуты",
         "section_related": "Связанные сущности",
@@ -705,11 +701,9 @@
         "empty_related": "Связанных сущностей нет",
         "empty_relationships": "Связей не найдено",
         "empty_neighbors": "Связанных объектов нет",
-        "empty_attachments": "Вложений нет",
         "tab_card": "Карточка",
         "tab_relations": "Связи",
-        "tab_graph": "Граф",
-        "tab_attachments": "Вложения"
+        "tab_graph": "Граф"
     },
     "ai_analysis_modal": {
         "loading_1": "Проверяю текст...",
@@ -766,7 +760,8 @@
         "merge_dnd_hint": "Перетащите карточку за ручку справа на другую для слияния. Shift+клик — слияние, Ctrl+клик — выделение.",
         "drag_merge_handle": "Перетащите на другую карточку для слияния",
         "status_active": "Активные",
-        "status_archived": "Архивные"
+        "status_archived": "Архивные",
+        "detail_select_hint": "Выберите объект в списке для быстрого просмотра."
     },
     "import_wizard_cta": {
         "empty_entities_hint": "В пространстве пока нет сущностей — импортируйте знания через мастер импорта.",

@@ -7,6 +7,7 @@ export class PlatformFieldArray extends PlatformElement {
         value: { type: Array },
         mode: { type: String },
         disabled: { type: Boolean },
+        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -44,6 +45,7 @@ export class PlatformFieldArray extends PlatformElement {
         this.value = [];
         this.mode = 'view';
         this.disabled = false;
+        this.flat = false;
     }
 
     _onChange(e) {
@@ -72,8 +74,9 @@ export class PlatformFieldArray extends PlatformElement {
             <tag-input
                 .tags=${items}
                 placeholder=${(this.t('platform_field.array_placeholder') || 'platform_field.array_placeholder')}
-                ?disabled=${this.disabled}
-                @tags-changed=${this._onChange}
+                ?readonly=${this.disabled}
+                ?flat=${this.flat === true}
+                @change=${this._onChange}
             ></tag-input>
         `;
     }

@@ -1,7 +1,8 @@
 /**
  * EntitiesPage — основной экран сущностей CRM.
  *
- * Layout: на десктопе — `cards-grid` слева + `entity-card` справа (380px),
+ * Layout: на десктопе — `cards-grid` слева + `crm-entity-detail-page` (embedded) справа;
+ * высота колонок — на область island-content (`content-no-scroll` на `platform-island` в `crm-app`).
  * на мобильном — табы «Список / Карточка». Все доменные данные — через
  * фабрики платформы:
  *
@@ -34,7 +35,7 @@ import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/layout/page-header.js';
-import '../components/entity-card.js';
+import '../pages/entity-detail-page.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
@@ -504,11 +505,18 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
             .layout {
                 display: grid;
-                grid-template-columns: 1fr 380px;
-                gap: var(--space-4);
+                grid-template-columns: 1fr minmax(360px, min(42vw, 520px));
+                gap: 0;
                 flex: 1;
                 min-height: 0;
                 overflow: hidden;
+            }
+
+            @media (min-width: 1280px) {
+                .layout:has(aside.detail-panel > crm-entity-detail-page) .list-panel {
+                    opacity: 0.78;
+                    transition: opacity 0.2s ease;
+                }
             }
 
             .list-panel {
@@ -815,6 +823,31 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 flex-direction: column;
                 min-height: 0;
                 overflow: hidden;
+                box-sizing: border-box;
+                background: var(--crm-surface);
+                border-radius: var(--radius-xl, 20px) 0 0 var(--radius-xl, 20px);
+                border: 1px solid var(--crm-stroke);
+                border-right: none;
+                box-shadow: -10px 0 36px color-mix(in srgb, var(--text-primary) 10%, transparent);
+                margin-left: var(--space-3);
+            }
+
+            .detail-panel > crm-entity-detail-page {
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
+            }
+
+            .detail-panel-empty {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--space-4);
+                text-align: center;
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
             }
 
             .entities-mobile-header-wrap {
@@ -867,6 +900,13 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
             @media (max-width: 1279px) {
                 .layout { grid-template-columns: 1fr; }
+                .detail-panel {
+                    border-radius: 0;
+                    border: none;
+                    box-shadow: none;
+                    margin-left: 0;
+                    background: transparent;
+                }
             }
 
             @media (max-width: 767px) {
@@ -1241,6 +1281,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     }
 
     _onMobileTab(tab) { this._mobileTab = tab; }
+
+    _onEmbeddedEntityRemoved() {
+        this._currentEntityId = null;
+    }
 
     _onSelectEntity(entityId) {
         this._currentEntityId = entityId;
@@ -1878,28 +1922,22 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `;
     }
 
-    _selectedEntity() {
-        if (!this._currentEntityId) return null;
-        const items = this._entities.items;
-        if (!Array.isArray(items)) return null;
-        const found = items.find((e) => e && e.entity_id === this._currentEntityId);
-        if (found) return found;
-        return null;
-    }
-
     render() {
         const items = this._entities.items;
         const loading = this._entities.loading;
         const loadingMore = this._entities.loadingMore;
         const listActive = !this._isMobile || this._mobileTab === 'list';
         const cardActive = !this._isMobile || this._mobileTab === 'card';
-        const selectedEntity = this._selectedEntity();
 
         return html`
             ${this._isMobile ? this._renderMobileEntitiesHeader() : nothing}
-            <div class="breadcrumbs-wrap">
-                <platform-breadcrumbs></platform-breadcrumbs>
-            </div>
+            ${this._currentEntityId
+                ? nothing
+                : html`
+                <div class="breadcrumbs-wrap">
+                    <platform-breadcrumbs></platform-breadcrumbs>
+                </div>
+                `}
             ${this._isMobile
                 ? html`
                     <div class="mobile-tabs">
@@ -1951,10 +1989,15 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 </section>
 
                 <aside class="detail-panel ${cardActive ? 'mobile-active' : ''}">
-                    <crm-entity-card
-                        .entity=${selectedEntity}
-                        .entityId=${this._currentEntityId}
-                    ></crm-entity-card>
+                    ${this._currentEntityId
+                        ? html`
+                            <crm-entity-detail-page
+                                embedded
+                                .itemId=${this._currentEntityId}
+                                @embedded-entity-removed=${this._onEmbeddedEntityRemoved}
+                            ></crm-entity-detail-page>
+                        `
+                        : html`<div class="detail-panel-empty">${this.t('entities_page.detail_select_hint')}</div>`}
                 </aside>
             </div>
         `;

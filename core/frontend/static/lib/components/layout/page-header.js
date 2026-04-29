@@ -9,6 +9,7 @@
  * На узких экранах: одна строка в липкой полосе — только заголовок (ellipsis),
  * без subtitle (длинный текст выносится в тело страницы). Режим
  * mobileToolbarMode="search" заменяет блок заголовка на слот toolbar-search.
+ * Атрибут hide-mobile-menu скрывает кнопку бургера (второй хедер внутри вложенного экрана).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
@@ -29,6 +30,8 @@ export class PageHeader extends PlatformElement {
          * `visible` — не обрезать по вертикали/вне контейнера (выпадающие меню в slot actions).
          */
         actionsOverflow: { type: String, attribute: 'actions-overflow' },
+        /** Скрыть кнопку открытия сайдбара на mobile (вложенный экран уже под общим хедером). */
+        hideMobileMenu: { type: Boolean, attribute: 'hide-mobile-menu' },
         _isMobile: { state: true },
     };
 
@@ -208,6 +211,7 @@ export class PageHeader extends PlatformElement {
         this.dense = false;
         this.mobileToolbarMode = 'title';
         this.actionsOverflow = 'auto';
+        this.hideMobileMenu = false;
         this._isMobile = false;
         this._resizeObserver = null;
         this._sidebarOpenSel = this.select((s) => s.ui.sidebar.mobileOpen);
@@ -255,7 +259,7 @@ export class PageHeader extends PlatformElement {
 
     render() {
         const sidebarOpen = !!(this._sidebarOpenSel && this._sidebarOpenSel.value);
-        const showMenu = this._isMobile && !sidebarOpen;
+        const showMenu = this._isMobile && !sidebarOpen && !this.hideMobileMenu;
 
         return html`
             <div class="header-wrap">

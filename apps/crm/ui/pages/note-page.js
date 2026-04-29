@@ -44,6 +44,7 @@ export class CRMNotePage extends CRMNamespacePage {
         _card: { state: true },
         _cardError: { state: true },
         _mode: { state: true },
+        _mobileHeaderPanel: { state: true },
     };
 
     static styles = [
@@ -110,6 +111,40 @@ export class CRMNotePage extends CRMNamespacePage {
                 transition: background var(--duration-fast);
             }
             .back-btn:hover { background: var(--glass-tint-medium); }
+            .note-mobile-header-wrap {
+                display: none;
+            }
+            .note-mobile-header-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+            .note-mobile-header-btn {
+                width: 36px;
+                height: 36px;
+                border: none;
+                border-radius: var(--radius-full);
+                background: var(--glass-tint-subtle);
+                color: var(--text-primary);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                cursor: pointer;
+            }
+            .note-mobile-header-btn.active {
+                background: var(--accent);
+                color: #FFFFFF;
+            }
+            @media (max-width: 767px) {
+                .note-mobile-header-wrap {
+                    display: block;
+                    flex-shrink: 0;
+                }
+                .breadcrumbs-wrap {
+                    padding-top: var(--space-3);
+                }
+            }
         `,
     ];
 
@@ -119,6 +154,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this._card = null;
         this._cardError = '';
         this._mode = 'view';
+        this._mobileHeaderPanel = '';
         this._lastRequestedId = '';
         this._entities = this.useResource('crm/entities');
         this._relationships = this.useResource('crm/relationships');
@@ -372,6 +408,13 @@ export class CRMNotePage extends CRMNamespacePage {
         this._mode = 'edit';
     }
 
+    _toggleMobileHeaderPanel(panel) {
+        if (panel !== 'summary' && panel !== 'neighbors') {
+            throw new Error('CRMNotePage._toggleMobileHeaderPanel: unknown panel');
+        }
+        this._mobileHeaderPanel = this._mobileHeaderPanel === panel ? '' : panel;
+    }
+
     _onEditCancel() {
         if (this._isDraftId(this.noteId)) {
             this.navigate('notes');
@@ -537,9 +580,41 @@ export class CRMNotePage extends CRMNamespacePage {
         return draft.draft_version;
     }
 
+    _renderMobilePageHeader(showPanelActions) {
+        return html`
+            <div class="note-mobile-header-wrap">
+                <page-header title=${this.t('daily_notes_page.section_title')} subtitle="">
+                    ${showPanelActions ? html`
+                        <div slot="actions" class="note-mobile-header-actions">
+                            <button
+                                type="button"
+                                class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'summary' ? 'active' : ''}`}
+                                title=${this.t('note_view.summary_title')}
+                                aria-expanded=${String(this._mobileHeaderPanel === 'summary')}
+                                @click=${() => this._toggleMobileHeaderPanel('summary')}
+                            >
+                                <platform-icon name="ai" size="18" colored></platform-icon>
+                            </button>
+                            <button
+                                type="button"
+                                class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'neighbors' ? 'active' : ''}`}
+                                title=${this.t('entity_card.related_objects_section')}
+                                aria-expanded=${String(this._mobileHeaderPanel === 'neighbors')}
+                                @click=${() => this._toggleMobileHeaderPanel('neighbors')}
+                            >
+                                <platform-icon name="folder" size="18"></platform-icon>
+                            </button>
+                        </div>
+                    ` : nothing}
+                </page-header>
+            </div>
+        `;
+    }
+
     render() {
         if (typeof this.noteId !== 'string' || this.noteId.length === 0) {
             return html`
+                ${this._renderMobilePageHeader(false)}
                 <div class="body">
                     <div class="center">
                         <platform-icon class="icon" name="info" size="48"></platform-icon>
@@ -556,6 +631,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
         if (this._isDraftId(this.noteId)) {
             return html`
+                ${this._renderMobilePageHeader(false)}
                 <div class="breadcrumbs-wrap">
                     <platform-breadcrumbs current-label=${this.t('note_page.draft_breadcrumb')}></platform-breadcrumbs>
                 </div>
@@ -573,6 +649,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
         if (this._cardError) {
             return html`
+                ${this._renderMobilePageHeader(false)}
                 <div class="body">
                     <div class="center">
                         <platform-icon class="icon" name="warning" size="48"></platform-icon>
@@ -592,6 +669,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
         if (!note || entityLoading) {
             return html`
+                ${this._renderMobilePageHeader(false)}
                 <div class="body">
                     <div class="center">
                         <glass-spinner size="lg"></glass-spinner>
@@ -603,6 +681,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
         if (this._mode === 'edit') {
             return html`
+                ${this._renderMobilePageHeader(false)}
                 <div class="breadcrumbs-wrap">
                     <platform-breadcrumbs current-label=${this._noteLabel(note)}></platform-breadcrumbs>
                 </div>
@@ -620,6 +699,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
         if (!this._card) {
             return html`
+                ${this._renderMobilePageHeader(false)}
                 <div class="body">
                     <div class="center">
                         <glass-spinner size="lg"></glass-spinner>
@@ -631,6 +711,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
         const relationshipTypes = Array.isArray(this._relTypes.items) ? this._relTypes.items : [];
         return html`
+            ${this._renderMobilePageHeader(true)}
             <div class="breadcrumbs-wrap">
                 <platform-breadcrumbs current-label=${this._noteLabel(note)}></platform-breadcrumbs>
             </div>
@@ -644,6 +725,7 @@ export class CRMNotePage extends CRMNamespacePage {
                     .aiProgressPct=${this._analyzeProgressPct()}
                     .aiProgressStage=${this._analyzeProgressStage()}
                     .aiProgressStatus=${this._analyzeProgressStatus()}
+                    .mobileHeaderPanel=${this._mobileHeaderPanel}
                     mode="view"
                     @entity-open=${this._onEntityOpen}
                     @show-graph=${this._onShowGraph}

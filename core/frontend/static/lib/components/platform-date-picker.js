@@ -177,6 +177,12 @@ export class PlatformDatePicker extends PlatformElement {
                 min-width: 180px;
             }
 
+            :host([embedded]) {
+                display: block;
+                width: 100%;
+                min-width: 0;
+            }
+
             .trigger {
                 width: 100%;
                 min-height: 42px;
@@ -203,12 +209,24 @@ export class PlatformDatePicker extends PlatformElement {
             }
 
             :host([embedded]) .trigger {
-                min-height: 28px;
+                min-height: 24px;
                 border: none;
                 border-radius: 0;
                 background: transparent;
                 padding: 0;
                 box-shadow: none;
+            }
+
+            :host([embedded]) .trigger-value {
+                font-size: 16px;
+                font-weight: 500;
+                line-height: 1.45;
+            }
+
+            :host([embedded]) .trigger-placeholder,
+            :host([embedded]) .trigger-value.placeholder {
+                font-size: 16px;
+                font-weight: 500;
             }
 
             :host([compact]) {

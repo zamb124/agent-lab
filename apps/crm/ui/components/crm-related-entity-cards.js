@@ -2,13 +2,19 @@ import { html } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { relatedEntityCardSharedStyles } from '../styles/related-entity-card.styles.js';
-import { entityKind, relatedIcon, relatedSubtitle, relatedTone } from '../utils/related-entity-presenter.js';
+import {
+    entityDisplayIconName,
+    entityKind,
+    relatedSubtitle,
+    relatedTone,
+} from '../utils/related-entity-presenter.js';
 
 export class CRMRelatedEntityCards extends PlatformElement {
     static styles = [relatedEntityCardSharedStyles];
 
     static properties = {
         entities: { type: Array, attribute: false },
+        entityTypeRows: { type: Array, attribute: false },
         excludeEntityIds: { type: Array, attribute: false },
         excludeKinds: { type: Array, attribute: false },
         emptyText: { type: String, attribute: 'empty-text' },
@@ -17,6 +23,7 @@ export class CRMRelatedEntityCards extends PlatformElement {
     constructor() {
         super();
         this.entities = [];
+        this.entityTypeRows = [];
         this.excludeEntityIds = [];
         this.excludeKinds = [];
         this.emptyText = '';
@@ -61,7 +68,7 @@ export class CRMRelatedEntityCards extends PlatformElement {
                     const tone = relatedTone(entity);
                     const subtitle = relatedSubtitle(entity);
                     const name = entity.name && entity.name.length > 0 ? entity.name : entity.entity_id;
-                    const iconName = relatedIcon(entity);
+                    const iconName = entityDisplayIconName(entity, this.entityTypeRows);
                     return html`
                         <button
                             type="button"

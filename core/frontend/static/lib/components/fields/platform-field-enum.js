@@ -8,6 +8,7 @@ export class PlatformFieldEnum extends PlatformElement {
         mode: { type: String },
         disabled: { type: Boolean },
         config: { type: Object },
+        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -44,6 +45,7 @@ export class PlatformFieldEnum extends PlatformElement {
         this.mode = 'view';
         this.disabled = false;
         this.config = {};
+        this.flat = false;
     }
 
     get _enumValues() {

@@ -217,7 +217,6 @@
         "reset": "Reset filters"
     },
     "neighbor_row": {
-        "graph_weight": "Relationship weight: {{value}}",
         "link_confidence": "Relationship confidence — {{percent}}%",
         "semantic_match": "Search relevance — {{percent}}%",
         "outgoing_from_object": "Outgoing →",
@@ -601,8 +600,6 @@
         "no_relationships": "No relationships found.",
         "no_neighbors": "No linked objects.",
         "this_note": "This note",
-        "attachments": "Attachments",
-        "no_attachments": "No attachments.",
         "attachments_empty_popover": "No attachments yet",
         "download": "Download",
         "attachment_remove": "Remove attachment",
@@ -695,7 +692,6 @@
         "action_access_request": "Request access",
         "action_delete": "Delete",
         "edit_template": "Change template (entity type)",
-        "action_download": "Download",
         "section_tags": "Tags",
         "section_attributes": "Attributes",
         "section_related": "Related entities",
@@ -705,11 +701,9 @@
         "empty_related": "No related entities",
         "empty_relationships": "No relationships",
         "empty_neighbors": "No linked objects",
-        "empty_attachments": "No attachments",
         "tab_card": "Card",
         "tab_relations": "Relations",
-        "tab_graph": "Graph",
-        "tab_attachments": "Attachments"
+        "tab_graph": "Graph"
     },
     "ai_analysis_modal": {
         "loading_1": "Checking text...",
@@ -766,7 +760,8 @@
         "merge_dnd_hint": "Drag a card by the handle onto another to merge. Shift+click — merge, Ctrl+click — select.",
         "drag_merge_handle": "Drag onto another card to merge",
         "status_active": "Active",
-        "status_archived": "Archived"
+        "status_archived": "Archived",
+        "detail_select_hint": "Select an entity from the list for a quick view."
     },
     "import_wizard_cta": {
         "empty_entities_hint": "This space has no entities yet—import your knowledge using the import wizard.",

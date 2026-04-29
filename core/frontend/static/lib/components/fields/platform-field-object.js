@@ -7,6 +7,7 @@ export class PlatformFieldObject extends PlatformElement {
         value: { type: Object },
         mode: { type: String },
         disabled: { type: Boolean },
+        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
@@ -55,6 +56,7 @@ export class PlatformFieldObject extends PlatformElement {
         this.value = null;
         this.mode = 'view';
         this.disabled = false;
+        this.flat = false;
         this._jsonError = '';
     }
 

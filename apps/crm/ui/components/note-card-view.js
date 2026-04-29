@@ -3,8 +3,8 @@
  * свойство `mode`:
  *
  *   - `view` (default): read-only представление с markdown, AI-summary,
- *     related entities, relationships, attachments. Шапка выдаёт три
- *     действия: attachments / graph / edit / delete (через emit и ops).
+ *     сайдбар (задачи, связанные объекты). Вложения — только из шапки
+ *     (popover), не дублируются в колонке. Шапка: attachments / graph / edit / delete.
  *   - `edit`: inline-форма поверх той же сущности — title, описание (с
  *     голосовым вводом), дата, теги, аплоад вложений. На сохранение шлёт
  *     `entitiesResource.create` (для note === null) или
@@ -44,7 +44,14 @@ import './crm-related-neighbor-rows.js';
 import { relatedEntityCardSharedStyles } from '../styles/related-entity-card.styles.js';
 import { extractNeighborEdges } from '../utils/neighbor-edges.js';
 import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
-import { entityKind } from '../utils/related-entity-presenter.js';
+import {
+    buildSummaryEntityLookupFromRelated,
+    entityDisplayIconName,
+    entityKind,
+    fallbackEntityGlyph,
+    resolveSummaryChipEntity,
+    summaryChipUnresolvedIconName,
+} from '../utils/related-entity-presenter.js';
 import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
 
 const ENTITIES_NAME = 'crm/entities';
@@ -221,6 +228,7 @@ export class CRMNoteCardView extends PlatformElement {
         relationshipTypes: { attribute: false },
         mode: { type: String },
         defaultNamespace: { type: String },
+        mobileHeaderPanel: { type: String },
         aiAnalyzing: { type: Boolean, attribute: 'ai-analyzing' },
         aiStatusText: { type: String, attribute: 'ai-status-text' },
         aiProgressPct: { type: Number, attribute: 'ai-progress-pct' },
@@ -287,6 +295,8 @@ export class CRMNoteCardView extends PlatformElement {
             @media (max-width: 1023px) {
                 .layout {
                     grid-template-columns: 1fr;
+                    align-content: start;
+                    gap: var(--space-4);
                     overflow-y: auto;
                 }
             }
@@ -308,6 +318,13 @@ export class CRMNoteCardView extends PlatformElement {
                 overflow-y: auto;
                 padding-right: var(--space-1);
             }
+            @media (max-width: 1023px) {
+                .main,
+                .sidebar {
+                    overflow: visible;
+                    padding-right: 0;
+                }
+            }
 
             /* ================== note header ================== */
             .header {
@@ -315,6 +332,7 @@ export class CRMNoteCardView extends PlatformElement {
                 align-items: flex-start;
                 justify-content: space-between;
                 gap: var(--space-4);
+                position: relative;
             }
             .title-block {
                 display: flex;
@@ -359,6 +377,9 @@ export class CRMNoteCardView extends PlatformElement {
                 gap: var(--space-3);
                 flex-shrink: 0;
                 align-items: center;
+            }
+            .mobile-header-panels {
+                display: none;
             }
             .attachments-menu {
                 position: relative;
@@ -726,6 +747,15 @@ export class CRMNoteCardView extends PlatformElement {
             .summary-tag.tag-violet { background: var(--crm-accent-violet); }
             .summary-tag.tag-yellow { background: var(--crm-accent-yellow); }
             .summary-tag.tag-orange { background: var(--crm-accent-orange); color: #FFFFFF; }
+            .summary-tag.summary-tag--clickable {
+                cursor: pointer;
+                border: none;
+                font: inherit;
+                box-sizing: border-box;
+            }
+            .summary-tag.summary-tag--clickable:hover {
+                filter: brightness(1.12);
+            }
 
             /* Tasks card */
             .tasks-card {
@@ -735,11 +765,6 @@ export class CRMNoteCardView extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
-            }
-            .attachments-sidebar-list {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
             }
             .task-row {
                 display: flex;
@@ -814,6 +839,115 @@ export class CRMNoteCardView extends PlatformElement {
                 font-family: inherit;
             }
             .task-add-input input::placeholder { color: var(--crm-note-text-muted); }
+
+            @media (max-width: 767px) {
+                .sidebar > .summary-card,
+                .sidebar > .neighbors-section {
+                    display: none;
+                }
+                .header {
+                    flex-direction: column;
+                    align-items: stretch;
+                    gap: var(--space-3);
+                }
+                .title {
+                    font-size: 24px;
+                    line-height: 30px;
+                }
+                .title-input {
+                    font-size: 24px;
+                    line-height: 30px;
+                }
+                .header-actions {
+                    width: 100%;
+                    max-width: 100%;
+                    gap: var(--space-2);
+                    overflow: visible;
+                    padding-bottom: 2px;
+                }
+                .mobile-header-panels {
+                    display: block;
+                    position: fixed;
+                    top: calc(env(safe-area-inset-top, 0px) + 72px);
+                    right: var(--space-3);
+                    width: min(340px, calc(100vw - 24px));
+                    z-index: 70;
+                    max-height: min(320px, calc(100vh - 140px));
+                    overflow: auto;
+                    border: 1px solid var(--crm-stroke);
+                    border-radius: var(--radius-lg);
+                    background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                    box-shadow: var(--glass-shadow-medium);
+                    padding: var(--space-2);
+                }
+                .mobile-header-panels:empty {
+                    display: none;
+                }
+                .mobile-header-panels::before {
+                    content: '';
+                    position: fixed;
+                    top: calc(env(safe-area-inset-top, 0px) + 64px);
+                    right: 58px;
+                    width: 14px;
+                    height: 14px;
+                    border-left: 1px solid var(--crm-stroke);
+                    border-top: 1px solid var(--crm-stroke);
+                    background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                    transform: rotate(45deg);
+                }
+                .mobile-header-panels > .card,
+                .mobile-header-panels > .neighbors-section {
+                    position: relative;
+                    z-index: 1;
+                    max-height: none;
+                    box-shadow: none;
+                }
+                .mobile-header-panels > .neighbors-section {
+                    padding: var(--space-3);
+                    border-radius: var(--radius-md);
+                    background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                }
+                .round-btn {
+                    width: 40px;
+                    height: 40px;
+                    flex: 0 0 40px;
+                }
+                .pill-btn {
+                    width: 40px;
+                    flex: 0 0 40px;
+                    justify-content: center;
+                    height: 40px;
+                    padding: 0;
+                    gap: 0;
+                    font-size: 0;
+                    line-height: 0;
+                }
+                .attachments-popover {
+                    position: fixed;
+                    left: var(--space-3);
+                    right: var(--space-3);
+                    top: auto;
+                    width: auto;
+                    max-height: min(360px, calc(100vh - 160px));
+                }
+                .card {
+                    padding: var(--space-4);
+                }
+                .card-header {
+                    align-items: flex-start;
+                }
+                .summary-tags {
+                    gap: var(--space-2);
+                }
+                .summary-tag {
+                    max-width: 100%;
+                    white-space: normal;
+                    text-align: left;
+                }
+                .task-add-input {
+                    padding: 10px 14px;
+                }
+            }
 
             .panel-empty {
                 font-size: 14px;
@@ -1192,6 +1326,7 @@ export class CRMNoteCardView extends PlatformElement {
         this.relationshipTypes = [];
         this.mode = 'view';
         this.defaultNamespace = '';
+        this.mobileHeaderPanel = '';
         this.aiAnalyzing = false;
         this.aiStatusText = '';
         this.aiProgressPct = 0;
@@ -1621,40 +1756,11 @@ export class CRMNoteCardView extends PlatformElement {
         return typeId;
     }
 
-    _iconFromEntityTypesCatalog(typeId) {
-        if (typeof typeId !== 'string' || typeId.length === 0) {
-            return null;
-        }
-        const items = this._entityTypeItems();
-        for (const row of items) {
-            if (typeof row !== 'object' || row === null) continue;
-            if (row.type_id !== typeId) continue;
-            const ic = row.icon;
-            if (typeof ic === 'string' && ic.trim().length > 0) {
-                return ic.trim();
-            }
-            return null;
-        }
-        return null;
-    }
-
     _pickerIconNameForItem(item) {
         if (!item || typeof item !== 'object') {
-            return 'box';
+            return fallbackEntityGlyph();
         }
-        const sub = typeof item.entity_subtype === 'string' ? item.entity_subtype.trim() : '';
-        if (sub.length > 0) {
-            const fromSub = this._iconFromEntityTypesCatalog(sub);
-            if (fromSub !== null) {
-                return fromSub;
-            }
-        }
-        const root = typeof item.entity_type === 'string' ? item.entity_type.trim() : '';
-        const fromRoot = this._iconFromEntityTypesCatalog(root);
-        if (fromRoot !== null) {
-            return fromRoot;
-        }
-        return 'box';
+        return entityDisplayIconName(item, this._entityTypeItems());
     }
 
     _pickerTypeLabelForItem(item) {
@@ -2949,17 +3055,27 @@ export class CRMNoteCardView extends PlatformElement {
     _renderNeighborsSection() {
         const rows = this._noteNeighborRows();
         return html`
-            <section>
+            <section class="neighbors-section">
                 <h3 class="card-title" style="margin-bottom: var(--space-4);">${this.t('entity_card.related_objects_section')}</h3>
                 <crm-related-neighbor-rows
                     .rows=${rows}
+                    .entityTypeRows=${this._entityTypeItems()}
                     .emptyText=${this.t('note_view.no_neighbors')}
                     .showRemove=${false}
-                    .showWeight=${true}
                     @entity-open=${(e) => this._emitEntityOpen(e.detail.entityId)}
                 ></crm-related-neighbor-rows>
             </section>
         `;
+    }
+
+    _renderMobileHeaderPanel(summaryText, summaryTime, summaryEntities) {
+        if (this.mobileHeaderPanel === 'summary') {
+            return this._renderSummaryCard(summaryText, summaryTime, summaryEntities);
+        }
+        if (this.mobileHeaderPanel === 'neighbors') {
+            return this._renderNeighborsSection();
+        }
+        return nothing;
     }
 
     _noteTasks() {
@@ -3057,6 +3173,9 @@ export class CRMNoteCardView extends PlatformElement {
                                 ${this.t('note_view.action_edit')}
                             </button>
                         </div>
+                        <div class="mobile-header-panels">
+                            ${this._renderMobileHeaderPanel(summaryText, summaryTime, summaryEntities)}
+                        </div>
                     </header>
                     ${description.length > 0
                         ? html`
@@ -3076,7 +3195,6 @@ export class CRMNoteCardView extends PlatformElement {
                     ${this._renderSummaryCard(summaryText, summaryTime, summaryEntities)}
                     ${this._renderTasksCard(tasks)}
                     ${this._renderNeighborsSection()}
-                    ${this._renderAttachmentsSection()}
                 </aside>
             </div>
             ${this._renderAttachmentInput()}
@@ -3099,6 +3217,11 @@ export class CRMNoteCardView extends PlatformElement {
         const stageOrStatus = stage.length > 0
             ? stage
             : (status.length > 0 ? status : this.t('note_view.summary_progress_stage_fallback'));
+        const relatedForLookup = this.card !== null && Array.isArray(this.card.related_entities)
+            ? this.card.related_entities
+            : [];
+        const summaryLookup = buildSummaryEntityLookupFromRelated(relatedForLookup);
+        const typeRows = this._entityTypeItems();
         return html`
             <section class="card summary-card">
                 <div class="card-header">
@@ -3146,10 +3269,27 @@ export class CRMNoteCardView extends PlatformElement {
                     <div class="summary-tags">
                         ${summaryEntities.map((tag, idx) => {
                             const tone = ['violet', 'yellow', 'orange'][idx % 3];
+                            const resolved = resolveSummaryChipEntity(tag, summaryLookup);
+                            const chipIcon = resolved
+                                ? entityDisplayIconName(resolved, typeRows)
+                                : summaryChipUnresolvedIconName();
+                            if (resolved) {
+                                return html`
+                                    <button
+                                        type="button"
+                                        class="summary-tag summary-tag--clickable tag-${tone}"
+                                        @click=${(e) => {
+                                            e.stopPropagation();
+                                            this._emitEntityOpen(resolved.entity_id);
+                                        }}
+                                    >
+                                        <platform-icon name=${chipIcon} size="12"></platform-icon>${tag}
+                                    </button>
+                                `;
+                            }
                             return html`
                                 <span class="summary-tag tag-${tone}">
-                                    <platform-icon name="folder" size="12"></platform-icon>
-                                    ${tag}
+                                    <platform-icon name=${chipIcon} size="12"></platform-icon>${tag}
                                 </span>
                             `;
                         })}
@@ -3205,60 +3345,6 @@ export class CRMNoteCardView extends PlatformElement {
                         @keydown=${this._onTaskAddKeydown}
                     />
                 </label>
-            </section>
-        `;
-    }
-
-    _renderAttachmentsSection() {
-        const items = this._viewAttachments();
-        return html`
-            <section class="card attachments-card">
-                <h3 class="card-title">${this.t('note_view.attachments')}</h3>
-                <div class="attachments-sidebar-list">
-                    ${items.length === 0
-                        ? html`<p class="related-empty">${this.t('note_view.no_attachments')}</p>`
-                        : items.map((item) => {
-                            const iconName = _resolveAttachmentIconName(item.filename, item.contentType);
-                            const metaParts = [];
-                            const bytes = formatBytes(item.sizeBytes);
-                            if (bytes.length > 0) metaParts.push(bytes);
-                            if (item.status.length > 0) metaParts.push(item.status);
-                            const metaText = metaParts.join(' · ');
-                            return html`
-                                <div class="attachments-popover-row">
-                                    <platform-icon name=${iconName} size="16"></platform-icon>
-                                    <div class="attachments-popover-info">
-                                        <p class="attachments-popover-name">${item.filename}</p>
-                                        <p class="attachments-popover-meta">${metaText}</p>
-                                    </div>
-                                    <div class="attachments-popover-actions">
-                                        ${item.downloadUrl.length > 0 ? html`
-                                            <a
-                                                class="attachment-action-btn"
-                                                href=${item.downloadUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                download=${item.filename}
-                                                title=${this.t('note_view.download')}
-                                            >
-                                                <platform-icon name="import" size="14"></platform-icon>
-                                            </a>
-                                        ` : nothing}
-                                        ${item.canDelete ? html`
-                                            <button
-                                                type="button"
-                                                class="attachment-action-btn"
-                                                title=${this.t('note_view.attachment_remove')}
-                                                @click=${() => this._onDeleteViewAttachment(item.id)}
-                                            >
-                                                <platform-icon name="trash" size="14"></platform-icon>
-                                            </button>
-                                        ` : nothing}
-                                    </div>
-                                </div>
-                            `;
-                        })}
-                </div>
             </section>
         `;
     }

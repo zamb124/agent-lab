@@ -20,6 +20,9 @@ export const relatedEntityCardSharedStyles = css`
         cursor: pointer;
         border: none;
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
         text-align: left;
         color: var(--text-primary);
         font-family: inherit;
@@ -87,6 +90,10 @@ export const relatedEntityCardSharedStyles = css`
         display: flex;
         flex-direction: column;
         gap: var(--space-3);
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
     }
     .neighbor-line {
         display: flex;
@@ -94,9 +101,12 @@ export const relatedEntityCardSharedStyles = css`
         align-items: flex-start;
         gap: var(--space-2);
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
     }
     .neighbor-line .related-card {
-        flex: 1;
+        flex: 1 1 0;
         min-width: 0;
     }
     .neighbor-remove {
@@ -123,10 +133,12 @@ export const relatedEntityCardSharedStyles = css`
     }
     .relationship-meta {
         margin: 0;
-        display: inline-flex;
+        display: flex;
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
+        min-width: 0;
+        max-width: 100%;
         font-size: 12px;
         line-height: 16px;
         color: var(--crm-note-text-muted);
@@ -141,59 +153,85 @@ export const relatedEntityCardSharedStyles = css`
         font-size: 11px;
         font-weight: 600;
     }
-    .neighbor-weight {
-        margin: 0;
-        font-size: 11px;
-        line-height: 14px;
-        color: var(--text-tertiary);
-        font-weight: 500;
-    }
     .neighbor-strength {
         display: flex;
         flex-direction: column;
         gap: 6px;
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
         margin-top: 2px;
+        box-sizing: border-box;
     }
     .neighbor-strength-label {
         font-size: 12px;
         font-weight: 600;
         color: var(--text-secondary);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .neighbor-strength-track {
         height: 8px;
         border-radius: 999px;
         background: rgba(34, 34, 34, 0.08);
         overflow: hidden;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
     }
     .neighbor-strength-fill {
         height: 100%;
+        max-width: 100%;
         border-radius: 999px;
         background: linear-gradient(90deg, #7b92ff, #a855f7);
         opacity: 0.85;
+        box-sizing: border-box;
     }
     .neighbor-confidence {
         display: flex;
         flex-direction: column;
         gap: 6px;
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
         margin-top: 2px;
+        box-sizing: border-box;
     }
     .neighbor-confidence-label {
         font-size: 12px;
         font-weight: 600;
         color: var(--text-secondary);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .neighbor-confidence-track {
         height: 8px;
         border-radius: 999px;
         background: rgba(34, 34, 34, 0.08);
         overflow: hidden;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
     }
     .neighbor-confidence-fill {
         height: 100%;
+        max-width: 100%;
         border-radius: 999px;
         background: linear-gradient(90deg, #22c55e, #16a34a);
         opacity: 0.85;
+        box-sizing: border-box;
+    }
+
+    @media (max-width: 767px) {
+        .related-card {
+            gap: var(--space-2);
+            padding: 10px;
+        }
+        .related-icon {
+            width: 48px;
+            height: 48px;
+        }
     }
 `;

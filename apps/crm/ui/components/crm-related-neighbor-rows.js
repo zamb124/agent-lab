@@ -1,35 +1,42 @@
-import { html, nothing } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { relatedEntityCardSharedStyles } from '../styles/related-entity-card.styles.js';
-import { relatedIcon, relatedSubtitle, relatedTone } from '../utils/related-entity-presenter.js';
-
-function _formatGraphWeight(weight) {
-    if (typeof weight !== 'number' || !Number.isFinite(weight)) {
-        return '';
-    }
-    if (Number.isInteger(weight)) return String(weight);
-    return String(Math.round(weight * 100) / 100);
-}
+import {
+    entityDisplayIconName,
+    relatedSubtitle,
+    relatedTone,
+} from '../utils/related-entity-presenter.js';
 
 export class CRMRelatedNeighborRows extends PlatformElement {
     static i18nNamespace = 'crm';
 
-    static styles = [relatedEntityCardSharedStyles];
+    static styles = [
+        css`
+            :host {
+                display: block;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+        `,
+        relatedEntityCardSharedStyles,
+    ];
 
     static properties = {
         rows: { type: Array, attribute: false },
+        entityTypeRows: { type: Array, attribute: false },
         emptyText: { type: String, attribute: 'empty-text' },
         showRemove: { type: Boolean, attribute: 'show-remove' },
-        showWeight: { type: Boolean, attribute: 'show-weight' },
     };
 
     constructor() {
         super();
         this.rows = [];
+        this.entityTypeRows = [];
         this.emptyText = '';
         this.showRemove = false;
-        this.showWeight = true;
     }
 
     _thumbEntity(row) {
@@ -75,15 +82,11 @@ export class CRMRelatedNeighborRows extends PlatformElement {
                     }
                     const thumb = this._thumbEntity(row);
                     const tone = relatedTone(thumb);
-                    const iconName = relatedIcon(thumb);
+                    const iconName = entityDisplayIconName(thumb, this.entityTypeRows);
                     const name = thumb.name && typeof thumb.name === 'string' && thumb.name.length > 0
                         ? thumb.name
                         : row.otherId;
                     const sub = relatedSubtitle(thumb);
-                    const weightStr = this.showWeight ? _formatGraphWeight(row.weight) : '';
-                    const weightLine = weightStr.length > 0
-                        ? html`<p class="neighbor-weight">${this.t('neighbor_row.graph_weight', { value: weightStr })}</p>`
-                        : nothing;
                     const scorePct = typeof row.scorePercent === 'number' && Number.isFinite(row.scorePercent)
                         ? Math.min(100, Math.max(0, row.scorePercent))
                         : null;
@@ -131,7 +134,6 @@ export class CRMRelatedNeighborRows extends PlatformElement {
                                         <span class="relationship-type">${row.relationshipTypeLabel}</span>
                                         <span>${row.directionText}</span>
                                     </p>
-                                    ${weightLine}
                                     ${confidenceBlock}
                                     ${scoreBlock}
                                 </span>

@@ -9,7 +9,7 @@ export const formStyles = css`
     .form-group {
         display: flex;
         flex-direction: column;
-        margin-bottom: var(--space-5, 20px);
+        margin-bottom: var(--space-6, 24px);
     }
     
     .form-group:last-child {
@@ -20,7 +20,7 @@ export const formStyles = css`
         display: block;
         font-size: var(--text-xs, 12px);
         font-weight: var(--font-semibold, 600);
-        color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+        color: var(--text-secondary, rgba(255, 255, 255, 0.65));
         margin-bottom: var(--space-2, 8px);
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -78,7 +78,7 @@ export const formStyles = css`
     .form-select,
     .form-textarea {
         width: 100%;
-        padding: var(--space-3, 14px) var(--space-4, 16px);
+        padding: var(--space-4, 16px) var(--space-4, 16px);
         font-size: var(--text-base, 15px);
         color: var(--text-primary, rgba(255, 255, 255, 0.95));
         background:
@@ -341,5 +341,58 @@ export const formStyles = css`
         padding-top: var(--space-5, 20px);
         border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
         margin-top: var(--space-5, 20px);
+    }
+
+    /* Ввод без отдельной «стеклянной» рамки: родитель задаёт одну поверхность (например пилюля CRM). */
+    :host([flat]) .form-input,
+    :host([flat]) .form-select,
+    :host([flat]) .form-textarea {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        padding: 0;
+        border-radius: 0;
+        font-size: 16px;
+        font-weight: 500;
+        min-height: 0;
+        line-height: 1.45;
+    }
+
+    :host([flat]) .form-textarea {
+        font-weight: 400;
+    }
+
+    :host([flat]) .form-input:focus,
+    :host([flat]) .form-select:focus,
+    :host([flat]) .form-textarea:focus {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        outline: none;
+    }
+
+    :host([flat]) .form-select {
+        padding-right: 28px;
+        background-position: right var(--space-2, 8px) center;
+        cursor: pointer;
+    }
+
+    :host-context([data-theme="light"]) :host([flat]) .form-input:focus,
+    :host-context([data-theme="light"]) :host([flat]) .form-select:focus,
+    :host-context([data-theme="light"]) :host([flat]) .form-textarea:focus {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+    }
+
+    @media (max-width: 480px) {
+        :host([flat]) .form-input,
+        :host([flat]) .form-select,
+        :host([flat]) .form-textarea {
+            padding: 0;
+            font-size: 16px;
+        }
     }
 `;

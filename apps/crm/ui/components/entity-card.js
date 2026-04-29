@@ -8,8 +8,10 @@
  *   - panelMode: 'view' | 'edit' | 'create'
  *   - entity / entityId — для view и edit (create только prefill-поля)
  *   - layoutVariant: 'full' | 'detailSummary' — на странице детали вкладка «Карточка»
- *     в просмотре и редактировании: `full` (двухколоночная схема, связи и файлы);
+ *     в просмотре и редактировании: `full` (двухколоночная схема, связи; вложения — кнопка в шапке
+ *     области карточки и popover, как у заметки);
  *     в боковой панели `detailSummary` ограничивает блоки без дубля с другими вкладками.
+ *   - compact-stack — принудительно одна колонка (аватар сверху), для узкой панели быстрого просмотра
  *   - cardBundle — опционально { entity, relationships, related_entities, attachments }
  *   - prefillEntityType / prefillNamespace — для create
  */
@@ -21,7 +23,10 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './crm-related-entity-cards.js';
 import './crm-related-neighbor-rows.js';
-import { relatedIcon } from '../utils/related-entity-presenter.js';
+import {
+    entityDisplayIconName,
+    normalizeCatalogIconName,
+} from '../utils/related-entity-presenter.js';
 import { extractNeighborEdges } from '../utils/neighbor-edges.js';
 import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
 
@@ -38,6 +43,57 @@ const MODE_VIEW = 'view';
 
 const ENTITY_STATUS_VALUES = Object.freeze(['active', 'archived', 'draft', 'completed']);
 
+let _entityCardAttachInputSeq = 0;
+function _nextEntityCardAttachInputId() {
+    _entityCardAttachInputSeq += 1;
+    return `entity-card-attach-${_entityCardAttachInputSeq}`;
+}
+
+function _entityCardFormatBytes(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '';
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function _entityCardFileExtension(filename) {
+    if (typeof filename !== 'string') return '';
+    const trimmed = filename.trim().toLowerCase();
+    const dotIndex = trimmed.lastIndexOf('.');
+    if (dotIndex <= 0 || dotIndex === trimmed.length - 1) return '';
+    return trimmed.slice(dotIndex + 1);
+}
+
+function _entityCardAttachmentIcon(filename, contentType) {
+    const ext = _entityCardFileExtension(filename);
+    const mime = typeof contentType === 'string' ? contentType.toLowerCase() : '';
+    if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic'].includes(ext)) {
+        return 'image';
+    }
+    if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) {
+        return 'microphone';
+    }
+    if (mime.startsWith('video/') || ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) {
+        return 'play';
+    }
+    if (['xls', 'xlsx', 'csv'].includes(ext)) {
+        return 'chart';
+    }
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+        return 'box';
+    }
+    if (mime === 'application/pdf' || ext === 'pdf') {
+        return 'doc-detail';
+    }
+    if (['doc', 'docx', 'txt', 'rtf', 'md', 'odt', 'ppt', 'pptx'].includes(ext)) {
+        return 'text-fields';
+    }
+    if (['json', 'xml', 'yaml', 'yml', 'py', 'js', 'ts', 'tsx', 'jsx', 'html', 'css', 'sql'].includes(ext)) {
+        return 'code';
+    }
+    return 'paperclip';
+}
+
 export class CRMEntityCard extends PlatformElement {
     static i18nNamespace = 'crm';
 
@@ -51,6 +107,8 @@ export class CRMEntityCard extends PlatformElement {
         prefillEntityType: { type: String, attribute: 'prefill-entity-type' },
         prefillNamespace: { type: String, attribute: 'prefill-namespace' },
         showEntityActions: { type: Boolean, attribute: 'show-entity-actions' },
+        /** Вертикальная схема (аватар сверху), как на узкой ширине — для панели быстрого просмотра */
+        compactStack: { type: Boolean, attribute: 'compact-stack' },
         /** Тулбар редактирования рендерит родитель (entity-detail-page) */
         hostToolbar: { type: Boolean, attribute: 'host-toolbar' },
         _step: { state: true },
@@ -74,6 +132,8 @@ export class CRMEntityCard extends PlatformElement {
         _grantsExpanded: { state: true },
         _relatedExpanded: { state: true },
         _isDirty: { state: true },
+        _attachmentsPopoverOpen: { state: true },
+        _attachmentsPopoverMode: { state: true },
     };
 
     static styles = [
@@ -137,15 +197,16 @@ export class CRMEntityCard extends PlatformElement {
                 gap: 2px;
                 min-width: 140px;
                 padding: 10px 16px;
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--crm-surface-tint-strong);
                 border-radius: 16px;
+                border: 1px solid var(--crm-stroke);
             }
             .edit-template-label {
                 font-size: 11px;
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.03em;
-                color: rgba(34, 34, 34, 0.42);
+                color: var(--text-tertiary);
             }
             .edit-template-value {
                 font-size: 15px;
@@ -157,29 +218,29 @@ export class CRMEntityCard extends PlatformElement {
                 height: 44px;
                 border: none;
                 border-radius: 14px;
-                background: rgba(249, 115, 22, 0.18);
-                color: #c2410c;
+                background: var(--crm-danger-bg);
+                color: var(--error);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
             .btn-circle-danger:hover {
-                background: rgba(249, 115, 22, 0.28);
+                background: color-mix(in srgb, var(--error) 28%, transparent);
             }
             .btn-pill-primary {
                 min-height: 44px;
                 padding: 0 24px;
                 border: none;
                 border-radius: 22px;
-                background: #7b92ff;
-                color: #fff;
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
                 font-size: 15px;
                 font-weight: 600;
                 cursor: pointer;
             }
             .btn-pill-primary:hover:not(:disabled) {
-                filter: brightness(1.06);
+                background: var(--crm-button-primary-hover);
             }
             .btn-pill-primary:disabled {
                 opacity: 0.5;
@@ -190,15 +251,20 @@ export class CRMEntityCard extends PlatformElement {
                 padding: 0 18px;
                 border: none;
                 border-radius: 22px;
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--crm-surface-tint-strong);
                 color: var(--text-secondary);
                 font-size: 14px;
                 font-weight: 500;
                 cursor: pointer;
             }
             .btn-pill-ghost:hover {
-                background: rgba(34, 34, 34, 0.1);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
+            }
+
+            .entity-card-layout-container {
+                container-type: inline-size;
+                container-name: entity-card-sheet;
             }
 
             .edit-two-col {
@@ -207,10 +273,13 @@ export class CRMEntityCard extends PlatformElement {
                 gap: var(--space-6);
                 align-items: start;
             }
-            @media (max-width: 800px) {
+            @container entity-card-sheet (max-width: 480px) {
                 .edit-two-col {
                     grid-template-columns: 1fr;
                 }
+            }
+            .entity-card-layout-container--force-stack .edit-two-col {
+                grid-template-columns: 1fr;
             }
             .edit-aside {
                 display: flex;
@@ -232,7 +301,7 @@ export class CRMEntityCard extends PlatformElement {
                     color-mix(in srgb, var(--edit-type-color, var(--accent)) 18%, #fce7f3)
                 );
                 color: color-mix(in srgb, var(--edit-type-color, var(--accent)) 75%, #1e1b4b);
-                box-shadow: 0 8px 28px rgba(34, 34, 34, 0.08);
+                box-shadow: var(--glass-shadow-subtle);
             }
             .edit-avatar-wrap platform-icon {
                 width: min(140px, 64%);
@@ -241,11 +310,57 @@ export class CRMEntityCard extends PlatformElement {
             .edit-fields {
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-4);
+                gap: var(--space-5);
                 min-width: 0;
             }
+            .edit-fields-heading-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: center;
+                gap: var(--space-3);
+                margin-bottom: 0;
+                min-width: 0;
+            }
+            .edit-fields-heading-row .edit-fields-heading {
+                margin: 0;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .edit-fields-heading-actions {
+                flex-shrink: 0;
+                justify-self: end;
+                margin: 0;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+            }
+            .edit-fields-heading-actions .attachments-menu {
+                display: inline-flex;
+                align-items: center;
+                line-height: 0;
+            }
+            .round-btn--compact {
+                width: 28px;
+                height: 28px;
+                padding: 0;
+                margin: 0;
+            }
+            .round-btn--compact platform-icon {
+                display: block;
+                line-height: 0;
+            }
+            .round-btn--compact .attachments-badge {
+                min-width: 14px;
+                height: 14px;
+                font-size: 9px;
+                line-height: 14px;
+                padding: 0 3px;
+                right: -2px;
+                top: -2px;
+            }
             .edit-fields-heading {
-                margin: 0 0 var(--space-1);
                 font-size: 1.05rem;
                 font-weight: 700;
                 color: var(--text-primary);
@@ -271,9 +386,10 @@ export class CRMEntityCard extends PlatformElement {
                 flex-direction: column;
                 gap: 8px;
                 padding: 14px 18px;
-                background: rgba(34, 34, 34, 0.05);
                 border-radius: 18px;
-                border: none;
+                box-sizing: border-box;
+                background: var(--glass-tint-medium);
+                border: 1px solid var(--border-subtle);
             }
             .field-pill--textarea {
                 gap: 10px;
@@ -307,7 +423,7 @@ export class CRMEntityCard extends PlatformElement {
             }
             .field-pill--tags .tag-chip {
                 border: none;
-                background: rgba(34, 34, 34, 0.08);
+                background: var(--glass-tint-strong);
             }
             .field-pill-tags-head {
                 display: flex;
@@ -320,7 +436,10 @@ export class CRMEntityCard extends PlatformElement {
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
-                color: rgba(34, 34, 34, 0.42);
+                color: var(--text-secondary);
+            }
+            :host-context([data-theme="light"]) .field-pill-label {
+                color: var(--text-tertiary);
             }
             .field-pill-input,
             .field-pill-textarea,
@@ -375,21 +494,33 @@ export class CRMEntityCard extends PlatformElement {
                 height: 22px;
                 padding: 0 6px;
                 border-radius: 11px;
-                background: rgba(123, 146, 255, 0.25);
-                color: #4f46e5;
+                background: var(--accent-subtle);
+                color: var(--accent);
                 font-size: 12px;
                 font-weight: 700;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
+            :host-context([data-theme="light"]) .tag-count-badge {
+                color: var(--crm-selected-text);
+            }
             .edit-attrs-grid .attrs-grid {
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
-                gap: var(--space-3);
+                gap: var(--space-4);
                 padding: 0;
                 border: none;
                 background: transparent;
+            }
+            .edit-attrs-grid .attr-row {
+                display: grid;
+                gap: var(--space-2);
+                padding: 14px 18px;
+                border-radius: 18px;
+                box-sizing: border-box;
+                background: var(--glass-tint-medium);
+                border: 1px solid var(--border-subtle);
             }
             @media (max-width: 720px) {
                 .edit-attrs-grid .attrs-grid {
@@ -401,13 +532,14 @@ export class CRMEntityCard extends PlatformElement {
             }
             .btn-add-rel-pill {
                 border-radius: 22px !important;
-                background: rgba(123, 146, 255, 0.2) !important;
-                color: #4338ca !important;
+                background: var(--accent-subtle) !important;
+                color: var(--accent) !important;
                 border: none !important;
                 font-weight: 600 !important;
             }
             .btn-add-rel-pill:hover {
-                background: rgba(123, 146, 255, 0.32) !important;
+                background: color-mix(in srgb, var(--accent) 28%, transparent) !important;
+                color: var(--accent-hover) !important;
             }
 
             .scroll {
@@ -437,7 +569,7 @@ export class CRMEntityCard extends PlatformElement {
             .sheet-block {
                 border-radius: var(--radius-md);
                 overflow: hidden;
-                border: 1px solid rgba(34, 34, 34, 0.06);
+                border: 1px solid var(--crm-stroke);
             }
             .sheet-cell-head {
                 font-size: var(--text-xs);
@@ -446,13 +578,13 @@ export class CRMEntityCard extends PlatformElement {
                 letter-spacing: 0.04em;
                 color: var(--text-tertiary);
                 padding: 10px var(--space-3);
-                background: rgba(34, 34, 34, 0.05);
-                border-bottom: 1px solid rgba(34, 34, 34, 0.05);
+                background: var(--crm-surface-tint);
+                border-bottom: 1px solid var(--crm-stroke);
             }
             .sheet-cell-body {
                 padding: var(--space-3);
                 background: var(--crm-surface);
-                border-bottom: 1px solid rgba(34, 34, 34, 0.05);
+                border-bottom: 1px solid var(--crm-stroke);
             }
             .sheet-block:last-of-type .sheet-cell-body {
                 border-bottom: none;
@@ -719,7 +851,10 @@ export class CRMEntityCard extends PlatformElement {
                 text-align: center;
                 padding: var(--space-2) var(--space-3);
             }
-            .attr-row { display: grid; gap: var(--space-1); }
+            .attr-row {
+                display: grid;
+                gap: var(--space-1);
+            }
             .attr-hint { color: var(--text-tertiary); font-size: var(--text-xs); }
 
             .tags-row {
@@ -802,31 +937,139 @@ export class CRMEntityCard extends PlatformElement {
             .btn-primary:hover { filter: brightness(1.05); }
             .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-            .rel-list, .att-list { display: grid; gap: var(--space-2); }
-            .att-row {
-                display: grid;
-                grid-template-columns: 1fr auto;
-                gap: var(--space-2);
-                align-items: center;
-                padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                background: var(--crm-surface-muted);
-                font-size: var(--text-sm);
+            .actions-bar-lead {
+                margin-right: auto;
             }
-            .att-row .meta { display: grid; gap: 2px; min-width: 0; }
-            .att-row .title {
+
+            .attachments-menu { position: relative; }
+            .attachments-badge {
+                position: absolute;
+                right: -4px;
+                top: -4px;
+                min-width: 18px;
+                height: 18px;
+                border-radius: 999px;
+                background: var(--accent);
+                color: #fff;
+                font-size: 11px;
+                line-height: 18px;
+                text-align: center;
+                padding: 0 5px;
+                box-sizing: border-box;
+                border: 1px solid var(--crm-surface-elevated, var(--glass-solid-strong));
+                font-weight: 600;
+            }
+            .attachments-popover {
+                position: absolute;
+                top: calc(100% + 8px);
+                right: 0;
+                width: min(420px, 80vw);
+                max-height: 360px;
+                overflow: auto;
+                z-index: 40;
+                background: var(--crm-surface-elevated, var(--glass-solid-strong));
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-lg);
+                box-shadow: var(--glass-shadow-medium);
+                padding: var(--space-2);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
+            .attachments-popover-row {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                align-items: center;
+                gap: var(--space-2);
+                padding: 8px;
+                border-radius: var(--radius-md);
+                background: transparent;
+            }
+            .attachments-popover-row:hover { background: var(--crm-note-action-bg); }
+            .attachments-popover-info { min-width: 0; }
+            .attachments-popover-name {
+                margin: 0;
+                font-size: 14px;
+                line-height: 18px;
                 color: var(--text-primary);
-                font-weight: 500;
+                white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
+            }
+            .attachments-popover-meta {
+                margin: 0;
+                font-size: 12px;
+                line-height: 16px;
+                color: var(--crm-note-text-muted);
                 white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
-            .att-row .sub {
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-                font-family: var(--font-mono);
+            .attachments-popover-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
             }
+            .attachment-action-btn {
+                width: 28px;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: none;
+                border-radius: var(--radius-full);
+                background: transparent;
+                color: var(--crm-note-text-muted);
+                cursor: pointer;
+                text-decoration: none;
+            }
+            .attachment-action-btn:hover {
+                background: var(--crm-note-action-bg-hover);
+                color: var(--text-primary);
+            }
+            .attachments-popover-empty {
+                padding: 10px 12px;
+                color: var(--crm-note-text-muted);
+                font-size: 13px;
+                line-height: 16px;
+            }
+            .visually-hidden-file-input {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                border: 0;
+                opacity: 0;
+                pointer-events: none;
+            }
+            .round-btn,
+            label.round-btn {
+                position: relative;
+                width: 44px;
+                height: 44px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                margin: 0;
+                box-sizing: border-box;
+                background: var(--crm-note-action-bg);
+                border: none;
+                border-radius: var(--radius-full);
+                color: var(--text-primary);
+                cursor: pointer;
+                transition: background var(--duration-fast);
+                -webkit-appearance: none;
+                appearance: none;
+            }
+            .round-btn:hover:not(:disabled),
+            label.round-btn:hover:not(:disabled) { background: var(--crm-note-action-bg-hover); }
+            .round-btn:disabled,
+            label.round-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
             .icon-btn {
                 background: transparent; border: none;
                 color: var(--text-tertiary);
@@ -880,22 +1123,6 @@ export class CRMEntityCard extends PlatformElement {
                 font-family: var(--font-mono);
             }
 
-            .att-dropzone {
-                display: grid;
-                gap: var(--space-2);
-                padding: var(--space-3);
-                text-align: center;
-                border: 1px dashed var(--crm-stroke);
-                border-radius: var(--radius-md);
-                color: var(--text-tertiary);
-                cursor: pointer;
-            }
-            .att-dropzone.dragover {
-                border-color: var(--accent);
-                background: var(--crm-selected-bg);
-            }
-            .att-dropzone input { display: none; }
-
             .footer-actions {
                 display: flex;
                 gap: var(--space-3);
@@ -942,6 +1169,7 @@ export class CRMEntityCard extends PlatformElement {
         this.prefillEntityType = '';
         this.prefillNamespace = '';
         this.showEntityActions = true;
+        this.compactStack = false;
         this.hostToolbar = false;
 
         this._step = 'form';
@@ -965,6 +1193,10 @@ export class CRMEntityCard extends PlatformElement {
         this._grantsExpanded = false;
         this._relatedExpanded = false;
         this._isDirty = false;
+        this._attachmentsPopoverOpen = false;
+        this._attachmentsPopoverMode = '';
+        this._attachmentsPopoverCloseTimer = null;
+        this._entityAttachmentInputId = _nextEntityCardAttachInputId();
 
         this._createForm = this.useForm(CREATE_FORM);
         this._editForm = this.useForm(EDIT_FORM);
@@ -1044,6 +1276,14 @@ export class CRMEntityCard extends PlatformElement {
             return;
         }
 
+        this.useEvent(this._attachmentsListOp.op.events.SUCCEEDED, (event) => this._onAttachmentsLoaded(event));
+        this.useEvent(this._attachmentUploadOp.op.events.SUCCEEDED, () => this._reloadAttachments());
+        this.useEvent(this._attachmentDeleteOp.op.events.SUCCEEDED, () => this._reloadAttachments());
+        const viewAttachId = this._effectiveEntityId();
+        if (typeof viewAttachId === 'string' && viewAttachId.length > 0 && !this.cardBundle) {
+            this._reloadAttachments();
+        }
+
         this._relationshipTypes.load(null);
     }
 
@@ -1051,6 +1291,10 @@ export class CRMEntityCard extends PlatformElement {
         if (this._searchTimer !== null) {
             clearTimeout(this._searchTimer);
             this._searchTimer = null;
+        }
+        if (this._attachmentsPopoverCloseTimer !== null) {
+            clearTimeout(this._attachmentsPopoverCloseTimer);
+            this._attachmentsPopoverCloseTimer = null;
         }
         if (this.panelMode === MODE_CREATE) {
             this._createForm.close();
@@ -1062,8 +1306,12 @@ export class CRMEntityCard extends PlatformElement {
 
     _effectiveEntityId() {
         if (typeof this.entityId === 'string' && this.entityId.length > 0) return this.entityId;
-        const e = this._resolveEntity();
-        if (e && typeof e.entity_id === 'string') return e.entity_id;
+        const data = this._entityData;
+        if (data && typeof data.entity_id === 'string' && data.entity_id.length > 0) return data.entity_id;
+        const fromProp = this.entity;
+        if (fromProp && typeof fromProp.entity_id === 'string' && fromProp.entity_id.length > 0) {
+            return fromProp.entity_id;
+        }
         return '';
     }
 
@@ -1120,6 +1368,12 @@ export class CRMEntityCard extends PlatformElement {
             const id = this._effectiveEntityId();
             if (id && (!this.entity || this.entity.entity_id !== id)) {
                 this._entities.get(id);
+            }
+        }
+        if (changed.has('entityId') && this.panelMode === MODE_VIEW && this.layoutVariant === 'full') {
+            const attachId = this._effectiveEntityId();
+            if (typeof attachId === 'string' && attachId.length > 0 && !this.cardBundle) {
+                this._reloadAttachments();
             }
         }
         if (changed.has('cardBundle') && this.panelMode === MODE_EDIT && this.cardBundle) {
@@ -1588,6 +1842,7 @@ export class CRMEntityCard extends PlatformElement {
                                     .value=${value}
                                     mode=${uiMode}
                                     .label=${key}
+                                    ?flat=${editable}
                                     ?disabled=${readOnlyExternal}
                                     @change=${editable ? (event) => this._onAttrChange(key, event) : undefined}
                                 ></platform-field>
@@ -1614,6 +1869,7 @@ export class CRMEntityCard extends PlatformElement {
                                 mode=${uiMode}
                                 .label=${this._fieldLabel(key, def) + (required ? ' *' : '')}
                                 .config=${this._fieldConfig(def)}
+                                ?flat=${editable}
                                 ?disabled=${readOnlyExternal}
                                 @change=${editable ? (event) => this._onAttrChange(key, event) : undefined}
                             ></platform-field>
@@ -1814,7 +2070,8 @@ export class CRMEntityCard extends PlatformElement {
     }
 
     _resolveEntity() {
-        if (this.entity && typeof this.entity === 'object') return this.entity;
+        const fromProp = this.entity;
+        if (fromProp && typeof fromProp === 'object') return fromProp;
         const id = this._effectiveEntityId();
         if (!id) return null;
         const byId = this._entities.byId;
@@ -1822,8 +2079,17 @@ export class CRMEntityCard extends PlatformElement {
         return null;
     }
 
+    _entityTypesCatalogRows() {
+        const ctrl = this._entityTypes;
+        if (!ctrl || ctrl.items === undefined || !Array.isArray(ctrl.items)) {
+            return [];
+        }
+        return ctrl.items;
+    }
+
     _heroIconName(entity) {
         const currentId = this._effectiveEntityId();
+        const catalogRows = this._entityTypesCatalogRows();
         if (
             entity
             && typeof entity.entity_id === 'string'
@@ -1833,10 +2099,12 @@ export class CRMEntityCard extends PlatformElement {
             && entity.entity_id === currentId
         ) {
             const type = this._selectedType();
-            if (type && typeof type.icon === 'string' && type.icon.length > 0) return type.icon;
+            if (type && typeof type.icon === 'string' && type.icon.length > 0) {
+                return normalizeCatalogIconName(type.icon.trim());
+            }
         }
         if (entity && typeof entity.entity_type === 'string' && entity.entity_type.length > 0) {
-            return relatedIcon(entity);
+            return entityDisplayIconName(entity, catalogRows);
         }
         return 'folder';
     }
@@ -1999,9 +2267,9 @@ export class CRMEntityCard extends PlatformElement {
         return html`
             <crm-related-neighbor-rows
                 .rows=${rows}
+                .entityTypeRows=${this._entityTypesCatalogRows()}
                 .emptyText=${this.t('entity_modal.relationships_empty')}
                 .showRemove=${!readOnly}
-                .showWeight=${true}
                 @entity-open=${(e) => this._onOpenRelated(e.detail.entityId)}
                 @relationship-remove=${(e) => this._onRemoveRelationship({ relationship_id: e.detail.relationshipId })}
             ></crm-related-neighbor-rows>
@@ -2136,15 +2404,6 @@ export class CRMEntityCard extends PlatformElement {
         for (const file of files) this._uploadAttachment(file, id);
         event.target.value = '';
     }
-    _onDragOver(event) { event.preventDefault(); event.currentTarget.classList.add('dragover'); }
-    _onDragLeave(event) { event.currentTarget.classList.remove('dragover'); }
-    _onDrop(event) {
-        event.preventDefault();
-        event.currentTarget.classList.remove('dragover');
-        const id = this._effectiveEntityId();
-        const files = Array.from(event.dataTransfer.files);
-        for (const file of files) this._uploadAttachment(file, id);
-    }
 
     _uploadAttachment(file, entityId) {
         if (!(file instanceof File)) return;
@@ -2159,52 +2418,221 @@ export class CRMEntityCard extends PlatformElement {
         this._attachmentDeleteOp.run({ entity_id: id, attachment_id: att.document_id });
     }
 
-    _renderAttachmentsSection(options = {}) {
-        const readOnly = options.readOnly === true;
+    _shouldShowAttachmentsChrome() {
+        if (this.layoutVariant !== 'full') return false;
+        if (this.panelMode === MODE_CREATE) return false;
+        const id = this._effectiveEntityId();
+        return typeof id === 'string' && id.length > 0;
+    }
+
+    _mapEntityCardAttachmentItems() {
+        return this._attachmentsData.map((item) => {
+            const attachmentId = typeof item.document_id === 'string' ? item.document_id : '';
+            const filename = typeof item.filename === 'string' && item.filename.length > 0
+                ? item.filename
+                : attachmentId;
+            const metadata = item && typeof item.metadata === 'object' && item.metadata !== null
+                ? item.metadata
+                : {};
+            const contentType = typeof metadata.content_type === 'string' ? metadata.content_type : '';
+            const sizeBytes = typeof item.size_bytes === 'number'
+                ? item.size_bytes
+                : (typeof metadata.size_bytes === 'number'
+                    ? metadata.size_bytes
+                    : (typeof metadata.file_size === 'number' ? metadata.file_size : 0));
+            const downloadUrl = typeof item.download_url === 'string' && item.download_url.length > 0
+                ? item.download_url
+                : (typeof item.url === 'string' ? item.url : '');
+            return {
+                id: attachmentId,
+                filename,
+                sizeBytes,
+                status: typeof item.status === 'string' ? item.status : '',
+                downloadUrl,
+                contentType,
+            };
+        });
+    }
+
+    _entityAttachmentMode() {
+        return this.panelMode === MODE_EDIT ? 'edit' : 'view';
+    }
+
+    _openEntityAttachmentsPopover(mode) {
+        this._cancelEntityAttachmentsPopoverClose();
+        this._attachmentsPopoverMode = mode;
+        this._attachmentsPopoverOpen = true;
+    }
+
+    _closeEntityAttachmentsPopover() {
+        this._cancelEntityAttachmentsPopoverClose();
+        this._attachmentsPopoverOpen = false;
+        this._attachmentsPopoverMode = '';
+    }
+
+    _scheduleEntityAttachmentsPopoverClose() {
+        this._cancelEntityAttachmentsPopoverClose();
+        this._attachmentsPopoverCloseTimer = setTimeout(() => {
+            this._attachmentsPopoverCloseTimer = null;
+            this._closeEntityAttachmentsPopover();
+        }, 140);
+    }
+
+    _cancelEntityAttachmentsPopoverClose() {
+        if (this._attachmentsPopoverCloseTimer === null) return;
+        clearTimeout(this._attachmentsPopoverCloseTimer);
+        this._attachmentsPopoverCloseTimer = null;
+    }
+
+    _onEntityAttachmentsFocusOut(event) {
+        const next = event.relatedTarget;
+        if (next instanceof Node && event.currentTarget.contains(next)) return;
+        this._closeEntityAttachmentsPopover();
+    }
+
+    _onEntityAttachmentTriggerKeydown(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        this._triggerEntityAttachmentFileInput();
+    }
+
+    _triggerEntityAttachmentFileInput() {
+        const root = this.renderRoot;
+        const input = root.querySelector('[data-role="entity-card-attachment-input"]');
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error('CRMEntityCard: attachment file input missing');
+        }
+        input.click();
+    }
+
+    _onEntityAttachmentHeaderClick(mode, isOpen) {
+        this._triggerEntityAttachmentFileInput();
+        if (isOpen) {
+            this._closeEntityAttachmentsPopover();
+            return;
+        }
+        this._openEntityAttachmentsPopover(mode);
+    }
+
+    _onRemoveAttachmentById(attachmentId) {
+        if (typeof attachmentId !== 'string' || attachmentId.length === 0) return;
+        this._onRemoveAttachment({ document_id: attachmentId });
+    }
+
+    _renderEntityAttachmentsPopover(mode) {
+        const mapped = this._mapEntityCardAttachmentItems();
+        const editMode = mode === 'edit';
         return html`
-            <div class="section-title">
-                <span>${this.t('entity_modal.section_attachments')}</span>
-            </div>
-            ${this._attachmentsData.length === 0
-                ? html`<div class="empty-soft">${this.t('entity_modal.attachments_empty')}</div>`
-                : html`
-                    <div class="att-list">
-                        ${this._attachmentsData.map((att) => html`
-                            <div class="att-row">
-                                <div class="meta">
-                                    <span class="title">${att.filename}</span>
-                                    <span class="sub">${att.document_id}</span>
-                                </div>
-                                ${readOnly ? nothing : html`
-                                <button
-                                    type="button"
-                                    class="icon-btn"
-                                    title=${this.t('entity_modal.action_remove_attachment')}
-                                    @click=${() => this._onRemoveAttachment(att)}
-                                >
-                                    <platform-icon name="trash" size="14"></platform-icon>
-                                </button>
-                                `}
-                            </div>
-                        `)}
-                    </div>
-                `}
-            ${readOnly ? nothing : html`
-            <label
-                class="att-dropzone"
-                @dragover=${this._onDragOver}
-                @dragleave=${this._onDragLeave}
-                @drop=${this._onDrop}
+            <div
+                class="attachments-popover"
+                role="menu"
+                @mouseenter=${() => this._cancelEntityAttachmentsPopoverClose()}
+                @mouseleave=${() => this._scheduleEntityAttachmentsPopoverClose()}
             >
-                <span>
-                    <platform-icon name="cloud" size="16"></platform-icon>
-                    ${this._uploading
-                        ? this.t('entity_modal.attachment_uploading')
-                        : this.t('entity_modal.attachment_dropzone')}
-                </span>
-                <input type="file" multiple @change=${this._onAttachmentInput} />
-            </label>
-            `}
+                ${mapped.length === 0
+                    ? html`<div class="attachments-popover-empty">${this.t('note_view.attachments_empty_popover')}</div>`
+                    : mapped.map((item) => {
+                        const metaParts = [];
+                        const bytes = _entityCardFormatBytes(item.sizeBytes);
+                        if (bytes.length > 0) metaParts.push(bytes);
+                        if (item.status.length > 0) metaParts.push(item.status);
+                        const metaText = metaParts.join(' · ');
+                        const iconName = _entityCardAttachmentIcon(item.filename, item.contentType);
+                        return html`
+                            <div class="attachments-popover-row">
+                                <platform-icon name=${iconName} size="16"></platform-icon>
+                                <div class="attachments-popover-info">
+                                    <p class="attachments-popover-name">${item.filename}</p>
+                                    <p class="attachments-popover-meta">${metaText}</p>
+                                </div>
+                                <div class="attachments-popover-actions">
+                                    ${item.downloadUrl.length > 0 ? html`
+                                        <a
+                                            class="attachment-action-btn"
+                                            href=${item.downloadUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            download=${item.filename}
+                                            title=${this.t('note_view.download')}
+                                        >
+                                            <platform-icon name="import" size="14"></platform-icon>
+                                        </a>
+                                    ` : nothing}
+                                    ${item.id.length > 0 ? html`
+                                        <button
+                                            type="button"
+                                            class="attachment-action-btn"
+                                            title=${editMode
+                                                ? this.t('note_edit.attachment_remove')
+                                                : this.t('note_view.attachment_remove')}
+                                            @click=${() => this._onRemoveAttachmentById(item.id)}
+                                        >
+                                            <platform-icon name="trash" size="14"></platform-icon>
+                                        </button>
+                                    ` : nothing}
+                                </div>
+                            </div>
+                        `;
+                    })}
+            </div>
+        `;
+    }
+
+    _renderEntityAttachmentsHeader(opts = undefined) {
+        const compact = opts && opts.compact === true;
+        const mode = this._entityAttachmentMode();
+        const editMode = mode === 'edit';
+        const isOpen = this._attachmentsPopoverOpen && this._attachmentsPopoverMode === mode;
+        const count = this._mapEntityCardAttachmentItems().length;
+        const buttonTitle = editMode ? this.t('note_edit.attachment_add') : this.t('note_view.action_attachments');
+        const onClick = () => this._onEntityAttachmentHeaderClick(mode, isOpen);
+        const btnClass = compact ? 'round-btn round-btn--compact' : 'round-btn';
+        const clipSize = compact ? '16' : '20';
+        return html`
+            <input
+                type="file"
+                multiple
+                class="visually-hidden-file-input"
+                data-role="entity-card-attachment-input"
+                id=${this._entityAttachmentInputId}
+                @change=${this._onAttachmentInput}
+            />
+            <div
+                class="attachments-menu"
+                @mouseenter=${() => this._openEntityAttachmentsPopover(mode)}
+                @mouseleave=${() => this._scheduleEntityAttachmentsPopoverClose()}
+                @focusin=${() => this._openEntityAttachmentsPopover(mode)}
+                @focusout=${this._onEntityAttachmentsFocusOut}
+            >
+                ${editMode
+                    ? html`
+                        <label
+                            class=${btnClass}
+                            title=${buttonTitle}
+                            for=${this._entityAttachmentInputId}
+                            tabindex="0"
+                            @click=${onClick}
+                            @keydown=${this._onEntityAttachmentTriggerKeydown}
+                        >
+                            <platform-icon name="paperclip" size=${clipSize}></platform-icon>
+                            <span class="attachments-badge">${count}</span>
+                        </label>
+                    `
+                    : html`
+                        <button
+                            type="button"
+                            class=${btnClass}
+                            title=${buttonTitle}
+                            aria-haspopup="menu"
+                            aria-expanded=${String(isOpen)}
+                            @click=${onClick}
+                        >
+                            <platform-icon name="paperclip" size=${clipSize}></platform-icon>
+                            <span class="attachments-badge">${count}</span>
+                        </button>
+                    `}
+                ${isOpen ? this._renderEntityAttachmentsPopover(mode) : nothing}
+            </div>
         `;
     }
 
@@ -2247,6 +2675,7 @@ export class CRMEntityCard extends PlatformElement {
         return html`
             <crm-related-entity-cards
                 .entities=${items}
+                .entityTypeRows=${this._entityTypesCatalogRows()}
                 .emptyText=${this.t('entity_card.requests_empty')}
                 @entity-open=${(e) => this._onOpenRelated(e.detail.entityId)}
             ></crm-related-entity-cards>
@@ -2267,6 +2696,7 @@ export class CRMEntityCard extends PlatformElement {
         return html`
             <div class="scroll">
                 <div class="edit-page-sheet">
+                    <div class="entity-card-layout-container ${this.compactStack ? 'entity-card-layout-container--force-stack' : ''}">
                     <div class="edit-two-col">
                         <aside class="edit-aside">
                             <div class="edit-avatar-wrap">
@@ -2274,7 +2704,12 @@ export class CRMEntityCard extends PlatformElement {
                             </div>
                         </aside>
                         <div class="edit-fields">
-                            <h2 class="edit-fields-heading">${this.t('entity_card.object_data_section')}</h2>
+                            <div class="edit-fields-heading-row">
+                                <h2 class="edit-fields-heading">${this.t('entity_card.object_data_section')}</h2>
+                                ${this._shouldShowAttachmentsChrome()
+                                    ? html`<div class="edit-fields-heading-actions">${this._renderEntityAttachmentsHeader({ compact: true })}</div>`
+                                    : nothing}
+                            </div>
                             <div class="edit-name-status-row">
                                 <div class="field-pill">
                                     <span class="field-pill-label">${this.t('entity_modal.label_name')}</span>
@@ -2305,10 +2740,10 @@ export class CRMEntityCard extends PlatformElement {
                                     <div class="edit-related-block section">
                                         ${this._renderRelationshipsSection({ readOnly: true })}
                                     </div>
-                                    <div class="section">${this._renderAttachmentsSection({ readOnly: true })}</div>
                                 `
                                 : nothing}
                         </div>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -2359,6 +2794,9 @@ export class CRMEntityCard extends PlatformElement {
                     : nothing}
                 ${this.showEntityActions ? html`
                 <div class="actions-bar">
+                    ${this._shouldShowAttachmentsChrome()
+                        ? html`<div class="actions-bar-lead">${this._renderEntityAttachmentsHeader()}</div>`
+                        : nothing}
                     <button class="btn btn-primary" type="button" @click=${() => this._onEditNavigate(entity)}>
                         <platform-icon name="edit" size="14"></platform-icon>
                         ${this.t('edit', {}, 'common')}
@@ -2470,6 +2908,7 @@ export class CRMEntityCard extends PlatformElement {
                             </div>
                         </div>
                     `}
+                    <div class="entity-card-layout-container ${this.compactStack ? 'entity-card-layout-container--force-stack' : ''}">
                     <div class="edit-two-col">
                         <aside class="edit-aside">
                             <div class="edit-avatar-wrap">
@@ -2477,7 +2916,12 @@ export class CRMEntityCard extends PlatformElement {
                             </div>
                         </aside>
                         <div class="edit-fields">
-                            <h2 class="edit-fields-heading">${this.t('entity_card.object_data_section')}</h2>
+                            <div class="edit-fields-heading-row">
+                                <h2 class="edit-fields-heading">${this.t('entity_card.object_data_section')}</h2>
+                                ${this._shouldShowAttachmentsChrome()
+                                    ? html`<div class="edit-fields-heading-actions">${this._renderEntityAttachmentsHeader({ compact: true })}</div>`
+                                    : nothing}
+                            </div>
                             <div class="edit-name-status-row">
                                 <label class="field-pill">
                                     <span class="field-pill-label">${this.t('entity_modal.label_name')}</span>
@@ -2522,10 +2966,10 @@ export class CRMEntityCard extends PlatformElement {
                                     <div class="edit-related-block section">
                                         ${this._renderRelationshipsSection()}
                                     </div>
-                                    <div class="section">${this._renderAttachmentsSection()}</div>
                                 `
                                 : nothing}
                         </div>
+                    </div>
                     </div>
                 </div>
             </form>
@@ -2571,7 +3015,6 @@ export class CRMEntityCard extends PlatformElement {
                 </div>
                 ${showRelAtt ? html`
                     <div class="section">${this._renderRelationshipsSection()}</div>
-                    <div class="section">${this._renderAttachmentsSection()}</div>
                 ` : nothing}
             </form>
         `;

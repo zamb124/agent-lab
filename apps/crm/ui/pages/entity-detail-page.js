@@ -2,16 +2,20 @@
  * CRMEntityDetailPage — страница карточки одной сущности CRM.
  *
  * Маршрут: `/crm/entities/:itemId` (роутер передаёт `itemId` через `params`).
- * Редактирование: query `?edit=1`, тело вкладки «Карточка» — `<crm-entity-card>`.
+ * Редактирование: query `?edit=1` на полной странице маршрута `entity`. В режиме `embedded`
+ * в панели списка кнопка «Редактировать» ведёт на тот же маршрут с `?edit=1`.
  *
  * Источники данных:
  *   - `useResource('crm/entities')`           — entity по id (GET /entities/{id}).
  *   - `useOp('crm/entity_card')`              — related/relationships/attachments.
  *   - `useResource('crm/relationship_types')` — подписи типов связей.
  *
- * UI: breadcrumbs → одна строка page-header (title + subtitle слева, действия в slot actions) →
- * вкладки → контент. Карточка: `crm-entity-card`; в режиме `?edit=1` тулбар редактирования
- * в шапке страницы (`host-toolbar` на карточке).
+ * UI: breadcrumbs (`:not([embedded])` скрыты на мобилке) → строка `page-header` (на мобилке контекст
+ * `namespace · type` под липкой полосой, в полосе только заголовок; действия — иконки) → вкладки → контент.
+ * Карточка: `crm-entity-card`; в режиме `?edit=1` тулбар редактирования
+ * в шапке страницы (`host-toolbar` на карточке). Встроенный режим `embedded` на списке сущностей:
+ * без breadcrumbs на родителе и внутри; компактный ряд действий (только иконки);
+ * карточка с `compact-stack` — вертикальная схема как на узкой ширине; при удалении — `embedded-entity-removed`.
  */
 
 import { html, css, nothing } from 'lit';
@@ -34,15 +38,7 @@ const REL_TYPES_NAME = 'crm/relationship_types';
 const TAB_CARD = 'card';
 const TAB_RELATIONS = 'relations';
 const TAB_GRAPH = 'graph';
-const TAB_ATTACHMENTS = 'attachments';
-const ALL_TABS = [TAB_CARD, TAB_RELATIONS, TAB_GRAPH, TAB_ATTACHMENTS];
-
-function _formatBytes(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '';
-    if (value < 1024) return `${value} B`;
-    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
+const ALL_TABS = [TAB_CARD, TAB_RELATIONS, TAB_GRAPH];
 
 function _isEditSearch(searchRaw) {
     const raw = typeof searchRaw === 'string' ? searchRaw : '';
@@ -54,7 +50,9 @@ export class CRMEntityDetailPage extends PlatformPage {
     static i18nNamespace = 'crm';
 
     static properties = {
+        embedded: { type: Boolean, reflect: true },
         itemId: { type: String },
+        _isMobile: { state: true },
         _card: { state: true },
         _cardError: { state: true },
         _activeTab: { state: true },
@@ -95,6 +93,22 @@ export class CRMEntityDetailPage extends PlatformPage {
                 justify-content: flex-end;
                 gap: var(--space-2);
             }
+            @media (max-width: 767px) {
+                :host(:not([embedded])) .breadcrumbs-wrap {
+                    display: none;
+                }
+                .detail-header-actions {
+                    flex-wrap: nowrap;
+                }
+            }
+            .page-subtitle-mobile {
+                flex-shrink: 0;
+                margin: 0 var(--space-4) var(--space-2);
+                padding: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                line-height: 1.35;
+            }
             .detail-template-box {
                 display: inline-flex;
                 flex-direction: row;
@@ -105,8 +119,9 @@ export class CRMEntityDetailPage extends PlatformPage {
                 min-width: 0;
                 max-width: min(480px, 100%);
                 padding: 0 14px;
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--crm-surface-tint-strong);
                 border-radius: 20px;
+                border: 1px solid var(--crm-stroke);
             }
             .detail-template-select {
                 flex: 1;
@@ -138,7 +153,7 @@ export class CRMEntityDetailPage extends PlatformPage {
             }
             .detail-template-pencil:hover:not(:disabled) {
                 color: var(--text-primary);
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--crm-surface-tint-strong);
             }
             .detail-template-pencil:disabled {
                 opacity: 0.45;
@@ -150,7 +165,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
-                color: rgba(34, 34, 34, 0.42);
+                color: var(--text-tertiary);
                 line-height: 1;
             }
             .detail-template-value {
@@ -182,36 +197,36 @@ export class CRMEntityDetailPage extends PlatformPage {
                 cursor: not-allowed;
             }
             .toolbar-pill-primary {
-                background: #7b92ff;
-                color: #fff;
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
             }
             .toolbar-pill-primary:hover:not(:disabled) {
-                filter: brightness(1.06);
+                background: var(--crm-button-primary-hover);
             }
             .toolbar-pill-ghost {
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--crm-surface-tint-strong);
                 color: var(--text-secondary);
             }
             .toolbar-pill-ghost:hover:not(:disabled) {
-                background: rgba(34, 34, 34, 0.1);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
             }
             .toolbar-pill-muted {
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--crm-surface-tint-strong);
                 color: var(--text-secondary);
                 border: 1px solid transparent;
             }
             .toolbar-pill-muted:hover:not(:disabled) {
-                background: rgba(34, 34, 34, 0.09);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
             }
             .toolbar-pill-danger {
                 background: transparent;
-                color: #c2410c;
-                border: 1px solid rgba(249, 115, 22, 0.45);
+                color: var(--error);
+                border: 1px solid var(--crm-danger-stroke);
             }
             .toolbar-pill-danger:hover:not(:disabled) {
-                background: rgba(249, 115, 22, 0.12);
+                background: var(--crm-danger-bg);
             }
             .toolbar-icon-danger {
                 width: 40px;
@@ -219,8 +234,8 @@ export class CRMEntityDetailPage extends PlatformPage {
                 padding: 0;
                 border: none;
                 border-radius: 14px;
-                background: rgba(249, 115, 22, 0.18);
-                color: #c2410c;
+                background: var(--crm-danger-bg);
+                color: var(--error);
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
@@ -228,7 +243,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 flex-shrink: 0;
             }
             .toolbar-icon-danger:hover:not(:disabled) {
-                background: rgba(249, 115, 22, 0.28);
+                background: color-mix(in srgb, var(--error) 28%, transparent);
             }
             .toolbar-icon-muted {
                 width: 40px;
@@ -236,7 +251,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 padding: 0;
                 border: none;
                 border-radius: 14px;
-                background: rgba(34, 34, 34, 0.06);
+                background: var(--crm-surface-tint-strong);
                 color: var(--text-secondary);
                 cursor: pointer;
                 display: inline-flex;
@@ -245,10 +260,31 @@ export class CRMEntityDetailPage extends PlatformPage {
                 flex-shrink: 0;
             }
             .toolbar-icon-muted:hover:not(:disabled) {
-                background: rgba(34, 34, 34, 0.1);
+                background: var(--glass-tint-strong);
                 color: var(--text-primary);
             }
             .toolbar-icon-muted:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .toolbar-icon-primary {
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                border: none;
+                border-radius: 14px;
+                background: var(--crm-button-primary-bg);
+                color: var(--crm-button-primary-text);
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .toolbar-icon-primary:hover:not(:disabled) {
+                background: var(--crm-button-primary-hover);
+            }
+            .toolbar-icon-primary:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
             }
@@ -279,8 +315,10 @@ export class CRMEntityDetailPage extends PlatformPage {
             .body {
                 flex: 1;
                 min-height: 0;
+                min-width: 0;
                 padding: var(--space-4);
                 overflow-y: auto;
+                overflow-x: hidden;
                 width: 100%;
                 box-sizing: border-box;
             }
@@ -288,7 +326,8 @@ export class CRMEntityDetailPage extends PlatformPage {
                 display: flex;
                 flex-direction: column;
                 align-items: stretch;
-                background: rgba(34, 34, 34, 0.02);
+                background: var(--crm-surface-tint);
+                border-radius: var(--radius-lg);
             }
             .body.detail-body-muted crm-entity-card {
                 flex: 1;
@@ -358,7 +397,8 @@ export class CRMEntityDetailPage extends PlatformPage {
                 flex-direction: column;
                 gap: var(--space-4);
                 width: 100%;
-                max-width: none;
+                max-width: 100%;
+                min-width: 0;
             }
             .description {
                 color: var(--text-primary);
@@ -413,73 +453,30 @@ export class CRMEntityDetailPage extends PlatformPage {
                 letter-spacing: 0.04em;
             }
 
-            .list {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-                width: 100%;
+            :host([embedded]) .breadcrumbs-wrap {
+                display: none;
             }
-            .list-row {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                background: var(--crm-surface);
+            :host([embedded]) .header-wrap {
+                padding: 0 var(--space-3);
             }
-            .list-row.clickable {
-                cursor: pointer;
-                background: var(--glass-tint-subtle);
-                border-color: transparent;
+            :host([embedded]) .tabs {
+                padding: 0 var(--space-3);
             }
-            .list-row.clickable:hover { background: var(--glass-tint-medium); }
-            .list-row .icon {
-                width: 28px;
-                height: 28px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                background: color-mix(in srgb, var(--accent) 14%, transparent);
-                color: var(--accent);
-                border-radius: var(--radius-sm);
-                flex-shrink: 0;
+            :host([embedded]) .body {
+                padding: var(--space-3);
             }
-            .list-row .meta {
-                display: flex;
-                flex-direction: column;
-                min-width: 0;
+            .embedded-host-filler {
                 flex: 1;
+                min-height: 0;
             }
-            .list-row .name {
-                margin: 0;
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .list-row .sub {
-                margin: 0;
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-            }
-            .list-row .arrow { color: var(--text-tertiary); }
-            .list-row a {
-                color: var(--accent);
-                text-decoration: none;
-                font-size: var(--text-xs);
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-            }
-            .list-row a:hover { text-decoration: underline; }
         `,
     ];
 
     constructor() {
         super();
+        this.embedded = false;
         this.itemId = '';
+        this._isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
         this._card = null;
         this._cardError = '';
         this._activeTab = TAB_CARD;
@@ -497,10 +494,20 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._cardOp = this.useOp(ENTITY_CARD_OP);
         this._relTypes = this.useResource(REL_TYPES_NAME, { autoload: true });
         this._routerSearchSel = this.select((s) => s.router.search);
+        this._mql = null;
+        this._mqlListener = null;
     }
 
     connectedCallback() {
         super.connectedCallback();
+        if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+            this._mql = window.matchMedia('(max-width: 767px)');
+            this._mqlListener = (e) => {
+                this._isMobile = e.matches;
+            };
+            this._mql.addEventListener('change', this._mqlListener);
+            this._isMobile = this._mql.matches;
+        }
         if (this.shadowRoot) {
             this.shadowRoot.addEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
             this.shadowRoot.addEventListener('crm-entity-card-storage-type-draft', this._onCardStorageTypeDraftBound);
@@ -525,11 +532,18 @@ export class CRMEntityDetailPage extends PlatformPage {
             const idField = this._entities.resource.idField;
             const removedId = payload && typeof payload[idField] === 'string' ? payload[idField] : null;
             if (removedId !== this.itemId) return;
+            if (this.embedded) {
+                this.emit('embedded-entity-removed', { entityId: removedId });
+                return;
+            }
             this.navigate('entities');
         });
     }
 
     disconnectedCallback() {
+        if (this._mql && this._mqlListener) {
+            this._mql.removeEventListener('change', this._mqlListener);
+        }
         if (this.shadowRoot) {
             this.shadowRoot.removeEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
             this.shadowRoot.removeEventListener('crm-entity-card-storage-type-draft', this._onCardStorageTypeDraftBound);
@@ -556,6 +570,9 @@ export class CRMEntityDetailPage extends PlatformPage {
 
     willUpdate(changed) {
         super.willUpdate(changed);
+        if (this._activeTab !== TAB_CARD && this._activeTab !== TAB_RELATIONS && this._activeTab !== TAB_GRAPH) {
+            this._activeTab = TAB_CARD;
+        }
         if (changed.has('itemId')) {
             if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
                 this._card = null;
@@ -599,18 +616,32 @@ export class CRMEntityDetailPage extends PlatformPage {
         return null;
     }
 
+    _entityTypesCatalogRows() {
+        const ctrl = this._entityTypes;
+        if (!ctrl || ctrl.items === undefined || !Array.isArray(ctrl.items)) {
+            return [];
+        }
+        return ctrl.items;
+    }
+
     _onPickTab(tab) {
         if (ALL_TABS.indexOf(tab) === -1) return;
         this._activeTab = tab;
     }
 
     _isEditingCard() {
+        if (this.embedded) {
+            return false;
+        }
         return _isEditSearch(this._routerSearchSel.value);
     }
 
     _onEdit() {
-        this.navigate('entity', { itemId: this.itemId }, { search: '?edit=1' });
         this._activeTab = TAB_CARD;
+        if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
+            return;
+        }
+        this.navigate('entity', { itemId: this.itemId }, { search: '?edit=1' });
     }
 
     _onCardSaved() {
@@ -660,6 +691,9 @@ export class CRMEntityDetailPage extends PlatformPage {
 
     render() {
         if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
+            if (this.embedded) {
+                return html`<div class="embedded-host-filler" aria-hidden="true"></div>`;
+            }
             return html`
                 <div class="body">
                     <div class="center">
@@ -680,9 +714,13 @@ export class CRMEntityDetailPage extends PlatformPage {
                         <platform-icon class="icon" name="warning" size="48"></platform-icon>
                         <h2>${this.t('entity_detail_page.not_found_title')}</h2>
                         <p>${this._cardError}</p>
-                        <button class="btn" type="button" @click=${() => this.navigate('entities')}>
-                            ${this.t('entity_detail_page.back_to_entities')}
-                        </button>
+                        ${this.embedded
+                            ? nothing
+                            : html`
+                                <button class="btn" type="button" @click=${() => this.navigate('entities')}>
+                                    ${this.t('entity_detail_page.back_to_entities')}
+                                </button>
+                            `}
                     </div>
                 </div>
             `;
@@ -709,6 +747,8 @@ export class CRMEntityDetailPage extends PlatformPage {
         const headerSubtitle = editingCard
             ? `${this.t('entity_card.edit_object_title')} · ${baseSubtitle}`
             : baseSubtitle;
+        const headerSubtitleForBar =
+            this.embedded ? headerSubtitle : this._isMobile ? '' : headerSubtitle;
         return html`
             <div class="breadcrumbs-wrap">
                 <platform-breadcrumbs current-label=${entityLabel}></platform-breadcrumbs>
@@ -717,13 +757,19 @@ export class CRMEntityDetailPage extends PlatformPage {
                 <page-header
                     dense
                     title=${entityLabel}
-                    subtitle=${headerSubtitle}
+                    subtitle=${headerSubtitleForBar}
+                    ?hide-mobile-menu=${this.embedded && this._isMobile}
                 >
                     <div slot="actions" class="detail-header-actions">
                         ${this._renderDetailHeaderActions(entity, editingCard, isBusy)}
                     </div>
                 </page-header>
             </div>
+            ${this._isMobile && !this.embedded
+                ? html`
+                    <p class="page-subtitle-mobile">${headerSubtitle}</p>
+                `
+                : nothing}
             <div class="tabs">
                 ${ALL_TABS.map((tab) => html`
                     <button
@@ -867,6 +913,88 @@ export class CRMEntityDetailPage extends PlatformPage {
     }
 
     _renderDetailHeaderActions(entity, editingCard, isBusy) {
+        const compactToolbar = this.embedded || this._isMobile;
+        if (compactToolbar && !editingCard) {
+            return html`
+                    <button
+                        type="button"
+                        class="toolbar-icon-primary"
+                        title=${this.t('entity_detail_page.action_edit')}
+                        aria-label=${this.t('entity_detail_page.action_edit')}
+                        @click=${() => this._onEdit()}
+                    >
+                        <platform-icon name="edit" size="18"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="toolbar-icon-muted"
+                        title=${this.t('entity_detail_page.action_share')}
+                        aria-label=${this.t('entity_detail_page.action_share')}
+                        @click=${() => this._onShare()}
+                    >
+                        <platform-icon name="share" size="18"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="toolbar-icon-muted"
+                        title=${this.t('entity_detail_page.action_access_request')}
+                        aria-label=${this.t('entity_detail_page.action_access_request')}
+                        @click=${() => this._onAccessRequest()}
+                    >
+                        <platform-icon name="lock" size="18"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="toolbar-icon-danger"
+                        title=${this.t('entity_detail_page.action_delete')}
+                        aria-label=${this.t('entity_detail_page.action_delete')}
+                        @click=${() => this._onDelete()}
+                        ?disabled=${isBusy}
+                    >
+                        <platform-icon name="trash" size="18"></platform-icon>
+                    </button>
+            `;
+        }
+        if (compactToolbar && editingCard) {
+            return html`
+                    ${this._isMobile ? nothing : this._renderEditTemplateBox(entity, isBusy)}
+                    <button
+                        type="button"
+                        class="toolbar-icon-muted"
+                        title=${this.t('entity_modal.action_cancel')}
+                        aria-label=${this.t('entity_modal.action_cancel')}
+                        @click=${() => this._onToolbarCancelEdit()}
+                    >
+                        <platform-icon name="close" size="18"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="toolbar-icon-primary"
+                        title=${this._editToolbarSubmitting
+                            ? this.t('entity_modal.action_saving')
+                            : this.t('entity_modal.action_save')}
+                        aria-label=${this._editToolbarSubmitting
+                            ? this.t('entity_modal.action_saving')
+                            : this.t('entity_modal.action_save')}
+                        ?disabled=${this._editToolbarSaveDisabled || this._editToolbarSubmitting}
+                        @click=${() => this._onToolbarSave()}
+                    >
+                        ${this._editToolbarSubmitting
+                            ? html`<glass-spinner size="16"></glass-spinner>`
+                            : html`<platform-icon name="check" size="18"></platform-icon>`}
+                    </button>
+                    <button
+                        type="button"
+                        class="toolbar-icon-danger"
+                        title=${this.t('entity_card.delete_object_tooltip')}
+                        aria-label=${this.t('entity_card.delete_object_tooltip')}
+                        @click=${() => this._onDelete()}
+                        ?disabled=${isBusy}
+                    >
+                        <platform-icon name="trash" size="18"></platform-icon>
+                    </button>
+            `;
+        }
         return html`
                     ${editingCard
                         ? this._renderEditTemplateBox(entity, isBusy)
@@ -993,6 +1121,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                             panel-mode="edit"
                             host-toolbar
                             layout-variant="full"
+                            ?compact-stack=${this.embedded}
                             entity-id=${this.itemId}
                             .cardBundle=${this._card}
                             .showEntityActions=${false}
@@ -1006,6 +1135,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                                 surface="page"
                                 panel-mode="view"
                                 layout-variant="full"
+                                ?compact-stack=${this.embedded}
                                 .entity=${entity}
                                 entity-id=${this.itemId}
                                 .cardBundle=${this._card}
@@ -1014,7 +1144,6 @@ export class CRMEntityDetailPage extends PlatformPage {
                         `
                         : nothing}
                 ${this._activeTab === TAB_RELATIONS ? this._renderRelationsTab(entity) : nothing}
-                ${this._activeTab === TAB_ATTACHMENTS ? this._renderAttachmentsTab() : nothing}
             </div>
         `;
     }
@@ -1046,54 +1175,11 @@ export class CRMEntityDetailPage extends PlatformPage {
                 <p class="section-title">${this.t('entity_detail_page.section_neighbors')}</p>
                 <crm-related-neighbor-rows
                     .rows=${rows}
+                    .entityTypeRows=${this._entityTypesCatalogRows()}
                     .emptyText=${this.t('entity_detail_page.empty_neighbors')}
                     .showRemove=${false}
-                    .showWeight=${true}
                     @entity-open=${(e) => this._onRelatedClick(e.detail.entityId)}
                 ></crm-related-neighbor-rows>
-            </div>
-        `;
-    }
-
-    _renderAttachmentsTab() {
-        const attachments = this._card && Array.isArray(this._card.attachments) ? this._card.attachments : [];
-        if (attachments.length === 0) {
-            return html`
-                <div class="card-section">
-                    <p class="empty-text">${this.t('entity_detail_page.empty_attachments')}</p>
-                </div>
-            `;
-        }
-        return html`
-            <div class="card-section">
-                <div class="list">
-                    ${attachments.map((att) => {
-                        const filename = typeof att.filename === 'string' && att.filename.length > 0
-                            ? att.filename
-                            : (typeof att.document_id === 'string' ? att.document_id : '—');
-                        const sizeText = _formatBytes(att.size_bytes);
-                        const downloadUrl = typeof att.download_url === 'string' && att.download_url.length > 0
-                            ? att.download_url
-                            : '';
-                        return html`
-                            <div class="list-row">
-                                <span class="icon">
-                                    <platform-icon name="paperclip" size="14"></platform-icon>
-                                </span>
-                                <span class="meta">
-                                    <p class="name">${filename}</p>
-                                    <p class="sub">${sizeText}${sizeText ? ' · ' : ''}${typeof att.status === 'string' ? att.status : ''}</p>
-                                </span>
-                                ${downloadUrl ? html`
-                                    <a href=${downloadUrl} target="_blank" rel="noopener noreferrer" download=${filename}>
-                                        <platform-icon name="download" size="14"></platform-icon>
-                                        ${this.t('entity_detail_page.action_download')}
-                                    </a>
-                                ` : nothing}
-                            </div>
-                        `;
-                    })}
-                </div>
             </div>
         `;
     }
