@@ -150,6 +150,7 @@ class TestAnalysisDraftPipeline:
                                     "target_name": ivan,
                                     "relationship_type": "mentions",
                                     "weight": 1.0,
+                                    "confidence": 0.9,
                                 },
                                 {
                                     "source_type": "note",
@@ -158,6 +159,7 @@ class TestAnalysisDraftPipeline:
                                     "target_name": petr,
                                     "relationship_type": "mentions",
                                     "weight": 0.9,
+                                    "confidence": 0.85,
                                 },
                             ],
                         )
@@ -176,6 +178,7 @@ class TestAnalysisDraftPipeline:
             assert rel.get("draft_relationship_id")
             assert rel.get("source_draft_entity_id")
             assert rel.get("target_draft_entity_id")
+            assert "confidence" in rel
 
         stored = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
         assert stored.status_code == 200, stored.text
@@ -375,6 +378,7 @@ class TestAnalysisDraftPipeline:
                                     "target_name": contact,
                                     "relationship_type": "mentions",
                                     "weight": 1.0,
+                                    "confidence": 0.9,
                                 },
                             ],
                         )

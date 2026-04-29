@@ -228,6 +228,7 @@ class AmoCRMIntegrationService:
             target_entity_id=target_entity_id,
             relationship_type=relationship_type,
             weight=1.0,
+            confidence=1.0,
             attributes={},
         )
         await self._relationship_repo.create(rel)

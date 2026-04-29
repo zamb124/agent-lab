@@ -279,10 +279,12 @@ class AccessRequestService:
             new_rel = Relationship(
                 relationship_id=str(uuid.uuid4()),
                 company_id=copy.company_id,
+                namespace=rel.namespace,
                 source_entity_id=copy.entity_id,
                 target_entity_id=target_copy_id,
                 relationship_type=rel.relationship_type,
                 weight=rel.weight,
+                confidence=rel.confidence,
                 attributes=rel.attributes
             )
             await self._relationship_repo.create(new_rel)

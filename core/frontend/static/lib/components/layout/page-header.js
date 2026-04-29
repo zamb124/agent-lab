@@ -20,6 +20,8 @@ export class PageHeader extends PlatformElement {
     static properties = {
         title: { type: String },
         subtitle: { type: String },
+        /** Компактный отступ снизу и чуть меньший заголовок (строчка с actions). */
+        dense: { type: Boolean, reflect: true },
         /** На mobile: "title" — только заголовок; "search" — слот toolbar-search */
         mobileToolbarMode: { type: String },
         /**
@@ -37,6 +39,19 @@ export class PageHeader extends PlatformElement {
             :host {
                 display: block;
                 margin-bottom: var(--space-6);
+            }
+
+            :host([dense]) {
+                margin-bottom: var(--space-2);
+            }
+
+            :host([dense]) .title {
+                font-size: var(--text-2xl);
+            }
+
+            :host([dense]) .subtitle {
+                font-size: var(--text-sm);
+                margin-top: 2px;
             }
 
             .header {
@@ -190,6 +205,7 @@ export class PageHeader extends PlatformElement {
         super();
         this.title = '';
         this.subtitle = '';
+        this.dense = false;
         this.mobileToolbarMode = 'title';
         this.actionsOverflow = 'auto';
         this._isMobile = false;

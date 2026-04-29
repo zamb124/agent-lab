@@ -14,7 +14,7 @@ SQLAlchemy модели для CRM Service.
 from datetime import datetime, date, timezone
 from typing import Optional, Dict, Any, List
 
-from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint, ForeignKey, Integer
+from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint, ForeignKey, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TSVECTOR
 
@@ -293,6 +293,12 @@ class Relationship(Base):
     relationship_type: Mapped[str] = mapped_column(String(100), nullable=False)
     
     weight: Mapped[float] = mapped_column(Float, default=1.0)
+    confidence: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=1.0,
+        server_default=text("1.0"),
+    )
     attributes: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
     
     created_at: Mapped[datetime] = mapped_column(

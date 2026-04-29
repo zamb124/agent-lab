@@ -336,6 +336,11 @@ export const entityEditForm = createForm({
             required: true,
             errorKey: 'entity_modal.err_id_required',
         },
+        entity_type: {
+            required: true,
+            errorKey: 'entity_modal.err_type_required',
+        },
+        entity_subtype: {},
         name: {
             required: true,
             maxLength: ENTITY_NAME_MAX,
@@ -350,6 +355,8 @@ export const entityEditForm = createForm({
     },
     initial: {
         id: '',
+        entity_type: '',
+        entity_subtype: '',
         name: '',
         description: '',
         status: '',
@@ -357,14 +364,24 @@ export const entityEditForm = createForm({
         tags: [],
     },
     submitEvent: entityUpdateOp.events.REQUESTED,
-    buildPayload: (draft) => ({
-        id: draft.id,
-        body: {
+    buildPayload: (draft) => {
+        const et = typeof draft.entity_type === 'string' ? draft.entity_type.trim() : '';
+        if (et.length === 0) {
+            throw new Error('entityEditForm.buildPayload: entity_type required');
+        }
+        const subRaw = typeof draft.entity_subtype === 'string' ? draft.entity_subtype.trim() : '';
+        const body = {
             name: typeof draft.name === 'string' ? draft.name.trim() : '',
             description: _trimmedOrNull(draft.description),
             status: typeof draft.status === 'string' && draft.status.length > 0 ? draft.status : null,
             attributes: _normalizeAttributes(draft.attributes),
             tags: _normalizeTags(draft.tags),
-        },
-    }),
+            entity_type: et,
+            entity_subtype: subRaw.length > 0 ? subRaw : null,
+        };
+        return {
+            id: draft.id,
+            body,
+        };
+    },
 });

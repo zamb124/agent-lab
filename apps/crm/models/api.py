@@ -48,6 +48,7 @@ class EntityUpdate(BaseModel):
     voice_entity_id: Optional[str] = None
     context_entity_id: Optional[str] = None
 
+    entity_type: Optional[str] = None
     entity_subtype: Optional[str] = None
 
     note_date: Optional[date] = None
@@ -81,10 +82,18 @@ class EntityResponse(BaseModel):
     source_entity_id: Optional[str]
     source_company_id: Optional[str]
     external_relationships: List[Dict[str, Any]] = []
-    relevance: float
+    relevance: float = Field(
+        description="Значение CRMEntity.relevance в БД; на ранжирование результатов поиска не влияет.",
+    )
     access_level: Optional[str] = None
-    score: Optional[float] = None
-    match_type: Optional[str] = None
+    score: Optional[float] = Field(
+        default=None,
+        description="Релевантность из пайплайна поиска (semantic / text / hybrid), если запрос — поиск. Не смешивается с relevance сущности и не зависит от весов рёбер графа.",
+    )
+    match_type: Optional[str] = Field(
+        default=None,
+        description="Источник совпадения в гибридном поиске, когда применимо.",
+    )
 
     created_at: datetime
     updated_at: datetime
@@ -138,7 +147,10 @@ class EntitySearchQueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: Optional[str] = None
-    search_mode: Literal["text", "semantic", "hybrid"] = "hybrid"
+    search_mode: Literal["text", "semantic", "hybrid"] = Field(
+        default="hybrid",
+        description="Режим поиска: только текст (FTS), только semantic (вектор), hybrid (RRF). Рёбра графа ранжирование не меняют.",
+    )
     entity_type: Optional[str] = None
     entity_subtype: Optional[str] = None
     namespace: Optional[str] = None
@@ -313,7 +325,16 @@ class RelationshipCreate(BaseModel):
     target_entity_id: str
     relationship_type: str
     namespace: str = Field(default="default", description="Namespace для изоляции")
-    weight: float = 1.0
+    weight: float = Field(
+        default=1.0,
+        description="Сила или стоимость связи; участвует в метриках пути по графу, не в ранжировании поиска сущностей.",
+    )
+    confidence: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Достоверность связи (например из AI); не участвует в ранжировании поиска сущностей и не входит в стоимость кратчайшего пути.",
+    )
     attributes: Optional[Dict[str, Any]] = None
 
 
@@ -327,7 +348,12 @@ class RelationshipResponse(BaseModel):
     source_entity_id: str
     target_entity_id: str
     relationship_type: str
-    weight: float
+    weight: float = Field(
+        description="Сила или стоимость связи; в кратчайшем пути по графу накапливается как расстояние.",
+    )
+    confidence: float = Field(
+        description="Достоверность связи; на длину пути и на поиск сущностей не влияет.",
+    )
     attributes: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
@@ -569,7 +595,8 @@ class AIAnalyzeRelationshipExtracted(BaseModel):
     target_type: str
     target_name: str
     relationship_type: str
-    weight: float = 1.0
+    weight: float
+    confidence: float = Field(ge=0.0, le=1.0)
     attributes: Optional[Dict[str, Any]] = None
 
 
@@ -584,6 +611,7 @@ class AIAnalysisRelationshipDraft(BaseModel):
     target_draft_entity_id: str
     relationship_type: str
     weight: float = 1.0
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     attributes: Optional[Dict[str, Any]] = None
 
 
@@ -639,6 +667,7 @@ class DraftEntityPatch(BaseModel):
 class DraftRelationshipPatch(BaseModel):
     draft_relationship_id: str
     weight: Optional[float] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     attributes: Optional[Dict[str, Any]] = None
 
 

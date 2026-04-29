@@ -121,13 +121,13 @@ import '../pages/namespace-tasks-page.js';
 import '../pages/relationship-types-page.js';
 import '../pages/note-page.js';
 import '../pages/entity-detail-page.js';
+import '../pages/entity-create-page.js';
 import '../pages/access-requests-page.js';
 import '../pages/spaces-page.js';
 import '../pages/space-detail-page.js';
 import '../pages/space-integrations-page.js';
 
 import '../modals/namespace-modal.js';
-import '../modals/entity-modal.js';
 import '../modals/share-modal.js';
 import '../modals/access-request-modal.js';
 import '../modals/ai-analysis-modal.js';
@@ -156,6 +156,7 @@ const CRM_ROUTES = [
     { key: 'notes',               path: 'notes' },
     { key: 'note',                path: 'notes/:itemId',     parent: 'notes' },
     { key: 'entities',            path: 'entities' },
+    { key: 'entity_new',           path: 'entities/new',     parent: 'entities' },
     { key: 'entity',              path: 'entities/:itemId',   parent: 'entities' },
     { key: 'graph',               path: 'graph' },
     { key: 'tasks',               path: 'tasks' },
@@ -186,6 +187,7 @@ const CRM_ROUTES_WITH_OWN_PAGE_HEADER = new Set([
     'namespace_imports',
     'relationship_types',
     'entity',
+    'entity_new',
 ]);
 
 export class CRMApp extends PlatformApp {
@@ -408,6 +410,7 @@ export class CRMApp extends PlatformApp {
             case 'notes':               content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
             case 'note':                content = html`<crm-note-page .noteId=${params.itemId}></crm-note-page>`; break;
             case 'entities':            content = html`<crm-entities-page></crm-entities-page>`; break;
+            case 'entity_new':         content = html`<crm-entity-create-page></crm-entity-create-page>`; break;
             case 'entity':              content = html`<crm-entity-detail-page .itemId=${params.itemId}></crm-entity-detail-page>`; break;
             case 'graph':               content = html`<crm-graph-page></crm-graph-page>`; break;
             case 'tasks':               content = html`<crm-tasks-page></crm-tasks-page>`; break;

@@ -678,6 +678,50 @@
         ],
         "title": "Body_upload_file_flows_api_v1_files__post"
       },
+      "BulkDeleteNodesRequest": {
+        "properties": {
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Node Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_ids"
+        ],
+        "title": "BulkDeleteNodesRequest",
+        "description": "Запрос на массовое удаление нод с отчисткой связанных рёбер."
+      },
+      "BulkDeleteNodesResponse": {
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "deleted_node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deleted Node Ids"
+          },
+          "deleted_edge_count": {
+            "type": "integer",
+            "title": "Deleted Edge Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "flow_id",
+          "deleted_node_ids",
+          "deleted_edge_count"
+        ],
+        "title": "BulkDeleteNodesResponse",
+        "description": "Результат массового удаления."
+      },
       "CalendarAttendee": {
         "properties": {
           "attendee_id": {
@@ -1383,6 +1427,18 @@
         ],
         "title": "CalendarUpsertRequest"
       },
+      "ChannelType": {
+        "type": "string",
+        "enum": [
+          "telegram",
+          "email",
+          "whatsapp",
+          "sms",
+          "webhook"
+        ],
+        "title": "ChannelType",
+        "description": "Типы каналов для отправки сообщений.\n\nИспользуется в ChannelNode и output_actions триггеров."
+      },
       "CodeCompletionsResponse": {
         "properties": {
           "modules": {
@@ -1440,6 +1496,20 @@
             "type": "array",
             "title": "Platform Tools",
             "default": []
+          },
+          "runtime_namespace_extras": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GlobalVariable"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Namespace Extras"
           }
         },
         "type": "object",
@@ -2130,6 +2200,47 @@
         "title": "FlowFunctionsResponse",
         "description": "Список функций из bundle flow (``functions.py``)."
       },
+      "FlowMetadataRequest": {
+        "properties": {
+          "sticky_notes": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sticky Notes"
+          }
+        },
+        "type": "object",
+        "title": "FlowMetadataRequest",
+        "description": "PATCH-обновление flow.config.metadata (sticky_notes, etc.)."
+      },
+      "FlowMetadataResponse": {
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "flow_id",
+          "metadata"
+        ],
+        "title": "FlowMetadataResponse"
+      },
       "FlowResponse": {
         "properties": {
           "flow_id": {
@@ -2327,6 +2438,12 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Resources",
+            "default": {}
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
             "default": {}
           },
           "source": {
@@ -3901,6 +4018,53 @@
         ],
         "title": "OperatorTaskPatch"
       },
+      "OutputAction": {
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/ChannelType",
+            "description": "Тип канала (telegram, email, etc)"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Действие: send_message, send_photo, send_document"
+          },
+          "mapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Mapping",
+            "description": "Маппинг параметров: param_name -> @state:field.path"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config",
+            "description": "Статические параметры (parse_mode, etc)"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition",
+            "description": "Условие выполнения: @state:field == value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel",
+          "action"
+        ],
+        "title": "OutputAction",
+        "description": "Действие отправки сообщения в канал.\n\nИспользуется в trigger.output_actions для автоматической отправки\nпосле выполнения агента.\n\nПример (ответ в тот же чат, chat_id из триггера):\n{\n    \"channel\": \"telegram\",\n    \"action\": \"send_message\",\n    \"mapping\": {\n        \"recipient\": \"@state:triggers.tg_1.context.chat_id\",\n        \"text\": \"@state:response\"\n    },\n    \"config\": {\n        \"parse_mode\": \"HTML\"\n    },\n    \"condition\": \"@state:should_reply == true\"\n}"
+      },
       "ParameterInfo": {
         "properties": {
           "type": {
@@ -4494,6 +4658,17 @@
             ],
             "title": "Nodes"
           },
+          "nodes_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes Mode"
+          },
           "edges": {
             "anyOf": [
               {
@@ -4509,11 +4684,33 @@
             ],
             "title": "Edges"
           },
+          "edges_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges Mode"
+          },
           "variables": {
             "additionalProperties": true,
             "type": "object",
             "title": "Variables",
             "default": {}
+          },
+          "variables_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variables Mode"
           }
         },
         "type": "object",
@@ -4714,7 +4911,8 @@
             "type": "string",
             "enum": [
               "web_vapid",
-              "ios_apns"
+              "ios_apns",
+              "android_fcm"
             ],
             "title": "Transport",
             "default": "web_vapid"
@@ -5119,6 +5317,17 @@
               }
             ],
             "title": "Mcp Server Id"
+          },
+          "mcp_tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcp Tool Name"
           }
         },
         "type": "object",
@@ -5158,13 +5367,47 @@
             "title": "Config",
             "description": "Конфигурация"
           },
+          "output_mapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Output Mapping",
+            "description": "Маппинг payload -> state (state.path -> payload.path)"
+          },
           "input_mapping": {
             "additionalProperties": {
               "type": "string"
             },
             "type": "object",
             "title": "Input Mapping",
-            "description": "Маппинг"
+            "description": "DEPRECATED: используйте output_mapping"
+          },
+          "output_actions": {
+            "items": {
+              "$ref": "#/components/schemas/OutputAction"
+            },
+            "type": "array",
+            "title": "Output Actions",
+            "description": "Действия отправки ответа в канал после агента"
+          },
+          "post_flow_output_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Flow Output Enabled",
+            "description": "Включить рассылку после flow; None — дефолт по типу триггера"
+          },
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id",
+            "description": "ID skill из flow.skills; default — entry базового flow",
+            "default": "default"
           }
         },
         "type": "object",
@@ -5198,12 +5441,34 @@
             "type": "object",
             "title": "Config"
           },
+          "output_mapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Output Mapping"
+          },
           "input_mapping": {
             "additionalProperties": {
               "type": "string"
             },
             "type": "object",
             "title": "Input Mapping"
+          },
+          "output_actions": {
+            "items": {
+              "$ref": "#/components/schemas/OutputAction"
+            },
+            "type": "array",
+            "title": "Output Actions"
+          },
+          "post_flow_output_enabled": {
+            "type": "boolean",
+            "title": "Post Flow Output Enabled"
+          },
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id"
           },
           "webhook_url": {
             "anyOf": [
@@ -5238,7 +5503,11 @@
           "type",
           "enabled",
           "config",
+          "output_mapping",
           "input_mapping",
+          "output_actions",
+          "post_flow_output_enabled",
+          "skill_id",
           "status"
         ],
         "title": "TriggerResponse",
@@ -5302,6 +5571,20 @@
             ],
             "title": "Config"
           },
+          "output_mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Mapping"
+          },
           "input_mapping": {
             "anyOf": [
               {
@@ -5315,11 +5598,126 @@
               }
             ],
             "title": "Input Mapping"
+          },
+          "output_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OutputAction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Actions"
+          },
+          "post_flow_output_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Flow Output Enabled"
+          },
+          "skill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
           }
         },
         "type": "object",
         "title": "TriggerUpdateRequest",
         "description": "Запрос на обновление триггера."
+      },
+      "TriggerVerifyRequest": {
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/TriggerType",
+            "description": "Тип триггера"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config",
+            "description": "Конфиг как в trigger.config"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id",
+            "description": "Черновой ID триггера (для подсказки пути webhook)"
+          },
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id",
+            "description": "Skill для резолва @var: (как при выполнении flow с этим skill)",
+            "default": "default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "TriggerVerifyRequest",
+        "description": "Проверка чернового конфига триггера (без сохранения)."
+      },
+      "TriggerVerifyResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "TriggerVerifyResponse",
+        "description": "Результат проверки (getMe, cron, схема пути)."
       },
       "UserSearchResult": {
         "properties": {

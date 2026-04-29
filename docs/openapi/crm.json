@@ -124,6 +124,13 @@
             "title": "Weight",
             "default": 1.0
           },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
           "attributes": {
             "anyOf": [
               {
@@ -564,22 +571,70 @@
         "title": "AccessRequestUpdate",
         "description": "Обновление статуса запроса"
       },
-      "AddNamespaceIdsRequest": {
+      "AuthorizeResponse": {
         "properties": {
-          "namespace_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace Ids"
+          "authorize_url": {
+            "type": "string",
+            "title": "Authorize Url",
+            "description": "GET: открыть в браузере для OAuth"
           }
         },
         "type": "object",
         "required": [
-          "namespace_ids"
+          "authorize_url"
         ],
-        "title": "AddNamespaceIdsRequest",
-        "description": "Атомарное добавление namespace_ids к entity type."
+        "title": "AuthorizeResponse"
+      },
+      "AutoNoteAiAnalyzeUpdateRequest": {
+        "properties": {
+          "auto_note_ai_analyze": {
+            "type": "boolean",
+            "title": "Auto Note Ai Analyze",
+            "description": "Для новых заметок из интеграции автоматически ставить задачу AI-анализа"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auto_note_ai_analyze"
+        ],
+        "title": "AutoNoteAiAnalyzeUpdateRequest"
+      },
+      "BoardStage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Id",
+            "description": "Стабильный идентификатор стадии (snake_case)"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Label",
+            "description": "Подпись колонки в UI"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Опциональный CSS-цвет"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "BoardStage",
+        "description": "Стадия канбана задач: id хранится в attributes.status у CRMEntity с entity_type=task."
       },
       "Body_auth_callback_post_crm_api_auth_callback__provider_name__post": {
         "properties": {
@@ -1784,6 +1839,19 @@
             ],
             "title": "Weight"
           },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "attributes": {
             "anyOf": [
               {
@@ -1866,6 +1934,20 @@
               }
             ],
             "title": "Tags"
+          },
+          "attachment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Ids"
           },
           "user_id": {
             "anyOf": [
@@ -2167,7 +2249,8 @@
           },
           "relevance": {
             "type": "number",
-            "title": "Relevance"
+            "title": "Relevance",
+            "description": "Значение CRMEntity.relevance в БД; на ранжирование результатов поиска не влияет."
           },
           "access_level": {
             "anyOf": [
@@ -2189,7 +2272,8 @@
                 "type": "null"
               }
             ],
-            "title": "Score"
+            "title": "Score",
+            "description": "Релевантность из пайплайна поиска (semantic / text / hybrid), если запрос — поиск. Не смешивается с relevance сущности и не зависит от весов рёбер графа."
           },
           "match_type": {
             "anyOf": [
@@ -2200,7 +2284,8 @@
                 "type": "null"
               }
             ],
-            "title": "Match Type"
+            "title": "Match Type",
+            "description": "Источник совпадения в гибридном поиске, когда применимо."
           },
           "created_at": {
             "type": "string",
@@ -2328,6 +2413,7 @@
               "hybrid"
             ],
             "title": "Search Mode",
+            "description": "Режим поиска: только текст (FTS), только semantic (вектор), hybrid (RRF). Рёбра графа ранжирование не меняют.",
             "default": "hybrid"
           },
           "entity_type": {
@@ -2443,6 +2529,12 @@
             "type": "string",
             "title": "Type Id"
           },
+          "namespace": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Namespace",
+            "default": "default"
+          },
           "parent_type_id": {
             "anyOf": [
               {
@@ -2536,20 +2628,6 @@
             "title": "Check Duplicates",
             "default": true
           },
-          "namespace_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Namespace Ids"
-          },
           "is_context_anchor": {
             "type": "boolean",
             "title": "Is Context Anchor",
@@ -2578,6 +2656,10 @@
           "company_id": {
             "type": "string",
             "title": "Company Id"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
           },
           "parent_type_id": {
             "anyOf": [
@@ -2671,13 +2753,6 @@
             "type": "number",
             "title": "Weight Coefficient"
           },
-          "namespace_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Namespace Ids"
-          },
           "is_context_anchor": {
             "type": "boolean",
             "title": "Is Context Anchor"
@@ -2694,12 +2769,28 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "list_entity_type": {
+            "type": "string",
+            "title": "List Entity Type"
+          },
+          "list_entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Entity Subtype"
           }
         },
         "type": "object",
         "required": [
           "type_id",
           "company_id",
+          "namespace",
           "parent_type_id",
           "name",
           "description",
@@ -2713,11 +2804,11 @@
           "is_event",
           "check_duplicates",
           "weight_coefficient",
-          "namespace_ids",
           "is_context_anchor",
           "is_voice_target",
           "extractable",
-          "created_at"
+          "created_at",
+          "list_entity_type"
         ],
         "title": "EntityTypeResponse",
         "description": "Response с типом сущности"
@@ -2814,20 +2905,6 @@
             ],
             "title": "Color"
           },
-          "namespace_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Namespace Ids"
-          },
           "is_context_anchor": {
             "anyOf": [
               {
@@ -2916,6 +2993,20 @@
             ],
             "title": "Tags"
           },
+          "attachment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Ids"
+          },
           "voice_entity_id": {
             "anyOf": [
               {
@@ -2937,6 +3028,28 @@
               }
             ],
             "title": "Context Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
+          },
+          "entity_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Subtype"
           },
           "note_date": {
             "anyOf": [
@@ -3204,6 +3317,11 @@
             "title": "Weight",
             "description": "Вес ребра"
           },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "Уверенность в корректности связи (модель / источник)"
+          },
           "is_directed": {
             "type": "boolean",
             "title": "Is Directed",
@@ -3230,6 +3348,7 @@
           "target_id",
           "relationship_type",
           "weight",
+          "confidence",
           "is_directed"
         ],
         "title": "GraphEdge",
@@ -3362,6 +3481,145 @@
         ],
         "title": "InfluenceGraphResponse",
         "description": "Граф влияния от корневой entity.\n\nСодержит все узлы и ребра в пределах max_depth."
+      },
+      "IntegrationAutoSyncUpdateRequest": {
+        "properties": {
+          "auto_sync_enabled": {
+            "type": "boolean",
+            "title": "Auto Sync Enabled",
+            "description": "Включить периодический unified-синк"
+          },
+          "auto_sync_cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Sync Cron",
+            "description": "Cron (5 полей), обязателен при auto_sync_enabled=true"
+          },
+          "auto_sync_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Sync Timezone",
+            "description": "IANA timezone для интерпретации cron",
+            "default": "UTC"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auto_sync_enabled"
+        ],
+        "title": "IntegrationAutoSyncUpdateRequest"
+      },
+      "IntegrationManifestItem": {
+        "properties": {
+          "provider_id": {
+            "type": "string",
+            "title": "Provider Id"
+          },
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "auto_sync_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Sync Enabled"
+          },
+          "auto_sync_cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Sync Cron"
+          },
+          "auto_sync_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Sync Timezone"
+          },
+          "auto_sync_schedule_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Sync Schedule Task Id"
+          },
+          "auto_note_ai_analyze": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Note Ai Analyze"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_id",
+          "connected"
+        ],
+        "title": "IntegrationManifestItem"
+      },
+      "IntegrationsListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrationManifestItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "IntegrationsListResponse"
       },
       "KnowledgeImportCreatedEntityItem": {
         "properties": {
@@ -3518,7 +3776,54 @@
         ],
         "title": "ListResponse[dict]"
       },
-      "NamespaceCRMSettings": {
+      "NamespaceAutomationRule": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rule Id"
+          },
+          "entity_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Entity Type"
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Trigger",
+            "description": "entity_created | stage_changed | …"
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Action",
+            "description": "run_flow | notify | …"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule_id",
+          "entity_type",
+          "trigger",
+          "action"
+        ],
+        "title": "NamespaceAutomationRule",
+        "description": "Правило автоматизации пространства (контракт хранения; исполнитель — flows/scheduler)."
+      },
+      "NamespaceCRMSettings-Input": {
         "properties": {
           "show_note_voice_ui": {
             "type": "boolean",
@@ -3545,11 +3850,136 @@
               }
             ],
             "title": "Якорь контекста по умолчанию"
+          },
+          "integrations": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Метаданные интеграций по ключу провайдера",
+            "description": "Только отображение и подсказки; секреты хранятся в OAuth credentials. Для автосинка (если поддерживает коннектор): auto_sync_enabled, auto_sync_cron, auto_sync_timezone, auto_sync_schedule_task_id, auto_sync_oauth_user_id."
+          },
+          "sidebar_navigation": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SidebarNavEntry-Input"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Дерево основного меню сайдбара",
+            "description": "None: клиент строит меню из типов пространства"
+          },
+          "default_flow_by_entity_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Идентификатор flow по умолчанию для типа сущности"
+          },
+          "automation_rules": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceAutomationRule"
+            },
+            "type": "array",
+            "title": "Automation Rules"
+          },
+          "pipeline_stage_presets": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TaskBoardPreset"
+            },
+            "type": "object",
+            "title": "Пресеты колонок доски задач",
+            "description": "Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор."
           }
         },
         "type": "object",
         "title": "NamespaceCRMSettings",
-        "description": "Настройки CRM для namespace (заметки: голос, контекст)."
+        "description": "Настройки CRM для namespace (заметки: голос, контекст, метаданные интеграций)."
+      },
+      "NamespaceCRMSettings-Output": {
+        "properties": {
+          "show_note_voice_ui": {
+            "type": "boolean",
+            "title": "Показывать выбор голоса",
+            "default": true
+          },
+          "default_note_voice": {
+            "type": "string",
+            "enum": [
+              "self",
+              "none",
+              "last"
+            ],
+            "title": "Голос по умолчанию для новой заметки",
+            "default": "self"
+          },
+          "default_context_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Якорь контекста по умолчанию"
+          },
+          "integrations": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Метаданные интеграций по ключу провайдера",
+            "description": "Только отображение и подсказки; секреты хранятся в OAuth credentials. Для автосинка (если поддерживает коннектор): auto_sync_enabled, auto_sync_cron, auto_sync_timezone, auto_sync_schedule_task_id, auto_sync_oauth_user_id."
+          },
+          "sidebar_navigation": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SidebarNavEntry-Output"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Дерево основного меню сайдбара",
+            "description": "None: клиент строит меню из типов пространства"
+          },
+          "default_flow_by_entity_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Идентификатор flow по умолчанию для типа сущности"
+          },
+          "automation_rules": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceAutomationRule"
+            },
+            "type": "array",
+            "title": "Automation Rules"
+          },
+          "pipeline_stage_presets": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TaskBoardPreset"
+            },
+            "type": "object",
+            "title": "Пресеты колонок доски задач",
+            "description": "Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор."
+          }
+        },
+        "type": "object",
+        "title": "NamespaceCRMSettings",
+        "description": "Настройки CRM для namespace (заметки: голос, контекст, метаданные интеграций)."
       },
       "NamespaceCreateRequest": {
         "properties": {
@@ -3573,7 +4003,7 @@
           "template_id": {
             "type": "string",
             "title": "Template Id",
-            "description": "ID шаблона: sales | development | hr"
+            "description": "ID шаблона: sales | development | hr | ..."
           }
         },
         "type": "object",
@@ -3669,6 +4099,25 @@
         "title": "NamespaceEditabilityResponse",
         "description": "Ограничения редактирования namespace."
       },
+      "NamespaceIntegrationBadge": {
+        "properties": {
+          "provider_id": {
+            "type": "string",
+            "title": "Provider Id"
+          },
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_id",
+          "connected"
+        ],
+        "title": "NamespaceIntegrationBadge",
+        "description": "Статус подключения интеграции в пространстве (для UI)."
+      },
       "NamespaceResponse": {
         "properties": {
           "name": {
@@ -3698,12 +4147,19 @@
           "crm_settings": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NamespaceCRMSettings"
+                "$ref": "#/components/schemas/NamespaceCRMSettings-Output"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "integration_badges": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceIntegrationBadge"
+            },
+            "type": "array",
+            "title": "Integration Badges"
           }
         },
         "type": "object",
@@ -3803,6 +4259,16 @@
             },
             "type": "array",
             "title": "Entity Type Ids"
+          },
+          "crm_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceCRMSettings-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4252,6 +4718,16 @@
               }
             ],
             "title": "Icon"
+          },
+          "crm_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceCRMSettings-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4287,7 +4763,7 @@
           "crm_settings": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NamespaceCRMSettings"
+                "$ref": "#/components/schemas/NamespaceCRMSettings-Input"
               },
               {
                 "type": "null"
@@ -4653,6 +5129,15 @@
           "weight": {
             "type": "number",
             "title": "Weight",
+            "description": "Сила или стоимость связи; участвует в метриках пути по графу, не в ранжировании поиска сущностей.",
+            "default": 1.0
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Достоверность связи (например из AI); не участвует в ранжировании поиска сущностей и не входит в стоимость кратчайшего пути.",
             "default": 1.0
           },
           "attributes": {
@@ -4705,7 +5190,13 @@
           },
           "weight": {
             "type": "number",
-            "title": "Weight"
+            "title": "Weight",
+            "description": "Сила или стоимость связи; в кратчайшем пути по графу накапливается как расстояние."
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "Достоверность связи; на длину пути и на поиск сущностей не влияет."
           },
           "attributes": {
             "additionalProperties": true,
@@ -4732,6 +5223,7 @@
           "target_entity_id",
           "relationship_type",
           "weight",
+          "confidence",
           "attributes",
           "created_at",
           "updated_at"
@@ -5045,6 +5537,126 @@
         "title": "ShortestPathResponse",
         "description": "Кратчайший путь между двумя entities.\n\nИспользует weighted алгоритм Dijkstra."
       },
+      "SidebarNavEntry-Input": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id",
+            "description": "Стабильный id для active state и редактора"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Подпись пункта"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon",
+            "description": "Имя иконки platform-icon"
+          },
+          "route_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Key",
+            "description": "Ключ маршрута SPA (лист)"
+          },
+          "search": {
+            "type": "string",
+            "title": "Search",
+            "description": "Query с ведущим ? для history",
+            "default": ""
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/SidebarNavEntry-Input"
+            },
+            "type": "array",
+            "title": "Children"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "SidebarNavEntry",
+        "description": "Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."
+      },
+      "SidebarNavEntry-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id",
+            "description": "Стабильный id для active state и редактора"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Подпись пункта"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon",
+            "description": "Имя иконки platform-icon"
+          },
+          "route_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Key",
+            "description": "Ключ маршрута SPA (лист)"
+          },
+          "search": {
+            "type": "string",
+            "title": "Search",
+            "description": "Query с ведущим ? для history",
+            "default": ""
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/SidebarNavEntry-Output"
+            },
+            "type": "array",
+            "title": "Children"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "SidebarNavEntry",
+        "description": "Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."
+      },
       "StartDailySummaryRequest": {
         "properties": {
           "namespace": {
@@ -5307,7 +5919,8 @@
             "type": "string",
             "enum": [
               "web_vapid",
-              "ios_apns"
+              "ios_apns",
+              "android_fcm"
             ],
             "title": "Transport",
             "default": "web_vapid"
@@ -5347,6 +5960,110 @@
         ],
         "title": "SwitchCompanyRequest",
         "description": "Переключение активной компании пользователя"
+      },
+      "SyncStatsResponse": {
+        "properties": {
+          "items": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "SyncStatsResponse"
+      },
+      "TaskBoardEditorBoardResponse": {
+        "properties": {
+          "board_key": {
+            "type": "string",
+            "title": "Board Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/BoardStage"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "uses_custom_preset": {
+            "type": "boolean",
+            "title": "Uses Custom Preset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "board_key",
+          "label",
+          "stages",
+          "uses_custom_preset"
+        ],
+        "title": "TaskBoardEditorBoardResponse",
+        "description": "Одна доска в редакторе стадий пространства."
+      },
+      "TaskBoardEditorStateResponse": {
+        "properties": {
+          "boards": {
+            "items": {
+              "$ref": "#/components/schemas/TaskBoardEditorBoardResponse"
+            },
+            "type": "array",
+            "title": "Boards"
+          }
+        },
+        "type": "object",
+        "required": [
+          "boards"
+        ],
+        "title": "TaskBoardEditorStateResponse",
+        "description": "Сводка досок задач для экрана настройки namespace."
+      },
+      "TaskBoardPreset": {
+        "properties": {
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/BoardStage"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Stages",
+            "description": "Упорядоченные стадии слева направо"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stages"
+        ],
+        "title": "TaskBoardPreset",
+        "description": "Набор колонок доски задач для одного ключа доски (см. task_board_key в CRM)."
+      },
+      "TaskBoardStagesApiResponse": {
+        "properties": {
+          "board_key": {
+            "type": "string",
+            "title": "Board Key"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/BoardStage"
+            },
+            "type": "array",
+            "title": "Stages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "board_key",
+          "stages"
+        ],
+        "title": "TaskBoardStagesApiResponse",
+        "description": "Стадии доски задач для namespace и текущего фильтра подтипа."
       },
       "TaskCreatedEntitiesResponse": {
         "properties": {

@@ -86,7 +86,7 @@ describe('crm graph page', () => {
           { entity_id: 'entity-2', entity_type: 'note', name: 'Entity Two', level: 1, access: true, created_at: '2026-12-31T00:00:00Z' },
         ],
         edges: [
-          { edge_id: 'edge-1', source_id: 'entity-1', target_id: 'entity-2', relationship_type: 'knows', is_directed: true, weight: 1.0 },
+          { edge_id: 'edge-1', source_id: 'entity-1', target_id: 'entity-2', relationship_type: 'knows', is_directed: true, weight: 1.0, confidence: 1.0 },
         ],
       }),
       getInfluenceGraph: async () => ({
@@ -95,7 +95,7 @@ describe('crm graph page', () => {
           { entity_id: 'entity-2', entity_type: 'note', name: 'Entity Two', level: 1, access: true, created_at: '2026-12-31T00:00:00Z' },
         ],
         edges: [
-          { edge_id: 'edge-1', source_id: 'entity-1', target_id: 'entity-2', relationship_type: 'knows', is_directed: true, weight: 1.0 },
+          { edge_id: 'edge-1', source_id: 'entity-1', target_id: 'entity-2', relationship_type: 'knows', is_directed: true, weight: 1.0, confidence: 1.0 },
         ],
       }),
       getRelatedEntities: async () => ({ incoming: [], outgoing: [], undirected: [] }),

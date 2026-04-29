@@ -637,8 +637,14 @@ export class CRMGraphPage extends CRMNamespacePage {
 
     _onSearchLoaded(response) {
         const all = response && Array.isArray(response.items) ? response.items : [];
+        // Порог min score действует только для узлов с числовым score из поиска; узлы без score не трактуем как 0.
         const items = this._minScore > 0
-            ? all.filter((entry) => (typeof entry.score === 'number' ? entry.score : 0) >= this._minScore)
+            ? all.filter((entry) => {
+                if (typeof entry.score !== 'number') {
+                    return true;
+                }
+                return entry.score >= this._minScore;
+            })
             : all;
         if (items.length === 0) {
             this._graphNodes = [];
@@ -993,7 +999,7 @@ export class CRMGraphPage extends CRMNamespacePage {
     }
 
     _openEntityModal(entityId) {
-        this.openModal('crm.entity', { mode: 'edit', id: entityId });
+        this.navigate('entity', { itemId: entityId }, { search: '?edit=1' });
     }
 
     _openMergeModal(entityIdA, entityIdB) {

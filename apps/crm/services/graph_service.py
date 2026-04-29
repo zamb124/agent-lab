@@ -664,6 +664,7 @@ class GraphService:
                 target_id=rel.target_entity_id,
                 relationship_type=rel.relationship_type,
                 weight=rel.weight,
+                confidence=rel.confidence,
                 is_directed=rel_info["is_directed"],
                 attributes=rel.attributes
             ))
@@ -814,6 +815,7 @@ class GraphService:
                         target_id=rel.target_entity_id,
                         relationship_type=rel.relationship_type,
                         weight=rel.weight,
+                        confidence=rel.confidence,
                         is_directed=rel_info.get("is_directed", True),
                         attributes=rel.attributes
                     ))

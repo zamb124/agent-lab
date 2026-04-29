@@ -100,6 +100,7 @@ async def create_relationship(
         relationship_type=data.relationship_type,
         namespace=data.namespace,
         weight=data.weight,
+        confidence=data.confidence,
         attributes=data.attributes or {},
         company_id=company_id,
         created_at=datetime.now(timezone.utc),

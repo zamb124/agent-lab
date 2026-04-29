@@ -2,11 +2,10 @@
  * PlatformPage — базовый класс для страниц-маршрутов в event-driven канон.
  *
  * Удобные хелперы поверх PlatformElement: знание текущего маршрута,
- * `navigate(routeKey, params)` через events.
+ * `navigate(routeKey, params?, navigationOptions?)` через events (как у PlatformElement).
  */
 
 import { PlatformElement } from '../platform-element/index.js';
-import { CoreEvents } from '../events/contract.js';
 
 export class PlatformPage extends PlatformElement {
     constructor() {
@@ -22,10 +21,7 @@ export class PlatformPage extends PlatformElement {
         return this._routeSelect && this._routeSelect.value ? (this._routeSelect.value.params || {}) : {};
     }
 
-    navigate(routeKey, params) {
-        if (typeof routeKey !== 'string' || routeKey.length === 0) {
-            throw new Error('PlatformPage.navigate: routeKey required');
-        }
-        this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey, params: params || {} });
+    navigate(routeKey, params, navigationOptions) {
+        super.navigate(routeKey, params, navigationOptions);
     }
 }

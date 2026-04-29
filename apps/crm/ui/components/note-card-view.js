@@ -40,6 +40,11 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import './entity-hover-preview.js';
+import './crm-related-neighbor-rows.js';
+import { relatedEntityCardSharedStyles } from '../styles/related-entity-card.styles.js';
+import { extractNeighborEdges } from '../utils/neighbor-edges.js';
+import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
+import { entityKind } from '../utils/related-entity-presenter.js';
 import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
 
 const ENTITIES_NAME = 'crm/entities';
@@ -255,6 +260,7 @@ export class CRMNoteCardView extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        relatedEntityCardSharedStyles,
         css`
             :host {
                 display: block;
@@ -730,6 +736,11 @@ export class CRMNoteCardView extends PlatformElement {
                 flex-direction: column;
                 gap: var(--space-2);
             }
+            .attachments-sidebar-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+            }
             .task-row {
                 display: flex;
                 align-items: center;
@@ -804,118 +815,10 @@ export class CRMNoteCardView extends PlatformElement {
             }
             .task-add-input input::placeholder { color: var(--crm-note-text-muted); }
 
-            /* Related entities */
-            .related-list {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-            }
-            .related-card {
-                display: flex;
-                align-items: flex-start;
-                gap: var(--space-3);
-                padding: 12px;
-                border-radius: var(--radius-lg);
-                background: var(--crm-note-related-violet-bg);
-                cursor: pointer;
-                border: none;
-                width: 100%;
-                text-align: left;
-                color: var(--text-primary);
-                font-family: inherit;
-                transition: filter var(--duration-fast);
-            }
-            .related-card:hover { filter: brightness(0.97); }
-            .related-card.tone-violet { background: var(--crm-note-related-violet-bg); }
-            .related-card.tone-yellow { background: var(--crm-note-related-yellow-bg); }
-            .related-card.tone-orange { background: var(--crm-note-related-orange-bg); }
-
-            .related-icon {
-                width: 64px;
-                height: 64px;
-                border-radius: var(--radius-md);
-                background: var(--crm-note-related-icon-gradient);
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                color: #FFFFFF;
-                flex-shrink: 0;
-            }
-
-            .related-body {
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-                min-width: 0;
-                flex: 1;
-            }
-            .related-name {
-                margin: 0;
-                font-size: 16px;
-                line-height: 20px;
-                font-weight: 600;
-                color: var(--text-primary);
-                font-family: 'Inter', var(--font-sans);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .related-position {
-                margin: 0;
-                font-size: 12px;
-                line-height: 15px;
-                color: var(--crm-note-text-muted);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .related-empty {
-                font-size: 16px;
-                line-height: 20px;
-                color: var(--crm-note-text-muted);
-            }
-
             .panel-empty {
                 font-size: 14px;
                 line-height: 18px;
                 color: var(--crm-note-text-muted);
-            }
-
-            .relationships-list {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-3);
-            }
-
-            .relationship-card {
-                background: var(--crm-note-related-violet-bg);
-            }
-
-            .relationship-icon {
-                width: 52px;
-                height: 52px;
-            }
-
-            .relationship-meta {
-                margin: 0;
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                flex-wrap: wrap;
-                font-size: 12px;
-                line-height: 16px;
-                color: var(--crm-note-text-muted);
-            }
-
-            .relationship-type {
-                display: inline-flex;
-                align-items: center;
-                padding: 2px 8px;
-                border-radius: var(--radius-full);
-                background: var(--crm-note-action-bg);
-                color: var(--text-primary);
-                font-size: 11px;
-                font-weight: 600;
             }
 
             /* ================== EDIT inputs ================== */
@@ -3024,82 +2927,46 @@ export class CRMNoteCardView extends PlatformElement {
         this.emit('cancel');
     }
 
-    _renderRelatedEntities() {
-        const cardRelated = this.card !== null && Array.isArray(this.card.related_entities)
-            ? this.card.related_entities
-            : [];
-        const entities = cardRelated.filter(
-            (e) => e && e.entity_id !== this.note.entity_id && this._entityKind(e) !== 'task',
-        );
-        if (entities.length === 0) {
-            return html`<div class="related-empty">${this.t('note_view.no_related')}</div>`;
+    _noteNeighborRows() {
+        if (this.card === null || this.note === null || typeof this.note.entity_id !== 'string') {
+            return [];
         }
+        const edges = extractNeighborEdges(this.card, this.note.entity_id);
+        return edges.map(({ rel, otherId, otherEntity, isOutgoing }) => ({
+            relationshipId: rel.relationship_id,
+            otherId,
+            otherEntity,
+            relationshipTypeLabel: this._relationshipTypeLabel(rel.relationship_type),
+            directionText: isOutgoing
+                ? `${this.t('note_view.this_note')} →`
+                : `${this.t('note_view.this_note')} ←`,
+            weight: typeof rel.weight === 'number' && Number.isFinite(rel.weight) ? rel.weight : null,
+            confidencePercent: relationshipConfidencePercent(rel),
+            scorePercent: searchScorePercent(otherEntity),
+        }));
+    }
+
+    _renderNeighborsSection() {
+        const rows = this._noteNeighborRows();
         return html`
-            <div class="related-list">
-                ${entities.map((entity) => {
-                    const tone = this._relatedTone(entity);
-                    const subtitle = this._relatedSubtitle(entity);
-                    const name = entity.name && entity.name.length > 0 ? entity.name : entity.entity_id;
-                    const iconName = this._relatedIcon(entity);
-                    return html`
-                        <button
-                            type="button"
-                            class="related-card tone-${tone}"
-                            @click=${() => this._emitEntityOpen(entity.entity_id)}
-                        >
-                            <span class="related-icon">
-                                <platform-icon name=${iconName} size="32"></platform-icon>
-                            </span>
-                            <span class="related-body">
-                                <p class="related-name">${name}</p>
-                                ${subtitle.length > 0
-                                    ? html`<p class="related-position">${subtitle}</p>`
-                                    : ''}
-                            </span>
-                        </button>
-                    `;
-                })}
-            </div>
+            <section>
+                <h3 class="card-title" style="margin-bottom: var(--space-4);">${this.t('entity_card.related_objects_section')}</h3>
+                <crm-related-neighbor-rows
+                    .rows=${rows}
+                    .emptyText=${this.t('note_view.no_neighbors')}
+                    .showRemove=${false}
+                    .showWeight=${true}
+                    @entity-open=${(e) => this._emitEntityOpen(e.detail.entityId)}
+                ></crm-related-neighbor-rows>
+            </section>
         `;
-    }
-
-    _entityKind(entity) {
-        if (!entity || typeof entity.entity_type !== 'string') return '';
-        return entity.entity_type;
-    }
-
-    _relatedTone(entity) {
-        const type = this._entityKind(entity);
-        if (type === 'company' || type === 'organization' || type === 'team') return 'yellow';
-        if (type === NOTE_ROOT_ENTITY_TYPE_ID || type === 'event' || type === 'meeting' || type === 'document') return 'orange';
-        return 'violet';
-    }
-
-    _relatedIcon(entity) {
-        const type = this._entityKind(entity);
-        if (type === 'company' || type === 'organization' || type === 'team') return 'building';
-        if (type === NOTE_ROOT_ENTITY_TYPE_ID) return 'note';
-        if (type === 'event' || type === 'meeting') return 'calendar';
-        if (type === 'document') return 'folder';
-        if (type === 'task') return 'check';
-        return 'user';
-    }
-
-    _relatedSubtitle(entity) {
-        if (entity && typeof entity.entity_subtype === 'string' && entity.entity_subtype.length > 0) {
-            return entity.entity_subtype;
-        }
-        if (entity && typeof entity.entity_type === 'string') {
-            return entity.entity_type;
-        }
-        return '';
     }
 
     _noteTasks() {
         const cardRelated = this.card !== null && Array.isArray(this.card.related_entities)
             ? this.card.related_entities
             : [];
-        return cardRelated.filter((e) => e && this._entityKind(e) === 'task');
+        return cardRelated.filter((e) => e && entityKind(e) === 'task');
     }
 
     _isTaskDone(task) {
@@ -3126,97 +2993,6 @@ export class CRMNoteCardView extends PlatformElement {
         event.preventDefault();
         event.target.value = '';
         this.emit('task-add', { text: value });
-    }
-
-    _renderRelationships() {
-        const noteId = this.note.entity_id;
-        const cardRelationships = this.card !== null && Array.isArray(this.card.relationships)
-            ? this.card.relationships
-            : [];
-        const relationships = cardRelationships.filter(
-            (r) => r && r.relationship_type !== 'note_voice' && r.relationship_type !== 'in_context',
-        );
-        if (relationships.length === 0) {
-            return html`<div class="panel-empty">${this.t('note_view.no_relationships')}</div>`;
-        }
-        return html`
-            <div class="relationships-list">
-                ${relationships.map((rel) => {
-                    const sourceId = rel.source_entity_id;
-                    const targetId = rel.target_entity_id;
-                    const isOutgoing = sourceId === noteId;
-                    const otherId = isOutgoing ? targetId : sourceId;
-                    const otherLabel = this._entityLabelById(otherId);
-                    const direction = isOutgoing
-                        ? `${this.t('note_view.this_note')} →`
-                        : `${this.t('note_view.this_note')} ←`;
-                    return html`
-                        <button
-                            type="button"
-                            class="related-card relationship-card"
-                            @click=${() => this._emitEntityOpen(otherId)}
-                        >
-                            <span class="related-icon relationship-icon">
-                                <platform-icon name="circular-connection" size="24"></platform-icon>
-                            </span>
-                            <span class="related-body">
-                                <p class="related-name">${otherLabel}</p>
-                                <p class="relationship-meta">
-                                    <span class="relationship-type">${this._relationshipTypeLabel(rel.relationship_type)}</span>
-                                    <span>${direction}</span>
-                                </p>
-                            </span>
-                        </button>
-                    `;
-                })}
-            </div>
-        `;
-    }
-
-    _renderAttachments() {
-        const attachments = Array.isArray(this.card?.attachments) ? this.card.attachments : [];
-        if (attachments.length === 0) {
-            return html`<div class="panel-empty">${this.t('note_view.no_attachments')}</div>`;
-        }
-        return html`
-            ${attachments.map((att) => {
-                const filename = typeof att.filename === 'string' && att.filename.length > 0
-                    ? att.filename
-                    : (typeof att.document_id === 'string' ? att.document_id : '—');
-                const sizeText = formatBytes(att.size_bytes);
-                const downloadUrl = typeof att.download_url === 'string' && att.download_url.length > 0
-                    ? att.download_url
-                    : '';
-                const metadata = att && typeof att.metadata === 'object' && att.metadata !== null ? att.metadata : {};
-                const contentType = typeof metadata.content_type === 'string' ? metadata.content_type : '';
-                const iconName = _resolveAttachmentIconName(filename, contentType);
-                return html`
-                    <div class="attachment-row">
-                        <span class="attachment-icon">
-                            <platform-icon name=${iconName} size="16"></platform-icon>
-                        </span>
-                        <span class="attachment-info">
-                            <p class="attachment-name">${filename}</p>
-                            <p class="attachment-meta">
-                                ${sizeText}${sizeText ? ' · ' : ''}${typeof att.status === 'string' ? att.status : ''}
-                            </p>
-                        </span>
-                        ${downloadUrl ? html`
-                            <a
-                                class="attachment-link"
-                                href=${downloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                download=${filename}
-                            >
-                                <platform-icon name="import" size="14"></platform-icon>
-                                ${this.t('note_view.download')}
-                            </a>
-                        ` : nothing}
-                    </div>
-                `;
-            })}
-        `;
     }
 
     render() {
@@ -3299,8 +3075,7 @@ export class CRMNoteCardView extends PlatformElement {
                 <aside class="sidebar">
                     ${this._renderSummaryCard(summaryText, summaryTime, summaryEntities)}
                     ${this._renderTasksCard(tasks)}
-                    ${this._renderRelatedSection()}
-                    ${this._renderRelationshipsSection()}
+                    ${this._renderNeighborsSection()}
                     ${this._renderAttachmentsSection()}
                 </aside>
             </div>
@@ -3434,31 +3209,56 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
-    _renderRelatedSection() {
-        return html`
-            <section>
-                <h3 class="card-title" style="margin-bottom: var(--space-4);">${this.t('note_view.related_entities')}</h3>
-                ${this._renderRelatedEntities()}
-            </section>
-        `;
-    }
-
-    _renderRelationshipsSection() {
-        return html`
-            <section>
-                <h3 class="card-title" style="margin-bottom: var(--space-4);">${this.t('note_view.relationships')}</h3>
-                ${this._renderRelationships()}
-            </section>
-        `;
-    }
-
     _renderAttachmentsSection() {
-        const attachments = Array.isArray(this.card?.attachments) ? this.card.attachments : [];
-        if (attachments.length === 0) return '';
+        const items = this._viewAttachments();
         return html`
-            <section>
-                <h3 class="card-title" style="margin-bottom: var(--space-4);">${this.t('note_view.attachments')}</h3>
-                ${this._renderAttachments()}
+            <section class="card attachments-card">
+                <h3 class="card-title">${this.t('note_view.attachments')}</h3>
+                <div class="attachments-sidebar-list">
+                    ${items.length === 0
+                        ? html`<p class="related-empty">${this.t('note_view.no_attachments')}</p>`
+                        : items.map((item) => {
+                            const iconName = _resolveAttachmentIconName(item.filename, item.contentType);
+                            const metaParts = [];
+                            const bytes = formatBytes(item.sizeBytes);
+                            if (bytes.length > 0) metaParts.push(bytes);
+                            if (item.status.length > 0) metaParts.push(item.status);
+                            const metaText = metaParts.join(' · ');
+                            return html`
+                                <div class="attachments-popover-row">
+                                    <platform-icon name=${iconName} size="16"></platform-icon>
+                                    <div class="attachments-popover-info">
+                                        <p class="attachments-popover-name">${item.filename}</p>
+                                        <p class="attachments-popover-meta">${metaText}</p>
+                                    </div>
+                                    <div class="attachments-popover-actions">
+                                        ${item.downloadUrl.length > 0 ? html`
+                                            <a
+                                                class="attachment-action-btn"
+                                                href=${item.downloadUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                download=${item.filename}
+                                                title=${this.t('note_view.download')}
+                                            >
+                                                <platform-icon name="import" size="14"></platform-icon>
+                                            </a>
+                                        ` : nothing}
+                                        ${item.canDelete ? html`
+                                            <button
+                                                type="button"
+                                                class="attachment-action-btn"
+                                                title=${this.t('note_view.attachment_remove')}
+                                                @click=${() => this._onDeleteViewAttachment(item.id)}
+                                            >
+                                                <platform-icon name="trash" size="14"></platform-icon>
+                                            </button>
+                                        ` : nothing}
+                                    </div>
+                                </div>
+                            `;
+                        })}
+                </div>
             </section>
         `;
     }

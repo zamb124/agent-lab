@@ -36,6 +36,7 @@ class TestRelationships:
         assert relationship["source_entity_id"] == note_id
         assert relationship["target_entity_id"] == contact_id
         assert relationship["relationship_type"] == "mentions"
+        assert relationship["confidence"] == 1.0
     
     @pytest.mark.asyncio
     async def test_get_entity_relationships(self, crm_client, unique_id, auth_headers_system):
@@ -145,12 +146,14 @@ class TestRelationships:
             "target_entity_id": entity2_id,
             "relationship_type": "assigned_to",
             "weight": 0.8,
+            "confidence": 0.72,
             "attributes": {"role": "developer", "since": "2024-01-01"}
         }, headers=auth_headers_system)
         assert rel_resp.status_code == 200
         
         relationship = rel_resp.json()
         assert relationship["weight"] == 0.8
+        assert relationship["confidence"] == 0.72
         assert relationship["attributes"]["role"] == "developer"
     
     @pytest.mark.asyncio

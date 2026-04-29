@@ -40,6 +40,7 @@ class GraphEdge(BaseModel):
     target_id: str = Field(description="ID цели")
     relationship_type: str = Field(description="Тип связи")
     weight: float = Field(description="Вес ребра")
+    confidence: float = Field(description="Уверенность в корректности связи (модель / источник)")
     is_directed: bool = Field(description="Направленное ли ребро")
     attributes: Optional[Dict[str, Any]] = Field(
         default=None,

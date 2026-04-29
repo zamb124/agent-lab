@@ -3,7 +3,7 @@
  * активного namespace. Загружает задачи через `crm/entities_lookup`,
  * создаёт через `crm/entities` (create), переносит между колонками через
  * `crm/entity_update`. Drag&drop работает на десктопе, на мобильном —
- * вкладки колонок. Открытие задачи — модалка `crm.entity` (mode='edit').
+ * вкладки колонок. Открытие задачи — страница сущности с `?edit=1`.
  */
 
 import { html, css, nothing } from 'lit';
@@ -876,7 +876,7 @@ export class CRMTasksPage extends CRMNamespacePage {
     }
 
     _openTask(taskId) {
-        this.openModal('crm.entity', { mode: 'edit', id: taskId });
+        this.navigate('entity', { itemId: taskId }, { search: '?edit=1' });
     }
 
     _createTask() {

@@ -110,5 +110,4 @@ Side-effect import: диспетчер автоматически импорти
 
 - `apps/crm/api/namespaces.py` — `SCHEMA_OPTIONS_RESPONSE` (канонический список типов)
 - `apps/crm/services/entity_service.py` — `_check_field_type` (серверная валидация)
-- `apps/crm/ui/modals/entity-modal.js` — ввод атрибутов (edit mode)
-- `apps/crm/ui/components/entity-card.js` — отображение атрибутов (view mode)
+- `apps/crm/ui/components/entity-card.js` — единая карточка: атрибуты в view и edit/create (`panel-mode`, `platform-field`)

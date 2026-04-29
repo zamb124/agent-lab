@@ -883,6 +883,12 @@
             ],
             "title": "Phase",
             "description": "Фаза сессии."
+          },
+          "has_recording": {
+            "type": "boolean",
+            "title": "Has Recording",
+            "description": "Для phase=ended: есть успешно завершённая серверная запись (status uploaded).",
+            "default": true
           }
         },
         "type": "object",
@@ -993,6 +999,12 @@
             ],
             "title": "Calendar Member User Ids",
             "description": "Участники канала встречи (platform user_id), без создателя."
+          },
+          "reuse_channel_link": {
+            "type": "boolean",
+            "title": "Reuse Channel Link",
+            "description": "Для channel без calendar: вернуть существующую постоянную ссылку и продлить TTL.",
+            "default": true
           }
         },
         "type": "object",
@@ -1003,6 +1015,14 @@
           "link_token": {
             "type": "string",
             "title": "Link Token"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
           },
           "channel_name": {
             "anyOf": [
@@ -1045,6 +1065,8 @@
         "type": "object",
         "required": [
           "link_token",
+          "company_id",
+          "channel_id",
           "channel_name",
           "creator_display_name",
           "call_type",
@@ -1349,16 +1371,9 @@
             "type": "string",
             "title": "Channel Id"
           },
-          "space_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Space Id"
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
           },
           "started_by_user_id": {
             "anyOf": [
@@ -1471,6 +1486,7 @@
           "recording_id",
           "call_id",
           "channel_id",
+          "namespace",
           "status",
           "created_at"
         ],
@@ -1612,7 +1628,7 @@
       },
       "ChannelCreate": {
         "properties": {
-          "space_id": {
+          "namespace": {
             "anyOf": [
               {
                 "type": "string"
@@ -1621,8 +1637,8 @@
                 "type": "null"
               }
             ],
-            "title": "Space Id",
-            "description": "Пространство, если канал привязан к Space."
+            "title": "Namespace",
+            "description": "Платформенный namespace (1:1 с shared NamespaceRepository). Для topic обязателен; для direct/calendar_meeting если опущен — используется 'default'."
           },
           "type": {
             "$ref": "#/components/schemas/ChannelType",
@@ -1671,7 +1687,7 @@
               }
             ],
             "title": "Transcribe Voice Messages",
-            "description": "Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false."
+            "description": "Если задано — оверрайд над дефолтом из Namespace.sync_settings. Иначе берётся `Namespace.sync_settings.transcribe_voice_messages` или false."
           },
           "speech_to_chat_enabled": {
             "anyOf": [
@@ -1683,7 +1699,7 @@
               }
             ],
             "title": "Speech To Chat Enabled",
-            "description": "Если задано — перекрывает значение с пространства; иначе при space_id — как у space, без space — false."
+            "description": "Если задано — оверрайд над дефолтом из Namespace.sync_settings. Иначе берётся `Namespace.sync_settings.speech_to_chat_enabled` или false."
           }
         },
         "type": "object",
@@ -1757,17 +1773,10 @@
             "title": "Id",
             "description": "Идентификатор канала."
           },
-          "space_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Space Id",
-            "description": "Пространство, в котором живёт канал (для topic/group)."
+          "namespace": {
+            "type": "string",
+            "title": "Namespace",
+            "description": "Платформенный namespace, в котором живёт канал (1:1 c shared NamespaceRepository)."
           },
           "type": {
             "$ref": "#/components/schemas/ChannelType"
@@ -1903,6 +1912,7 @@
         "type": "object",
         "required": [
           "id",
+          "namespace",
           "type",
           "is_private",
           "created_at",
@@ -2301,6 +2311,34 @@
         ],
         "title": "FileResponse",
         "description": "Публичное представление файла для API-ответов.\n\nНе содержит внутренних полей (s3_key, s3_bucket, s3_endpoint).\nИспользуется как return-тип всех file-эндпоинтов во всех сервисах."
+      },
+      "FilesUploadCompletedResult": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "mime_type",
+          "size"
+        ],
+        "title": "FilesUploadCompletedResult"
       },
       "ForwardedFromChannel": {
         "properties": {
@@ -2839,6 +2877,18 @@
             ],
             "title": "Call Id",
             "description": "Связать сообщение с активным/завершённым звонком (голос, чат оверлея, запись)."
+          },
+          "local_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Id",
+            "description": "Клиентский идентификатор optimistic-сообщения. Не сохраняется в БД, но эхо-возвращается в payload push-события sync/message/created, чтобы UI отправителя удалил pending optimistic-запись и не показывал дубль."
           }
         },
         "type": "object",
@@ -2870,8 +2920,8 @@
         "properties": {
           "to_channel_id": {
             "type": "string",
-            "title": "To Channel Id",
-            "description": "Целевой канал."
+            "minLength": 1,
+            "title": "To Channel Id"
           },
           "thread_id": {
             "anyOf": [
@@ -2882,8 +2932,7 @@
                 "type": "null"
               }
             ],
-            "title": "Thread Id",
-            "description": "Опционально тред в целевом канале."
+            "title": "Thread Id"
           }
         },
         "type": "object",
@@ -2896,8 +2945,8 @@
         "properties": {
           "message_id": {
             "type": "string",
-            "title": "Message Id",
-            "description": "Сообщение для закрепа."
+            "minLength": 1,
+            "title": "Message Id"
           },
           "action": {
             "type": "string",
@@ -2905,8 +2954,7 @@
               "add",
               "remove"
             ],
-            "title": "Action",
-            "description": "Добавить или снять закреп."
+            "title": "Action"
           }
         },
         "type": "object",
@@ -2927,8 +2975,7 @@
                 "type": "null"
               }
             ],
-            "title": "Emoji",
-            "description": "Эмодзи или null чтобы снять."
+            "title": "Emoji"
           }
         },
         "type": "object",
@@ -3101,6 +3148,25 @@
         "title": "MockImageContent",
         "description": "Блок изображения/макета."
       },
+      "NamespaceSyncSettings": {
+        "properties": {
+          "transcribe_voice_messages": {
+            "type": "boolean",
+            "title": "Авто-расшифровка голосовых",
+            "description": "Автоматически отправлять голосовые сообщения на STT после загрузки",
+            "default": false
+          },
+          "speech_to_chat_enabled": {
+            "type": "boolean",
+            "title": "Речь звонка в ленту",
+            "description": "Постить расшифрованные сегменты речи звонка как сообщения в ленту канала",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "NamespaceSyncSettings",
+        "description": "Настройки Sync для namespace (поведение каналов и звонков пространства)."
+      },
       "OffsetPage_CallScheduledLinkRead_": {
         "properties": {
           "items": {
@@ -3194,11 +3260,11 @@
         ],
         "title": "OffsetPage[CompanyMemberRead]"
       },
-      "OffsetPage_SpaceRead_": {
+      "OffsetPage_SyncNamespaceResponse_": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/SpaceRead"
+              "$ref": "#/components/schemas/SyncNamespaceResponse"
             },
             "type": "array",
             "title": "Items"
@@ -3223,7 +3289,7 @@
           "limit",
           "offset"
         ],
-        "title": "OffsetPage[SpaceRead]"
+        "title": "OffsetPage[SyncNamespaceResponse]"
       },
       "OffsetPage_ThreadRow_": {
         "properties": {
@@ -3325,213 +3391,14 @@
         "title": "ReactionEntry",
         "description": "Одна реакция на сообщение (хранится в JSON на строке сообщения)."
       },
-      "SpaceCreate": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Человекочитаемое имя пространства."
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description",
-            "description": "Описание пространства."
-          },
-          "transcribe_voice_messages": {
-            "type": "boolean",
-            "title": "Transcribe Voice Messages",
-            "description": "Дефолт авто-STT для новых каналов в этом пространстве.",
-            "default": false
-          },
-          "speech_to_chat_enabled": {
-            "type": "boolean",
-            "title": "Speech To Chat Enabled",
-            "description": "Дефолт «речь в ленту» для новых каналов в этом пространстве.",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "SpaceCreate",
-        "description": "Параметры для создания пространства."
-      },
-      "SpaceRead": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id",
-            "description": "Идентификатор пространства."
-          },
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Человекочитаемое имя пространства."
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description",
-            "description": "Описание пространства."
-          },
-          "avatar_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avatar Url",
-            "description": "URL аватара (изображение)."
-          },
-          "namespace": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Namespace",
-            "description": "Общий namespace для CRM/RAG."
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At",
-            "description": "Время создания пространства."
-          },
-          "created_by_user_id": {
-            "type": "string",
-            "title": "Created By User Id",
-            "description": "Создатель пространства."
-          },
-          "transcribe_voice_messages": {
-            "type": "boolean",
-            "title": "Transcribe Voice Messages",
-            "description": "Значение по умолчанию для новых каналов: авто-STT голосовых.",
-            "default": false
-          },
-          "speech_to_chat_enabled": {
-            "type": "boolean",
-            "title": "Speech To Chat Enabled",
-            "description": "Значение по умолчанию для новых каналов: речь звонка в ленту (LiveKit egress).",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "created_at",
-          "created_by_user_id"
-        ],
-        "title": "SpaceRead",
-        "description": "Пространство, объединяющее каналы и чаты."
-      },
-      "SpaceUpdate": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name",
-            "description": "Новое имя пространства."
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description",
-            "description": "Новое описание пространства."
-          },
-          "avatar_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avatar Url",
-            "description": "URL аватара или null для сброса."
-          },
-          "namespace": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Namespace",
-            "description": "Общий namespace CRM/RAG или null для сброса."
-          },
-          "transcribe_voice_messages": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transcribe Voice Messages",
-            "description": "Дефолт для новых каналов в space; существующие каналы не меняются."
-          },
-          "speech_to_chat_enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Speech To Chat Enabled",
-            "description": "Дефолт «речь в ленту» для новых каналов; существующие каналы не меняются."
-          }
-        },
-        "type": "object",
-        "title": "SpaceUpdate",
-        "description": "Обновление параметров пространства."
-      },
       "SubscribeRequest": {
         "properties": {
           "transport": {
             "type": "string",
             "enum": [
               "web_vapid",
-              "ios_apns"
+              "ios_apns",
+              "android_fcm"
             ],
             "title": "Transport",
             "default": "web_vapid"
@@ -3571,6 +3438,74 @@
         ],
         "title": "SwitchCompanyRequest",
         "description": "Переключение активной компании пользователя"
+      },
+      "SyncNamespaceResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Slug namespace."
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id",
+            "description": "ID компании-владельца."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Описание namespace."
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "description": "Дефолтный namespace компании.",
+            "default": false
+          },
+          "sync_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceSyncSettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sync-настройки namespace (транскрипция голосовых, речь в ленту)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "company_id"
+        ],
+        "title": "SyncNamespaceResponse",
+        "description": "Namespace в формате для UI Sync (срез нужных полей)."
+      },
+      "SyncNamespaceUpdateRequest": {
+        "properties": {
+          "sync_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceSyncSettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Полная новая секция sync-настроек либо null для сброса."
+          }
+        },
+        "type": "object",
+        "title": "SyncNamespaceUpdateRequest",
+        "description": "Обновление sync-настроек namespace.\n\n`sync_settings: null` сбрасывает настройки к дефолту (фабричное\nвыключенное состояние). Имя/описание/crm_settings меняются через CRM."
       },
       "TeamMemberResponse": {
         "properties": {
@@ -4152,6 +4087,81 @@
         ],
         "title": "VideoAttachmentContent",
         "description": "Видеовложение в сообщении (запись звонка и т.п.)."
+      },
+      "_CallSignalBody": {
+        "properties": {
+          "target_user_id": {
+            "type": "string",
+            "title": "Target User Id"
+          },
+          "signal_type": {
+            "type": "string",
+            "title": "Signal Type"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_user_id",
+          "signal_type",
+          "data"
+        ],
+        "title": "_CallSignalBody"
+      },
+      "_CallTransferAdminBody": {
+        "properties": {
+          "target_user_id": {
+            "type": "string",
+            "title": "Target User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_user_id"
+        ],
+        "title": "_CallTransferAdminBody"
+      },
+      "_TypingBody": {
+        "properties": {
+          "typing": {
+            "type": "boolean",
+            "title": "Typing"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "typing"
+        ],
+        "title": "_TypingBody"
+      },
+      "_UploadCompletedBody": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "File Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "_UploadCompletedBody"
       }
     }
   }

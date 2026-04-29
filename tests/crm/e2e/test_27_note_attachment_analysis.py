@@ -80,6 +80,7 @@ def _analyze_llm_response(*, note_name: str, person_name: str) -> str:
                     "target_name": person_name,
                     "relationship_type": "mentions",
                     "weight": 1.0,
+                    "confidence": 0.9,
                 }
             ],
             "metadata": _ANALYZE_META,

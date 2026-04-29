@@ -9,6 +9,43 @@
   "paths": {},
   "components": {
     "schemas": {
+      "BoardStage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Id",
+            "description": "Стабильный идентификатор стадии (snake_case)"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Label",
+            "description": "Подпись колонки в UI"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Опциональный CSS-цвет"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "BoardStage",
+        "description": "Стадия канбана задач: id хранится в attributes.status у CRMEntity с entity_type=task."
+      },
       "Body_auth_callback_post_rag_api_auth_callback__provider_name__post": {
         "properties": {
           "code": {
@@ -1247,6 +1284,18 @@
             "title": "Настройки CRM",
             "description": "Опционально: UI заметок и значения по умолчанию"
           },
+          "sync_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamespaceSyncSettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Настройки Sync",
+            "description": "Опционально: дефолты транскрипции и речи в ленту для каналов пространства"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -1268,6 +1317,53 @@
         "title": "Namespace",
         "description": "Namespace (изолированная область данных).\nИспользуется всеми сервисами для организации данных внутри компании.",
         "storage_prefix": "namespace"
+      },
+      "NamespaceAutomationRule": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rule Id"
+          },
+          "entity_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Entity Type"
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Trigger",
+            "description": "entity_created | stage_changed | …"
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Action",
+            "description": "run_flow | notify | …"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule_id",
+          "entity_type",
+          "trigger",
+          "action"
+        ],
+        "title": "NamespaceAutomationRule",
+        "description": "Правило автоматизации пространства (контракт хранения; исполнитель — flows/scheduler)."
       },
       "NamespaceCRMSettings": {
         "properties": {
@@ -1296,11 +1392,57 @@
               }
             ],
             "title": "Якорь контекста по умолчанию"
+          },
+          "integrations": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Метаданные интеграций по ключу провайдера",
+            "description": "Только отображение и подсказки; секреты хранятся в OAuth credentials. Для автосинка (если поддерживает коннектор): auto_sync_enabled, auto_sync_cron, auto_sync_timezone, auto_sync_schedule_task_id, auto_sync_oauth_user_id."
+          },
+          "sidebar_navigation": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SidebarNavEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Дерево основного меню сайдбара",
+            "description": "None: клиент строит меню из типов пространства"
+          },
+          "default_flow_by_entity_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Идентификатор flow по умолчанию для типа сущности"
+          },
+          "automation_rules": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceAutomationRule"
+            },
+            "type": "array",
+            "title": "Automation Rules"
+          },
+          "pipeline_stage_presets": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TaskBoardPreset"
+            },
+            "type": "object",
+            "title": "Пресеты колонок доски задач",
+            "description": "Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор."
           }
         },
         "type": "object",
         "title": "NamespaceCRMSettings",
-        "description": "Настройки CRM для namespace (заметки: голос, контекст)."
+        "description": "Настройки CRM для namespace (заметки: голос, контекст, метаданные интеграций)."
       },
       "NamespaceCreateRequest": {
         "properties": {
@@ -1326,6 +1468,25 @@
         ],
         "title": "NamespaceCreateRequest",
         "description": "Запрос на создание namespace"
+      },
+      "NamespaceSyncSettings": {
+        "properties": {
+          "transcribe_voice_messages": {
+            "type": "boolean",
+            "title": "Авто-расшифровка голосовых",
+            "description": "Автоматически отправлять голосовые сообщения на STT после загрузки",
+            "default": false
+          },
+          "speech_to_chat_enabled": {
+            "type": "boolean",
+            "title": "Речь звонка в ленту",
+            "description": "Постить расшифрованные сегменты речи звонка как сообщения в ленту канала",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "NamespaceSyncSettings",
+        "description": "Настройки Sync для namespace (поведение каналов и звонков пространства)."
       },
       "OffsetPage_Namespace_": {
         "properties": {
@@ -1418,7 +1579,21 @@
         "title": "ProviderInfo",
         "description": "Информация о RAG провайдере"
       },
-      "ProviderListResponse": {
+      "ProviderSwitchRequest": {
+        "properties": {
+          "provider_name": {
+            "type": "string",
+            "title": "Provider Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_name"
+        ],
+        "title": "ProviderSwitchRequest",
+        "description": "Запрос на переключение провайдера"
+      },
+      "ProvidersView": {
         "properties": {
           "items": {
             "items": {
@@ -1437,22 +1612,8 @@
           "items",
           "current_provider"
         ],
-        "title": "ProviderListResponse",
-        "description": "Ответ со списком провайдеров"
-      },
-      "ProviderSwitchRequest": {
-        "properties": {
-          "provider_name": {
-            "type": "string",
-            "title": "Provider Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "provider_name"
-        ],
-        "title": "ProviderSwitchRequest",
-        "description": "Запрос на переключение провайдера"
+        "title": "ProvidersView",
+        "description": "Композитный ответ: канонический `items` из core.pagination +\nметаполе `current_provider` (имя активного провайдера для компании).\n\nНаследуется от ``ListResponse[ProviderInfo]`` — не ad-hoc модель\nпагинации, а расширение канонической формы дополнительным полем\n(см. правило «только CursorPage/OffsetPage/ListResponse» в main.mdc)."
       },
       "RAGDocument": {
         "properties": {
@@ -1721,13 +1882,74 @@
         "title": "SearchResponse",
         "description": "Ответ с результатами поиска"
       },
+      "SidebarNavEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id",
+            "description": "Стабильный id для active state и редактора"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Подпись пункта"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon",
+            "description": "Имя иконки platform-icon"
+          },
+          "route_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Key",
+            "description": "Ключ маршрута SPA (лист)"
+          },
+          "search": {
+            "type": "string",
+            "title": "Search",
+            "description": "Query с ведущим ? для history",
+            "default": ""
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/SidebarNavEntry"
+            },
+            "type": "array",
+            "title": "Children"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "SidebarNavEntry",
+        "description": "Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."
+      },
       "SubscribeRequest": {
         "properties": {
           "transport": {
             "type": "string",
             "enum": [
               "web_vapid",
-              "ios_apns"
+              "ios_apns",
+              "android_fcm"
             ],
             "title": "Transport",
             "default": "web_vapid"
@@ -1767,6 +1989,26 @@
         ],
         "title": "SwitchCompanyRequest",
         "description": "Переключение активной компании пользователя"
+      },
+      "TaskBoardPreset": {
+        "properties": {
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/BoardStage"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Stages",
+            "description": "Упорядоченные стадии слева направо"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stages"
+        ],
+        "title": "TaskBoardPreset",
+        "description": "Набор колонок доски задач для одного ключа доски (см. task_board_key в CRM)."
       },
       "TeamMemberResponse": {
         "properties": {

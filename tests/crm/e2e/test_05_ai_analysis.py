@@ -72,20 +72,24 @@ class TestAIAnalysis:
                     "entity_type": "note",
                     "name": note_title,
                     "description": "Обсудили проект X. Иван предложил нанять Петра для разработки.",
-                    "note_date": "2024-01-06"
+                    "note_date": "2024-01-06",
+                    "attributes": {},
+                    "confidence": 0.92,
                 },
                 "entities": [
                     {
                         "entity_type": "task",
                         "name": "Иван Иванов",
                         "description": "Менеджер проекта, ведёт переговоры и сроки",
-                        "attributes": {"role": "менеджер"}
+                        "attributes": {"role": "менеджер"},
+                        "confidence": 0.9,
                     },
                     {
                         "entity_type": "task",
                         "name": "Петр Петров",
                         "description": "Разработчик, подключается к задачам бэкенда",
-                        "attributes": {"role": "разработчик"}
+                        "attributes": {"role": "разработчик"},
+                        "confidence": 0.88,
                     }
                 ],
                 "relationships": [
@@ -96,6 +100,7 @@ class TestAIAnalysis:
                         "target_name": "Иван Иванов",
                         "relationship_type": "mentions",
                         "weight": 1.0,
+                        "confidence": 0.9,
                     },
                     {
                         "source_type": "note",
@@ -104,9 +109,11 @@ class TestAIAnalysis:
                         "target_name": "Петр Петров",
                         "relationship_type": "mentions",
                         "weight": 1.0,
+                        "confidence": 0.9,
                     }
                 ],
                 "metadata": _META,
+                "attachment_summaries": [],
             })
         }])
         
@@ -136,6 +143,7 @@ class TestAIAnalysis:
             assert rel.get("draft_relationship_id")
             assert rel.get("source_draft_entity_id")
             assert rel.get("target_draft_entity_id")
+            assert "confidence" in rel
 
     @pytest.mark.asyncio
     async def test_ai_extract_tasks(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
@@ -147,12 +155,16 @@ class TestAIAnalysis:
                     "entity_type": "note",
                     "name": "План задач на неделю",
                     "description": "Список приоритетных задач на текущую неделю команды",
+                    "attributes": {},
+                    "confidence": 0.9,
                 },
                 "entities": [
                     {
                         "entity_type": "task",
                         "name": "Подготовить отчет",
                         "description": "Квартальный отчет для руководства",
+                        "attributes": {},
+                        "confidence": 0.91,
                         "due_date": "2024-01-10",
                         "priority": "urgent",
                         "assignees": ["ivan"]
@@ -161,6 +173,8 @@ class TestAIAnalysis:
                         "entity_type": "task",
                         "name": "Созвониться с клиентом",
                         "description": "Обсудить детали контракта",
+                        "attributes": {},
+                        "confidence": 0.9,
                         "due_date": "2024-01-08",
                         "priority": "high"
                     },
@@ -168,12 +182,15 @@ class TestAIAnalysis:
                         "entity_type": "task",
                         "name": "Обновить документацию",
                         "description": "Актуализировать внутреннюю документацию продукта",
+                        "attributes": {},
+                        "confidence": 0.87,
                         "due_date": "2024-01-15",
                         "priority": "medium"
                     }
                 ],
                 "relationships": [],
                 "metadata": _META,
+                "attachment_summaries": [],
             })
         }])
         
@@ -214,16 +231,19 @@ class TestAIAnalysis:
                 "note": {
                     "entity_type": "note",
                     "name": "Встреча команды",
-                    "description": "Обсудили проект X (75% готовности). Решили нанять разработчика. Петр - backend, Анна - тестирование. Следующая встреча через неделю."
+                    "description": "Обсудили проект X (75% готовности). Решили нанять разработчика. Петр - backend, Анна - тестирование. Следующая встреча через неделю.",
+                    "attributes": {},
+                    "confidence": 0.93,
                 },
                 "entities": [
-                    {"entity_type": "task", "name": "Проект X", "description": "Текущий проект с прогрессом и рисками"},
-                    {"entity_type": "task", "name": "Иван", "description": "Участник встречи, предложил усилить команду"},
-                    {"entity_type": "task", "name": "Петр", "description": "Отвечает за backend и реализацию сервисов"},
-                    {"entity_type": "task", "name": "Анна", "description": "Занимается тестированием и качеством релиза"}
+                    {"entity_type": "task", "name": "Проект X", "description": "Текущий проект с прогрессом и рисками", "attributes": {}, "confidence": 0.9},
+                    {"entity_type": "task", "name": "Иван", "description": "Участник встречи, предложил усилить команду", "attributes": {}, "confidence": 0.88},
+                    {"entity_type": "task", "name": "Петр", "description": "Отвечает за backend и реализацию сервисов", "attributes": {}, "confidence": 0.9},
+                    {"entity_type": "task", "name": "Анна", "description": "Занимается тестированием и качеством релиза", "attributes": {}, "confidence": 0.89}
                 ],
                 "relationships": [],
                 "metadata": _META,
+                "attachment_summaries": [],
             })
         }])
         
@@ -265,7 +285,9 @@ class TestAIAnalysis:
                 "note": {
                     "entity_type": "note",
                     "name": call_title,
-                    "description": "Обсудили условия сотрудничества"
+                    "description": "Обсудили условия сотрудничества",
+                    "attributes": {},
+                    "confidence": 0.92,
                 },
                 "entities": [],
                 "relationships": [
@@ -276,9 +298,11 @@ class TestAIAnalysis:
                         "target_name": existing_name,
                         "relationship_type": "mentions",
                         "weight": 1.0,
+                        "confidence": 0.9,
                     }
                 ],
                 "metadata": _META,
+                "attachment_summaries": [],
             })
         }])
         
@@ -314,13 +338,16 @@ class TestAIAnalysis:
                     "entity_type": "note",
                     "name": "Встреча",
                     "description": "Краткий протокол встречи с участниками команды",
+                    "attributes": {},
+                    "confidence": 0.9,
                 },
                 "entities": [
-                    {"entity_type": "task", "name": "Иван", "description": "Участник встречи, статус задач"},
-                    {"entity_type": "task", "name": "Петр", "description": "Второй участник, вопросы по срокам"}
+                    {"entity_type": "task", "name": "Иван", "description": "Участник встречи, статус задач", "attributes": {}, "confidence": 0.89},
+                    {"entity_type": "task", "name": "Петр", "description": "Второй участник, вопросы по срокам", "attributes": {}, "confidence": 0.88}
                 ],
                 "relationships": [],
                 "metadata": _META,
+                "attachment_summaries": [],
             })
         }])
         
@@ -357,10 +384,12 @@ class TestAIAnalysis:
                     "entity_type": "note",
                     "name": "Распределение задач",
                     "description": "Кто над чем работает в текущем спринте команды",
+                    "attributes": {},
+                    "confidence": 0.91,
                 },
                 "entities": [
-                    {"entity_type": "task", "name": "Иван", "description": "Сотрудник, назначенный на проект A"},
-                    {"entity_type": "task", "name": "Проект A", "description": "Основной проект спринта с дедлайнами"}
+                    {"entity_type": "task", "name": "Иван", "description": "Сотрудник, назначенный на проект A", "attributes": {}, "confidence": 0.9},
+                    {"entity_type": "task", "name": "Проект A", "description": "Основной проект спринта с дедлайнами", "attributes": {}, "confidence": 0.92}
                 ],
                 "relationships": [
                     {
@@ -370,9 +399,11 @@ class TestAIAnalysis:
                         "target_name": "Проект A",
                         "relationship_type": f"works_on_{unique_id}",
                         "weight": 1.0,
+                        "confidence": 0.88,
                     }
                 ],
                 "metadata": _META,
+                "attachment_summaries": [],
             })
         }])
         

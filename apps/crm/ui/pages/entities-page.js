@@ -1248,7 +1248,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
     }
 
     _onCreateEntity() {
-        this.openModal('crm.entity', { mode: 'create' });
+        this.navigate('entity_new');
     }
 
     _hasExpandedFilters() {

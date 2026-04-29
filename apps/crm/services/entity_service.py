@@ -681,6 +681,7 @@ class EntityService:
                 relationship_type=NOTE_VOICE_RELATIONSHIP_TYPE,
                 namespace=namespace,
                 weight=1.0,
+                confidence=1.0,
                 attributes={},
                 company_id=company_id,
                 created_at=now,
@@ -696,6 +697,7 @@ class EntityService:
                 relationship_type=IN_CONTEXT_RELATIONSHIP_TYPE,
                 namespace=namespace,
                 weight=1.0,
+                confidence=1.0,
                 attributes={},
                 company_id=company_id,
                 created_at=now,
@@ -1814,6 +1816,7 @@ class EntityService:
                     target_draft_entity_id=key_index[tk],
                     relationship_type=ext.relationship_type,
                     weight=ext.weight,
+                    confidence=ext.confidence,
                     attributes=ext.attributes,
                 )
             )
@@ -1979,6 +1982,8 @@ class EntityService:
             ru: Dict[str, Any] = {}
             if p.weight is not None:
                 ru["weight"] = p.weight
+            if p.confidence is not None:
+                ru["confidence"] = p.confidence
             if p.attributes is not None:
                 rmerged = dict(rel.attributes or {})
                 rmerged.update(p.attributes)
@@ -2191,14 +2196,14 @@ class EntityService:
             )
             if existing:
                 return None
-            weight = rel.weight if rel.weight is not None else 1.0
             row = Relationship(
                 relationship_id=str(uuid.uuid4()),
                 source_entity_id=src,
                 target_entity_id=tgt,
                 relationship_type=rel.relationship_type,
                 namespace=namespace,
-                weight=weight,
+                weight=rel.weight,
+                confidence=rel.confidence,
                 attributes=dict(rel.attributes or {}),
                 company_id=self._get_company_id(),
                 created_at=datetime.now(timezone.utc),
@@ -3192,6 +3197,7 @@ class EntityService:
                 relationship_type="linked",
                 namespace=namespace,
                 weight=1.0,
+                confidence=1.0,
                 attributes={},
                 company_id=company_id,
                 created_at=now,
@@ -3227,6 +3233,7 @@ class EntityService:
                 relationship_type="mentions",
                 namespace=namespace,
                 weight=1.0,
+                confidence=1.0,
                 attributes={},
                 company_id=company_id,
                 created_at=now,
@@ -4321,6 +4328,7 @@ class EntityService:
                     "target_entity_id": rel.target_entity_id,
                     "relationship_type": rel.relationship_type,
                     "weight": rel.weight,
+                    "confidence": rel.confidence,
                     "attributes": rel.attributes,
                     "created_at": rel.created_at.isoformat() if rel.created_at else None,
                     "updated_at": rel.updated_at.isoformat() if rel.updated_at else None,
@@ -4392,6 +4400,7 @@ class EntityService:
                         "target_entity_id": rel.target_entity_id,
                         "relationship_type": rel.relationship_type,
                         "weight": rel.weight,
+                        "confidence": rel.confidence,
                         "attributes": rel.attributes,
                         "created_at": rel.created_at.isoformat() if rel.created_at else None,
                         "updated_at": rel.updated_at.isoformat() if rel.updated_at else None,

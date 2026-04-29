@@ -7,6 +7,31 @@
     "x-service": "frontend"
   },
   "paths": {
+    "/frontend/api/companies/me": {
+      "get": {
+        "tags": [
+          "public",
+          "companies",
+          "public",
+          "companies"
+        ],
+        "summary": "Get My Companies",
+        "description": "Получить список компаний текущего пользователя\n\nArgs:\n    request: FastAPI request\n    container: DI контейнер\n\nReturns:\n    Список компаний с их данными",
+        "operationId": "get_my_companies_frontend_api_companies_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse_dict_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/frontend/api/companies/check-slug": {
       "post": {
         "tags": [
@@ -90,31 +115,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/frontend/api/companies/me": {
-      "get": {
-        "tags": [
-          "public",
-          "companies",
-          "public",
-          "companies"
-        ],
-        "summary": "Get My Companies",
-        "description": "Получить список компаний текущего пользователя\n\nArgs:\n    request: FastAPI request\n    container: DI контейнер\n\nReturns:\n    Список компаний с их данными",
-        "operationId": "get_my_companies_frontend_api_companies_me_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ListResponse_dict_"
                 }
               }
             }
@@ -2352,6 +2352,72 @@
         ],
         "title": "OffsetPage[ServiceStatus]"
       },
+      "PlatformBillingBalanceGrantRequest": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Company Id",
+            "description": "ID компании-получателя"
+          },
+          "amount": {
+            "type": "number",
+            "maximum": 10000000.0,
+            "minimum": 0.01,
+            "title": "Amount",
+            "description": "Сумма в RUB"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "Комментарий к гранту (аудит)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "amount"
+        ],
+        "title": "PlatformBillingBalanceGrantRequest",
+        "description": "Начисление гранта на баланс (только компания system)."
+      },
+      "PlatformBillingBalanceGrantResponse": {
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "title": "Transaction Id"
+          },
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "balance": {
+            "type": "number",
+            "title": "Balance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "company_id",
+          "amount",
+          "balance"
+        ],
+        "title": "PlatformBillingBalanceGrantResponse",
+        "description": "Результат начисления гранта."
+      },
       "PlatformBillingCompaniesOverviewResponse": {
         "properties": {
           "items": {
@@ -2996,6 +3062,52 @@
         "title": "PlatformTracingFacetsResponse",
         "description": "Подсказки для автокомплита (distinct значения)."
       },
+      "PreviewInviteRequest": {
+        "properties": {
+          "short_code": {
+            "type": "string",
+            "title": "Short Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "short_code"
+        ],
+        "title": "PreviewInviteRequest"
+      },
+      "PreviewInviteResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "invited_by_user_id": {
+            "type": "string",
+            "title": "Invited By User Id"
+          },
+          "invited_by_name": {
+            "type": "string",
+            "title": "Invited By Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "company_name",
+          "role",
+          "invited_by_user_id",
+          "invited_by_name"
+        ],
+        "title": "PreviewInviteResponse"
+      },
       "RagEmbeddingOverrideUpdate": {
         "properties": {
           "enabled": {
@@ -3090,7 +3202,8 @@
             "type": "string",
             "enum": [
               "web_vapid",
-              "ios_apns"
+              "ios_apns",
+              "android_fcm"
             ],
             "title": "Transport",
             "default": "web_vapid"

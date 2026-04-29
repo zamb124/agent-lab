@@ -2,25 +2,16 @@
  * CRMEntityDetailPage — страница карточки одной сущности CRM.
  *
  * Маршрут: `/crm/entities/:itemId` (роутер передаёт `itemId` через `params`).
+ * Редактирование: query `?edit=1`, тело вкладки «Карточка» — `<crm-entity-card>`.
  *
  * Источники данных:
  *   - `useResource('crm/entities')`           — entity по id (GET /entities/{id}).
  *   - `useOp('crm/entity_card')`              — related/relationships/attachments.
  *   - `useResource('crm/relationship_types')` — подписи типов связей.
  *
- * UI: breadcrumbs → page-header (имя + entity_type/subtype) → панель действий
- * (edit / share / access_request / delete) → tabs «Карточка» / «Связи» /
- * «Граф» / «Вложения».
- *
- * Обработчики:
- *   - edit       → openModal('crm.entity', { mode: 'edit', id })
- *   - share      → openModal('crm.share', { entityId })
- *   - access     → openModal('crm.access_request', { entityId })
- *   - delete     → openModal('crm.entity_delete', { entityId, redirectRoute: 'entities' })
- *   - entity-open от mini-graph-preview → navigate('entity', { itemId })
- *
- * Подписки:
- *   - `entitiesResource.events.REMOVED` для текущего id → navigate('entities').
+ * UI: breadcrumbs → одна строка page-header (title + subtitle слева, действия в slot actions) →
+ * вкладки → контент. Карточка: `crm-entity-card`; в режиме `?edit=1` тулбар редактирования
+ * в шапке страницы (`host-toolbar` на карточке).
  */
 
 import { html, css, nothing } from 'lit';
@@ -30,9 +21,14 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/mini-graph-preview.js';
+import '../components/entity-card.js';
+import '../components/crm-related-neighbor-rows.js';
+import { extractNeighborEdges } from '../utils/neighbor-edges.js';
+import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_CARD_OP = 'crm/entity_card';
+const ENTITY_TYPES_NAME = 'crm/entity_types';
 const REL_TYPES_NAME = 'crm/relationship_types';
 
 const TAB_CARD = 'card';
@@ -48,6 +44,12 @@ function _formatBytes(value) {
     return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function _isEditSearch(searchRaw) {
+    const raw = typeof searchRaw === 'string' ? searchRaw : '';
+    const q = raw.startsWith('?') ? raw.slice(1) : raw;
+    return new URLSearchParams(q).get('edit') === '1';
+}
+
 export class CRMEntityDetailPage extends PlatformPage {
     static i18nNamespace = 'crm';
 
@@ -56,6 +58,10 @@ export class CRMEntityDetailPage extends PlatformPage {
         _card: { state: true },
         _cardError: { state: true },
         _activeTab: { state: true },
+        _editToolbarSaveDisabled: { state: true },
+        _editToolbarSubmitting: { state: true },
+        _templatePickerOpen: { state: true },
+        _draftStorageTypePair: { state: true },
     };
 
     static styles = [
@@ -82,11 +88,169 @@ export class CRMEntityDetailPage extends PlatformPage {
                 padding: 0 var(--space-4);
             }
 
-            .actions-bar {
+            .detail-header-actions {
                 display: flex;
-                gap: var(--space-2);
                 flex-wrap: wrap;
-                padding: 0 var(--space-4) var(--space-3);
+                align-items: center;
+                justify-content: flex-end;
+                gap: var(--space-2);
+            }
+            .detail-template-box {
+                display: inline-flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 10px;
+                box-sizing: border-box;
+                min-height: 40px;
+                min-width: 0;
+                max-width: min(480px, 100%);
+                padding: 0 14px;
+                background: rgba(34, 34, 34, 0.06);
+                border-radius: 20px;
+            }
+            .detail-template-select {
+                flex: 1;
+                min-width: 120px;
+                max-width: 260px;
+                height: 32px;
+                border-radius: 10px;
+                border: 1px solid var(--crm-stroke);
+                padding: 0 10px;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-primary);
+                background: var(--crm-surface);
+                box-sizing: border-box;
+            }
+            .detail-template-pencil {
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+                padding: 4px;
+                border: none;
+                border-radius: var(--radius-md);
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+                box-sizing: border-box;
+            }
+            .detail-template-pencil:hover:not(:disabled) {
+                color: var(--text-primary);
+                background: rgba(34, 34, 34, 0.06);
+            }
+            .detail-template-pencil:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+            .detail-template-label {
+                flex-shrink: 0;
+                font-size: 9px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: rgba(34, 34, 34, 0.42);
+                line-height: 1;
+            }
+            .detail-template-value {
+                flex: 1;
+                min-width: 0;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-primary);
+                line-height: 1.2;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .toolbar-pill {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                min-height: 40px;
+                padding: 0 18px;
+                border: none;
+                border-radius: 20px;
+                font-size: var(--text-sm);
+                font-weight: 600;
+                cursor: pointer;
+            }
+            .toolbar-pill:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .toolbar-pill-primary {
+                background: #7b92ff;
+                color: #fff;
+            }
+            .toolbar-pill-primary:hover:not(:disabled) {
+                filter: brightness(1.06);
+            }
+            .toolbar-pill-ghost {
+                background: rgba(34, 34, 34, 0.06);
+                color: var(--text-secondary);
+            }
+            .toolbar-pill-ghost:hover:not(:disabled) {
+                background: rgba(34, 34, 34, 0.1);
+                color: var(--text-primary);
+            }
+            .toolbar-pill-muted {
+                background: rgba(34, 34, 34, 0.06);
+                color: var(--text-secondary);
+                border: 1px solid transparent;
+            }
+            .toolbar-pill-muted:hover:not(:disabled) {
+                background: rgba(34, 34, 34, 0.09);
+                color: var(--text-primary);
+            }
+            .toolbar-pill-danger {
+                background: transparent;
+                color: #c2410c;
+                border: 1px solid rgba(249, 115, 22, 0.45);
+            }
+            .toolbar-pill-danger:hover:not(:disabled) {
+                background: rgba(249, 115, 22, 0.12);
+            }
+            .toolbar-icon-danger {
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                border: none;
+                border-radius: 14px;
+                background: rgba(249, 115, 22, 0.18);
+                color: #c2410c;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .toolbar-icon-danger:hover:not(:disabled) {
+                background: rgba(249, 115, 22, 0.28);
+            }
+            .toolbar-icon-muted {
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                border: none;
+                border-radius: 14px;
+                background: rgba(34, 34, 34, 0.06);
+                color: var(--text-secondary);
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .toolbar-icon-muted:hover:not(:disabled) {
+                background: rgba(34, 34, 34, 0.1);
+                color: var(--text-primary);
+            }
+            .toolbar-icon-muted:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
 
             .tabs {
@@ -117,6 +281,23 @@ export class CRMEntityDetailPage extends PlatformPage {
                 min-height: 0;
                 padding: var(--space-4);
                 overflow-y: auto;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .body.detail-body-muted {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                background: rgba(34, 34, 34, 0.02);
+            }
+            .body.detail-body-muted crm-entity-card {
+                flex: 1;
+                min-height: 400px;
+                width: 100%;
+                align-self: stretch;
+            }
+            crm-entity-card.edit-card-hidden-host {
+                display: none !important;
             }
             .body.graph { overflow: hidden; padding: 0; display: flex; }
             .body.graph crm-mini-graph-preview { flex: 1; min-height: 0; }
@@ -176,7 +357,8 @@ export class CRMEntityDetailPage extends PlatformPage {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-4);
-                max-width: 800px;
+                width: 100%;
+                max-width: none;
             }
             .description {
                 color: var(--text-primary);
@@ -235,6 +417,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
+                width: 100%;
             }
             .list-row {
                 display: flex;
@@ -301,14 +484,27 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._cardError = '';
         this._activeTab = TAB_CARD;
         this._lastRequestedId = '';
+        this._editToolbarSaveDisabled = true;
+        this._editToolbarSubmitting = false;
+        this._templatePickerOpen = false;
+        this._draftStorageTypePair = { entity_type: '', entity_subtype: '' };
+        this._entityTypesQueryNs = '';
+        this._onCardToolbarStateBound = this._onCardToolbarState.bind(this);
+        this._onCardStorageTypeDraftBound = this._onCardStorageTypeDraft.bind(this);
 
         this._entities = this.useResource(ENTITIES_NAME);
+        this._entityTypes = this.useResource(ENTITY_TYPES_NAME, { autoload: false });
         this._cardOp = this.useOp(ENTITY_CARD_OP);
         this._relTypes = this.useResource(REL_TYPES_NAME, { autoload: true });
+        this._routerSearchSel = this.select((s) => s.router.search);
     }
 
     connectedCallback() {
         super.connectedCallback();
+        if (this.shadowRoot) {
+            this.shadowRoot.addEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
+            this.shadowRoot.addEventListener('crm-entity-card-storage-type-draft', this._onCardStorageTypeDraftBound);
+        }
 
         this.useEvent(this._cardOp.op.events.SUCCEEDED, (event) => {
             const result = event.payload && event.payload.result ? event.payload.result : null;
@@ -333,18 +529,62 @@ export class CRMEntityDetailPage extends PlatformPage {
         });
     }
 
+    disconnectedCallback() {
+        if (this.shadowRoot) {
+            this.shadowRoot.removeEventListener('crm-entity-card-toolbar-state', this._onCardToolbarStateBound);
+            this.shadowRoot.removeEventListener('crm-entity-card-storage-type-draft', this._onCardStorageTypeDraftBound);
+        }
+        super.disconnectedCallback();
+    }
+
+    _onCardToolbarState(ev) {
+        const d = ev.detail;
+        if (!d || typeof d.saveDisabled !== 'boolean' || typeof d.submitting !== 'boolean') {
+            throw new Error('crm-entity-card-toolbar-state: invalid detail');
+        }
+        this._editToolbarSaveDisabled = d.saveDisabled;
+        this._editToolbarSubmitting = d.submitting;
+    }
+
+    _onCardStorageTypeDraft(ev) {
+        const d = ev.detail;
+        if (!d || typeof d.entity_type !== 'string' || typeof d.entity_subtype !== 'string') {
+            throw new Error('crm-entity-card-storage-type-draft: invalid detail');
+        }
+        this._draftStorageTypePair = { entity_type: d.entity_type, entity_subtype: d.entity_subtype };
+    }
+
     willUpdate(changed) {
-        if (!changed.has('itemId')) return;
-        if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
-            this._card = null;
-            this._cardError = '';
-            this._lastRequestedId = '';
+        super.willUpdate(changed);
+        if (changed.has('itemId')) {
+            if (typeof this.itemId !== 'string' || this.itemId.length === 0) {
+                this._card = null;
+                this._cardError = '';
+                this._lastRequestedId = '';
+            } else if (this._lastRequestedId !== this.itemId) {
+                this._lastRequestedId = this.itemId;
+                this._activeTab = TAB_CARD;
+                this._reload();
+            }
+        }
+        const editing = this._isEditingCard();
+        if (!editing) {
+            if (this._templatePickerOpen) {
+                this._templatePickerOpen = false;
+            }
+            if (this._draftStorageTypePair.entity_type !== '' || this._draftStorageTypePair.entity_subtype !== '') {
+                this._draftStorageTypePair = { entity_type: '', entity_subtype: '' };
+            }
             return;
         }
-        if (this._lastRequestedId === this.itemId) return;
-        this._lastRequestedId = this.itemId;
-        this._activeTab = TAB_CARD;
-        this._reload();
+        const entity = this._entity();
+        if (!entity || typeof entity.namespace !== 'string' || entity.namespace.length === 0) {
+            return;
+        }
+        if (this._entityTypesQueryNs !== entity.namespace) {
+            this._entityTypesQueryNs = entity.namespace;
+            this._entityTypes.load({ namespace: entity.namespace });
+        }
     }
 
     _reload() {
@@ -364,8 +604,26 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._activeTab = tab;
     }
 
+    _isEditingCard() {
+        return _isEditSearch(this._routerSearchSel.value);
+    }
+
     _onEdit() {
-        this.openModal('crm.entity', { mode: 'edit', id: this.itemId });
+        this.navigate('entity', { itemId: this.itemId }, { search: '?edit=1' });
+        this._activeTab = TAB_CARD;
+    }
+
+    _onCardSaved() {
+        this._editToolbarSaveDisabled = true;
+        this._editToolbarSubmitting = false;
+        this._reload();
+        this.navigate('entity', { itemId: this.itemId });
+    }
+
+    _onCardEditCancelled() {
+        this._editToolbarSaveDisabled = true;
+        this._editToolbarSubmitting = false;
+        this.navigate('entity', { itemId: this.itemId });
     }
 
     _onShare() {
@@ -441,39 +699,30 @@ export class CRMEntityDetailPage extends PlatformPage {
             `;
         }
 
-        const subtitle = this._buildSubtitle(entity);
         const isBusy = this._entities.isBusy(this.itemId);
 
         const entityLabel = typeof entity.name === 'string' && entity.name.length > 0
             ? entity.name
             : this.itemId;
+        const editingCard = this._isEditingCard();
+        const baseSubtitle = this._buildSubtitle(entity);
+        const headerSubtitle = editingCard
+            ? `${this.t('entity_card.edit_object_title')} · ${baseSubtitle}`
+            : baseSubtitle;
         return html`
             <div class="breadcrumbs-wrap">
                 <platform-breadcrumbs current-label=${entityLabel}></platform-breadcrumbs>
             </div>
             <div class="header-wrap">
                 <page-header
+                    dense
                     title=${entityLabel}
-                    subtitle=${subtitle}
-                ></page-header>
-            </div>
-            <div class="actions-bar">
-                <button class="btn btn-primary" type="button" @click=${() => this._onEdit()}>
-                    <platform-icon name="edit" size="14"></platform-icon>
-                    ${this.t('entity_detail_page.action_edit')}
-                </button>
-                <button class="btn" type="button" @click=${() => this._onShare()}>
-                    <platform-icon name="share" size="14"></platform-icon>
-                    ${this.t('entity_detail_page.action_share')}
-                </button>
-                <button class="btn" type="button" @click=${() => this._onAccessRequest()}>
-                    <platform-icon name="lock" size="14"></platform-icon>
-                    ${this.t('entity_detail_page.action_access_request')}
-                </button>
-                <button class="btn btn-danger" type="button" @click=${() => this._onDelete()} ?disabled=${isBusy}>
-                    <platform-icon name="trash" size="14"></platform-icon>
-                    ${this.t('entity_detail_page.action_delete')}
-                </button>
+                    subtitle=${headerSubtitle}
+                >
+                    <div slot="actions" class="detail-header-actions">
+                        ${this._renderDetailHeaderActions(entity, editingCard, isBusy)}
+                    </div>
+                </page-header>
             </div>
             <div class="tabs">
                 ${ALL_TABS.map((tab) => html`
@@ -488,6 +737,226 @@ export class CRMEntityDetailPage extends PlatformPage {
             </div>
             ${this._renderActiveTab(entity)}
         `;
+    }
+
+    _detailStoragePairForTemplateUi(entity) {
+        const d = this._draftStorageTypePair;
+        if (typeof d.entity_type === 'string' && d.entity_type.length > 0) {
+            const stRaw = typeof d.entity_subtype === 'string' ? d.entity_subtype.trim() : '';
+            return { entity_type: d.entity_type, subtypeNorm: stRaw.length > 0 ? stRaw : null };
+        }
+        if (!entity || typeof entity.entity_type !== 'string' || entity.entity_type.length === 0) {
+            throw new Error('CRMEntityDetailPage._detailStoragePairForTemplateUi: entity_type required');
+        }
+        const stRaw = typeof entity.entity_subtype === 'string' && entity.entity_subtype.length > 0
+            ? entity.entity_subtype
+            : '';
+        return { entity_type: entity.entity_type, subtypeNorm: stRaw.length > 0 ? stRaw : null };
+    }
+
+    _detailTemplateDisplayLabel(entity) {
+        const { entity_type: et, subtypeNorm } = this._detailStoragePairForTemplateUi(entity);
+        const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
+        for (const t of items) {
+            const rowSt = t.list_entity_subtype === undefined || t.list_entity_subtype === null || t.list_entity_subtype === ''
+                ? null
+                : t.list_entity_subtype;
+            if (t.list_entity_type === et && rowSt === subtypeNorm) {
+                if (typeof t.name === 'string' && t.name.length > 0) return t.name;
+                return t.type_id;
+            }
+        }
+        return this._entityTemplateLabel(entity);
+    }
+
+    _detailTemplateSelectedTypeId(entity) {
+        const { entity_type: et, subtypeNorm } = this._detailStoragePairForTemplateUi(entity);
+        const items = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
+        for (const t of items) {
+            const rowSt = t.list_entity_subtype === undefined || t.list_entity_subtype === null || t.list_entity_subtype === ''
+                ? null
+                : t.list_entity_subtype;
+            if (t.list_entity_type === et && rowSt === subtypeNorm) return t.type_id;
+        }
+        return '';
+    }
+
+    _onToggleTemplatePicker() {
+        this._templatePickerOpen = !this._templatePickerOpen;
+    }
+
+    _onDetailTemplateSelect(ev) {
+        const sel = ev.target;
+        if (!(sel instanceof HTMLSelectElement)) {
+            throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: expected select');
+        }
+        const typeId = sel.value;
+        if (typeId.length === 0) return;
+        const items = this._entityTypes.items;
+        const item = items.find((it) => it.type_id === typeId);
+        if (!item) {
+            throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: type not found');
+        }
+        const root = this.shadowRoot;
+        if (!root) {
+            throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: shadowRoot missing');
+        }
+        const card = root.querySelector('crm-entity-card[panel-mode="edit"]');
+        if (!card || typeof card.setEditTemplateFromListRow !== 'function') {
+            throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: edit card missing');
+        }
+        card.setEditTemplateFromListRow(item);
+    }
+
+    _renderEditTemplateBox(entity, isBusy) {
+        const typesLoading = this._entityTypes.loading;
+        const rawItems = Array.isArray(this._entityTypes.items) ? this._entityTypes.items : [];
+        const items = [...rawItems].sort((a, b) => {
+            const na = typeof a.name === 'string' && a.name.length > 0 ? a.name : a.type_id;
+            const nb = typeof b.name === 'string' && b.name.length > 0 ? b.name : b.type_id;
+            return na.localeCompare(nb);
+        });
+        const displayLabel = this._detailTemplateDisplayLabel(entity);
+        const selectedTypeId = this._detailTemplateSelectedTypeId(entity);
+        return html`
+            <div class="detail-template-box detail-template-box--edit">
+                <span class="detail-template-label">${this.t('entity_card.object_template_label')}</span>
+                ${this._templatePickerOpen
+                    ? html`
+                        ${typesLoading
+                            ? html`<span class="detail-template-value">${this.t('entity_modal.types_loading')}</span>`
+                            : html`
+                                <select
+                                    class="detail-template-select"
+                                    .value=${selectedTypeId}
+                                    @change=${this._onDetailTemplateSelect}
+                                >
+                                    <option value="">${this.t('entity_modal.entity_template_pick_placeholder')}</option>
+                                    ${items.map((it) => {
+                                        const label = typeof it.name === 'string' && it.name.length > 0
+                                            ? it.name
+                                            : it.type_id;
+                                        return html`<option value=${it.type_id}>${label}</option>`;
+                                    })}
+                                </select>
+                            `}
+                    `
+                    : html`<span class="detail-template-value" title=${displayLabel}>${displayLabel}</span>`}
+                <button
+                    type="button"
+                    class="detail-template-pencil"
+                    title=${this.t('entity_detail_page.edit_template')}
+                    aria-label=${this.t('entity_detail_page.edit_template')}
+                    ?disabled=${isBusy}
+                    @click=${this._onToggleTemplatePicker}
+                >
+                    <platform-icon name="edit" size="16"></platform-icon>
+                </button>
+            </div>
+        `;
+    }
+
+    _entityTemplateLabel(ent) {
+        if (!ent || typeof ent.entity_type !== 'string' || ent.entity_type.length === 0) {
+            throw new Error('CRMEntityDetailPage._entityTemplateLabel: entity_type required');
+        }
+        const st = typeof ent.entity_subtype === 'string' && ent.entity_subtype.length > 0
+            ? ent.entity_subtype
+            : '';
+        return st.length > 0 ? `${ent.entity_type} / ${st}` : ent.entity_type;
+    }
+
+    _renderDetailHeaderActions(entity, editingCard, isBusy) {
+        return html`
+                    ${editingCard
+                        ? this._renderEditTemplateBox(entity, isBusy)
+                        : html`
+                            <button type="button" class="toolbar-pill toolbar-pill-primary" @click=${() => this._onEdit()}>
+                                <platform-icon name="edit" size="14"></platform-icon>
+                                ${this.t('entity_detail_page.action_edit')}
+                            </button>
+                        `}
+                    <button
+                        type="button"
+                        class="toolbar-icon-muted"
+                        title=${this.t('entity_detail_page.action_share')}
+                        aria-label=${this.t('entity_detail_page.action_share')}
+                        @click=${() => this._onShare()}
+                    >
+                        <platform-icon name="share" size="18"></platform-icon>
+                    </button>
+                    <button
+                        type="button"
+                        class="toolbar-icon-muted"
+                        title=${this.t('entity_detail_page.action_access_request')}
+                        aria-label=${this.t('entity_detail_page.action_access_request')}
+                        @click=${() => this._onAccessRequest()}
+                    >
+                        <platform-icon name="lock" size="18"></platform-icon>
+                    </button>
+                    ${editingCard
+                        ? html`
+                            <button type="button" class="toolbar-pill toolbar-pill-ghost" @click=${() => this._onToolbarCancelEdit()}>
+                                ${this.t('entity_modal.action_cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                class="toolbar-pill toolbar-pill-primary"
+                                ?disabled=${this._editToolbarSaveDisabled}
+                                @click=${() => this._onToolbarSave()}
+                            >
+                                ${this._editToolbarSubmitting
+                                    ? this.t('entity_modal.action_saving')
+                                    : this.t('entity_modal.action_save')}
+                            </button>
+                            <button
+                                type="button"
+                                class="toolbar-icon-danger"
+                                title=${this.t('entity_card.delete_object_tooltip')}
+                                aria-label=${this.t('entity_card.delete_object_tooltip')}
+                                @click=${() => this._onDelete()}
+                                ?disabled=${isBusy}
+                            >
+                                <platform-icon name="trash" size="18"></platform-icon>
+                            </button>
+                        `
+                        : html`
+                            <button
+                                type="button"
+                                class="toolbar-pill toolbar-pill-danger"
+                                @click=${() => this._onDelete()}
+                                ?disabled=${isBusy}
+                            >
+                                <platform-icon name="trash" size="14"></platform-icon>
+                                ${this.t('entity_detail_page.action_delete')}
+                            </button>
+                        `}
+        `;
+    }
+
+    _onToolbarSave() {
+        const root = this.shadowRoot;
+        if (!root) {
+            throw new Error('CRMEntityDetailPage._onToolbarSave: shadowRoot missing');
+        }
+        const card = root.querySelector('crm-entity-card[panel-mode="edit"]');
+        if (!card || typeof card.triggerSave !== 'function') {
+            throw new Error('CRMEntityDetailPage._onToolbarSave: edit card not found');
+        }
+        card.triggerSave();
+    }
+
+    _onToolbarCancelEdit() {
+        const root = this.shadowRoot;
+        if (!root) {
+            throw new Error('CRMEntityDetailPage._onToolbarCancelEdit: shadowRoot missing');
+        }
+        const card = root.querySelector('crm-entity-card[panel-mode="edit"]');
+        if (card && typeof card.triggerEditCancel === 'function') {
+            card.triggerEditCancel();
+            return;
+        }
+        this._onCardEditCancelled();
     }
 
     _buildSubtitle(entity) {
@@ -512,124 +981,77 @@ export class CRMEntityDetailPage extends PlatformPage {
                 </div>
             `;
         }
+        const editingCard = this._isEditingCard();
+        const mutedFill = this._activeTab !== TAB_GRAPH;
         return html`
-            <div class="body">
-                ${this._activeTab === TAB_CARD ? this._renderCardTab(entity) : nothing}
+            <div class="body ${mutedFill ? 'detail-body-muted' : ''}">
+                ${editingCard
+                    ? html`
+                        <crm-entity-card
+                            class=${this._activeTab === TAB_CARD ? '' : 'edit-card-hidden-host'}
+                            surface="page"
+                            panel-mode="edit"
+                            host-toolbar
+                            layout-variant="full"
+                            entity-id=${this.itemId}
+                            .cardBundle=${this._card}
+                            .showEntityActions=${false}
+                            @entity-saved=${this._onCardSaved}
+                            @edit-cancelled=${this._onCardEditCancelled}
+                        ></crm-entity-card>
+                    `
+                    : this._activeTab === TAB_CARD
+                        ? html`
+                            <crm-entity-card
+                                surface="page"
+                                panel-mode="view"
+                                layout-variant="full"
+                                .entity=${entity}
+                                entity-id=${this.itemId}
+                                .cardBundle=${this._card}
+                                .showEntityActions=${false}
+                            ></crm-entity-card>
+                        `
+                        : nothing}
                 ${this._activeTab === TAB_RELATIONS ? this._renderRelationsTab(entity) : nothing}
                 ${this._activeTab === TAB_ATTACHMENTS ? this._renderAttachmentsTab() : nothing}
             </div>
         `;
     }
 
-    _renderCardTab(entity) {
-        const description = typeof entity.description === 'string' ? entity.description : '';
-        const tags = Array.isArray(entity.tags) ? entity.tags : [];
-        const attrs = entity.attributes && typeof entity.attributes === 'object' && !Array.isArray(entity.attributes)
-            ? Object.entries(entity.attributes).filter(([, v]) => v !== null && v !== undefined && v !== '')
-            : [];
-
-        return html`
-            <div class="card-section">
-                ${description.length > 0
-                    ? html`<p class="description">${description}</p>`
-                    : html`<p class="empty-text">${this.t('entity_detail_page.empty_description')}</p>`}
-                ${tags.length > 0 ? html`
-                    <div>
-                        <p class="section-title">${this.t('entity_detail_page.section_tags')}</p>
-                        <div class="tags">
-                            ${tags.map((tag) => html`<span class="tag">${tag}</span>`)}
-                        </div>
-                    </div>
-                ` : nothing}
-                ${attrs.length > 0 ? html`
-                    <div>
-                        <p class="section-title">${this.t('entity_detail_page.section_attributes')}</p>
-                        <div class="attrs">
-                            ${attrs.map(([k, v]) => html`
-                                <div class="attr-key">${k}</div>
-                                <div class="attr-val">${typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)}</div>
-                            `)}
-                        </div>
-                    </div>
-                ` : nothing}
-            </div>
-        `;
+    _neighborRowsForDetail() {
+        const card = this._card;
+        if (card === null || card === undefined || typeof this.itemId !== 'string' || this.itemId.length === 0) {
+            return [];
+        }
+        const edges = extractNeighborEdges(card, this.itemId, { skipTaskNeighbors: true });
+        return edges.map(({ rel, otherId, otherEntity, isOutgoing }) => ({
+            relationshipId: rel.relationship_id,
+            otherId,
+            otherEntity,
+            relationshipTypeLabel: this._relationshipTypeLabel(rel.relationship_type),
+            directionText: isOutgoing
+                ? this.t('neighbor_row.outgoing_from_object')
+                : this.t('neighbor_row.incoming_to_object'),
+            weight: typeof rel.weight === 'number' && Number.isFinite(rel.weight) ? rel.weight : null,
+            confidencePercent: relationshipConfidencePercent(rel),
+            scorePercent: searchScorePercent(otherEntity),
+        }));
     }
 
-    _renderRelationsTab(entity) {
-        const card = this._card;
-        const related = card && Array.isArray(card.related_entities)
-            ? card.related_entities.filter((e) => e && e.entity_id !== this.itemId)
-            : [];
-        const relationships = card && Array.isArray(card.relationships) ? card.relationships : [];
-
+    _renderRelationsTab(_entity) {
+        const rows = this._neighborRowsForDetail();
         return html`
             <div class="card-section">
-                <div>
-                    <p class="section-title">${this.t('entity_detail_page.section_related')}</p>
-                    ${related.length === 0
-                        ? html`<p class="empty-text">${this.t('entity_detail_page.empty_related')}</p>`
-                        : html`
-                            <div class="list">
-                                ${related.map((it) => html`
-                                    <button
-                                        type="button"
-                                        class="list-row clickable"
-                                        @click=${() => this._onRelatedClick(it.entity_id)}
-                                    >
-                                        <span class="icon">
-                                            <platform-icon name="link" size="14"></platform-icon>
-                                        </span>
-                                        <span class="meta">
-                                            <p class="name">${it.name && it.name.length > 0 ? it.name : it.entity_id}</p>
-                                            <p class="sub">${typeof it.entity_type === 'string' ? it.entity_type : ''}</p>
-                                        </span>
-                                        <span class="arrow">
-                                            <platform-icon name="chevron-right" size="14"></platform-icon>
-                                        </span>
-                                    </button>
-                                `)}
-                            </div>
-                        `}
-                </div>
-                <div>
-                    <p class="section-title">${this.t('entity_detail_page.section_relationships')}</p>
-                    ${relationships.length === 0
-                        ? html`<p class="empty-text">${this.t('entity_detail_page.empty_relationships')}</p>`
-                        : html`
-                            <div class="list">
-                                ${relationships.map((rel) => this._renderRelationshipRow(entity, rel))}
-                            </div>
-                        `}
-                </div>
+                <p class="section-title">${this.t('entity_detail_page.section_neighbors')}</p>
+                <crm-related-neighbor-rows
+                    .rows=${rows}
+                    .emptyText=${this.t('entity_detail_page.empty_neighbors')}
+                    .showRemove=${false}
+                    .showWeight=${true}
+                    @entity-open=${(e) => this._onRelatedClick(e.detail.entityId)}
+                ></crm-related-neighbor-rows>
             </div>
-        `;
-    }
-
-    _renderRelationshipRow(entity, rel) {
-        const isOutgoing = rel.source_entity_id === this.itemId;
-        const otherId = isOutgoing ? rel.target_entity_id : rel.source_entity_id;
-        const card = this._card;
-        const otherEntity = card && Array.isArray(card.related_entities)
-            ? card.related_entities.find((e) => e.entity_id === otherId)
-            : null;
-        const otherName = otherEntity !== null && otherEntity !== undefined && typeof otherEntity.name === 'string'
-            ? otherEntity.name
-            : otherId;
-        const arrow = isOutgoing ? '→' : '←';
-        return html`
-            <button type="button" class="list-row clickable" @click=${() => this._onRelatedClick(otherId)}>
-                <span class="icon">
-                    <platform-icon name="git-branch" size="14"></platform-icon>
-                </span>
-                <span class="meta">
-                    <p class="name">${entity.name || this.itemId} ${arrow} ${otherName}</p>
-                    <p class="sub">${this._relationshipTypeLabel(rel.relationship_type)}</p>
-                </span>
-                <span class="arrow">
-                    <platform-icon name="chevron-right" size="14"></platform-icon>
-                </span>
-            </button>
         `;
     }
 

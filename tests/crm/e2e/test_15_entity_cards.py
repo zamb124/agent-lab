@@ -52,6 +52,7 @@ class TestEntityCards:
         assert card["entity"]["entity_id"] == main_entity_id
         assert "relationships" in card
         assert len(card["relationships"]) >= 2
+        assert all("confidence" in r for r in card["relationships"])
         assert "related_entities" in card
     
     @pytest.mark.asyncio

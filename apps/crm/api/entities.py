@@ -756,6 +756,7 @@ async def get_entity_relationships(
             "relationship_type": r.relationship_type,
             "namespace": r.namespace,
             "weight": r.weight,
+            "confidence": r.confidence,
             "attributes": r.attributes or {},
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
