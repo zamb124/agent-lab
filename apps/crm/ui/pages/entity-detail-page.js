@@ -74,6 +74,15 @@ export class CRMEntityDetailPage extends PlatformPage {
                 overflow: hidden;
             }
 
+            .detail-shell {
+                display: flex;
+                flex-direction: column;
+                flex: 1 1 0%;
+                min-height: 0;
+                width: 100%;
+                overflow: hidden;
+            }
+
             .breadcrumbs-wrap {
                 flex-shrink: 0;
                 padding: 0 var(--space-4);
@@ -313,7 +322,7 @@ export class CRMEntityDetailPage extends PlatformPage {
             }
 
             .body {
-                flex: 1;
+                flex: 1 1 0%;
                 min-height: 0;
                 min-width: 0;
                 padding: var(--space-4);
@@ -338,8 +347,23 @@ export class CRMEntityDetailPage extends PlatformPage {
             crm-entity-card.edit-card-hidden-host {
                 display: none !important;
             }
-            .body.graph { overflow: hidden; padding: 0; display: flex; }
-            .body.graph crm-mini-graph-preview { flex: 1; min-height: 0; }
+            .body.graph {
+                overflow: hidden;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                flex: 1 1 0%;
+                min-height: 0;
+            }
+            :host([embedded]) .body.graph {
+                padding: 0;
+            }
+            .body.graph crm-mini-graph-preview {
+                flex: 1 1 0%;
+                min-height: 0;
+                width: 100%;
+            }
 
             .center {
                 display: flex;
@@ -457,7 +481,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                 display: none;
             }
             :host([embedded]) .header-wrap {
-                padding: 0 var(--space-3);
+                padding: var(--space-4) var(--space-3) var(--space-2);
             }
             :host([embedded]) .tabs {
                 padding: 0 var(--space-3);
@@ -626,7 +650,11 @@ export class CRMEntityDetailPage extends PlatformPage {
 
     _onPickTab(tab) {
         if (ALL_TABS.indexOf(tab) === -1) return;
+        const prev = this._activeTab;
         this._activeTab = tab;
+        if (this.embedded && prev === TAB_GRAPH && tab !== TAB_GRAPH) {
+            this.emit('crm-embedded-detail-left-graph-tab');
+        }
     }
 
     _isEditingCard() {
@@ -750,38 +778,40 @@ export class CRMEntityDetailPage extends PlatformPage {
         const headerSubtitleForBar =
             this.embedded ? headerSubtitle : this._isMobile ? '' : headerSubtitle;
         return html`
-            <div class="breadcrumbs-wrap">
-                <platform-breadcrumbs current-label=${entityLabel}></platform-breadcrumbs>
-            </div>
-            <div class="header-wrap">
-                <page-header
-                    dense
-                    title=${entityLabel}
-                    subtitle=${headerSubtitleForBar}
-                    ?hide-mobile-menu=${this.embedded && this._isMobile}
-                >
-                    <div slot="actions" class="detail-header-actions">
-                        ${this._renderDetailHeaderActions(entity, editingCard, isBusy)}
-                    </div>
-                </page-header>
-            </div>
-            ${this._isMobile && !this.embedded
-                ? html`
-                    <p class="page-subtitle-mobile">${headerSubtitle}</p>
-                `
-                : nothing}
-            <div class="tabs">
-                ${ALL_TABS.map((tab) => html`
-                    <button
-                        type="button"
-                        class="tab ${this._activeTab === tab ? 'active' : ''}"
-                        @click=${() => this._onPickTab(tab)}
+            <div class="detail-shell">
+                <div class="breadcrumbs-wrap">
+                    <platform-breadcrumbs current-label=${entityLabel}></platform-breadcrumbs>
+                </div>
+                <div class="header-wrap">
+                    <page-header
+                        dense
+                        title=${entityLabel}
+                        subtitle=${headerSubtitleForBar}
+                        ?hide-mobile-menu=${this.embedded && this._isMobile}
                     >
-                        ${this.t(`entity_detail_page.tab_${tab}`)}
-                    </button>
-                `)}
+                        <div slot="actions" class="detail-header-actions">
+                            ${this._renderDetailHeaderActions(entity, editingCard, isBusy)}
+                        </div>
+                    </page-header>
+                </div>
+                ${this._isMobile && !this.embedded
+                    ? html`
+                        <p class="page-subtitle-mobile">${headerSubtitle}</p>
+                    `
+                    : nothing}
+                <div class="tabs">
+                    ${ALL_TABS.map((tab) => html`
+                        <button
+                            type="button"
+                            class="tab ${this._activeTab === tab ? 'active' : ''}"
+                            @click=${() => this._onPickTab(tab)}
+                        >
+                            ${this.t(`entity_detail_page.tab_${tab}`)}
+                        </button>
+                    `)}
+                </div>
+                ${this._renderActiveTab(entity)}
             </div>
-            ${this._renderActiveTab(entity)}
         `;
     }
 
@@ -1097,11 +1127,16 @@ export class CRMEntityDetailPage extends PlatformPage {
 
     _renderActiveTab(entity) {
         if (this._activeTab === TAB_GRAPH) {
+            const entityNs =
+                entity && typeof entity.namespace === 'string' && entity.namespace.length > 0
+                    ? entity.namespace
+                    : '';
             return html`
                 <div class="body graph">
                     <crm-mini-graph-preview
                         fill-container
-                        entity-id=${this.itemId}
+                        .entityId=${this.itemId}
+                        namespace=${entityNs}
                         .maxDepth=${4}
                         .initialDisplayDepth=${2}
                         @entity-open=${this._onMiniGraphEntityOpen}

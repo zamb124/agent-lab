@@ -3,6 +3,7 @@
  *
  * Загружает данные через `useOp('crm/influence_graph')`, цвета и подписи
  * связей берёт через `useResource('crm/entity_types' | 'crm/relationship_types')`.
+ * Типы подгружаются с `namespace` (prop), без `load(null)` — иначе общий срез ломает фильтры на списке сущностей.
  * Открытие сущности из канваса — через DOM-событие `entity-open` (slot-композиция).
  */
 
@@ -24,6 +25,8 @@ export class CRMMiniGraphPreview extends PlatformElement {
 
     static properties = {
         entityId: { type: String },
+        /** Пространство сущности: узкая загрузка `crm/entity_types`, без перетирания списка сущностей. */
+        namespace: { type: String },
         maxDepth: { type: Number },
         initialDisplayDepth: { type: Number },
         fillContainer: { type: Boolean, reflect: true },
@@ -45,10 +48,12 @@ export class CRMMiniGraphPreview extends PlatformElement {
             }
 
             :host([fill-container]) {
-                flex: 1 1 auto;
+                flex: 1 1 0%;
+                min-width: 0;
                 min-height: 0;
-                height: auto;
-                max-height: 100%;
+                width: 100%;
+                height: 100%;
+                max-height: none;
                 align-self: stretch;
             }
 
@@ -95,8 +100,9 @@ export class CRMMiniGraphPreview extends PlatformElement {
             }
 
             .mini-canvas-wrap {
-                flex: 1;
-                min-height: 120px;
+                flex: 1 1 0%;
+                min-height: 0;
+                min-width: 0;
                 position: relative;
             }
 
@@ -121,6 +127,7 @@ export class CRMMiniGraphPreview extends PlatformElement {
     constructor() {
         super();
         this.entityId = '';
+        this.namespace = '';
         this.maxDepth = API_MAX_DEPTH;
         this.initialDisplayDepth = 1;
         this.fillContainer = false;
@@ -135,24 +142,33 @@ export class CRMMiniGraphPreview extends PlatformElement {
         this._lastLoadedEntityId = '';
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        this._entityTypes.load(null);
+    _syncEntityTypesForNamespace() {
+        const raw = typeof this.namespace === 'string' ? this.namespace.trim() : '';
+        if (raw.length === 0) {
+            return;
+        }
+        this._entityTypes.load({ namespace: raw });
     }
 
     firstUpdated() {
         super.firstUpdated?.();
-        if (this.entityId) {
+        this._syncEntityTypesForNamespace();
+        if (this._trimEntityId().length > 0) {
             this._loadGraph();
         }
     }
 
     updated(changed) {
+        if (changed.has('namespace')) {
+            this._syncEntityTypesForNamespace();
+        }
         if (changed.has('entityId')) {
-            const prev = changed.get('entityId');
-            if (!this.entityId) {
+            const prevRaw = changed.get('entityId');
+            const prev = typeof prevRaw === 'string' ? prevRaw.trim() : '';
+            const cur = this._trimEntityId();
+            if (cur.length === 0) {
                 this._destroyGraph();
-            } else if (prev !== this.entityId) {
+            } else if (prev !== cur) {
                 this._loadGraph();
             }
             return;
@@ -244,7 +260,7 @@ export class CRMMiniGraphPreview extends PlatformElement {
     }
 
     _getMaxLevelInFetched() {
-        const root = this.entityId;
+        const root = this._trimEntityId();
         const nodes = this._getFetchedNodes();
         if (nodes.length === 0) {
             return 0;
@@ -275,17 +291,39 @@ export class CRMMiniGraphPreview extends PlatformElement {
         this._displayDepth = d;
     }
 
+    _trimEntityId() {
+        return typeof this.entityId === 'string' ? this.entityId.trim() : '';
+    }
+
+    /**
+     * Кастомные узлы (sphere + спрайты подписей) берут THREE с window.
+     * Инициализация графа идёт после отложенного import three в index.html —
+     * при первом открытии вкладки к моменту _initGraph окно может быть ещё без THREE.
+     */
+    async _ensureThree() {
+        if (typeof window === 'undefined') {
+            throw new Error('CRMMiniGraphPreview._ensureThree: window is not available');
+        }
+        if (window.THREE && typeof window.THREE.SphereGeometry === 'function') {
+            return;
+        }
+        const mod = await import('/crm/ui/vendor/three/three.module.min.js');
+        window.THREE = mod;
+    }
+
     async _loadGraph() {
-        if (!this.entityId) {
+        const id = this._trimEntityId();
+        if (id.length === 0) {
             return;
         }
         this._destroyGraph();
-        this._lastLoadedEntityId = this.entityId;
+        this._lastLoadedEntityId = id;
         await this._graphOp.run({
-            entityId: this.entityId,
+            entityId: id,
             params: { max_depth: this._getFetchDepth() },
         });
-        if (this._lastLoadedEntityId !== this.entityId) {
+        const current = this._trimEntityId();
+        if (this._lastLoadedEntityId !== current) {
             return;
         }
         if (this._getFetchedNodes().length === 0) {
@@ -293,11 +331,15 @@ export class CRMMiniGraphPreview extends PlatformElement {
         }
         this._clampInitialDisplayDepth();
         await this.updateComplete;
+        await this._ensureThree();
         this._initGraph();
     }
 
     _normalizeSceneNodes() {
-        const root = this.entityId;
+        const root = this._trimEntityId();
+        if (root.length === 0) {
+            throw new Error('CRMMiniGraphPreview._normalizeSceneNodes: entityId required');
+        }
         return this._getFetchedNodes().map((raw) => {
             const id = raw.entity_id || raw.id;
             if (typeof id !== 'string' || id.trim().length === 0) {
@@ -572,13 +614,18 @@ export class CRMMiniGraphPreview extends PlatformElement {
     render() {
         const fill = this.fillContainer === true;
         const boxHeight = fill ? '100%' : this.height;
-        const boxFlex = fill ? 'flex:1 1 auto;min-height:0;' : '';
+        const boxFlex = fill ? 'flex:1 1 0%;min-height:0;' : '';
         const boxStyle = `width:${this.width};height:${boxHeight};${boxFlex}display:flex;flex-direction:column;box-sizing:border-box;`;
         const maxL = this._getMaxLevelInFetched();
         const canDecrease = this._displayDepth > 1;
         const canIncrease = maxL > 0 && this._displayDepth < maxL;
         const fetchedNodes = this._getFetchedNodes();
         const error = this._graphOp.error;
+        const entityIdTrim = this._trimEntityId();
+
+        if (entityIdTrim.length === 0) {
+            return html`<div style="${boxStyle}" class="mini-empty"></div>`;
+        }
 
         if (this._graphOp.busy) {
             return html`<div style="${boxStyle}" class="mini-empty">${this.t('graph.mini_loading')}</div>`;
@@ -586,7 +633,7 @@ export class CRMMiniGraphPreview extends PlatformElement {
         if (error) {
             return html`<div style="${boxStyle}" class="mini-empty">${error}</div>`;
         }
-        if (fetchedNodes.length === 0 && this.entityId) {
+        if (fetchedNodes.length === 0) {
             return html`<div style="${boxStyle}" class="mini-empty">${this.t('graph.mini_no_edges')}</div>`;
         }
 

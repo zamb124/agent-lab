@@ -760,8 +760,7 @@
         "merge_dnd_hint": "Drag a card by the handle onto another to merge. Shift+click — merge, Ctrl+click — select.",
         "drag_merge_handle": "Drag onto another card to merge",
         "status_active": "Active",
-        "status_archived": "Archived",
-        "detail_select_hint": "Select an entity from the list for a quick view."
+        "status_archived": "Archived"
     },
     "import_wizard_cta": {
         "empty_entities_hint": "This space has no entities yet—import your knowledge using the import wizard.",

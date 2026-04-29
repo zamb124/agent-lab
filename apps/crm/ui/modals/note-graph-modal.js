@@ -6,7 +6,7 @@
  *
  * Поток:
  *   1. На open `entitiesResource.get(noteId)` подгружает имя заметки в шапку.
- *   2. Тело — `<crm-mini-graph-preview entity-id=noteId>`, компонент сам
+ *   2. Тело — `<crm-mini-graph-preview .entityId=${noteId}>` (prop), компонент сам
  *      загружает граф через `useOp('crm/influence_graph')` и рендерит 3D-сцену.
  *   3. Клик по сущности в графе — `entity-open` событие → close модалку и
  *      navigate('entity', { itemId }).
@@ -120,6 +120,10 @@ export class CRMNoteGraphModal extends PlatformModal {
         const name = note !== null && typeof note.name === 'string' && note.name.length > 0
             ? note.name
             : this.noteId;
+        const noteNs =
+            note !== null && typeof note.namespace === 'string' && note.namespace.length > 0
+                ? note.namespace
+                : '';
         return html`
             <div class="body">
                 <div class="head">
@@ -130,7 +134,8 @@ export class CRMNoteGraphModal extends PlatformModal {
                 <div class="graph-wrap">
                     <crm-mini-graph-preview
                         fill-container
-                        entity-id=${this.noteId}
+                        .entityId=${this.noteId}
+                        namespace=${noteNs}
                         .maxDepth=${3}
                         .initialDisplayDepth=${2}
                         @entity-open=${this._onEntityOpen}

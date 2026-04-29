@@ -2,7 +2,8 @@
  * EntitiesPage — основной экран сущностей CRM.
  *
  * Layout: на десктопе — `cards-grid` слева + `crm-entity-detail-page` (embedded) справа;
- * высота колонок — на область island-content (`content-no-scroll` на `platform-island` в `crm-app`).
+ * высота колонок — на область island-content (`content-no-scroll` для `entities` и
+ * `entity` в `crm-app`).
  * на мобильном — табы «Список / Карточка». Все доменные данные — через
  * фабрики платформы:
  *
@@ -108,6 +109,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         _mergeDragSourceId: { state: true },
         _mergeDropHoverId: { state: true },
         _mobileHeaderSearch: { state: true },
+        _isWideDesktopSplit: { state: true },
     };
 
     static styles = [
@@ -505,17 +507,27 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
             .layout {
                 display: grid;
-                grid-template-columns: 1fr minmax(360px, min(42vw, 520px));
+                grid-template-columns: 1fr;
                 gap: 0;
-                flex: 1;
+                flex: 1 1 0%;
                 min-height: 0;
                 overflow: hidden;
             }
 
             @media (min-width: 1280px) {
-                .layout:has(aside.detail-panel > crm-entity-detail-page) .list-panel {
+                .layout.layout--wide-split {
+                    grid-template-columns: 1fr 0fr;
+                    grid-template-rows: minmax(0, 1fr);
+                    transition: grid-template-columns 0.32s cubic-bezier(0.25, 0.1, 0.25, 1);
+                }
+                .layout.layout--wide-split.layout--detail-open {
+                    grid-template-columns: 1fr minmax(360px, min(42vw, 520px));
+                }
+                .layout.layout--wide-split.layout--detail-open:has(aside.detail-panel > crm-entity-detail-page) .list-panel {
                     opacity: 0.78;
-                    transition: opacity 0.2s ease;
+                }
+                .layout.layout--wide-split:not(.layout--detail-open) .list-panel {
+                    opacity: 1;
                 }
             }
 
@@ -523,8 +535,11 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
+                height: 100%;
+                align-self: stretch;
                 overflow: hidden;
                 position: relative;
+                transition: opacity 0.28s ease;
             }
             .list-panel.busy .cards-scroll {
                 filter: saturate(0.92);
@@ -822,6 +837,8 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
+                height: 100%;
+                align-self: stretch;
                 overflow: hidden;
                 box-sizing: border-box;
                 background: var(--crm-surface);
@@ -830,24 +847,27 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 border-right: none;
                 box-shadow: -10px 0 36px color-mix(in srgb, var(--text-primary) 10%, transparent);
                 margin-left: var(--space-3);
-            }
-
-            .detail-panel > crm-entity-detail-page {
-                flex: 1;
-                min-height: 0;
                 min-width: 0;
             }
 
-            .detail-panel-empty {
-                flex: 1;
+            @media (min-width: 1280px) {
+                .detail-panel.detail-panel--collapsed {
+                    margin: 0;
+                    padding: 0;
+                    border: none;
+                    box-shadow: none;
+                    background: transparent;
+                    border-radius: 0;
+                    pointer-events: none;
+                }
+            }
+
+            .detail-panel > crm-entity-detail-page {
+                flex: 1 1 0%;
                 min-height: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: var(--space-4);
-                text-align: center;
-                color: var(--text-tertiary);
-                font-size: var(--text-sm);
+                min-width: 0;
+                width: 100%;
+                height: 100%;
             }
 
             .entities-mobile-header-wrap {
@@ -1010,7 +1030,13 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._scrollObserver = null;
         this._mql = null;
         this._mqlListener = null;
+        this._mqlWide = null;
+        this._mqlWideListener = null;
         this._lastNamespace = undefined;
+        this._isWideDesktopSplit =
+            typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+                ? window.matchMedia('(min-width: 1280px)').matches
+                : false;
 
         this._entities = this.useCursorList('crm/entities_list');
         this._entityTypes = this.useResource('crm/entity_types');
@@ -1020,6 +1046,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
         this._authSel = this.select((s) => s.auth.user);
         this._routeKeySel = this.select((s) => s.router.routeKey);
+        this._onEmbeddedDetailLeftGraphTab = () => {
+            const ns = this._currentNamespace();
+            this._entityTypes.load({ namespace: crmNamespaceForOptionalQuery(ns) });
+        };
     }
 
     connectedCallback() {
@@ -1029,6 +1059,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             this._mqlListener = (e) => { this._isMobile = e.matches; };
             this._mql.addEventListener('change', this._mqlListener);
             this._isMobile = this._mql.matches;
+            this._mqlWide = window.matchMedia('(min-width: 1280px)');
+            this._mqlWideListener = (e) => { this._isWideDesktopSplit = e.matches; };
+            this._mqlWide.addEventListener('change', this._mqlWideListener);
+            this._isWideDesktopSplit = this._mqlWide.matches;
         }
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._reloadAll());
@@ -1060,9 +1094,24 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._reloadAll();
     }
 
+    firstUpdated(changedProperties) {
+        super.firstUpdated(changedProperties);
+        const root = this.shadowRoot;
+        if (root) {
+            root.addEventListener('crm-embedded-detail-left-graph-tab', this._onEmbeddedDetailLeftGraphTab);
+        }
+    }
+
     disconnectedCallback() {
+        const root = this.shadowRoot;
+        if (root) {
+            root.removeEventListener('crm-embedded-detail-left-graph-tab', this._onEmbeddedDetailLeftGraphTab);
+        }
         if (this._mql && this._mqlListener) {
             this._mql.removeEventListener('change', this._mqlListener);
+        }
+        if (this._mqlWide && this._mqlWideListener) {
+            this._mqlWide.removeEventListener('change', this._mqlWideListener);
         }
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
@@ -1284,9 +1333,18 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
     _onEmbeddedEntityRemoved() {
         this._currentEntityId = null;
+        this._onEmbeddedDetailLeftGraphTab();
     }
 
     _onSelectEntity(entityId) {
+        if (this._currentEntityId === entityId) {
+            this._currentEntityId = null;
+            if (this._isMobile && this._mobileTab === 'card') {
+                this._mobileTab = 'list';
+            }
+            this._onEmbeddedDetailLeftGraphTab();
+            return;
+        }
         this._currentEntityId = entityId;
         if (this._isMobile) this._mobileTab = 'card';
     }
@@ -1968,7 +2026,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 ? html`<p class="merge-dnd-hint">${this.t('entities_page.merge_dnd_hint')}</p>`
                 : nothing}
 
-            <div class="layout">
+            <div
+                class="layout ${this._isWideDesktopSplit ? 'layout--wide-split' : ''} ${this._isWideDesktopSplit && this._currentEntityId ? 'layout--detail-open' : ''}"
+            >
                 <section class="list-panel ${listActive ? 'mobile-active' : ''} ${loading ? 'busy' : ''}">
                     ${loading
                         ? html`<div class="list-overlay"><glass-spinner size="lg"></glass-spinner></div>`
@@ -1988,17 +2048,24 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     </div>
                 </section>
 
-                <aside class="detail-panel ${cardActive ? 'mobile-active' : ''}">
+                ${this._isWideDesktopSplit || this._currentEntityId
+                    ? html`
+                <aside
+                    class="detail-panel ${this._isWideDesktopSplit && !this._currentEntityId ? 'detail-panel--collapsed' : ''} ${cardActive ? 'mobile-active' : ''}"
+                    aria-hidden=${this._isWideDesktopSplit && !this._currentEntityId ? 'true' : 'false'}
+                >
                     ${this._currentEntityId
                         ? html`
-                            <crm-entity-detail-page
-                                embedded
-                                .itemId=${this._currentEntityId}
-                                @embedded-entity-removed=${this._onEmbeddedEntityRemoved}
-                            ></crm-entity-detail-page>
-                        `
-                        : html`<div class="detail-panel-empty">${this.t('entities_page.detail_select_hint')}</div>`}
+                        <crm-entity-detail-page
+                            embedded
+                            .itemId=${this._currentEntityId}
+                            @embedded-entity-removed=${this._onEmbeddedEntityRemoved}
+                        ></crm-entity-detail-page>
+                    `
+                        : nothing}
                 </aside>
+                    `
+                    : nothing}
             </div>
         `;
     }
