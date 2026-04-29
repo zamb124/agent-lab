@@ -70,11 +70,13 @@ alwaysApply: false
 | `flows.llm_resource.*` | `apps/flows/src/resources/wrappers/llm_resource.py` | `llm_request` | `llm:{model}` | из attr |
 | `core.files.reader.image` | `core/files/reader/service.py` | `llm_request` | `llm:{model}` | 1 |
 | `rag.embed.batch` | `core/rag/services/embedding_service.py` | `embedding_request` | `embedding:{model}` | token_count |
-| `livekit.room.create` | `core/calls/livekit_client.py` | `tool_call` | `livekit:room_create` | 1 |
-| `livekit.egress.room_composite_s3` | `core/calls/livekit_client.py` | `tool_call` | `livekit:egress_composite` | 1 |
-| `livekit.egress.track_composite_segmented` | `core/calls/livekit_client.py` | `tool_call` | `livekit:egress_segmented` | 1 |
+| `livekit.room.session_usage` | `core/calls/livekit_usage_spans.py` (завершение SFU-сессии) | `tool_call` | `livekit:room_minute` | поминутно, `platform.billing.quantity` (ceil минут) |
+| `livekit.egress.composite_usage` | `core/calls/livekit_usage_spans.py` (стоп записи встречи) | `tool_call` | `livekit:egress_composite_minute` | то же |
+| `livekit.egress.segmented_usage` | `core/calls/livekit_usage_spans.py` (speech-to-chat по каналу) | `tool_call` | `livekit:egress_segmented_minute` | то же |
 
-Только трейсинг (без `pending_settlement`, в дефолтном settlement не матчатся): `sync.stt.*`, `sync.calls.finalize_recording`, `flows.external_api.call`, `flows.mcp.call_tool`, `flows.channel.execute_action`. Категория прайса **`tool`** не используется: `resource_name` вида `tool:*` в расчёте unit cost даёт **0**; в `GET` эффективного каталога и при сохранении прайса категория **`tool`** отбрасывается / запрещена (`422` на `PUT`).
+**LiveKit:** `create_room`, `start_*_egress` в [`core/calls/livekit_client.py`](core/calls/livekit_client.py) остаются в трейсинге **без** `billing_pending_settlement` (нет разового списания за факт старта); списание только через spans `*usage` выше. Правила settlement: `livekit_room_session_minutes` / `livekit_egress_*_minutes` (приоритет 26–28, `quantity_from` = `attr:platform.billing.quantity`) и запасное `livekit_ops` (префикс `livekit.`, `const:1`) для иных `livekit.*` с pending. Прайс: `room_minute`, `egress_composite_minute`, `egress_segmented_minute`; ключи `room_create` / `egress_*` в каталоге могут дублировать цену для совместимости override'ов.
+
+Только трейсинг (без `pending_settlement`, в дефолтном settlement не матчатся): `livekit.room.create`, старт/стоп egress в `livekit_client` (`livekit.egress.*` кроме usage-spans), `sync.stt.*`, `sync.calls.finalize_recording`, `flows.external_api.call`, `flows.mcp.call_tool`, `flows.channel.execute_action`. Категория прайса **`tool`** не используется: `resource_name` вида `tool:*` в расчёте unit cost даёт **0**; в `GET` эффективного каталога и при сохранении прайса категория **`tool`** отбрасывается / запрещена (`422` на `PUT`).
 
 Не в settlement: вызовы инструментов LLM (`flows.tools.*` и т.п.) без `pending_settlement`. Перечень `UsageType` — `core/models/billing_models.py`; в правилах используются строковые значения enum.
 

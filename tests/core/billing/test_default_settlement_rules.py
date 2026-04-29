@@ -22,7 +22,7 @@ def _span(operation_name: str, attrs: dict | None = None) -> dict:
 def test_default_document_first_win_single_rule_per_family() -> None:
     doc = default_settlement_rules_document()
     assert doc.application_mode.value == "first_win"
-    assert len(doc.rules) == 7
+    assert len(doc.rules) == 10
 
 
 def test_matches_llm_tracer_with_total_tokens() -> None:
@@ -91,6 +91,40 @@ def test_matches_livekit_prefix() -> None:
     matched = resolve_matched_rules(doc, span)
     assert len(matched) == 1
     assert matched[0].rule_id == "livekit_ops"
+
+
+def test_matches_livekit_room_session_usage_minutes() -> None:
+    doc = default_settlement_rules_document()
+    span = _span(
+        "livekit.room.session_usage",
+        {trace_attr.ATTR_BILLING_QUANTITY: 3},
+    )
+    matched = resolve_matched_rules(doc, span)
+    assert len(matched) == 1
+    assert matched[0].rule_id == "livekit_room_session_minutes"
+    assert matched[0].resource_name == "livekit:room_minute"
+
+
+def test_matches_livekit_egress_composite_usage_minutes() -> None:
+    doc = default_settlement_rules_document()
+    span = _span(
+        "livekit.egress.composite_usage",
+        {trace_attr.ATTR_BILLING_QUANTITY: 2},
+    )
+    matched = resolve_matched_rules(doc, span)
+    assert len(matched) == 1
+    assert matched[0].rule_id == "livekit_egress_composite_minutes"
+
+
+def test_matches_livekit_egress_segmented_usage_minutes() -> None:
+    doc = default_settlement_rules_document()
+    span = _span(
+        "livekit.egress.segmented_usage",
+        {trace_attr.ATTR_BILLING_QUANTITY: 7},
+    )
+    matched = resolve_matched_rules(doc, span)
+    assert len(matched) == 1
+    assert matched[0].rule_id == "livekit_egress_segmented_minutes"
 
 
 def test_no_rule_for_sync_stt_observability_only() -> None:

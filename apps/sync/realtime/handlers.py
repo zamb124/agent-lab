@@ -53,6 +53,7 @@ from apps.sync.realtime.notification_tasks import (
 )
 from apps.sync.sender_display import sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
+from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.db.repositories.user_repository import UserRepository
@@ -198,6 +199,17 @@ async def _stop_and_finalize_recording(
     updated_recording = await call_recordings.get(recording.recording_id)
     if updated_recording is None:
         raise RuntimeError("Запись пропала после обновления.")
+    if call.livekit_room_name is not None and call.livekit_room_name != "":
+        await trace_livekit_egress_composite_usage(
+            company_id=company_id,
+            user_id=recording.started_by_user_id,
+            call_id=call.call_id,
+            recording_id=updated_recording.recording_id,
+            livekit_room_name=call.livekit_room_name,
+            egress_id=recording.provider_job_id,
+            started_at=recording.started_at,
+            ended_at=updated_recording.ended_at,
+        )
     from apps.sync.realtime.tasks import sync_finalize_recording_task
 
     await sync_finalize_recording_task.kiq(

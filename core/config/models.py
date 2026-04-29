@@ -823,7 +823,9 @@ def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
     - llm: модели (трейсы llm.*, flows.llm_resource.*, flows.llm.*). "*" — типично руб/токен.
     - embedding: RAG эмбеддинги (rag.embed.*).
     - billing:rub — единица = 1 ₽; quantity из platform.billing.settlement_quantity_rub (OpenRouter USD×usd_to_rub_rate).
-    - livekit: room_create, egress_composite, egress_segmented — см. core/calls/livekit_client.py; "*" — прочие livekit:*.
+    - livekit: поминутное списание — room_minute, egress_composite_minute, egress_segmented_minute
+      (см. core/calls/livekit_usage_spans.py); legacy-ключи room_create, egress_composite, egress_segmented
+      сохранены с теми же числами для обратной совместимости прайса; "*" — прочие livekit:*.
 
     Категория tool в биллинге не используется (тулы flows бесплатны в учёте).
     Подробнее: conf.json → billing._docs_ru, configuration.mdc, billing.mdc.
@@ -833,6 +835,9 @@ def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
         "embedding": {"*": 0.00005},
         "billing": {"rub": 1.0},
         "livekit": {
+            "room_minute": 0.01,
+            "egress_composite_minute": 0.05,
+            "egress_segmented_minute": 0.02,
             "room_create": 0.01,
             "egress_composite": 0.05,
             "egress_segmented": 0.02,

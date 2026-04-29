@@ -143,13 +143,13 @@ def test_attribute_route_prod_billing_resource_name_condition() -> None:
         usage_type="tool_call",
         match=SettlementRuleMatch(
             attribute_equals={
-                "platform.billing.resource_name": "livekit:room_create",
+                "platform.billing.resource_name": "livekit:room_minute",
             },
         ),
     )
     span_ok = _span(
         operation_name="anything",
-        attributes={"platform.billing.resource_name": "livekit:room_create"},
+        attributes={"platform.billing.resource_name": "livekit:room_minute"},
     )
     span_bad = _span(
         operation_name="anything",

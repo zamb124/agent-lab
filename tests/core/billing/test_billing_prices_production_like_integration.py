@@ -26,6 +26,9 @@ PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
     "embedding": {"*": 0.00005},
     "billing": {"rub": 1.0},
     "livekit": {
+        "room_minute": 0.01,
+        "egress_composite_minute": 0.05,
+        "egress_segmented_minute": 0.02,
         "room_create": 0.01,
         "egress_composite": 0.05,
         "egress_segmented": 0.02,
@@ -145,7 +148,7 @@ async def test_tariff_plan_basic_multiplier(frontend_container, unique_id, syste
     fresh = await frontend_container.company_repository.get(cid)
     assert fresh is not None
     m = float(DEFAULT_TARIFF_PRICES[TariffPlan.BASIC]["livekit"]["*"])
-    assert await billing.get_resource_cost_for_company(fresh, "livekit:room_create") == pytest.approx(0.01 * m)
+    assert await billing.get_resource_cost_for_company(fresh, "livekit:room_minute") == pytest.approx(0.01 * m)
 
 
 @pytest.mark.asyncio
@@ -184,7 +187,7 @@ async def test_global_storage_override_merges_llm_only(frontend_container, syste
         assert await billing.get_resource_cost_for_company(company, "llm:x") == pytest.approx(
             0.01 * _free_llm_mult()
         )
-        assert await billing.get_resource_cost_for_company(company, "livekit:room_create") == pytest.approx(
+        assert await billing.get_resource_cost_for_company(company, "livekit:room_minute") == pytest.approx(
             0.01 * _free_livekit_mult()
         )
     finally:
@@ -221,11 +224,11 @@ async def test_company_override_merges_over_global_and_static(
         )
         await frontend_container.shared_storage.set(
             ckey,
-            json.dumps({"livekit": {"room_create": 0.33}}),
+            json.dumps({"livekit": {"room_minute": 0.33}}),
             force_global=True,
         )
         assert await billing.get_resource_cost_for_company(fresh, "llm:x") == pytest.approx(0.02 * _free_llm_mult())
-        assert await billing.get_resource_cost_for_company(fresh, "livekit:room_create") == pytest.approx(
+        assert await billing.get_resource_cost_for_company(fresh, "livekit:room_minute") == pytest.approx(
             0.33 * _free_livekit_mult()
         )
         assert await billing.get_resource_cost_for_company(fresh, "livekit:unknown_op") == pytest.approx(
@@ -324,13 +327,13 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_livekit(
     assert fresh is not None
 
     billing = frontend_container.billing_service
-    unit = await billing.get_resource_cost_for_company(fresh, "livekit:room_create")
+    unit = await billing.get_resource_cost_for_company(fresh, "livekit:room_minute")
     qty = 4
     expected = unit * qty
 
     rule = SettlementRule(
         rule_id=f"rule_cost_{unique_id}",
-        resource_name="livekit:room_create",
+        resource_name="livekit:room_minute",
         usage_type="tool_call",
         quantity_from=f"const:{qty}",
         match=SettlementRuleMatch(operation_name_prefix=f"prod.{unique_id}."),
@@ -355,7 +358,7 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_livekit(
     row = next(r for r in recs if r.usage_id == usage_id)
     assert row.quantity == qty
     assert row.cost == pytest.approx(expected)
-    assert row.resource_name == "livekit:room_create"
+    assert row.resource_name == "livekit:room_minute"
 
 
 @pytest.mark.asyncio
@@ -452,7 +455,7 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
             SettlementRule(
                 rule_id=f"r_hi_{unique_id}",
                 priority=5,
-                resource_name="livekit:room_create",
+                resource_name="livekit:room_minute",
                 usage_type="tool_call",
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_prefix=f"fw.{unique_id}."),
@@ -476,7 +479,7 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
         rules_doc=doc,
     )
     assert n == 1
-    unit_room = await billing.get_resource_cost_for_company(fresh, "livekit:room_create")
+    unit_room = await billing.get_resource_cost_for_company(fresh, "livekit:room_minute")
     unit_star = await billing.get_resource_cost_for_company(fresh, "livekit:custom")
     assert unit_room != unit_star
 
@@ -484,5 +487,5 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
     span_recs = [r for r in recs if r.metadata.get("span_id") == span_dict["span_id"]]
     assert len(span_recs) == 1
     assert span_recs[0].metadata.get("rule_id") == f"r_hi_{unique_id}"
-    assert span_recs[0].resource_name == "livekit:room_create"
+    assert span_recs[0].resource_name == "livekit:room_minute"
     assert span_recs[0].cost == pytest.approx(unit_room)

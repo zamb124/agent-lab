@@ -9,8 +9,10 @@
 - flows.llm.invoke_task — apps/flows/src/tasks/llm_tasks.py
 - rag.embed.batch — core/rag/services/embedding_service.py
 - core.files.reader.image — core/files/reader/service.py
+- livekit.room.session_usage | livekit.egress.composite_usage | livekit.egress.segmented_usage
+  — core/calls/livekit_usage_spans.py (поминутное списание после завершения сессии / записи / речи в ленту)
 - livekit.room.create | livekit.egress.room_composite_s3 | livekit.egress.track_composite_segmented
-  — core/calls/livekit_client.py (delete_room и прочие без pending не в очереди settlement)
+  — core/calls/livekit_client.py observability без pending_settlement (списание только через *usage выше)
 - sync.calls.* | sync.stt.* (без pending_settlement) — apps/sync/realtime/tasks.py, только трейсинг
 - flows.external_api.call | flows.mcp.call_tool | flows.channel.execute_action — без pending_settlement, только трейсинг
 
@@ -90,6 +92,39 @@ def default_settlement_rules_document() -> SettlementRulesDocument:
                 usage_type=UsageType.LLM_REQUEST.value,
                 quantity_from="const:1",
                 match=SettlementRuleMatch(operation_name_prefix="core.files.reader"),
+            ),
+            SettlementRule(
+                rule_id="livekit_room_session_minutes",
+                priority=26,
+                resource_name="livekit:room_minute",
+                usage_type=UsageType.TOOL_CALL.value,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_equals="livekit.room.session_usage",
+                    attribute_keys_present=[trace_attr.ATTR_BILLING_QUANTITY],
+                ),
+            ),
+            SettlementRule(
+                rule_id="livekit_egress_composite_minutes",
+                priority=27,
+                resource_name="livekit:egress_composite_minute",
+                usage_type=UsageType.TOOL_CALL.value,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_equals="livekit.egress.composite_usage",
+                    attribute_keys_present=[trace_attr.ATTR_BILLING_QUANTITY],
+                ),
+            ),
+            SettlementRule(
+                rule_id="livekit_egress_segmented_minutes",
+                priority=28,
+                resource_name="livekit:egress_segmented_minute",
+                usage_type=UsageType.TOOL_CALL.value,
+                quantity_from=f"attr:{trace_attr.ATTR_BILLING_QUANTITY}",
+                match=SettlementRuleMatch(
+                    operation_name_equals="livekit.egress.segmented_usage",
+                    attribute_keys_present=[trace_attr.ATTR_BILLING_QUANTITY],
+                ),
             ),
             SettlementRule(
                 rule_id="livekit_ops",

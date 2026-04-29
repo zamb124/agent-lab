@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import math
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -29,6 +31,7 @@ from apps.sync.models.messages import (
 from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
 from core.models.identity_models import User
 from core.calls.livekit_client import LiveKitClient
+from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from core.config import get_settings
 from core.files.audio_probe import probe_audio_duration_ms_from_bytes
 from core.files.audio_silence import (
@@ -800,6 +803,22 @@ async def stop_speech_egresses_for_call_room(
                     await process_new_files_for_egress_row(
                         row=row, egress_info=info, call_id=call_id
                     )
+
+    now = datetime.now(UTC)
+    total_track_minutes = 0
+    for row in rows:
+        secs = (now - row.created_at).total_seconds()
+        if secs > 0:
+            total_track_minutes += max(1, int(math.ceil(secs / 60.0)))
+    if total_track_minutes > 0:
+        call_entity = await container.call_repository.get_call(call_id, company_id)
+        await trace_livekit_egress_segmented_usage(
+            company_id=company_id,
+            user_id=call_entity.created_by_user_id,
+            call_id=call_id,
+            livekit_room_name=room_name,
+            billed_minutes=total_track_minutes,
+        )
 
     await repo.delete_for_call(call_id, company_id)
     logger.info(

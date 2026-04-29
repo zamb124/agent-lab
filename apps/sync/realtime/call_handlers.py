@@ -324,6 +324,21 @@ async def handle_call_hangup(
                 ) from exc
 
         ended_call = await calls.get_call(payload.call_id, cmd.company_id)
+        if (
+            ended_call.mode == "sfu"
+            and ended_call.livekit_room_name is not None
+            and ended_call.livekit_room_name != ""
+        ):
+            from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
+
+            await trace_livekit_room_session_usage(
+                company_id=cmd.company_id,
+                user_id=ended_call.created_by_user_id,
+                call_id=payload.call_id,
+                livekit_room_name=ended_call.livekit_room_name,
+                started_at=ended_call.started_at,
+                ended_at=ended_call.ended_at,
+            )
         final_participants = await calls.list_participants(payload.call_id)
         call_read = _call_read_from_entities(ended_call, final_participants)
         events.append(

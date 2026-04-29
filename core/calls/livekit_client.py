@@ -29,7 +29,6 @@ from core.billing.service import (
     BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
     BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
 )
-from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
@@ -86,10 +85,6 @@ class LiveKitClient:
             "livekit.room.create",
             event_type="livekit.room",
             operation_category="livekit",
-            billing_usage_type=UsageType.TOOL_CALL.value,
-            billing_resource_name="livekit:room_create",
-            billing_quantity=1,
-            billing_pending_settlement=True,
             extra_attributes=_livekit_traced_attrs(
                 company_id=company_id,
                 user_id=user_id,
@@ -200,10 +195,6 @@ class LiveKitClient:
             "livekit.egress.room_composite_s3",
             event_type="livekit.egress",
             operation_category="livekit_egress",
-            billing_usage_type=UsageType.TOOL_CALL.value,
-            billing_resource_name="livekit:egress_composite",
-            billing_quantity=1,
-            billing_pending_settlement=True,
             extra_attributes=_livekit_traced_attrs(
                 company_id=company_id,
                 user_id=user_id,
@@ -291,10 +282,6 @@ class LiveKitClient:
             "livekit.egress.track_composite_segmented",
             event_type="livekit.egress",
             operation_category="livekit_egress",
-            billing_usage_type=UsageType.TOOL_CALL.value,
-            billing_resource_name="livekit:egress_segmented",
-            billing_quantity=1,
-            billing_pending_settlement=True,
             extra_attributes=_livekit_traced_attrs(
                 company_id=company_id,
                 user_id=user_id,
