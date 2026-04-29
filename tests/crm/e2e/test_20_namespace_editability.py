@@ -12,6 +12,8 @@
 
 import pytest
 
+pytestmark = pytest.mark.timeout(60)
+
 
 async def _create_namespace_with_types(crm_client, headers, unique_id, type_ids):
     """Хелпер: создает шаблон, типы и namespace."""
@@ -72,6 +74,8 @@ class TestNamespaceEditabilityEmpty:
         assert type_b in editability["removable_type_ids"]
         assert type_a in editability["current_allowed_type_ids"]
         assert type_b in editability["current_allowed_type_ids"]
+        assert isinstance(editability["all_spaces_type_ids"], list)
+        assert len(editability["all_spaces_type_ids"]) >= 1
 
     @pytest.mark.asyncio
     async def test_empty_namespace_can_remove_all_types(self, crm_client, unique_id, auth_headers_system):
@@ -98,10 +102,9 @@ class TestNamespaceEditabilityEmpty:
         assert type_a not in remaining_type_ids
         assert type_b not in remaining_type_ids
         for t in types_resp.json()["items"]:
-            ns_ids = t.get("namespace_ids") or []
-            assert namespace_name in ns_ids or "*" in ns_ids, (
-                f"Тип {t['type_id']}: для листинга по namespace ожидалось "
-                f"{namespace_name!r} или '*' в namespace_ids, получено {ns_ids!r}"
+            assert t.get("namespace") == namespace_name, (
+                f"Тип {t['type_id']}: ожидался namespace {namespace_name!r}, "
+                f"получено {t.get('namespace')!r}"
             )
 
     @pytest.mark.asyncio
@@ -225,7 +228,7 @@ class TestNamespaceEditabilityWithEntities:
         await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": extra_type_id,
             "name": "Extra Type",
-            "namespace_ids": ["default"],
+            "namespace": "default",
         }, headers=auth_headers_system)
 
         resp = await crm_client.put(
@@ -308,7 +311,7 @@ class TestNamespaceEditabilityWithEntities:
         await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": type_added,
             "name": "Added Type",
-            "namespace_ids": ["default"],
+            "namespace": "default",
         }, headers=auth_headers_system)
 
         resp = await crm_client.put(
@@ -342,7 +345,10 @@ class TestEntityTypeImmutability:
             "description": "Старое описание",
         }, headers=auth_headers_system)
 
-        resp = await crm_client.put(f"/crm/api/v1/entity-types/{type_id}", json={
+        resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
+            json={
             "prompt": "Новый промпт для AI-извлечения",
             "description": "Новое описание типа",
         }, headers=auth_headers_system)
@@ -363,7 +369,10 @@ class TestEntityTypeImmutability:
             "color": "#000000",
         }, headers=auth_headers_system)
 
-        resp = await crm_client.put(f"/crm/api/v1/entity-types/{type_id}", json={
+        resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
+            json={
             "name": "Обновленное название",
             "icon": "star",
             "color": "#FF5722",
@@ -385,7 +394,10 @@ class TestEntityTypeImmutability:
             "optional_fields": {},
         }, headers=auth_headers_system)
 
-        resp = await crm_client.put(f"/crm/api/v1/entity-types/{type_id}", json={
+        resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
+            json={
             "required_fields": {"new_field": {"type": "number", "label": "Число"}},
             "optional_fields": {"extra": {"type": "string", "label": "Доп"}},
         }, headers=auth_headers_system)
@@ -403,7 +415,10 @@ class TestEntityTypeImmutability:
             "name": "Immutable ID",
         }, headers=auth_headers_system)
 
-        resp = await crm_client.put(f"/crm/api/v1/entity-types/{type_id}", json={
+        resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
+            json={
             "name": "Changed Name Only",
         }, headers=auth_headers_system)
         assert resp.status_code == 200
@@ -424,7 +439,10 @@ class TestEntityTypeImmutability:
             "name": f"Entity {unique_id}",
         }, headers=auth_headers_system)
 
-        resp = await crm_client.put(f"/crm/api/v1/entity-types/{type_id}", json={
+        resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
+            json={
             "name": "Updated In Use Type",
             "prompt": "Обновленный промпт для типа с данными",
             "description": "Тип с данными, описание обновлено",
@@ -500,7 +518,7 @@ class TestNamespaceEditabilityEdgeCases:
         await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": type_added,
             "name": "Новый тип",
-            "namespace_ids": ["default"],
+            "namespace": "default",
         }, headers=auth_headers_system)
 
         resp = await crm_client.put(

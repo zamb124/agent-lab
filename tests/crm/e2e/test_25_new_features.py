@@ -33,7 +33,7 @@ class TestSchemaValidation:
                 "optional_fields": {
                     "notes": {"type": "string"},
                 },
-                "namespace_ids": [namespace_id],
+                "namespace": namespace_id,
             },
             headers=headers,
         )

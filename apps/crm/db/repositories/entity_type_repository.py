@@ -1,13 +1,13 @@
 """
 Репозиторий для EntityType с поддержкой иерархии.
 
-Системные типы (note, task) + пользовательские типы.
-ВСЕ типы с company_id (ОБЯЗАТЕЛЬНО)!
+Уникальность строки: (company_id, namespace, type_id).
 """
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, select
 from sqlalchemy import update as sa_update
 
 from apps.crm.db.base import BaseCRMRepository
@@ -36,17 +36,13 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         limit: int = 200,
         offset: int = 0,
     ) -> list[EntityType]:
-        """Типы, доступные для компании из контекста."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(EntityType).where(EntityType.company_id == company_id)
-            if namespace:
-                stmt = stmt.where(
-                    or_(
-                        EntityType.namespace_ids.contains([namespace]),
-                        EntityType.namespace_ids.contains(["*"]),
-                    )
-                )
+            if namespace is not None:
+                stmt = stmt.where(EntityType.namespace == namespace)
+            if not include_system:
+                stmt = stmt.where(EntityType.is_system.is_(False))
             stmt = (
                 stmt.order_by(EntityType.is_system.desc(), EntityType.type_id.asc())
                 .limit(limit)
@@ -55,12 +51,13 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def get_parent_type_id_map_for_company(self) -> dict[str, Optional[str]]:
-        """Все type_id компании → parent_type_id (для resolve_list_entity_query_pair)."""
+    async def get_parent_type_id_map_for_namespace(self, namespace: str) -> dict[str, Optional[str]]:
+        """type_id -> parent_type_id в рамках одного namespace."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(EntityType.type_id, EntityType.parent_type_id).where(
-                EntityType.company_id == company_id
+                EntityType.company_id == company_id,
+                EntityType.namespace == namespace,
             )
             result = await session.execute(stmt)
             rows = result.all()
@@ -73,27 +70,47 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(func.count()).select_from(EntityType).where(EntityType.company_id == company_id)
-            if namespace:
-                stmt = stmt.where(
-                    or_(
-                        EntityType.namespace_ids.contains([namespace]),
-                        EntityType.namespace_ids.contains(["*"]),
-                    )
-                )
+            if namespace is not None:
+                stmt = stmt.where(EntityType.namespace == namespace)
             result = await session.execute(stmt)
             return result.scalar() or 0
+
+    async def load_all_entity_types_for_company(
+        self,
+        *,
+        namespace: Optional[str] = None,
+        page_limit: int = 200,
+    ) -> list[EntityType]:
+        if page_limit < 1:
+            raise ValueError("page_limit must be positive")
+        offset = 0
+        items: list[EntityType] = []
+        while True:
+            page = await self.get_all_for_company(
+                namespace=namespace,
+                limit=page_limit,
+                offset=offset,
+            )
+            if not page:
+                return items
+            items.extend(page)
+            if len(page) < page_limit:
+                return items
+            offset += page_limit
 
     async def get_by_type_id(
         self,
         type_id: str,
-        company_id: Optional[str] = None
+        *,
+        namespace: str,
+        company_id: Optional[str] = None,
     ) -> Optional[EntityType]:
-        """Получает тип по type_id в рамках компании."""
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(EntityType).where(
                 EntityType.type_id == type_id,
                 EntityType.company_id == effective_company_id,
+                EntityType.namespace == namespace,
             )
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
@@ -105,16 +122,16 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         limit: int = 200,
         offset: int = 0,
     ) -> list[EntityType]:
-        """Возвращает типы, разрешенные в конкретном namespace."""
         return await self.get_all_for_company(namespace=namespace, limit=limit, offset=offset)
 
     async def update_metadata(
         self,
         type_id: str,
+        *,
+        namespace: str,
         company_id: str | None = None,
         **fields: object,
     ) -> None:
-        """Обновляет указанные поля entity type через SQL UPDATE (без session.merge)."""
         company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = (
@@ -122,6 +139,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 .where(
                     EntityType.type_id == type_id,
                     EntityType.company_id == company_id,
+                    EntityType.namespace == namespace,
                 )
                 .values(**fields)
             )
@@ -132,22 +150,23 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         self,
         type_id: str,
         *,
+        namespace: str,
         company_id: str,
         extra: dict[str, Any],
     ) -> None:
-        """Дописывает ключи в optional_fields только если такого ключа ещё нет."""
         if not extra:
             return
         async with self._db.session() as session:
             stmt = select(EntityType).where(
                 EntityType.type_id == type_id,
                 EntityType.company_id == company_id,
+                EntityType.namespace == namespace,
             )
             result = await session.execute(stmt)
             entity_type = result.scalar_one_or_none()
             if entity_type is None:
                 raise ValueError(
-                    f"EntityType '{type_id}' not found for company '{company_id}'"
+                    f"EntityType '{type_id}' not found for company '{company_id}' namespace '{namespace}'"
                 )
             current = dict(entity_type.optional_fields or {})
             for key, value in extra.items():
@@ -156,8 +175,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             entity_type.optional_fields = current
             await session.commit()
 
-    async def update_color(self, type_id: str, color: str) -> None:
-        """Точечное обновление цвета без session.merge (не затрагивает namespace_ids)."""
+    async def update_color(self, type_id: str, namespace: str, color: str) -> None:
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = (
@@ -165,111 +183,87 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 .where(
                     EntityType.type_id == type_id,
                     EntityType.company_id == company_id,
+                    EntityType.namespace == namespace,
                 )
                 .values(color=color)
             )
             await session.execute(stmt)
             await session.commit()
 
-    async def set_namespace_ids(
-        self,
-        type_id: str,
-        namespace_ids: list[str],
-    ) -> EntityType:
-        """Атомарная полная замена namespace_ids (SELECT FOR UPDATE)."""
-        company_id = self._get_company_id()
-        async with self._db.session() as session:
-            stmt = (
-                select(EntityType)
-                .where(
-                    EntityType.type_id == type_id,
-                    EntityType.company_id == company_id,
-                )
-                .with_for_update()
-            )
-            result = await session.execute(stmt)
-            entity_type = result.scalar_one_or_none()
-            if not entity_type:
-                raise ValueError(f"EntityType '{type_id}' not found for company '{company_id}'")
-
-            entity_type.namespace_ids = sorted(namespace_ids)
-
-            await session.commit()
-            await session.refresh(entity_type)
-            return entity_type
-
-    async def add_namespace_ids(
-        self,
-        type_id: str,
-        namespace_ids: list[str],
-        company_id: str | None = None,
-    ) -> EntityType:
-        """Атомарно добавляет namespace_ids к entity type (SELECT FOR UPDATE)."""
-        company_id = company_id or self._get_company_id()
-        async with self._db.session() as session:
-            stmt = (
-                select(EntityType)
-                .where(
-                    EntityType.type_id == type_id,
-                    EntityType.company_id == company_id,
-                )
-                .with_for_update()
-            )
-            result = await session.execute(stmt)
-            entity_type = result.scalar_one_or_none()
-            if not entity_type:
-                raise ValueError(f"EntityType '{type_id}' not found for company '{company_id}'")
-
-            current = set(entity_type.namespace_ids or [])
-            current.update(namespace_ids)
-            entity_type.namespace_ids = sorted(current)
-
-            await session.commit()
-            await session.refresh(entity_type)
-            return entity_type
-
-    async def remove_namespace_ids(
-        self,
-        type_id: str,
-        namespace_ids: list[str],
-    ) -> EntityType:
-        """Атомарно удаляет namespace_ids из entity type (SELECT FOR UPDATE)."""
-        company_id = self._get_company_id()
-        async with self._db.session() as session:
-            stmt = (
-                select(EntityType)
-                .where(
-                    EntityType.type_id == type_id,
-                    EntityType.company_id == company_id,
-                )
-                .with_for_update()
-            )
-            result = await session.execute(stmt)
-            entity_type = result.scalar_one_or_none()
-            if not entity_type:
-                raise ValueError(f"EntityType '{type_id}' not found for company '{company_id}'")
-
-            current = set(entity_type.namespace_ids or [])
-            current -= set(namespace_ids)
-            entity_type.namespace_ids = sorted(current)
-
-            await session.commit()
-            await session.refresh(entity_type)
-            return entity_type
-
     async def create_custom_type(
         self,
         type_data: EntityType,
-        company_id: str
+        company_id: str,
     ) -> EntityType:
-        """
-        Создает кастомный тип для компании.
-
-        Системные типы создавать нельзя!
-        """
         if type_data.is_system:
             raise ValueError("Cannot create system type through this method")
 
         type_data.company_id = company_id
         return await self.create(type_data)
 
+    async def clone_entity_type_between_namespaces(
+        self,
+        type_id: str,
+        *,
+        source_namespace: str,
+        target_namespace: str,
+        company_id: str | None = None,
+    ) -> EntityType:
+        effective_company_id = company_id or self._get_company_id()
+        src = await self.get_by_type_id(
+            type_id,
+            namespace=source_namespace,
+            company_id=effective_company_id,
+        )
+        if src is None:
+            raise ValueError(
+                f"EntityType {type_id!r} не найден в пространстве {source_namespace!r}"
+            )
+        existing = await self.get_by_type_id(
+            type_id,
+            namespace=target_namespace,
+            company_id=effective_company_id,
+        )
+        if existing is not None:
+            return existing
+        clone = EntityType(
+            company_id=effective_company_id,
+            namespace=target_namespace,
+            type_id=src.type_id,
+            parent_type_id=src.parent_type_id,
+            name=src.name,
+            description=src.description,
+            prompt=src.prompt,
+            required_fields=dict(src.required_fields or {}),
+            optional_fields=dict(src.optional_fields or {}),
+            icon=src.icon,
+            color=src.color,
+            is_system=src.is_system,
+            is_event=src.is_event,
+            check_duplicates=src.check_duplicates,
+            weight_coefficient=src.weight_coefficient,
+            public_fields=list(src.public_fields or []),
+            is_context_anchor=src.is_context_anchor,
+            extractable=src.extractable,
+            is_voice_target=src.is_voice_target,
+            created_at=datetime.now(timezone.utc),
+        )
+        return await self.create(clone)
+
+    async def delete_entity_type_scoped(
+        self,
+        type_id: str,
+        *,
+        namespace: str,
+        company_id: str | None = None,
+    ) -> bool:
+        effective_company_id = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = delete(EntityType).where(
+                EntityType.company_id == effective_company_id,
+                EntityType.namespace == namespace,
+                EntityType.type_id == type_id,
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            return (result.rowcount or 0) > 0

@@ -612,6 +612,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         self,
         namespace: str,
         company_id: Optional[str] = None,
+        exclude_entity_types: Optional[set[str]] = None,
     ) -> List[str]:
         """Возвращает список типов сущностей, используемых в namespace."""
         if not namespace:
@@ -627,6 +628,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 )
                 .distinct()
             )
+            if exclude_entity_types:
+                stmt = stmt.where(CRMEntity.entity_type.notin_(exclude_entity_types))
             result = await session.execute(stmt)
             type_ids = [item for item in result.scalars().all() if isinstance(item, str) and item.strip()]
             return sorted(type_ids)

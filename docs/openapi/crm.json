@@ -3634,6 +3634,13 @@
             "type": "array",
             "title": "Removable Type Ids"
           },
+          "all_spaces_type_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "All Spaces Type Ids"
+          },
           "lock_reason": {
             "anyOf": [
               {
@@ -3656,7 +3663,8 @@
           "can_update_allowed_types",
           "can_add_types",
           "locked_type_ids",
-          "removable_type_ids"
+          "removable_type_ids",
+          "all_spaces_type_ids"
         ],
         "title": "NamespaceEditabilityResponse",
         "description": "Ограничения редактирования namespace."

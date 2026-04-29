@@ -31,6 +31,13 @@ LEAD_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
     "external_refs": dict(AMO_OPTIONAL_FIELD_EXTERNAL_REFS),
 }
 
+ORGANIZATION_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
+    "name": {"type": "string", "label": "Название"},
+    "industry": {"type": "string", "label": "Отрасль"},
+    "legal_name": {"type": "string", "label": "Юридическое название"},
+    "external_refs": dict(AMO_OPTIONAL_FIELD_EXTERNAL_REFS),
+}
+
 CONTACT_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
     "display_name": {"type": "string", "label": "Имя"},
     "role": {"type": "string", "label": "Роль"},
@@ -66,6 +73,7 @@ TASK_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
 AMO_OPTIONAL_FIELDS_BY_TYPE_ID: dict[str, dict[str, Any]] = {
     "lead": LEAD_AMO_OPTIONAL_FIELDS,
     "contact": CONTACT_AMO_OPTIONAL_FIELDS,
+    "organization": ORGANIZATION_AMO_OPTIONAL_FIELDS,
     "member": MEMBER_AMO_OPTIONAL_FIELDS,
     "task": TASK_AMO_OPTIONAL_FIELDS,
 }

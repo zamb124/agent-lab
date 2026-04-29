@@ -15,6 +15,7 @@
 """
 
 import asyncio
+import time
 import uuid
 import pytest
 
@@ -845,7 +846,7 @@ class TestRAGResource:
         RAG resource: добавление документа и поиск.
         """
 
-
+        doc_id = f"doc_{unique_namespace}"
         rag_resource = {
             "type": "rag",
             "config": {
@@ -855,34 +856,32 @@ class TestRAGResource:
                 "company_id": "system",
             }
         }
-        
-        # Добавляем документ
+
+        add_code = f"""
+async def execute(args, state):
+    result = await kb.add_document(
+        document_id={doc_id!r},
+        content='Cats are wonderful pets that love to sleep and play.',
+        metadata={{'category': 'pets'}}
+    )
+    state.doc_added = True
+    return {{'added': True}}
+"""
+
         add_node = CodeNode(
             node_id="add_doc",
             config={
-                "code": """
-async def execute(args, state):
-    result = await kb.add_document(
-        document_id='doc_1',
-        content='Cats are wonderful pets that love to sleep and play.',
-        metadata={'category': 'pets'}
-    )
-    state.doc_added = True
-    return {'added': True}
-""",
+                "code": add_code,
                 "resources": {
                     "kb": ResourceReference.model_validate(rag_resource)
                 }
             }
         )
-        
-        state = make_state()
-        await add_node.run(state)
-        
-        # Небольшая задержка для индексации
-        await asyncio.sleep(0.5)
-        
-        # Ищем документ
+
+        with service_client_asgi_auth_context(auth_headers_system):
+            state = make_state()
+            await add_node.run(state)
+
         search_node = CodeNode(
             node_id="search_doc",
             config={
@@ -898,12 +897,19 @@ async def execute(args, state):
                 }
             }
         )
-        
-        state2 = make_state()
-        with service_client_asgi_auth_context(auth_headers_system):
-            result = await search_node.run(state2)
-        
-        assert result.found is True
+
+        deadline = time.monotonic() + 45.0
+        result = None
+        while time.monotonic() < deadline:
+            state2 = make_state()
+            with service_client_asgi_auth_context(auth_headers_system):
+                result = await search_node.run(state2)
+            if result.found:
+                break
+            await asyncio.sleep(0.4)
+
+        assert result is not None
+        assert result.found is True, "RAG search: нет попаданий за отведённое время (индексация/эмбеддинги)"
         assert len(result.search_results) > 0
 
     @pytest.mark.asyncio

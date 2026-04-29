@@ -35,6 +35,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
+import '@platform/lib/components/platform-help-hint.js';
 import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import './schema-field-builder.js';
 import { buildSchemaFromRows } from './schema-field-builder.js';
@@ -106,6 +107,24 @@ export class CRMEntityTypeEditor extends PlatformElement {
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
             }
+            .field-label-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .field-label-row .field-label {
+                margin: 0;
+            }
+            .schema-section-title-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .schema-section-title-row .panel-title {
+                margin: 0;
+            }
 
             .input, .select, .textarea {
                 width: 100%;
@@ -119,10 +138,25 @@ export class CRMEntityTypeEditor extends PlatformElement {
             }
             .input.mono, .select.mono { font-family: var(--font-mono); }
             .textarea { min-height: 76px; resize: vertical; }
-            .flags-row {
+            .flags-col {
                 display: flex;
-                flex-wrap: wrap;
+                flex-direction: column;
                 gap: var(--space-3);
+            }
+            .flag-row {
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                gap: var(--space-2);
+                width: 100%;
+                min-width: 0;
+            }
+            .flag-row platform-switch {
+                flex: 1;
+                min-width: 0;
+            }
+            .flag-row platform-help-hint {
+                flex-shrink: 0;
             }
 
             .schema-grid {
@@ -278,6 +312,18 @@ export class CRMEntityTypeEditor extends PlatformElement {
         this._emitDraftField('color', typeof v === 'string' ? v : '');
     }
 
+    _fieldLabelWithHint(labelKey, hintKey) {
+        return html`
+            <div class="field-label-row">
+                <span class="field-label">${this.t(labelKey)}</span>
+                <platform-help-hint
+                    .text=${this.t(hintKey)}
+                    label=${this.t('templates_page.field_hint_button_aria')}
+                ></platform-help-hint>
+            </div>
+        `;
+    }
+
     _getSchemaPreview(sectionKey, sectionLabel) {
         const rows = Array.isArray(this.typeDraft[sectionKey]) ? this.typeDraft[sectionKey] : [];
         try {
@@ -325,7 +371,10 @@ export class CRMEntityTypeEditor extends PlatformElement {
                 ${!schemaReady ? html`<div class="empty">${this.t('templates_page.loading_schema')}</div>` : ''}
                 <div class="grid-2">
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_type_id')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.field_type_id',
+                            'templates_page.field_type_id_hint',
+                        )}
                         <input
                             class="input mono"
                             .value=${this.typeDraft.type_id}
@@ -334,7 +383,10 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         />
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_type_name')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.field_type_name',
+                            'templates_page.field_type_name_hint',
+                        )}
                         <input
                             class="input"
                             .value=${this.typeDraft.name}
@@ -342,7 +394,10 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         />
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_parent')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.field_parent',
+                            'templates_page.field_parent_hint',
+                        )}
                         <select
                             class="select mono"
                             .value=${this.typeDraft.parent_type_id}
@@ -355,7 +410,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         </select>
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_icon')}</label>
+                        ${this._fieldLabelWithHint('templates_page.field_icon', 'templates_page.field_icon_hint')}
                         <platform-icon-picker
                             .value=${this.typeDraft.icon}
                             .icons=${this._iconPickerIcons(this.typeDraft.icon)}
@@ -365,7 +420,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         ></platform-icon-picker>
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_color')}</label>
+                        ${this._fieldLabelWithHint('templates_page.field_color', 'templates_page.field_color_hint')}
                         <platform-palette-color-picker
                             .value=${this.typeDraft.color}
                             allow-clear
@@ -374,7 +429,10 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         ></platform-palette-color-picker>
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_weight')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.field_weight',
+                            'templates_page.field_weight_hint',
+                        )}
                         <input
                             type="number"
                             step="0.1"
@@ -385,41 +443,68 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         />
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_flags')}</label>
-                        <div class="flags-row">
-                            <platform-switch
-                                size="sm"
-                                label=${this.t('templates_page.field_is_event')}
-                                .checked=${this.typeDraft.is_event}
-                                @change=${(e) => this._emitDraftField('is_event', Boolean(e.detail.value))}
-                            ></platform-switch>
-                            <platform-switch
-                                size="sm"
-                                label=${this.t('templates_page.field_check_duplicates')}
-                                .checked=${this.typeDraft.check_duplicates}
-                                @change=${(e) => this._emitDraftField('check_duplicates', Boolean(e.detail.value))}
-                            ></platform-switch>
-                            <platform-switch
-                                size="sm"
-                                label=${this.t('templates_page.field_is_context_anchor')}
-                                .checked=${anchorChecked}
-                                ?disabled=${semanticsLocked || this.savingType}
-                                @change=${(e) => this._emitDraftField('is_context_anchor', Boolean(e.detail.value))}
-                            ></platform-switch>
-                            <platform-switch
-                                size="sm"
-                                label=${this.t('templates_page.field_is_voice_target')}
-                                .checked=${voiceChecked}
-                                ?disabled=${semanticsLocked || this.savingType}
-                                @change=${(e) => this._emitDraftField('is_voice_target', Boolean(e.detail.value))}
-                            ></platform-switch>
+                        ${this._fieldLabelWithHint('templates_page.field_flags', 'templates_page.field_flags_hint')}
+                        <div class="flags-col">
+                            <div class="flag-row">
+                                <platform-switch
+                                    size="sm"
+                                    label=${this.t('templates_page.field_is_event')}
+                                    .checked=${this.typeDraft.is_event}
+                                    @change=${(e) => this._emitDraftField('is_event', Boolean(e.detail.value))}
+                                ></platform-switch>
+                                <platform-help-hint
+                                    .text=${this.t('templates_page.field_is_event_hint')}
+                                    label=${this.t('templates_page.field_hint_button_aria')}
+                                ></platform-help-hint>
+                            </div>
+                            <div class="flag-row">
+                                <platform-switch
+                                    size="sm"
+                                    label=${this.t('templates_page.field_check_duplicates')}
+                                    .checked=${this.typeDraft.check_duplicates}
+                                    @change=${(e) => this._emitDraftField('check_duplicates', Boolean(e.detail.value))}
+                                ></platform-switch>
+                                <platform-help-hint
+                                    .text=${this.t('templates_page.field_check_duplicates_hint')}
+                                    label=${this.t('templates_page.field_hint_button_aria')}
+                                ></platform-help-hint>
+                            </div>
+                            <div class="flag-row">
+                                <platform-switch
+                                    size="sm"
+                                    label=${this.t('templates_page.field_is_context_anchor')}
+                                    .checked=${anchorChecked}
+                                    ?disabled=${semanticsLocked || this.savingType}
+                                    @change=${(e) => this._emitDraftField('is_context_anchor', Boolean(e.detail.value))}
+                                ></platform-switch>
+                                <platform-help-hint
+                                    .text=${this.t('templates_page.field_is_context_anchor_hint')}
+                                    label=${this.t('templates_page.field_hint_button_aria')}
+                                ></platform-help-hint>
+                            </div>
+                            <div class="flag-row">
+                                <platform-switch
+                                    size="sm"
+                                    label=${this.t('templates_page.field_is_voice_target')}
+                                    .checked=${voiceChecked}
+                                    ?disabled=${semanticsLocked || this.savingType}
+                                    @change=${(e) => this._emitDraftField('is_voice_target', Boolean(e.detail.value))}
+                                ></platform-switch>
+                                <platform-help-hint
+                                    .text=${this.t('templates_page.field_is_voice_target_hint')}
+                                    label=${this.t('templates_page.field_hint_button_aria')}
+                                ></platform-help-hint>
+                            </div>
                         </div>
                         ${semanticsLocked
                             ? html`<div class="hint">${this.t('templates_page.note_semantics_flags_locked_hint')}</div>`
                             : ''}
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_description')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.field_description',
+                            'templates_page.field_description_hint',
+                        )}
                         <textarea
                             class="textarea"
                             .value=${this.typeDraft.description}
@@ -427,7 +512,7 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         ></textarea>
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.field_prompt')}</label>
+                        ${this._fieldLabelWithHint('templates_page.field_prompt', 'templates_page.field_prompt_hint')}
                         <textarea
                             class="textarea"
                             .value=${this.typeDraft.prompt}
@@ -436,7 +521,10 @@ export class CRMEntityTypeEditor extends PlatformElement {
                     </div>
                     ${this.showNamespaces ? html`
                         <div class="field">
-                            <label class="field-label">${this.t('templates_page.field_namespaces')}</label>
+                            ${this._fieldLabelWithHint(
+                                'templates_page.field_namespaces',
+                                'templates_page.field_namespaces_hint',
+                            )}
                             ${this.namespaces.length > 0 ? html`
                                 <div class="namespace-pills">
                                     ${this.namespaces.map((ns) => {
@@ -459,7 +547,13 @@ export class CRMEntityTypeEditor extends PlatformElement {
                 </div>
                 <div class="schema-grid">
                     <div class="schema-section">
-                        <div class="panel-title">${this.t('templates_page.required_fields_title')}</div>
+                        <div class="schema-section-title-row">
+                            <div class="panel-title">${this.t('templates_page.required_fields_title')}</div>
+                            <platform-help-hint
+                                .text=${this.t('templates_page.required_fields_title_hint')}
+                                label=${this.t('templates_page.field_hint_button_aria')}
+                            ></platform-help-hint>
+                        </div>
                         <div class="hint">${this.t('templates_page.required_fields_hint')}</div>
                         ${schemaReady ? html`
                             <crm-schema-field-builder
@@ -470,7 +564,13 @@ export class CRMEntityTypeEditor extends PlatformElement {
                         ` : html`<div class="empty">${this.t('templates_page.loading_schema')}</div>`}
                     </div>
                     <div class="schema-section">
-                        <div class="panel-title">${this.t('templates_page.optional_fields_title')}</div>
+                        <div class="schema-section-title-row">
+                            <div class="panel-title">${this.t('templates_page.optional_fields_title')}</div>
+                            <platform-help-hint
+                                .text=${this.t('templates_page.optional_fields_title_hint')}
+                                label=${this.t('templates_page.field_hint_button_aria')}
+                            ></platform-help-hint>
+                        </div>
                         <div class="hint">${this.t('templates_page.optional_fields_hint')}</div>
                         ${schemaReady ? html`
                             <crm-schema-field-builder
@@ -485,11 +585,17 @@ export class CRMEntityTypeEditor extends PlatformElement {
                     <summary>${this.t('templates_page.json_preview')}</summary>
                     <div class="grid-2">
                         <div class="field">
-                            <label class="field-label">${this.t('templates_page.preview_required')}</label>
+                            ${this._fieldLabelWithHint(
+                                'templates_page.preview_required',
+                                'templates_page.preview_required_hint',
+                            )}
                             <pre class="preview">${this._getSchemaPreview('required_fields_rows', this.t('schema_sections.required_fields'))}</pre>
                         </div>
                         <div class="field">
-                            <label class="field-label">${this.t('templates_page.preview_optional')}</label>
+                            ${this._fieldLabelWithHint(
+                                'templates_page.preview_optional',
+                                'templates_page.preview_optional_hint',
+                            )}
                             <pre class="preview">${this._getSchemaPreview('optional_fields_rows', this.t('schema_sections.optional_fields'))}</pre>
                         </div>
                     </div>

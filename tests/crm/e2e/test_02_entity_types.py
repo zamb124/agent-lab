@@ -6,6 +6,8 @@ User Story: Шаблоны заметок, кастомные типы для б
 
 import pytest
 
+pytestmark = pytest.mark.timeout(60)
+
 
 class TestEntityTypes:
     """Работа с типами entities и шаблонами"""
@@ -13,7 +15,11 @@ class TestEntityTypes:
     @pytest.mark.asyncio
     async def test_system_types_initialized(self, crm_client, auth_headers_system):
         """Системные типы минимального ядра (note, task) инициализированы"""
-        response = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
+        response = await crm_client.get(
+            "/crm/api/v1/entity-types/",
+            headers=auth_headers_system,
+            params={"limit": 1000, "namespace": "default"},
+        )
         assert response.status_code == 200
         
         page = response.json()
@@ -86,7 +92,9 @@ class TestEntityTypes:
         # Атомарная проверка по ID — не зависит от пагинации общего списка
         # (в test-БД может накопиться много type'ов из других прогонов).
         resp = await crm_client.get(
-            f"/crm/api/v1/entity-types/{type_id}", headers=auth_headers_system
+            f"/crm/api/v1/entity-types/{type_id}",
+            headers=auth_headers_system,
+            params={"namespace": "default"},
         )
         assert resp.status_code == 200, resp.text
         workshop = resp.json()
@@ -120,7 +128,11 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         type_id = create_resp.json()["type_id"]
         
-        get_resp = await crm_client.get(f"/crm/api/v1/entity-types/{type_id}", headers=auth_headers_system)
+        get_resp = await crm_client.get(
+            f"/crm/api/v1/entity-types/{type_id}",
+            headers=auth_headers_system,
+            params={"namespace": "default"},
+        )
         assert get_resp.status_code == 200
         
         entity_type = get_resp.json()
@@ -137,13 +149,22 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         type_id = create_resp.json()["type_id"]
         
-        update_resp = await crm_client.put(f"/crm/api/v1/entity-types/{type_id}", json={
-            "name": "Обновленное название",
-            "icon": "📝"
-        }, headers=auth_headers_system)
+        update_resp = await crm_client.put(
+            f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
+            json={
+                "name": "Обновленное название",
+                "icon": "📝",
+            },
+            headers=auth_headers_system,
+        )
         assert update_resp.status_code == 200
         
-        get_resp = await crm_client.get(f"/crm/api/v1/entity-types/{type_id}", headers=auth_headers_system)
+        get_resp = await crm_client.get(
+            f"/crm/api/v1/entity-types/{type_id}",
+            headers=auth_headers_system,
+            params={"namespace": "default"},
+        )
         updated = get_resp.json()
         assert updated["name"] == "Обновленное название"
         assert updated["icon"] == "📝"
@@ -157,7 +178,7 @@ class TestEntityTypes:
             json={
                 "type_id": type_id,
                 "name": "Тип якоря",
-                "namespace_ids": ["default"],
+                "namespace": "default",
                 "is_context_anchor": False,
             },
             headers=auth_headers_system,
@@ -167,13 +188,18 @@ class TestEntityTypes:
 
         update_resp = await crm_client.put(
             f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
             json={"is_context_anchor": True},
             headers=auth_headers_system,
         )
         assert update_resp.status_code == 200
         assert update_resp.json().get("is_context_anchor") is True
 
-        get_resp = await crm_client.get(f"/crm/api/v1/entity-types/{type_id}", headers=auth_headers_system)
+        get_resp = await crm_client.get(
+            f"/crm/api/v1/entity-types/{type_id}",
+            headers=auth_headers_system,
+            params={"namespace": "default"},
+        )
         assert get_resp.json().get("is_context_anchor") is True
 
     @pytest.mark.asyncio

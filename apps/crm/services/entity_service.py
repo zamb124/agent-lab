@@ -318,31 +318,35 @@ class EntityService:
             if sub_clean == "":
                 return
 
-        entity_type_model = await self._entity_type_repo.get_by_type_id(entity_type)
+        entity_type_model = await self._entity_type_repo.get_by_type_id(
+            entity_type,
+            namespace=namespace,
+        )
         if entity_type_model is None:
             raise ValueError(f"Entity type not found: {entity_type}")
-        allowed_namespaces = entity_type_model.namespace_ids_list()
-        if "*" not in allowed_namespaces and namespace not in allowed_namespaces:
-            raise ValueError(f"Entity type '{entity_type}' is not allowed in namespace '{namespace}'")
 
         sub_clean = entity_subtype.strip() if isinstance(entity_subtype, str) else ""
         if sub_clean:
-            subtype_model = await self._entity_type_repo.get_by_type_id(sub_clean)
+            subtype_model = await self._entity_type_repo.get_by_type_id(
+                sub_clean,
+                namespace=namespace,
+            )
             if subtype_model is None:
                 raise ValueError(f"Entity subtype not found: {sub_clean}")
-            subtype_namespaces = subtype_model.namespace_ids_list()
-            if "*" not in subtype_namespaces and namespace not in subtype_namespaces:
-                raise ValueError(f"Entity subtype '{sub_clean}' is not allowed in namespace '{namespace}'")
 
     async def _validate_entity_attributes(
         self,
         entity_type: str,
         attributes: Dict[str, Any],
+        namespace: str,
         entity_subtype: Optional[str] = None,
     ) -> None:
         """Проверяет attributes сущности на соответствие required_fields / optional_fields типа."""
         type_id = entity_subtype or entity_type
-        entity_type_model = await self._entity_type_repo.get_by_type_id(type_id)
+        entity_type_model = await self._entity_type_repo.get_by_type_id(
+            type_id,
+            namespace=namespace,
+        )
         if entity_type_model is None:
             raise ValueError(f"Entity type not found: {type_id}")
 
@@ -514,16 +518,12 @@ class EntityService:
         field_specs: Dict[str, Dict[str, Any]] = {}
         type_id = entity_subtype or entity_type
         if type_id is not None:
-            entity_type_model = await self._entity_type_repo.get_by_type_id(type_id)
+            entity_type_model = await self._entity_type_repo.get_by_type_id(
+                type_id,
+                namespace=namespace,
+            )
             if entity_type_model is None:
                 raise ValueError(f"Entity type not found: {type_id}")
-            allowed_namespaces = entity_type_model.namespace_ids_list()
-            if (
-                type_id != NOTE_ROOT_ENTITY_TYPE_ID
-                and "*" not in allowed_namespaces
-                and namespace not in allowed_namespaces
-            ):
-                raise ValueError(f"Entity type '{type_id}' is not allowed in namespace '{namespace}'")
             field_specs = self._collect_entity_type_field_specs(entity_type_model)
         operator_matrix = self._build_filter_operator_matrix()
         used_field_types: Dict[str, str] = {}
@@ -577,7 +577,10 @@ class EntityService:
         ent = await self._entity_repo.get(entity_id)
         if ent is None or ent.company_id != company_id:
             raise ValueError(f"Сущность голоса не найдена: {entity_id}")
-        et = await self._entity_type_repo.get_by_type_id(ent.entity_type)
+        et = await self._entity_type_repo.get_by_type_id(
+            ent.entity_type,
+            namespace=ent.namespace,
+        )
         if et is None or not et.is_voice_target:
             raise ValueError(
                 f"Тип {ent.entity_type!r} не может быть голосом заметки "
@@ -588,7 +591,10 @@ class EntityService:
         ent = await self._entity_repo.get(entity_id)
         if ent is None or ent.company_id != company_id:
             raise ValueError(f"Сущность контекста не найдена: {entity_id}")
-        et = await self._entity_type_repo.get_by_type_id(ent.entity_type)
+        et = await self._entity_type_repo.get_by_type_id(
+            ent.entity_type,
+            namespace=ent.namespace,
+        )
         if et is None or not et.is_context_anchor:
             raise ValueError("Контекст заметки должен быть типом с флагом якоря контекста")
 
@@ -789,7 +795,11 @@ class EntityService:
             "op": "$eq",
             "value": date_str,
         }
-        eff_type, list_nf, legacy_nf = await self._list_by_cursor_note_family_args(NOTE_ROOT_ENTITY_TYPE_ID, None)
+        eff_type, list_nf, legacy_nf = await self._list_by_cursor_note_family_args(
+            NOTE_ROOT_ENTITY_TYPE_ID,
+            None,
+            self._normalize_namespace(namespace),
+        )
         entities, _, _ = await self._entity_repo.list_by_cursor(
             entity_type=eff_type,
             entity_subtype=None,
@@ -850,16 +860,18 @@ class EntityService:
                 raise ValueError("user_id is required (no user in context)")
             user_id = context.user.user_id
 
+        namespace = self._resolve_namespace_for_write(kwargs.get("namespace"))
+        kwargs["namespace"] = namespace
+        await self._ensure_namespace_exists(namespace)
+
         storage_type, storage_subtype = await self._resolve_storage_type_for_note_family(
             entity_type,
             entity_subtype,
+            namespace,
         )
         entity_type = storage_type
         entity_subtype = storage_subtype
 
-        namespace = self._resolve_namespace_for_write(kwargs.get("namespace"))
-        kwargs["namespace"] = namespace
-        await self._ensure_namespace_exists(namespace)
         await self._ensure_entity_type_allowed_in_namespace(
             entity_type=entity_type,
             namespace=namespace,
@@ -885,6 +897,7 @@ class EntityService:
         await self._validate_entity_attributes(
             entity_type=entity_type,
             attributes=attributes or {},
+            namespace=namespace,
             entity_subtype=entity_subtype,
         )
 
@@ -1168,6 +1181,7 @@ class EntityService:
         await self._validate_entity_attributes(
             entity_type=next_entity_type,
             attributes=merged_attributes,
+            namespace=next_namespace,
             entity_subtype=next_entity_subtype,
         )
 
@@ -1284,6 +1298,7 @@ class EntityService:
         eff_entity_type, list_note_family, note_family_legacy = await self._list_by_cursor_note_family_args(
             entity_type,
             entity_subtype,
+            namespace,
         )
 
         oversample_factor = 3
@@ -2226,6 +2241,7 @@ class EntityService:
         self,
         leaf_type_id: str,
         initial_subtype: Optional[str],
+        namespace: str,
     ) -> tuple[str, Optional[str]]:
         """
         Типы из ветки note в справочнике entity_types (meeting, call, …) в БД храним как
@@ -2239,7 +2255,7 @@ class EntityService:
         cur: Optional[str] = leaf_type_id
         while cur and cur not in seen:
             seen.add(cur)
-            row = await self._entity_type_repo.get_by_type_id(cur)
+            row = await self._entity_type_repo.get_by_type_id(cur, namespace=namespace)
             if row is None:
                 raise ValueError(f"Entity type not found: {leaf_type_id}")
             if row.type_id == NOTE_ROOT_ENTITY_TYPE_ID:
@@ -2252,6 +2268,7 @@ class EntityService:
         self,
         entity_type: Optional[str],
         entity_subtype: Optional[str],
+        namespace: Optional[str] = None,
     ) -> tuple[Optional[str], bool, Optional[list[str]]]:
         """
         Для ленты заметок (entity_type=note без subtype) учитываем и канонические строки
@@ -2259,13 +2276,19 @@ class EntityService:
         """
         if entity_type != NOTE_ROOT_ENTITY_TYPE_ID or entity_subtype is not None:
             return entity_type, False, None
-        family = await self._collect_note_family_type_ids()
+        ns = self._normalize_namespace(namespace)
+        if ns is None:
+            return NOTE_ROOT_ENTITY_TYPE_ID, False, None
+        family = await self._collect_note_family_type_ids(ns)
         legacy = sorted(t for t in family if t != NOTE_ROOT_ENTITY_TYPE_ID)
         return None, True, legacy
 
-    async def _collect_note_family_type_ids(self) -> set[str]:
+    async def _collect_note_family_type_ids(self, namespace: str) -> set[str]:
         """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""
-        all_types = await self._entity_type_repo.get_all_for_company(include_system=True)
+        all_types = await self._entity_type_repo.get_all_for_company(
+            include_system=True,
+            namespace=namespace,
+        )
         children_by_parent: dict[str | None, list[str]] = {}
         for et in all_types:
             children_by_parent.setdefault(et.parent_type_id, []).append(et.type_id)
@@ -2290,6 +2313,7 @@ class EntityService:
         storage_type, storage_subtype = await self._resolve_storage_type_for_note_family(
             ent.entity_type,
             ent.entity_subtype,
+            namespace,
         )
         note_date = self._parse_optional_date_iso(raw.get("note_date"))
         if storage_type == NOTE_ROOT_ENTITY_TYPE_ID and note_date is None:
@@ -2416,6 +2440,7 @@ class EntityService:
             entity_types=entity_types,
             relationship_types=relationship_types,
             known_entities=known_entities if known_entities else None,
+            namespace=namespace,
         )
         logger.info(
             "crm.analyze.flow_llm_ms=%.1f",
@@ -2673,6 +2698,8 @@ class EntityService:
         entity_types: List,
         relationship_types: List,
         known_entities: Optional[List[Dict[str, Any]]] = None,
+        *,
+        namespace: str,
     ) -> _AnalyzePipelineState:
         """Вызывает AI agent через A2A API для анализа"""
         from core.config import get_settings
@@ -2729,7 +2756,7 @@ class EntityService:
         if not isinstance(entities_data, list):
             entities_data = []
         entity_list: List[AIExtractedEntity] = []
-        note_family_type_ids = await self._collect_note_family_type_ids()
+        note_family_type_ids = await self._collect_note_family_type_ids(namespace)
         for i, raw_ent in enumerate(entities_data):
             if not isinstance(raw_ent, dict):
                 raise ValueError(f"entities[{i}] должен быть объектом")

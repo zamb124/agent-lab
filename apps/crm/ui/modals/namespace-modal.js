@@ -25,6 +25,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-help-hint.js';
 
 const CREATE_FORM = 'crm/namespace_create_form';
 const EDIT_FORM = 'crm/namespace_edit_form';
@@ -145,6 +146,20 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 margin-top: var(--space-1);
+            }
+            .form-label-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .form-label-row .form-label {
+                margin: 0;
+            }
+            .form-label {
+                font-size: var(--text-sm);
+                font-weight: 600;
+                color: var(--text-secondary);
             }
 
             .empty-templates {
@@ -508,6 +523,18 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._templateSeeded = false;
         this._editSeedAttempted = false;
         this._grantsLoaded = false;
+    }
+
+    _formLabelWithHint(labelKey, hintKey) {
+        return html`
+            <div class="form-label-row">
+                <span class="form-label">${this.t(labelKey)}</span>
+                <platform-help-hint
+                    .text=${this.t(hintKey)}
+                    label=${this.t('templates_page.field_hint_button_aria')}
+                ></platform-help-hint>
+            </div>
+        `;
     }
 
     connectedCallback() {
@@ -913,7 +940,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         const badges = this._connectedIntegrationBadges(item);
         return html`
             <div class="form-group">
-                <label class="form-label">${this.t('namespace_modal.label_integrations')}</label>
+                ${this._formLabelWithHint('namespace_modal.label_integrations', 'namespace_modal.label_integrations_hint')}
                 ${badges.length === 0
                     ? html`<p class="integrations-hint">${this.t('namespace_modal.integrations_empty')}</p>`
                     : html`
@@ -1005,14 +1032,14 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return html`
             <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>
                 <div class="form-group">
-                    <label class="form-label">${this.t('namespace_modal.label_template')}</label>
+                    ${this._formLabelWithHint('namespace_modal.label_template', 'namespace_modal.label_template_hint')}
                     ${this._renderTemplates()}
                     ${this._renderFieldError('template_id')}
                     <div class="hint">${this.t('namespace_modal.template_hint')}</div>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">${this.t('namespace_modal.label_name')}</label>
+                    ${this._formLabelWithHint('namespace_modal.label_name', 'namespace_modal.label_name_hint')}
                     <input
                         type="text"
                         class="form-input"
@@ -1027,7 +1054,10 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">${this.t('namespace_modal.label_description')}</label>
+                    ${this._formLabelWithHint(
+                        'namespace_modal.label_description',
+                        'namespace_modal.label_description_hint',
+                    )}
                     <textarea
                         class="form-textarea"
                         rows="3"
@@ -1065,7 +1095,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return html`
             <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>
                 <div class="form-group">
-                    <label class="form-label">${this.t('namespace_modal.label_name')}</label>
+                    ${this._formLabelWithHint('namespace_modal.label_name', 'namespace_modal.label_name_readonly_hint')}
                     <span class="name-readonly">
                         <platform-icon name="folder" size="14"></platform-icon>
                         ${draft.name}
@@ -1073,7 +1103,10 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">${this.t('namespace_modal.label_description')}</label>
+                    ${this._formLabelWithHint(
+                        'namespace_modal.label_description',
+                        'namespace_modal.label_description_hint',
+                    )}
                     <textarea
                         class="form-textarea"
                         rows="4"

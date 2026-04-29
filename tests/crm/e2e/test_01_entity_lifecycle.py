@@ -170,7 +170,7 @@ class TestEntityLifecycle:
             "type_id": f"meeting_{unique_id}",
             "parent_type_id": "note",
             "name": "Meeting",
-            "namespace_ids": ["default"],
+            "namespace": "default",
         }, headers=auth_headers_system)
         assert create_subtype_resp.status_code == 200
 
@@ -276,7 +276,7 @@ class TestEntityLifecycle:
             "type_id": f"candidate_{unique_id}",
             "name": "Кандидат",
             "description": "HR сущность",
-            "namespace_ids": ["default"],
+            "namespace": "default",
         }, headers=auth_headers_system)
         assert create_type_resp.status_code == 200
 

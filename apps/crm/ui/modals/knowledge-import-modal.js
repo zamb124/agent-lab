@@ -16,13 +16,15 @@
  *   - хотя бы один источник (файл ИЛИ текст) обязателен.
  *
  * Состояние пространства:
- *   - целевой namespace — getEffectiveCrmNamespaceApiFilter (bus + тот же localStorage,
- *     что у CRM-сайдбара); при режиме «все пространства» wizard блокирует запуск.
+ *   - целевой namespace — `selectCrmApiNamespace` (тот же срез, что у страниц CRM);
+ *     при режиме «все пространства» wizard блокирует запуск; список типов перезагружается
+ *     при смене пространства и при открытии модалки.
  */
 
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
+import { CoreEvents } from '@platform/lib/events/index.js';
+import { selectCrmApiNamespace } from '../utils/crm-namespace-select.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/platform-icon.js';
@@ -271,24 +273,42 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         this._starting = false;
         this._dropzoneActive = false;
 
-        this._entityTypes = this.useResource('crm/entity_types', { autoload: true });
+        this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
         this._fileUpload = this.useOp('crm/file_upload');
         this._startImport = this.useOp('crm/task_knowledge_import_start');
 
-        this._namespaceSel = this.select((s) => {
-            const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return null;
-            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
-        });
+        this._crmNamespaceSel = this.select(selectCrmApiNamespace);
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (changedProperties.has('open') && this.open) {
+            this._selectedTypeIds = [];
+            this._reloadEntityTypesForImport();
+        }
     }
 
     connectedCallback() {
         super.connectedCallback();
         this.useEvent(this._startImport.op.events.SUCCEEDED, () => this.close());
+        this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
+            this._selectedTypeIds = [];
+            this._reloadEntityTypesForImport();
+        });
+        this._reloadEntityTypesForImport();
+    }
+
+    _reloadEntityTypesForImport() {
+        const ns = this._currentNamespace();
+        if (typeof ns === 'string' && ns.length > 0) {
+            this._entityTypes.load({ namespace: ns });
+            return;
+        }
+        this._entityTypes.load(null);
     }
 
     _currentNamespace() {
-        return this._namespaceSel.value;
+        return this._crmNamespaceSel.value;
     }
 
     _hasNamespace() {

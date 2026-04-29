@@ -26,7 +26,7 @@
  *   - useOp('crm/shortest_path')              — кратчайший путь;
  *   - useOp('crm/entity_search')              — поиск по запросу.
  *
- * UI-команды (модалки, тосты, навигация) — только через helpers `PlatformPage`
+ * UI-команды (модалки, тосты, навигация) — только через helpers базы
  * (`openModal`, `toast`, `navigate`). Никаких прямых dispatch UI/ROUTER/AUTH,
  * httpRequest, fetch, services.* / store / features.
  *
@@ -37,9 +37,9 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CRMNamespacePage } from '../base/crm-namespace-page.js';
+import { crmNamespaceForOptionalQuery } from '../utils/crm-namespace-select.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -72,7 +72,7 @@ function _getEdgeId(edge) {
     return `${sourceId}:${targetId}:${relationType}`;
 }
 
-export class CRMGraphPage extends PlatformPage {
+export class CRMGraphPage extends CRMNamespacePage {
     static i18nNamespace = 'crm';
 
     static properties = {
@@ -109,7 +109,7 @@ export class CRMGraphPage extends PlatformPage {
     };
 
     static styles = [
-        PlatformPage.styles,
+        CRMNamespacePage.styles,
         css`
             :host {
                 display: flex;
@@ -340,7 +340,7 @@ export class CRMGraphPage extends PlatformPage {
         this._lastNamespaceLoaded = undefined;
 
         this._graphUi = this.useSlice('crm/graph_ui');
-        this._entityTypes = this.useResource('crm/entity_types', { autoload: true });
+        this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
         this._relationshipTypes = this.useResource('crm/relationship_types', { autoload: true });
         this._timelineBoundsOp = this.useOp('crm/timeline_bounds');
         this._entitiesLookupOp = this.useOp('crm/entities_lookup');
@@ -351,11 +351,6 @@ export class CRMGraphPage extends PlatformPage {
         this._shortestPathOp = this.useOp('crm/shortest_path');
         this._entitySearchOp = this.useOp('crm/entity_search');
 
-        this._namespaceSel = this.select((s) => {
-            const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return null;
-            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
-        });
     }
 
     connectedCallback() {
@@ -409,15 +404,16 @@ export class CRMGraphPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        return this._namespaceSel.value;
+        return this._crmNamespaceSel.value;
     }
 
     _reloadAll() {
         this._loading = true;
         const namespace = this._currentNamespace();
         this._lastNamespaceLoaded = namespace;
-        this._entityTypes.load({ namespace: namespace === null ? undefined : namespace });
-        this._timelineBoundsOp.run({ namespace: namespace === null ? undefined : namespace });
+        const nq = crmNamespaceForOptionalQuery(namespace);
+        this._entityTypes.load({ namespace: nq });
+        this._timelineBoundsOp.run({ namespace: nq });
     }
 
     _onTimelineBoundsLoaded(bounds) {
@@ -436,8 +432,9 @@ export class CRMGraphPage extends PlatformPage {
         }
         const namespace = this._currentNamespace();
         const timelineParams = this._getTimelineQueryParams();
+        const nq = crmNamespaceForOptionalQuery(namespace);
         this._entitiesLookupOp.run({
-            namespace: namespace === null ? undefined : namespace,
+            namespace: nq,
             limit: 120,
             ...timelineParams,
         });
@@ -540,9 +537,10 @@ export class CRMGraphPage extends PlatformPage {
         this._relatedNodeIds = new Set(nodeMap.keys());
         this._relatedNodesPending = Array.from(nodeMap.values());
         const namespace = this._currentNamespace();
+        const nq = crmNamespaceForOptionalQuery(namespace);
         this._entityRelOp.run({
             entityId: this._selectedRootId,
-            params: { namespace: namespace === null ? undefined : namespace },
+            params: { namespace: nq },
         });
     }
 

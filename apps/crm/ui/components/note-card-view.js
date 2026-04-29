@@ -35,7 +35,7 @@
 import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
+import { selectCrmSidebarOrDefaultNamespace } from '../utils/crm-namespace-select.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -1278,22 +1278,12 @@ export class CRMNoteCardView extends PlatformElement {
         this._voice = this.useOp(VOICE_OP);
         this._entitySearch = this.useOp(ENTITY_SEARCH_OP);
         this._uploadTargetMode = 'edit';
+
+        this._crmSidebarDefaultNsSel = this.select(selectCrmSidebarOrDefaultNamespace);
     }
 
     connectedCallback() {
         super.connectedCallback();
-
-        this._crmNamespaceSel = this.select((st) => {
-            const u = st.auth.user;
-            if (!u || typeof u.company_id !== 'string' || u.company_id.length === 0) {
-                return 'default';
-            }
-            const raw = getEffectiveCrmNamespaceApiFilter(u.company_id, st.ui.namespace.selectionByCompany);
-            if (typeof raw === 'string' && raw.length > 0) {
-                return raw;
-            }
-            return 'default';
-        });
 
         this._hydrateEditFromNote();
 
@@ -1480,7 +1470,7 @@ export class CRMNoteCardView extends PlatformElement {
         if (typeof this.defaultNamespace === 'string' && this.defaultNamespace.trim().length > 0) {
             return this.defaultNamespace.trim();
         }
-        const sel = this._crmNamespaceSel;
+        const sel = this._crmSidebarDefaultNsSel;
         if (sel && typeof sel.value === 'string' && sel.value.length > 0) {
             return sel.value;
         }

@@ -24,9 +24,8 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CRMNamespacePage } from '../base/crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -37,7 +36,7 @@ const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
 const ANALYZE_TASK_POLL_MS = 2500;
 const TASK_RELATIONSHIP_TYPE = 'related_to';
 
-export class CRMNotePage extends PlatformPage {
+export class CRMNotePage extends CRMNamespacePage {
     static i18nNamespace = 'crm';
 
     static properties = {
@@ -48,7 +47,7 @@ export class CRMNotePage extends PlatformPage {
     };
 
     static styles = [
-        PlatformPage.styles,
+        CRMNamespacePage.styles,
         css`
             :host {
                 display: flex;
@@ -132,12 +131,6 @@ export class CRMNotePage extends PlatformPage {
         this._draftVersionInitialized = false;
         this._lastDraftVersion = null;
         this._lastAutoOpenedDraftVersion = null;
-
-        this._namespaceSelectionSel = this.select((s) => {
-            const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return null;
-            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
-        });
     }
 
     connectedCallback() {
@@ -348,7 +341,7 @@ export class CRMNotePage extends PlatformPage {
     }
 
     _currentNamespace() {
-        const raw = this._namespaceSelectionSel.value;
+        const raw = this._crmNamespaceSel.value;
         if (raw === null || raw === undefined) {
             return 'default';
         }

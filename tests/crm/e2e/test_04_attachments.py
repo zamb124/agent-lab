@@ -45,10 +45,11 @@ class TestAttachments:
         }, headers=auth_headers_system)
         entity_id = entity_resp.json()["entity_id"]
         
+        tag = unique_id.encode("utf-8")
         files_to_upload = [
-            ("document.pdf", b"%PDF-1.4 fake pdf content", "application/pdf"),
-            ("image.png", b"\x89PNG\r\n\x1a\n fake png", "image/png"),
-            ("data.docx", b"PK fake docx content", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            ("document.pdf", b"%PDF-1.4 fake pdf content " + tag, "application/pdf"),
+            ("image.png", b"\x89PNG\r\n\x1a\n fake png " + tag, "image/png"),
+            ("data.docx", b"PK fake docx content " + tag, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         ]
         
         uploaded_ids = []

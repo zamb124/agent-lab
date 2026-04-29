@@ -135,6 +135,8 @@ import '../modals/entity-merge-modal.js';
 import '../modals/note-graph-modal.js';
 import '../modals/entity-delete-modal.js';
 import '../modals/knowledge-import-modal.js';
+import '../modals/entity-type-create-mode-modal.js';
+import '../modals/entity-type-preset-picker-modal.js';
 
 import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
 import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
@@ -371,8 +373,8 @@ export class CRMApp extends PlatformApp {
 
     /**
      * Сайдбар читает выбор из localStorage сразу; state.ui.namespace заполняется здесь.
-     * Страницы CRM для API-фильтра используют getEffectiveCrmNamespaceApiFilter (тот же
-     * fallback), чтобы первый запрос после F5 не уходил без namespace.
+     * Страницы с **`CRMNamespacePage`** берут фильтр через **`selectCrmApiNamespace`** (тот же
+     * fallback), чтобы первый запрос после F5 совпадал с сайдбаром.
      */
     _hydrateCrmNamespaceSelection(auth) {
         if (!auth || auth.status !== 'authenticated' || !auth.user) {

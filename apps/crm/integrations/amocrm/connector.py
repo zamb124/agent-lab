@@ -83,17 +83,29 @@ class AmoCRMConnector:
         if not ns:
             raise ValueError("namespace_name обязателен")
         for type_id in sorted(amo_canonical_type_ids()):
-            existing_type = await repo.get_by_type_id(type_id, company_id=company_id)
+            existing_type = await repo.get_by_type_id(
+                type_id, namespace=ns, company_id=company_id,
+            )
             if existing_type is None:
-                raise ValueError(
-                    f"Для интеграции AmoCRM в пространстве «{ns}» нужен тип сущности «{type_id}» "
-                    "в компании. Создайте пространство из шаблона sales или amocrm либо добавьте тип вручную."
+                src_default = await repo.get_by_type_id(
+                    type_id, namespace="default", company_id=company_id,
                 )
-            await repo.add_namespace_ids(type_id, [ns], company_id=company_id)
+                if src_default is None:
+                    raise ValueError(
+                        f"Для интеграции AmoCRM в пространстве «{ns}» нужен тип сущности «{type_id}» "
+                        "в компании. Создайте пространство из шаблона sales либо добавьте тип вручную."
+                    )
+                await repo.clone_entity_type_between_namespaces(
+                    type_id,
+                    source_namespace="default",
+                    target_namespace=ns,
+                    company_id=company_id,
+                )
             extra = AMO_OPTIONAL_FIELDS_BY_TYPE_ID.get(type_id)
             if extra:
                 await repo.merge_optional_fields_if_absent(
                     type_id,
+                    namespace=ns,
                     company_id=company_id,
                     extra=extra,
                 )

@@ -16,6 +16,8 @@ import openpyxl
 import pytest
 from docx import Document
 
+from tests.fixtures.crm_test_setup import ensure_entity_type_in_namespace
+
 from tests.crm.knowledge_import_helpers import (
     combined_entity_blob,
     crm_upload_bytes,
@@ -127,13 +129,13 @@ async def _ensure_import_namespace(crm_client, headers: dict, namespace: str) ->
     if update_ns.status_code != 200:
         raise AssertionError(f"namespace update: {update_ns.status_code} {update_ns.text}")
     for system_type in ("note", "meeting", "task"):
-        bind_resp = await crm_client.post(
-            f"/crm/api/v1/entity-types/{system_type}/namespaces",
-            json={"namespace_ids": [namespace]},
-            headers=headers,
+        await ensure_entity_type_in_namespace(
+            crm_client,
+            headers,
+            system_type,
+            system_type,
+            namespace,
         )
-        if bind_resp.status_code != 200:
-            raise AssertionError(f"{system_type} namespace bind: {bind_resp.status_code} {bind_resp.text}")
 
 
 async def _assert_blob_then_rollback(

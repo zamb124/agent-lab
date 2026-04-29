@@ -19,7 +19,12 @@ async def _analyze_note(
     Возвращает (task_row, ai_analysis_draft).
     """
     import asyncio, time
-    body = {"note_id": note_id, **extra}
+    body = {
+        "note_id": note_id,
+        "check_duplicates": False,
+        "include_attachments": False,
+        **extra,
+    }
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
         json=body,

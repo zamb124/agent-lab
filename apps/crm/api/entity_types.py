@@ -20,14 +20,20 @@ from core.context import get_context
 router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
 
 
-class AddNamespaceIdsRequest(BaseModel):
-    """Атомарное добавление namespace_ids к entity type."""
-    namespace_ids: List[str]
-
-
 class UpdatePublicFieldsRequest(BaseModel):
     """Запрос на обновление публичных полей"""
     public_fields: List[str]
+
+
+async def _parent_maps_for_types(
+    repo: EntityTypeRepository,
+    types: List[EntityType],
+) -> dict[str, dict[str, Optional[str]]]:
+    namespaces = {t.namespace for t in types if isinstance(t.namespace, str) and t.namespace.strip()}
+    out: dict[str, dict[str, Optional[str]]] = {}
+    for ns in sorted(namespaces):
+        out[ns] = await repo.get_parent_type_id_map_for_namespace(ns)
+    return out
 
 
 async def _backfill_missing_colors(
@@ -45,30 +51,60 @@ async def _backfill_missing_colors(
             continue
         assigned_color = assign_color_from_palette(used_colors)
         used_colors.add(assigned_color)
-        await repo.update_color(entity_type.type_id, assigned_color)
+        await repo.update_color(
+            entity_type.type_id, entity_type.namespace, assigned_color,
+        )
         updated = True
     return updated
 
 
-async def _collect_company_types(repo: EntityTypeRepository) -> list[EntityType]:
-    page_limit = 200
-    offset = 0
-    items: list[EntityType] = []
-    while True:
-        page = await repo.get_all_for_company(limit=page_limit, offset=offset)
-        if not page:
-            return items
-        items.extend(page)
-        if len(page) < page_limit:
-            return items
-        offset += page_limit
+async def _list_entity_types_offset_page(
+    repo: EntityTypeRepository,
+    *,
+    namespace: Optional[str],
+    limit: int,
+    offset: int,
+) -> OffsetPage[EntityTypeResponse]:
+    types, total = await asyncio.gather(
+        repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset),
+        repo.count_all_for_company(namespace=namespace),
+    )
+    if not types:
+        return OffsetPage[EntityTypeResponse](
+            items=[],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+    parent_maps = await _parent_maps_for_types(repo, types)
+    if await _backfill_missing_colors(types, repo):
+        types = await repo.get_all_for_company(
+            namespace=namespace,
+            limit=limit,
+            offset=offset,
+        )
+        parent_maps = await _parent_maps_for_types(repo, types)
+    items = [
+        _entity_type_to_response(t, parent_maps[t.namespace])
+        for t in types
+    ]
+    return OffsetPage[EntityTypeResponse](
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
-def _entity_type_to_response(entity: EntityType, parent_map: dict[str, Optional[str]]) -> EntityTypeResponse:
+def _entity_type_to_response(
+    entity: EntityType,
+    parent_map: dict[str, Optional[str]],
+) -> EntityTypeResponse:
     lt, ls = resolve_list_entity_query_pair(entity.type_id, parent_map)
     return EntityTypeResponse(
         type_id=entity.type_id,
         company_id=entity.company_id,
+        namespace=entity.namespace,
         parent_type_id=entity.parent_type_id,
         name=entity.name,
         description=entity.description,
@@ -82,7 +118,6 @@ def _entity_type_to_response(entity: EntityType, parent_map: dict[str, Optional[
         is_event=entity.is_event,
         check_duplicates=entity.check_duplicates,
         weight_coefficient=entity.weight_coefficient,
-        namespace_ids=entity.namespace_ids,
         is_context_anchor=entity.is_context_anchor,
         is_voice_target=entity.is_voice_target,
         extractable=entity.extractable,
@@ -95,20 +130,16 @@ def _entity_type_to_response(entity: EntityType, parent_map: dict[str, Optional[
 @router.get("", response_model=OffsetPage[EntityTypeResponse])
 async def list_entity_types(
     container: ContainerDep,
-    namespace: Optional[str] = Query(default=None, description="Фильтр разрешенных типов по namespace"),
+    namespace: Optional[str] = Query(default=None, description="Фильтр по пространству"),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[EntityTypeResponse]:
-    repo = container.entity_type_repository
-    types, total, parent_map = await asyncio.gather(
-        repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset),
-        repo.count_all_for_company(namespace=namespace),
-        repo.get_parent_type_id_map_for_company(),
+    return await _list_entity_types_offset_page(
+        container.entity_type_repository,
+        namespace=namespace,
+        limit=limit,
+        offset=offset,
     )
-    if await _backfill_missing_colors(types, repo):
-        types = await repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset)
-    items = [_entity_type_to_response(t, parent_map) for t in types]
-    return OffsetPage[EntityTypeResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/by-namespace/{namespace}", response_model=OffsetPage[EntityTypeResponse])
@@ -121,33 +152,32 @@ async def list_entity_types_by_namespace(
     normalized_namespace = namespace.strip()
     if not normalized_namespace:
         raise HTTPException(status_code=422, detail="namespace is required")
-    repo = container.entity_type_repository
-    types, total, parent_map = await asyncio.gather(
-        repo.get_all_for_company(namespace=normalized_namespace, limit=limit, offset=offset),
-        repo.count_all_for_company(normalized_namespace),
-        repo.get_parent_type_id_map_for_company(),
+    return await _list_entity_types_offset_page(
+        container.entity_type_repository,
+        namespace=normalized_namespace,
+        limit=limit,
+        offset=offset,
     )
-    if await _backfill_missing_colors(types, repo):
-        types = await repo.get_all_for_company(namespace=normalized_namespace, limit=limit, offset=offset)
-    items = [_entity_type_to_response(t, parent_map) for t in types]
-    return OffsetPage[EntityTypeResponse](items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/{type_id}", response_model=EntityTypeResponse)
 async def get_entity_type(
     type_id: str,
     container: ContainerDep,
+    namespace: str = Query(..., description="Пространство строки типа"),
 ):
-    """Получить тип entity по ID"""
     repo = container.entity_type_repository
-    entity_type = await repo.get_by_type_id(type_id)
+    ns = namespace.strip()
+    if not ns:
+        raise HTTPException(status_code=422, detail="namespace is required")
+    entity_type = await repo.get_by_type_id(type_id, namespace=ns)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
     if not entity_type.color or not entity_type.color.strip():
         assigned_color = assign_color_from_palette(set())
-        await repo.update_color(type_id, assigned_color)
+        await repo.update_color(type_id, ns, assigned_color)
         entity_type.color = assigned_color
-    parent_map = await repo.get_parent_type_id_map_for_company()
+    parent_map = await repo.get_parent_type_id_map_for_namespace(ns)
     return _entity_type_to_response(entity_type, parent_map)
 
 
@@ -156,15 +186,21 @@ async def create_entity_type(
     data: EntityTypeCreate,
     container: ContainerDep,
 ):
-    """Создать новый тип entity"""
     repo = container.entity_type_repository
     context = get_context()
     company_id = context.active_company.company_id
-    namespace_ids = data.namespace_ids or ["default"]
-    if len(namespace_ids) == 0:
-        raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
+    ns = data.namespace.strip()
+    if not ns:
+        raise HTTPException(status_code=422, detail="namespace is required")
 
-    existing_types = await _collect_company_types(repo)
+    dup = await repo.get_by_type_id(data.type_id, namespace=ns, company_id=company_id)
+    if dup is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"EntityType {data.type_id!r} already exists in namespace {ns!r}",
+        )
+
+    existing_types = await repo.load_all_entity_types_for_company()
     used_colors = {
         et.color for et in existing_types
         if isinstance(et.color, str) and et.color.strip()
@@ -175,6 +211,7 @@ async def create_entity_type(
 
     entity_type = EntityType(
         type_id=data.type_id,
+        namespace=ns,
         name=data.name,
         description=data.description,
         parent_type_id=data.parent_type_id,
@@ -186,15 +223,14 @@ async def create_entity_type(
         is_system=False,
         is_event=data.is_event,
         check_duplicates=data.check_duplicates,
-        namespace_ids=namespace_ids,
         company_id=company_id,
         is_context_anchor=data.is_context_anchor,
         is_voice_target=data.is_voice_target,
     )
-    
+
     await repo.create_custom_type(entity_type, company_id)
-    parent_map = await repo.get_parent_type_id_map_for_company()
-    refreshed = await repo.get_by_type_id(data.type_id)
+    parent_map = await repo.get_parent_type_id_map_for_namespace(ns)
+    refreshed = await repo.get_by_type_id(data.type_id, namespace=ns)
     if not refreshed:
         raise HTTPException(status_code=500, detail="EntityType not found after create")
     return _entity_type_to_response(refreshed, parent_map)
@@ -205,10 +241,13 @@ async def update_entity_type(
     type_id: str,
     data: EntityTypeUpdate,
     container: ContainerDep,
+    namespace: str = Query(..., description="Пространство строки типа"),
 ):
-    """Обновить тип entity"""
     repo = container.entity_type_repository
-    entity_type = await repo.get_by_type_id(type_id)
+    ns = namespace.strip()
+    if not ns:
+        raise HTTPException(status_code=422, detail="namespace is required")
+    entity_type = await repo.get_by_type_id(type_id, namespace=ns)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
 
@@ -239,37 +278,13 @@ async def update_entity_type(
         fields["color"] = assign_color_from_palette(set())
 
     if fields:
-        await repo.update_metadata(type_id, **fields)
+        await repo.update_metadata(type_id, namespace=ns, **fields)
 
-    if data.namespace_ids is not None:
-        if len(data.namespace_ids) == 0:
-            raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
-        entity_type = await repo.set_namespace_ids(type_id, data.namespace_ids)
-    elif fields:
-        entity_type = await repo.get_by_type_id(type_id)
-
-    parent_map = await repo.get_parent_type_id_map_for_company()
+    entity_type = await repo.get_by_type_id(type_id, namespace=ns)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
+    parent_map = await repo.get_parent_type_id_map_for_namespace(ns)
     return _entity_type_to_response(entity_type, parent_map)
-
-
-@router.post("/{type_id}/namespaces", response_model=EntityTypeResponse)
-async def add_namespace_ids(
-    type_id: str,
-    data: AddNamespaceIdsRequest,
-    container: ContainerDep,
-):
-    """Атомарно добавляет namespace_ids к entity type (SELECT FOR UPDATE)."""
-    if not data.namespace_ids:
-        raise HTTPException(status_code=422, detail="namespace_ids must not be empty")
-    repo = container.entity_type_repository
-    try:
-        updated = await repo.add_namespace_ids(type_id, data.namespace_ids)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    parent_map = await repo.get_parent_type_id_map_for_company()
-    return _entity_type_to_response(updated, parent_map)
 
 
 @router.put("/{type_id}/public-fields", response_model=EntityTypeResponse)
@@ -277,17 +292,20 @@ async def update_public_fields(
     type_id: str,
     data: UpdatePublicFieldsRequest,
     container: ContainerDep,
+    namespace: str = Query(..., description="Пространство строки типа"),
 ):
-    """Обновить список публичных полей для типа"""
     repo = container.entity_type_repository
-    entity_type = await repo.get_by_type_id(type_id)
+    ns = namespace.strip()
+    if not ns:
+        raise HTTPException(status_code=422, detail="namespace is required")
+    entity_type = await repo.get_by_type_id(type_id, namespace=ns)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
 
-    await repo.update_metadata(type_id, public_fields=data.public_fields)
+    await repo.update_metadata(type_id, namespace=ns, public_fields=data.public_fields)
 
-    entity_type = await repo.get_by_type_id(type_id)
+    entity_type = await repo.get_by_type_id(type_id, namespace=ns)
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
-    parent_map = await repo.get_parent_type_id_map_for_company()
+    parent_map = await repo.get_parent_type_id_map_for_namespace(ns)
     return _entity_type_to_response(entity_type, parent_map)

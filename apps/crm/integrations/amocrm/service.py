@@ -1053,7 +1053,11 @@ class AmoCRMIntegrationService:
             fields = (data.get("_embedded") or {}).get("custom_fields")
             if not isinstance(fields, list):
                 fields = []
-            et = await self._entity_type_repo.get_by_type_id(type_id, company_id=company_id)
+            et = await self._entity_type_repo.get_by_type_id(
+                type_id,
+                namespace=namespace_name,
+                company_id=company_id,
+            )
             if et is None:
                 updated[type_id] = 0
                 continue
@@ -1084,7 +1088,10 @@ class AmoCRMIntegrationService:
                 n_add += 1
             if n_add:
                 await self._entity_type_repo.update_metadata(
-                    type_id, company_id=company_id, optional_fields=opt
+                    type_id,
+                    namespace=namespace_name,
+                    company_id=company_id,
+                    optional_fields=opt,
                 )
             updated[type_id] = n_add
 

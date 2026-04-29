@@ -4,19 +4,18 @@
  * Маршрут: `/crm/spaces/:itemId` (parent: `spaces`).
  *
  * UX-аналог `templates-page`, но работает с **instance** namespace и его
- * привязанными типами. Типы — общекомпанийные (`crm/entity_types`),
- * к namespace они привязаны через `entityType.namespace_ids`.
+ * привязанными типами. Список типов пространства — GET `entity_types?namespace=itemId`.
  *
  * Источники данных:
  *   - useResource('crm/namespaces')         — метаданные namespace (описание и др.).
- *   - useOp('crm/namespace_editability')    — статистика, locked_type_ids и
- *     current_allowed_type_ids (канон для карточек и счётчика «разрешено»).
- *   - useResource('crm/entity_types', { autoload: true }) — все типы компании.
- *   - useOp('crm/entity_type_update')       — PUT /entity-types/{id}.
+ *   - useOp('crm/namespace_editability')    — статистика, locked_type_ids,
+ *     all_spaces_type_ids (типы в других пространствах, которых ещё нет здесь) и current_allowed_type_ids.
+ *   - useResource('crm/entity_types', { autoload: false }) — load({ namespace: itemId }).
+ *   - useOp('crm/entity_type_update')       — PUT с query namespace.
  *   - useOp('crm/template_schema_options')  — опции SchemaFieldBuilder
  *                                             (общие для шаблонов и типов).
- *   - useOp('crm/namespace_update')         — body.allowed_type_ids: сервис синхронизирует
- *     entity_type.namespace_ids; после успеха перезапускается editability.
+ *   - useOp('crm/namespace_update')         — body.allowed_type_ids: сервис клонирует/удаляет строки
+ *     EntityType в этом namespace; после успеха перезапускается editability.
  *
  * Поток:
  *   - На load: get(namespace), editability(namespace), load entity_types.
@@ -37,6 +36,7 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
+import '@platform/lib/components/platform-help-hint.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 import '../components/entity-type-editor.js';
@@ -54,6 +54,11 @@ import {
     buildSchemaFromRows,
 } from '../components/schema-field-builder.js';
 import { entityTypeNoteSubtreeLocked } from '../utils/entity-type-note-subtree-lock.js';
+import {
+    CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN,
+    CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED,
+} from '../utils/entity-type-create-events.js';
+import { buildEntityTypeDraftFromTemplateTypeItem } from '../utils/entity-type-draft-from-preset.js';
 
 const DEFAULT_TYPE_DRAFT = Object.freeze({
     type_id: '',
@@ -62,7 +67,6 @@ const DEFAULT_TYPE_DRAFT = Object.freeze({
     prompt: '',
     required_fields_rows: Object.freeze([]),
     optional_fields_rows: Object.freeze([]),
-    namespace_ids: Object.freeze([]),
     parent_type_id: '',
     icon: '',
     color: '',
@@ -78,7 +82,6 @@ function makeTypeDraft(overrides = {}) {
         ...DEFAULT_TYPE_DRAFT,
         required_fields_rows: [],
         optional_fields_rows: [],
-        namespace_ids: [],
         ...overrides,
     };
 }
@@ -179,6 +182,53 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 color: var(--text-tertiary);
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
+            }
+            .field-label-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .field-label-row .field-label {
+                margin: 0;
+            }
+            .panel-title-row-hint {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .meta-row-label {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .stage-header-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) auto;
+                gap: var(--space-2);
+                align-items: center;
+                margin-bottom: var(--space-1);
+            }
+            @media (max-width: 720px) {
+                .stage-header-row {
+                    display: none;
+                }
+            }
+            .stage-head-cell {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+                font-size: var(--text-xs);
+                font-weight: 600;
+                color: var(--text-tertiary);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .stage-head-cell.stage-head-actions {
+                justify-content: flex-end;
             }
             .input, .textarea {
                 width: 100%;
@@ -388,9 +438,21 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._editabilityOp = this.useOp('crm/namespace_editability');
         this._namespaceUpdateOp = this.useOp('crm/namespace_update');
         this._taskBoardEditorStateOp = this.useOp('crm/task_board_editor_state');
-        this._entityTypes = this.useResource('crm/entity_types', { autoload: true });
+        this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
         this._entityTypeUpdateOp = this.useOp('crm/entity_type_update');
         this._schemaOptionsOp = this.useOp('crm/template_schema_options');
+    }
+
+    _fieldLabelWithHint(labelKey, hintKey) {
+        return html`
+            <div class="field-label-row">
+                <span class="field-label">${this.t(labelKey)}</span>
+                <platform-help-hint
+                    .text=${this.t(hintKey)}
+                    label=${this.t('templates_page.field_hint_button_aria')}
+                ></platform-help-hint>
+            </div>
+        `;
     }
 
     connectedCallback() {
@@ -455,6 +517,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
             }
             this._namespaces.load();
             this._editabilityOp.run({ name: this.itemId });
+            this._entityTypes.load({ namespace: this.itemId });
             this._loadTaskBoardEditorState();
         });
         this.useEvent(this._namespaceUpdateOp.op.events.FAILED, () => {
@@ -468,7 +531,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
             this._typeFormOpen = false;
             this._typeDraft = makeTypeDraft();
             this._editingTypeId = '';
-            this._entityTypes.load(null);
+            this._entityTypes.load({ namespace: this.itemId });
         });
         this.useEvent(this._entityTypeUpdateOp.op.events.FAILED, () => {
             this._savingType = false;
@@ -491,6 +554,39 @@ export class CRMSpaceDetailPage extends PlatformPage {
         });
         this.useEvent(this._entityTypes.resource.events.CREATE_FAILED, () => {
             this._creatingType = false;
+        });
+        this.useEvent(CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN, (event) => {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') {
+                throw new Error('CRMSpaceDetailPage: create_mode_chosen payload required');
+            }
+            if (p.mode === 'blank') {
+                this._openNewTypeForm();
+                return;
+            }
+            if (p.mode === 'from_presets') {
+                this.openModal('crm.entity_type_preset_picker');
+                return;
+            }
+            throw new Error('CRMSpaceDetailPage: create_mode_chosen unknown mode');
+        });
+        this.useEvent(CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED, (event) => {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') {
+                throw new Error('CRMSpaceDetailPage: preset_picker_applied payload required');
+            }
+            const snap = p.type_snapshot;
+            if (!snap || typeof snap !== 'object' || typeof snap.type_id !== 'string') {
+                throw new Error('CRMSpaceDetailPage: preset_picker_applied type_snapshot required');
+            }
+            this._editingTypeId = '';
+            this._typeDraft = buildEntityTypeDraftFromTemplateTypeItem(
+                snap,
+                this._spaceEntityTypeCatalogRows(),
+                makeTypeDraft,
+                { namespaceIds: false },
+            );
+            this._typeFormOpen = true;
         });
     }
 
@@ -515,6 +611,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._taskBoardDraft = null;
         this._namespaces.get(this.itemId);
         this._editabilityOp.run({ name: this.itemId });
+        this._entityTypes.load({ namespace: this.itemId });
     }
 
     _namespace() {
@@ -713,6 +810,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
 
     _onToggleType(typeId, allowed) {
         if (typeof typeId !== 'string' || typeId.length === 0) return;
+        if (this._typeIsAllSpaces(typeId)) return;
         const next = allowed
             ? [...new Set([...this._allowedTypeIds, typeId])]
             : this._allowedTypeIds.filter((id) => id !== typeId);
@@ -722,6 +820,22 @@ export class CRMSpaceDetailPage extends PlatformPage {
             name: this.itemId,
             body: { allowed_type_ids: next },
         });
+    }
+
+    async _onRequestDisallowType(typeId) {
+        if (typeof typeId !== 'string' || typeId.length === 0) return;
+        if (this._typeIsAllSpaces(typeId)) return;
+        const confirmed = await platformConfirm(
+            this.t('space_detail_page.confirm_remove_from_namespace_msg', { type_id: typeId }),
+            {
+                title: this.t('space_detail_page.confirm_remove_from_namespace_title'),
+                variant: 'danger',
+                confirmText: this.t('space_detail_page.action_disallow'),
+                cancelText: this.t('templates_page.btn_cancel'),
+            },
+        );
+        if (!confirmed) return;
+        this._onToggleType(typeId, false);
     }
 
     _openNewTypeForm() {
@@ -760,7 +874,6 @@ export class CRMSpaceDetailPage extends PlatformPage {
             prompt: item.prompt || '',
             required_fields_rows: normalizeSchemaRows(item.required_fields && typeof item.required_fields === 'object' ? item.required_fields : {}),
             optional_fields_rows: normalizeSchemaRows(item.optional_fields && typeof item.optional_fields === 'object' ? item.optional_fields : {}),
-            namespace_ids: Array.isArray(item.namespace_ids) ? [...item.namespace_ids] : [],
             parent_type_id: parentId,
             icon: item.icon || '',
             color: item.color || '',
@@ -836,26 +949,15 @@ export class CRMSpaceDetailPage extends PlatformPage {
         };
         if (this._editingTypeId.length > 0) {
             this._savingType = true;
-            this._entityTypeUpdateOp.run({ type_id: this._editingTypeId, body });
+            this._entityTypeUpdateOp.run({
+                type_id: this._editingTypeId,
+                namespace: this.itemId,
+                body,
+            });
             return;
         }
         this._creatingType = true;
-        this._entityTypes.create({ type_id: typeId, ...body });
-    }
-
-    async _onDeleteEntity(typeId) {
-        if (typeof typeId !== 'string' || typeId.length === 0) return;
-        const confirmed = await platformConfirm(
-            this.t('templates_page.confirm_delete_type_msg', { type_id: typeId }),
-            {
-                title: this.t('templates_page.confirm_delete_type_title'),
-                variant: 'danger',
-                confirmText: this.t('templates_page.delete_type'),
-                cancelText: this.t('templates_page.btn_cancel'),
-            },
-        );
-        if (!confirmed) return;
-        this._onToggleType(typeId, false);
+        this._entityTypes.create({ type_id: typeId, namespace: this.itemId, ...body });
     }
 
     _getParentTypeOptions() {
@@ -870,6 +972,12 @@ export class CRMSpaceDetailPage extends PlatformPage {
         const result = this._editabilityOp.lastResult;
         if (!result || !Array.isArray(result.locked_type_ids)) return false;
         return result.locked_type_ids.includes(typeId);
+    }
+
+    _typeIsAllSpaces(typeId) {
+        const result = this._editabilityOp.lastResult;
+        if (!result || !Array.isArray(result.all_spaces_type_ids)) return false;
+        return result.all_spaces_type_ids.includes(typeId);
     }
 
     render() {
@@ -926,19 +1034,29 @@ export class CRMSpaceDetailPage extends PlatformPage {
         return html`
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">
+                    <span class="panel-title panel-title-row-hint">
                         <platform-icon name="folder" size="18"></platform-icon>
-                        ${this.t('space_detail_page.meta_section')}
+                        <span>${this.t('space_detail_page.meta_section')}</span>
+                        <platform-help-hint
+                            .text=${this.t('space_detail_page.meta_section_hint')}
+                            label=${this.t('templates_page.field_hint_button_aria')}
+                        ></platform-help-hint>
                     </span>
                 </div>
 
                 <div class="field">
-                    <label class="field-label">${this.t('namespace_modal.label_name')}</label>
+                    ${this._fieldLabelWithHint(
+                        'namespace_modal.label_name',
+                        'space_detail_page.meta_name_hint',
+                    )}
                     <div class="hint mono">${ns.name}</div>
                 </div>
 
                 <div class="field">
-                    <label class="field-label">${this.t('namespace_modal.label_description')}</label>
+                    ${this._fieldLabelWithHint(
+                        'namespace_modal.label_description',
+                        'space_detail_page.meta_description_hint',
+                    )}
                     <textarea
                         class="textarea"
                         placeholder=${this.t('namespace_modal.description_placeholder')}
@@ -971,15 +1089,33 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 ${editability !== null ? html`
                     <div class="meta">
                         <div class="meta-row">
-                            <span>${this.t('namespace_modal.entity_count')}</span>
+                            <span class="meta-row-label">
+                                <span>${this.t('namespace_modal.entity_count')}</span>
+                                <platform-help-hint
+                                    .text=${this.t('space_detail_page.meta_stat_entity_count_hint')}
+                                    label=${this.t('templates_page.field_hint_button_aria')}
+                                ></platform-help-hint>
+                            </span>
                             <strong>${editability.entity_count}</strong>
                         </div>
                         <div class="meta-row">
-                            <span>${this.t('namespace_modal.used_types')}</span>
+                            <span class="meta-row-label">
+                                <span>${this.t('namespace_modal.used_types')}</span>
+                                <platform-help-hint
+                                    .text=${this.t('space_detail_page.meta_stat_used_types_hint')}
+                                    label=${this.t('templates_page.field_hint_button_aria')}
+                                ></platform-help-hint>
+                            </span>
                             <strong>${Array.isArray(editability.used_type_ids) ? editability.used_type_ids.length : 0}</strong>
                         </div>
                         <div class="meta-row">
-                            <span>${this.t('namespace_modal.can_update_types')}</span>
+                            <span class="meta-row-label">
+                                <span>${this.t('namespace_modal.can_update_types')}</span>
+                                <platform-help-hint
+                                    .text=${this.t('space_detail_page.meta_stat_can_update_hint')}
+                                    label=${this.t('templates_page.field_hint_button_aria')}
+                                ></platform-help-hint>
+                            </span>
                             <strong>${editability.can_update_allowed_types
                                 ? this.t('namespace_modal.yes')
                                 : this.t('namespace_modal.no')}</strong>
@@ -1001,9 +1137,13 @@ export class CRMSpaceDetailPage extends PlatformPage {
         return html`
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">
+                    <span class="panel-title panel-title-row-hint">
                         <platform-icon name="menu" size="18"></platform-icon>
-                        ${this.t('space_detail_page.sidebar_menu_section')}
+                        <span>${this.t('space_detail_page.sidebar_menu_section')}</span>
+                        <platform-help-hint
+                            .text=${this.t('space_detail_page.sidebar_menu_section_hint')}
+                            label=${this.t('templates_page.field_hint_button_aria')}
+                        ></platform-help-hint>
                     </span>
                 </div>
                 <p class="hint">${this.t('space_detail_page.sidebar_menu_hint')}</p>
@@ -1036,9 +1176,13 @@ export class CRMSpaceDetailPage extends PlatformPage {
             return html`
                 <div class="panel">
                     <div class="panel-header">
-                        <span class="panel-title">
+                        <span class="panel-title panel-title-row-hint">
                             <platform-icon name="layers" size="18"></platform-icon>
-                            ${this.t('space_detail_page.task_board_section')}
+                            <span>${this.t('space_detail_page.task_board_section')}</span>
+                            <platform-help-hint
+                                .text=${this.t('space_detail_page.task_board_section_hint')}
+                                label=${this.t('templates_page.field_hint_button_aria')}
+                            ></platform-help-hint>
                         </span>
                     </div>
                     <div class="center" style="padding: var(--space-3);">
@@ -1052,9 +1196,13 @@ export class CRMSpaceDetailPage extends PlatformPage {
         return html`
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">
+                    <span class="panel-title panel-title-row-hint">
                         <platform-icon name="layers" size="18"></platform-icon>
-                        ${this.t('space_detail_page.task_board_section')}
+                        <span>${this.t('space_detail_page.task_board_section')}</span>
+                        <platform-help-hint
+                            .text=${this.t('space_detail_page.task_board_section_hint')}
+                            label=${this.t('templates_page.field_hint_button_aria')}
+                        ></platform-help-hint>
                     </span>
                 </div>
                 <p class="hint">${this.t('space_detail_page.task_board_hint')}</p>
@@ -1097,6 +1245,30 @@ export class CRMSpaceDetailPage extends PlatformPage {
                                         </button>
                                     </div>
                                     <div class="hint mono">${board.board_key}</div>
+                                </div>
+                                <div class="stage-header-row">
+                                    <div class="stage-head-cell">
+                                        <span>${this.t('space_detail_page.task_board_col_stage_id_label')}</span>
+                                        <platform-help-hint
+                                            .text=${this.t('space_detail_page.task_board_col_stage_id_hint')}
+                                            label=${this.t('templates_page.field_hint_button_aria')}
+                                        ></platform-help-hint>
+                                    </div>
+                                    <div class="stage-head-cell">
+                                        <span>${this.t('space_detail_page.task_board_col_stage_title_label')}</span>
+                                        <platform-help-hint
+                                            .text=${this.t('space_detail_page.task_board_col_stage_title_hint')}
+                                            label=${this.t('templates_page.field_hint_button_aria')}
+                                        ></platform-help-hint>
+                                    </div>
+                                    <div class="stage-head-cell">
+                                        <span>${this.t('space_detail_page.task_board_col_color_label')}</span>
+                                        <platform-help-hint
+                                            .text=${this.t('space_detail_page.task_board_col_color_hint')}
+                                            label=${this.t('templates_page.field_hint_button_aria')}
+                                        ></platform-help-hint>
+                                    </div>
+                                    <div class="stage-head-cell stage-head-actions"></div>
                                 </div>
                                 ${board.stages.map((st, si) => html`
                                     <div class="stage-row">
@@ -1210,7 +1382,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         <button
                             class="btn btn-soft"
                             type="button"
-                            @click=${this._openNewTypeForm}
+                            @click=${() => this.openModal('crm.entity_type_create_mode')}
                         >
                             ${this.t('space_detail_page.action_new_type')}
                         </button>
@@ -1230,9 +1402,11 @@ export class CRMSpaceDetailPage extends PlatformPage {
     _renderTypeCard(item) {
         const allowed = this._allowedTypeIds.includes(item.type_id);
         const locked = this._typeIsLocked(item.type_id);
+        const allSpaces = this._typeIsAllSpaces(item.type_id);
         const classes = ['type-card'];
         if (allowed) classes.push('allowed');
         if (locked) classes.push('locked');
+        if (allSpaces) classes.push('all-spaces');
         return html`
             <div class=${classes.join(' ')}>
                 <div class="type-title">
@@ -1245,8 +1419,11 @@ export class CRMSpaceDetailPage extends PlatformPage {
                     <button
                         class="btn ${allowed ? 'btn-soft' : 'btn-primary'}"
                         type="button"
-                        ?disabled=${this._savingAllowed || (locked && allowed)}
-                        @click=${() => this._onToggleType(item.type_id, !allowed)}
+                        title=${allSpaces ? this.t('space_detail_page.type_all_spaces_hint') : ''}
+                        ?disabled=${this._savingAllowed || (locked && allowed) || allSpaces}
+                        @click=${() => (allowed
+                            ? this._onRequestDisallowType(item.type_id)
+                            : this._onToggleType(item.type_id, true))}
                     >
                         ${allowed
                             ? this.t('space_detail_page.action_disallow')
@@ -1259,15 +1436,6 @@ export class CRMSpaceDetailPage extends PlatformPage {
                     >
                         ${this.t('templates_page.edit_type')}
                     </button>
-                    ${allowed && !locked ? html`
-                        <button
-                            class="btn btn-danger"
-                            type="button"
-                            @click=${() => this._onDeleteEntity(item.type_id)}
-                        >
-                            ${this.t('space_detail_page.action_remove')}
-                        </button>
-                    ` : ''}
                 </div>
             </div>
         `;

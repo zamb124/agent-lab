@@ -41,7 +41,7 @@ def _build_service() -> EntityService:
     entity_type_repo = AsyncMock()
     entity_type_repo.get_by_type_id = AsyncMock(
         return_value=SimpleNamespace(
-            namespace_ids=["default", "sales", "support"],
+            namespace="default",
             required_fields={},
         )
     )

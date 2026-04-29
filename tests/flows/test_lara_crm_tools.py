@@ -216,7 +216,11 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
 
     start_resp = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
-        json={"note_id": note_id},
+        json={
+            "note_id": note_id,
+            "check_duplicates": False,
+            "include_attachments": False,
+        },
         headers=auth_headers_system,
     )
     assert start_resp.status_code == 202, start_resp.text
@@ -310,7 +314,11 @@ async def test_crm_create_note_and_analyze_tool_chains(
 
     start_resp = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
-        json={"note_id": note_id},
+        json={
+            "note_id": note_id,
+            "check_duplicates": False,
+            "include_attachments": False,
+        },
         headers=auth_headers_system,
     )
     assert start_resp.status_code == 202, start_resp.text

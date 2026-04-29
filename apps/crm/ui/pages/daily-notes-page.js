@@ -27,14 +27,13 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CRMNamespacePage } from '../base/crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import {
     getUserMediaCompat,
     hasGetUserMediaApi,
     pickVoiceMimeType,
 } from '@platform/lib/utils/voice-recording.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -87,7 +86,7 @@ const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
 const ANALYZE_TASKS_POLL_MS = 2500;
 
-export class CRMDailyNotesPage extends PlatformPage {
+export class CRMDailyNotesPage extends CRMNamespacePage {
     static i18nNamespace = 'crm';
 
     static properties = {
@@ -105,7 +104,7 @@ export class CRMDailyNotesPage extends PlatformPage {
     };
 
     static styles = [
-        PlatformPage.styles,
+        CRMNamespacePage.styles,
         css`
             :host {
                 display: flex;
@@ -790,11 +789,6 @@ export class CRMDailyNotesPage extends PlatformPage {
         this._cardsBulk = this.useOp('crm/entity_cards_bulk');
         this._tasks = this.useResource('crm/tasks');
 
-        this._namespaceSelectionSel = this.select((s) => {
-            const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return null;
-            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
-        });
         this._routeKeySel = this.select((s) => s.router.routeKey);
 
         this._mql = null;
@@ -884,7 +878,7 @@ export class CRMDailyNotesPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        return this._namespaceSelectionSel.value;
+        return this._crmNamespaceSel.value;
     }
 
     _noteSubtypeFromLocationSearch() {

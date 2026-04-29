@@ -20,7 +20,8 @@ description: "CRM NetWorkle система управления сущностя
 - **История импорта** (`namespace-imports-page`): при `running/pending` — `_loadImports({ silent: true })`; кнопка отмены — inline SVG, не `platform-icon`.
 - i18n: `this.t('группа.ключ')`, namespace `crm` через `static i18nNamespace = 'crm';` или `defaultI18nNamespace='crm'` в `<crm-app>`; файлы `core/i18n/translations/{ru,en}/crm.json`, проверка — `make check-i18n`, `make check-i18n-keys`. Сканер: `uv run python scripts/report_ui_i18n_gaps.py --app crm`.
 - **Namespace в localStorage:** UI хранит последний выбранный namespace по `company_id`; если пропал из списка — сброс на «Все» (не подстановка другого). При первом `authenticated` для компании `CRMApp` диспатчит `UI_NAMESPACE_CHANGED` из того же ключа, что читает сайдбар (`getPlatformNamespaceSidebarSelection`), если в `state.ui.namespace.selectionByCompany` ещё нет записи — иначе после F5 сайдбар показывает сохранённое пространство, а ленты/фильтры ведут себя как «Все».
-- **`mini-graph-preview`:** один запрос `getInfluenceGraph(max_depth≤5)`, фильтр уровней без повторного запроса (`initialDisplayDepth=1`). Модалка `note-graph-modal` — отдельная поверх `note-view-modal`; `ResizeObserver` подгоняет canvas.
+- **Фильтр пространства в UI:** срез для API (`null` = все пространства) — **`selectCrmApiNamespace`** в **`apps/crm/ui/utils/crm-namespace-select.js`**; опциональный query/payload `namespace` — **`crmNamespaceForOptionalQuery`**. Страницы лент/графа/заметок/задач с фильтром сайдбара наследуют **`CRMNamespacePage`** (**`apps/crm/ui/base/crm-namespace-page.js`**) вместо дублирующего `this.select(getEffectiveCrmNamespaceApiFilter …)`. Локальный UI, где при «всех» нужна строка — **`selectCrmSidebarOrDefaultNamespace`** (например **`note-card-view`**).
+- **`mini-graph-preview`:** один запрос `getInfluenceGraph(max_depth≤5)`, фильтр уровней без повторного запроса (`initialDisplayDepth=1`). Палитра типов: **`crm/entity_types`** с **`load(null)`** в **`connectedCallback`** (все типы компании). Модалка `note-graph-modal` — отдельная поверх `note-view-modal`; `ResizeObserver` подгоняет canvas.
 - **Модалка заметки:** мини-граф открывается в отдельной `note-graph-modal`, чтобы WebGL не конфликтовал со скроллом.
 
 ## Назначение сервиса
@@ -33,7 +34,7 @@ description: "CRM NetWorkle система управления сущностя
 
 ## Терминология и продуктовая модель
 
-- **Тип сущности (`EntityType` / `entity_type`)** — запись в каталоге: поля, иерархия подтипов (`parent_type_id`), привязка к пространствам через `namespace_ids`.
+- **Тип сущности (`EntityType` / `entity_type`)** — запись в каталоге компании: поля, иерархия подтипов (`parent_type_id`), обязательная колонка **`namespace`** (одна строка типа = одно пространство; уникальный ключ **`(company_id, namespace, type_id)`**).
 - **Задача в узком CRM-смысле (activity)** — to-do с дедлайном и исполнителями; в платформе это по-прежнему **запись `CRMEntity`**, часто с `entity_type=task` и подтипами от `task`.
 - **Объект воронки (deal/lead и т.д.)** — тоже **сущность** с соответствующим типом; «воронка» и стадии описываются отдельно от слова «задача» как activity, чтобы не смешивать канбан сделок и список поручений.
 - **Стадии / pipeline** — не сводятся к одной строке `status` на сущности; расширяемая модель задаётся в настройках пространства (`NamespaceCRMSettings.pipeline_stage_presets` и связанные правила). События переходов стадий — контракт для триггеров автоматизации.
@@ -89,9 +90,10 @@ description: "CRM NetWorkle система управления сущностя
 
 ```python
 EntityType(
-    type_id="meeting",                             # уникальный ID
-    company_id="acme",                             # владелец (всегда конкретная компания)
-    parent_type_id="note",                         # иерархия подтипов
+    type_id="meeting",                             # стабильный id в пределах (company_id, namespace)
+    company_id="acme",
+    namespace="sales",                             # пространство строки; совпадает с CRMEntity.namespace
+    parent_type_id="note",
     name="Встреча",
     prompt="Инструкции для AI при извлечении...",  # None у member/company/namespace
     required_fields={"field": {"type": "string", "label": "..."}},
@@ -99,29 +101,32 @@ EntityType(
     # типы полей: string, text, number, integer, boolean, date, datetime, enum, array, object
     # для enum добавляется "values": [...]
     is_system=True,
-    is_event=True,                                 # заметки и события
-    is_voice_target=False,                         # может быть целью note_voice
-    is_context_anchor=False,                       # может быть целью in_context
-    extractable=True,                              # AI извлекает этот тип
+    is_event=True,
+    is_voice_target=False,
+    is_context_anchor=False,
+    extractable=True,
     check_duplicates=True,
-    namespace_ids=["default"],                     # пространства, где разрешён тип; "*" = все
-    public_fields=["name", "entity_type"],         # видимые без полного доступа
+    public_fields=["name", "entity_type"],
     weight_coefficient=1.0,
 )
 ```
 
-**Системные типы** (`SYSTEM_ENTITY_TYPE_TEMPLATES`):
+**API типов:** `GET /entity-types` принимает опциональный query **`namespace`** (фильтр страницы). **`GET /entity-types/{type_id}`** требует **`namespace`**. `POST /entity-types` задаёт `namespace` в теле (дефолт `"default"`). `PUT /entity-types/{type_id}` и `PUT .../public-fields` требуют `?namespace=`. Список типов пространства: **`GET /entity-types/by-namespace/{ns}`**. Материализация из шаблона namespace — **вставка** отдельной строки `EntityType` на каждую пару `(целевой namespace, type_id)`; общая на компанию строка без `namespace` не используется.
 
-| type_id | parent | is_event | is_voice_target | extractable | namespace_ids |
-|---------|--------|---------|----------------|------------|--------------|
-| `note` | — | ✓ | — | ✓ | `["default"]` |
-| `meeting` | note | ✓ | — | ✓ | `["default"]` |
-| `call` | note | ✓ | — | ✓ | `["default"]` |
-| `task` | — | — | — | ✓ | `["default"]` |
-| `contact` | — | — | ✓ | ✓ | `["default"]` |
-| `member` | — | — | ✓ | — | `["*"]` |
-| `company` | — | — | — | — | `["*"]` |
-| `namespace` | — | — | — | — | `["*"]` |
+**Шаблоны (`NamespaceTemplateType`):** по-прежнему могут содержать поле **`namespace_ids`** (какие пространства пресета покрывает определение в каталоге шаблона); это не поле строки `EntityType` в CRM.
+
+**Системные типы** (`SYSTEM_ENTITY_TYPE_TEMPLATES`) при инициализации компании создаются в **`namespace="default"`** (в т.ч. `member`, `company`, `namespace`). Для других пространств строки клонируются при создании namespace из шаблона / `ensure_namespace_ready`, если их ещё нет.
+
+| type_id | parent | is_event | is_voice_target | extractable | namespace (старт) |
+|---------|--------|---------|----------------|------------|-------------------|
+| `note` | — | ✓ | — | ✓ | `default` |
+| `meeting` | note | ✓ | — | ✓ | `default` |
+| `call` | note | ✓ | — | ✓ | `default` |
+| `task` | — | — | — | ✓ | `default` |
+| `contact` | — | — | ✓ | ✓ | `default` |
+| `member` | — | — | ✓ | — | `default` |
+| `company` | — | — | — | — | `default` |
+| `namespace` | — | — | — | — | `default` |
 
 `member`, `contact`, `company` имеют `optional_fields.aliases = {"type": "array", "label": "Псевдонимы"}` — используется при обогащении текста заметки @-токенами.
 
@@ -140,7 +145,7 @@ EntityType(
 - Поиск: `EntityRepository.find_by_external_ref`. Общий upsert: `apps/crm/integrations/entity_upsert.py` (`upsert_canonical_by_external_ref`).
 - Отображение «коллекция/сущность API провайдера → `type_id`» хранится рядом с коннектором (например `apps/crm/integrations/amocrm/mapping.py`).
 - **Иконка интеграции в UI:** для каждого `provider_id` из `IntegrationRegistry` обязателен файл **`apps/crm/ui/assets/integrations/<provider_id>.svg`** (круглая подложка и обрезка — в CSS карточек). Регистрация коннектора без файла падает при старте контейнера. Статический URL в CRM: `/crm/ui/static/assets/integrations/<provider_id>.svg`.
-- Интеграция подключается к **любому** существующему namespace: OAuth и синк идут по `namespaces/{namespace_name}/integrations/...`. После сохранения credential коннектор обязан вызвать `ensure_namespace_ready` (протокол `NamespaceIntegrationConnector`, `apps/crm/integrations/protocol.py`): добавить `namespace` в `namespace_ids` всех типов, которые импорт пишет в граф, и при необходимости дополнить `optional_fields` без затирания ключей (`EntityTypeRepository.merge_optional_fields_if_absent`). Если нужного `type_id` в компании нет — явная ошибка с подсказкой создать шаблон/тип.
+- Интеграция подключается к **любому** существующему namespace: OAuth и синк идут по `namespaces/{namespace_name}/integrations/...`. После сохранения credential коннектор обязан вызвать `ensure_namespace_ready` (протокол `NamespaceIntegrationConnector`, `apps/crm/integrations/protocol.py`): обеспечить в целевом `namespace` строки `EntityType` для всех `type_id`, которые импорт пишет в граф (клонирование схемы из `default` при отсутствии), и при необходимости дополнить `optional_fields` без затирания ключей (`EntityTypeRepository.merge_optional_fields_if_absent`). Если нужного типа в компании нет даже в `default` — явная ошибка с подсказкой создать шаблон/тип.
 - **AmoCRM OAuth:** в `conf.json` поле **`client_id`** = UUID интеграции Amo (**`uuid`**); **`client_secret`** — только из кабинета Amo (или после перевыпуска секрета). Формула redirect URI и остальные поля **`auth.providers.amocrm`** — в **`configuration.mdc`**.
 - **Импорт сущностей AmoCRM** (`AmoCRMIntegrationService.sync_entities`, `apps/crm/integrations/amocrm/service.py`): фазы **contacts** (`GET /api/v4/contacts?limit=250&with=companies`) → **companies** → **leads** (`with=contacts%2Ccompanies`) → **users** → **tasks** (`GET /api/v4/tasks?limit=250`, пагинация `_links.next`). Коллекции Amo v4 маппятся на типы из `mapping.py`: `leads`→`lead`, `contacts`→`contact`, `companies`→`organization`, пользователи API→`member`. После upsert каждой сущности строятся рёбра в `relationships`: у лида из `_embedded.contacts` / `_embedded.companies` — исходящие **`related_to`** к уже существующим `contact` / `organization` (поиск канонического `entity_id` через `find_by_external_ref`); у контакта из `_embedded.companies` — **`belongs_to`** к `organization`. Повторный синк не создаёт дубликат ребра (уникальность `(company_id, namespace, source_entity_id, target_entity_id, relationship_type)`). В объекте статистики синка поле **`relationships`** — число рёбер, **впервые** созданных за этот прогон; поле **`notes`** — число примечаний Amo с извлекаемым текстом, импортированных (или обновлённых) как `entity_type=note` за прогон; **`tasks`** / **`tasks_skipped_no_parent`** — импортированные задачи и пропуски без разрешённого родителя в графе.
 - **Задачи AmoCRM → `entity_type=task`:** идемпотентность `upsert_canonical_by_external_ref` с `source_id=amocrm`, `record_id=id` задачи. Поля: имя — первая строка `text` (или запасной ярлык); `description` — полный `text` и при наличии `result.text`; `due_date` — из `complete_till` (unix timestamp), если валиден; `attributes.status` — **`done`** при `is_completed=true`, иначе **`todo`** (промежуточный `in_progress` из Amo не приходит). `task_type_id` → `attributes.amo_task_type_id`; для стандартных типов 1 и 2 дополнительно `attributes.amo_task_type_name` («Звонок», «Встреча»), иначе только число без выдуманного названия; при наличии текста результата — `attributes.amo_result_text`; `attributes.amo_is_completed` — копия флага Amo. Родитель: `entity_type`/`entity_id` Amo → канонический тип (`leads`/`contacts`/`companies` → `lead`/`contact`/`organization`) и поиск по `find_by_external_ref`; типы вроде **`customers`** и неизвестные коллекции не маппятся — задача **не** создаётся, учёт в **`tasks_skipped_no_parent`**. Связи: от задачи к родителю — **`related_to`**; при разрешённом `responsible_user_id` в `member` — **`assigned_to`** к этому `member`, иначе без ребра назначения.
@@ -173,8 +178,8 @@ AI использует только типы с `prompt != None` (`mentions`, `
 ## Namespace и пространства
 
 - `namespace` = строковый идентификатор области данных внутри компании; дефолт `"default"`.
-- Каждый `EntityType` содержит `namespace_ids` — список разрешённых пространств; `"*"` = все; доступ к списку для логики без неявных дефолтов — метод `namespace_ids_list()` в [`apps/crm/db/models.py`](apps/crm/db/models.py) (`list[str]`, иначе `ValueError`). Проверяется при создании/обновлении сущности.
-- Корневой тип `NOTE_ROOT_ENTITY_TYPE_ID` при создании сущности **без** `entity_subtype` не проверяется по `namespace_ids` в `EntityService._ensure_entity_type_allowed_in_namespace`. Подтипы заметок и сущности с `entity_type` не равным корню заметки проверяются по `namespace_ids`. В `resolve_filter_field_types` исключение по `namespace_ids` только для `type_id == NOTE_ROOT_ENTITY_TYPE_ID`. При `PUT /namespaces/{name}` к `allowed_type_ids` добавляются `NOTE_ROOT_ENTITY_TYPE_ID` и `TASK_ROOT_ENTITY_TYPE_ID`, чтобы их нельзя было снять через API; подтипы task и семейства заметок в это ядро не входят.
+- Резолв определения типа для сущности: **`EntityTypeRepository.get_by_type_id(type_id, namespace=entity.namespace)`** (и `company_id` из контекста). Дубликат `type_id` в другом пространстве — отдельная строка с тем же техническим именем.
+- Корневой тип `NOTE_ROOT_ENTITY_TYPE_ID` при создании сущности **без** `entity_subtype` ослабленно проверяется в `EntityService._ensure_entity_type_allowed_in_namespace`. Подтипы заметок и прочие типы — по правилам `allowed_type_ids` namespace. В `resolve_filter_field_types` локальное исключение только для корня заметки. При `PUT /namespaces/{name}` к `allowed_type_ids` добавляются `NOTE_ROOT_ENTITY_TYPE_ID` и `TASK_ROOT_ENTITY_TYPE_ID`, чтобы их нельзя было снять через API; подтипы task и семейства заметок в это ядро не входят.
 - `vector_documents` фильтруется по `namespace_id = "{company_id}_{namespace}"`.
 - Модалка создания пространства (`namespace-modal`): имя + описание + `template_id` (список из БД, дефолт `'sales'`). `POST /namespaces` требует `template_id`.
 - `spaces-page`: редактирование описания, разрешённых типов, CRM-настроек, грантов. Добавление типов — всегда; удаление — только если нет сущностей (`locked_type_ids`).
@@ -438,7 +443,7 @@ AccessGrant(
 
 ### `/entity-types`
 
-`GET ""`, `POST ""`, `GET /by-namespace/{ns}`, `GET /{type_id}`, `PUT /{type_id}`, `POST /{type_id}/namespaces`, `PUT /{type_id}/public-fields`
+`GET ""` (query `namespace?`), `POST ""` (тело с `namespace`), `GET /by-namespace/{ns}`, `GET /{type_id}` (`namespace` query обязателен), `PUT /{type_id}` (`namespace` query), `PUT /{type_id}/public-fields` (`namespace` query)
 
 ### `/relationships`
 

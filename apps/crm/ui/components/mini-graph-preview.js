@@ -130,9 +130,14 @@ export class CRMMiniGraphPreview extends PlatformElement {
         this._graphInstance = null;
         this._resizeObserver = null;
         this._graphOp = this.useOp('crm/influence_graph');
-        this._entityTypes = this.useResource('crm/entity_types', { autoload: true });
+        this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
         this._relationshipTypes = this.useResource('crm/relationship_types', { autoload: true });
         this._lastLoadedEntityId = '';
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._entityTypes.load(null);
     }
 
     firstUpdated() {

@@ -5,7 +5,12 @@ from typing import Any, Optional
 from core.context import get_context
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 
-from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID
+from apps.crm.constants_graph import (
+    ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE,
+    ENTITY_TYPES_EXCLUDED_FROM_NAMESPACE_EDITABILITY_COUNTS,
+    NOTE_ROOT_ENTITY_TYPE_ID,
+    TASK_ROOT_ENTITY_TYPE_ID,
+)
 from apps.crm.db.models import EntityType
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
@@ -86,23 +91,147 @@ class NamespaceTemplateService:
                 f"в шаблоне отсутствуют: {', '.join(sorted(missing))}"
             )
 
+    async def _materialize_entity_type_row(
+        self,
+        *,
+        company_id: str,
+        target_namespace: str,
+        item: Any,
+        is_system: bool,
+    ) -> EntityType:
+        row = await self._entity_type_repo.get_by_type_id(
+            item.type_id,
+            namespace=target_namespace,
+            company_id=company_id,
+        )
+        if row is None:
+            entity_type = EntityType(
+                type_id=item.type_id,
+                company_id=company_id,
+                namespace=target_namespace,
+                parent_type_id=item.parent_type_id,
+                name=item.name,
+                description=item.description,
+                prompt=item.prompt,
+                required_fields=item.required_fields,
+                optional_fields=item.optional_fields,
+                icon=item.icon,
+                color=item.color,
+                is_system=is_system,
+                is_event=item.is_event,
+                check_duplicates=item.check_duplicates,
+                weight_coefficient=item.weight_coefficient,
+                is_context_anchor=item.is_context_anchor,
+                is_voice_target=item.is_voice_target,
+            )
+            return await self._entity_type_repo.create(entity_type)
+        await self._entity_type_repo.update_metadata(
+            item.type_id,
+            namespace=target_namespace,
+            company_id=company_id,
+            parent_type_id=item.parent_type_id,
+            name=item.name,
+            description=item.description,
+            prompt=item.prompt,
+            required_fields=item.required_fields,
+            optional_fields=item.optional_fields,
+            icon=item.icon,
+            color=item.color,
+            is_system=is_system,
+            is_event=item.is_event,
+            check_duplicates=item.check_duplicates,
+            weight_coefficient=item.weight_coefficient,
+            is_context_anchor=item.is_context_anchor,
+            is_voice_target=item.is_voice_target,
+        )
+        refreshed = await self._entity_type_repo.get_by_type_id(
+            item.type_id,
+            namespace=target_namespace,
+            company_id=company_id,
+        )
+        if refreshed is None:
+            raise ValueError(
+                f"EntityType {item.type_id!r} не найден после update_metadata "
+                f"в пространстве {target_namespace!r}"
+            )
+        return refreshed
+
     async def ensure_core_workspace_types_linked_to_namespace(self, namespace_name: str) -> None:
         """
-        Корневые типы note и task привязаны к пространству.
-
-        Подтипы task и подтипы заметок (meeting, call и др.) не подмешиваются: их добавляют шаблон или настройки типов.
-        Без привязок note и task списки и сайдбар по разрешённым типам обрезаются.
+        Гарантирует типы note и task в пространстве: при отсутствии строки — копия из default.
         """
         name = namespace_name.strip()
         if not name:
             raise ValueError("namespace_name is required")
-        all_types = await self._load_company_types()
+        context = get_context()
+        company_id = context.active_company.company_id
         for tid in (NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID):
-            row = next((t for t in all_types if t.type_id == tid), None)
-            if row is None:
-                raise ValueError(f"System entity type {tid!r} is required")
-            if name not in row.namespace_ids_list():
-                await self._entity_type_repo.add_namespace_ids(tid, [name])
+            row = await self._entity_type_repo.get_by_type_id(
+                tid, namespace=name, company_id=company_id,
+            )
+            if row is not None:
+                continue
+            await self._entity_type_repo.clone_entity_type_between_namespaces(
+                tid,
+                source_namespace="default",
+                target_namespace=name,
+                company_id=company_id,
+            )
+
+    async def _clone_type_into_namespace_if_missing(
+        self,
+        type_id: str,
+        target_namespace: str,
+        company_id: str,
+    ) -> None:
+        row = await self._entity_type_repo.get_by_type_id(
+            type_id,
+            namespace=target_namespace,
+            company_id=company_id,
+        )
+        if row is not None:
+            return
+        source_ns: Optional[str] = None
+        for item in await self._load_company_types():
+            if item.company_id != company_id:
+                continue
+            if item.namespace == target_namespace:
+                continue
+            if item.type_id == type_id:
+                source_ns = item.namespace
+                break
+        if source_ns is None:
+            raise ValueError(
+                f"Тип сущности {type_id!r} не найден ни в одном пространстве компании. "
+                "Добавьте тип в каталоге или через шаблон пространства."
+            )
+        await self._entity_type_repo.clone_entity_type_between_namespaces(
+            type_id,
+            source_namespace=source_ns,
+            target_namespace=target_namespace,
+            company_id=company_id,
+        )
+
+    async def _ensure_platform_types_in_namespace(
+        self,
+        *,
+        company_id: str,
+        target_namespace: str,
+    ) -> None:
+        if target_namespace == "default":
+            return
+        for tid in sorted(ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE):
+            existing = await self._entity_type_repo.get_by_type_id(
+                tid, namespace=target_namespace, company_id=company_id,
+            )
+            if existing is not None:
+                continue
+            await self._entity_type_repo.clone_entity_type_between_namespaces(
+                tid,
+                source_namespace="default",
+                target_namespace=target_namespace,
+                company_id=company_id,
+            )
 
     async def expanded_allowed_type_ids_for_namespace_update(
         self, allowed_type_ids: list[str]
@@ -144,84 +273,45 @@ class NamespaceTemplateService:
             namespace.crm_settings = NamespaceCRMSettings.model_validate(raw_tpl_crm)
         await self._namespace_repo.set(namespace)
 
-        existing_types = await self._load_company_types()
-        existing_types_map = {item.type_id: item for item in existing_types}
-
         for item in template_types:
-            runtime_type = existing_types_map.get(item.type_id)
-            if runtime_type is None:
-                runtime_type = EntityType(
-                    type_id=item.type_id,
-                    company_id=company_id,
-                    parent_type_id=item.parent_type_id,
-                    name=item.name,
-                    description=item.description,
-                    prompt=item.prompt,
-                    required_fields=item.required_fields,
-                    optional_fields=item.optional_fields,
-                    icon=item.icon,
-                    color=item.color,
-                    is_system=False,
-                    is_event=item.is_event,
-                    check_duplicates=item.check_duplicates,
-                    weight_coefficient=item.weight_coefficient,
-                    namespace_ids=[],
-                    is_context_anchor=item.is_context_anchor,
-                    is_voice_target=item.is_voice_target,
-                )
-                runtime_type = await self._entity_type_repo.update(runtime_type)
-                existing_types_map[runtime_type.type_id] = runtime_type
-            else:
-                await self._entity_type_repo.update_metadata(
-                    runtime_type.type_id,
-                    company_id=company_id,
-                    parent_type_id=item.parent_type_id,
-                    name=item.name,
-                    description=item.description,
-                    prompt=item.prompt,
-                    required_fields=item.required_fields,
-                    optional_fields=item.optional_fields,
-                    icon=item.icon,
-                    color=item.color,
-                    is_event=item.is_event,
-                    check_duplicates=item.check_duplicates,
-                    weight_coefficient=item.weight_coefficient,
-                    is_context_anchor=item.is_context_anchor,
-                    is_voice_target=item.is_voice_target,
-                )
-
-            current_namespaces = runtime_type.namespace_ids_list()
-            if namespace_name not in current_namespaces:
-                await self._entity_type_repo.add_namespace_ids(
-                    runtime_type.type_id, [namespace_name],
-                )
+            await self._materialize_entity_type_row(
+                company_id=company_id,
+                target_namespace=namespace_name,
+                item=item,
+                is_system=False,
+            )
 
         await self.ensure_core_workspace_types_linked_to_namespace(namespace_name)
+        await self._ensure_platform_types_in_namespace(
+            company_id=company_id,
+            target_namespace=namespace_name,
+        )
 
         await self._company_init_service._ensure_namespace_entity(company_id, namespace_name)
 
         return namespace
 
     async def get_namespace_editability(self, namespace_name: str) -> dict[str, Any]:
-        all_types = await self._load_company_types()
+        types_here = await self._entity_type_repo.get_all_for_company(
+            namespace=namespace_name, include_system=True, limit=10_000, offset=0,
+        )
+        current_allowed_type_ids = sorted({t.type_id for t in types_here})
 
-        cross_namespace_type_ids = {
-            t.type_id for t in all_types if "*" in t.namespace_ids_list()
-        }
+        type_ids_elsewhere: set[str] = set()
+        for row in await self._load_company_types():
+            if row.namespace != namespace_name:
+                type_ids_elsewhere.add(row.type_id)
+        addable_type_ids = sorted(type_ids_elsewhere - set(current_allowed_type_ids))
 
         entity_count = await self._entity_repo.count_by_namespace(
-            namespace_name, exclude_entity_types=cross_namespace_type_ids,
+            namespace_name,
+            exclude_entity_types=ENTITY_TYPES_EXCLUDED_FROM_NAMESPACE_EDITABILITY_COUNTS,
         )
-        used_type_ids = await self._entity_repo.list_used_entity_types_by_namespace(namespace_name)
-        used_type_ids_set = set(used_type_ids) - cross_namespace_type_ids
-
-        def _type_linked_to_namespace(row: EntityType) -> bool:
-            ns = row.namespace_ids_list()
-            return namespace_name in ns or "*" in ns
-
-        current_allowed_type_ids = sorted(
-            [item.type_id for item in all_types if _type_linked_to_namespace(item)]
+        used_type_ids = await self._entity_repo.list_used_entity_types_by_namespace(
+            namespace_name,
+            exclude_entity_types=ENTITY_TYPES_EXCLUDED_FROM_NAMESPACE_EDITABILITY_COUNTS,
         )
+        used_type_ids_set = set(used_type_ids)
 
         locked_type_ids = sorted(used_type_ids_set)
         removable_type_ids = sorted(
@@ -240,6 +330,7 @@ class NamespaceTemplateService:
             "can_add_types": True,
             "locked_type_ids": locked_type_ids,
             "removable_type_ids": removable_type_ids,
+            "all_spaces_type_ids": addable_type_ids,
             "lock_reason": None,
         }
 
@@ -254,10 +345,15 @@ class NamespaceTemplateService:
         if namespace is None:
             raise RuntimeError(f"Namespace {namespace_name} not found")
 
+        context = get_context()
+        company_id = context.active_company.company_id
+
         if allowed_type_ids is not None:
             editability = await self.get_namespace_editability(namespace_name)
             locked_type_ids = set(editability["locked_type_ids"])
-            requested_set = await self.expanded_allowed_type_ids_for_namespace_update(allowed_type_ids)
+            requested_set = await self.expanded_allowed_type_ids_for_namespace_update(
+                allowed_type_ids
+            )
             missing_locked = locked_type_ids - requested_set
             if missing_locked:
                 raise ValueError(
@@ -266,22 +362,23 @@ class NamespaceTemplateService:
 
             current_allowed_type_ids = set(editability["current_allowed_type_ids"])
             if requested_set != current_allowed_type_ids:
-                all_types = await self._load_company_types()
-                for item in all_types:
-                    current_ns = set(item.namespace_ids_list())
-                    has_namespace = namespace_name in current_ns
-                    should_have_namespace = item.type_id in requested_set
-                    if has_namespace == should_have_namespace:
+                for type_id in sorted(requested_set - current_allowed_type_ids):
+                    await self._clone_type_into_namespace_if_missing(
+                        type_id,
+                        namespace_name,
+                        company_id,
+                    )
+                for type_id in sorted(current_allowed_type_ids - requested_set):
+                    if type_id in {
+                        NOTE_ROOT_ENTITY_TYPE_ID,
+                        TASK_ROOT_ENTITY_TYPE_ID,
+                    }:
                         continue
-
-                    if should_have_namespace:
-                        await self._entity_type_repo.add_namespace_ids(
-                            item.type_id, [namespace_name],
-                        )
-                    else:
-                        await self._entity_type_repo.remove_namespace_ids(
-                            item.type_id, [namespace_name],
-                        )
+                    await self._entity_type_repo.delete_entity_type_scoped(
+                        type_id,
+                        namespace=namespace_name,
+                        company_id=company_id,
+                    )
 
         if description_is_set:
             namespace.description = description

@@ -87,12 +87,7 @@ function allowedTypeIdsForSpace(nsName, entityTypesItems) {
         if (!t || typeof t.type_id !== 'string' || t.type_id.length === 0) {
             continue;
         }
-        const ns = t.namespace_ids;
-        if (!Array.isArray(ns)) {
-            continue;
-        }
-        const inThisNamespace = ns.includes(nsName) || ns.includes('*');
-        if (!inThisNamespace) {
+        if (t.namespace !== nsName) {
             continue;
         }
         out.push(t.type_id);

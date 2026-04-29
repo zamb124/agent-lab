@@ -65,7 +65,10 @@ class UserPersonService:
                 await self._sync_person_fields_from_user(existing, user)
                 return existing_id
 
-        member_type = await self._entity_type_repo.get_by_type_id(MEMBER_ENTITY_TYPE)
+        member_type = await self._entity_type_repo.get_by_type_id(
+            MEMBER_ENTITY_TYPE,
+            namespace=USER_PERSON_NAMESPACE,
+        )
         if member_type is None:
             raise ValueError("Тип сущности member не найден для компании (инициализация CRM?)")
 
@@ -157,7 +160,11 @@ class UserPersonService:
         ent = await self._entity_repo.get(eid)
         if ent is None or ent.company_id != company_id:
             return None
-        et = await self._entity_type_repo.get_by_type_id(ent.entity_type)
+        et = await self._entity_type_repo.get_by_type_id(
+            ent.entity_type,
+            namespace=ent.namespace,
+            company_id=company_id,
+        )
         if et is None or not et.is_voice_target:
             return None
         return eid

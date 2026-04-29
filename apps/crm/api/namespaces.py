@@ -133,20 +133,8 @@ def _normalize_allowed_type_ids(raw_value: list[str]) -> list[str]:
 
 
 async def _collect_company_type_ids(container: ContainerDep) -> set[str]:
-    page_limit = 200
-    offset = 0
-    type_ids: set[str] = set()
-    while True:
-        page = await container.entity_type_repository.get_all_for_company(
-            limit=page_limit,
-            offset=offset,
-        )
-        if not page:
-            return type_ids
-        type_ids.update(item.type_id for item in page)
-        if len(page) < page_limit:
-            return type_ids
-        offset += page_limit
+    rows = await container.entity_type_repository.load_all_entity_types_for_company()
+    return {item.type_id for item in rows}
 
 
 @router.get("", response_model=OffsetPage[NamespaceResponse])

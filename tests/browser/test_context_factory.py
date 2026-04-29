@@ -50,7 +50,12 @@ class _FakeContext:
 
 class _FakeBrowser:
     def __init__(self) -> None:
-        self.contexts: list[Any] = [_FakeContext()]
+        self.contexts: list[Any] = []
+
+    async def new_context(self, **kwargs: Any) -> _FakeContext:
+        ctx = _FakeContext()
+        self.contexts.append(ctx)
+        return ctx
 
 
 def _sig() -> ContextSignature:
@@ -68,7 +73,14 @@ def _sig() -> ContextSignature:
 
 
 @pytest.mark.asyncio
-async def test_close_page_raises_when_page_close_fails() -> None:
+async def test_close_page_raises_when_page_close_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _noop_stealth(_ctx: object, _signature: ContextSignature) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "apps.browser.engine.context_factory.apply_stealth_to_context",
+        _noop_stealth,
+    )
     factory = ContextFactory()
     browser = _FakeBrowser()
     sig = _sig()

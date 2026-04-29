@@ -13,7 +13,11 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_system_types_exist_for_company(self, crm_client, unique_id, auth_headers_system):
         """Системные типы минимального ядра существуют для компании"""
-        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
+        types_resp = await crm_client.get(
+            "/crm/api/v1/entity-types/",
+            headers=auth_headers_system,
+            params={"limit": 1000, "namespace": "default"},
+        )
         assert types_resp.status_code == 200
         
         types = types_resp.json()["items"]
@@ -26,6 +30,9 @@ class TestCompanyInit:
         assert "member" in type_ids
         assert "company" in type_ids
         assert "namespace" in type_ids
+        assert "organization" in type_ids
+        assert "project" in type_ids
+        assert "topic" in type_ids
         
         for entity_type in types:
             assert entity_type["company_id"] is not None
@@ -34,7 +41,7 @@ class TestCompanyInit:
         assert member_t["is_voice_target"] is True
         assert member_t["extractable"] is False
         assert member_t["is_context_anchor"] is False
-        assert "*" in member_t["namespace_ids"]
+        assert member_t["namespace"] == "default"
 
         contact_t = types_by_id["contact"]
         assert contact_t["is_voice_target"] is True
@@ -42,11 +49,11 @@ class TestCompanyInit:
         company_t = types_by_id["company"]
         assert company_t["extractable"] is False
         assert company_t["is_context_anchor"] is False
-        assert "*" in company_t["namespace_ids"]
+        assert company_t["namespace"] == "default"
 
         namespace_t = types_by_id["namespace"]
         assert namespace_t["extractable"] is False
-        assert "*" in namespace_t["namespace_ids"]
+        assert namespace_t["namespace"] == "default"
     
     @pytest.mark.asyncio
     async def test_system_relationship_types_exist(self, crm_client, unique_id, auth_headers_system):
@@ -103,7 +110,11 @@ class TestCompanyInit:
     @pytest.mark.asyncio
     async def test_system_entity_types_have_prompts(self, crm_client, auth_headers_system):
         """Системные типы сущностей имеют промпты для AI"""
-        types_resp = await crm_client.get("/crm/api/v1/entity-types/", headers=auth_headers_system, params={"limit": 1000})
+        types_resp = await crm_client.get(
+            "/crm/api/v1/entity-types/",
+            headers=auth_headers_system,
+            params={"limit": 1000, "namespace": "default"},
+        )
         types = types_resp.json()["items"]
         
         note_type = next((t for t in types if t["type_id"] == "note"), None)

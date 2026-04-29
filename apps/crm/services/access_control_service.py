@@ -134,6 +134,7 @@ class AccessControlService:
         
         entity_type = await self._entity_type_repo.get_by_type_id(
             entity.entity_type,
+            namespace=entity.namespace,
             company_id=entity.company_id,
         )
         

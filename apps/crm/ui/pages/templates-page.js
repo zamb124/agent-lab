@@ -28,6 +28,7 @@ import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
+import '@platform/lib/components/platform-help-hint.js';
 import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
@@ -42,6 +43,11 @@ import {
     buildSchemaFromRows,
 } from '../components/schema-field-builder.js';
 import { entityTypeNoteSubtreeLocked } from '../utils/entity-type-note-subtree-lock.js';
+import {
+    CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN,
+    CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED,
+} from '../utils/entity-type-create-events.js';
+import { buildEntityTypeDraftFromTemplateTypeItem } from '../utils/entity-type-draft-from-preset.js';
 
 const DEFAULT_TYPE_DRAFT = Object.freeze({
     type_id: '',
@@ -257,6 +263,47 @@ export class CRMTemplatesPage extends PlatformPage {
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
+            }
+            .field-label-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .field-label-row .field-label {
+                margin: 0;
+            }
+            .panel-title-row-hint {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .stage-header-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) auto;
+                gap: var(--space-2);
+                align-items: center;
+                margin-bottom: var(--space-1);
+            }
+            @media (max-width: 720px) {
+                .stage-header-row {
+                    display: none;
+                }
+            }
+            .stage-head-cell {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                color: var(--text-tertiary);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .stage-head-cell.stage-head-actions {
+                justify-content: flex-end;
             }
 
             .input,
@@ -499,6 +546,18 @@ export class CRMTemplatesPage extends PlatformPage {
         this._templateTaskBoardEditorStateOp = this.useOp('crm/template_task_board_editor_state');
     }
 
+    _fieldLabelWithHint(labelKey, hintKey) {
+        return html`
+            <div class="field-label-row">
+                <span class="field-label">${this.t(labelKey)}</span>
+                <platform-help-hint
+                    .text=${this.t(hintKey)}
+                    label=${this.t('templates_page.field_hint_button_aria')}
+                ></platform-help-hint>
+            </div>
+        `;
+    }
+
     connectedCallback() {
         super.connectedCallback();
         this._schemaOptionsOp.run(null);
@@ -615,6 +674,39 @@ export class CRMTemplatesPage extends PlatformPage {
                 this._templates.get(this._selectedTemplateId);
                 this._loadTemplateTaskBoardEditorState();
             }
+        });
+        this.useEvent(CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN, (event) => {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') {
+                throw new Error('CRMTemplatesPage: create_mode_chosen payload required');
+            }
+            if (p.mode === 'blank') {
+                this._openNewTypeForm();
+                return;
+            }
+            if (p.mode === 'from_presets') {
+                this.openModal('crm.entity_type_preset_picker');
+                return;
+            }
+            throw new Error('CRMTemplatesPage: create_mode_chosen unknown mode');
+        });
+        this.useEvent(CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED, (event) => {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') {
+                throw new Error('CRMTemplatesPage: preset_picker_applied payload required');
+            }
+            const snap = p.type_snapshot;
+            if (!snap || typeof snap !== 'object' || typeof snap.type_id !== 'string') {
+                throw new Error('CRMTemplatesPage: preset_picker_applied type_snapshot required');
+            }
+            this._editingTypeId = '';
+            this._typeDraft = buildEntityTypeDraftFromTemplateTypeItem(
+                snap,
+                this._templateDetailTypeCatalogRows(),
+                makeTypeDraft,
+                { namespaceIds: true },
+            );
+            this._typeFormOpen = true;
         });
     }
 
@@ -785,9 +877,13 @@ export class CRMTemplatesPage extends PlatformPage {
         return html`
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">
+                    <span class="panel-title panel-title-row-hint">
                         <platform-icon name="layers" size="18"></platform-icon>
-                        ${this.t('space_detail_page.task_board_section')}
+                        <span>${this.t('space_detail_page.task_board_section')}</span>
+                        <platform-help-hint
+                            .text=${this.t('space_detail_page.task_board_section_hint')}
+                            label=${this.t('templates_page.field_hint_button_aria')}
+                        ></platform-help-hint>
                     </span>
                 </div>
                 <p class="hint">${this.t('space_detail_page.task_board_hint')}</p>
@@ -831,6 +927,30 @@ export class CRMTemplatesPage extends PlatformPage {
                                         </button>
                                     </div>
                                     <div class="hint mono">${board.board_key}</div>
+                                </div>
+                                <div class="stage-header-row">
+                                    <div class="stage-head-cell">
+                                        <span>${this.t('space_detail_page.task_board_col_stage_id_label')}</span>
+                                        <platform-help-hint
+                                            .text=${this.t('space_detail_page.task_board_col_stage_id_hint')}
+                                            label=${this.t('templates_page.field_hint_button_aria')}
+                                        ></platform-help-hint>
+                                    </div>
+                                    <div class="stage-head-cell">
+                                        <span>${this.t('space_detail_page.task_board_col_stage_title_label')}</span>
+                                        <platform-help-hint
+                                            .text=${this.t('space_detail_page.task_board_col_stage_title_hint')}
+                                            label=${this.t('templates_page.field_hint_button_aria')}
+                                        ></platform-help-hint>
+                                    </div>
+                                    <div class="stage-head-cell">
+                                        <span>${this.t('space_detail_page.task_board_col_color_label')}</span>
+                                        <platform-help-hint
+                                            .text=${this.t('space_detail_page.task_board_col_color_hint')}
+                                            label=${this.t('templates_page.field_hint_button_aria')}
+                                        ></platform-help-hint>
+                                    </div>
+                                    <div class="stage-head-cell stage-head-actions"></div>
                                 </div>
                                 ${board.stages.map((st, si) => html`
                                     <div class="stage-row">
@@ -1304,7 +1424,10 @@ export class CRMTemplatesPage extends PlatformPage {
         return html`
             <form @submit=${this._onCreateSubmit} class="panel" style="background: var(--glass-solid-medium);">
                 <div class="field">
-                    <label class="field-label">${this.t('templates_page.label_template_id')}</label>
+                    ${this._fieldLabelWithHint(
+                        'templates_page.label_template_id',
+                        'templates_page.label_template_id_hint',
+                    )}
                     <input
                         class="input mono"
                         .value=${this._newDraft.template_id}
@@ -1314,7 +1437,10 @@ export class CRMTemplatesPage extends PlatformPage {
                     />
                 </div>
                 <div class="field">
-                    <label class="field-label">${this.t('templates_page.label_name')}</label>
+                    ${this._fieldLabelWithHint(
+                        'templates_page.label_name',
+                        'templates_page.label_name_hint',
+                    )}
                     <input
                         class="input"
                         .value=${this._newDraft.name}
@@ -1324,7 +1450,10 @@ export class CRMTemplatesPage extends PlatformPage {
                     />
                 </div>
                 <div class="field">
-                    <label class="field-label">${this.t('templates_page.label_description')}</label>
+                    ${this._fieldLabelWithHint(
+                        'templates_page.label_description',
+                        'templates_page.label_description_hint',
+                    )}
                     <textarea
                         class="textarea"
                         .value=${this._newDraft.description}
@@ -1334,7 +1463,10 @@ export class CRMTemplatesPage extends PlatformPage {
                     ></textarea>
                 </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.label_icon')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.label_icon',
+                            'templates_page.label_icon_hint',
+                        )}
                         <platform-icon-picker
                             .value=${this._newDraft.icon}
                             .icons=${this._metaIconPickerIcons(this._newDraft.icon)}
@@ -1419,15 +1551,22 @@ export class CRMTemplatesPage extends PlatformPage {
         return html`
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">
+                    <span class="panel-title panel-title-row-hint">
                         <platform-icon name="edit" size="18"></platform-icon>
-                        ${this.t('templates_page.meta_section')}
+                        <span>${this.t('templates_page.meta_section')}</span>
+                        <platform-help-hint
+                            .text=${this.t('templates_page.meta_section_hint')}
+                            label=${this.t('templates_page.field_hint_button_aria')}
+                        ></platform-help-hint>
                     </span>
                     <span class="chip mono">${detail.template_id}</span>
                 </div>
                 <div class="grid-2">
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.label_name')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.label_name',
+                            'templates_page.label_name_hint',
+                        )}
                         <input
                             class="input"
                             .value=${this._metaDraft.name}
@@ -1436,7 +1575,10 @@ export class CRMTemplatesPage extends PlatformPage {
                         />
                     </div>
                     <div class="field">
-                        <label class="field-label">${this.t('templates_page.label_icon')}</label>
+                        ${this._fieldLabelWithHint(
+                            'templates_page.label_icon',
+                            'templates_page.label_icon_hint',
+                        )}
                         <platform-icon-picker
                             .value=${this._metaDraft.icon}
                             .icons=${this._metaIconPickerIcons(this._metaDraft.icon)}
@@ -1447,7 +1589,10 @@ export class CRMTemplatesPage extends PlatformPage {
                     </div>
                 </div>
                 <div class="field">
-                    <label class="field-label">${this.t('templates_page.label_description')}</label>
+                    ${this._fieldLabelWithHint(
+                        'templates_page.label_description',
+                        'templates_page.label_description_hint',
+                    )}
                     <textarea
                         class="textarea"
                         .value=${this._metaDraft.description}
@@ -1499,7 +1644,7 @@ export class CRMTemplatesPage extends PlatformPage {
                         <button
                             class="btn btn-soft"
                             type="button"
-                            @click=${this._openNewTypeForm}
+                            @click=${() => this.openModal('crm.entity_type_create_mode')}
                         >
                             ${this.t('templates_page.action_new_type')}
                         </button>

@@ -6,6 +6,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-help-hint.js';
 
 export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -33,6 +34,25 @@ export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
                 font-weight: var(--font-medium);
                 letter-spacing: 0.04em;
                 text-transform: uppercase;
+            }
+            .nf-label-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .nf-label-row .nf-label {
+                margin: 0;
+            }
+            .nf-switch-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .nf-switch-row platform-switch {
+                flex: 1;
+                min-width: 0;
             }
             .nf-select {
                 border: 1px solid var(--glass-border-subtle);
@@ -97,11 +117,23 @@ export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
                 : 'self';
         return html`
             <div class="nf-field">
-                <span class="nf-label">${this.t('namespace_note_defaults.section_title')}</span>
+                <div class="nf-label-row">
+                    <span class="nf-label">${this.t('namespace_note_defaults.section_title')}</span>
+                    <platform-help-hint
+                        .text=${this.t('namespace_note_defaults.section_title_hint')}
+                        label=${this.t('templates_page.field_hint_button_aria')}
+                    ></platform-help-hint>
+                </div>
                 <p class="nf-hint">${this.t('namespace_note_defaults.section_hint')}</p>
             </div>
             <div class="nf-field">
-                <label class="nf-label" for="nf-voice-mode">${this.t('namespace_note_defaults.voice_mode_label')}</label>
+                <div class="nf-label-row">
+                    <label class="nf-label" for="nf-voice-mode">${this.t('namespace_note_defaults.voice_mode_label')}</label>
+                    <platform-help-hint
+                        .text=${this.t('namespace_note_defaults.voice_mode_label_hint')}
+                        label=${this.t('templates_page.field_hint_button_aria')}
+                    ></platform-help-hint>
+                </div>
                 <select
                     id="nf-voice-mode"
                     class="nf-select mono"
@@ -116,13 +148,19 @@ export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
                 <p class="nf-hint">${this.t('namespace_note_defaults.voice_mode_hint')}</p>
             </div>
             <div class="nf-field">
-                <platform-switch
-                    size="sm"
-                    label=${this.t('namespace_note_defaults.show_ui_label')}
-                    .checked=${this.showNoteVoiceUi === true}
-                    ?disabled=${dis}
-                    @change=${this._onShowUiChange}
-                ></platform-switch>
+                <div class="nf-switch-row">
+                    <platform-switch
+                        size="sm"
+                        label=${this.t('namespace_note_defaults.show_ui_label')}
+                        .checked=${this.showNoteVoiceUi === true}
+                        ?disabled=${dis}
+                        @change=${this._onShowUiChange}
+                    ></platform-switch>
+                    <platform-help-hint
+                        .text=${this.t('namespace_note_defaults.show_ui_label_hint')}
+                        label=${this.t('templates_page.field_hint_button_aria')}
+                    ></platform-help-hint>
+                </div>
             </div>
         `;
     }

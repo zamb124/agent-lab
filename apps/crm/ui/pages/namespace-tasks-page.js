@@ -22,9 +22,8 @@
  */
 
 import { html, css } from 'lit';
-import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CRMNamespacePage } from '../base/crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
@@ -92,7 +91,7 @@ function formatDateTime(value) {
     return date.toLocaleString();
 }
 
-export class CRMNamespaceTasksPage extends PlatformPage {
+export class CRMNamespaceTasksPage extends CRMNamespacePage {
     static i18nNamespace = 'crm';
 
     static properties = {
@@ -101,7 +100,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
     };
 
     static styles = [
-        PlatformPage.styles,
+        CRMNamespacePage.styles,
         css`
             :host {
                 display: flex;
@@ -389,14 +388,6 @@ export class CRMNamespaceTasksPage extends PlatformPage {
         this._retryOp = this.useOp('crm/task_retry');
         this._rollbackOp = this.useOp('crm/task_rollback');
         this._reviewCompleteOp = this.useOp('crm/task_review_complete');
-
-        this._namespaceSel = this.select((s) => {
-            const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') {
-                return null;
-            }
-            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
-        });
     }
 
     connectedCallback() {
@@ -418,7 +409,7 @@ export class CRMNamespaceTasksPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        return this._namespaceSel.value;
+        return this._crmNamespaceSel.value;
     }
 
     _loadTasks() {

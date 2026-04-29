@@ -7,9 +7,13 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CRMNamespacePage } from '../base/crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
+import {
+    pruneToAllowedIds,
+    readCollapsedStatusIds,
+    writeCollapsedStatusIds,
+} from '../utils/tasks-kanban-column-collapse.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -17,7 +21,7 @@ import '@platform/lib/components/layout/page-header.js';
 
 const TASK_DND_MIME = 'application/x-crm-task-id';
 
-export class CRMTasksPage extends PlatformPage {
+export class CRMTasksPage extends CRMNamespacePage {
     static i18nNamespace = 'crm';
 
     static properties = {
@@ -33,10 +37,12 @@ export class CRMTasksPage extends PlatformPage {
         _boardBusy: { state: true },
         _mobileHeaderSearch: { state: true },
         _boardStages: { state: true },
+        _boardKey: { state: true },
+        _collapsedStatusIds: { state: true },
     };
 
     static styles = [
-        PlatformPage.styles,
+        CRMNamespacePage.styles,
         css`
             :host {
                 display: flex;
@@ -224,14 +230,83 @@ export class CRMTasksPage extends PlatformPage {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                gap: var(--space-2);
                 padding: var(--space-3);
                 border-bottom: 1px solid var(--crm-stroke);
+                flex-shrink: 0;
+            }
+
+            .column-header-aside {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-shrink: 0;
+            }
+
+            .column-collapse-btn {
+                width: 28px;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface);
+                color: var(--text-secondary);
+                cursor: pointer;
+                padding: 0;
+                flex-shrink: 0;
+                transition: all var(--duration-fast);
+            }
+
+            .column-collapse-btn:hover {
+                border-color: var(--crm-selected-stroke);
+                color: var(--text-primary);
+            }
+
+            .column.collapsed .column-header {
+                flex: 1;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                border-bottom: none;
+                padding: var(--space-2) 4px;
+                min-height: 0;
+            }
+
+            .column-title-vertical {
+                font-weight: 600;
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                writing-mode: vertical-rl;
+                text-orientation: mixed;
+                max-height: min(240px, 40vh);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                line-height: 1.3;
+            }
+
+            .column-count-vertical {
+                color: var(--text-tertiary);
+                font-size: 10px;
+                font-weight: 600;
+            }
+
+            .column.collapsed {
+                cursor: default;
+            }
+
+            .column.collapsed.dnd-target-col {
+                outline: 2px dashed var(--crm-selected-stroke);
+                outline-offset: -6px;
+                background: var(--crm-selected-bg);
             }
 
             .column-title {
                 font-weight: 600;
                 color: var(--text-primary);
                 font-size: var(--text-sm);
+                min-width: 0;
             }
 
             .column-count {
@@ -247,6 +322,10 @@ export class CRMTasksPage extends PlatformPage {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
+            }
+
+            .column.collapsed .column-body {
+                display: none;
             }
 
             .column-body.dnd-target {
@@ -502,16 +581,19 @@ export class CRMTasksPage extends PlatformPage {
         this._mql = null;
         this._onMqlChange = null;
         this._boardStages = null;
+        this._boardKey = '';
+        this._collapsedStatusIds = [];
 
         this._lookupOp = this.useOp('crm/entities_lookup');
         this._updateOp = this.useOp('crm/entity_update');
         this._entitiesResource = this.useResource('crm/entities');
         this._taskBoardOp = this.useOp('crm/task_board_stages');
 
-        this._namespaceSel = this.select((s) => {
+        this._companyIdSel = this.select((s) => {
             const user = s.auth.user;
             if (!user || typeof user.company_id !== 'string') return null;
-            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
+            const id = user.company_id.trim();
+            return id.length > 0 ? id : null;
         });
         this._routeKeySel = this.select((s) => s.router.routeKey);
         this._routerSearchSel = this.select((s) => {
@@ -541,6 +623,8 @@ export class CRMTasksPage extends PlatformPage {
         });
         this.useEvent(this._taskBoardOp.op.events.FAILED, (event) => {
             this._boardStages = [];
+            this._boardKey = '';
+            this._collapsedStatusIds = [];
             this.toast('crm:tasks_page.board_stages_failed', {
                 type: 'error',
                 vars: { message: typeof event.payload.message === 'string' ? event.payload.message : '' },
@@ -570,7 +654,7 @@ export class CRMTasksPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        return this._namespaceSel.value;
+        return this._crmNamespaceSel.value;
     }
 
     /**
@@ -611,9 +695,17 @@ export class CRMTasksPage extends PlatformPage {
         });
     }
 
-    _normalizeStagesFromApi(result) {
-        if (!result || !Array.isArray(result.stages)) {
-            return [];
+    _parseTaskBoardStagesResult(result) {
+        if (!result || typeof result !== 'object') {
+            throw new Error('CRMTasksPage: ответ стадий доски должен быть объектом');
+        }
+        const boardKeyRaw = result.board_key;
+        const boardKey = typeof boardKeyRaw === 'string' ? boardKeyRaw.trim() : '';
+        if (!boardKey) {
+            throw new Error('CRMTasksPage: в ответе стадий доски нужен непустой board_key');
+        }
+        if (!Array.isArray(result.stages)) {
+            throw new Error('CRMTasksPage: в ответе стадий доски нужен массив stages');
         }
         const out = [];
         for (const row of result.stages) {
@@ -628,17 +720,72 @@ export class CRMTasksPage extends PlatformPage {
             const color = typeof row.color === 'string' && row.color.trim().length > 0 ? row.color.trim() : null;
             out.push({ id, label, color });
         }
-        return out;
+        return { boardKey, stages: out };
+    }
+
+    _hydrateCollapsedFromStorage(stages) {
+        this._collapsedStatusIds = [];
+        if (!Array.isArray(stages) || stages.length === 0) {
+            return;
+        }
+        const companyId = this._companyIdSel.value;
+        if (companyId === null) {
+            return;
+        }
+        const raw = readCollapsedStatusIds(companyId, this._boardApiNamespace(), this._boardKey);
+        const allowed = new Set(stages.map((row) => row.id));
+        this._collapsedStatusIds = pruneToAllowedIds(raw, allowed);
+    }
+
+    _isColumnCollapsed(statusId) {
+        return this._collapsedStatusIds.includes(statusId);
+    }
+
+    _persistCollapsedColumns() {
+        const companyId = this._companyIdSel.value;
+        if (companyId === null) {
+            return;
+        }
+        if (typeof this._boardKey !== 'string' || this._boardKey.length === 0) {
+            return;
+        }
+        writeCollapsedStatusIds(companyId, this._boardApiNamespace(), this._boardKey, this._collapsedStatusIds);
+    }
+
+    _toggleColumnCollapse(statusId, event) {
+        event.stopPropagation();
+        if (this._isMobile) {
+            return;
+        }
+        const next = new Set(this._collapsedStatusIds);
+        if (next.has(statusId)) {
+            next.delete(statusId);
+        } else {
+            next.add(statusId);
+        }
+        this._collapsedStatusIds = [...next].sort();
+        this._persistCollapsedColumns();
+    }
+
+    _boardGridTemplateColumns(taskStatuses) {
+        if (this._isMobile) {
+            return taskStatuses.map(() => 'minmax(0, 1fr)').join(' ');
+        }
+        return taskStatuses
+            .map((s) => (this._isColumnCollapsed(s.id) ? 'minmax(36px, 44px)' : 'minmax(0, 1fr)'))
+            .join(' ');
     }
 
     _onTaskBoardStagesLoaded(result) {
-        const stages = this._normalizeStagesFromApi(result);
+        const { boardKey, stages } = this._parseTaskBoardStagesResult(result);
+        this._boardKey = boardKey;
         this._boardStages = stages;
+        this._hydrateCollapsedFromStorage(stages);
         if (stages.length === 0) {
             this.toast('crm:tasks_page.board_stages_empty', { type: 'error' });
             return;
         }
-        const ids = new Set(stages.map((s) => s.id));
+        const ids = new Set(stages.map((sRow) => sRow.id));
         if (!ids.has(this._activeStatus)) {
             this._activeStatus = stages[0].id;
         }
@@ -776,6 +923,48 @@ export class CRMTasksPage extends PlatformPage {
         });
     }
 
+    _onCollapsedColumnShellDragOver(e) {
+        if (!(e.currentTarget instanceof HTMLElement)) {
+            throw new Error('CRMTasksPage: ожидался HTMLElement');
+        }
+        const statusId = e.currentTarget.dataset.statusId;
+        if (typeof statusId !== 'string' || statusId.length === 0) {
+            throw new Error('CRMTasksPage: у колонки должен быть data-status-id');
+        }
+        if (this._isMobile || !this._isColumnCollapsed(statusId)) {
+            return;
+        }
+        this._onColumnBodyDragOver(e, statusId, true);
+    }
+
+    _onCollapsedColumnShellDragLeave(e) {
+        if (!(e.currentTarget instanceof HTMLElement)) {
+            throw new Error('CRMTasksPage: ожидался HTMLElement');
+        }
+        const statusId = e.currentTarget.dataset.statusId;
+        if (typeof statusId !== 'string' || statusId.length === 0) {
+            throw new Error('CRMTasksPage: у колонки должен быть data-status-id');
+        }
+        if (this._isMobile || !this._isColumnCollapsed(statusId)) {
+            return;
+        }
+        this._onColumnDragLeave(e);
+    }
+
+    _onCollapsedColumnShellDrop(e) {
+        if (!(e.currentTarget instanceof HTMLElement)) {
+            throw new Error('CRMTasksPage: ожидался HTMLElement');
+        }
+        const statusId = e.currentTarget.dataset.statusId;
+        if (typeof statusId !== 'string' || statusId.length === 0) {
+            throw new Error('CRMTasksPage: у колонки должен быть data-status-id');
+        }
+        if (this._isMobile || !this._isColumnCollapsed(statusId)) {
+            return;
+        }
+        this._onColumnDrop(e, statusId);
+    }
+
     _scheduleClearSuppressTaskClick() {
         this._suppressTaskClick = true;
         requestAnimationFrame(() => {
@@ -832,12 +1021,16 @@ export class CRMTasksPage extends PlatformPage {
         this._dndInsert = { status: statusId, beforeTaskId };
     }
 
-    _onColumnBodyDragOver(e, targetStatus) {
+    _onColumnBodyDragOver(e, targetStatus, collapsedStrip) {
         if (this._isMobile || !this._draggingTaskId) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         if (this._dragOverStatus !== targetStatus) {
             this._dragOverStatus = targetStatus;
+        }
+        if (collapsedStrip === true) {
+            this._dndInsert = { status: targetStatus, beforeTaskId: '__end__' };
+            return;
         }
         this._computeDndInsert(e, targetStatus);
     }
@@ -978,9 +1171,8 @@ export class CRMTasksPage extends PlatformPage {
             tasksByStatus[s.id] = tasks.filter((task) => this._taskStatus(task) === s.id);
         }
         const n = taskStatuses.length;
-        const boardGridStyleStr = n > 0
-            ? `grid-template-columns: repeat(${n}, minmax(0, 1fr))`
-            : 'grid-template-columns: minmax(0, 1fr)';
+        const boardGridStyleStr =
+            n > 0 ? `grid-template-columns: ${this._boardGridTemplateColumns(taskStatuses)}` : 'grid-template-columns: minmax(0, 1fr)';
         const boardGridPlaceholderStr = 'grid-template-columns: minmax(0, 1fr)';
         const boardBlocked = this._boardStages !== null && taskStatuses.length === 0;
 
@@ -1044,15 +1236,62 @@ export class CRMTasksPage extends PlatformPage {
                     ${taskStatuses.map((s) => {
                         const isActive = !this._isMobile || this._activeStatus === s.id;
                         const statusTasks = tasksByStatus[s.id];
+                        const isCollapsedDesktop = !this._isMobile && this._isColumnCollapsed(s.id);
+                        const dragOverHere = this._dragOverStatus === s.id;
+                        const collapseIconName = isCollapsedDesktop ? 'chevron-right' : 'chevron-left';
+                        const collapseLabel = isCollapsedDesktop
+                            ? this.t('tasks_page.expand_column')
+                            : this.t('tasks_page.collapse_column');
                         return html`
-                            <section class="column ${isActive ? 'mobile-active' : ''}">
-                                <div class="column-header">
-                                    <div class="column-title">${s.label}</div>
-                                    <div class="column-count">${statusTasks.length}</div>
-                                </div>
+                            <section
+                                class="column ${isActive ? 'mobile-active' : ''} ${isCollapsedDesktop ? 'collapsed' : ''} ${isCollapsedDesktop && dragOverHere ? 'dnd-target-col' : ''}"
+                                @dragover=${this._onCollapsedColumnShellDragOver}
+                                @dragleave=${this._onCollapsedColumnShellDragLeave}
+                                @drop=${this._onCollapsedColumnShellDrop}
+                                data-status-id=${s.id}
+                            >
+                                ${isCollapsedDesktop
+                                    ? html`
+                                    <div class="column-header">
+                                        <button
+                                            type="button"
+                                            class="column-collapse-btn"
+                                            title=${collapseLabel}
+                                            aria-label=${collapseLabel}
+                                            aria-expanded="false"
+                                            @click=${(e) => this._toggleColumnCollapse(s.id, e)}
+                                        >
+                                            <platform-icon name="${collapseIconName}" size="16"></platform-icon>
+                                        </button>
+                                        <span class="column-title-vertical">${s.label}</span>
+                                        <span class="column-count-vertical" aria-hidden="true">${statusTasks.length}</span>
+                                    </div>
+                                `
+                                    : html`
+                                    <div class="column-header">
+                                        <div class="column-title">${s.label}</div>
+                                        <div class="column-header-aside">
+                                            <span class="column-count">${statusTasks.length}</span>
+                                            ${!this._isMobile
+                                                ? html`
+                                                <button
+                                                    type="button"
+                                                    class="column-collapse-btn"
+                                                    title=${collapseLabel}
+                                                    aria-label=${collapseLabel}
+                                                    aria-expanded="true"
+                                                    @click=${(e) => this._toggleColumnCollapse(s.id, e)}
+                                                >
+                                                    <platform-icon name="${collapseIconName}" size="16"></platform-icon>
+                                                </button>
+                                            `
+                                                : nothing}
+                                        </div>
+                                    </div>
+                                `}
                                 <div
-                                    class="column-body ${this._dragOverStatus === s.id ? 'dnd-target' : ''}"
-                                    @dragover=${(e) => this._onColumnBodyDragOver(e, s.id)}
+                                    class="column-body ${!isCollapsedDesktop && dragOverHere ? 'dnd-target' : ''}"
+                                    @dragover=${(e) => this._onColumnBodyDragOver(e, s.id, false)}
                                     @dragleave=${this._onColumnDragLeave}
                                     @drop=${(e) => this._onColumnDrop(e, s.id)}
                                 >

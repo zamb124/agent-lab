@@ -120,14 +120,11 @@ class EntityType(Base):
     """
     
     __tablename__ = "entity_types"
-    
-    type_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    company_id: Mapped[str] = mapped_column(
-        String(100),
-        primary_key=True,
-        nullable=False,
-        index=True
-    )
+
+    company_id: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
+    namespace: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
+    type_id: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
+
     parent_type_id: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
@@ -165,12 +162,6 @@ class EntityType(Base):
         nullable=False,
         comment="Какие поля показывать при публичном доступе"
     )
-    namespace_ids: Mapped[List[str]] = mapped_column(
-        JSONB,
-        default=["default"],
-        nullable=False,
-        comment="Список namespace, где тип разрешен"
-    )
     is_context_anchor: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -200,23 +191,14 @@ class EntityType(Base):
     __table_args__ = (
         Index("idx_entity_types_parent", "parent_type_id"),
         Index("idx_entity_types_system", "is_system"),
+        Index("ix_entity_types_company_ns", "company_id", "namespace"),
     )
 
-    def namespace_ids_list(self) -> List[str]:
-        raw = self.namespace_ids
-        if not isinstance(raw, list):
-            raise ValueError(
-                f"EntityType {self.type_id!r}: namespace_ids must be list[str], got {type(raw).__name__}"
-            )
-        for i, item in enumerate(raw):
-            if not isinstance(item, str):
-                raise ValueError(
-                    f"EntityType {self.type_id!r}: namespace_ids[{i}] must be str, got {type(item).__name__}"
-                )
-        return raw
-
     def __repr__(self) -> str:
-        return f"<EntityType(type_id='{self.type_id}', name='{self.name}', company='{self.company_id}')>"
+        return (
+            f"<EntityType(type_id='{self.type_id}', namespace='{self.namespace}', "
+            f"name='{self.name}', company='{self.company_id}')>"
+        )
 
 
 class RelationshipType(Base):
@@ -591,6 +573,12 @@ class NamespaceTemplateType(Base):
         UniqueConstraint("template_key", "type_id", name="uq_namespace_template_type"),
         Index("idx_namespace_template_type_template", "template_key"),
     )
+
+    def namespace_ids_list(self) -> list[str]:
+        raw = self.namespace_ids
+        if raw is None:
+            return []
+        return list(raw)
 
     def __repr__(self) -> str:
         return f"<NamespaceTemplateType(template_key='{self.template_key}', type_id='{self.type_id}')>"

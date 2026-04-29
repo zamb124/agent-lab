@@ -195,7 +195,7 @@ async def _crm_base_schema_ready(db_url: str) -> bool:
                     SELECT COUNT(*)
                     FROM information_schema.columns
                     WHERE table_name = 'entity_types'
-                      AND column_name = 'namespace_ids'
+                      AND column_name = 'namespace'
                     """
                 )
             )

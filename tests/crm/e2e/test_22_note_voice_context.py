@@ -73,7 +73,7 @@ class TestNoteVoiceAndContext:
             json={
                 "type_id": anchor_type_id,
                 "name": "Тестовый якорь",
-                "namespace_ids": ["default"],
+                "namespace": "default",
                 "is_context_anchor": True,
             },
             headers=auth_headers_system,
@@ -354,7 +354,7 @@ class TestNoteVoiceAndContext:
             json={
                 "type_id": anchor_type_id,
                 "name": "Якорь upd",
-                "namespace_ids": ["default"],
+                "namespace": "default",
                 "is_context_anchor": True,
             },
             headers=auth_headers_system,

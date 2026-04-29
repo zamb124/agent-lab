@@ -219,6 +219,7 @@ class EntityMergeResponse(BaseModel):
 class EntityTypeCreate(BaseModel):
     """Создание типа сущности"""
     type_id: str
+    namespace: str = Field(default="default", min_length=1)
     parent_type_id: Optional[str] = None
     name: str
     description: Optional[str] = None
@@ -229,7 +230,6 @@ class EntityTypeCreate(BaseModel):
     color: Optional[str] = None
     is_event: bool = False
     check_duplicates: bool = True
-    namespace_ids: Optional[List[str]] = None
     is_context_anchor: bool = False
     is_voice_target: bool = False
 
@@ -244,7 +244,6 @@ class EntityTypeUpdate(BaseModel):
     optional_fields: Optional[Dict[str, Any]] = None
     icon: Optional[str] = None
     color: Optional[str] = None
-    namespace_ids: Optional[List[str]] = None
     is_context_anchor: Optional[bool] = None
     is_voice_target: Optional[bool] = None
 
@@ -252,9 +251,10 @@ class EntityTypeUpdate(BaseModel):
 class EntityTypeResponse(BaseModel):
     """Response с типом сущности"""
     model_config = ConfigDict(from_attributes=True)
-    
+
     type_id: str
     company_id: str
+    namespace: str
     parent_type_id: Optional[str]
     name: str
     description: Optional[str]
@@ -268,7 +268,6 @@ class EntityTypeResponse(BaseModel):
     is_event: bool
     check_duplicates: bool
     weight_coefficient: float
-    namespace_ids: List[str]
     is_context_anchor: bool
     is_voice_target: bool
     extractable: bool
@@ -368,7 +367,7 @@ class NamespaceCreateRequest(BaseModel):
     description: Optional[str] = Field(default=None, description="Описание namespace")
     template_id: str = Field(
         ...,
-        description="ID шаблона: sales | development | hr | amocrm | ...",
+        description="ID шаблона: sales | development | hr | ...",
     )
 
 
@@ -429,6 +428,7 @@ class NamespaceEditabilityResponse(BaseModel):
     can_add_types: bool
     locked_type_ids: List[str]
     removable_type_ids: List[str]
+    all_spaces_type_ids: List[str]
     lock_reason: Optional[str] = None
 
 

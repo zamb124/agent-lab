@@ -10,6 +10,39 @@ import json
 
 from tests.fixtures.crm_test_setup import wait_for_crm_semantic_search_hit
 
+_META = {
+    "dates_mentioned": [],
+    "places_mentioned": [],
+    "key_topics": [],
+}
+
+
+def _mock_analyze_note(name: str, description: str) -> dict:
+    return {
+        "entity_type": "note",
+        "name": name,
+        "description": description,
+        "attributes": {},
+        "confidence": 0.9,
+    }
+
+
+def _mock_analyze_entity(
+    entity_type: str,
+    name: str,
+    description: str,
+    attributes: dict,
+    *,
+    confidence: float = 0.9,
+) -> dict:
+    return {
+        "entity_type": entity_type,
+        "name": name,
+        "description": description,
+        "attributes": attributes,
+        "confidence": confidence,
+    }
+
 
 async def _analyze_note(
     crm_client,
@@ -22,7 +55,11 @@ async def _analyze_note(
     Возвращает (task_row, ai_analysis_draft).
     """
     import asyncio, time
-    body = {"note_id": note_id, **extra}
+    body = {
+        "note_id": note_id,
+        "include_attachments": False,
+        **extra,
+    }
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
         json=body,
@@ -67,20 +104,21 @@ class TestEntityDeduplication:
         await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
-                "note": {
-                    "entity_type": "note",
-                    "name": f"Встреча {unique_id}",
-                    "description": "Обсуждение нового проекта"
-                },
+                "note": _mock_analyze_note(
+                    f"Встреча {unique_id}",
+                    "Обсуждение нового проекта",
+                ),
                 "entities": [
-                    {
-                        "entity_type": "contact",
-                        "name": f"Уникальный контакт {unique_id}",
-                        "description": "Абсолютно новый человек в системе",
-                        "attributes": {"role": "менеджер"}
-                    }
+                    _mock_analyze_entity(
+                        "contact",
+                        f"Уникальный контакт {unique_id}",
+                        "Абсолютно новый человек в системе",
+                        {"role": "менеджер"},
+                    )
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
+                "attachment_summaries": []
             })
         }])
         
@@ -88,6 +126,7 @@ class TestEntityDeduplication:
             "entity_type": "note",
             "name": f"Знакомство {unique_id}",
             "description": f"Сегодня познакомился с Уникальный контакт {unique_id}. Он менеджер проекта.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
 
@@ -131,20 +170,21 @@ class TestEntityDeduplication:
         await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
-                "note": {
-                    "entity_type": "note",
-                    "name": f"Звонок {unique_id}",
-                    "description": "Звонок с Иваном"
-                },
+                "note": _mock_analyze_note(
+                    f"Звонок {unique_id}",
+                    "Звонок с Иваном",
+                ),
                 "entities": [
-                    {
-                        "entity_type": "contact",
-                        "name": f"Иван Петров {unique_id}",
-                        "description": "Технический директор компании ABC",
-                        "attributes": {"email": "ivan@abc.com"}
-                    }
+                    _mock_analyze_entity(
+                        "contact",
+                        f"Иван Петров {unique_id}",
+                        "Технический директор компании ABC",
+                        {"email": "ivan@abc.com"},
+                    )
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
+                "attachment_summaries": []
             })
         }, {
             "type": "text",
@@ -207,20 +247,21 @@ class TestEntityDeduplication:
             {
                 "type": "text",
                 "content": json.dumps({
-                    "note": {
-                        "entity_type": "note",
-                        "name": f"Заметка {unique_id}",
-                        "description": "Встреча с компанией"
-                    },
+                    "note": _mock_analyze_note(
+                        f"Заметка {unique_id}",
+                        "Встреча с компанией",
+                    ),
                     "entities": [
-                        {
-                            "entity_type": "organization",
-                            "name": f"Компания Альфа {unique_id}",
-                            "description": "Разработка программного обеспечения",
-                            "attributes": {"location": "Москва"}
-                        }
+                        _mock_analyze_entity(
+                            "organization",
+                            f"Компания Альфа {unique_id}",
+                            "Разработка программного обеспечения",
+                            {"location": "Москва"},
+                        )
                     ],
-                    "relationships": []
+                    "relationships": [],
+                    "metadata": _META,
+                    "attachment_summaries": []
                 })
             },
             {
@@ -270,7 +311,8 @@ class TestEntityDeduplication:
             "entity_type": "contact",
             "name": f"Мария Сидорова {unique_id}",
             "description": "Бухгалтер, работает в финансовом отделе",
-            "attributes": {"department": "finance"}
+            "attributes": {"department": "finance"},
+            "namespace": "default",
         }, headers=auth_headers_system)
 
         await wait_for_crm_semantic_search_hit(
@@ -284,20 +326,21 @@ class TestEntityDeduplication:
             {
                 "type": "text",
                 "content": json.dumps({
-                    "note": {
-                        "entity_type": "note",
-                        "name": f"Собеседование {unique_id}",
-                        "description": "Собеседование нового кандидата"
-                    },
+                    "note": _mock_analyze_note(
+                        f"Собеседование {unique_id}",
+                        "Собеседование нового кандидата",
+                    ),
                     "entities": [
-                        {
-                            "entity_type": "contact",
-                            "name": f"Алексей Кузнецов {unique_id}",
-                            "description": "Разработчик, кандидат на позицию backend",
-                            "attributes": {"role": "developer"}
-                        }
+                        _mock_analyze_entity(
+                            "contact",
+                            f"Алексей Кузнецов {unique_id}",
+                            "Разработчик, кандидат на позицию backend",
+                            {"role": "developer"},
+                        )
                     ],
-                    "relationships": []
+                    "relationships": [],
+                    "metadata": _META,
+                    "attachment_summaries": []
                 })
             },
             {
@@ -317,6 +360,7 @@ class TestEntityDeduplication:
             "entity_type": "note",
             "name": f"Собеседование {unique_id}",
             "description": f"Провел собеседование с Алексеем Кузнецовым {unique_id}. Хороший backend разработчик.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
 
@@ -358,26 +402,27 @@ class TestEntityDeduplication:
             {
                 "type": "text",
                 "content": json.dumps({
-                    "note": {
-                        "entity_type": "note",
-                        "name": f"Планерка {unique_id}",
-                        "description": "Еженедельная планерка команды"
-                    },
+                    "note": _mock_analyze_note(
+                        f"Планерка {unique_id}",
+                        "Еженедельная планерка команды",
+                    ),
                     "entities": [
-                        {
-                            "entity_type": "contact",
-                            "name": f"Петр Иванов {unique_id}",
-                            "description": "Менеджер по продажам в нашей компании",
-                            "attributes": {"phone": "+79998887766"}
-                        },
-                        {
-                            "entity_type": "contact",
-                            "name": f"Анна Новикова {unique_id}",
-                            "description": "Новый дизайнер в команде",
-                            "attributes": {"role": "designer"}
-                        }
+                        _mock_analyze_entity(
+                            "contact",
+                            f"Петр Иванов {unique_id}",
+                            "Менеджер по продажам в нашей компании",
+                            {"phone": "+79998887766"},
+                        ),
+                        _mock_analyze_entity(
+                            "contact",
+                            f"Анна Новикова {unique_id}",
+                            "Новый дизайнер в команде",
+                            {"role": "designer"},
+                        ),
                     ],
-                    "relationships": []
+                    "relationships": [],
+                    "metadata": _META,
+                    "attachment_summaries": []
                 })
             },
             {
@@ -441,26 +486,28 @@ class TestEntityDeduplication:
             "entity_type": "project",
             "name": f"Проект Омега {unique_id}",
             "description": "Секретный проект",
-            "attributes": {}
+            "attributes": {},
+            "namespace": "default",
         }, headers=auth_headers_system)
         
         await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
-                "note": {
-                    "entity_type": "note",
-                    "name": f"Статус проекта {unique_id}",
-                    "description": "Обновление статуса"
-                },
+                "note": _mock_analyze_note(
+                    f"Статус проекта {unique_id}",
+                    "Обновление статуса",
+                ),
                 "entities": [
-                    {
-                        "entity_type": "project",
-                        "name": f"Проект Омега {unique_id}",
-                        "description": "Тот же проект с обновлениями",
-                        "attributes": {"status": "in_progress"}
-                    }
+                    _mock_analyze_entity(
+                        "project",
+                        f"Проект Омега {unique_id}",
+                        "Тот же проект с обновлениями",
+                        {"status": "in_progress"},
+                    )
                 ],
-                "relationships": []
+                "relationships": [],
+                "metadata": _META,
+                "attachment_summaries": []
             })
         }])
         
@@ -468,6 +515,7 @@ class TestEntityDeduplication:
             "entity_type": "note",
             "name": f"Статус {unique_id}",
             "description": f"Обсудили статус Проекта Омега {unique_id}. Все идет по плану.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
 
@@ -514,20 +562,21 @@ class TestDeduplicateSkill:
             {
                 "type": "text",
                 "content": json.dumps({
-                    "note": {
-                        "entity_type": "note",
-                        "name": f"Встреча {unique_id}",
-                        "description": "Встреча по поставкам"
-                    },
+                    "note": _mock_analyze_note(
+                        f"Встреча {unique_id}",
+                        "Встреча по поставкам",
+                    ),
                     "entities": [
-                        {
-                            "entity_type": "organization",
-                            "name": f"ООО Рога и Копыта {unique_id}",
-                            "description": "Торговая компания, обсуждение поставок",
-                            "attributes": {"email": "info@rogaicopyta.ru"}
-                        }
+                        _mock_analyze_entity(
+                            "organization",
+                            f"ООО Рога и Копыта {unique_id}",
+                            "Торговая компания, обсуждение поставок",
+                            {"email": "info@rogaicopyta.ru"},
+                        )
                     ],
-                    "relationships": []
+                    "relationships": [],
+                    "metadata": _META,
+                    "attachment_summaries": []
                 })
             },
             {
@@ -577,20 +626,21 @@ class TestDeduplicateSkill:
             {
                 "type": "text",
                 "content": json.dumps({
-                    "note": {
-                        "entity_type": "note",
-                        "name": f"Записка {unique_id}",
-                        "description": "Техническая записка"
-                    },
+                    "note": _mock_analyze_note(
+                        f"Записка {unique_id}",
+                        "Техническая записка",
+                    ),
                     "entities": [
-                        {
-                            "entity_type": "contact",
-                            "name": f"Новый контакт {unique_id}",
-                            "description": "Новый человек в системе",
-                            "attributes": {"position": "engineer"}
-                        }
+                        _mock_analyze_entity(
+                            "contact",
+                            f"Новый контакт {unique_id}",
+                            "Новый человек в системе",
+                            {"position": "engineer"},
+                        )
                     ],
-                    "relationships": []
+                    "relationships": [],
+                    "metadata": _META,
+                    "attachment_summaries": []
                 })
             }
         ])
@@ -599,6 +649,7 @@ class TestDeduplicateSkill:
             "entity_type": "note",
             "name": f"Знакомство {unique_id}",
             "description": f"Познакомился с новым контактом {unique_id}, инженер.",
+            "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
 

@@ -13,7 +13,7 @@
  *   - useOp('crm/entity_bulk_delete')      — массовое удаление.
  *   - useOp('crm/entity_bulk_update')      — массовая смена статуса.
  *
- * UI-команды (модалки, тосты, навигация) — только через helpers `PlatformPage`
+ * UI-команды (модалки, тосты, навигация) — только через helpers базы
  * (`openModal`, `toast`, `navigate`). Никаких прямых dispatch UI/ROUTER/AUTH,
  * httpRequest, fetch, services.* / store / features.
  *
@@ -25,9 +25,9 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import { CRMNamespacePage } from '../base/crm-namespace-page.js';
+import { crmNamespaceForOptionalQuery } from '../utils/crm-namespace-select.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import { getEffectiveCrmNamespaceApiFilter } from '@platform/lib/utils/platform-namespace.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
@@ -85,7 +85,7 @@ function _entityTypeChipGroups(items) {
     }));
 }
 
-export class CRMEntitiesPage extends PlatformPage {
+export class CRMEntitiesPage extends CRMNamespacePage {
     static i18nNamespace = 'crm';
 
     static properties = {
@@ -110,7 +110,7 @@ export class CRMEntitiesPage extends PlatformPage {
     };
 
     static styles = [
-        PlatformPage.styles,
+        CRMNamespacePage.styles,
         css`
             :host {
                 display: flex;
@@ -980,11 +980,6 @@ export class CRMEntitiesPage extends PlatformPage {
 
         this._authSel = this.select((s) => s.auth.user);
         this._routeKeySel = this.select((s) => s.router.routeKey);
-        this._namespaceSel = this.select((s) => {
-            const user = s.auth.user;
-            if (!user || typeof user.company_id !== 'string') return null;
-            return getEffectiveCrmNamespaceApiFilter(user.company_id, s.ui.namespace.selectionByCompany);
-        });
     }
 
     connectedCallback() {
@@ -1067,7 +1062,7 @@ export class CRMEntitiesPage extends PlatformPage {
     }
 
     _currentNamespace() {
-        return this._namespaceSel.value;
+        return this._crmNamespaceSel.value;
     }
 
     _applyEntityQueryFromLocation() {
@@ -1104,8 +1099,8 @@ export class CRMEntitiesPage extends PlatformPage {
 
     _reloadAll() {
         const ns = this._currentNamespace();
-        this._entityTypes.load({ namespace: ns === null ? undefined : ns });
-        this._aggregate.run({ namespace: ns === null ? undefined : ns });
+        this._entityTypes.load({ namespace: crmNamespaceForOptionalQuery(ns) });
+        this._aggregate.run({ namespace: crmNamespaceForOptionalQuery(ns) });
         this._reloadList();
     }
 

@@ -30,7 +30,7 @@ async def _list_all_entity_types(crm_client, headers: dict) -> dict[str, dict]:
         resp = await crm_client.get(
             "/crm/api/v1/entity-types/",
             headers=headers,
-            params={"limit": page_limit, "offset": offset},
+            params={"limit": page_limit, "offset": offset, "namespace": "default"},
         )
         assert resp.status_code == 200
         payload = resp.json()
@@ -60,7 +60,7 @@ class TestSystemTypesFlags:
             assert t["is_system"] is True
             assert t["extractable"] is False
             assert t["is_context_anchor"] is False
-            assert "*" in t["namespace_ids"]
+            assert t["namespace"] == "default"
 
     @pytest.mark.asyncio
     async def test_member_and_contact_are_voice_targets(
@@ -95,7 +95,7 @@ class TestVoiceTargetAPI:
             json={
                 "type_id": type_id,
                 "name": "Тип-голос",
-                "namespace_ids": ["default"],
+                "namespace": "default",
                 "is_voice_target": True,
             },
             headers=auth_headers_system,
@@ -107,6 +107,7 @@ class TestVoiceTargetAPI:
         get_resp = await crm_client.get(
             f"/crm/api/v1/entity-types/{type_id}",
             headers=auth_headers_system,
+            params={"namespace": "default"},
         )
         assert get_resp.status_code == 200
         assert get_resp.json()["is_voice_target"] is True
@@ -121,7 +122,7 @@ class TestVoiceTargetAPI:
             json={
                 "type_id": type_id,
                 "name": "Тип без голоса",
-                "namespace_ids": ["default"],
+                "namespace": "default",
                 "is_voice_target": False,
             },
             headers=auth_headers_system,
@@ -129,6 +130,7 @@ class TestVoiceTargetAPI:
 
         upd_resp = await crm_client.put(
             f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
             json={"is_voice_target": True},
             headers=auth_headers_system,
         )
@@ -138,6 +140,7 @@ class TestVoiceTargetAPI:
         get_resp = await crm_client.get(
             f"/crm/api/v1/entity-types/{type_id}",
             headers=auth_headers_system,
+            params={"namespace": "default"},
         )
         assert get_resp.json()["is_voice_target"] is True
 
@@ -152,7 +155,7 @@ class TestVoiceTargetAPI:
             json={
                 "type_id": type_id,
                 "name": "Не голос",
-                "namespace_ids": ["default"],
+                "namespace": "default",
                 "is_voice_target": False,
             },
             headers=auth_headers_system,
@@ -193,7 +196,7 @@ class TestVoiceTargetAPI:
             json={
                 "type_id": type_id,
                 "name": "Кастомный голос",
-                "namespace_ids": ["default"],
+                "namespace": "default",
                 "is_voice_target": True,
             },
             headers=auth_headers_system,
@@ -394,6 +397,7 @@ class TestNamespaceTemplateVoiceTarget:
         et_resp = await crm_client.get(
             f"/crm/api/v1/entity-types/{type_id}",
             headers=auth_headers_system,
+            params={"namespace": ns_name},
         )
         assert et_resp.status_code == 200
         assert et_resp.json()["is_voice_target"] is True

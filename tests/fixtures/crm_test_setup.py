@@ -22,7 +22,7 @@ _CUSTOM_ENTITY_TYPES: list[dict[str, str]] = [
 ]
 
 
-async def _ensure_entity_type(
+async def ensure_entity_type_in_namespace(
     crm_client: AsyncClient,
     headers: dict[str, Any],
     type_id: str,
@@ -34,46 +34,69 @@ async def _ensure_entity_type(
     for attempt in range(max_retries):
         response = await crm_client.get(
             f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": namespace_id},
             headers=headers,
         )
         if response.status_code == 200:
-            namespace_ids = response.json().get("namespace_ids") or []
-            if namespace_id in namespace_ids and "default" in namespace_ids:
-                return
-            add_response = await crm_client.post(
-                f"/crm/api/v1/entity-types/{type_id}/namespaces",
-                json={"namespace_ids": ["default", namespace_id]},
-                headers=headers,
-            )
-            if add_response.status_code == 200:
-                return
-            await asyncio.sleep(0.05 * (attempt + 1))
-            continue
+            return
         if response.status_code != 404:
             raise AssertionError(
-                f"Не удалось проверить entity type '{type_id}': "
+                f"Не удалось проверить entity type '{type_id}' в {namespace_id!r}: "
                 f"{response.status_code} {response.text}"
             )
-        create_response = await crm_client.post(
-            "/crm/api/v1/entity-types",
-            json={
-                "type_id": type_id,
-                "name": type_name,
-                "namespace_ids": ["default", namespace_id],
-            },
+        create_response = None
+        def_response = await crm_client.get(
+            f"/crm/api/v1/entity-types/{type_id}",
+            params={"namespace": "default"},
             headers=headers,
         )
-        if create_response.status_code == 200:
-            return
+        if def_response.status_code == 200:
+            src = def_response.json()
+            create_body: dict[str, Any] = {
+                "type_id": type_id,
+                "namespace": namespace_id,
+                "name": str(src.get("name") or type_name),
+                "description": src.get("description"),
+                "prompt": src.get("prompt"),
+                "parent_type_id": src.get("parent_type_id"),
+                "required_fields": src.get("required_fields") if isinstance(src.get("required_fields"), dict) else {},
+                "optional_fields": src.get("optional_fields") if isinstance(src.get("optional_fields"), dict) else {},
+                "icon": src.get("icon"),
+                "color": src.get("color"),
+                "is_event": bool(src.get("is_event", False)),
+                "check_duplicates": bool(src.get("check_duplicates", True)),
+                "is_context_anchor": bool(src.get("is_context_anchor", False)),
+                "is_voice_target": bool(src.get("is_voice_target", False)),
+            }
+            create_response = await crm_client.post(
+                "/crm/api/v1/entity-types",
+                json=create_body,
+                headers=headers,
+            )
+            if create_response.status_code == 200:
+                return
+        else:
+            create_response = await crm_client.post(
+                "/crm/api/v1/entity-types",
+                json={
+                    "type_id": type_id,
+                    "namespace": namespace_id,
+                    "name": type_name,
+                },
+                headers=headers,
+            )
+            if create_response.status_code == 200:
+                return
         if create_response.status_code == 409:
+            await asyncio.sleep(0.05 * (attempt + 1))
             continue
         raise AssertionError(
-            f"Не удалось создать entity type '{type_id}': "
+            f"Не удалось создать entity type '{type_id}' в {namespace_id!r}: "
             f"{create_response.status_code} {create_response.text}"
         )
     raise AssertionError(
-        f"Не удалось обеспечить namespace '{namespace_id}' для entity type '{type_id}' "
-        f"после {max_retries} попыток (concurrent xdist race)"
+        f"Не удалось обеспечить entity type '{type_id}' в namespace '{namespace_id}' "
+        f"после {max_retries} попыток"
     )
 
 
@@ -110,14 +133,14 @@ async def ensure_crm_per_test_namespace_and_types(
     await _ensure_namespace(crm_client, auth_headers_company2, namespace_id)
 
     for item in _CUSTOM_ENTITY_TYPES:
-        await _ensure_entity_type(
+        await ensure_entity_type_in_namespace(
             crm_client=crm_client,
             headers=auth_headers_system,
             type_id=item["type_id"],
             type_name=item["name"],
             namespace_id=namespace_id,
         )
-        await _ensure_entity_type(
+        await ensure_entity_type_in_namespace(
             crm_client=crm_client,
             headers=auth_headers_company2,
             type_id=item["type_id"],
