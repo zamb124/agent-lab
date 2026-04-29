@@ -598,6 +598,7 @@ class LlmNode(BaseNode):
         structured_result = getattr(state, "structured_output_result", None)
         if structured_result is not None:
             delattr(state, "structured_output_result")
+            state.response = json.dumps(structured_result, ensure_ascii=False)
             return structured_result
 
         return {"response": state.response} if state.response else None

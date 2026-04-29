@@ -2814,6 +2814,18 @@ class EntityService:
         """Нормализует ответ analyze от flows перед Pydantic-валидацией."""
         normalized = dict(result_data)
 
+        nested = normalized.get("structured_output")
+        if isinstance(nested, dict):
+            for key in (
+                NOTE_ROOT_ENTITY_TYPE_ID,
+                "entities",
+                "relationships",
+                "metadata",
+                "attachment_summaries",
+            ):
+                if key in nested:
+                    normalized[key] = nested[key]
+
         note_data = normalized.get(NOTE_ROOT_ENTITY_TYPE_ID)
         if isinstance(note_data, dict):
             normalized[NOTE_ROOT_ENTITY_TYPE_ID] = self._normalize_entity_payload(note_data)
