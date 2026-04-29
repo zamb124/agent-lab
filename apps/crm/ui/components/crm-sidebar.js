@@ -492,6 +492,13 @@ export class CRMSidebar extends PlatformElement {
         const activeItemId = treeNodes !== null && typeof routeKey === 'string' && routeKey.length > 0
             ? findNavLeafId(treeNodes, routeKey, searchNorm)
             : '';
+        const navTreeStorageScope =
+            selectValue !== '' &&
+            user &&
+            typeof user.company_id === 'string' &&
+            user.company_id.trim().length > 0
+                ? `crm:${user.company_id.trim()}:${selectValue}`
+                : '';
 
         return html`
             <platform-service-sidebar
@@ -545,6 +552,7 @@ export class CRMSidebar extends PlatformElement {
                             .nodes=${treeNodes}
                             active-item-id=${activeItemId}
                             active-path=${activeTail}
+                            storage-scope=${navTreeStorageScope}
                             ?collapsed=${this.collapsed}
                             @pick=${this._onNavTreePick}
                         ></platform-sidebar-nav-tree>

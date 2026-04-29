@@ -43,6 +43,13 @@ export class SyncForwardModal extends PlatformModal {
                 text-align: center;
                 font-size: var(--text-sm);
             }
+            .form-item-content {
+                flex: 1;
+                min-width: 0;
+            }
+            .form-actions {
+                flex-wrap: wrap;
+            }
         `,
     ];
 
@@ -107,42 +114,45 @@ export class SyncForwardModal extends PlatformModal {
         return html`<h3>${this.t('chat_view.forward_modal_title')}</h3>`;
     }
 
-    render() {
+    renderBody() {
         const channels = this._filteredChannels();
         return html`
-            <div class="modal-body">
-                <div class="form-group">
-                    <input
-                        class="form-input"
-                        type="text"
-                        .value=${this._query}
-                        @input=${(e) => { this._query = e.target.value; }}
-                        placeholder=${this.t('sidebar.direct_search_placeholder')}
-                    />
-                </div>
-                ${channels.length === 0
-                    ? html`<div class="empty">${this.t('chat_view.no_other_channels')}</div>`
-                    : html`<div class="list">
-                        ${channels.map((c) => html`
-                            <div
-                                class=${this._selectedIds.includes(c.id) ? 'form-item selected' : 'form-item'}
-                                @click=${() => this._toggle(c.id)}
-                            >
-                                <div class="form-checkbox">
-                                    ${this._selectedIds.includes(c.id) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
-                                </div>
-                                <div class="form-item-content">
-                                    <sync-channel-row .channel=${c}></sync-channel-row>
-                                </div>
+            <div class="form-group">
+                <input
+                    class="form-input"
+                    type="text"
+                    .value=${this._query}
+                    @input=${(e) => { this._query = e.target.value; }}
+                    placeholder=${this.t('sidebar.direct_search_placeholder')}
+                />
+            </div>
+            ${channels.length === 0
+                ? html`<div class="empty">${this.t('chat_view.no_other_channels')}</div>`
+                : html`<div class="list">
+                    ${channels.map((c) => html`
+                        <div
+                            class=${this._selectedIds.includes(c.id) ? 'form-item selected' : 'form-item'}
+                            @click=${() => this._toggle(c.id)}
+                        >
+                            <div class="form-checkbox">
+                                ${this._selectedIds.includes(c.id) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
                             </div>
-                        `)}
-                    </div>`}
-                <div class="form-actions">
-                    <platform-button variant="secondary" @click=${() => this.close()}>${this.t('chat_view.cancel')}</platform-button>
-                    <platform-button variant="primary" @click=${this._onConfirm} ?disabled=${this._selectedIds.length === 0}>
-                        ${this.t('chat_view.forward')}
-                    </platform-button>
-                </div>
+                            <div class="form-item-content">
+                                <sync-channel-row pick-mode .channel=${c}></sync-channel-row>
+                            </div>
+                        </div>
+                    `)}
+                </div>`}
+        `;
+    }
+
+    renderFooter() {
+        return html`
+            <div class="form-actions">
+                <platform-button variant="secondary" @click=${() => this.close()}>${this.t('chat_view.cancel')}</platform-button>
+                <platform-button variant="primary" @click=${this._onConfirm} ?disabled=${this._selectedIds.length === 0}>
+                    ${this.t('chat_view.forward')}
+                </platform-button>
             </div>
         `;
     }

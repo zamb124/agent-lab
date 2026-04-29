@@ -129,6 +129,11 @@ export class SyncCallOverlayModal extends PlatformModal {
                 max-width: none;
                 min-height: 0;
                 z-index: var(--platform-modal-layer-z, var(--z-modal, 9999)) !important;
+                box-sizing: border-box;
+                padding-top: max(var(--space-2), var(--platform-safe-top));
+                padding-right: max(var(--space-2), var(--platform-safe-right));
+                padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
+                padding-left: max(var(--space-2), var(--platform-safe-left));
             }
             :host([data-minimized]) {
                 position: fixed !important;

@@ -8,6 +8,10 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { sidebarNavItemStyles } from '../../styles/shared/sidebar.styles.js';
+import {
+    readSidebarNavTreeExpanded,
+    writeSidebarNavTreeExpanded,
+} from '../../utils/sidebar-nav-tree-preference.js';
 import '../platform-icon.js';
 
 function _normalizeSearch(search) {
@@ -31,6 +35,11 @@ export class PlatformSidebarNavTree extends PlatformElement {
         /** Совпадение с текущим URL: pathname без base + search */
         activePath: { type: String, attribute: 'active-path' },
         collapsed: { type: Boolean, reflect: true },
+        /**
+         * Непустая строка: читать/писать свёрнутые группы в localStorage
+         * (`sidebar-nav-tree-preference`). Смена scope перезагружает состояние.
+         */
+        storageScope: { type: String, attribute: 'storage-scope' },
     };
 
     static styles = [
@@ -82,7 +91,23 @@ export class PlatformSidebarNavTree extends PlatformElement {
         this.activeItemId = '';
         this.activePath = '';
         this.collapsed = false;
+        this.storageScope = '';
         this._expanded = Object.create(null);
+    }
+
+    willUpdate(changedProperties) {
+        if (changedProperties.has('storageScope')) {
+            const scope = this.storageScope;
+            if (typeof scope === 'string' && scope.trim().length > 0) {
+                this._expanded = Object.assign(
+                    Object.create(null),
+                    readSidebarNavTreeExpanded(scope.trim()),
+                );
+            } else {
+                this._expanded = Object.create(null);
+            }
+        }
+        super.willUpdate(changedProperties);
     }
 
     _isLeafActive(node) {
@@ -100,9 +125,21 @@ export class PlatformSidebarNavTree extends PlatformElement {
 
     _toggleGroup(id) {
         if (typeof id !== 'string' || id.length === 0) return;
-        const cur = this._expanded[id] !== false;
-        this._expanded = { ...this._expanded, [id]: !cur };
+        if (this.collapsed) return;
+        const curExpanded = this._expanded[id] !== false;
+        const nextExpanded = !curExpanded;
+        const next = { ...this._expanded };
+        if (nextExpanded) {
+            delete next[id];
+        } else {
+            next[id] = false;
+        }
+        this._expanded = next;
         this.requestUpdate();
+        const scope = this.storageScope;
+        if (typeof scope === 'string' && scope.trim().length > 0) {
+            writeSidebarNavTreeExpanded(scope.trim(), this._expanded);
+        }
     }
 
     _onLeafClick(node) {

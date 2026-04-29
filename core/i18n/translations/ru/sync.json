@@ -103,6 +103,7 @@
         "max_chars_plain": "Сообщение не длиннее {{max}} символов.",
         "default_preview": "Сообщение",
         "remove_attachment": "Удалить",
+        "voice_draft_label": "Голосовое сообщение",
         "uploading": "Отправка...",
         "edit_heading": "Редактирование сообщения",
         "cancel": "Отмена",

@@ -76,6 +76,7 @@ export class SyncMessageBubble extends PlatformElement {
         :host {
             display: block;
             margin: 1px 0;
+            min-width: 0;
             transition: opacity 200ms ease, transform 200ms ease;
         }
         :host([data-position="first"]) { margin-top: var(--space-2); }
@@ -85,9 +86,11 @@ export class SyncMessageBubble extends PlatformElement {
             display: flex;
             gap: var(--space-2);
             align-items: flex-end;
+            min-width: 0;
         }
         @media (max-width: 767px) {
-            .row {
+            .row,
+            .row * {
                 -webkit-user-select: none;
                 user-select: none;
                 -webkit-touch-callout: none;
@@ -220,12 +223,26 @@ export class SyncMessageBubble extends PlatformElement {
         }
         .reply-quote .who { font-weight: 600; }
         .forwarded {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
             font-size: var(--text-xs);
             color: var(--text-secondary);
             margin-bottom: var(--space-1);
+        }
+        .forwarded platform-icon {
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .forwarded-label {
+            flex: 1;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.35;
         }
         :host([data-own]) .forwarded { color: rgba(255,255,255,0.85); }
         .body {
@@ -559,6 +576,26 @@ export class SyncMessageBubble extends PlatformElement {
         this._longPressTriggered = false;
         this._senderAvatarFailed = false;
         this._senderAvatarSig = '';
+        this._captureSelectStartMobile = (e) => {
+            if (!window.matchMedia || !window.matchMedia('(max-width: 767px)').matches) return;
+            e.preventDefault();
+        };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        const sr = this.shadowRoot;
+        if (sr) {
+            sr.addEventListener('selectstart', this._captureSelectStartMobile, true);
+        }
+    }
+
+    disconnectedCallback() {
+        const sr = this.shadowRoot;
+        if (sr) {
+            sr.removeEventListener('selectstart', this._captureSelectStartMobile, true);
+        }
+        super.disconnectedCallback();
     }
 
     updated(changed) {
@@ -595,6 +632,7 @@ export class SyncMessageBubble extends PlatformElement {
 
     _onPointerDown(e) {
         if (e.pointerType !== 'touch') return;
+        this._clearTextSelection();
         this._longPressTriggered = false;
         this._longPressTimer = window.setTimeout(() => {
             this._longPressTriggered = true;
@@ -630,11 +668,6 @@ export class SyncMessageBubble extends PlatformElement {
         if (sel && typeof sel.removeAllRanges === 'function') {
             sel.removeAllRanges();
         }
-    }
-
-    _onSelectStart(e) {
-        if (!window.matchMedia || !window.matchMedia('(max-width: 767px)').matches) return;
-        e.preventDefault();
     }
 
     _onBubbleClick(e) {
@@ -996,7 +1029,7 @@ export class SyncMessageBubble extends PlatformElement {
         const label = typeof this.message.forwarded_from.label === 'string' ? this.message.forwarded_from.label : '';
         return html`<div class="forwarded">
             <platform-icon name="forward" size="12"></platform-icon>
-            ${this.t('bubble.forwarded_from', { label })}
+            <span class="forwarded-label">${this.t('bubble.forwarded_from', { label })}</span>
         </div>`;
     }
 
@@ -1174,7 +1207,6 @@ export class SyncMessageBubble extends PlatformElement {
                  @pointerdown=${this._onPointerDown}
                  @pointerup=${this._onPointerUp}
                  @pointercancel=${this._onPointerUp}
-                 @selectstart=${this._onSelectStart}
                  @click=${this._onBubbleClick}
             >
                 ${selectionMode ? html`<span class="check"><input type="checkbox" .checked=${!!selected} /></span>` : ''}

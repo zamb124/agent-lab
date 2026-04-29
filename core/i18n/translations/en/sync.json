@@ -103,6 +103,7 @@
         "max_chars_plain": "Message must not exceed {{max}} characters.",
         "default_preview": "Message",
         "remove_attachment": "Remove",
+        "voice_draft_label": "Voice message",
         "uploading": "Sending...",
         "edit_heading": "Edit message",
         "cancel": "Cancel",

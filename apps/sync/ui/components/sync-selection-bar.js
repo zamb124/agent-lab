@@ -24,12 +24,14 @@ export class SyncSelectionBar extends PlatformElement {
         }
         .row {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: var(--space-2);
             padding: var(--space-2) var(--space-3);
         }
         .count {
-            flex: 1;
+            flex: 1 1 120px;
+            min-width: 0;
             font-size: var(--text-sm);
             font-weight: 500;
         }

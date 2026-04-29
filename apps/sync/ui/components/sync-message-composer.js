@@ -23,6 +23,18 @@ import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 
 const TYPING_DEBOUNCE_MS = 1500;
 
+const VOICE_DRAFT_WAVE_HEIGHTS_PX = Object.freeze([
+    12, 20, 14, 24, 16, 22, 10, 26, 18, 14, 20, 16, 22, 12, 24, 18,
+]);
+
+function formatVoiceDurationMs(ms) {
+    const n = typeof ms === 'number' && ms > 0 ? ms : 0;
+    const totalSec = Math.floor(n / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export class SyncMessageComposer extends PlatformElement {
     static properties = {
         channelId: { type: String },
@@ -167,6 +179,76 @@ export class SyncMessageComposer extends PlatformElement {
             border-radius: var(--radius-full, 999px);
             font-size: var(--text-xs);
             color: var(--text-secondary);
+            cursor: pointer;
+        }
+        .voice-draft {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            width: 100%;
+            flex-basis: 100%;
+            min-width: 0;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--glass-border-subtle, var(--glass-border));
+            background: var(--glass-tint-subtle, var(--glass-hover));
+            box-sizing: border-box;
+        }
+        .voice-draft-mic {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-full, 999px);
+            background: var(--accent-subtle, rgba(153, 166, 249, 0.2));
+            color: var(--accent);
+        }
+        .voice-draft-waves {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            flex: 1;
+            min-width: 0;
+            height: 32px;
+        }
+        .voice-draft-waves span {
+            display: block;
+            width: 3px;
+            border-radius: 2px;
+            background: var(--accent);
+            opacity: 0.8;
+            flex-shrink: 0;
+        }
+        .voice-draft-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+        .voice-draft-time {
+            font-size: var(--text-xs);
+            font-variant-numeric: tabular-nums;
+            color: var(--text-secondary);
+        }
+        .voice-draft-remove {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            margin: -4px -4px -4px 0;
+            border: none;
+            border-radius: var(--radius-full, 999px);
+            background: transparent;
+            color: var(--text-tertiary);
+            cursor: pointer;
+        }
+        .voice-draft-remove:hover {
+            background: var(--glass-hover);
+            color: var(--text-primary);
         }
         .mention-popup {
             position: absolute;
@@ -223,6 +305,7 @@ export class SyncMessageComposer extends PlatformElement {
         this._mentionQuery = null;
         this._mediaRecorder = null;
         this._recordedChunks = [];
+        this._recordStartedAt = null;
         this._typingTimer = null;
         this._emojiOpen = false;
         this._mentionIndex = 0;
@@ -425,10 +508,16 @@ export class SyncMessageComposer extends PlatformElement {
         }
     }
 
-    async _uploadFile(file) {
+    async _uploadFile(file, opts) {
         await this._upload.run({ file });
         const result = this._upload.lastResult;
         if (!result || typeof result.file_id !== 'string' || result.file_id === '') return;
+        const meta = typeof opts === 'object' && opts !== null ? opts : null;
+        const voiceMessage = meta !== null && meta.voiceMessage === true;
+        let recordDurationMs = null;
+        if (meta !== null && typeof meta.durationMsApprox === 'number' && meta.durationMsApprox > 0) {
+            recordDurationMs = meta.durationMsApprox;
+        }
         const mimeType = (typeof result.mime_type === 'string' && result.mime_type !== '')
             ? result.mime_type
             : (typeof result.mime === 'string' && result.mime !== '' ? result.mime : file.type);
@@ -437,8 +526,13 @@ export class SyncMessageComposer extends PlatformElement {
             : (typeof result.original_name === 'string' && result.original_name !== '' ? result.original_name : file.name);
         const size = typeof result.size === 'number' ? result.size : file.size;
         const entry = { file_id: result.file_id, filename, mime_type: mimeType, size };
-        if (typeof result.duration_ms === 'number') entry.duration_ms = result.duration_ms;
+        if (typeof result.duration_ms === 'number') {
+            entry.duration_ms = result.duration_ms;
+        } else if (recordDurationMs !== null) {
+            entry.duration_ms = recordDurationMs;
+        }
         if (typeof result.url === 'string' && result.url !== '') entry.url = result.url;
+        if (voiceMessage) entry.voiceMessage = true;
         this._attachments = [...this._attachments, entry];
     }
 
@@ -481,13 +575,18 @@ export class SyncMessageComposer extends PlatformElement {
         this._mediaRecorder = recorder;
         recorder.ondataavailable = (ev) => { if (ev.data.size > 0) this._recordedChunks.push(ev.data); };
         recorder.onstop = async () => {
+            const endedAt = Date.now();
+            const startedAt = typeof this._recordStartedAt === 'number' ? this._recordStartedAt : endedAt;
+            this._recordStartedAt = null;
+            const durationMsApprox = Math.max(0, endedAt - startedAt);
             stream.getTracks().forEach((t) => t.stop());
             this._recording = false;
             const blob = new Blob(this._recordedChunks, { type: chosen });
             const ext = chosen.includes('mp4') ? 'm4a' : 'webm';
             const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type });
-            await this._uploadFile(file);
+            await this._uploadFile(file, { voiceMessage: true, durationMsApprox });
         };
+        this._recordStartedAt = Date.now();
         recorder.start();
         this._recording = true;
     }
@@ -633,12 +732,41 @@ export class SyncMessageComposer extends PlatformElement {
             ` : ''}
             ${this._attachments.length > 0 ? html`
                 <div class="attachments">
-                    ${this._attachments.map((att, i) => html`
-                        <span class="att" @click=${() => this._removeAttachment(i)}>
-                            ${att.filename || att.name || ''}
-                            <platform-icon name="close" size="12"></platform-icon>
-                        </span>
-                    `)}
+                    ${this._attachments.map((att, i) => {
+                        const mt = typeof att.mime_type === 'string' ? att.mime_type : '';
+                        const isVoiceDraft = att.voiceMessage === true && mt.startsWith('audio/');
+                        if (isVoiceDraft) {
+                            const dur = typeof att.duration_ms === 'number' ? att.duration_ms : 0;
+                            return html`
+                                <div class="voice-draft" role="group" aria-label=${this.t('composer.voice_draft_label')}>
+                                    <span class="voice-draft-mic" aria-hidden="true">
+                                        <platform-icon name="mic" size="18"></platform-icon>
+                                    </span>
+                                    <div class="voice-draft-waves" aria-hidden="true">
+                                        ${VOICE_DRAFT_WAVE_HEIGHTS_PX.map((h) => html`<span style="height:${h}px"></span>`)}
+                                    </div>
+                                    <div class="voice-draft-meta">
+                                        <span class="voice-draft-time">${formatVoiceDurationMs(dur)}</span>
+                                        <button
+                                            type="button"
+                                            class="voice-draft-remove"
+                                            title=${this.t('composer.remove_attachment')}
+                                            aria-label=${this.t('composer.remove_attachment')}
+                                            @click=${() => this._removeAttachment(i)}
+                                        >
+                                            <platform-icon name="close" size="14"></platform-icon>
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        return html`
+                            <span class="att" @click=${() => this._removeAttachment(i)}>
+                                ${att.filename || att.name || ''}
+                                <platform-icon name="close" size="12"></platform-icon>
+                            </span>
+                        `;
+                    })}
                 </div>
             ` : ''}
             <div class="pill" style="position: relative;" @drop=${this._onDrop} @dragover=${(e) => e.preventDefault()}>

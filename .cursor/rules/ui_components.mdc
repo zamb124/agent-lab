@@ -400,7 +400,9 @@ UX поверх данных, не дерево маршрутов).
 
 **Файл:** `core/frontend/static/lib/components/layout/platform-sidebar-nav-tree.js`.
 
-**Назначение:** иерархическое меню в колонке shell-сайдбара (группы со сворачиванием, листья с иконкой). Доменно нейтрален: хост передаёт `nodes`, `active-item-id`, `active-path` (суффикс вида `tasks` или `notes?entity_type=note&entity_subtype=meeting`), `collapsed`.
+**Назначение:** иерархическое меню в колонке shell-сайдбара (группы со сворачиванием, листья с иконкой). Доменно нейтрален: хост передаёт `nodes`, `active-item-id`, `active-path` (суффикс вида `tasks` или `notes?entity_type=note&entity_subtype=meeting`), `collapsed`, опционально **`storage-scope`**.
+
+**Персистентность:** при непустом `storage-scope` свёрнутые группы читаются/пишутся в `localStorage` через `core/frontend/static/lib/utils/sidebar-nav-tree-preference.js` (префикс ключа `platform:sidebar-nav-tree-expanded:`; в JSON только пары `id -> false`). Битый JSON или значение `true` у ключа в storage — `throw` при чтении. Смена `storage-scope` перезагружает `_expanded` из storage. При тоггле группы запись не делается, если `collapsed` (сайдбар в узком режиме).
 
 **Лист:** `id`, `label`, `icon?`, `routeKey`, `search` (строка query с ведущим `?`, может быть пустой).
 

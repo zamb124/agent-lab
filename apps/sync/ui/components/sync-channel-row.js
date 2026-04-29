@@ -24,6 +24,8 @@ import { getTypingIndicatorLine } from '../_helpers/sync-typing.js';
 export class SyncChannelRow extends PlatformElement {
     static properties = {
         channel: { type: Object },
+        /** Режим выбора в модалке (клик не ведёт в канал, без шестерёнки и «Войти»). */
+        pickMode: { type: Boolean, attribute: 'pick-mode' },
         _avatarImgFailed: { state: true },
     };
 
@@ -279,6 +281,7 @@ export class SyncChannelRow extends PlatformElement {
     constructor() {
         super();
         this.channel = null;
+        this.pickMode = false;
         this._avatarImgFailed = false;
         this._avatarRowSig = '';
         this._presenceSel = this.select((s) => s.syncPresence);
@@ -330,6 +333,7 @@ export class SyncChannelRow extends PlatformElement {
     }
 
     _onClick() {
+        if (this.pickMode) return;
         if (!this.channel) return;
         this.navigate('channel', { channelId: this.channel.id });
         this._closeSidebarMobile();
@@ -337,6 +341,7 @@ export class SyncChannelRow extends PlatformElement {
 
     _onJoinCall(callInfo, e) {
         e.stopPropagation();
+        if (this.pickMode) return;
         if (!this.channel || !callInfo || typeof callInfo.call_id !== 'string' || callInfo.call_id === '') {
             return;
         }
@@ -365,6 +370,7 @@ export class SyncChannelRow extends PlatformElement {
 
     _onGear(e) {
         e.stopPropagation();
+        if (this.pickMode) return;
         if (!this.channel) return;
         const ch = this.channel;
         const isDm = ch.type === 'direct' && ch.peer && typeof ch.peer.user_id === 'string' && ch.peer.user_id !== '';
@@ -434,7 +440,7 @@ export class SyncChannelRow extends PlatformElement {
             t: (k, v) => this.t(k, v),
         });
         const callUi = this._callUiSel.value;
-        const activeCall = callUi && callUi.activeCallChannels && callUi.activeCallChannels[this.channel.id];
+        const activeCall = !this.pickMode && callUi && callUi.activeCallChannels && callUi.activeCallChannels[this.channel.id];
         const unread = typeof this.channel.unread_count === 'number' ? this.channel.unread_count : 0;
         const mentions = typeof this.channel.mention_unread_count === 'number' ? this.channel.mention_unread_count : 0;
         const previewText = typeof this.channel.last_message_preview === 'string' ? this.channel.last_message_preview : '';
@@ -442,7 +448,7 @@ export class SyncChannelRow extends PlatformElement {
         const timeLabel = lastAtIso !== '' ? this._formatTime(lastAtIso) : '';
         const isDm = this.channel.type === 'direct' && this.channel.peer
             && typeof this.channel.peer.user_id === 'string' && this.channel.peer.user_id !== '';
-        const showGear = isDm || this.channel.type !== 'direct';
+        const showGear = !this.pickMode && (isDm || this.channel.type !== 'direct');
         const gearTitle = isDm
             ? this.t('chat_view.peer_profile_aria')
             : this.t('sidebar.channel_settings_aria');
