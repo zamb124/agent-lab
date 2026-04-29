@@ -609,6 +609,8 @@
         "context_anchor_search_types": "Search among: {{types}}",
         "entity_search_min": "Type more characters to search",
         "entity_search_none": "No matches",
+        "entity_search_none_matching_voice": "No entities of an allowed type for the note voice in this namespace.",
+        "entity_search_none_matching_anchor": "No entities of an allowed type for the context anchor.",
         "field_date": "Note date",
         "field_tags": "Tags",
         "placeholder_title": "Note title",

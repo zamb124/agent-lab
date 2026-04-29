@@ -609,6 +609,8 @@
         "context_anchor_search_types": "Искать: {{types}}",
         "entity_search_min": "Введите больше символов для поиска",
         "entity_search_none": "Ничего не найдено",
+        "entity_search_none_matching_voice": "Нет сущностей подходящего типа для голоса заметки в этом пространстве.",
+        "entity_search_none_matching_anchor": "Нет сущностей подходящего типа для якоря контекста.",
         "field_date": "Дата заметки",
         "field_tags": "Теги",
         "placeholder_title": "Название заметки",

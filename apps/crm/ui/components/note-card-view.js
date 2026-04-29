@@ -249,6 +249,8 @@ export class CRMNoteCardView extends PlatformElement {
         _contextSearchOpen: { state: true },
         _contextSearchResults: { state: true },
         _contextSearchLoading: { state: true },
+        _voiceSearchFilteredNoMatch: { state: true },
+        _contextSearchFilteredNoMatch: { state: true },
     };
 
     static styles = [
@@ -311,7 +313,7 @@ export class CRMNoteCardView extends PlatformElement {
             .title-block {
                 display: flex;
                 flex-direction: column;
-                gap: 2px;
+                gap: var(--space-2);
                 min-width: 0;
                 flex: 1;
             }
@@ -1007,7 +1009,6 @@ export class CRMNoteCardView extends PlatformElement {
                 flex-wrap: wrap;
                 align-items: center;
                 gap: var(--space-2);
-                margin-top: var(--space-2);
             }
             .meta-pill {
                 display: inline-flex;
@@ -1194,6 +1195,81 @@ export class CRMNoteCardView extends PlatformElement {
                 font-size: 13px;
             }
 
+            .mention-popover--entity-list {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
+            .mention-row {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: var(--space-3);
+                width: 100%;
+                margin: 0;
+                padding: var(--space-2) var(--space-3);
+                box-sizing: border-box;
+                border: none;
+                border-bottom: 1px solid var(--crm-stroke);
+                border-radius: 0;
+                background: transparent;
+                color: var(--text-primary);
+                font-family: inherit;
+                font-size: 14px;
+                line-height: 1.3;
+                text-align: left;
+                cursor: pointer;
+                -webkit-appearance: none;
+                appearance: none;
+            }
+
+            .mention-row:last-child {
+                border-bottom: none;
+            }
+
+            .mention-row:hover,
+            .mention-row:focus-visible {
+                background: var(--crm-note-action-bg);
+                outline: none;
+            }
+
+            .mention-row-lead {
+                flex-shrink: 0;
+                width: 36px;
+                height: 36px;
+                border-radius: var(--radius-md);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: var(--glass-solid-medium);
+                color: var(--accent);
+            }
+
+            .mention-row-body {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                align-items: flex-start;
+            }
+
+            .mention-row .mention-name {
+                font-weight: 500;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                width: 100%;
+                max-width: 100%;
+            }
+
+            .mention-row .mention-type {
+                font-size: 12px;
+                line-height: 1.2;
+                color: var(--crm-note-text-muted);
+            }
+
             @keyframes summarySpin {
                 from { transform: rotate(0deg); }
                 to { transform: rotate(360deg); }
@@ -1261,10 +1337,12 @@ export class CRMNoteCardView extends PlatformElement {
         this._voiceSearchOpen = false;
         this._voiceSearchResults = [];
         this._voiceSearchLoading = false;
+        this._voiceSearchFilteredNoMatch = false;
         this._contextSearchQuery = '';
         this._contextSearchOpen = false;
         this._contextSearchResults = [];
         this._contextSearchLoading = false;
+        this._contextSearchFilteredNoMatch = false;
         this._voiceSearchDeb = null;
         this._contextSearchDeb = null;
 
@@ -1374,18 +1452,22 @@ export class CRMNoteCardView extends PlatformElement {
             if (purpose === 'voice') {
                 if (this._voiceSearchRequestId === null || cid !== this._voiceSearchRequestId) return;
                 const allow = this._voiceTargetTypeIdSet();
-                this._voiceSearchResults = rawItems.filter(
+                const filtered = rawItems.filter(
                     (it) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
                 );
+                this._voiceSearchFilteredNoMatch = rawItems.length > 0 && filtered.length === 0;
+                this._voiceSearchResults = filtered;
                 this._voiceSearchLoading = false;
                 return;
             }
             if (purpose === 'context') {
                 if (this._contextSearchRequestId === null || cid !== this._contextSearchRequestId) return;
                 const allow = this._contextAnchorTypeIdSet();
-                this._contextSearchResults = rawItems.filter(
+                const filtered = rawItems.filter(
                     (it) => typeof it.entity_type === 'string' && allow.has(it.entity_type),
                 );
+                this._contextSearchFilteredNoMatch = rawItems.length > 0 && filtered.length === 0;
+                this._contextSearchResults = filtered;
                 this._contextSearchLoading = false;
             }
         });
@@ -1402,12 +1484,14 @@ export class CRMNoteCardView extends PlatformElement {
             if (purpose === 'voice') {
                 if (this._voiceSearchRequestId === null || cid !== this._voiceSearchRequestId) return;
                 this._voiceSearchResults = [];
+                this._voiceSearchFilteredNoMatch = false;
                 this._voiceSearchLoading = false;
                 return;
             }
             if (purpose === 'context') {
                 if (this._contextSearchRequestId === null || cid !== this._contextSearchRequestId) return;
                 this._contextSearchResults = [];
+                this._contextSearchFilteredNoMatch = false;
                 this._contextSearchLoading = false;
             }
         });
@@ -1634,6 +1718,54 @@ export class CRMNoteCardView extends PlatformElement {
         return typeId;
     }
 
+    _iconFromEntityTypesCatalog(typeId) {
+        if (typeof typeId !== 'string' || typeId.length === 0) {
+            return null;
+        }
+        const items = this._entityTypeItems();
+        for (const row of items) {
+            if (typeof row !== 'object' || row === null) continue;
+            if (row.type_id !== typeId) continue;
+            const ic = row.icon;
+            if (typeof ic === 'string' && ic.trim().length > 0) {
+                return ic.trim();
+            }
+            return null;
+        }
+        return null;
+    }
+
+    _pickerIconNameForItem(item) {
+        if (!item || typeof item !== 'object') {
+            return 'box';
+        }
+        const sub = typeof item.entity_subtype === 'string' ? item.entity_subtype.trim() : '';
+        if (sub.length > 0) {
+            const fromSub = this._iconFromEntityTypesCatalog(sub);
+            if (fromSub !== null) {
+                return fromSub;
+            }
+        }
+        const root = typeof item.entity_type === 'string' ? item.entity_type.trim() : '';
+        const fromRoot = this._iconFromEntityTypesCatalog(root);
+        if (fromRoot !== null) {
+            return fromRoot;
+        }
+        return 'box';
+    }
+
+    _pickerTypeLabelForItem(item) {
+        if (!item || typeof item !== 'object') {
+            return '';
+        }
+        const root = typeof item.entity_type === 'string' ? item.entity_type.trim() : '';
+        const sub = typeof item.entity_subtype === 'string' ? item.entity_subtype.trim() : '';
+        if (sub.length > 0) {
+            return `${this._subtypeNameByTypeId(root)} / ${this._subtypeNameByTypeId(sub)}`;
+        }
+        return this._subtypeNameByTypeId(root);
+    }
+
     _hydrateGraphEditorsFromCard() {
         if (this.note === null) {
             this._editVoiceEntityId = '';
@@ -1704,6 +1836,12 @@ export class CRMNoteCardView extends PlatformElement {
             this._contextSearchQuery = '';
             this._voiceSearchOpen = false;
             this._contextSearchOpen = false;
+            this._voiceSearchResults = [];
+            this._voiceSearchLoading = false;
+            this._voiceSearchFilteredNoMatch = false;
+            this._contextSearchResults = [];
+            this._contextSearchLoading = false;
+            this._contextSearchFilteredNoMatch = false;
             return;
         }
         this._editName = typeof note.name === 'string' ? note.name : '';
@@ -1808,7 +1946,15 @@ export class CRMNoteCardView extends PlatformElement {
                 && related.name.length > 0
                     ? related.name
                     : targetId;
-            return { entity_id: targetId, label };
+            const entity_type =
+                related !== undefined && typeof related.entity_type === 'string'
+                    ? related.entity_type
+                    : '';
+            const entity_subtype =
+                related !== undefined && typeof related.entity_subtype === 'string'
+                    ? related.entity_subtype
+                    : '';
+            return { entity_id: targetId, label, entity_type, entity_subtype };
         };
         return {
             voice: findOutgoingTarget('note_voice'),
@@ -2024,7 +2170,7 @@ export class CRMNoteCardView extends PlatformElement {
                 payload.namespace = namespace;
             }
             this._entitySearchPurpose = 'mention';
-            this._mentionRequestId = this._entitySearch.run(payload);
+            this._mentionRequestId = this._dispatchEntitySearchRequested(payload);
         }, 200);
     }
 
@@ -2071,10 +2217,18 @@ export class CRMNoteCardView extends PlatformElement {
         return null;
     }
 
-    _renderEntityPickerPopover(kind, loading, queryMinLen, emptyKey, rows, onPick) {
+    _dispatchEntitySearchRequested(payload) {
+        const ev = this.dispatch(this._entitySearch.op.events.REQUESTED, payload, { source: 'local' });
+        if (!ev || typeof ev.id !== 'string') {
+            throw new Error('CRMNoteCardView: entity search REQUESTED did not return event id');
+        }
+        return ev.id;
+    }
+
+    _renderEntityPickerPopover(kind, loading, queryMinLen, emptyKey, rows, onPick, noRowsKey) {
         if (loading === true) {
             return html`
-                <div class="mention-popover">
+                <div class="mention-popover mention-popover--entity-list">
                     <div class="mention-empty">${this.t('note_edit.mention_searching')}</div>
                 </div>
             `;
@@ -2085,29 +2239,34 @@ export class CRMNoteCardView extends PlatformElement {
                 : (typeof this._contextSearchQuery === 'string' ? this._contextSearchQuery.trim() : '');
             if (q.length < queryMinLen) {
                 return html`
-                    <div class="mention-popover">
+                    <div class="mention-popover mention-popover--entity-list">
                         <div class="mention-empty">${this.t(emptyKey)}</div>
                     </div>
                 `;
             }
         }
         if (!Array.isArray(rows) || rows.length === 0) {
+            const key = typeof noRowsKey === 'string' && noRowsKey.length > 0
+                ? noRowsKey
+                : 'note_edit.entity_search_none';
             return html`
-                <div class="mention-popover">
-                    <div class="mention-empty">${this.t('note_edit.entity_search_none')}</div>
+                <div class="mention-popover mention-popover--entity-list">
+                    <div class="mention-empty">${this.t(key)}</div>
                 </div>
             `;
         }
         return html`
-            <div class="mention-popover">
+            <div class="mention-popover mention-popover--entity-list">
                 ${rows.map(
                     (item) => html`
                         <button type="button" class="mention-row" @click=${() => onPick(item)}>
-                            <platform-icon name="link" size="12"></platform-icon>
-                            <span class="mention-name">${item.name}</span>
-                            <span class="mention-type">${typeof item.entity_type === 'string'
-                                ? item.entity_type
-                                : ''}</span>
+                            <span class="mention-row-lead">
+                                <platform-icon name=${this._pickerIconNameForItem(item)} size="16"></platform-icon>
+                            </span>
+                            <span class="mention-row-body">
+                                <span class="mention-name">${typeof item.name === 'string' ? item.name : ''}</span>
+                                <span class="mention-type">${this._pickerTypeLabelForItem(item)}</span>
+                            </span>
                         </button>
                     `,
                 )}
@@ -2120,16 +2279,18 @@ export class CRMNoteCardView extends PlatformElement {
         if (q.length === 0) {
             this._voiceSearchResults = [];
             this._voiceSearchLoading = false;
+            this._voiceSearchFilteredNoMatch = false;
             return;
         }
         this._voiceSearchLoading = true;
+        this._voiceSearchFilteredNoMatch = false;
         const payload = { q, limit: 22 };
         const ns = this._currentNamespaceForSearch();
         if (typeof ns === 'string' && ns.length > 0) {
             payload.namespace = ns;
         }
         this._entitySearchPurpose = 'voice';
-        this._voiceSearchRequestId = this._entitySearch.run(payload);
+        this._voiceSearchRequestId = this._dispatchEntitySearchRequested(payload);
     }
 
     _runContextEntitySearch() {
@@ -2137,16 +2298,18 @@ export class CRMNoteCardView extends PlatformElement {
         if (q.length === 0) {
             this._contextSearchResults = [];
             this._contextSearchLoading = false;
+            this._contextSearchFilteredNoMatch = false;
             return;
         }
         this._contextSearchLoading = true;
+        this._contextSearchFilteredNoMatch = false;
         const payload = { q, limit: 22 };
         const ns = this._currentNamespaceForSearch();
         if (typeof ns === 'string' && ns.length > 0) {
             payload.namespace = ns;
         }
         this._entitySearchPurpose = 'context';
-        this._contextSearchRequestId = this._entitySearch.run(payload);
+        this._contextSearchRequestId = this._dispatchEntitySearchRequested(payload);
     }
 
     _onVoiceSearchInput(e) {
@@ -2202,6 +2365,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._voiceSearchQuery = '';
         this._voiceSearchResults = [];
         this._voiceSearchOpen = false;
+        this._voiceSearchFilteredNoMatch = false;
     }
 
     _onClearContextPick() {
@@ -2209,6 +2373,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._contextSearchQuery = '';
         this._contextSearchResults = [];
         this._contextSearchOpen = false;
+        this._contextSearchFilteredNoMatch = false;
     }
 
     _onSubtypeChange(e) {
@@ -2271,6 +2436,9 @@ export class CRMNoteCardView extends PlatformElement {
                                         'note_edit.entity_search_min',
                                         this._voiceSearchResults,
                                         (it) => this._onPickVoiceSearchItem(it),
+                                        this._voiceSearchFilteredNoMatch === true
+                                            ? 'note_edit.entity_search_none_matching_voice'
+                                            : 'note_edit.entity_search_none',
                                     )
                                     : ''}
                             </div>
@@ -2308,6 +2476,9 @@ export class CRMNoteCardView extends PlatformElement {
                                         'note_edit.entity_search_min',
                                         this._contextSearchResults,
                                         (it) => this._onPickContextSearchItem(it),
+                                        this._contextSearchFilteredNoMatch === true
+                                            ? 'note_edit.entity_search_none_matching_anchor'
+                                            : 'note_edit.entity_search_none',
                                     )
                                     : ''}
                             </div>
@@ -2345,7 +2516,10 @@ export class CRMNoteCardView extends PlatformElement {
                             @click=${() => this._emitEntityOpen(chipsData.voice.entity_id)}
                             title=${this.t('note_edit.field_voice_author')}
                         >
-                            <platform-icon name="user" size="12"></platform-icon>
+                            <platform-icon
+                                name=${this._pickerIconNameForItem(chipsData.voice)}
+                                size="12"
+                            ></platform-icon>
                             ${chipsData.voice.label}
                         </button>
                     `
@@ -2358,7 +2532,10 @@ export class CRMNoteCardView extends PlatformElement {
                             @click=${() => this._emitEntityOpen(chipsData.context.entity_id)}
                             title=${this.t('note_edit.field_context_anchor')}
                         >
-                            <platform-icon name="anchor" size="12"></platform-icon>
+                            <platform-icon
+                                name=${this._pickerIconNameForItem(chipsData.context)}
+                                size="12"
+                            ></platform-icon>
                             ${chipsData.context.label}
                         </button>
                     `
@@ -2370,36 +2547,40 @@ export class CRMNoteCardView extends PlatformElement {
     _renderMentionPopover() {
         if (this._mentionLoading) {
             return html`
-                <div class="mention-popover">
+                <div class="mention-popover mention-popover--entity-list">
                     <div class="mention-empty">${this.t('note_edit.mention_searching')}</div>
                 </div>
             `;
         }
         if (this._mentionQuery.length === 0) {
             return html`
-                <div class="mention-popover">
+                <div class="mention-popover mention-popover--entity-list">
                     <div class="mention-empty">${this.t('note_edit.mention_min_query')}</div>
                 </div>
             `;
         }
         if (this._mentionResults.length === 0) {
             return html`
-                <div class="mention-popover">
+                <div class="mention-popover mention-popover--entity-list">
                     <div class="mention-empty">${this.t('note_edit.mention_no_results')}</div>
                 </div>
             `;
         }
         return html`
-            <div class="mention-popover">
+            <div class="mention-popover mention-popover--entity-list">
                 ${this._mentionResults.map((item) => html`
                     <button
                         type="button"
                         class="mention-row"
                         @click=${() => this._onMentionPick(item)}
                     >
-                        <platform-icon name="link" size="12"></platform-icon>
-                        <span class="mention-name">${item.name}</span>
-                        <span class="mention-type">${typeof item.entity_type === 'string' ? item.entity_type : ''}</span>
+                        <span class="mention-row-lead">
+                            <platform-icon name=${this._pickerIconNameForItem(item)} size="16"></platform-icon>
+                        </span>
+                        <span class="mention-row-body">
+                            <span class="mention-name">${typeof item.name === 'string' ? item.name : ''}</span>
+                            <span class="mention-type">${this._pickerTypeLabelForItem(item)}</span>
+                        </span>
                     </button>
                 `)}
             </div>
@@ -3067,10 +3248,10 @@ export class CRMNoteCardView extends PlatformElement {
                     <header class="header">
                         <div class="title-block">
                             <h1 class="title">${title}</h1>
-                            ${this._renderViewNoteMetaRibbon()}
                             ${dateText
                                 ? html`<span class="note-date">${this.t('note_view.date_prefix', { date: dateText })}</span>`
                                 : ''}
+                            ${this._renderViewNoteMetaRibbon()}
                         </div>
                         <div class="header-actions">
                             ${this._renderAttachmentsHeaderButton('view')}
