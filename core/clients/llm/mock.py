@@ -48,6 +48,23 @@ def _mock_redis_key() -> str:
         return f"mock_llm:responses:{worker}"
     return "mock_llm:responses"
 
+
+def _mock_capture_key(scope: str) -> str:
+    """
+    Ключ Redis для журнала вызовов MockLLM (захват `messages`).
+
+    `scope` — произвольная метка теста (UUID4); фикстура `mock_llm_capture`
+    использует одну метку на тест и кладёт её в Redis (см.
+    `_MOCK_CAPTURE_SCOPE_KEY`), а `MockLLM.stream` читает её и пишет
+    каждый вызов в `mock_llm:capture:<scope>` как отдельный элемент списка.
+
+    Без активной метки журнал не ведётся.
+    """
+    return f"mock_llm:capture:{scope}"
+
+
+_MOCK_CAPTURE_SCOPE_KEY = "mock_llm:capture:active_scope"
+
 _global_mock_registry: Dict[str, "MockLLM"] = {}
 
 # Атомарно: один элемент JSON-массива за вызов (несколько async LLM на одном ключе).
@@ -142,6 +159,50 @@ class MockLLM:
             logger.warning(f"MockLLM: ошибка чтения из Redis: {e}")
 
         return None
+
+    async def _capture_call_to_redis(
+        self,
+        messages: List[Message],
+        tools: Optional[List[Dict[str, Any]]],
+        response_format: Optional[Dict[str, Any]],
+    ) -> None:
+        """
+        Если фикстура теста выставила активный capture-scope в Redis,
+        пишет в журнал `mock_llm:capture:<scope>` запись об одном вызове
+        MockLLM (`messages`, `tools`, `response_format`, `model`).
+
+        `messages` нормализуются как plain text + role + metadata (ключи
+        tool_calls / tool_call_id / system / usage). FilePart-ы выписываются
+        как `{"file": True, "mime_type": ...}` без bytes — журнал должен
+        оставаться компактным даже для multimodal вызовов.
+        """
+        if not self._redis_client:
+            return
+        try:
+            scope = await self._redis_client.get(_MOCK_CAPTURE_SCOPE_KEY)
+        except Exception as exc:
+            logger.warning(f"MockLLM capture: ошибка чтения scope: {exc}")
+            return
+        if scope is None:
+            return
+        if isinstance(scope, bytes):
+            scope = scope.decode("utf-8")
+        if not scope:
+            return
+
+        normalized_messages = [_normalize_message_for_capture(m) for m in messages]
+        record = {
+            "model": self.model_name,
+            "messages": normalized_messages,
+            "tools": tools or [],
+            "response_format": response_format,
+        }
+        try:
+            await self._redis_client.rpush(
+                _mock_capture_key(scope), json.dumps(record, ensure_ascii=False)
+            )
+        except Exception as exc:
+            logger.warning(f"MockLLM capture: ошибка записи в Redis: {exc}")
 
     def _get_response(self, messages: List[Message]) -> Dict[str, Any]:
         """Внутренний метод получения ответа."""
@@ -300,6 +361,12 @@ class MockLLM:
         task_id = task_id or str(uuid.uuid4())
         context_id = context_id or task_id
         artifact_id = str(uuid.uuid4())
+
+        await self._capture_call_to_redis(
+            messages=messages,
+            tools=tools,
+            response_format=response_format,
+        )
 
         # Используем async метод для поддержки Redis
         response = await self._get_response_async(messages)
@@ -519,6 +586,66 @@ class MockLLM:
         )
 
 
+def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
+    """
+    Превращает A2A `Message` (или dict) в JSON-сериализуемое представление
+    для журнала MockLLM. Текст склеивается из всех TextPart-ов; FilePart
+    представляется заглушкой `{file: True, mime_type: ...}` без bytes.
+    """
+    if isinstance(message, Message):
+        role = message.role
+        metadata = message.metadata or {}
+        parts = message.parts or []
+    elif isinstance(message, dict):
+        role = message.get("role", "user")
+        metadata = message.get("metadata") or {}
+        parts = message.get("parts") or []
+    else:
+        return {"role": "user", "text": str(message), "parts": [], "metadata": {}}
+
+    text_parts: List[str] = []
+    raw_parts: List[Dict[str, Any]] = []
+    for part in parts:
+        root = getattr(part, "root", None)
+        if root is None and isinstance(part, dict):
+            root = part.get("root", part)
+        if root is None:
+            continue
+        text = None
+        if hasattr(root, "text"):
+            text = getattr(root, "text", None)
+        elif isinstance(root, dict) and "text" in root:
+            text = root["text"]
+        if isinstance(text, str):
+            text_parts.append(text)
+            raw_parts.append({"type": "text", "text": text})
+            continue
+        file_obj = None
+        if hasattr(root, "file"):
+            file_obj = getattr(root, "file")
+        elif isinstance(root, dict) and "file" in root:
+            file_obj = root["file"]
+        if file_obj is not None:
+            mime = None
+            if hasattr(file_obj, "mime_type"):
+                mime = getattr(file_obj, "mime_type")
+            elif isinstance(file_obj, dict):
+                mime = file_obj.get("mimeType") or file_obj.get("mime_type")
+            raw_parts.append({"type": "file", "mime_type": mime or "application/octet-stream"})
+
+    role_str = role.value if hasattr(role, "value") else str(role)
+    safe_metadata: Dict[str, Any] = {}
+    for key in ("system", "tool_call_id", "tool_calls"):
+        if key in metadata:
+            safe_metadata[key] = metadata[key]
+    return {
+        "role": role_str,
+        "text": "".join(text_parts),
+        "parts": raw_parts,
+        "metadata": safe_metadata,
+    }
+
+
 def _normalize_messages(messages: MessageInput) -> List[Message]:
     """
     Нормализует различные форматы messages в List[Message].
@@ -629,4 +756,38 @@ async def clear_mock_responses_redis(
     """Очищает mock ответы из Redis."""
     key = key_override or _mock_redis_key()
     await redis_client.delete(key)
+
+
+async def start_mock_llm_capture(redis_client, scope: str) -> str:
+    """
+    Включает запись каждого вызова MockLLM (`messages`, `tools`,
+    `response_format`, `model`) в Redis-список `mock_llm:capture:<scope>`.
+
+    Действует процессно-глобально: пока стоит ключ `mock_llm:capture:active_scope`,
+    `MockLLM.stream` пишет в `mock_llm:capture:<scope>`. Снимается через
+    `stop_mock_llm_capture`. Возвращает имя ключа списка.
+    """
+    if not scope:
+        raise ValueError("start_mock_llm_capture: scope не должен быть пустым")
+    list_key = _mock_capture_key(scope)
+    await redis_client.delete(list_key)
+    await redis_client.set(_MOCK_CAPTURE_SCOPE_KEY, scope)
+    return list_key
+
+
+async def stop_mock_llm_capture(redis_client, scope: str) -> None:
+    """Снимает активный capture-scope и удаляет его список."""
+    await redis_client.delete(_MOCK_CAPTURE_SCOPE_KEY)
+    await redis_client.delete(_mock_capture_key(scope))
+
+
+async def read_mock_llm_capture(redis_client, scope: str) -> List[Dict[str, Any]]:
+    """Возвращает все записанные за scope вызовы MockLLM в порядке прихода."""
+    raw = await redis_client.lrange(_mock_capture_key(scope), 0, -1)
+    out: List[Dict[str, Any]] = []
+    for item in raw or []:
+        if isinstance(item, bytes):
+            item = item.decode("utf-8")
+        out.append(json.loads(item))
+    return out
 

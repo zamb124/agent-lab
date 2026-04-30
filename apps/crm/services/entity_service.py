@@ -277,6 +277,17 @@ class EntityService:
             raise ValueError("Нет пользователя в контексте")
         return str(context.user.user_id)
 
+    async def _tenant_company_entity_ids(self) -> frozenset[str]:
+        """ID CRM-сущностей компании-тенанта (атрибут platform_company_id)."""
+        company_id = self._get_company_id()
+        rows = await self._entity_repo.find_by_attribute(
+            entity_type=COMPANY_ENTITY_TYPE,
+            attribute_key=PLATFORM_COMPANY_ID_ATTR,
+            attribute_value=company_id,
+            company_id=company_id,
+        )
+        return frozenset(row.entity_id for row in rows)
+
     @staticmethod
     def _normalize_namespace(namespace: Optional[str]) -> Optional[str]:
         if namespace is None:
@@ -3259,6 +3270,7 @@ class EntityService:
         """
         После apply AI-анализа: создаёт mentions-связи от заметки ко всем найденным сущностям.
         AI не всегда включает эти связи в черновик — создаём принудительно для всех извлечённых.
+        Сущность компании тенанта (platform_company_id) пропускается — не создаём шумную связь.
         """
         if not entity_ids:
             return
@@ -3267,9 +3279,12 @@ class EntityService:
             raise ValueError(f"Заметка не найдена: {note_id}")
         namespace = self._resolve_namespace_for_write(note.namespace)
         company_id = self._get_company_id()
+        tenant_company_ids = await self._tenant_company_entity_ids()
         now = datetime.now(timezone.utc)
         for entity_id in entity_ids:
             if entity_id == note_id:
+                continue
+            if entity_id in tenant_company_ids:
                 continue
             existing = await self._relationship_repo.find_exact(note_id, entity_id, "mentions")
             if existing:

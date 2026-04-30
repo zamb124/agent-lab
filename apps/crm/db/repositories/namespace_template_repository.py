@@ -70,6 +70,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         icon: Optional[str] = None,
         company_id: Optional[str] = None,
         is_system: bool = False,
+        crm_settings: Optional[dict[str, object]] = None,
     ) -> NamespaceTemplate:
         template = NamespaceTemplate(
             template_key=str(uuid4()),
@@ -79,6 +80,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             description=description,
             icon=icon,
             is_system=is_system,
+            crm_settings=crm_settings,
         )
         return await self.create(template)
 

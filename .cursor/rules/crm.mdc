@@ -132,9 +132,46 @@ EntityType(
 
 **Подтипы заметки:** при создании из AI-черновика `meeting`/`call` сохраняются как `entity_type=note`, `entity_subtype=meeting|call` — тогда они попадают в выборку `/crm/notes` (`entity_type=note`).
 
-**Общие типы-якоря** (`COMMON_NAMESPACE_ANCHOR_TYPES`, `is_context_anchor=True`): `topic`, `organization`, `project`.
+**Общие типы-якоря** (`COMMON_NAMESPACE_ANCHOR_TYPES`, `is_context_anchor=True`):
 
-**Шаблоны пространств** (`NAMESPACE_TEMPLATE_SEEDS`): `agile_project`, `sales`, `development`, `hr` — каждый содержит доменные типы + `COMMON_NAMESPACE_ANCHOR_TYPES`.
+| type_id | Расширенные поля |
+|---------|------------------|
+| `topic` | `title`, `scope`, `status` (active / paused / archived) |
+| `organization` | `name`, `legal_name`, `domain`, `industry`, `size` (solo … enterprise_1000_plus), `country` |
+| `project` | `title`, `objective`, `status` (discovery / in_progress / blocked / done / cancelled), `health` (green / yellow / red), `start_date`, `end_date` |
+
+**Канон системного шаблона** (см. `apps/crm/system_templates.py`):
+
+- У каждого типа сущности — `name` и `description ≥ 30 символов` («что это, чем отличается»).
+- У каждого `extractable=True` типа — `prompt ≥ 120 символов` по схеме «что извлекать → 2–3 примера → что НЕ извлекать»; используется AI в bundle `crm/analyze`.
+- Для каждого поля `required_fields` / `optional_fields` обязательны `type` ∈ {string, text, number, integer, boolean, date, datetime, enum, array, object}, `label`, `description ≥ 10 символов`.
+- Для `enum`-полей `values` непустой и в `description` поля упомянуты все значения в формате `id — пояснение` (так LLM видит расшифровку каждого варианта в `analyze.md`).
+- Для типов связи (`SYSTEM_RELATIONSHIP_TYPE_TEMPLATES`) с непустым `prompt` действует формат «когда использовать → примеры → когда НЕ использовать», ≥ 150 символов.
+- Семантические флаги: заметки/встречи/звонки — не якоря (`is_context_anchor=False`), `member` и `contact` — `is_voice_target=True`, person-сущности обязаны иметь `optional_fields.aliases` (`array`) для @-обогащения.
+- Инварианты проверяет `tests/crm/test_system_templates_invariants.py`, `tests/crm/test_relationship_type_templates_invariants.py`, `tests/crm/test_namespace_template_seeds_invariants.py`.
+
+**Шаблоны пространств** (`NAMESPACE_TEMPLATE_SEEDS`):
+
+| `template_id` | Доменные типы (помимо общих якорей и core note/task) | Доски `pipeline_stage_presets` |
+|---------------|------------------------------------------------------|---------------------------------|
+| `sales` | `lead` (task), `account`, `deal` (task), `quote`, `contact` (BANT/MEDDIC: `decision_role`) | `task`, `task:lead`, `task:deal` |
+| `agile_project` | `epic`, `sprint`, `release`, `persona`, `user_story` (task), `bug` (task), `impediment`, `spike` (task) | `task`, `task:user_story`, `task:bug`, `task:spike` |
+| `development` | `incident` (task, SEV1–4), `decision` (ADR), `post_mortem`, `runbook`, `feature` (task), `technical_debt` (task) | `task`, `task:incident`, `task:feature` |
+| `hr` | `position`, `candidate` (task), `interview` (meeting), `offer`, `employee`, `performance_review`, `one_on_one` (meeting) | `task`, `task:candidate` |
+| `marketing` | `campaign` (task), `channel`, `content` (task), `audience_segment`, `lead_source`, `asset` | `task`, `task:campaign`, `task:content` |
+| `support` | `ticket` (task), `incident` (task), `customer`, `knowledge_article` (task), `faq` | `task`, `task:ticket`, `task:incident`, `task:knowledge_article` |
+| `product_management` | `initiative` (task), `opportunity`, `hypothesis`, `experiment` (task), `feature` (task), `okr_objective`, `key_result` | `task`, `task:initiative`, `task:experiment`, `task:feature` |
+| `recruiting` | `client_company`, `position`, `candidate` (task), `submission` (task), `placement` | `task`, `task:candidate`, `task:submission` |
+| `real_estate` | `property` (task), `lead` (task), `viewing` (meeting), `owner`, `agent` | `task`, `task:property`, `task:lead` |
+| `legal` | `matter` (task), `contract` (task), `party`, `clause`, `deadline` (task) | `task`, `task:matter`, `task:contract` |
+| `finance` | `invoice` (task), `expense` (task), `vendor`, `budget`, `transaction` | `task`, `task:invoice`, `task:expense` |
+| `education` | `course` (task), `lesson` (meeting), `assignment` (task), `student`, `instructor`, `cohort`, `enrollment` | `task`, `task:assignment` |
+
+В каждый seed автоматически дотягиваются: типы `note` и `task` (`REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS`), `COMMON_NAMESPACE_ANCHOR_TYPES`, и все парент-типы по транзитивным `parent_type_id` (например `meeting` — для seeds `hr` / `real_estate` / `education`).
+
+`crm_settings` сидов содержит, помимо `pipeline_stage_presets`, дефолты голоса (`default_note_voice = "self"`, `show_note_voice_ui = true`).
+
+**Reseed на рестарте:** `CompanyInitService._init_namespace_templates` обновляет только системные строки в БД — `is_system=True` шаблоны и типы пространства `default`. **Уже созданные пользователями пространства** (копии шаблона) **не обновляются автоматически**: после reseed правка `system_templates.py` не доезжает до `acme.sales_old_clone`. Пересоздание пользовательского пространства из шаблона делает только сам пользователь через UI.
 
 ### Интеграции: канонический тип и `attributes.external_refs`
 
@@ -161,16 +198,20 @@ EntityType(
 | `related_to` | undirected | ✓ | — | 0.7 | общая ассоциация |
 | `parent_of` | directed | ✓ | `child_of` | 1.0 | иерархия родитель→дочь |
 | `child_of` | directed | — | `parent_of` | 1.0 | обратная к parent_of |
-| `assigned_to` | directed | ✓ | — | 0.8 | назначено на |
+| `assigned_to` | directed | ✓ | — | 0.8 | назначено на (разовая работа) |
 | `belongs_to` | directed | ✓ | — | 0.8 | принадлежность |
 | `follows_up` | directed | ✓ | — | 0.6 | продолжение цепочки |
 | `blocks` | directed | ✓ | `blocked_by` | 0.9 | блокирует выполнение |
 | `blocked_by` | directed | — | `blocks` | 0.9 | заблокировано |
 | `duplicates` | undirected | — | — | 0.3 | дубликат |
+| `reports_to` | directed | ✓ | `manages` | 0.9 | подчинение в орг. иерархии |
+| `manages` | directed | — | `reports_to` | 0.9 | обратная к reports_to |
+| `owner_of` | directed | ✓ | — | 0.85 | долговременный владелец объекта работы |
+| `attended` | directed | — | — | 0.7 | участник присутствовал на встрече (сервисная) |
 | **`note_voice`** | directed | — | — | 1.0 | заметка → автор (голос) |
 | **`in_context`** | directed | — | — | 1.0 | заметка → якорь контекста |
 
-AI использует только типы с `prompt != None` (`mentions`, `related_to`, `parent_of`, `assigned_to`, `belongs_to`, `follows_up`, `blocks`).
+AI использует только типы с `prompt != None` (`mentions`, `related_to`, `parent_of`, `assigned_to`, `belongs_to`, `follows_up`, `blocks`, `reports_to`, `owner_of`).
 `POST /relationships` валидирует `relationship_type` — несуществующий → 422.
 
 Константы в `apps/crm/constants_graph.py`: `NOTE_ROOT_ENTITY_TYPE_ID`, `TASK_ROOT_ENTITY_TYPE_ID`, `MEETING_ENTITY_TYPE_ID`, `CALL_ENTITY_TYPE_ID`, `NOTE_FAMILY_ENTITY_TYPE_IDS`, `NOTE_VOICE_RELATIONSHIP_TYPE`, `IN_CONTEXT_RELATIONSHIP_TYPE`, `BELONGS_TO_RELATIONSHIP_TYPE`, `PLATFORM_USER_ID_ATTR`, `PLATFORM_COMPANY_ID_ATTR`, `PLATFORM_NAMESPACE_ATTR`. На фронте CRM корни типов: `apps/crm/ui/constants/entity-type-ids.js`.

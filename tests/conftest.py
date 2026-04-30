@@ -737,6 +737,42 @@ def mock_llm_with_queue():
 
 
 @pytest_asyncio.fixture
+async def mock_llm_capture(container, unique_id):
+    """
+    Включает захват LLM-вызовов MockLLM в Redis на время теста и
+    возвращает callable, читающий журнал.
+
+    `MockLLM.stream` в любом процессе (uvicorn flows, TaskIQ workers,
+    локальные вызовы) читает один общий ключ `mock_llm:capture:active_scope`
+    и пишет каждый вызов как JSON в `mock_llm:capture:<scope>`.
+    Запись содержит `model`, `messages` (role + plain text + parts),
+    `tools`, `response_format`. Никаких моков продакшна и monkeypatch.
+
+    Usage:
+        async def test_smth(mock_llm_capture, mock_llm_redis):
+            await mock_llm_redis([{"type": "text", "content": "..."}])
+            ...  # запускаем сценарий
+            calls = await mock_llm_capture()  # все вызовы LLM в порядке прихода
+    """
+    from core.clients.llm.mock import (
+        read_mock_llm_capture,
+        start_mock_llm_capture,
+        stop_mock_llm_capture,
+    )
+
+    scope = f"test_{unique_id}"
+    await start_mock_llm_capture(container.redis_client, scope)
+
+    async def _read():
+        return await read_mock_llm_capture(container.redis_client, scope)
+
+    try:
+        yield _read
+    finally:
+        await stop_mock_llm_capture(container.redis_client, scope)
+
+
+@pytest_asyncio.fixture
 async def mock_llm_redis(container, request):
     """
     Фабрика для создания MockLLM через Redis.

@@ -151,6 +151,26 @@ class RedisClient:
             raise RuntimeError("Redis client not connected after retries")
         return await self._client.eval(script, numkeys, *keys_and_args)
 
+    async def rpush(self, key: str, *values: str) -> int:
+        """Добавляет значения в конец списка (RPUSH)."""
+        if not await self._ensure_connected():
+            return 0
+        try:
+            return await self._client.rpush(key, *values)
+        except Exception as e:
+            logger.warning(f"RedisClient: ошибка RPUSH в {key}: {e}")
+            return 0
+
+    async def lrange(self, key: str, start: int, end: int) -> list[str]:
+        """Возвращает срез списка (LRANGE), включая обе границы."""
+        if not await self._ensure_connected():
+            return []
+        try:
+            return await self._client.lrange(key, start, end)
+        except Exception as e:
+            logger.warning(f"RedisClient: ошибка LRANGE из {key}: {e}")
+            return []
+
     async def ping(self) -> bool:
         """Проверяет соединение с Redis"""
         if not self._client:

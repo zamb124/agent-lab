@@ -204,6 +204,12 @@ class CompanyInitService:
     async def _init_namespace_templates(self, company_id: str) -> int:
         created_count = 0
         for seed in NAMESPACE_TEMPLATE_SEEDS:
+            seed_crm_settings = seed.get("crm_settings")
+            if seed_crm_settings is not None and not isinstance(seed_crm_settings, dict):
+                raise ValueError(
+                    f"namespace template seed {seed.get('template_id')!r}: "
+                    "crm_settings must be a dict"
+                )
             existing = await self._namespace_template_repo.get_by_template_id(seed["template_id"], company_id=company_id)
             if existing is None:
                 existing = await self._namespace_template_repo.create_template(
@@ -213,6 +219,7 @@ class CompanyInitService:
                     icon=seed.get("icon"),
                     company_id=company_id,
                     is_system=True,
+                    crm_settings=seed_crm_settings,
                 )
                 created_count += 1
             else:
@@ -220,6 +227,7 @@ class CompanyInitService:
                 existing.description = seed.get("description")
                 existing.icon = seed.get("icon")
                 existing.is_system = True
+                existing.crm_settings = seed_crm_settings
                 existing = await self._namespace_template_repo.update(existing)
 
             for item in seed["types"]:
