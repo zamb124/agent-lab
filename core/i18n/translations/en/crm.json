@@ -604,6 +604,8 @@
         "summary_analyzing": "Analysis in progress...",
         "summary_progress_stage_fallback": "Preparing analysis",
         "no_summary": "Summary is not generated yet.",
+        "summary_analysis_failed_title": "Analysis error",
+        "summary_analysis_retry_hint": "Use the refresh button in the block header to retry analysis.",
         "related_entities": "Related entities",
         "no_related": "No related entities.",
         "relationships": "Relationships",
@@ -802,7 +804,9 @@
         "add_note_creating": "Creating note...",
         "mobile_header_date_range": "Select date range",
         "mobile_header_search": "Search",
-        "mobile_header_close_search": "Close search"
+        "mobile_header_close_search": "Close search",
+        "note_preview_analysis_failed_title": "Analysis error",
+        "analysis_tooltip_after_error": "Analysis failed — click to retry"
     },
     "spaces_page": {
         "title": "Namespaces",

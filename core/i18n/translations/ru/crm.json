@@ -604,6 +604,8 @@
         "summary_analyzing": "Идет анализ...",
         "summary_progress_stage_fallback": "Подготовка анализа",
         "no_summary": "Резюме ещё не сформировано.",
+        "summary_analysis_failed_title": "Ошибка анализа",
+        "summary_analysis_retry_hint": "Нажмите «Обновить» в заголовке блока, чтобы повторить анализ.",
         "related_entities": "Связанные сущности",
         "no_related": "Связанных сущностей нет.",
         "relationships": "Связи",
@@ -802,7 +804,9 @@
         "add_note_creating": "Создается заметка...",
         "mobile_header_date_range": "Выбрать период",
         "mobile_header_search": "Поиск",
-        "mobile_header_close_search": "Закрыть поиск"
+        "mobile_header_close_search": "Закрыть поиск",
+        "note_preview_analysis_failed_title": "Ошибка анализа",
+        "analysis_tooltip_after_error": "Ошибка анализа — нажмите, чтобы повторить"
     },
     "spaces_page": {
         "title": "Пространства",

@@ -121,6 +121,19 @@ def _sniff_pdf(raw: bytes) -> bool:
     return len(raw) >= 5 and raw[:5] == b"%PDF-"
 
 
+_OLE_COMPOUND_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def _is_msword_ole_compound(raw: bytes) -> bool:
+    """Бинарный Word 97–2003 (Compound File), ожидаемый antiword."""
+    return len(raw) >= len(_OLE_COMPOUND_MAGIC) and raw[: len(_OLE_COMPOUND_MAGIC)] == _OLE_COMPOUND_MAGIC
+
+
+def _is_zip_local_header_magic(raw: bytes) -> bool:
+    """ZIP local file header (DOCX/XLSX и др. — OOXML под неверным расширением .doc)."""
+    return len(raw) >= 4 and raw[:4] == b"PK\x03\x04"
+
+
 def _kind_from_extension(ext: str) -> FileReadKind:
     if ext == ".pdf":
         return FileReadKind.PDF
@@ -223,7 +236,7 @@ class FileReader:
         elif info.detected_kind == FileReadKind.SPREADSHEET and info.extension == ".xls":
             result = await asyncio.to_thread(_read_xls_sync, raw, name, mime, opts)
         elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".doc":
-            result = await asyncio.to_thread(_read_doc_with_antiword_sync, raw, name, mime, opts)
+            result = await asyncio.to_thread(_read_doc_choosing_backend_sync, raw, name, mime, opts)
         elif info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
             result = await asyncio.to_thread(_read_unstructured_sync, raw, name, mime, info.detected_kind, opts)
         elif info.detected_kind == FileReadKind.UNKNOWN:
@@ -422,6 +435,23 @@ def _read_xls_sync(
         pages=pages,
         warnings=[],
     )
+
+
+def _read_doc_choosing_backend_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    if _is_msword_ole_compound(raw):
+        return _read_doc_with_antiword_sync(raw, file_name, mime, opts)
+    eff_name = file_name
+    eff_mime = mime
+    if _is_zip_local_header_magic(raw):
+        eff_mime = eff_mime or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if file_name.lower().endswith(".doc"):
+            eff_name = f"{file_name[:-4]}.docx"
+    return _read_unstructured_sync(raw, eff_name, eff_mime, FileReadKind.OFFICE, opts)
 
 
 def _read_doc_with_antiword_sync(

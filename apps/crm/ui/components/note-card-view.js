@@ -750,6 +750,35 @@ export class CRMNoteCardView extends PlatformElement {
                 color: var(--text-primary);
                 white-space: pre-wrap;
             }
+            .summary-analysis-error {
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .summary-analysis-error-title {
+                margin: 0;
+                font-size: 14px;
+                line-height: 18px;
+                font-weight: 700;
+                color: var(--error);
+            }
+            .summary-analysis-error-detail {
+                margin: 0;
+                font-size: 13px;
+                line-height: 18px;
+                font-weight: 500;
+                color: var(--error);
+                opacity: 0.92;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+            .summary-analysis-error-hint {
+                margin: 0;
+                font-size: 12px;
+                line-height: 16px;
+                color: var(--crm-note-text-muted);
+            }
             .summary-status {
                 margin: 0;
                 font-size: 14px;
@@ -1999,6 +2028,22 @@ export class CRMNoteCardView extends PlatformElement {
         return items
             .filter((item) => typeof item === 'string' && item.trim().length > 0)
             .slice(0, 8);
+    }
+
+    _noteAnalysisErrorMessage() {
+        const note = this.note;
+        if (!note || typeof note !== 'object') {
+            return '';
+        }
+        const attrs = note.attributes;
+        if (!attrs || typeof attrs !== 'object') {
+            return '';
+        }
+        const msg = attrs.ai_analysis_last_error;
+        if (typeof msg !== 'string') {
+            return '';
+        }
+        return msg.trim();
     }
 
     _voiceContextChips() {
@@ -3353,6 +3398,7 @@ export class CRMNoteCardView extends PlatformElement {
             : [];
         const summaryLookup = buildSummaryEntityLookupFromRelated(relatedForLookup);
         const typeRows = this._entityTypeItems();
+        const analysisErr = this._noteAnalysisErrorMessage();
         return html`
             <section class="card summary-card">
                 <div class="card-header">
@@ -3381,7 +3427,23 @@ export class CRMNoteCardView extends PlatformElement {
                 ${this.aiAnalyzing
                     ? html`<p class="summary-status analyzing">${this.aiStatusText}</p>`
                     : summaryText.length > 0
-                    ? html`<p class="summary-text">${summaryText}</p>`
+                    ? html`
+                        <p class="summary-text">${summaryText}</p>
+                        ${analysisErr.length > 0
+                            ? html`
+                                <div class="summary-analysis-error">
+                                    <p class="summary-analysis-error-title">${this.t('note_view.summary_analysis_failed_title')}</p>
+                                    <p class="summary-analysis-error-detail">${analysisErr}</p>
+                                    <p class="summary-analysis-error-hint">${this.t('note_view.summary_analysis_retry_hint')}</p>
+                                </div>`
+                            : nothing}`
+                    : analysisErr.length > 0
+                    ? html`
+                        <div class="summary-analysis-error">
+                            <p class="summary-analysis-error-title">${this.t('note_view.summary_analysis_failed_title')}</p>
+                            <p class="summary-analysis-error-detail">${analysisErr}</p>
+                            <p class="summary-analysis-error-hint">${this.t('note_view.summary_analysis_retry_hint')}</p>
+                        </div>`
                     : html`<p class="summary-text" style="color: var(--crm-note-text-muted);">${this.t('note_view.no_summary')}</p>`}
                 ${this.aiAnalyzing
                     ? html`

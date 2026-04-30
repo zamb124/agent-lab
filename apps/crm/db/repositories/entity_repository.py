@@ -65,6 +65,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     _SKIP_SEARCH_ATTRIBUTE_KEYS: ClassVar[frozenset[str]] = frozenset({
         "ai_analysis_draft",  # большой JSON-блок, шум в векторном индексе
+        "ai_analysis_last_error",
+        "ai_analysis_last_error_at",
     })
 
     def _build_search_text(self, entity: CRMEntity) -> str:

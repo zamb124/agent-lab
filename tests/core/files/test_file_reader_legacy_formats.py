@@ -144,6 +144,19 @@ async def test_read_doc_via_antiword() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60)
+async def test_read_docx_bytes_with_doc_extension_uses_unstructured() -> None:
+    """Байты DOCX (ZIP OOXML) с расширением .doc распознаются по сигнатуре и читаются через Unstructured."""
+    raw = _make_docx_bytes("Маркер OOXML под именем doc")
+    reader = FileReader()
+    result = await reader.read(raw, file_name="report.doc")
+
+    assert result.detected_kind == FileReadKind.OFFICE
+    all_text = "\n".join(p.text for p in result.pages)
+    assert "Маркер OOXML" in all_text
+
+
+@pytest.mark.asyncio
 async def test_read_doc_without_antiword_raises_clear_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

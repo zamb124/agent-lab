@@ -75,6 +75,8 @@ from core.utils.chunked_async import map_reduce_tree, run_chunked_map
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
 
+_AI_NOTE_ANALYSIS_ERROR_MAX_LEN = 8000
+
 _RESOLVED_NOTE_NEIGHBOR_REL_TYPES: frozenset[str] = frozenset({
     "linked",
     "mentions",
@@ -1835,6 +1837,8 @@ class EntityService:
                 f"Сохранение черновика analyze допустимо только для note, получено: {note.entity_type}"
             )
         attrs = dict(note.attributes or {})
+        attrs.pop("ai_analysis_last_error", None)
+        attrs.pop("ai_analysis_last_error_at", None)
         prev = attrs.get("ai_analysis_draft")
         next_ver = 1
         if isinstance(prev, dict) and isinstance(prev.get("draft_version"), int):
@@ -1868,6 +1872,36 @@ class EntityService:
         if snapshot.attachment_summaries:
             attrs["attachment_summaries"] = snapshot.attachment_summaries
 
+        await self.update_entity(note_id, {"attributes": attrs})
+
+    async def record_note_analysis_failure(self, note_id: str, error_message: str) -> None:
+        note = await self._entity_repo.get(note_id)
+        if note is None:
+            return
+        if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
+            return
+        if isinstance(error_message, str):
+            msg = error_message.strip()
+        else:
+            msg = str(error_message).strip()
+        if not msg:
+            msg = "Неизвестная ошибка"
+        if len(msg) > _AI_NOTE_ANALYSIS_ERROR_MAX_LEN:
+            msg = msg[:_AI_NOTE_ANALYSIS_ERROR_MAX_LEN] + "…"
+        attrs = dict(note.attributes or {})
+        attrs["ai_analysis_last_error"] = msg
+        attrs["ai_analysis_last_error_at"] = datetime.now(timezone.utc).isoformat()
+        await self.update_entity(note_id, {"attributes": attrs})
+
+    async def clear_note_analysis_error(self, note_id: str) -> None:
+        note = await self._entity_repo.get(note_id)
+        if note is None:
+            return
+        attrs = dict(note.attributes or {})
+        if "ai_analysis_last_error" not in attrs and "ai_analysis_last_error_at" not in attrs:
+            return
+        attrs.pop("ai_analysis_last_error", None)
+        attrs.pop("ai_analysis_last_error_at", None)
         await self.update_entity(note_id, {"attributes": attrs})
 
     async def _load_analysis_draft_from_note(
@@ -2218,6 +2252,8 @@ class EntityService:
         created_relationship_ids = [rid for rid in rel_results if rid is not None]
 
         attrs = dict(note.attributes or {})
+        attrs.pop("ai_analysis_last_error", None)
+        attrs.pop("ai_analysis_last_error_at", None)
         note_draft = draft.note
         if note_draft is not None and isinstance(note_draft.description, str):
             summary_text = note_draft.description.strip()

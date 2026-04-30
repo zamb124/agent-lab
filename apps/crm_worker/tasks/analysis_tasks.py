@@ -113,6 +113,7 @@ async def process_note_task(
         return {"status": "cancelled", "task_id": task_id}
 
     try:
+        await container.entity_service.clear_note_analysis_error(note_id)
         async with traced_operation(
             f"crm.worker.note_{mode}",
             event_type="crm.worker",
@@ -158,6 +159,7 @@ async def process_note_task(
             error_message=err_msg,
             completed_at=datetime.now(timezone.utc),
         )
+        await container.entity_service.record_note_analysis_failure(note_id, err_msg)
         await _notify_analyze_stage(
             user_id,
             task_id=task_id, namespace=namespace,
@@ -174,6 +176,7 @@ async def process_note_task(
             error_message=err_msg,
             completed_at=datetime.now(timezone.utc),
         )
+        await container.entity_service.record_note_analysis_failure(note_id, err_msg)
         await _notify_analyze_stage(
             user_id,
             task_id=task_id, namespace=namespace,

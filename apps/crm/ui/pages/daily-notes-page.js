@@ -374,6 +374,27 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 line-height: 20px;
                 overflow-wrap: anywhere;
             }
+            .note-preview-error {
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                overflow-wrap: anywhere;
+            }
+            .note-preview-error-title {
+                font-size: 16px;
+                line-height: 20px;
+                font-weight: 700;
+                color: var(--error);
+            }
+            .note-preview-error-detail {
+                margin: 0;
+                font-size: 14px;
+                line-height: 18px;
+                font-weight: 600;
+                color: var(--error);
+                opacity: 0.92;
+            }
             .note-analysis-progress {
                 margin-top: 2px;
                 display: flex;
@@ -452,6 +473,12 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 background: rgba(139, 92, 246, 0.14);
                 color: #8b5cf6;
                 animation: ai-pulse 2s ease-in-out infinite;
+            }
+            .analyze-btn.analysis-failed {
+                border-color: var(--error-border);
+                background: var(--error-bg);
+                color: var(--error);
+                animation: none;
             }
             .analyze-btn.analyzing { animation: analyze-busy 1.2s ease-in-out infinite; cursor: wait; }
             .analyze-btn:disabled { opacity: 0.72; cursor: not-allowed; }
@@ -1349,6 +1376,16 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         return icon === undefined ? 'doc-detail' : icon;
     }
 
+    _noteHasAnalysisError(note) {
+        const attrs = note && note.attributes;
+        return !!(
+            attrs
+            && typeof attrs === 'object'
+            && typeof attrs.ai_analysis_last_error === 'string'
+            && attrs.ai_analysis_last_error.trim().length > 0
+        );
+    }
+
     _notePreview(note) {
         const attrs = note && note.attributes;
         if (attrs && typeof attrs === 'object'
@@ -1376,6 +1413,21 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         const s = typeof text === 'string' ? text.trim() : '';
         if (s.length <= maxLength) return s;
         return `${s.slice(0, maxLength).trimEnd()}...`;
+    }
+
+    _renderNoteCardPreview(note) {
+        if (this._noteHasAnalysisError(note)) {
+            const attrs = note.attributes;
+            const raw = attrs.ai_analysis_last_error;
+            const detail = this._truncate(typeof raw === 'string' ? raw.trim() : '', 220);
+            return html`
+                <div class="note-preview-error">
+                    <span class="note-preview-error-title">${this.t('daily_notes_page.note_preview_analysis_failed_title')}</span>
+                    <p class="note-preview-error-detail">${detail}</p>
+                </div>
+            `;
+        }
+        return html`<p class="note-text">${this._notePreview(note)}</p>`;
     }
 
     _formatTime(dateString) {
@@ -1473,6 +1525,23 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         const draft = this._hasAnalysisDraft(note);
         const applied = this._hasAnalysisApplied(note);
         const needsAi = this._noteNeedsAi(note);
+        const analysisFailed = !isAnalyzing && this._noteHasAnalysisError(note);
+        const analyzeBtnModifier = analysisFailed
+            ? 'analysis-failed'
+            : draft
+                ? 'has-draft'
+                : applied
+                    ? 'has-applied'
+                    : needsAi
+                        ? 'needs-ai'
+                        : '';
+        const analyzeTitle = analysisFailed
+            ? this.t('daily_notes_page.analysis_tooltip_after_error')
+            : draft
+                ? this.t('daily_notes_page.analysis_open_draft')
+                : applied
+                    ? this.t('daily_notes_page.analysis_view_applied')
+                    : this.t('daily_notes_page.analysis_run');
         const authorId = typeof note.user_id === 'string' && note.user_id.length > 0 ? note.user_id : '';
         const updated = typeof note.updated_at === 'string' && note.updated_at.length > 0 ? note.updated_at : note.created_at;
         const time = typeof updated === 'string' && updated.length > 0 ? this._formatTime(updated) : '';
@@ -1501,7 +1570,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     </div>
                 ` : ''}
                 <h3 class="note-title">${note.name}</h3>
-                <p class="note-text">${this._notePreview(note)}</p>
+                ${this._renderNoteCardPreview(note)}
                 ${isAnalyzing ? html`
                     <div class="note-analysis-progress">
                         <div class="note-analysis-progress-head">
@@ -1520,15 +1589,13 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     <div class="note-footer-right">
                         <span class="published-at">${time}</span>
                         <button
-                            class="analyze-btn ${isAnalyzing ? 'analyzing' : ''} ${draft ? 'has-draft' : applied ? 'has-applied' : needsAi ? 'needs-ai' : ''}"
+                            class="analyze-btn ${isAnalyzing ? 'analyzing' : ''} ${analyzeBtnModifier}"
                             type="button"
                             ?disabled=${isAnalyzing}
                             @click=${(e) => { e.stopPropagation(); this._onAnalyzeNote(note); }}
-                            title=${draft ? this.t('daily_notes_page.analysis_open_draft')
-                                : applied ? this.t('daily_notes_page.analysis_view_applied')
-                                : this.t('daily_notes_page.analysis_run')}
+                            title=${analyzeTitle}
                         >
-                            <platform-icon name="ai" size="14" colored></platform-icon>
+                            <platform-icon name="ai" size="14" ?colored=${!analysisFailed}></platform-icon>
                         </button>
                     </div>
                 </div>
