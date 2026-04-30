@@ -174,24 +174,39 @@ async def find_shortest_path(
     max_depth: int = Query(10, ge=1, le=20, description="Максимальная глубина поиска"),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
+    namespace: Optional[str] = Query(
+        None,
+        description=(
+            "Namespace пространства данных. При непустом значении используется и для "
+            "лимита сущностей, и как фильтр Relationship.namespace при обходе."
+        ),
+    ),
+    include_all_namespaces: bool = Query(
+        False,
+        description=(
+            "Если true и задан namespace — обход берёт связи всех Relationship.namespace."
+        ),
+    ),
 ):
     """
     Кратчайший путь между entities с учетом весов.
-    
+
     Использует:
     - Алгоритм: Bidirectional Weighted Dijkstra
     - Учитывает weight из Relationship
     - Возвращает два расчета: directed и undirected
-    
+
+    При непустом ``namespace`` обход видит только связи с тем же
+    ``Relationship.namespace`` (если не передан ``include_all_namespaces``).
+
     Args:
         from_entity_id: Начальная entity
         to_entity_id: Конечная entity
         max_depth: Максимальная глубина поиска (1-20)
-    
+
     Returns:
         Кратчайший путь с edges и total_distance
-    
+
     Raises:
         404: Entity не найдена
         403: Нет доступа к entity
@@ -204,6 +219,7 @@ async def find_shortest_path(
             created_at_from=created_at_from,
             created_at_to=created_at_to,
             namespace=namespace,
+            include_all_namespaces=include_all_namespaces,
         )
         return path
     except GraphEntityLimitExceededError as e:

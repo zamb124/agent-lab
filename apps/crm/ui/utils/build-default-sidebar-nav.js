@@ -81,6 +81,7 @@ const CRM_SIDEBAR_GROUP_ICON = Object.freeze({
     'grp-notes': 'list',
     'grp-tasks': 'check',
     'grp-entities': 'database',
+    'grp-graph': 'share',
 });
 
 function _sidebarGroupIconForId(id) {
@@ -293,7 +294,7 @@ export function replaceCrmSidebarGroupChildrenFromCanonical(nodes, canonicalNode
             return node;
         }
         const cid = node.id;
-        if (cid === 'grp-notes' || cid === 'grp-tasks' || cid === 'grp-entities') {
+        if (cid === 'grp-notes' || cid === 'grp-tasks' || cid === 'grp-entities' || cid === 'grp-graph') {
             const canon = canonMap.get(cid);
             if (canon && Array.isArray(canon.children) && canon.children.length > 0) {
                 const childrenCopy = canon.children.map((ch) => _deepCopyNavNode(ch));
@@ -305,6 +306,42 @@ export function replaceCrmSidebarGroupChildrenFromCanonical(nodes, canonicalNode
             }
         }
         return node;
+    });
+}
+
+/**
+ * Узлы из сохранённого `sidebar_navigation`, которые больше не часть актуального меню
+ * и должны быть вычищены при сборке: одиночный «Граф» лист и старая мини-карта были
+ * заменены группой `grp-graph` с подпунктами 3D / Mind map.
+ */
+const CRM_SIDEBAR_LEGACY_TOPLEVEL_IDS = new Set([
+    'nav-graph',
+    'nav-mindmap',
+    'nav-graph-mindmap',
+    'nav-graph-3d',
+]);
+
+/**
+ * Удаляет верхнеуровневые узлы из сохранённого snapshot, помеченные как легаси.
+ * Контракт: snapshot мог содержать одиночные `nav-graph`/`nav-mindmap` рядом с уже актуальной
+ * `grp-graph`. Без вычистки они показываются как дублирующие пункты.
+ *
+ * @param {Array<Record<string, unknown>>} nodes
+ * @returns {Array<Record<string, unknown>>}
+ */
+export function dropCrmSidebarLegacyTopLevelNodes(nodes) {
+    if (!Array.isArray(nodes)) {
+        throw new Error('dropCrmSidebarLegacyTopLevelNodes: nodes must be an array');
+    }
+    return nodes.filter((n) => {
+        if (!n || typeof n !== 'object') {
+            return true;
+        }
+        const id = n.id;
+        if (typeof id !== 'string' || id.length === 0) {
+            return true;
+        }
+        return !CRM_SIDEBAR_LEGACY_TOPLEVEL_IDS.has(id);
     });
 }
 
@@ -423,6 +460,10 @@ export function buildDefaultSidebarNav(opts) {
     const allTasks = typeof labels.allTasks === 'string' ? labels.allTasks : '';
     const allEntities = typeof labels.allEntities === 'string' ? labels.allEntities : '';
 
+    const groupGraph = typeof labels.groupGraph === 'string' ? labels.groupGraph : '';
+    const graphView3d = typeof labels.graphView3d === 'string' ? labels.graphView3d : '';
+    const graphViewMindmap = typeof labels.graphViewMindmap === 'string' ? labels.graphViewMindmap : '';
+
     const byId = _entityTypesById(entityTypes);
 
     const out = [];
@@ -532,11 +573,25 @@ export function buildDefaultSidebarNav(opts) {
     }
 
     out.push({
-        id: 'nav-graph',
-        label: typeof labels.graph === 'string' ? labels.graph : '',
-        icon: 'share',
-        routeKey: 'graph',
-        search: '',
+        id: 'grp-graph',
+        label: groupGraph,
+        icon: CRM_SIDEBAR_GROUP_ICON['grp-graph'],
+        children: [
+            {
+                id: 'nav-graph-3d',
+                label: graphView3d,
+                icon: 'share',
+                routeKey: 'graph',
+                search: '?view=3d',
+            },
+            {
+                id: 'nav-graph-mindmap',
+                label: graphViewMindmap,
+                icon: 'git-branch',
+                routeKey: 'graph',
+                search: '?view=mindmap',
+            },
+        ],
     });
 
     return out;

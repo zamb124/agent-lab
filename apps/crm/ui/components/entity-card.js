@@ -1435,22 +1435,14 @@ export class CRMEntityCard extends PlatformElement {
         const draft = form.draft;
         const has_name = typeof draft.name === 'string' && draft.name.trim().length > 0;
         const saveDisabled = this._loadingCard || form.submitting || !has_name;
-        this.dispatchEvent(new CustomEvent('crm-entity-card-toolbar-state', {
-            bubbles: true,
-            composed: true,
-            detail: {
-                saveDisabled,
-                submitting: form.submitting,
-            },
-        }));
-        this.dispatchEvent(new CustomEvent('crm-entity-card-storage-type-draft', {
-            bubbles: true,
-            composed: true,
-            detail: {
-                entity_type: typeof draft.entity_type === 'string' ? draft.entity_type : '',
-                entity_subtype: typeof draft.entity_subtype === 'string' ? draft.entity_subtype : '',
-            },
-        }));
+        this.emit('crm-entity-card-toolbar-state', {
+            saveDisabled,
+            submitting: form.submitting,
+        });
+        this.emit('crm-entity-card-storage-type-draft', {
+            entity_type: typeof draft.entity_type === 'string' ? draft.entity_type : '',
+            entity_subtype: typeof draft.entity_subtype === 'string' ? draft.entity_subtype : '',
+        });
     }
 
     _syncDirty() {

@@ -46,9 +46,13 @@ export class CRMRelatedNeighborRows extends PlatformElement {
         return { entity_id: row.otherId, entity_type: '' };
     }
 
-    _onOpen(otherId) {
-        if (typeof otherId !== 'string' || otherId.length === 0) return;
-        this.emit('entity-open', { entityId: otherId });
+    _onOpen(row) {
+        if (!row || typeof row.otherId !== 'string' || row.otherId.length === 0) {
+            return;
+        }
+        const thumb = this._thumbEntity(row);
+        const entityType = thumb && typeof thumb.entity_type === 'string' ? thumb.entity_type.trim() : '';
+        this.emit('entity-open', { entityId: row.otherId, entity_type: entityType });
     }
 
     _onRemove(relationshipId, event) {
@@ -122,7 +126,7 @@ export class CRMRelatedNeighborRows extends PlatformElement {
                             <button
                                 type="button"
                                 class="related-card tone-${tone}"
-                                @click=${() => this._onOpen(row.otherId)}
+                                @click=${() => this._onOpen(row)}
                             >
                                 <span class="related-icon">
                                     <platform-icon name=${iconName} size="32"></platform-icon>

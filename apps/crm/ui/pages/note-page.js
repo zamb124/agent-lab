@@ -389,8 +389,15 @@ export class CRMNotePage extends CRMNamespacePage {
     }
 
     _onEntityOpen(event) {
-        const entityId = event.detail && event.detail.entityId ? event.detail.entityId : '';
-        if (typeof entityId !== 'string' || entityId.length === 0) {
+        const detail = event.detail;
+        const rawId = detail && typeof detail.entityId === 'string' ? detail.entityId : '';
+        const entityId = rawId.trim();
+        if (entityId.length === 0) {
+            return;
+        }
+        const entityType = detail && typeof detail.entity_type === 'string' ? detail.entity_type.trim() : '';
+        if (entityType === 'note') {
+            this.navigate('note', { itemId: entityId });
             return;
         }
         this.navigate('entity', { itemId: entityId });

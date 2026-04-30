@@ -1,38 +1,51 @@
 /**
- * mini-graph-preview — компактная 3D-визуализация графа влияния одной сущности.
+ * crm-mini-graph — компактный граф влияния (3D или mind map), один запрос influence на max depth.
  *
- * Загружает данные через `useOp('crm/influence_graph')`, цвета и подписи
- * связей берёт через `useResource('crm/entity_types' | 'crm/relationship_types')`.
- * Типы подгружаются с `namespace` (prop), без `load(null)` — иначе общий срез ломает фильтры на списке сущностей.
- * Открытие сущности из канваса — через DOM-событие `entity-open` (slot-композиция).
+ * Локальные кнопки +/- глубины меняют только отображаемую глубину без повторного запроса.
+ * В mindmap-режиме рядом с глубиной — блок управления масштабом превью (`compactZoom`,
+ * диапазон 0.5..3): кнопки `−` / процент-с-кликом-на-сброс / `+`. Текущее значение
+ * прокидывается в `<crm-mindmap-canvas .compactZoom=${...}>`; событие `compact-zoom-change`
+ * от canvas (Ctrl/⌘ + колесо) обновляет локальный state.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
 import {
     aggregateIncidentWeightsByNode,
     computeGraphNodeDisplaySize,
-    createGraphTextSprite,
+    createGraphLinkLabelPlane,
     createMatteSphereNodeGroup,
     maxIncidentWeightOrOne,
+    positionGraphLinkLabelMesh,
 } from './graph-3d-helpers.js';
+import {
+    buildEntityTypeColorMapFromItems,
+    buildEntityTypeIconMapFromItems,
+} from '../utils/crm-entity-type-visuals.js';
+import { buildRelationshipTypeLabelMapFromItems } from '../utils/crm-relationship-type-labels.js';
+import { buildGraphWorkspaceSearch } from '../utils/graph-view-mode.js';
+import './mindmap-canvas.js';
 
 const API_MAX_DEPTH = 5;
 const MINI_NODE_REL_SIZE = 4;
 
-export class CRMMiniGraphPreview extends PlatformElement {
+export class CRMMiniGraph extends PlatformElement {
     static i18nNamespace = 'crm';
 
     static properties = {
         entityId: { type: String },
-        /** Пространство сущности: узкая загрузка `crm/entity_types`, без перетирания списка сущностей. */
         namespace: { type: String },
+        /** @type {'3d' | 'mindmap'} */
+        viewMode: { type: String },
         maxDepth: { type: Number },
         initialDisplayDepth: { type: Number },
-        fillContainer: { type: Boolean, reflect: true },
+        fillContainer: { type: Boolean, reflect: true, attribute: 'fill-container' },
         width: { type: String },
         height: { type: String },
         _displayDepth: { state: true },
+        _fitNonce: { state: true },
+        _compactZoom: { state: true },
     };
 
     static styles = [
@@ -44,7 +57,10 @@ export class CRMMiniGraphPreview extends PlatformElement {
                 border-radius: 12px;
                 overflow: hidden;
                 border: 1px solid var(--glass-border-subtle);
+                width: 100%;
+                height: var(--mini-graph-host-height, 240px);
                 min-height: 0;
+                box-sizing: border-box;
             }
 
             :host([fill-container]) {
@@ -55,6 +71,15 @@ export class CRMMiniGraphPreview extends PlatformElement {
                 height: 100%;
                 max-height: none;
                 align-self: stretch;
+            }
+
+            .mini-box {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                height: 100%;
+                box-sizing: border-box;
+                min-height: 0;
             }
 
             .mini-depth-toolbar {
@@ -99,6 +124,25 @@ export class CRMMiniGraphPreview extends PlatformElement {
                 cursor: not-allowed;
             }
 
+            .mini-toolbar-sep {
+                width: 1px;
+                align-self: stretch;
+                background: var(--glass-border-subtle);
+                margin: 4px 4px;
+            }
+
+            .mini-zoom-label {
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+                min-width: 3rem;
+                text-align: center;
+                cursor: pointer;
+            }
+
+            .mini-zoom-label:hover {
+                color: var(--text-primary);
+            }
+
             .mini-canvas-wrap {
                 flex: 1 1 0%;
                 min-height: 0;
@@ -121,6 +165,33 @@ export class CRMMiniGraphPreview extends PlatformElement {
                 color: var(--text-tertiary);
                 font-size: 12px;
             }
+
+            .mini-footer {
+                display: flex;
+                justify-content: flex-end;
+                padding: var(--space-2) var(--space-3);
+                border-top: 1px solid var(--glass-border-subtle);
+                background: var(--glass-tint-subtle);
+                flex-shrink: 0;
+            }
+
+            .mini-open-full {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 12px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+                font-size: var(--text-xs);
+                font-weight: 600;
+                cursor: pointer;
+            }
+
+            .mini-open-full:hover {
+                background: var(--glass-solid-strong);
+            }
         `,
     ];
 
@@ -128,18 +199,22 @@ export class CRMMiniGraphPreview extends PlatformElement {
         super();
         this.entityId = '';
         this.namespace = '';
+        this.viewMode = 'mindmap';
         this.maxDepth = API_MAX_DEPTH;
         this.initialDisplayDepth = 1;
         this.fillContainer = false;
         this.width = '100%';
         this.height = '240px';
         this._displayDepth = 1;
+        this._fitNonce = 0;
+        this._compactZoom = 1;
         this._graphInstance = null;
         this._resizeObserver = null;
         this._graphOp = this.useOp('crm/influence_graph');
         this._entityTypes = this.useResource('crm/entity_types', { autoload: false });
         this._relationshipTypes = this.useResource('crm/relationship_types', { autoload: true });
-        this._lastLoadedEntityId = '';
+        /** Ответ GET influence-graph только для текущего экземпляра (общий slice lastResult перетирается чужими запросами). */
+        this._graphPayload = null;
     }
 
     _syncEntityTypesForNamespace() {
@@ -166,25 +241,42 @@ export class CRMMiniGraphPreview extends PlatformElement {
             const prevRaw = changed.get('entityId');
             const prev = typeof prevRaw === 'string' ? prevRaw.trim() : '';
             const cur = this._trimEntityId();
+            this._compactZoom = 1;
             if (cur.length === 0) {
-                this._destroyGraph();
+                this._destroyGraphState();
             } else if (prev !== cur) {
                 this._loadGraph();
             }
             return;
         }
-        if (changed.has('maxDepth') && this.entityId) {
-            this._loadGraph();
+        if (changed.has('viewMode')) {
+            this._teardownThreeGraph();
+            this._fitNonce += 1;
+            this._compactZoom = 1;
+            const id = this._trimEntityId();
+            if (this.viewMode === '3d' && this._graphPayload && id.length > 0) {
+                void this.updateComplete.then(() =>
+                    this._ensureThree().then(() => {
+                        if (this._trimEntityId() === id && this.viewMode === '3d') {
+                            this._initGraph();
+                        }
+                    }),
+                );
+            }
             return;
         }
-        if (changed.has('_displayDepth') && this._graphInstance) {
-            this._syncFilteredGraphData();
+        if (changed.has('_displayDepth')) {
+            if (this.viewMode === 'mindmap') {
+                this._fitNonce += 1;
+            } else if (this._graphInstance) {
+                this._syncFilteredGraphData();
+            }
         }
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        this._destroyGraph();
+        this._destroyGraphState();
     }
 
     _resolveNodeColor(node) {
@@ -236,15 +328,11 @@ export class CRMMiniGraphPreview extends PlatformElement {
     }
 
     _getFetchDepth() {
-        const n = this.maxDepth;
-        if (typeof n !== 'number' || !Number.isFinite(n)) {
-            return API_MAX_DEPTH;
-        }
-        return Math.min(API_MAX_DEPTH, Math.max(1, Math.floor(n)));
+        return API_MAX_DEPTH;
     }
 
     _getFetchedNodes() {
-        const result = this._graphOp.lastResult;
+        const result = this._graphPayload;
         if (!result || !Array.isArray(result.nodes)) {
             return [];
         }
@@ -252,7 +340,7 @@ export class CRMMiniGraphPreview extends PlatformElement {
     }
 
     _getFetchedEdges() {
-        const result = this._graphOp.lastResult;
+        const result = this._graphPayload;
         if (!result || !Array.isArray(result.edges)) {
             return [];
         }
@@ -295,6 +383,29 @@ export class CRMMiniGraphPreview extends PlatformElement {
         return typeof this.entityId === 'string' ? this.entityId.trim() : '';
     }
 
+    _openFullWorkspace() {
+        const id = this._trimEntityId();
+        if (id.length === 0) {
+            throw new Error('CRMMiniGraph: entityId required for full graph workspace');
+        }
+        const vm = this._resolvedViewMode();
+        const search = buildGraphWorkspaceSearch({
+            view: vm,
+            root: id,
+            depth: null,
+            query: '',
+        });
+        this.navigate('graph', {}, { search });
+    }
+
+    _resolvedViewMode() {
+        const v = this.viewMode;
+        if (v === '3d' || v === 'mindmap') {
+            return v;
+        }
+        throw new Error('CRMMiniGraph: viewMode must be 3d or mindmap');
+    }
+
     /**
      * Кастомные узлы (sphere + спрайты подписей) берут THREE с window.
      * Инициализация графа идёт после отложенного import three в index.html —
@@ -302,7 +413,7 @@ export class CRMMiniGraphPreview extends PlatformElement {
      */
     async _ensureThree() {
         if (typeof window === 'undefined') {
-            throw new Error('CRMMiniGraphPreview._ensureThree: window is not available');
+            throw new Error('CRMMiniGraph._ensureThree: window is not available');
         }
         if (window.THREE && typeof window.THREE.SphereGeometry === 'function') {
             return;
@@ -316,29 +427,47 @@ export class CRMMiniGraphPreview extends PlatformElement {
         if (id.length === 0) {
             return;
         }
-        this._destroyGraph();
-        this._lastLoadedEntityId = id;
-        await this._graphOp.run({
+        this._destroyGraphState();
+        const graphResult = await this._graphOp.run({
             entityId: id,
             params: { max_depth: this._getFetchDepth() },
         });
         const current = this._trimEntityId();
-        if (this._lastLoadedEntityId !== current) {
+        if (current !== id) {
             return;
         }
-        if (this._getFetchedNodes().length === 0) {
+        if (graphResult === null || typeof graphResult !== 'object') {
             return;
         }
+        if (typeof graphResult.root_entity_id !== 'string' || graphResult.root_entity_id !== id) {
+            return;
+        }
+        const nodes = Array.isArray(graphResult.nodes) ? graphResult.nodes : [];
+        if (nodes.length === 0) {
+            return;
+        }
+        this._graphPayload = graphResult;
         this._clampInitialDisplayDepth();
         await this.updateComplete;
-        await this._ensureThree();
-        this._initGraph();
+        if (this._trimEntityId() !== id) {
+            return;
+        }
+        const vm = this._resolvedViewMode();
+        if (vm === '3d') {
+            await this._ensureThree();
+            if (this._trimEntityId() !== id) {
+                return;
+            }
+            this._initGraph();
+        } else {
+            this._fitNonce += 1;
+        }
     }
 
     _normalizeSceneNodes() {
         const root = this._trimEntityId();
         if (root.length === 0) {
-            throw new Error('CRMMiniGraphPreview._normalizeSceneNodes: entityId required');
+            throw new Error('CRMMiniGraph._normalizeSceneNodes: entityId required');
         }
         return this._getFetchedNodes().map((raw) => {
             const id = raw.entity_id || raw.id;
@@ -502,17 +631,16 @@ export class CRMMiniGraphPreview extends PlatformElement {
             .linkThreeObject((link) => {
                 const typeKey = link.relation_type || 'related';
                 const label = this._relationshipTypeLabel(typeKey);
-                return createGraphTextSprite(label, linkLabelColor, 13, 24);
+                return createGraphLinkLabelPlane(label, linkLabelColor, 13, 26);
             })
-            .linkPositionUpdate((sprite, { start, end }) => {
-                if (!sprite || !start || !end) {
+            .linkPositionUpdate((mesh, { start, end }) => {
+                if (!mesh || !start || !end) {
                     return false;
                 }
-                const mx = start.x + (end.x - start.x) / 2;
-                const my = start.y + (end.y - start.y) / 2;
-                const mz = start.z + (end.z - start.z) / 2;
-                sprite.position.set(mx, my, mz);
-                return true;
+                const cam = this._graphInstance
+                    ? this._graphInstance.cameraPosition()
+                    : null;
+                return positionGraphLinkLabelMesh(mesh, start, end, cam);
             })
             .enableNodeDrag(true)
             .onNodeClick((node) => {
@@ -532,7 +660,11 @@ export class CRMMiniGraphPreview extends PlatformElement {
             .graphData({ nodes: sceneNodes, links: sceneLinks });
 
         this._graphInstance.d3Force('flatZ', () => {
-            const gd = this._graphInstance.graphData();
+            const inst = this._graphInstance;
+            if (!inst) {
+                return;
+            }
+            const gd = inst.graphData();
             if (!gd?.nodes) {
                 return;
             }
@@ -585,12 +717,17 @@ export class CRMMiniGraphPreview extends PlatformElement {
         this._resizeObserver.observe(wrap);
     }
 
-    _destroyGraph() {
+    _teardownThreeGraph() {
         this._teardownGraphResizeObserver();
         if (this._graphInstance) {
             this._graphInstance._destructor?.();
             this._graphInstance = null;
         }
+    }
+
+    _destroyGraphState() {
+        this._graphPayload = null;
+        this._teardownThreeGraph();
     }
 
     _onDecreaseDepth() {
@@ -611,30 +748,142 @@ export class CRMMiniGraphPreview extends PlatformElement {
         this._displayDepth += 1;
     }
 
+    _clampCompactZoom(value) {
+        const num = typeof value === 'number' && Number.isFinite(value) ? value : 1;
+        return Math.max(0.5, Math.min(3, num));
+    }
+
+    _onCompactZoomOut() {
+        const next = this._clampCompactZoom(this._compactZoom / 1.25);
+        if (next === this._compactZoom) {
+            return;
+        }
+        this._compactZoom = next;
+    }
+
+    _onCompactZoomIn() {
+        const next = this._clampCompactZoom(this._compactZoom * 1.25);
+        if (next === this._compactZoom) {
+            return;
+        }
+        this._compactZoom = next;
+    }
+
+    _onCompactZoomReset() {
+        if (this._compactZoom === 1) {
+            return;
+        }
+        this._compactZoom = 1;
+    }
+
+    _onMindmapCompactZoomChange(e) {
+        const detail = e?.detail;
+        const value = detail && typeof detail === 'object' ? detail.value : null;
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            return;
+        }
+        this._compactZoom = this._clampCompactZoom(value);
+    }
+
+    _mindmapDisplayPayload() {
+        const root = this._trimEntityId();
+        const payload = this._graphPayload;
+        if (!payload || root.length === 0) {
+            return { nodes: [], edges: [], rootId: root };
+        }
+        const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
+        const edges = Array.isArray(payload.edges) ? payload.edges : [];
+        const depth = this._displayDepth;
+        const graded = [];
+        for (const raw of nodes) {
+            const id = raw.entity_id || raw.id;
+            if (typeof id !== 'string') {
+                continue;
+            }
+            graded.push({
+                raw,
+                id,
+                level: this._normalizeLevel(raw, root, id),
+            });
+        }
+        const visibleIds = new Set(
+            graded.filter((x) => x.level <= depth).map((x) => x.id),
+        );
+        const outNodes = graded.filter((x) => visibleIds.has(x.id)).map((x) => x.raw);
+        const outEdges = edges.filter((e) => {
+            const s = e.source_id || e.source_entity_id || e.source;
+            const t = e.target_id || e.target_entity_id || e.target;
+            return (
+                typeof s === 'string'
+                && typeof t === 'string'
+                && visibleIds.has(s)
+                && visibleIds.has(t)
+            );
+        });
+        return { nodes: outNodes, edges: outEdges, rootId: root };
+    }
+
+    _onMindmapNodeDblClick(e) {
+        const node = e.detail && e.detail.node;
+        if (!node || typeof node.id !== 'string' || node.id.length === 0) {
+            return;
+        }
+        let entityType = '';
+        const payload = this._graphPayload;
+        const nodes = payload && Array.isArray(payload.nodes) ? payload.nodes : [];
+        const row = nodes.find((raw) => {
+            const rid = raw && (raw.entity_id || raw.id);
+            return typeof rid === 'string' && rid === node.id;
+        });
+        if (row && typeof row.entity_type === 'string' && row.entity_type.length > 0) {
+            entityType = row.entity_type;
+        }
+        this.emit('entity-open', { entityId: node.id, entity_type: entityType });
+    }
+
     render() {
-        const fill = this.fillContainer === true;
-        const boxHeight = fill ? '100%' : this.height;
-        const boxFlex = fill ? 'flex:1 1 0%;min-height:0;' : '';
-        const boxStyle = `width:${this.width};height:${boxHeight};${boxFlex}display:flex;flex-direction:column;box-sizing:border-box;`;
         const maxL = this._getMaxLevelInFetched();
         const canDecrease = this._displayDepth > 1;
         const canIncrease = maxL > 0 && this._displayDepth < maxL;
         const fetchedNodes = this._getFetchedNodes();
         const error = this._graphOp.error;
         const entityIdTrim = this._trimEntityId();
+        const vm = this._resolvedViewMode();
 
         if (entityIdTrim.length === 0) {
-            return html`<div style="${boxStyle}" class="mini-empty"></div>`;
+            return html`<div class="mini-box mini-empty">${this.t('graph.empty_need_entity')}</div>`;
         }
 
+        const footerBtn = html`
+            <button type="button" class="mini-open-full" @click=${() => this._openFullWorkspace()}>
+                <platform-icon name="fullscreen" size="14"></platform-icon>
+                ${this.t('graph.mini_open_full')}
+            </button>
+        `;
+
         if (this._graphOp.busy) {
-            return html`<div style="${boxStyle}" class="mini-empty">${this.t('graph.mini_loading')}</div>`;
+            return html`
+                <div class="mini-box">
+                    <div class="mini-empty" style="flex:1;min-height:0;">${this.t('graph.mini_loading')}</div>
+                    <div class="mini-footer">${footerBtn}</div>
+                </div>
+            `;
         }
         if (error) {
-            return html`<div style="${boxStyle}" class="mini-empty">${error}</div>`;
+            return html`
+                <div class="mini-box">
+                    <div class="mini-empty" style="flex:1;min-height:0;">${error}</div>
+                    <div class="mini-footer">${footerBtn}</div>
+                </div>
+            `;
         }
         if (fetchedNodes.length === 0) {
-            return html`<div style="${boxStyle}" class="mini-empty">${this.t('graph.mini_no_edges')}</div>`;
+            return html`
+                <div class="mini-box">
+                    <div class="mini-empty" style="flex:1;min-height:0;">${this.t('graph.mini_no_edges')}</div>
+                    <div class="mini-footer">${footerBtn}</div>
+                </div>
+            `;
         }
 
         const depthCap = Math.max(maxL, 1);
@@ -643,31 +892,104 @@ export class CRMMiniGraphPreview extends PlatformElement {
             max: String(depthCap),
         });
 
-        return html`
-            <div style="${boxStyle}">
-                <div class="mini-depth-toolbar">
-                    <button
-                        type="button"
-                        class="mini-depth-btn"
-                        title=${this.t('graph.mini_depth_less')}
-                        ?disabled=${!canDecrease}
-                        @click=${this._onDecreaseDepth}
-                    >\u2212</button>
-                    <span class="mini-depth-label">${depthLabel}</span>
-                    <button
-                        type="button"
-                        class="mini-depth-btn"
-                        title=${this.t('graph.mini_depth_more')}
-                        ?disabled=${!canIncrease}
-                        @click=${this._onIncreaseDepth}
-                    >+</button>
+        const zoomPercent = Math.round(this._compactZoom * 100);
+        const canZoomOut = this._compactZoom > 0.5 + 0.001;
+        const canZoomIn = this._compactZoom < 3 - 0.001;
+        const zoomBlock = vm === 'mindmap'
+            ? html`
+                  <span class="mini-toolbar-sep" aria-hidden="true"></span>
+                  <button
+                      type="button"
+                      class="mini-depth-btn"
+                      title=${this.t('graph.mini_zoom_out')}
+                      ?disabled=${!canZoomOut}
+                      @click=${this._onCompactZoomOut}
+                  >\u2212</button>
+                  <span
+                      class="mini-zoom-label"
+                      title=${this.t('graph.mini_zoom_reset')}
+                      @click=${this._onCompactZoomReset}
+                  >${zoomPercent}%</span>
+                  <button
+                      type="button"
+                      class="mini-depth-btn"
+                      title=${this.t('graph.mini_zoom_in')}
+                      ?disabled=${!canZoomIn}
+                      @click=${this._onCompactZoomIn}
+                  >+</button>
+              `
+            : nothing;
+
+        const toolbar = html`
+            <div class="mini-depth-toolbar">
+                <button
+                    type="button"
+                    class="mini-depth-btn"
+                    title=${this.t('graph.mini_depth_less')}
+                    ?disabled=${!canDecrease}
+                    @click=${this._onDecreaseDepth}
+                >\u2212</button>
+                <span class="mini-depth-label">${depthLabel}</span>
+                <button
+                    type="button"
+                    class="mini-depth-btn"
+                    title=${this.t('graph.mini_depth_more')}
+                    ?disabled=${!canIncrease}
+                    @click=${this._onIncreaseDepth}
+                >+</button>
+                ${zoomBlock}
+            </div>
+        `;
+
+        if (vm === 'mindmap') {
+            const mm = this._mindmapDisplayPayload();
+            const colorMap = buildEntityTypeColorMapFromItems(this._entityTypes.items);
+            const iconMap = buildEntityTypeIconMapFromItems(this._entityTypes.items);
+            const colorsPlain = Object.fromEntries(colorMap);
+            const iconsPlain = Object.fromEntries(iconMap);
+            const relLabelsPlain = buildRelationshipTypeLabelMapFromItems(this._relationshipTypes.items);
+            const showMm =
+                mm.nodes.length > 0
+                && typeof mm.rootId === 'string'
+                && mm.rootId.length > 0;
+            return html`
+                <div class="mini-box">
+                    ${toolbar}
+                    <div class="mini-canvas-wrap" style="min-height:180px;">
+                        ${showMm
+                            ? html`
+                                  <crm-mindmap-canvas
+                                      compact
+                                      .graphNodes=${mm.nodes}
+                                      .graphEdges=${mm.edges}
+                                      .rootEntityId=${mm.rootId}
+                                      .entityTypeColors=${colorsPlain}
+                                      .entityTypeIcons=${iconsPlain}
+                                      .relationshipTypeLabels=${relLabelsPlain}
+                                      defaultAccent="#6366f1"
+                                      .fitNonce=${this._fitNonce}
+                                      .compactZoom=${this._compactZoom}
+                                      @node-dblclick=${this._onMindmapNodeDblClick}
+                                      @compact-zoom-change=${this._onMindmapCompactZoomChange}
+                                  ></crm-mindmap-canvas>
+                              `
+                            : html`<div class="mini-empty">${this.t('graph.empty_graph')}</div>`}
+                    </div>
+                    <div class="mini-footer">${footerBtn}</div>
                 </div>
+            `;
+        }
+
+        return html`
+            <div class="mini-box">
+                ${toolbar}
                 <div class="mini-canvas-wrap">
                     <div class="mini-canvas"></div>
                 </div>
+                <div class="mini-footer">${footerBtn}</div>
             </div>
         `;
     }
 }
 
-customElements.define('crm-mini-graph-preview', CRMMiniGraphPreview);
+customElements.define('crm-mini-graph', CRMMiniGraph);

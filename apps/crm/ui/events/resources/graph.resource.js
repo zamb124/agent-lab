@@ -2,6 +2,7 @@
  * Graph — граф влияния, связей и кратчайших путей между сущностями.
  *
  * Backend (`/crm/api/v1/entities`):
+ *   GET  /person-entity/self                    → EntityResponse (сущность текущего пользователя)
  *   POST /overview-graph                       → InfluenceGraphResponse
  *   GET  /{entity_id}/influence-graph          → InfluenceGraphResponse
  *   GET  /{entity_id}/related                  → RelatedEntitiesResponse
@@ -25,6 +26,18 @@ function _entityIdFromPayload(payload) {
     }
     return '';
 }
+
+export const personEntitySelfOp = createAsyncOp({
+    name: 'crm/person_entity_self',
+    silent: true,
+    restMirror: { method: 'GET', path: '/crm/api/v1/entities/person-entity/self' },
+    request: async () => {
+        return await httpRequest({
+            method: 'GET',
+            url: '/crm/api/v1/entities/person-entity/self',
+        });
+    },
+});
 
 function _buildQuery(params) {
     const url = new URLSearchParams();

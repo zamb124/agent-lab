@@ -24,6 +24,8 @@ const TOOLBAR_ICONS = {
     toggle_legend: html`<platform-icon name="list" size="14"></platform-icon>`,
     toggle_meta: html`<platform-icon name="info" size="14"></platform-icon>`,
     merge_entities: html`<platform-icon name="circular-connection" size="14"></platform-icon>`,
+    view_3d: html`<platform-icon name="share" size="14"></platform-icon>`,
+    view_mindmap: html`<platform-icon name="git-branch" size="14"></platform-icon>`,
 };
 
 export class CRMGraphToolbar extends PlatformElement {
@@ -33,6 +35,7 @@ export class CRMGraphToolbar extends PlatformElement {
         actions: { type: Array },
         toggles: { type: Array },
         labelMode: { type: String, attribute: 'label-mode' },
+        canvasView: { type: String, attribute: 'canvas-view' },
     };
 
     static styles = [
@@ -50,7 +53,7 @@ export class CRMGraphToolbar extends PlatformElement {
                 border: 1px solid var(--glass-border-subtle);
                 backdrop-filter: blur(6px);
                 pointer-events: auto;
-                max-height: calc(100% - 32px);
+                max-height: calc(100% - var(--graph-toolbar-max-height-slop, 88px));
                 overflow-y: auto;
                 scrollbar-width: none;
             }
@@ -59,9 +62,16 @@ export class CRMGraphToolbar extends PlatformElement {
                 display: none;
             }
 
+            .view-switch {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+            }
+
             .separator {
-                width: 20px;
-                height: 2px;
+                height: 1px;
+                width: 18px;
                 background: var(--accent);
                 opacity: 0.4;
                 border-radius: 1px;
@@ -125,6 +135,7 @@ export class CRMGraphToolbar extends PlatformElement {
         this.actions = [];
         this.toggles = [];
         this.labelMode = 'fixed';
+        this.canvasView = 'mindmap';
     }
 
     _getIcon(iconKey) {
@@ -147,8 +158,36 @@ export class CRMGraphToolbar extends PlatformElement {
         this.emit('panel-toggle', { panelId });
     }
 
+    _onCanvasViewChange(mode) {
+        if (mode !== '3d' && mode !== 'mindmap') {
+            throw new Error(`graph-toolbar: invalid canvas view "${mode}"`);
+        }
+        this.emit('view-mode-change', { canvasView: mode });
+    }
+
     render() {
         return html`
+            <div class="view-switch" role="group" aria-label=${this.t('graph.canvas_view_group_label')}>
+                <button
+                    class="icon-btn ${this.canvasView === '3d' ? 'active' : ''}"
+                    type="button"
+                    title=${this.t('graph.view_mode_3d')}
+                    aria-label=${this.t('graph.view_mode_3d')}
+                    @click=${() => this._onCanvasViewChange('3d')}
+                >
+                    ${this._getIcon('view_3d')}
+                </button>
+                <button
+                    class="icon-btn ${this.canvasView === 'mindmap' ? 'active' : ''}"
+                    type="button"
+                    title=${this.t('graph.view_mode_mindmap')}
+                    aria-label=${this.t('graph.view_mode_mindmap')}
+                    @click=${() => this._onCanvasViewChange('mindmap')}
+                >
+                    ${this._getIcon('view_mindmap')}
+                </button>
+            </div>
+            <div class="separator"></div>
             ${this.actions.map((action) => html`
                 <button
                     class="icon-btn ${this._isActionActive(action.id) ? 'active' : ''}"

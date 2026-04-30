@@ -3,7 +3,8 @@
  *
  * Источник правды о текущем маршруте — state.router. Effect синхронизирует state
  * с реальным URL и наоборот:
- *   - на ROUTER_NAVIGATE_REQUESTED делает history.pushState и эмитит ROUTER_ROUTE_CHANGED.
+ *   - на ROUTER_NAVIGATE_REQUESTED делает history.pushState или replaceState (payload.replace)
+ *     и эмитит ROUTER_ROUTE_CHANGED.
  *   - слушает popstate / onload и эмитит ROUTER_ROUTE_CHANGED по текущему URL.
  *
  * Маршруты регистрируются через registerRoutes(routes) — массив { key, path, parent?, title? }.
@@ -126,7 +127,12 @@ export function createRouterEffect({ baseUrl, routes }) {
                     search = s;
                 }
                 const urlForHistory = fullPath + search;
-                history.pushState({}, '', urlForHistory);
+                const replace = p.replace === true;
+                if (replace) {
+                    history.replaceState({}, '', urlForHistory);
+                } else {
+                    history.pushState({}, '', urlForHistory);
+                }
                 ctx.dispatch(
                     CoreEvents.ROUTER_ROUTE_CHANGED,
                     {

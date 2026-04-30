@@ -11,6 +11,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/page-header.js';
+import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -371,13 +372,7 @@ export class ChatPage extends PlatformPage {
 
     _openLara() {
         this._overflowOpen = false;
-        window.dispatchEvent(
-            new CustomEvent('flows-lara-open', {
-                bubbles: true,
-                composed: true,
-                detail: { open: true },
-            }),
-        );
+        dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
     }
 
     _toggleOverflow(e) {

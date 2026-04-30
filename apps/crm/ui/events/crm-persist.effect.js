@@ -5,12 +5,13 @@
  * `STORAGE_LOAD_REQUESTED` для всех ключей CRM. На `STORAGE_LOADED` от storage
  * effect'а — гидратирует соответствующий slice через action.
  *
- * На действия фабрик (`crm/graph_ui/panels_updated`,
+ * На действия фабрик (`crm/graph_ui/panels_updated`, `crm/graph_view/*_updated`,
  * `crm/daily_notes_ui/range_updated`) — диспатчит `STORAGE_PERSIST_REQUESTED`
  * с актуальным значением из slice.
  *
  * Ключи в localStorage:
  *   crm.graph_ui.panels        — { search, timeline, legend, meta }
+ *   crm.graph_view.state      — { viewMode, maxDepth, displayDepth, searchInput }
  *   crm.daily_notes.range      — { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
  *
  * Никаких fallback: если ключа нет — гидратация не происходит, slice остаётся
@@ -21,6 +22,7 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 
 const KEYS = Object.freeze({
     graphPanels: 'crm.graph_ui.panels',
+    graphViewState: 'crm.graph_view.state',
     dailyNotesRange: 'crm.daily_notes.range',
 });
 
@@ -30,6 +32,10 @@ const HYDRATION_ACTIONS = Object.freeze({
     [KEYS.graphPanels]: (value) => {
         if (!value || typeof value !== 'object') return null;
         return { type: 'crm/graph_ui/panels_hydrated', payload: { panels: value } };
+    },
+    [KEYS.graphViewState]: (value) => {
+        if (!value || typeof value !== 'object') return null;
+        return { type: 'crm/graph_view/hydrated', payload: value };
     },
     [KEYS.dailyNotesRange]: (value) => {
         if (!value || typeof value !== 'object') return null;
@@ -46,6 +52,66 @@ const PERSIST_TRIGGERS = Object.freeze({
             return { key: KEYS.graphPanels, value: null };
         }
         return { key: KEYS.graphPanels, value: { ...slice.panels } };
+    },
+    'crm/graph_view/view_mode_updated': (event, getState) => {
+        const slice = getState().crmGraphView;
+        if (!slice || typeof slice !== 'object') {
+            return { key: KEYS.graphViewState, value: null };
+        }
+        return {
+            key: KEYS.graphViewState,
+            value: {
+                viewMode: slice.viewMode,
+                maxDepth: slice.maxDepth,
+                displayDepth: slice.displayDepth,
+                searchInput: { ...slice.searchInput },
+            },
+        };
+    },
+    'crm/graph_view/max_depth_updated': (event, getState) => {
+        const slice = getState().crmGraphView;
+        if (!slice || typeof slice !== 'object') {
+            return { key: KEYS.graphViewState, value: null };
+        }
+        return {
+            key: KEYS.graphViewState,
+            value: {
+                viewMode: slice.viewMode,
+                maxDepth: slice.maxDepth,
+                displayDepth: slice.displayDepth,
+                searchInput: { ...slice.searchInput },
+            },
+        };
+    },
+    'crm/graph_view/display_depth_updated': (event, getState) => {
+        const slice = getState().crmGraphView;
+        if (!slice || typeof slice !== 'object') {
+            return { key: KEYS.graphViewState, value: null };
+        }
+        return {
+            key: KEYS.graphViewState,
+            value: {
+                viewMode: slice.viewMode,
+                maxDepth: slice.maxDepth,
+                displayDepth: slice.displayDepth,
+                searchInput: { ...slice.searchInput },
+            },
+        };
+    },
+    'crm/graph_view/search_input_updated': (event, getState) => {
+        const slice = getState().crmGraphView;
+        if (!slice || typeof slice !== 'object') {
+            return { key: KEYS.graphViewState, value: null };
+        }
+        return {
+            key: KEYS.graphViewState,
+            value: {
+                viewMode: slice.viewMode,
+                maxDepth: slice.maxDepth,
+                displayDepth: slice.displayDepth,
+                searchInput: { ...slice.searchInput },
+            },
+        };
     },
     'crm/daily_notes_ui/range_updated': (event, getState) => {
         const slice = getState().crmDailyNotesUi;

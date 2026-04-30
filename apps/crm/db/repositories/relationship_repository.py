@@ -46,16 +46,19 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
     async def get_by_entity_for_graph(
         self,
         entity_id: str,
-        cross_company: bool = False
+        cross_company: bool = False,
+        relationship_namespace: Optional[str] = None,
     ) -> List[Relationship]:
         """
         Получает relationships для graph traversal.
-        
+
         Args:
             entity_id: ID entity
             cross_company: Если True - игнорирует company_id фильтр
                           (для cross-company графов через grants)
-        
+            relationship_namespace: Если задан непустой — оставляем только связи
+                с `Relationship.namespace == relationship_namespace`.
+
         Returns:
             List relationships где entity_id участвует (source или target)
         """
@@ -66,11 +69,14 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
                     Relationship.target_entity_id == entity_id
                 )
             )
-            
+
             if not cross_company:
                 company_id = self._get_company_id()
                 stmt = stmt.where(Relationship.company_id == company_id)
-            
+
+            if relationship_namespace is not None and relationship_namespace.strip() != "":
+                stmt = stmt.where(Relationship.namespace == relationship_namespace)
+
             result = await session.execute(stmt)
             return list(result.scalars().all())
     
@@ -155,21 +161,26 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         entity_ids: List[str],
         relationship_types: Optional[List[str]] = None,
         cross_company: bool = False,
+        relationship_namespace: Optional[str] = None,
     ) -> Dict[str, List[Relationship]]:
         """
         Batch получение соседей для списка entities.
-        
+
         Args:
             entity_ids: Список ID entities
             relationship_types: Фильтр по типам связей (опционально)
             cross_company: Если True — без фильтра по company_id (для cross-company графов)
-        
+            relationship_namespace: Если задан непустой — оставляем только связи
+                с `Relationship.namespace == relationship_namespace`. Без него
+                возвращаются связи всех пространств — нужно для UI «связи сущности»,
+                не привязанного к одному namespace.
+
         Returns:
             Dict где ключ - entity_id, значение - список relationships
         """
         if not entity_ids:
             return {}
-        
+
         async with self._db.session() as session:
             stmt = select(Relationship).where(
                 or_(
@@ -177,13 +188,16 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
                     Relationship.target_entity_id.in_(entity_ids)
                 )
             )
-            
+
             if not cross_company:
                 company_id = self._get_company_id()
                 stmt = stmt.where(Relationship.company_id == company_id)
-            
+
             if relationship_types:
                 stmt = stmt.where(Relationship.relationship_type.in_(relationship_types))
+
+            if relationship_namespace is not None and relationship_namespace.strip() != "":
+                stmt = stmt.where(Relationship.namespace == relationship_namespace)
             
             result = await session.execute(stmt)
             relationships = list(result.scalars().all())

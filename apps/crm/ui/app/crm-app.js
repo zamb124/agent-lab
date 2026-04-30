@@ -99,6 +99,7 @@ import {
     entityRelationshipsOp,
     shortestPathOp,
     timelineBoundsOp,
+    personEntitySelfOp,
 } from '../events/resources/graph.resource.js';
 import { laraSummaryOp } from '../events/resources/workspace.resource.js';
 import {
@@ -139,8 +140,10 @@ import '../modals/entity-type-create-mode-modal.js';
 import '../modals/entity-type-preset-picker-modal.js';
 
 import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
+import { graphViewSlice } from '../events/resources/graph-view.resource.js';
 import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
 import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
+import { createCrmGraphLegacyRoutesEffect } from '../events/crm-graph-legacy-routes.effect.js';
 import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
 import { getPlatformBus } from '@platform/lib/events/bus-singleton.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
@@ -305,12 +308,14 @@ export class CRMApp extends PlatformApp {
         entityRelationshipsOp,
         shortestPathOp,
         timelineBoundsOp,
+        personEntitySelfOp,
         laraSummaryOp,
         attachmentsListOp,
         attachmentUploadOp,
         attachmentDeleteOp,
         fileUploadOp,
         graphUiSlice,
+        graphViewSlice,
         dailyNotesUiSlice,
     ];
 
@@ -358,6 +363,7 @@ export class CRMApp extends PlatformApp {
     getServiceEffects() {
         return [
             createRouterEffect({ baseUrl: '/crm', routes: CRM_ROUTES }),
+            createCrmGraphLegacyRoutesEffect(),
             createCrmPersistEffect(),
         ];
     }

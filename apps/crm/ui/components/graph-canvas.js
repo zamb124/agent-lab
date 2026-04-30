@@ -11,9 +11,11 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import {
     aggregateIncidentWeightsByNode,
     computeGraphNodeDisplaySize,
+    createGraphLinkLabelPlane,
     createGraphNodeLabelSprite,
     createGraphTextSprite,
     maxIncidentWeightOrOne,
+    positionGraphLinkLabelMesh,
 } from './graph-3d-helpers.js';
 
 const GRAPH_PRESETS = {
@@ -42,6 +44,8 @@ export class CRMGraphCanvas extends PlatformElement {
         edgeDirectedFn: { state: true },
         relationshipTypeColors: { state: true },
         incidentWeightSubtitleFn: { attribute: false },
+        /** Плоский объект type_id → локализованное имя типа связи (подпись на ребре). */
+        relationshipTypeLabels: { type: Object },
     };
 
     static styles = [
@@ -67,6 +71,7 @@ export class CRMGraphCanvas extends PlatformElement {
         this.edgeDirectedFn = () => true;
         this.relationshipTypeColors = new Map();
         this.incidentWeightSubtitleFn = null;
+        this.relationshipTypeLabels = {};
         this._graphInstance = null;
         this._graphContainerEl = null;
         this._resizeObserver = null;
@@ -365,20 +370,21 @@ export class CRMGraphCanvas extends PlatformElement {
             .linkThreeObjectExtend(true)
             .linkThreeObject((link) => {
                 const linkLabelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#d4dae8';
-                const sprite = this._createTextSprite(link.relation_type || 'related', linkLabelColor, 20);
-                if (!sprite) return null;
-                sprite.visible = this._shouldShowLinkLabel(link);
-                return sprite;
+                const typeKey = typeof link.relation_type === 'string' && link.relation_type.trim().length > 0
+                    ? link.relation_type.trim()
+                    : 'related';
+                const human = this._resolveLinkRelationshipLabel(typeKey);
+                const mesh = createGraphLinkLabelPlane(human, linkLabelColor, 17, 30);
+                if (!mesh) return null;
+                mesh.visible = this._shouldShowLinkLabel(link);
+                return mesh;
             })
-            .linkPositionUpdate((sprite, { start, end }, link) => {
-                if (!sprite || !start || !end) return false;
-                sprite.visible = this._shouldShowLinkLabel(link);
-                const middlePosition = {
-                    x: start.x + ((end.x - start.x) / 2),
-                    y: start.y + ((end.y - start.y) / 2),
-                    z: start.z + ((end.z - start.z) / 2),
-                };
-                sprite.position.set(middlePosition.x, middlePosition.y, middlePosition.z);
+            .linkPositionUpdate((mesh, { start, end }, link) => {
+                if (!mesh || !start || !end) return false;
+                mesh.visible = this._shouldShowLinkLabel(link);
+                if (!mesh.visible) return true;
+                const cam = this._graphInstance ? this._graphInstance.cameraPosition() : null;
+                positionGraphLinkLabelMesh(mesh, start, end, cam);
                 return true;
             })
             .linkDirectionalArrowLength((link) => {
@@ -554,6 +560,21 @@ export class CRMGraphCanvas extends PlatformElement {
             return;
         }
         this.emit('node-click', { node, event });
+    }
+
+    _resolveLinkRelationshipLabel(typeKey) {
+        const k = typeof typeKey === 'string' ? typeKey.trim() : '';
+        if (k.length === 0) {
+            return 'related';
+        }
+        const map = this.relationshipTypeLabels;
+        if (map && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, k)) {
+            const v = map[k];
+            if (typeof v === 'string' && v.trim().length > 0) {
+                return v.trim();
+            }
+        }
+        return k;
     }
 
     _shouldShowNodeLabel(node) {

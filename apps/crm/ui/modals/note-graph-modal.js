@@ -6,8 +6,7 @@
  *
  * Поток:
  *   1. На open `entitiesResource.get(noteId)` подгружает имя заметки в шапку.
- *   2. Тело — `<crm-mini-graph-preview .entityId=${noteId}>` (prop), компонент сам
- *      загружает граф через `useOp('crm/influence_graph')` и рендерит 3D-сцену.
+ *   2. Тело — `<crm-mini-graph viewMode="3d" .entityId=${noteId}>`.
  *   3. Клик по сущности в графе — `entity-open` событие → close модалку и
  *      navigate('entity', { itemId }).
  */
@@ -17,7 +16,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
-import '../components/mini-graph-preview.js';
+import '../components/crm-mini-graph.js';
 
 const ENTITIES_NAME = 'crm/entities';
 
@@ -60,7 +59,7 @@ export class CRMNoteGraphModal extends PlatformModal {
                 min-height: 0;
                 display: flex;
             }
-            crm-mini-graph-preview {
+            crm-mini-graph {
                 flex: 1;
                 min-height: 0;
             }
@@ -132,14 +131,13 @@ export class CRMNoteGraphModal extends PlatformModal {
                     <span class="name">${name}</span>
                 </div>
                 <div class="graph-wrap">
-                    <crm-mini-graph-preview
+                    <crm-mini-graph
                         fill-container
+                        viewMode="3d"
                         .entityId=${this.noteId}
                         namespace=${noteNs}
-                        .maxDepth=${3}
-                        .initialDisplayDepth=${2}
                         @entity-open=${this._onEntityOpen}
-                    ></crm-mini-graph-preview>
+                    ></crm-mini-graph>
                 </div>
             </div>
         `;

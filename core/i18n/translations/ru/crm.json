@@ -20,7 +20,8 @@
         "nav_group_entities": "Сущности",
         "nav_all_notes": "Все заметки",
         "nav_all_tasks": "Все задачи",
-        "nav_all_entities": "Все сущности"
+        "nav_all_entities": "Все сущности",
+        "nav_group_graph": "Граф"
     },
     "routes": {
         "platform_services": "Сервисы",
@@ -174,6 +175,15 @@
         "mini_depth_level": "Уровень {{current}} из {{max}}",
         "mini_depth_less": "Меньше уровней",
         "mini_depth_more": "Больше уровней",
+        "mini_zoom_in": "Увеличить (Ctrl + колесо)",
+        "mini_zoom_out": "Уменьшить (Ctrl + колесо)",
+        "mini_zoom_reset": "Сбросить масштаб",
+        "mini_open_full": "Открыть полностью",
+        "canvas_view_group_label": "Вид канваса",
+        "view_mode_3d": "3D",
+        "view_mode_mindmap": "Mind map",
+        "empty_need_entity": "Укажите сущность для графа.",
+        "empty_graph": "Нет данных для выбранной глубины.",
         "timeline_reset": "Сбросить шкалу времени",
         "timeline_title": "Период",
         "legend_hidden": "Скрыто",
@@ -614,7 +624,8 @@
         "task_undone": "Снять отметку",
         "task_remove": "Удалить задачу",
         "task_add_placeholder": "Введите задачу + Enter",
-        "summary_entity_open": "Открыть сущность"
+        "summary_entity_open": "Открыть сущность",
+        "graph_inline_title": "Окружение заметки"
     },
     "note_edit": {
         "field_description": "Текст заметки",
@@ -946,6 +957,15 @@
         "auto_note_ai_hint": "Для каждой новой заметки, пришедшей из AmoCRM при синхронизации, автоматически создаётся задача анализа (режим «Только анализ») с настройками по умолчанию.",
         "auto_note_ai_toggle": "Автоматически анализировать новые заметки"
     },
+    "mindmap": {
+        "page_title": "Mind map",
+        "overlay_title": "Mind map",
+        "loading": "Загружаем карту связей…",
+        "err_person": "Не удалось загрузить сущность пользователя.",
+        "err_invalid_root": "Не указана или недоступна корневая сущность для карты.",
+        "err_graph": "Не удалось построить карту связей.",
+        "empty": "Нет связей для отображения."
+    },
     "graph_page": {
         "hint_browse": "Режим обзора",
         "hint_click_target": "Кликни на вторую сущность (target)",
@@ -967,6 +987,7 @@
         "panel_toggle_timeline": "Показать/скрыть timeline",
         "panel_toggle_legend": "Показать/скрыть легенду",
         "panel_toggle_meta": "Показать/скрыть статистику",
+        "meta_canvas": "канвас:",
         "empty_search": "По текущему фильтру совпадений нет",
         "empty_import_hint": "Граф пуст в этом режиме. Можно загрузить существующую базу знаний в текущее пространство.",
         "empty_import_cta": "Начальная загрузка",

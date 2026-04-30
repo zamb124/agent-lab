@@ -21,9 +21,10 @@
  *
  * Эмитит:
  *   - `edit-note`                — клик по карандашу в шапке view.
- *   - `show-graph`               — клик по иконке графа в шапке view.
+ *   - `show-graph`               — клик по иконке графа в шапке view (модалка 3D).
+ *                                В теле view также блок mind map / 3D под текстом заметки.
  *   - `delete-note`              — клик по корзине в шапке view.
- *   - `entity-open` { entityId } — клик по chip связанной сущности (view).
+ *   - `entity-open` { entityId, entity_type? } — клик по связанной сущности или превью графа.
  *   - `cancel`                   — отмена в edit-режиме.
  *   - `saved` { entity }         — успешное сохранение существующей заметки.
  *   - `created` { entity }       — успешное создание новой заметки.
@@ -41,6 +42,7 @@ import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import './entity-hover-preview.js';
 import './crm-related-neighbor-rows.js';
+import './crm-mini-graph.js';
 import { relatedEntityCardSharedStyles } from '../styles/related-entity-card.styles.js';
 import { extractNeighborEdges } from '../utils/neighbor-edges.js';
 import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
@@ -622,6 +624,72 @@ export class CRMNoteCardView extends PlatformElement {
                 line-height: 20px;
                 color: var(--crm-note-text-muted);
                 font-style: italic;
+            }
+
+            /* ================== inline graph (view) ================== */
+            .note-graph-inline {
+                display: flex;
+                flex-direction: column;
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+            .note-graph-inline-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-3) var(--space-4);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                background: var(--glass-tint-subtle);
+            }
+            .note-graph-inline-title {
+                margin: 0;
+                font-size: var(--text-sm);
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                color: var(--text-primary);
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+            .note-graph-inline .graph-mode-switch {
+                display: flex;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                background: var(--glass-tint-subtle);
+                flex-shrink: 0;
+            }
+            .note-graph-inline .graph-mode-switch button {
+                flex: 1;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-medium);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: 600;
+                cursor: pointer;
+            }
+            .note-graph-inline .graph-mode-switch button.active {
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+                color: var(--text-primary);
+            }
+            .note-graph-preview-host {
+                height: min(360px, 42vh);
+                min-height: 240px;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+            .note-graph-preview-host crm-mini-graph {
+                flex: 1 1 0%;
+                min-height: 0;
+                width: 100%;
             }
 
             /* ================== sidebar cards ================== */
@@ -1393,6 +1461,7 @@ export class CRMNoteCardView extends PlatformElement {
         this._attachmentDelete = this.useOp(ATTACHMENT_DELETE_OP);
         this._voice = this.useOp(VOICE_OP);
         this._entitySearch = this.useOp(ENTITY_SEARCH_OP);
+        this._graphView = this.useSlice('crm/graph_view');
         this._uploadTargetMode = 'edit';
 
         this._crmSidebarDefaultNsSel = this.select(selectCrmSidebarOrDefaultNamespace);
@@ -1992,8 +2061,12 @@ export class CRMNoteCardView extends PlatformElement {
         return typeof related.name === 'string' && related.name.length > 0 ? related.name : entityId;
     }
 
-    _emitEntityOpen(entityId) {
+    _emitEntityOpen(entityId, entityType) {
         if (typeof entityId !== 'string' || entityId.length === 0) {
+            return;
+        }
+        if (typeof entityType === 'string' && entityType.trim().length > 0) {
+            this.emit('entity-open', { entityId, entity_type: entityType.trim() });
             return;
         }
         this.emit('entity-open', { entityId });
@@ -3052,6 +3125,62 @@ export class CRMNoteCardView extends PlatformElement {
         }));
     }
 
+    _renderNoteGraphInlineSection() {
+        if (!this.note || typeof this.note !== 'object') {
+            return nothing;
+        }
+        const noteIdRaw = this.note.entity_id;
+        const noteId = typeof noteIdRaw === 'string' ? noteIdRaw.trim() : '';
+        if (noteId.length === 0) {
+            return nothing;
+        }
+        const entityNs =
+            typeof this.note.namespace === 'string' && this.note.namespace.length > 0
+                ? this.note.namespace
+                : '';
+        const vm = this._graphView.value.viewMode;
+        return html`
+            <section class="note-graph-inline" aria-label=${this.t('note_view.graph_inline_title')}>
+                <div class="note-graph-inline-head">
+                    <h3 class="note-graph-inline-title">
+                        <platform-icon name="git-branch" size="18"></platform-icon>
+                        ${this.t('note_view.graph_inline_title')}
+                    </h3>
+                </div>
+                <div class="graph-mode-switch" role="group">
+                    <button
+                        type="button"
+                        class=${vm === 'mindmap' ? 'active' : ''}
+                        @click=${() => {
+                            this._graphView.setViewMode({ viewMode: 'mindmap' });
+                        }}
+                    >
+                        ${this.t('graph.view_mode_mindmap')}
+                    </button>
+                    <button
+                        type="button"
+                        class=${vm === '3d' ? 'active' : ''}
+                        @click=${() => {
+                            this._graphView.setViewMode({ viewMode: '3d' });
+                        }}
+                    >
+                        ${this.t('graph.view_mode_3d')}
+                    </button>
+                </div>
+                <div class="note-graph-preview-host">
+                    <crm-mini-graph
+                        fill-container
+                        .entityId=${noteId}
+                        namespace=${entityNs}
+                        .viewMode=${vm}
+                        @entity-open=${(e) =>
+                            this._emitEntityOpen(e.detail.entityId, e.detail.entity_type)}
+                    ></crm-mini-graph>
+                </div>
+            </section>
+        `;
+    }
+
     _renderNeighborsSection() {
         const rows = this._noteNeighborRows();
         return html`
@@ -3062,7 +3191,8 @@ export class CRMNoteCardView extends PlatformElement {
                     .entityTypeRows=${this._entityTypeItems()}
                     .emptyText=${this.t('note_view.no_neighbors')}
                     .showRemove=${false}
-                    @entity-open=${(e) => this._emitEntityOpen(e.detail.entityId)}
+                    @entity-open=${(e) =>
+                        this._emitEntityOpen(e.detail.entityId, e.detail.entity_type)}
                 ></crm-related-neighbor-rows>
             </section>
         `;
@@ -3189,6 +3319,7 @@ export class CRMNoteCardView extends PlatformElement {
                             </article>
                         `
                         : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
+                    ${this._renderNoteGraphInlineSection()}
                 </section>
 
                 <aside class="sidebar">

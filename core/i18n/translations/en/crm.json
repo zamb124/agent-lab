@@ -20,7 +20,8 @@
         "nav_group_entities": "Entities",
         "nav_all_notes": "All notes",
         "nav_all_tasks": "All tasks",
-        "nav_all_entities": "All entities"
+        "nav_all_entities": "All entities",
+        "nav_group_graph": "Graph"
     },
     "routes": {
         "platform_services": "Services",
@@ -174,6 +175,15 @@
         "mini_depth_level": "Level {{current}} of {{max}}",
         "mini_depth_less": "Fewer levels",
         "mini_depth_more": "More levels",
+        "mini_zoom_in": "Zoom in (Ctrl + wheel)",
+        "mini_zoom_out": "Zoom out (Ctrl + wheel)",
+        "mini_zoom_reset": "Reset zoom",
+        "mini_open_full": "Open full workspace",
+        "canvas_view_group_label": "Canvas view",
+        "view_mode_3d": "3D",
+        "view_mode_mindmap": "Mind map",
+        "empty_need_entity": "Entity is required for the graph.",
+        "empty_graph": "No data at the selected depth.",
         "timeline_reset": "Reset timeline",
         "timeline_title": "Period",
         "legend_hidden": "Hidden",
@@ -614,7 +624,8 @@
         "task_undone": "Mark as not done",
         "task_remove": "Remove task",
         "task_add_placeholder": "Type a task + Enter",
-        "summary_entity_open": "Open entity"
+        "summary_entity_open": "Open entity",
+        "graph_inline_title": "Around this note"
     },
     "note_edit": {
         "field_description": "Note text",
@@ -946,6 +957,15 @@
         "auto_note_ai_hint": "For each new note imported from AmoCRM during sync, an analysis task is created (analyze-only mode) with default settings.",
         "auto_note_ai_toggle": "Automatically analyze new notes"
     },
+    "mindmap": {
+        "page_title": "Mind map",
+        "overlay_title": "Mind map",
+        "loading": "Loading relationship map…",
+        "err_person": "Could not load the user entity.",
+        "err_invalid_root": "Root entity for the map is missing or unavailable.",
+        "err_graph": "Could not build the relationship map.",
+        "empty": "No relationships to show."
+    },
     "graph_page": {
         "hint_browse": "Browse mode",
         "hint_click_target": "Click the second entity (target)",
@@ -967,6 +987,7 @@
         "panel_toggle_timeline": "Toggle timeline",
         "panel_toggle_legend": "Toggle legend",
         "panel_toggle_meta": "Toggle statistics",
+        "meta_canvas": "canvas:",
         "empty_search": "No matches for the current filter",
         "empty_import_hint": "The graph is empty in this mode. You can load an existing knowledge base into the current space.",
         "empty_import_cta": "Initial upload",

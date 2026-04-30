@@ -103,18 +103,22 @@ async def create_relationship(
     target_id: str,
     relationship_type: str,
     headers: dict,
-    weight: float = 1.0
+    weight: float = 1.0,
+    namespace: str | None = None,
 ) -> str:
     """Создать relationship и вернуть relationship_id"""
+    payload: dict = {
+        "source_entity_id": source_id,
+        "target_entity_id": target_id,
+        "relationship_type": relationship_type,
+        "weight": weight,
+    }
+    if namespace is not None:
+        payload["namespace"] = namespace
     response = await client.post(
         "/crm/api/v1/relationships/",
-        json={
-            "source_entity_id": source_id,
-            "target_entity_id": target_id,
-            "relationship_type": relationship_type,
-            "weight": weight
-        },
-        headers=headers
+        json=payload,
+        headers=headers,
     )
     assert response.status_code == 200, f"Failed to create relationship: {response.text}"
     return response.json()["relationship_id"]
@@ -140,6 +144,47 @@ async def create_relationship_type(
         headers=headers
     )
     assert response.status_code == 200, f"Failed to create relationship type: {response.text}"
+
+
+async def ensure_namespace(
+    client: AsyncClient,
+    namespace_name: str,
+    template_suffix: str,
+    headers: dict,
+    entity_type: str,
+) -> None:
+    """Создаёт namespace через шаблон с одним entity_type (идемпотентно по 409)."""
+    template_id = f"tmpl_test_{template_suffix}"
+    response = await client.post(
+        "/crm/api/v1/namespaces/templates",
+        json={"template_id": template_id, "name": f"Tpl {template_suffix}"},
+        headers=headers,
+    )
+    assert response.status_code in (201, 409), response.text
+
+    response = await client.post(
+        f"/crm/api/v1/namespaces/templates/{template_id}/types",
+        json={
+            "type_id": entity_type,
+            "name": entity_type,
+            "required_fields": {},
+            "optional_fields": {},
+            "namespace_ids": [],
+        },
+        headers=headers,
+    )
+    assert response.status_code in (201, 409), response.text
+
+    response = await client.post(
+        "/crm/api/v1/namespaces",
+        json={
+            "name": namespace_name,
+            "description": "graph namespace filter test",
+            "template_id": template_id,
+        },
+        headers=headers,
+    )
+    assert response.status_code in (201, 409), response.text
 
 
 async def create_public_grant(
@@ -1251,3 +1296,133 @@ class TestSameCompanyRegression:
         assert response.status_code == 200
         rels = response.json()["items"]
         assert len(rels) == 0
+
+
+class TestInfluenceGraphNamespaceFilter:
+    """Query ``namespace`` фильтрует Relationship.namespace при обходе графа."""
+
+    @pytest.mark.asyncio
+    async def test_other_namespace_edges_excluded(
+        self, crm_client, unique_id, auth_headers_system
+    ):
+        """Связи в чужом namespace не должны попадать в обход с ?namespace=default."""
+        ns_default = "default"
+        ns_other = f"other_{unique_id}"
+        await ensure_namespace(crm_client, ns_other, unique_id, auth_headers_system, "contact")
+
+        root_id = await create_entity(
+            crm_client, "contact", f"Root {unique_id}", auth_headers_system,
+            namespace=ns_default,
+        )
+        peer_default = await create_entity(
+            crm_client, "contact", f"PeerDefault {unique_id}", auth_headers_system,
+            namespace=ns_default,
+        )
+        peer_other = await create_entity(
+            crm_client, "contact", f"PeerOther {unique_id}", auth_headers_system,
+            namespace=ns_other,
+        )
+
+        await create_relationship(
+            crm_client, root_id, peer_default, "mentors", auth_headers_system,
+            namespace=ns_default,
+        )
+        await create_relationship(
+            crm_client, root_id, peer_other, "mentors", auth_headers_system,
+            namespace=ns_other,
+        )
+
+        response = await crm_client.get(
+            f"/crm/api/v1/entities/{root_id}/influence-graph",
+            params={"max_depth": 2, "namespace": ns_default},
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200, response.text
+        graph = response.json()
+        ids = {n["entity_id"] for n in graph["nodes"]}
+        assert root_id in ids
+        assert peer_default in ids
+        assert peer_other not in ids
+        assert len(graph["edges"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_include_all_namespaces_brings_back_other(
+        self, crm_client, unique_id, auth_headers_system
+    ):
+        """Флаг include_all_namespaces=true возвращает связи всех Relationship.namespace."""
+        ns_default = "default"
+        ns_other = f"other_{unique_id}_all"
+        await ensure_namespace(
+            crm_client, ns_other, f"{unique_id}_all", auth_headers_system, "contact"
+        )
+
+        root_id = await create_entity(
+            crm_client, "contact", f"Root {unique_id}", auth_headers_system,
+            namespace=ns_default,
+        )
+        peer_other = await create_entity(
+            crm_client, "contact", f"PeerOther {unique_id}", auth_headers_system,
+            namespace=ns_other,
+        )
+        await create_relationship(
+            crm_client, root_id, peer_other, "mentors", auth_headers_system,
+            namespace=ns_other,
+        )
+
+        response = await crm_client.get(
+            f"/crm/api/v1/entities/{root_id}/influence-graph",
+            params={
+                "max_depth": 2,
+                "namespace": ns_default,
+                "include_all_namespaces": "true",
+            },
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200, response.text
+        graph = response.json()
+        ids = {n["entity_id"] for n in graph["nodes"]}
+        assert peer_other in ids
+
+    @pytest.mark.asyncio
+    async def test_related_endpoint_namespace_filter(
+        self, crm_client, unique_id, auth_headers_system
+    ):
+        """GET /entities/{id}/related тоже фильтрует Relationship.namespace."""
+        ns_default = "default"
+        ns_other = f"other_{unique_id}_rel"
+        await ensure_namespace(
+            crm_client, ns_other, f"{unique_id}_rel", auth_headers_system, "contact"
+        )
+
+        root_id = await create_entity(
+            crm_client, "contact", f"Root {unique_id}", auth_headers_system,
+            namespace=ns_default,
+        )
+        peer_default = await create_entity(
+            crm_client, "contact", f"PeerDefault {unique_id}", auth_headers_system,
+            namespace=ns_default,
+        )
+        peer_other = await create_entity(
+            crm_client, "contact", f"PeerOther {unique_id}", auth_headers_system,
+            namespace=ns_other,
+        )
+
+        await create_relationship(
+            crm_client, root_id, peer_default, "mentors", auth_headers_system,
+            namespace=ns_default,
+        )
+        await create_relationship(
+            crm_client, root_id, peer_other, "mentors", auth_headers_system,
+            namespace=ns_other,
+        )
+
+        response = await crm_client.get(
+            f"/crm/api/v1/entities/{root_id}/related",
+            params={"namespace": ns_default},
+            headers=auth_headers_system,
+        )
+        assert response.status_code == 200, response.text
+        related = response.json()
+        outgoing_ids = {n["entity_id"] for n in related["outgoing"]}
+        assert peer_default in outgoing_ids
+        assert peer_other not in outgoing_ids

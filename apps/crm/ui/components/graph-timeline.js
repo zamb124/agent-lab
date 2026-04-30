@@ -8,6 +8,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import { clampTimelinePercents } from '../utils/crm-timeline-range.js';
 
 export class CRMGraphTimeline extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -157,9 +158,26 @@ export class CRMGraphTimeline extends PlatformElement {
         return new Date(ts).toLocaleDateString();
     }
 
+    _timelineSpanOk() {
+        return (
+            typeof this.minTimestamp === 'number'
+            && typeof this.maxTimestamp === 'number'
+            && Number.isFinite(this.minTimestamp)
+            && Number.isFinite(this.maxTimestamp)
+            && this.maxTimestamp > this.minTimestamp
+        );
+    }
+
     _onStartInput(e) {
-        const value = Number(e.target.value);
-        this.startPercent = Math.min(value, this.endPercent);
+        let start = Math.min(Number(e.target.value), this.endPercent);
+        let end = this.endPercent;
+        if (this._timelineSpanOk()) {
+            const c = clampTimelinePercents(start, end, this.minTimestamp, this.maxTimestamp);
+            start = c.startPercent;
+            end = c.endPercent;
+        }
+        this.startPercent = Math.max(0, start);
+        this.endPercent = Math.min(100, end);
         this.emit('timeline-change', {
             startPercent: this.startPercent,
             endPercent: this.endPercent,
@@ -167,8 +185,15 @@ export class CRMGraphTimeline extends PlatformElement {
     }
 
     _onEndInput(e) {
-        const value = Number(e.target.value);
-        this.endPercent = Math.max(value, this.startPercent);
+        let start = this.startPercent;
+        let end = Math.max(Number(e.target.value), this.startPercent);
+        if (this._timelineSpanOk()) {
+            const c = clampTimelinePercents(start, end, this.minTimestamp, this.maxTimestamp);
+            start = c.startPercent;
+            end = c.endPercent;
+        }
+        this.startPercent = Math.max(0, start);
+        this.endPercent = Math.min(100, end);
         this.emit('timeline-change', {
             startPercent: this.startPercent,
             endPercent: this.endPercent,

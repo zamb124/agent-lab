@@ -252,6 +252,15 @@ export class PlatformElement extends LitElement {
             }
             payload.search = s;
         }
+        if (navigationOptions !== undefined && Object.prototype.hasOwnProperty.call(navigationOptions, 'replace')) {
+            const r = navigationOptions.replace;
+            if (r !== true && r !== false) {
+                throw new Error('PlatformElement.navigate: navigationOptions.replace must be boolean');
+            }
+            if (r === true) {
+                payload.replace = true;
+            }
+        }
         this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, payload);
     }
 

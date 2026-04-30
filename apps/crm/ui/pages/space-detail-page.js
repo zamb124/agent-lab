@@ -797,7 +797,9 @@ export class CRMSpaceDetailPage extends PlatformPage {
                 allNotes: this.t('sidebar.nav_all_notes'),
                 allTasks: this.t('sidebar.nav_all_tasks'),
                 allEntities: this.t('sidebar.nav_all_entities'),
-                graph: this.t('sidebar.nav.graph'),
+                groupGraph: this.t('sidebar.nav_group_graph'),
+                graphView3d: this.t('graph.view_mode_3d'),
+                graphViewMindmap: this.t('graph.view_mode_mindmap'),
             },
         });
         const payload = sidebarNavTreeToApiPayload(tree);

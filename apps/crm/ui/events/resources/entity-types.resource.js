@@ -53,6 +53,9 @@ export const entityTypesResource = createResourceCollection({
     baseUrl: '/crm/api/v1/entity-types',
     idField: 'crm_entity_type_row_id',
     operations: ['list', 'get', 'create'],
+    restMirror: {
+        get: { method: 'GET', path: '/crm/api/v1/entity-types/:type_id' },
+    },
     listFetchAllPages: true,
     listQuery: (payload) => {
         if (!payload || typeof payload !== 'object') {

@@ -30,6 +30,7 @@ import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import {
     buildDefaultSidebarNav,
+    dropCrmSidebarLegacyTopLevelNodes,
     enrichSidebarNavWithEntityTypeIcons,
     ensureCrmSidebarNavAllLeavesFirst,
     mapSidebarNavFromApi,
@@ -41,7 +42,7 @@ const PRIMARY_NAV = [
     { route: 'notes', icon: 'list', label_key: 'sidebar.nav.notes' },
     { route: 'entities', icon: 'database', label_key: 'sidebar.nav.entities' },
     { route: 'tasks', icon: 'check', label_key: 'sidebar.nav.tasks' },
-    { route: 'graph', icon: 'share', label_key: 'sidebar.nav.graph' },
+    { route: 'graph', icon: 'share', label_key: 'sidebar.nav.graph', search: '?view=mindmap' },
 ];
 
 const ORG_NAV = [
@@ -411,10 +412,13 @@ export class CRMSidebar extends PlatformElement {
     }
 
     _renderNavItem(item) {
+        const opts = typeof item.search === 'string' && item.search.length > 0
+            ? { search: item.search }
+            : undefined;
         return html`
             <button
                 class="nav-item ${this._isActive(item.route) ? 'active' : ''}"
-                @click=${() => this._navigate(item.route)}
+                @click=${() => this._navigate(item.route, opts)}
             >
                 <span class="nav-icon-wrapper">
                     <platform-icon name=${item.icon} size="18"></platform-icon>
@@ -446,7 +450,9 @@ export class CRMSidebar extends PlatformElement {
             allNotes: this.t('sidebar.nav_all_notes'),
             allTasks: this.t('sidebar.nav_all_tasks'),
             allEntities: this.t('sidebar.nav_all_entities'),
-            graph: this.t('sidebar.nav.graph'),
+            groupGraph: this.t('sidebar.nav_group_graph'),
+            graphView3d: this.t('graph.view_mode_3d'),
+            graphViewMindmap: this.t('graph.view_mode_mindmap'),
         };
         const entityTypesItems = this._entityTypes.items;
         const canonical = buildDefaultSidebarNav({
@@ -456,7 +462,8 @@ export class CRMSidebar extends PlatformElement {
         });
         let base;
         if (fromApi !== null && fromApi.length > 0) {
-            const patched = replaceCrmSidebarGroupChildrenFromCanonical(fromApi, canonical);
+            const cleaned = dropCrmSidebarLegacyTopLevelNodes(fromApi);
+            const patched = replaceCrmSidebarGroupChildrenFromCanonical(cleaned, canonical);
             base = mergeCrmSidebarNavMissingGroups(patched, canonical);
         } else {
             base = canonical;

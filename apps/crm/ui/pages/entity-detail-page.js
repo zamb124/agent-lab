@@ -24,7 +24,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
-import '../components/mini-graph-preview.js';
+import '../components/crm-mini-graph.js';
 import '../components/entity-card.js';
 import '../components/crm-related-neighbor-rows.js';
 import { extractNeighborEdges } from '../utils/neighbor-edges.js';
@@ -359,10 +359,34 @@ export class CRMEntityDetailPage extends PlatformPage {
             :host([embedded]) .body.graph {
                 padding: 0;
             }
-            .body.graph crm-mini-graph-preview {
+            .body.graph crm-mini-graph {
                 flex: 1 1 0%;
                 min-height: 0;
                 width: 100%;
+            }
+            .graph-mode-switch {
+                display: flex;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-bottom: 1px solid var(--glass-border-subtle);
+                flex-shrink: 0;
+                background: var(--glass-tint-subtle);
+            }
+            .graph-mode-switch button {
+                flex: 1;
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-medium);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: 600;
+                cursor: pointer;
+            }
+            .graph-mode-switch button.active {
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+                color: var(--text-primary);
             }
 
             .center {
@@ -517,6 +541,7 @@ export class CRMEntityDetailPage extends PlatformPage {
         this._entityTypes = this.useResource(ENTITY_TYPES_NAME, { autoload: false });
         this._cardOp = this.useOp(ENTITY_CARD_OP);
         this._relTypes = this.useResource(REL_TYPES_NAME, { autoload: true });
+        this._graphView = this.useSlice('crm/graph_view');
         this._routerSearchSel = this.select((s) => s.router.search);
         this._mql = null;
         this._mqlListener = null;
@@ -697,17 +722,33 @@ export class CRMEntityDetailPage extends PlatformPage {
         this.openModal('crm.entity_delete', { entityId: this.itemId, redirectRoute: 'entities' });
     }
 
-    _onMiniGraphEntityOpen(event) {
-        const entityId = event.detail && event.detail.entityId ? event.detail.entityId : '';
-        if (typeof entityId !== 'string' || entityId.length === 0) return;
-        if (entityId === this.itemId) return;
+    _navigateToLinkedEntity(entityId, entityTypeRaw) {
+        if (typeof entityId !== 'string' || entityId.length === 0) {
+            return;
+        }
+        if (entityId === this.itemId) {
+            return;
+        }
+        const et = typeof entityTypeRaw === 'string' ? entityTypeRaw.trim() : '';
+        if (et === 'note') {
+            this.navigate('note', { itemId: entityId });
+            return;
+        }
         this.navigate('entity', { itemId: entityId });
     }
 
-    _onRelatedClick(entityId) {
-        if (typeof entityId !== 'string' || entityId.length === 0) return;
-        if (entityId === this.itemId) return;
-        this.navigate('entity', { itemId: entityId });
+    _onMiniGraphEntityOpen(event) {
+        const detail = event.detail;
+        const entityId = detail && typeof detail.entityId === 'string' ? detail.entityId : '';
+        const entityType = detail && typeof detail.entity_type === 'string' ? detail.entity_type : '';
+        this._navigateToLinkedEntity(entityId, entityType);
+    }
+
+    _onRelatedClick(event) {
+        const detail = event.detail && typeof event.detail === 'object' ? event.detail : {};
+        const entityId = typeof detail.entityId === 'string' ? detail.entityId : '';
+        const entityType = typeof detail.entity_type === 'string' ? detail.entity_type : '';
+        this._navigateToLinkedEntity(entityId, entityType);
     }
 
     _relationshipTypeLabel(typeId) {
@@ -1131,16 +1172,36 @@ export class CRMEntityDetailPage extends PlatformPage {
                 entity && typeof entity.namespace === 'string' && entity.namespace.length > 0
                     ? entity.namespace
                     : '';
+            const vm = this._graphView.value.viewMode;
             return html`
                 <div class="body graph">
-                    <crm-mini-graph-preview
+                    <div class="graph-mode-switch" role="group">
+                        <button
+                            type="button"
+                            class=${vm === 'mindmap' ? 'active' : ''}
+                            @click=${() => {
+                                this._graphView.setViewMode({ viewMode: 'mindmap' });
+                            }}
+                        >
+                            ${this.t('graph.view_mode_mindmap')}
+                        </button>
+                        <button
+                            type="button"
+                            class=${vm === '3d' ? 'active' : ''}
+                            @click=${() => {
+                                this._graphView.setViewMode({ viewMode: '3d' });
+                            }}
+                        >
+                            ${this.t('graph.view_mode_3d')}
+                        </button>
+                    </div>
+                    <crm-mini-graph
                         fill-container
                         .entityId=${this.itemId}
                         namespace=${entityNs}
-                        .maxDepth=${4}
-                        .initialDisplayDepth=${2}
+                        .viewMode=${vm}
                         @entity-open=${this._onMiniGraphEntityOpen}
-                    ></crm-mini-graph-preview>
+                    ></crm-mini-graph>
                 </div>
             `;
         }
@@ -1213,7 +1274,7 @@ export class CRMEntityDetailPage extends PlatformPage {
                     .entityTypeRows=${this._entityTypesCatalogRows()}
                     .emptyText=${this.t('entity_detail_page.empty_neighbors')}
                     .showRemove=${false}
-                    @entity-open=${(e) => this._onRelatedClick(e.detail.entityId)}
+                    @entity-open=${this._onRelatedClick}
                 ></crm-related-neighbor-rows>
             </div>
         `;

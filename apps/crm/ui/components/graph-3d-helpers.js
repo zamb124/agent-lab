@@ -100,6 +100,102 @@ export function createGraphTextSprite(text, color, fontSize = 16, maxLength = 20
 }
 
 /**
+ * Плоскость с текстом вдоль ребра: локальный X — направление подписи, нормаль к камере в {@link positionGraphLinkLabelMesh}.
+ */
+export function createGraphLinkLabelPlane(text, color, fontSize = 13, maxLength = 22) {
+    const THREE = window.THREE;
+    if (!THREE || typeof THREE.CanvasTexture !== 'function' || typeof THREE.PlaneGeometry !== 'function') {
+        throw new Error('THREE.js is not available for link label rendering');
+    }
+    const baseText = typeof text === 'string' && text.trim().length > 0 ? text.trim() : '';
+    const labelText = baseText.length === 0
+        ? '-'
+        : (baseText.length > maxLength ? `${baseText.slice(0, maxLength - 1)}\u2026` : baseText);
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) {
+        throw new Error('Cannot create 2d canvas context for link label');
+    }
+    context.font = `600 ${fontSize}px Inter, sans-serif`;
+    const textWidth = Math.max(28, Math.ceil(context.measureText(labelText).width));
+    canvas.width = textWidth + 14;
+    canvas.height = fontSize + 10;
+    context.font = `600 ${fontSize}px Inter, sans-serif`;
+    context.fillStyle = color;
+    context.textBaseline = 'middle';
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    context.shadowColor = isDark ? 'rgba(5, 7, 12, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    context.shadowBlur = 5;
+    context.lineWidth = 3;
+    context.strokeStyle = isDark ? 'rgba(5, 7, 12, 0.92)' : 'rgba(255, 255, 255, 0.92)';
+    context.strokeText(labelText, 7, canvas.height / 2);
+    context.fillText(labelText, 7, canvas.height / 2);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    const scale = fontSize >= 18 ? 0.065 : 0.056;
+    const planeW = canvas.width * scale;
+    const planeH = canvas.height * scale;
+    const geom = new THREE.PlaneGeometry(planeW, planeH);
+    const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geom, material);
+    mesh.renderOrder = 999;
+    return mesh;
+}
+
+/**
+ * Позиционирует подпись ребра: текст лежит в плоскости линии и направлен к камере.
+ *
+ * @param {*} mesh
+ * @param {{ x: number, y: number, z: number }} start
+ * @param {{ x: number, y: number, z: number }} end
+ * @param {{ x: number, y: number, z: number } | null | undefined} cameraPosition
+ */
+export function positionGraphLinkLabelMesh(mesh, start, end, cameraPosition) {
+    const THREE = window.THREE;
+    if (!mesh || !THREE || !start || !end) {
+        return false;
+    }
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dz = end.z - start.z;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-7) {
+        return false;
+    }
+    const dir = new THREE.Vector3(dx / len, dy / len, dz / len);
+    const mid = new THREE.Vector3(
+        (start.x + end.x) * 0.5,
+        (start.y + end.y) * 0.5,
+        (start.z + end.z) * 0.5,
+    );
+    const cam = cameraPosition && typeof cameraPosition.x === 'number'
+        ? new THREE.Vector3(cameraPosition.x, cameraPosition.y, cameraPosition.z)
+        : new THREE.Vector3(0, 0, 280);
+    const viewDir = new THREE.Vector3().subVectors(cam, mid).normalize();
+    let normal = new THREE.Vector3().crossVectors(dir, viewDir);
+    if (normal.length() < 1e-3) {
+        normal = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 0, 1));
+        if (normal.length() < 1e-3) {
+            normal = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
+        }
+    }
+    normal.normalize();
+    const planeUp = new THREE.Vector3().crossVectors(normal, dir).normalize();
+    const lift = Math.min(14, len * 0.1);
+    const pos = mid.clone().addScaledVector(normal, lift);
+    const rotMat = new THREE.Matrix4().makeBasis(dir, planeUp, normal);
+    mesh.quaternion.setFromRotationMatrix(rotMat);
+    mesh.position.copy(pos);
+    return true;
+}
+
+/**
  * Подпись узла: основная строка + опциональная вторая (например суммарный вес связей).
  */
 export function createGraphNodeLabelSprite(options) {

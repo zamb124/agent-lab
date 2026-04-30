@@ -372,6 +372,13 @@ export class PlatformDatePicker extends PlatformElement {
         this._removePortal();
     }
 
+    requestOpen() {
+        if (this.disabled) {
+            throw new Error('PlatformDatePicker.requestOpen: picker is disabled');
+        }
+        this.open = true;
+    }
+
     _bindScrollResize() {
         window.addEventListener('scroll', this._handleScrollResize, true);
         window.addEventListener('resize', this._handleScrollResize);

@@ -1584,7 +1584,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (!el) {
             throw new Error('Mobile date picker is not mounted');
         }
-        el.open = true;
+        el.requestOpen();
     }
 
     _toggleMobileHeaderSearch() {

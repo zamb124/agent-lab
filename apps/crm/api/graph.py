@@ -30,7 +30,20 @@ class OverviewGraphRequest(BaseModel):
     relationship_types: Optional[str] = Field(default=None, description="Comma-separated типы связей")
     created_at_from: Optional[datetime] = None
     created_at_to: Optional[datetime] = None
-    namespace: Optional[str] = Field(default=None, description="Namespace для проверки лимита сущностей в БД")
+    namespace: Optional[str] = Field(
+        default=None,
+        description=(
+            "Namespace пространства данных. При непустом значении используется и для "
+            "лимита сущностей, и как фильтр Relationship.namespace при обходе графа."
+        ),
+    )
+    include_all_namespaces: bool = Field(
+        default=False,
+        description=(
+            "Если true и задан namespace — обход берёт связи всех Relationship.namespace "
+            "(оставлено для редких отладочных вызовов)."
+        ),
+    )
 
 
 @router.post("/overview-graph", response_model=InfluenceGraphResponse)
@@ -54,6 +67,7 @@ async def get_overview_graph(
             created_at_from=request.created_at_from,
             created_at_to=request.created_at_to,
             namespace=request.namespace,
+            include_all_namespaces=request.include_all_namespaces,
         )
         return graph
     except GraphEntityLimitExceededError as e:
@@ -75,24 +89,38 @@ async def get_influence_graph(
     relationship_types: Optional[str] = Query(None, description="Comma-separated типы связей"),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
+    namespace: Optional[str] = Query(
+        None,
+        description=(
+            "Namespace пространства данных. При непустом значении используется и для "
+            "лимита сущностей, и как фильтр Relationship.namespace при обходе."
+        ),
+    ),
+    include_all_namespaces: bool = Query(
+        False,
+        description=(
+            "Если true и задан namespace — обход берёт связи всех Relationship.namespace "
+            "(оставлено для редких отладочных вызовов)."
+        ),
+    ),
 ):
     """
     Построение графа влияния от entity.
-    
-    Учитывает:
-    - Направленность связей (is_directed, inverse_type_id)
-    - Показывает узлы без доступа как placeholders
-    - Ограничение: max_depth <= 5 (производительность)
-    
+
+    BFS обходит соседей по всем инцидентным рёбрам (как на вкладке «Связи»).
+    При непустом query ``namespace`` обход видит только связи с тем же
+    ``Relationship.namespace`` — без флага ``include_all_namespaces`` параметр
+    единым контрактом задаёт пространство и сущностей, и связей.
+    Поля directed / source_id / target_id в ответе сохраняют семантику типа связи.
+
     Args:
         entity_id: ID корневой entity
         max_depth: Глубина обхода (1-5)
         relationship_types: Фильтр по типам связей (например: "manages,works_on")
-    
+
     Returns:
         Граф с nodes и edges
-    
+
     Raises:
         404: Entity не найдена
         403: Нет доступа к корневой entity
@@ -109,6 +137,7 @@ async def get_influence_graph(
             created_at_from=created_at_from,
             created_at_to=created_at_to,
             namespace=namespace,
+            include_all_namespaces=include_all_namespaces,
         )
         return graph
     except GraphEntityLimitExceededError as e:
@@ -130,7 +159,19 @@ async def get_related_entities(
     relationship_type: Optional[str] = Query(None),
     created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
     created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    namespace: Optional[str] = Query(None, description="Namespace для проверки лимита сущностей в БД"),
+    namespace: Optional[str] = Query(
+        None,
+        description=(
+            "Namespace пространства данных. При непустом значении используется и для "
+            "лимита сущностей, и как фильтр Relationship.namespace."
+        ),
+    ),
+    include_all_namespaces: bool = Query(
+        False,
+        description=(
+            "Если true и задан namespace — берутся связи всех Relationship.namespace."
+        ),
+    ),
 ):
     """
     Получить прямо связанные entities (1 уровень).
@@ -154,6 +195,7 @@ async def get_related_entities(
             created_at_from=created_at_from,
             created_at_to=created_at_to,
             namespace=namespace,
+            include_all_namespaces=include_all_namespaces,
         )
         return related
     except GraphEntityLimitExceededError as e:

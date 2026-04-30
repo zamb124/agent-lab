@@ -32,7 +32,30 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 MAX_NODES_IN_GRAPH = 1000
+"""Жёсткий потолок защиты от ошибок обхода."""
+INFLUENCE_GRAPH_MAX_NODES = 200
+"""Максимум вершин в ответе influence/overview (обход можно обрезать до этого числа)."""
 DIJKSTRA_PREFETCH_BATCH = 30
+
+_TIMELINE_ENTITY_COUNT_FILTER_FIELD_TYPES: Dict[str, str] = {"created_at": "datetime"}
+
+
+def _relationship_namespace_for_traversal(
+    namespace: Optional[str],
+    include_all_namespaces: bool,
+) -> Optional[str]:
+    """
+    Namespace строки Relationship: при переданном непустом `namespace` обход учитывает
+    только рёбра с тем же Relationship.namespace, кроме явного include_all_namespaces.
+    """
+    if include_all_namespaces:
+        return None
+    if namespace is None:
+        return None
+    ns = namespace.strip()
+    if len(ns) == 0:
+        return None
+    return ns
 
 
 class GraphEntityLimitExceededError(Exception):
@@ -72,12 +95,16 @@ class GraphService:
     ) -> Optional[Dict[str, Any]]:
         if created_at_from is None and created_at_to is None:
             return None
-        created_spec: Dict[str, Any] = {}
+        leaves: List[Dict[str, Any]] = []
         if created_at_from is not None:
-            created_spec["$gte"] = created_at_from
+            leaves.append({"field": "created_at", "op": "$gte", "value": created_at_from})
         if created_at_to is not None:
-            created_spec["$lte"] = created_at_to
-        return {"created_at": created_spec}
+            leaves.append({"field": "created_at", "op": "$lte", "value": created_at_to})
+        if len(leaves) == 0:
+            return None
+        if len(leaves) == 1:
+            return leaves[0]
+        return {"$and": leaves}
 
     async def _ensure_graph_entity_count_within_limit(
         self,
@@ -91,6 +118,7 @@ class GraphService:
         count = await self._entity_repo.count_all(
             namespace=namespace,
             filters=filters,
+            filter_field_types=_TIMELINE_ENTITY_COUNT_FILTER_FIELD_TYPES,
         )
         if count > MAX_NODES_IN_GRAPH:
             raise GraphEntityLimitExceededError(
@@ -128,7 +156,31 @@ class GraphService:
         if created_at_to is not None and entity_created_at > created_at_to:
             return False
         return True
-    
+
+    def _cap_influence_candidate_ids(
+        self,
+        candidate_ids: Set[str],
+        visited: Set[str],
+        graph_kind: str,
+    ) -> Set[str]:
+        cap = INFLUENCE_GRAPH_MAX_NODES
+        space = cap - len(visited)
+        if space <= 0:
+            return set()
+        if len(candidate_ids) <= space:
+            return candidate_ids
+        sorted_ids = sorted(candidate_ids)
+        truncated = set(sorted_ids[:space])
+        logger.warning(
+            "%s graph: truncated candidates from %s to %s (visited=%s, cap=%s)",
+            graph_kind,
+            len(candidate_ids),
+            len(truncated),
+            len(visited),
+            cap,
+        )
+        return truncated
+
     async def build_influence_graph(
         self,
         entity_id: str,
@@ -137,16 +189,21 @@ class GraphService:
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
         namespace: Optional[str] = None,
+        include_all_namespaces: bool = False,
     ) -> InfluenceGraphResponse:
         """
         Строит граф влияния от entity (wave-front BFS).
         
         Каждый уровень обхода — два SQL-запроса (ребра + сущности),
         вместо N+1 запросов на каждый узел.
+
+        При непустом query ``namespace`` в рёбрах обхода участвуют только связи с тем же
+        ``Relationship.namespace``, если ``include_all_namespaces`` не задан.
         """
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+        rel_namespace = _relationship_namespace_for_traversal(namespace, include_all_namespaces)
 
         await self._ensure_graph_entity_count_within_limit(
             namespace, timeline_from, timeline_to
@@ -155,9 +212,8 @@ class GraphService:
         root_entity = await self._entity_repo.get(entity_id)
         if not root_entity:
             raise ValueError(f"Entity not found: {entity_id}")
-        if not self._is_entity_in_time_window(root_entity, timeline_from, timeline_to):
-            raise ValueError(f"Root entity is out of created_at range: {entity_id}")
-        
+        # Фильтр периода задаёт обход соседей; корневая сущность всегда остаётся в графе.
+
         can_read = await self._access_control.can_read_entity(
             root_entity, user_id, company_id
         )
@@ -176,15 +232,20 @@ class GraphService:
         for level in range(max_depth):
             if not current_wave:
                 break
-            if len(visited) > MAX_NODES_IN_GRAPH:
-                raise GraphEntityLimitExceededError(
-                    f"Граф превышает лимит {MAX_NODES_IN_GRAPH} вершин; сузьте период или глубину."
+            if len(visited) >= INFLUENCE_GRAPH_MAX_NODES:
+                logger.warning(
+                    "influence graph: expansion stopped at visited=%s (cap=%s)",
+                    len(visited),
+                    INFLUENCE_GRAPH_MAX_NODES,
                 )
-            
+                break
+
             batch_edges = await self._relationship_repo.get_neighbors(
-                current_wave, cross_company=True
+                current_wave,
+                cross_company=True,
+                relationship_namespace=rel_namespace,
             )
-            
+
             candidate_ids: Set[str] = set()
             for current_id in current_wave:
                 for rel in batch_edges.get(current_id, []):
@@ -192,7 +253,7 @@ class GraphService:
                         continue
                     
                     can_traverse, neighbor_id = self._can_traverse_edge(
-                        rel, current_id, direction_map
+                        rel, current_id, direction_map, ignore_direction=True
                     )
                     if not can_traverse or not neighbor_id:
                         continue
@@ -205,7 +266,13 @@ class GraphService:
             
             if not candidate_ids:
                 break
-            
+
+            candidate_ids = self._cap_influence_candidate_ids(
+                candidate_ids, visited, "influence"
+            )
+            if not candidate_ids:
+                break
+
             loaded_entities = await self._entity_repo.get_by_ids(list(candidate_ids))
             entities_by_id = {e.entity_id: e for e in loaded_entities}
             
@@ -222,7 +289,7 @@ class GraphService:
                 next_wave.append(neighbor_id)
             
             current_wave = next_wave
-        
+
         nodes = await self._apply_access_control(
             entities_dict,
             entity_levels,
@@ -231,6 +298,7 @@ class GraphService:
             query_namespace=namespace,
         )
         edges = self._build_edges(list(edges_dict.values()), direction_map)
+        nodes, edges = self._finalize_graph_payload(nodes, edges, "influence graph")
         filtered_count = sum(1 for node in nodes if not node.access)
         
         logger.info(
@@ -255,11 +323,17 @@ class GraphService:
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
         namespace: Optional[str] = None,
+        include_all_namespaces: bool = False,
     ) -> InfluenceGraphResponse:
-        """Объединённый граф влияния по нескольким seed-сущностям (wave-front BFS)."""
+        """Объединённый граф влияния по нескольким seed-сущностям (wave-front BFS).
+
+        При непустом query ``namespace`` в рёбрах обхода участвуют только связи с тем же
+        ``Relationship.namespace``, если ``include_all_namespaces`` не задан.
+        """
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+        rel_namespace = _relationship_namespace_for_traversal(namespace, include_all_namespaces)
 
         await self._ensure_graph_entity_count_within_limit(
             namespace, timeline_from, timeline_to
@@ -283,6 +357,12 @@ class GraphService:
 
         initial_wave: list[str] = []
         for seed_id in entity_ids:
+            if len(visited) >= INFLUENCE_GRAPH_MAX_NODES:
+                logger.warning(
+                    "overview graph: seed list truncated at cap=%s",
+                    INFLUENCE_GRAPH_MAX_NODES,
+                )
+                break
             if seed_id in visited:
                 continue
             seed_entity = readable_seeds_by_id.get(seed_id)
@@ -300,13 +380,18 @@ class GraphService:
         for level in range(max_depth):
             if not current_wave:
                 break
-            if len(visited) > MAX_NODES_IN_GRAPH:
-                raise GraphEntityLimitExceededError(
-                    f"Граф превышает лимит {MAX_NODES_IN_GRAPH} вершин; сузьте период или глубину."
+            if len(visited) >= INFLUENCE_GRAPH_MAX_NODES:
+                logger.warning(
+                    "overview graph: expansion stopped at visited=%s (cap=%s)",
+                    len(visited),
+                    INFLUENCE_GRAPH_MAX_NODES,
                 )
+                break
 
             batch_edges = await self._relationship_repo.get_neighbors(
-                current_wave, cross_company=True
+                current_wave,
+                cross_company=True,
+                relationship_namespace=rel_namespace,
             )
 
             candidate_ids: Set[str] = set()
@@ -314,7 +399,9 @@ class GraphService:
                 for rel in batch_edges.get(current_id, []):
                     if relationship_types and rel.relationship_type not in relationship_types:
                         continue
-                    can_traverse, neighbor_id = self._can_traverse_edge(rel, current_id, direction_map)
+                    can_traverse, neighbor_id = self._can_traverse_edge(
+                        rel, current_id, direction_map, ignore_direction=True
+                    )
                     if not can_traverse or not neighbor_id:
                         continue
                     if rel.relationship_id not in edges_dict:
@@ -322,6 +409,12 @@ class GraphService:
                     if neighbor_id not in visited:
                         candidate_ids.add(neighbor_id)
 
+            if not candidate_ids:
+                break
+
+            candidate_ids = self._cap_influence_candidate_ids(
+                candidate_ids, visited, "overview"
+            )
             if not candidate_ids:
                 break
 
@@ -342,6 +435,11 @@ class GraphService:
 
             current_wave = next_wave
 
+            if len(visited) > MAX_NODES_IN_GRAPH:
+                raise GraphEntityLimitExceededError(
+                    f"Граф превышает лимит {MAX_NODES_IN_GRAPH} вершин; сузьте период или глубину."
+                )
+
         nodes = await self._apply_access_control(
             entities_dict,
             entity_levels,
@@ -350,6 +448,7 @@ class GraphService:
             query_namespace=namespace,
         )
         edges = self._build_edges(list(edges_dict.values()), direction_map)
+        nodes, edges = self._finalize_graph_payload(nodes, edges, "overview graph")
         filtered_count = sum(1 for node in nodes if not node.access)
 
         logger.info(
@@ -374,13 +473,18 @@ class GraphService:
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
         namespace: Optional[str] = None,
+        include_all_namespaces: bool = False,
     ) -> ShortestPathResponse:
         """
         Кратчайший путь между entities с учетом весов (Weighted Dijkstra с prefetch).
+
+        При непустом query ``namespace`` обход учитывает только связи с тем же
+        ``Relationship.namespace``, если ``include_all_namespaces`` не задан.
         """
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+        rel_namespace = _relationship_namespace_for_traversal(namespace, include_all_namespaces)
 
         await self._ensure_graph_entity_count_within_limit(
             namespace, timeline_from, timeline_to
@@ -420,12 +524,14 @@ class GraphService:
             ignore_direction=False,
             created_at_from=timeline_from, created_at_to=timeline_to,
             edges_cache=shared_edges_cache,
+            relationship_namespace=rel_namespace,
         )
         undirected_path, undirected_total_distance = await self._dijkstra_shortest_path(
             from_entity_id, to_entity_id, max_depth, direction_map,
             ignore_direction=True,
             created_at_from=timeline_from, created_at_to=timeline_to,
             edges_cache=shared_edges_cache,
+            relationship_namespace=rel_namespace,
         )
 
         directed_edges: List[GraphEdge] = []
@@ -465,29 +571,32 @@ class GraphService:
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
         namespace: Optional[str] = None,
+        include_all_namespaces: bool = False,
     ) -> RelatedEntitiesResponse:
         """
         Получает прямо связанные entities (1 уровень).
         Batch-загрузка всех соседей одним запросом.
+
+        При непустом query ``namespace`` учитываются только связи с тем же
+        ``Relationship.namespace``, если ``include_all_namespaces`` не задан.
         """
         user_id, company_id = self._get_context_info()
         timeline_from = self._normalize_datetime(created_at_from)
         timeline_to = self._normalize_datetime(created_at_to)
+        rel_namespace = _relationship_namespace_for_traversal(namespace, include_all_namespaces)
 
         await self._ensure_graph_entity_count_within_limit(
             namespace, timeline_from, timeline_to
         )
         
-        entity = await self._entity_repo.get(entity_id)
-        if not entity:
+        if (await self._entity_repo.get(entity_id)) is None:
             raise ValueError(f"Entity not found: {entity_id}")
-        if not self._is_entity_in_time_window(entity, timeline_from, timeline_to):
-            raise ValueError(f"Entity is out of created_at range: {entity_id}")
-        
+
         direction_map = await self._build_direction_map()
         relationships = await self._relationship_repo.get_by_entity_for_graph(
             entity_id,
-            cross_company=True
+            cross_company=True,
+            relationship_namespace=rel_namespace,
         )
         
         if relationship_type:
@@ -670,7 +779,62 @@ class GraphService:
             ))
         
         return edges
-    
+
+    def _filter_edges_to_nodes(
+        self,
+        edges: List[GraphEdge],
+        nodes: List[GraphNode],
+    ) -> List[GraphEdge]:
+        """Оставляет только рёбра, оба конца которых есть в итоговом списке узлов."""
+        node_ids = {n.entity_id for n in nodes}
+        return [
+            e for e in edges
+            if e.source_id in node_ids and e.target_id in node_ids
+        ]
+
+    def _dedupe_graph_nodes_min_level(self, nodes: List[GraphNode]) -> Tuple[List[GraphNode], int]:
+        best_by_id: Dict[str, GraphNode] = {}
+        for n in nodes:
+            prev = best_by_id.get(n.entity_id)
+            if prev is None:
+                best_by_id[n.entity_id] = n
+                continue
+            if n.level < prev.level:
+                best_by_id[n.entity_id] = n
+        merged = sorted(best_by_id.values(), key=lambda x: x.entity_id)
+        return merged, len(nodes) - len(merged)
+
+    def _dedupe_graph_edges_by_edge_id(self, edges: List[GraphEdge]) -> Tuple[List[GraphEdge], int]:
+        by_id: Dict[str, GraphEdge] = {}
+        for e in edges:
+            by_id[e.edge_id] = e
+        merged = sorted(by_id.values(), key=lambda x: x.edge_id)
+        return merged, len(edges) - len(merged)
+
+    def _finalize_graph_payload(
+        self,
+        nodes: List[GraphNode],
+        edges: List[GraphEdge],
+        log_prefix: str,
+    ) -> Tuple[List[GraphNode], List[GraphEdge]]:
+        edges = self._filter_edges_to_nodes(edges, nodes)
+        nodes, dup_node_rows = self._dedupe_graph_nodes_min_level(nodes)
+        if dup_node_rows > 0:
+            logger.warning(
+                "%s: merged %s duplicate GraphNode rows (same entity_id), minimal level kept",
+                log_prefix,
+                dup_node_rows,
+            )
+            edges = self._filter_edges_to_nodes(edges, nodes)
+        edges, dup_edge_rows = self._dedupe_graph_edges_by_edge_id(edges)
+        if dup_edge_rows > 0:
+            logger.warning(
+                "%s: dropped %s duplicate GraphEdge rows (same edge_id)",
+                log_prefix,
+                dup_edge_rows,
+            )
+        return nodes, edges
+
     async def _dijkstra_shortest_path(
         self,
         from_id: str,
@@ -681,6 +845,7 @@ class GraphService:
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
         edges_cache: Optional[Dict[str, List[Relationship]]] = None,
+        relationship_namespace: Optional[str] = None,
     ) -> Tuple[List[str], float]:
         """
         Weighted Dijkstra с prefetch ребер из кэша.
@@ -723,7 +888,9 @@ class GraphService:
                         if len(prefetch_ids) >= DIJKSTRA_PREFETCH_BATCH:
                             break
                 batch = await self._relationship_repo.get_neighbors(
-                    list(prefetch_ids), cross_company=True
+                    list(prefetch_ids),
+                    cross_company=True,
+                    relationship_namespace=relationship_namespace,
                 )
                 edges_cache.update(batch)
             
