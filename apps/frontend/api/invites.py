@@ -6,7 +6,7 @@ API для приглашений в компанию по ссылке.
 Принятие: POST /api/invites/accept   — любой авторизованный пользователь.
 """
 
-import logging
+from core.logging import get_logger
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -23,12 +23,10 @@ from core.utils.invite_tokens import (
     get_invite_token_service,
     invite_jti_already_used,
 )
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/invites", tags=["invites"])
 
 VALID_ROLES = ["owner", "admin", "developer", "viewer"]
-
 
 def _company_subdomain_for_response(company) -> str:
     raw = company.subdomain
@@ -39,20 +37,16 @@ def _company_subdomain_for_response(company) -> str:
         )
     return raw.strip()
 
-
 class GenerateInviteRequest(BaseModel):
     role: str = "developer"
-
 
 class GenerateInviteResponse(BaseModel):
     invite_url: str
     role: str
     expires_in_seconds: int
 
-
 class AcceptInviteRequest(BaseModel):
     short_code: str
-
 
 class AcceptInviteResponse(BaseModel):
     company_id: str
@@ -61,10 +55,8 @@ class AcceptInviteResponse(BaseModel):
     already_member: bool
     subdomain: str
 
-
 class PreviewInviteRequest(BaseModel):
     short_code: str
-
 
 class PreviewInviteResponse(BaseModel):
     company_id: str
@@ -73,18 +65,15 @@ class PreviewInviteResponse(BaseModel):
     invited_by_user_id: str
     invited_by_name: str
 
-
 def _require_user(request: Request):
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
     return request.state.user
 
-
 def _require_company(request: Request):
     if not hasattr(request.state, "company") or not request.state.company:
         raise HTTPException(status_code=400, detail="Компания не выбрана")
     return request.state.company
-
 
 @router.post("/generate", response_model=GenerateInviteResponse)
 async def generate_invite(
@@ -135,7 +124,6 @@ async def generate_invite(
         expires_in_seconds=INVITE_EXPIRES_SECONDS,
     )
 
-
 @router.post("/preview", response_model=PreviewInviteResponse)
 async def preview_invite(
     body: PreviewInviteRequest,
@@ -182,7 +170,6 @@ async def preview_invite(
         invited_by_user_id=inviter.user_id,
         invited_by_name=inviter.name,
     )
-
 
 @router.post("/accept")
 async def accept_invite(

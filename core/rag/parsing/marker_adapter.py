@@ -6,15 +6,14 @@
 
 from __future__ import annotations
 
-import logging
+from core.logging import get_logger
 import os
 import tempfile
 from pathlib import Path
 
 from core.rag.parsed_document import ParsedDocument
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 # Базовая установка marker-pdf (без [full]): в README — PDF и изображения.
 _MARKER_BASIC_SUFFIXES = frozenset({
     ".pdf",
@@ -26,7 +25,6 @@ _MARKER_BASIC_SUFFIXES = frozenset({
     ".tiff",
     ".gif",
 })
-
 
 def parse_marker_bytes(
     data: bytes,
@@ -50,7 +48,6 @@ def parse_marker_bytes(
     from marker.converters.pdf import PdfConverter
     from marker.models import create_model_dict
     from marker.output import text_from_rendered
-
 
     tmp_path: str | None = None
     try:

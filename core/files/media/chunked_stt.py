@@ -1,6 +1,6 @@
 """Чанкование аудио через ffmpeg и STT-транскрипция с автоматическим разбиением."""
 
-import logging
+from core.logging import get_logger
 import subprocess
 import tempfile
 from pathlib import Path
@@ -12,16 +12,13 @@ from core.clients.stt_client import BaseSTTClient, STTClientFactory
 from core.config import get_settings
 from core.files.models import AudioTranscriptionStatus
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 def _normalize_mime_type(raw_mime_type: str | None) -> str | None:
     if raw_mime_type is None:
         return None
     if raw_mime_type == "":
         return None
     return raw_mime_type.split(";", 1)[0].strip().lower()
-
 
 def audio_needs_mp3_upload_for_stt(*, file_name: str, mime_type: str) -> bool:
     """Контейнеры вроде M4A/MP4: cloud.ru STT в multipart часто отвечает Format not recognised.
@@ -40,7 +37,6 @@ def audio_needs_mp3_upload_for_stt(*, file_name: str, mime_type: str) -> bool:
         "video/mp4",
         "video/quicktime",
     )
-
 
 def normalize_audio_to_mp3_for_stt(
     *,
@@ -105,7 +101,6 @@ def normalize_audio_to_mp3_for_stt(
             raise ValueError("Нормализация STT дала пустой MP3.")
         return mp3_bytes, out_file_name
 
-
 def _audio_input_extension(file_name: str, mime_type: str) -> str:
     if file_name == "":
         raise ValueError("file_name не может быть пустым.")
@@ -126,7 +121,6 @@ def _audio_input_extension(file_name: str, mime_type: str) -> str:
     }
     return subtype_map.get(subtype, subtype)
 
-
 def validate_stt_result_text(
     *,
     transcript_result: Any,
@@ -144,7 +138,6 @@ def validate_stt_result_text(
         raise ValueError(f"STT вернул пустую транскрипцию для job_id={job_id}. context={context}")
     return transcript_text
 
-
 def is_stt_format_not_recognized_error(error: Exception) -> bool:
     """Определяет, является ли ошибка STT ошибкой формата (нужно перекодирование)."""
     message = str(error).lower()
@@ -153,7 +146,6 @@ def is_stt_format_not_recognized_error(error: Exception) -> bool:
         or "format not recognized" in message
         or "error opening <_io.bytesio object>" in message
     )
-
 
 def split_audio_for_stt_chunks(
     *,
@@ -247,7 +239,6 @@ def split_audio_for_stt_chunks(
     if len(chunks) == 0:
         raise ValueError("Не удалось сформировать чанки для STT.")
     return chunks
-
 
 async def transcribe_audio_with_chunking(
     *,

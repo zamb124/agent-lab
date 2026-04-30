@@ -144,7 +144,7 @@ def build_command(service: str) -> list[str]:
             "--port",
             config["port"],
             "--reload",
-            "--access-log",
+            "--no-access-log",
         ]
     if service_type == "taskiq-worker":
         cmd = [

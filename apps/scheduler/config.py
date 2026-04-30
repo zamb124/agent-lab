@@ -17,7 +17,7 @@ def get_scheduler_settings() -> SchedulerSettings:
     if _scheduler_settings is None:
         from core.config.loader import load_merged_config
 
-        merged_config = load_merged_config(service_name="scheduler")
+        merged_config = load_merged_config(service_name="scheduler", silent=True)
         _scheduler_settings = SchedulerSettings(**merged_config)
     return _scheduler_settings
 

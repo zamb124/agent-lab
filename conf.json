@@ -26,6 +26,13 @@
   "tasks": {
     "broker_url": "redis://localhost:63791/0"
   },
+  "logging": {
+    "format": "json",
+    "loggers_levels": {
+      "taskiq": "WARNING",
+      "taskiq.receiver": "WARNING"
+    }
+  },
   "tracing": {
     "enabled": true,
     "postgres_enabled": true,

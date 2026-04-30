@@ -3,16 +3,14 @@
 Использует service БД, is_global=False (изолирован по компаниям).
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.files.models import FileRecord
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class FileRepository(BaseRepository[FileRecord]):
     """
     Репозиторий для работы с файлами.

@@ -6,7 +6,8 @@
 """
 
 import json
-import logging
+
+from core.logging import get_logger
 import uuid
 import secrets
 from typing import Dict, Optional, Type, TYPE_CHECKING
@@ -35,9 +36,7 @@ if TYPE_CHECKING:
     from core.db.repositories.company_repository import CompanyRepository
     from core.db.repositories.auth_session_repository import AuthSessionRepository
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class AuthService:
     """
     Центральный сервис авторизации.

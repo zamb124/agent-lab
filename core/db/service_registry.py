@@ -4,13 +4,11 @@
 Каждый сервис регистрирует свои модели, функцию получения URL и путь к Alembic-дереву.
 """
 
-import logging
+from core.logging import get_logger
 from dataclasses import dataclass
 from typing import Callable, List
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 @dataclass
 class ServiceDBConfig:
     """Конфигурация БД сервиса"""
@@ -20,9 +18,7 @@ class ServiceDBConfig:
     models_module: str
     alembic_script_location: str   # путь к папке с env.py и versions/
 
-
 _registry: List[ServiceDBConfig] = []
-
 
 def register_service(
     name: str,
@@ -47,11 +43,9 @@ def register_service(
     _registry.append(ServiceDBConfig(name, get_db_url, models_module, location))
     logger.debug(f"Service '{name}' registered for migrations (tree: {location})")
 
-
 def get_all_services() -> List[ServiceDBConfig]:
     """Возвращает все зарегистрированные сервисы."""
     return _registry.copy()
-
 
 def get_service_by_name(name: str) -> ServiceDBConfig:
     """Возвращает конфиг сервиса по имени или бросает KeyError."""
@@ -59,7 +53,6 @@ def get_service_by_name(name: str) -> ServiceDBConfig:
         if svc.name == name:
             return svc
     raise KeyError(f"Сервис БД не зарегистрирован: {name!r}")
-
 
 def get_unique_db_urls() -> dict[str, List[str]]:
     """
@@ -77,7 +70,6 @@ def get_unique_db_urls() -> dict[str, List[str]]:
         urls[url].append(svc.name)
 
     return urls
-
 
 def clear_registry() -> None:
     """Очищает реестр (для тестов)."""

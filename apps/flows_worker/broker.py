@@ -14,7 +14,7 @@ from core.config.testing import is_testing
 from taskiq import TaskiqState
 
 from core.billing import set_billing_service
-from core.logging import get_logger, setup_logging
+from core.logging import get_logger
 from core.tasks.broker import (
     create_broker,
     create_scheduler,
@@ -25,7 +25,7 @@ from core.tasks.broker import (
 logger = get_logger(__name__)
 
 # Создаем broker для задач flows с очередью "flows_worker"
-broker = create_broker(queue_name="flows_worker")
+broker = create_broker(queue_name="flows_worker", service_name="flows_worker")
 scheduler = create_scheduler(broker)
 
 # Регистрируем recovery зависших задач для очереди "flows_worker"
@@ -42,13 +42,12 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
 
     settings = get_settings()
     set_core_settings(settings)
-    setup_logging(service_name=service_name)
 
     container = get_container()
     state.container = container
 
     set_billing_service(container.billing_service)
-    logger.info("Worker: BillingService инициализирован")
+    logger.info("worker.billing_initialized", service=service_name)
 
     from core.files.processors import initialize_default_processors
     from core.files.writer import FileWriter
@@ -64,22 +63,25 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     # Внутри воркера выполняем ноды напрямую, без рекурсивного kiq().
     container.use_worker = False
 
-    logger.info("Worker: connecting to Redis...")
+    logger.info("worker.redis_connecting", service=service_name)
     max_retries = 5
     for attempt in range(max_retries):
         try:
             await container.redis_client.connect()
-            logger.info("Worker: Redis connected")
+            logger.info("worker.redis_connected", service=service_name)
             break
         except Exception:
             if attempt < max_retries - 1:
                 wait_seconds = 2**attempt
                 logger.warning(
-                    f"Worker: Redis connection attempt {attempt + 1} failed, retry in {wait_seconds}s"
+                    "worker.redis_connect_retry",
+                    service=service_name,
+                    attempt=attempt + 1,
+                    wait_seconds=wait_seconds,
                 )
                 await asyncio.sleep(wait_seconds)
             else:
-                logger.error("Worker: Failed to connect to Redis")
+                logger.error("worker.redis_connect_failed", service=service_name)
                 raise
 
     if settings.tracing.enabled:
@@ -91,7 +93,7 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
                 )
             set_tracing_service_name("flows_worker")
             set_span_repository(container.span_repository)
-        logger.info("Worker: трейсинг инициализирован")
+        logger.info("worker.tracing_initialized", service=service_name)
 
     if is_testing():
         from core.clients.llm.factory import get_llm
@@ -99,9 +101,9 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
 
         get_llm("mock-gpt-4")
         configure_mock_llm_redis(container.redis_client)
-        logger.info("Worker: MockLLM настроен для чтения из Redis")
+        logger.info("worker.mock_llm_configured", service=service_name)
 
-    logger.info("Worker: контейнер инициализирован")
+    logger.info("worker.container_initialized", service=service_name)
 
 
 async def worker_startup(state: TaskiqState) -> None:
@@ -114,12 +116,20 @@ async def worker_shutdown(state: TaskiqState) -> None:
     if hasattr(state, "container"):
         try:
             await state.container.redis_client.close()
-            logger.info("Worker: Redis disconnected")
-        except Exception as error:
-            logger.error(f"Worker: Error closing Redis: {error}")
-    logger.info("Worker: контейнер закрыт")
+            logger.info("worker.redis_disconnected")
+        except Exception as exc:
+            logger.exception(
+                "worker.redis_close_failed",
+                **{"exception.type": type(exc).__name__},
+            )
+    logger.info("worker.container_closed")
 
 
-register_worker_events(broker, worker_startup, worker_shutdown)
+register_worker_events(
+    broker,
+    worker_startup,
+    worker_shutdown,
+    service_name="flows_worker",
+)
 
-logger.info("✅ Flows worker broker создан (queue='flows_worker')")
+logger.info("worker.broker_created", queue="flows_worker")

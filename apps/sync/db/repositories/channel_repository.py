@@ -1,6 +1,6 @@
 """Репозиторий для работы с каналами (SQLAlchemy)."""
 
-import logging
+from core.logging import get_logger
 from datetime import datetime
 from typing import List, Optional, Type
 
@@ -10,9 +10,7 @@ from sqlalchemy.orm import aliased
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannel, SyncChannelMember
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class ChannelRepository(BaseSyncRepository[SyncChannel]):
     """Репозиторий для каналов с изоляцией по company_id."""
 

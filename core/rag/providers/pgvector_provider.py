@@ -3,7 +3,7 @@ RAG провайдер на базе pgvector (PostgreSQL).
 Хранит векторные документы в таблице vector_documents через SQLAlchemy 2+.
 """
 
-import logging
+from core.logging import get_logger
 import os
 import uuid
 from typing import Any, Dict, List, Optional, Union
@@ -21,8 +21,7 @@ from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.rag.services.embedding_service import EmbeddingService
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 # Значения из шаблонного conf.json — не отправлять в OpenRouter как ключ
 _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
     {
@@ -31,7 +30,6 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
     }
 )
 
-
 def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if raw is None:
         return ""
@@ -39,7 +37,6 @@ def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if not s or s in _EMBEDDING_API_KEY_PLACEHOLDERS:
         return ""
     return s
-
 
 def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
     key = _normalize_embedding_api_key(config.get("embedding_api_key"))
@@ -64,7 +61,6 @@ def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
         "Плейсхолдеры YOUR_* из conf.json не считаются ключом. "
         "ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
     )
-
 
 class PgVectorProvider(BaseRAGProvider):
     """

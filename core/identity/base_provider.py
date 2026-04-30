@@ -4,7 +4,7 @@
 АДАПТИРОВАНО: убраны try-except блоки, локальные импорты
 """
 
-import logging
+from core.logging import get_logger
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional
 
@@ -12,9 +12,7 @@ from core.config.models import AuthProviderConfig
 from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.http import request_public_oauth
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class BaseAuthProvider(ABC):
     """
     Базовый класс для всех провайдеров авторизации.

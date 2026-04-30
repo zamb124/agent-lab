@@ -2,16 +2,14 @@
 Репозиторий для глобального маппинга embed_id -> company_id.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.models.embed_models import EmbedMapping
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class EmbedMappingRepository(BaseRepository[EmbedMapping]):
     """
     Глобальный маппинг для поиска компании по embed_id.

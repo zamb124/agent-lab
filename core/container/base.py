@@ -17,20 +17,18 @@
 """
 
 import functools
-import logging
+
+from core.logging import get_logger
 from typing import Optional, Any, Callable, Dict, List, Type, Union, get_args, TYPE_CHECKING
 from fastapi import APIRouter
 
 from core.db.http_repository import HTTPRepositoryProxy
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 if TYPE_CHECKING:
     from core.db.base_repository import BaseRepository
 
-
 _UNSET = object()
-
 
 def lazy(func: Callable) -> property:
     """
@@ -58,7 +56,6 @@ def lazy(func: Callable) -> property:
         return cached
     
     return wrapper
-
 
 class BaseContainer:
     """

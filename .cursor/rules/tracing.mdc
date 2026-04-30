@@ -11,6 +11,8 @@ alwaysApply: false
 
 Обе модели совместимы: корневой span сущности (`resource_root_span`) задаёт ресурс и контекст; внутри него вложенные `flow_span` / `node_span` / … наследуют `trace_id` и `parent_span_id`.
 
+**Связь с логированием:** `trace_id` и `span_id`, попадающие в каждую запись лога, берутся из того же OTel-спана (процессор `add_otel_trace_context`); fallback — `core.context.trace_id`. Пройдя по `trace_id`, можно найти и spans в `platform_tracing`, и все записи в логах того же запроса/задачи. Контракт лог-записи и канон вызова `get_logger` — в **`logging.mdc`**.
+
 ## Конфигурация
 
 | Уровень | Поле / ENV |

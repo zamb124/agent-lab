@@ -3,15 +3,12 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
-import logging
-
+from core.logging import get_logger
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.models.identity_models import Company
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class CompanyRepository(BaseRepository[Company]):
     """
     Репозиторий для работы с компаниями.

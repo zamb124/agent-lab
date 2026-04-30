@@ -99,6 +99,7 @@ core = [
     "reportlab>=4.4.7",
     "unstructured[xlsx]>=0.16.0",
     "yt-dlp>=2024.0.0",
+    "structlog>=25.5.0",
 ]
 
 agents = [

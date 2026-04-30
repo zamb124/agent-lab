@@ -2,7 +2,7 @@
 Базовая конфигурация приложения.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Any, Dict, Optional, Self
 
 from pydantic import ConfigDict, Field, model_validator
@@ -37,9 +37,7 @@ from core.config.models import (
     MediaTranscriberConfig,
 )
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class BaseSettings(PydanticBaseSettings):
     """
     Базовые настройки приложения.
@@ -118,14 +116,11 @@ class BaseSettings(PydanticBaseSettings):
     )
 
     def __init__(self, **data):
-        json_config = load_merged_config()
+        json_config = load_merged_config(silent=True)
         merged_data = {**json_config, **data}
         super().__init__(**merged_data)
 
-
-
 _settings_instance = None
-
 
 def get_settings() -> BaseSettings:
     """Получает синглтон настроек"""
@@ -134,13 +129,15 @@ def get_settings() -> BaseSettings:
         _settings_instance = BaseSettings()
     return _settings_instance
 
-
 def set_settings(new_settings: BaseSettings) -> None:
     """Устанавливает глобальный settings instance"""
     global _settings_instance
     _settings_instance = new_settings
-    logger.info(f"Settings обновлены: env={new_settings.server.env}, port={new_settings.server.port}")
-
+    logger.info(
+        "settings.updated",
+        env=new_settings.server.env,
+        port=new_settings.server.port,
+    )
 
 class _SettingsProxy:
     """
@@ -157,7 +154,6 @@ class _SettingsProxy:
     
     def __str__(self):
         return str(get_settings())
-
 
 settings = _SettingsProxy()
 

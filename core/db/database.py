@@ -6,7 +6,8 @@
 """
 
 import asyncio
-import logging
+
+from core.logging import get_logger
 import os
 import weakref
 from typing import AsyncGenerator, Optional
@@ -15,9 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engin
 
 from core.config import get_settings
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 def _require_shared_db_url() -> str:
     settings = get_settings()
     u = settings.database.shared_url
@@ -28,12 +27,10 @@ def _require_shared_db_url() -> str:
 _engines: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 _session_factories: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 
-
 def _get_loop_id() -> int:
     """Получает ID текущего event loop для кэширования"""
     loop = asyncio.get_running_loop()
     return id(loop)
-
 
 async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     """
@@ -83,7 +80,6 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     _engines[cache_key] = engine
     return engine
 
-
 async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmaker:
     """
     Лениво создает session factory для текущего event loop и URL БД.
@@ -111,7 +107,6 @@ async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmake
     logger.debug(f"Session factory создана (loop {loop_id}, db_url={db_url[:50]}...)")
     return session_factory
 
-
 async def session(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Алиас для get_session_factory() - создает контекстный менеджер сессии.
@@ -128,7 +123,6 @@ async def session(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, 
     async with session_factory() as s:
         yield s
 
-
 async def get_db(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency для получения сессии БД в FastAPI.
@@ -141,7 +135,6 @@ async def get_db(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, N
         await session.rollback()
         yield session
         await session.close()
-
 
 async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: Optional[str] = None):
     """
@@ -168,7 +161,6 @@ async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: Op
             await asyncio.sleep(retry_interval)
 
     raise RuntimeError(f"БД недоступна после {max_retries} попыток")
-
 
 async def close_db():
     """Закрывает соединения с БД для текущего event loop"""

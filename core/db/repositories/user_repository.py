@@ -4,7 +4,8 @@
 """
 
 import json
-import logging
+
+from core.logging import get_logger
 from typing import Optional
 
 from sqlalchemy import select, cast, text
@@ -15,9 +16,7 @@ from core.db.models import Users as UsersModel
 from core.db.storage import Storage
 from core.models.identity_models import User
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class UserRepository(BaseRepository[User]):
     """
     Репозиторий для работы с пользователями.

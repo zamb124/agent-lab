@@ -2,14 +2,14 @@
 Простой HTTP клиент для межсервисного взаимодействия.
 
 Автоматически добавляет заголовки из контекста:
-- X-Trace-Id
+- X-Trace-Id (обязателен; берётся из Context.trace_id, иначе из лог-контекста)
+- X-Request-Id
 - Authorization
-- X-Company-Id  
+- X-Company-Id
 - X-User-Id
 - X-Platform-Namespace (если не default)
 """
 
-import logging
 from typing import Any, Dict
 
 import httpx
@@ -17,10 +17,12 @@ import httpx
 from core.context import get_context
 from core.config import get_settings
 from core.http import get_httpx_client
+from core.logging import get_log_context, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 TRACE_ID_HEADER = "X-Trace-Id"
+REQUEST_ID_HEADER = "X-Request-Id"
 COMPANY_ID_HEADER = "X-Company-Id"
 USER_ID_HEADER = "X-User-Id"
 NAMESPACE_HEADER = "X-Platform-Namespace"
@@ -47,34 +49,41 @@ class ServiceClient:
     def _build_headers(self, include_content_type: bool = True) -> Dict[str, str]:
         """
         Собирает заголовки из текущего контекста.
-        
+
         Args:
             include_content_type: Включать ли Content-Type: application/json
                                  (False для multipart/form-data запросов)
         """
-        headers = {}
-        
+        headers: Dict[str, str] = {}
+
         if include_content_type:
             headers["Content-Type"] = "application/json"
-        
-        context = get_context()
-        if not context:
-            return headers
-        
-        if context.trace_id:
-            headers[TRACE_ID_HEADER] = context.trace_id
-        
-        if context.auth_token:
-            headers["Authorization"] = f"Bearer {context.auth_token}"
-        
-        if context.active_company:
-            headers[COMPANY_ID_HEADER] = context.active_company.company_id
-        
-        if context.user:
-            headers[USER_ID_HEADER] = context.user.user_id
 
-        if context.active_namespace and context.active_namespace != "default":
-            headers[NAMESPACE_HEADER] = context.active_namespace
+        log_ctx = get_log_context()
+
+        trace_id = None
+        request_id = log_ctx.get("request_id")
+
+        context = get_context()
+        if context is not None:
+            if context.trace_id:
+                trace_id = context.trace_id
+            if context.auth_token:
+                headers["Authorization"] = f"Bearer {context.auth_token}"
+            if context.active_company:
+                headers[COMPANY_ID_HEADER] = context.active_company.company_id
+            if context.user:
+                headers[USER_ID_HEADER] = context.user.user_id
+            if context.active_namespace and context.active_namespace != "default":
+                headers[NAMESPACE_HEADER] = context.active_namespace
+
+        if not trace_id:
+            trace_id = log_ctx.get("trace_id")
+
+        if trace_id:
+            headers[TRACE_ID_HEADER] = trace_id
+        if isinstance(request_id, str) and request_id:
+            headers[REQUEST_ID_HEADER] = request_id
 
         return headers
     

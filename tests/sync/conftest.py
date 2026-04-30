@@ -37,7 +37,7 @@ from core.config import set_settings
 from core.config.base import BaseSettings
 from core.config.loader import load_merged_config
 
-set_settings(BaseSettings(**load_merged_config(service_name="sync")))
+set_settings(BaseSettings(**load_merged_config(service_name="sync", silent=True)))
 
 from collections.abc import AsyncIterator
 

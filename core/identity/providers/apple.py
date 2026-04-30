@@ -3,7 +3,8 @@ Apple (Sign in with Apple) OAuth провайдер — веб-флоу authoriz
 """
 
 import json
-import logging
+
+from core.logging import get_logger
 import time
 from typing import Any, Optional, Tuple
 from urllib.parse import urlencode
@@ -16,8 +17,7 @@ from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.config.models import AuthProviderConfig
 from core.http import request_public_oauth
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 APPLE_ISSUER = "https://appleid.apple.com"
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 APPLE_AUDIENCE_FOR_SECRET = "https://appleid.apple.com"
@@ -25,13 +25,11 @@ DEFAULT_AUTH_URL = "https://appleid.apple.com/auth/authorize"
 DEFAULT_TOKEN_URL = "https://appleid.apple.com/auth/token"
 DEFAULT_SCOPE = "name email"
 
-
 def _normalize_apple_pem(raw: str) -> str:
     text = raw.strip().replace("\\n", "\n")
     if "BEGIN PRIVATE KEY" not in text:
         raise ValueError("apple_private_key должен быть PEM (BEGIN PRIVATE KEY)")
     return text
-
 
 def build_apple_client_secret(
     team_id: str,
@@ -51,7 +49,6 @@ def build_apple_client_secret(
     }
     return jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
 
-
 def decode_apple_id_token(id_token: str, audience: str) -> dict[str, Any]:
     jwks_client = PyJWKClient(APPLE_JWKS_URL)
     signing_key = jwks_client.get_signing_key_from_jwt(id_token)
@@ -64,7 +61,6 @@ def decode_apple_id_token(id_token: str, audience: str) -> dict[str, Any]:
     )
     return decoded
 
-
 def _name_from_apple_user_json(user_json: str) -> Optional[str]:
     parsed = json.loads(user_json)
     name_obj = parsed.get("name")
@@ -74,7 +70,6 @@ def _name_from_apple_user_json(user_json: str) -> Optional[str]:
     last = (name_obj.get("lastName") or "").strip()
     combined = f"{first} {last}".strip()
     return combined if combined else None
-
 
 class AppleProvider(BaseAuthProvider):
     """Провайдер Sign in with Apple (OAuth 2.0, Services ID как client_id)."""

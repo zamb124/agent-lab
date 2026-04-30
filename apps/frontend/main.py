@@ -1,7 +1,8 @@
 """
 Frontend Service - FastAPI приложение для управления платформой
 """
-import logging
+
+from core.logging import get_logger
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -32,14 +33,12 @@ from core.app.factory import create_service_app
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.system_bootstrap import ensure_system_admin_membership
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
     r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
     r"|"
     r"^https?://([a-z0-9-]+\.)*lvh\.me(:\d+)?$"
 )
-
 
 INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/",
@@ -51,7 +50,6 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/products/sync",
     "/products/documents",
 )
-
 
 def _short_link_redirect_location(target: str) -> str:
     """Относительный path+query: браузер остаётся на том же host:port, что и GET /l/{code}.
@@ -66,13 +64,11 @@ def _short_link_redirect_location(target: str) -> str:
         loc = f"{loc}?{p.query}"
     return loc
 
-
 def _get_platform_public_base_url() -> str:
     base_url = get_frontend_settings().server.platform_public_base_url
     if not base_url:
         raise ValueError("server.platform_public_base_url must be configured for SEO files")
     return base_url.rstrip("/")
-
 
 def _build_sitemap_xml(base_url: str) -> str:
     def _priority_for_path(path: str) -> str:
@@ -104,7 +100,6 @@ def _build_sitemap_xml(base_url: str) -> str:
         f"{urls_xml}\n"
         "</urlset>\n"
     )
-
 
 def _build_llms_txt(base_url: str) -> str:
     return (
@@ -139,7 +134,6 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
     PaymentProviderFactory.initialize()
     await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
     logger.info("Платежные провайдеры инициализированы")
-
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)
 _frontend_settings = get_frontend_settings()
@@ -191,7 +185,7 @@ if core_frontend_path.exists():
         StaticFiles(directory=str(core_frontend_path)),
         name="core-frontend"
     )
-    logger.info(f"✅ Core frontend библиотека: {core_frontend_path}")
+    logger.info("frontend.core_lib_mounted", path=str(core_frontend_path))
 
 # Монтирование apps/frontend/ui (само приложение)
 ui_path = Path(__file__).parent / "ui"
@@ -201,7 +195,7 @@ if ui_path.exists():
         StaticFiles(directory=str(ui_path)),
         name="frontend-ui"
     )
-    logger.info(f"✅ Frontend UI: {ui_path}")
+    logger.info("frontend.ui_mounted", path=str(ui_path))
 
 # Удаляем дефолтный root endpoint от фабрики - ПОСЛЕ монтирования статики
 # (он возвращает {"service": "core", "version": "1.0.0", "status": "running"})
@@ -210,13 +204,11 @@ for route in list(app.routes):
     if hasattr(route, 'path') and route.path == "/":
         app.routes.remove(route)
 
-
 @app.get("/api/health")
 @app.get("/health")
 async def health(container: ContainerDep):
     _ = container
     return {"status": "ok", "service": "frontend"}
-
 
 @app.api_route("/l/{code}", methods=["GET", "HEAD"])
 async def resolve_short_link(container: ContainerDep, code: str):
@@ -225,7 +217,6 @@ async def resolve_short_link(container: ContainerDep, code: str):
         raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
     return RedirectResponse(url=_short_link_redirect_location(target), status_code=303)
 
-
 @app.get("/api/public/legal")
 @app.get("/frontend/api/public/legal")
 async def get_public_legal(container: ContainerDep) -> JSONResponse:
@@ -233,7 +224,6 @@ async def get_public_legal(container: ContainerDep) -> JSONResponse:
     _ = container
     legal = get_frontend_settings().legal.model_dump()
     return JSONResponse(content=legal)
-
 
 @app.get("/robots.txt")
 @app.get("/frontend/robots.txt")
@@ -258,7 +248,6 @@ async def get_robots_txt(container: ContainerDep) -> PlainTextResponse:
     )
     return PlainTextResponse(content=robots_txt)
 
-
 @app.get("/sitemap.xml")
 @app.get("/frontend/sitemap.xml")
 async def get_sitemap_xml(container: ContainerDep) -> Response:
@@ -267,14 +256,12 @@ async def get_sitemap_xml(container: ContainerDep) -> Response:
     sitemap_xml = _build_sitemap_xml(base_url=base_url)
     return Response(content=sitemap_xml, media_type="application/xml")
 
-
 @app.get("/llms.txt")
 @app.get("/frontend/llms.txt")
 async def get_llms_txt(container: ContainerDep) -> PlainTextResponse:
     _ = container
     base_url = _get_platform_public_base_url()
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
-
 
 # SPA fallback (все неизвестные пути → index.html)
 @app.get("/")
@@ -300,7 +287,6 @@ async def serve_spa(container: ContainerDep, full_path: str = ""):
         return FileResponse(index_path)
     
     return {"message": "Frontend UI not built yet"}
-
 
 if __name__ == "__main__":
     import uvicorn

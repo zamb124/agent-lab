@@ -2,7 +2,8 @@
 API для проверки статуса микросервисов
 """
 import asyncio
-import logging
+
+from core.logging import get_logger
 import time
 import httpx
 from fastapi import APIRouter, Query
@@ -12,8 +13,7 @@ from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ServiceStatus
 from core.clients.service_client import ServiceClientError
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/services", tags=["services"])
 
 SERVICES = [
@@ -34,14 +34,12 @@ _NETWORK_ERRORS = (
     ServiceClientError,
 )
 
-
 def _service_status_display_url(name: str) -> str:
     if name == "flows":
         return "/flows"
     if name == "provider_litserve":
         return "/litserve"
     return f"/{name}"
-
 
 async def _check_service(service_client: object, name: str, health_url: str) -> ServiceStatus:
     display_url = _service_status_display_url(name)
@@ -54,7 +52,6 @@ async def _check_service(service_client: object, name: str, health_url: str) -> 
         url=display_url,
         response_time=round(elapsed_ms, 2),
     )
-
 
 @router.get("/status", response_model=OffsetPage[ServiceStatus])
 async def get_services_status(

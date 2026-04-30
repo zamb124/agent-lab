@@ -1,6 +1,6 @@
 """MediaTranscriber — единая точка входа для транскрипции аудио и видео."""
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -9,9 +9,7 @@ from core.clients.stt_client import BaseSTTClient, STTClientFactory
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 def _detect_provider_name(client: BaseSTTClient) -> str:
     """Определяет имя провайдера по классу STT-клиента."""
     from core.clients.stt_client import CloudRuSTTClient, MockSTTClient
@@ -22,14 +20,12 @@ def _detect_provider_name(client: BaseSTTClient) -> str:
         return "mock"
     return type(client).__name__
 
-
 class TranscriptionResult(BaseModel):
     """Результат транскрипции медиафайла."""
 
     text: str = Field(description="Распознанный текст.")
     language: Optional[str] = Field(default=None, description="Язык распознавания.")
     provider: Optional[str] = Field(default=None, description="Идентификатор STT провайдера.")
-
 
 class MediaTranscriber:
     """Единый сервис транскрипции медиафайлов.

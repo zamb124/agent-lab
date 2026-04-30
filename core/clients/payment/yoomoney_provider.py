@@ -12,7 +12,8 @@ Quickpay для приема, OAuth API для сверки транзакций
 
 import hashlib
 import json
-import logging
+
+from core.logging import get_logger
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlencode
 from typing import Dict, Any, Optional, Literal, List
@@ -28,13 +29,11 @@ from core.clients.payment.base_provider import (
 )
 from core.http import get_httpx_client
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 YOOMONEY_TOKEN_LIFETIME_YEARS = 3
 YOOMONEY_TOKEN_STORAGE_KEY = "yoomoney:access_token"
 YOOMONEY_OAUTH_AUTHORIZE_URL = "https://yoomoney.ru/oauth/authorize"
 YOOMONEY_OAUTH_TOKEN_URL = "https://yoomoney.ru/oauth/token"
-
 
 class YooMoneyConfig(PaymentProviderConfig):
     """Конфигурация YooMoney провайдера"""
@@ -52,7 +51,6 @@ class YooMoneyConfig(PaymentProviderConfig):
         default="https://yoomoney.ru/api",
         description="URL YooMoney API"
     )
-
 
 class YooMoneyTokenData:
     """Данные OAuth-токена YooMoney, хранятся в Redis storage."""
@@ -81,7 +79,6 @@ class YooMoneyTokenData:
             expires_at=datetime.fromisoformat(data["expires_at"]),
         )
 
-
 async def save_access_token(storage: Any, token: str) -> YooMoneyTokenData:
     """Сохраняет access_token в storage с метками времени."""
     now = datetime.now(timezone.utc)
@@ -94,7 +91,6 @@ async def save_access_token(storage: Any, token: str) -> YooMoneyTokenData:
     logger.info("YooMoney access_token сохранён в storage, истекает %s", token_data.expires_at.isoformat())
     return token_data
 
-
 async def load_access_token(storage: Any) -> Optional[YooMoneyTokenData]:
     """Загружает access_token из storage. Возвращает None если токена нет."""
     raw = await storage.get(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
@@ -105,7 +101,6 @@ async def load_access_token(storage: Any) -> Optional[YooMoneyTokenData]:
         logger.warning("YooMoney access_token истёк (%s), требуется повторная OAuth-авторизация", token_data.expires_at)
         return None
     return token_data
-
 
 class YooMoneyProvider(BasePaymentProvider):
     """

@@ -4,7 +4,8 @@
 """
 
 import hashlib
-import logging
+
+from core.logging import get_logger
 import mimetypes
 import re
 import uuid
@@ -26,9 +27,7 @@ from core.files.s3_client import S3Client, S3ClientFactory
 if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class FileProcessor:
     """
     Процессор для обработки файлов.
@@ -340,7 +339,6 @@ class FileProcessor:
 
         return file_info_list
 
-
 class AudioProcessor:
     """
     Процессор для обработки аудиофайлов.
@@ -444,11 +442,9 @@ class AudioProcessor:
     async def get_audio_record(self, audio_id: str) -> Optional[AudioMetadata]:
         return await self.file_repository.get(audio_id)
 
-
 _default_file_processor: Optional[FileProcessor] = None
 _default_audio_processor: Optional[AudioProcessor] = None
 _default_file_repository = None
-
 
 def initialize_default_processors(file_repository) -> None:
     """
@@ -460,7 +456,6 @@ def initialize_default_processors(file_repository) -> None:
     """
     global _default_file_repository
     _default_file_repository = file_repository
-
 
 async def get_default_file_processor() -> FileProcessor:
     """
@@ -478,7 +473,6 @@ async def get_default_file_processor() -> FileProcessor:
         _default_file_processor = FileProcessor(file_repository=_default_file_repository)
 
     return _default_file_processor
-
 
 async def get_default_audio_processor() -> AudioProcessor:
     """
@@ -499,14 +493,12 @@ async def get_default_audio_processor() -> AudioProcessor:
 
     return _default_audio_processor
 
-
 async def close_default_file_processor():
     """Закрывает дефолтный файловый процессор"""
     global _default_file_processor
     if _default_file_processor:
         await _default_file_processor.close()
         _default_file_processor = None
-
 
 async def close_default_audio_processor():
     """Закрывает дефолтный аудио процессор"""

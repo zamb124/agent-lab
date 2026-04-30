@@ -6,7 +6,8 @@
 import json
 import re
 import ast
-import logging
+
+from core.logging import get_logger
 import threading
 from pathlib import Path
 from typing import Dict, Optional
@@ -17,9 +18,7 @@ from core.models.i18n_models import (
 )
 from core.context import get_context
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class TranslationManager:
     """
     Центральный менеджер переводов.
@@ -86,7 +85,7 @@ class TranslationManager:
     async def initialize(self):
         """Инициализация менеджера переводов"""
         try:
-            logger.info("🌐 Инициализация системы переводов...")
+            logger.info("i18n.initializing")
             
             # Создаем директории если их нет
             await self._ensure_directories()
@@ -98,10 +97,16 @@ class TranslationManager:
             if self.config.auto_generate_on_startup:
                 await self._auto_generate_translations()
             
-            logger.info(f"✅ Система переводов инициализирована. Поддерживаемые языки: {[lang.value for lang in Language]}")
+            logger.info(
+                "i18n.initialized",
+                languages=[lang.value for lang in Language],
+            )
             
         except Exception as e:
-            logger.error(f"❌ Ошибка инициализации системы переводов: {e}")
+            logger.exception(
+                "i18n.initialize_failed",
+                **{"exception.type": type(e).__name__},
+            )
             raise
     
     async def _ensure_directories(self):
@@ -216,7 +221,7 @@ class TranslationManager:
         # Генерируем JS модули для фронтенда
         await self._generate_js_modules()
         
-        logger.info(f"✅ Автогенерация завершена. Найдено {len(self._discovered_keys)} ключей")
+        logger.info("i18n.autogeneration_finished", keys=len(self._discovered_keys))
     
     async def _scan_pydantic_models(self):
         """Сканирует Pydantic модели для извлечения ключей переводов"""
@@ -465,7 +470,10 @@ class TranslationManager:
             if updated:
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(module_data, f, ensure_ascii=False, indent=2)
-                logger.info(f"  ✅ Обновлен модуль: {file_path.relative_to(lang_dir.parent)}")
+                logger.info(
+                    "i18n.module_updated",
+                    path=str(file_path.relative_to(lang_dir.parent)),
+                )
     
     async def _update_monolithic_translations(self, translations_path: Path, language: Language):
         """Обновляет переводы в монолитной структуре (для обратной совместимости)"""
@@ -519,7 +527,12 @@ class TranslationManager:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             
-            logger.info(f"✅ Обновлен файл переводов: {language.value}.json ({translated_keys}/{total_keys} переводов)")
+            logger.info(
+                "i18n.translations_updated",
+                language=language.value,
+                translated=translated_keys,
+                total=total_keys,
+            )
     
     def _key_exists_in_data(self, key: str, data: dict) -> bool:
         """Проверяет существование ключа в данных"""
@@ -643,10 +656,8 @@ class TranslationManager:
             languages_stats=languages_stats
         )
 
-
 # Глобальный экземпляр менеджера
 _translation_manager: Optional[TranslationManager] = None
-
 
 def get_translation_manager() -> TranslationManager:
     """Получить глобальный экземпляр менеджера переводов"""
@@ -654,7 +665,6 @@ def get_translation_manager() -> TranslationManager:
     if _translation_manager is None:
         _translation_manager = TranslationManager()
     return _translation_manager
-
 
 def t(key: str, language: Language = None, **kwargs) -> str:
     """Глобальная функция перевода"""

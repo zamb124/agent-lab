@@ -15,7 +15,6 @@ OnlyOffice: префиксы /web-apps, /common, /cache, /fonts, /sdkjs, /downlo
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
 from typing import FrozenSet
 from urllib.parse import urlparse
@@ -27,9 +26,13 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from core.config import get_settings
+from core.logging import get_log_context, get_logger
 from core.utils.domain import is_local
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+REQUEST_ID_HEADER = "X-Request-Id"
+TRACE_ID_HEADER = "X-Trace-Id"
 
 _SERVICE_PREFIXES: tuple[str, ...] = (
     "flows",
@@ -130,6 +133,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             upstream = f"{upstream}?{query}"
 
         forward_headers: list[tuple[str, str]] = []
+        seen_lower: set[str] = set()
         for key, value in request.headers.items():
             lk = key.lower()
             if lk in _HOP_BY_HOP_REQUEST:
@@ -137,7 +141,18 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             if lk == "host":
                 continue
             forward_headers.append((key, value))
+            seen_lower.add(lk)
         forward_headers.append(("host", upstream_host))
+
+        log_ctx = get_log_context()
+        if "x-request-id" not in seen_lower:
+            request_id = log_ctx.get("request_id")
+            if isinstance(request_id, str) and request_id.strip():
+                forward_headers.append((REQUEST_ID_HEADER, request_id.strip()))
+        if "x-trace-id" not in seen_lower:
+            trace_id = log_ctx.get("trace_id")
+            if isinstance(trace_id, str) and trace_id.strip():
+                forward_headers.append((TRACE_ID_HEADER, trace_id.strip()))
 
         body = await request.body()
 
@@ -154,9 +169,9 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
                 )
         except httpx.RequestError as e:
             logger.warning(
-                "DevInterServiceProxy: upstream %s: %s",
-                upstream,
-                e,
+                "dev_proxy.upstream_failed",
+                upstream=upstream,
+                **{"exception.message": str(e), "exception.type": type(e).__name__},
             )
             hint = (
                 f"Inter-service dev proxy: нет HTTP-ответа от {base}.\n"
@@ -176,11 +191,11 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             out_headers[key] = value
 
         logger.debug(
-            "DevInterServiceProxy: %s %s -> %s (%s)",
-            request.method,
-            path,
-            upstream,
-            upstream_response.status_code,
+            "dev_proxy.forwarded",
+            http_method=request.method,
+            http_path=path,
+            upstream=upstream,
+            http_status_code=upstream_response.status_code,
         )
 
         return Response(
@@ -326,7 +341,11 @@ class DevInterServiceWsProxyMiddleware:
                 max_size=None,
             )
         except Exception as exc:
-            logger.warning("dev WS proxy: upstream connect failed %s: %s", upstream_url, exc)
+            logger.warning(
+                "dev_proxy.ws_upstream_failed",
+                upstream_url=upstream_url,
+                **{"exception.type": type(exc).__name__, "exception.message": str(exc)},
+            )
             await send({"type": "websocket.close", "code": 1011})
             return
 

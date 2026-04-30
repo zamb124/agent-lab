@@ -2,7 +2,7 @@
 Репозиторий для работы с конфигурациями встраиваемых виджетов.
 """
 
-import logging
+from core.logging import get_logger
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -10,9 +10,7 @@ from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.models.embed_models import EmbedConfig
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class EmbedConfigRepository(BaseRepository[EmbedConfig]):
     """
     Репозиторий для работы с конфигурациями встраиваемых виджетов.
@@ -46,5 +44,4 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
             config.last_used_at = datetime.now(timezone.utc)
             await self.set(config)
             logger.debug(f"Увеличен счетчик использований виджета {embed_id}: {config.usage_count}")
-
 

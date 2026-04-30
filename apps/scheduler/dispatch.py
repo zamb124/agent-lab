@@ -5,6 +5,7 @@ QueueAwareTaskiqScheduler и dispatch брокеров.
 поэтому должно жить в apps/, а не в core/.
 """
 
+import uuid
 from typing import Any
 
 from taskiq import TaskiqScheduler
@@ -15,6 +16,7 @@ from taskiq.scheduler.scheduled_task import ScheduledTask
 from taskiq.utils import maybe_awaitable
 
 from core.logging import get_logger
+from core.logging.attributes import EVENT_TASK_SCHEDULED
 from core.scheduler.source import get_schedule_source
 from apps.crm_worker.broker import broker as crm_broker
 from apps.flows_worker.broker import broker as flows_broker
@@ -67,10 +69,10 @@ def require_tasks_registered_for_scheduler(
             f"в apps/scheduler/scheduler.py. Отсутствуют: {'; '.join(parts)}"
         )
     logger.info(
-        "TaskIQ scheduler: проверка регистрации задач OK (flows_worker=%s, idle=%s, crm=%s)",
-        len(flows_worker_task_names),
-        len(idle_queue_task_names),
-        len(crm_queue_task_names),
+        "task.scheduler_registration_ok",
+        flows_worker_count=len(flows_worker_task_names),
+        idle_count=len(idle_queue_task_names),
+        crm_count=len(crm_queue_task_names),
     )
 
 
@@ -93,12 +95,35 @@ class QueueAwareTaskiqScheduler(TaskiqScheduler):
         try:
             await maybe_awaitable(source.pre_send(task))
         except ScheduledTaskCancelledError:
-            logger.info("Scheduled task %s has been cancelled.", task.task_name)
+            logger.info(
+                "task.scheduled_cancelled",
+                task_name=task.task_name,
+                schedule_id=task.schedule_id,
+            )
         else:
+            trace_id = task.labels.get("trace_id") or f"sched:{uuid.uuid4().hex}"
+            request_id = task.labels.get("request_id") or f"sched:{uuid.uuid4().hex}"
+            service_name = task.labels.get("service_name") or "scheduler"
+            task.labels["trace_id"] = trace_id
+            task.labels["request_id"] = request_id
+            task.labels["service_name"] = service_name
+            task.labels["triggered_by"] = "scheduler"
+            logger.info(
+                EVENT_TASK_SCHEDULED,
+                task_name=task.task_name,
+                queue=queue_name,
+                schedule_id=task.schedule_id,
+                trace_id=trace_id,
+                request_id=request_id,
+            )
             await (
                 AsyncKicker(task.task_name, target_broker, task.labels)
                 .with_labels(
                     schedule_id=task.schedule_id,
+                    trace_id=trace_id,
+                    request_id=request_id,
+                    service_name=service_name,
+                    triggered_by="scheduler",
                 )
                 .with_task_id(task_id=task.task_id)
                 .kiq(
@@ -138,7 +163,7 @@ def create_scheduler(redis_url: str) -> TaskiqScheduler:
         sources=[source],
     )
     
-    logger.info("TaskiqScheduler создан")
+    logger.info("task.scheduler_created")
     return scheduler
 
 

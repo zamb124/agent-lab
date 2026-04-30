@@ -8,7 +8,8 @@
 """
 
 import asyncio
-import logging
+
+from core.logging import get_logger
 from pathlib import Path
 
 from alembic import command
@@ -16,9 +17,7 @@ from alembic.config import Config
 
 from core.config.loader import get_project_root
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 def _make_alembic_config(script_location: str, db_url: str) -> Config | None:
     root = get_project_root()
     ini_path = root / script_location / "alembic.ini"
@@ -31,7 +30,6 @@ def _make_alembic_config(script_location: str, db_url: str) -> Config | None:
     cfg.set_main_option("script_location", str(root / script_location))
     cfg.set_main_option("sqlalchemy.url", db_url)
     return cfg
-
 
 def _assert_full_registry() -> None:
     from core.db.migration_manifest import expected_migration_registry_names
@@ -49,12 +47,10 @@ def _assert_full_registry() -> None:
             "или: python -m scripts.db_migrate …"
         )
 
-
 def run_migrations() -> None:
     import asyncio
 
     asyncio.run(run_migrations_async())
-
 
 async def run_migrations_async(service: str | None = None) -> None:
     """
@@ -93,11 +89,9 @@ async def run_migrations_async(service: str | None = None) -> None:
 
         logger.info(f"Миграция '{svc.name}' завершена")
 
-
 def _run_upgrade(sync_conn, cfg: Config) -> None:
     cfg.attributes["connection"] = sync_conn
     command.upgrade(cfg, "head")
-
 
 async def run_downgrade_async(service: str, revision: str) -> None:
     from sqlalchemy import pool
@@ -116,11 +110,9 @@ async def run_downgrade_async(service: str, revision: str) -> None:
         await conn.run_sync(_run_downgrade, cfg, revision)
     await engine.dispose()
 
-
 def _run_downgrade(sync_conn: object, cfg: Config, revision: str) -> None:
     cfg.attributes["connection"] = sync_conn
     command.downgrade(cfg, revision)
-
 
 async def run_current_async(service: str) -> None:
     from sqlalchemy import pool
@@ -139,11 +131,9 @@ async def run_current_async(service: str) -> None:
         await conn.run_sync(_run_current, cfg)
     await engine.dispose()
 
-
 def _run_current(sync_conn: object, cfg: Config) -> None:
     cfg.attributes["connection"] = sync_conn
     command.current(cfg)
-
 
 def run_history(service: str) -> None:
     from core.db.service_registry import get_service_by_name
@@ -156,7 +146,6 @@ def run_history(service: str) -> None:
         raise ValueError(f"Нет alembic.ini для сервиса {service!r}")
     command.history(cfg)
 
-
 def run_heads(service: str) -> None:
     from core.db.service_registry import get_service_by_name
 
@@ -167,7 +156,6 @@ def run_heads(service: str) -> None:
     if cfg is None:
         raise ValueError(f"Нет alembic.ini для сервиса {service!r}")
     command.heads(cfg)
-
 
 def run_revision(service: str, message: str, *, autogenerate: bool) -> None:
     from core.db.service_registry import get_service_by_name

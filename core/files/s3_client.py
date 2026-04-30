@@ -6,7 +6,8 @@ S3 клиент для работы с объектным хранилищем.
 """
 
 import asyncio
-import logging
+
+from core.logging import get_logger
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
@@ -17,9 +18,7 @@ from botocore.exceptions import ClientError
 
 from core.config import get_settings
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class S3Client:
     """
     Асинхронный клиент для работы с S3-совместимыми хранилищами.
@@ -597,7 +596,6 @@ class S3Client:
 
         return url
 
-
 class S3ClientFactory:
     """Фабрика для создания S3 клиентов"""
 
@@ -687,10 +685,8 @@ class S3ClientFactory:
 
         return S3ClientFactory.create_client_for_bucket(settings.s3.default_bucket)
 
-
 _default_s3_client: Optional[S3Client] = None
 _default_s3_client_lock: Optional[asyncio.Lock] = None
-
 
 def _get_lock() -> asyncio.Lock:
     """Получает или создает лок для глобального S3 клиента"""
@@ -698,7 +694,6 @@ def _get_lock() -> asyncio.Lock:
     if _default_s3_client_lock is None:
         _default_s3_client_lock = asyncio.Lock()
     return _default_s3_client_lock
-
 
 async def get_default_s3_client() -> Optional[S3Client]:
     """
@@ -724,13 +719,13 @@ async def get_default_s3_client() -> Optional[S3Client]:
                         settings.s3.default_bucket
                     )
                     logger.info(
-                        f"✅ Инициализирован дефолтный S3 клиент для бакета: {settings.s3.default_bucket}"
+                        "s3.default_client_initialized",
+                        s3_bucket=settings.s3.default_bucket,
                     )
                 else:
-                    logger.info("ℹ️ S3 не настроен в конфигурации")
+                    logger.info("s3.not_configured")
 
     return _default_s3_client
-
 
 async def close_default_s3_client():
     """Закрывает дефолтный S3 клиент"""
@@ -738,7 +733,6 @@ async def close_default_s3_client():
     if _default_s3_client:
         await _default_s3_client.close()
         _default_s3_client = None
-
 
 def build_s3_key_for_company(company_slug: str, relative_path: str) -> str:
     """
@@ -756,7 +750,6 @@ def build_s3_key_for_company(company_slug: str, relative_path: str) -> str:
         "system/rag/ns1/doc.pdf"
     """
     return f"{company_slug}/{relative_path.lstrip('/')}"
-
 
 def build_s3_key_from_context(relative_path: str) -> str:
     """

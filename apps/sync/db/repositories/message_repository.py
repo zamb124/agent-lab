@@ -1,7 +1,8 @@
 """Репозиторий для работы с сообщениями (SQLAlchemy)."""
 
 import json
-import logging
+
+from core.logging import get_logger
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Type
@@ -14,9 +15,7 @@ from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannelMember, SyncMessage, SyncMessageContent
 from apps.sync.models.messages import MessageContentModel
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 @dataclass(frozen=True)
 class MessageCursorWindow:
     """Окно сообщений для курсорной пагинации."""
@@ -24,7 +23,6 @@ class MessageCursorWindow:
     rows: list[SyncMessage]
     has_more_older: bool
     has_more_newer: bool
-
 
 class MessageRepository(BaseSyncRepository[SyncMessage]):
     """Репозиторий для сообщений с изоляцией по company_id."""

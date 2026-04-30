@@ -2,7 +2,8 @@
 API для управления API ключами компании
 """
 import hashlib
-import logging
+
+from core.logging import get_logger
 import secrets
 from datetime import datetime, timezone
 from typing import List
@@ -14,8 +15,7 @@ from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ApiKey, ApiKeyCreate, ApiKeyCreated, ApiKeyUpdate
 from core.db.models.platform import ApiKeyRecord
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])
 
 VALID_SCOPES = {
@@ -25,13 +25,11 @@ VALID_SCOPES = {
     "billing:read",
 }
 
-
 def _generate_api_key() -> tuple[str, str]:
     """Возвращает (secret, sha256_hex)."""
     secret = f"hum_{secrets.token_urlsafe(32)}"
     key_hash = hashlib.sha256(secret.encode()).hexdigest()
     return secret, key_hash
-
 
 def _record_to_model(record: ApiKeyRecord) -> ApiKey:
     return ApiKey(
@@ -44,7 +42,6 @@ def _record_to_model(record: ApiKeyRecord) -> ApiKey:
         company_id=record.company_id,
         created_by=record.created_by,
     )
-
 
 @router.get("", response_model=OffsetPage[ApiKey])
 async def list_api_keys(
@@ -64,7 +61,6 @@ async def list_api_keys(
     )
     items = [_record_to_model(r) for r in records]
     return OffsetPage[ApiKey](items=items, total=len(items), limit=limit, offset=offset)
-
 
 @router.post("", response_model=ApiKeyCreated)
 async def create_api_key(
@@ -116,7 +112,6 @@ async def create_api_key(
         scopes=key_data.scopes,
     )
 
-
 @router.patch("/{key_id}")
 async def update_api_key(
     key_id: str,
@@ -141,7 +136,6 @@ async def update_api_key(
         raise HTTPException(status_code=404, detail="Ключ не найден")
 
     return {"success": True, "key_id": key_id, "name": body.name}
-
 
 @router.delete("/{key_id}")
 async def revoke_api_key(

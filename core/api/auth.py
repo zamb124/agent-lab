@@ -5,7 +5,7 @@ API эндпоинты для авторизации.
 Контейнер получается через request.app.state.container.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Annotated, Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Request, Depends, Form, Query
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -18,10 +18,8 @@ from core.identity import AuthService
 from core.utils.tokens import TokenService, get_token_service
 from core.utils.domain import get_cookie_domain, build_url
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(tags=["auth"])
-
 
 class UserUpdate(BaseModel):
     """Обновление данных пользователя"""
@@ -35,24 +33,19 @@ class UserUpdate(BaseModel):
     bio: Optional[str] = PydanticField(None, max_length=4000)
     ui_preferences: Optional[Dict[str, Any]] = None
 
-
 class SwitchCompanyRequest(BaseModel):
     """Переключение активной компании пользователя"""
     company_id: str
-
 
 class DemoLoginRequest(BaseModel):
     email: str
     password: str
 
-
 def get_auth_service(request: Request) -> AuthService:
     """Получает AuthService из контейнера приложения"""
     return request.app.state.container.auth_service
 
-
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
-
 
 def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> None:
     """
@@ -81,14 +74,12 @@ def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> No
         samesite="lax",
     )
 
-
 def _append_query(url: str, params: Dict[str, str]) -> str:
     parsed = urlsplit(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.update(params)
     next_query = urlencode(query)
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, next_query, parsed.fragment))
-
 
 @router.get("/demo/status")
 async def demo_auth_status():
@@ -98,7 +89,6 @@ async def demo_auth_status():
     if not demo.login_enabled:
         return {"enabled": False}
     return {"enabled": True, "email": demo.email}
-
 
 @router.post("/login/demo")
 async def login_demo(
@@ -151,7 +141,6 @@ async def login_demo(
 
     return response
 
-
 @router.get("/providers")
 async def get_auth_providers(auth_service: AuthServiceDep):
     """Возвращает список доступных провайдеров авторизации"""
@@ -167,7 +156,6 @@ async def get_auth_providers(auth_service: AuthServiceDep):
             for provider in providers
         ]
     }
-
 
 @router.get("/login/{provider_name}")
 async def start_auth(
@@ -241,7 +229,6 @@ async def start_auth(
     except Exception as e:
         logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
 
 async def _complete_oauth_callback(
     request: Request,
@@ -367,7 +354,6 @@ async def _complete_oauth_callback(
     logger.info(f"Успешная авторизация пользователя {result.user.user_id}")
     return response
 
-
 @router.get("/callback/{provider_name}")
 async def auth_callback(
     request: Request,
@@ -388,7 +374,6 @@ async def auth_callback(
         error=error,
         oauth_first_login_user_json=user,
     )
-
 
 @router.post("/callback/{provider_name}")
 async def auth_callback_post(
@@ -411,7 +396,6 @@ async def auth_callback_post(
         oauth_first_login_user_json=user,
     )
 
-
 @router.post("/logout")
 async def logout(
     request: Request,
@@ -432,7 +416,6 @@ async def logout(
     response = JSONResponse({"success": True, "message": "Сессия завершена"})
     _clear_platform_auth_cookies(response, request)
     return response
-
 
 @router.get("/me")
 async def get_current_user(request: Request, auth_service: AuthServiceDep):
@@ -472,7 +455,6 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
-
 
 @router.post("/switch-company")
 async def switch_company(
@@ -518,7 +500,6 @@ async def switch_company(
     )
     return response
 
-
 @router.put("/me")
 async def update_current_user(
     request: Request,
@@ -560,7 +541,6 @@ async def update_current_user(
     
     return {"success": True, "message": "User updated"}
 
-
 @router.get("/me/attrs/{service}")
 async def get_service_attrs(
     request: Request,
@@ -585,7 +565,6 @@ async def get_service_attrs(
         raise HTTPException(status_code=404, detail="User not found")
     
     return user.attrs.get(service, {})
-
 
 @router.put("/me/attrs/{service}")
 async def update_service_attrs(
@@ -622,7 +601,6 @@ async def update_service_attrs(
     await user_repo.set(user)
     
     return {"success": True, "service": service, "attrs": user.attrs[service]}
-
 
 @router.get("/status")
 async def auth_status(auth_service: AuthServiceDep):

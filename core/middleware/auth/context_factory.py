@@ -2,7 +2,7 @@
 Фабрика для создания Context.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional, List
 
 from fastapi import HTTPException, Request
@@ -13,9 +13,7 @@ from core.models.identity_models import User, Company, UserStatus, AuthProvider
 from core.models.i18n_models import Language
 from core.utils.tokens import TokenData
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class ContextFactory:
     """Единая фабрика для создания Context"""
     

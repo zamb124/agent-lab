@@ -5,7 +5,8 @@
 
 import json
 import uuid
-import logging
+
+from core.logging import get_logger
 from typing import Any, Dict, List, Optional
 
 from core.clients import RedisClient
@@ -21,8 +22,7 @@ from core.config import get_settings
 REDIS_PREFIX = "push_notification:"
 REDIS_TTL = 86400 * 7  # 7 days
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 # Singleton redis_client для core-задач
 _redis_client: Optional[RedisClient] = None
 
@@ -33,7 +33,6 @@ def _get_redis() -> RedisClient:
         settings = get_settings()
         _redis_client = RedisClient(settings.database.redis_url)
     return _redis_client
-
 
 async def set_push_config(params: TaskPushNotificationConfig) -> Dict[str, Any]:
     """Сохраняет конфигурацию push notification."""
@@ -73,7 +72,6 @@ async def set_push_config(params: TaskPushNotificationConfig) -> Dict[str, Any]:
     logger.info(f"Push config saved: task={task_id}, config={config_id}")
     return data
 
-
 async def get_push_config(params: GetTaskPushNotificationConfigParams) -> Optional[Dict[str, Any]]:
     """Получает конфигурацию push notification."""
     redis = _get_redis()
@@ -98,7 +96,6 @@ async def get_push_config(params: GetTaskPushNotificationConfigParams) -> Option
     data = await redis.get(key)
     return json.loads(data) if data else None
 
-
 async def list_push_configs(params: ListTaskPushNotificationConfigParams) -> List[Dict[str, Any]]:
     """Список конфигураций для задачи."""
     redis = _get_redis()
@@ -121,7 +118,6 @@ async def list_push_configs(params: ListTaskPushNotificationConfigParams) -> Lis
 
     return result
 
-
 async def delete_push_config(params: DeleteTaskPushNotificationConfigParams) -> None:
     """Удаляет конфигурацию push notification."""
     redis = _get_redis()
@@ -140,7 +136,6 @@ async def delete_push_config(params: DeleteTaskPushNotificationConfigParams) -> 
             await redis.set(configs_key, json.dumps(config_ids), ttl=REDIS_TTL)
 
     logger.info(f"Push config deleted: task={task_id}, config={config_id}")
-
 
 async def send_webhook(
     url: str,
@@ -164,7 +159,6 @@ async def send_webhook(
 
         logger.info(f"Push notification sent to {url}")
         return {"success": True, "status_code": response.status_code}
-
 
 async def process_send_task_update(
     task_id: str, context_id: str, state: str, message: Optional[str], is_final: bool, webhook_trigger_func

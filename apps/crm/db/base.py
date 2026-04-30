@@ -8,7 +8,7 @@ CRM использует реляционную БД для:
 - Агрегаций и сортировки
 """
 
-import logging
+from core.logging import get_logger
 from typing import Generic, TypeVar, Optional, List, Type
 from abc import ABC, abstractmethod
 
@@ -18,10 +18,8 @@ from sqlalchemy.orm import DeclarativeBase
 
 from core.context import get_context
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 T = TypeVar('T', bound=DeclarativeBase)
-
 
 class CRMDatabase:
     """
@@ -65,7 +63,6 @@ class CRMDatabase:
     def session(self) -> AsyncSession:
         """Создает новую сессию"""
         return self._session_factory()
-
 
 class BaseCRMRepository(ABC, Generic[T]):
     """
@@ -170,7 +167,6 @@ class BaseCRMRepository(ABC, Generic[T]):
             stmt = select(func.count()).select_from(self.model_class)
             result = await session.execute(stmt)
             return result.scalar() or 0
-
 
 def get_crm_db() -> CRMDatabase:
     """Получает singleton CRM database"""

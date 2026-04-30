@@ -7,7 +7,8 @@ Nano Banana клиент для генерации изображений чер
 
 import base64
 import json
-import logging
+
+from core.logging import get_logger
 import re
 from typing import TYPE_CHECKING, List, Optional
 
@@ -18,9 +19,7 @@ from core.files.s3_client import S3ClientFactory
 if TYPE_CHECKING:
     from core.db.storage import Storage
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class NanoBananaClient:
     """
     Клиент для генерации изображений через OpenRouter.
@@ -148,7 +147,6 @@ class NanoBananaClient:
 
         return file_ids
 
-
 class NanoBananaClientFactory:
     """Фабрика для создания Nano Banana клиентов"""
 
@@ -165,7 +163,4 @@ class NanoBananaClientFactory:
             model_name=settings.nano_banana.model_name,
             timeout=settings.nano_banana.timeout,
         )
-
-
-
 

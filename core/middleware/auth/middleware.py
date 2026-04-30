@@ -1,10 +1,14 @@
 """
 Компактный AuthMiddleware с декларативной конфигурацией.
+
+Внутренний слой по отношению к AccessLogMiddleware: request_id и trace_id
+уже забиндены в лог-контекст и доступны через `request.state.request_id`
+и `request.state.trace_id`. AuthMiddleware дополняет лог-контекст полями
+user/company/session/namespace при успешной авторизации; снятие скоупа
+делает AccessLogMiddleware.
 """
 
-import logging
 import hashlib
-import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import Request, HTTPException
@@ -12,7 +16,14 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.context import set_context, clear_context
-from core.config import get_settings
+from core.logging import bind_log_context, get_logger
+from core.logging.attributes import (
+    LOG_COMPANY_ID,
+    LOG_COMPANY_SUBDOMAIN,
+    LOG_NAMESPACE,
+    LOG_SESSION_ID,
+    LOG_USER_ID,
+)
 from core.models.identity_models import User
 from core.utils.tokens import get_token_service, TokenData, TokenType
 
@@ -33,9 +44,8 @@ from .platform_handlers import get_platform_handler
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.domain import extract_subdomain
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
-TRACE_ID_HEADER = "X-Trace-Id"
 EMBED_SESSION_TOKEN_REQUIRED_SCOPES = {"agents:read", "agents:write"}
 
 
@@ -53,36 +63,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
     
     def _get_container(self, request: Request):
         return request.app.state.container
-    
-    def _get_or_create_trace_id(self, request: Request) -> str:
-        """
-        Извлекает trace_id из заголовка или генерирует новый.
-        
-        Формат: {service_name}:{uuid4}
-        Если trace_id уже пришел из другого сервиса - используем его как есть.
-        """
-        trace_id = request.headers.get(TRACE_ID_HEADER)
-        if trace_id:
-            return trace_id
-        
-        settings = get_settings()
-        service_name = settings.server.name
-        return f"{service_name}:{uuid.uuid4()}"
-    
+
+    def _trace_id_from_state(self, request: Request) -> str:
+        trace_id = getattr(request.state, "trace_id", None)
+        if not isinstance(trace_id, str) or not trace_id.strip():
+            raise RuntimeError(
+                "AuthMiddleware: request.state.trace_id отсутствует. "
+                "Проверьте, что AccessLogMiddleware подключён внешним слоем."
+            )
+        return trace_id
+
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        trace_id = self._get_or_create_trace_id(request)
-        
-        # ТЕСТЫ ТОЖЕ ДОЛЖНЫ ПРОХОДИТЬ ЧЕРЕЗ НОРМАЛЬНУЮ АВТОРИЗАЦИЮ!
-        # НЕТ НИКАКИХ ФОЛБЕКОВ НА "system" ЮЗЕРА!
-        
+        trace_id = self._trace_id_from_state(request)
+
         if self.route_matcher.should_skip(path):
             return await call_next(request)
-        
+
         container = self._get_container(request)
         company_resolver = CompanyResolver(container)
         context_factory = ContextFactory(container)
-        
+
         rule = self.route_matcher.match(path)
         if rule and rule.skip:
             return await call_next(request)
@@ -94,19 +95,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     auth_required=False,
                     context_type="anonymous",
                 )
-                logger.info(
-                    f"SPA fallback (anonymous): path={path}, trace_id={trace_id}"
-                )
+                logger.info("auth.spa_fallback", path=path)
             else:
                 logger.debug(
-                    f"Маршрут не найден (не SPA): path={path}, method={request.method}, trace_id={trace_id}"
+                    "auth.route_not_found",
+                    path=path,
+                    http_method=request.method,
                 )
                 return JSONResponse(status_code=404, content={"detail": "Not Found"})
-        
-        # Не логировать для публичных путей
+
         if not path.startswith(("/openapi", "/docs", "/static")):
-            logger.info(f"Matched rule for {path}: context_type={rule.context_type}, auth_required={rule.auth_required}")
-        
+            logger.info(
+                "auth.route_matched",
+                path=path,
+                context_type=rule.context_type,
+                auth_required=rule.auth_required,
+            )
+
         try:
             context = await self._create_context(
                 request, rule, container, company_resolver, context_factory, trace_id
@@ -125,6 +130,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.language = context.language.value
             request.state.user_companies = context.user_companies
             request.state.token_data = token_data
+
+            log_fields: dict[str, str | None] = {}
+            if context.user is not None:
+                log_fields[LOG_USER_ID] = context.user.user_id
+            if context.active_company is not None:
+                log_fields[LOG_COMPANY_ID] = context.active_company.company_id
+                if context.active_company.subdomain:
+                    log_fields[LOG_COMPANY_SUBDOMAIN] = context.active_company.subdomain
+            if context.session_id:
+                log_fields[LOG_SESSION_ID] = context.session_id
+            if context.active_namespace and context.active_namespace != "default":
+                log_fields[LOG_NAMESPACE] = context.active_namespace
+            if log_fields:
+                bind_log_context(**log_fields)
 
             if (
                 rule.context_type == "frontend"
@@ -204,17 +223,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
             raise HTTPException(status_code=401, detail="User not found")
         
         company = await company_resolver.resolve(request, token_data, rule.context_type)
-        
-        logger.info(f"🔍 Путь: {request.url.path}, context_type={rule.context_type}, company={company.company_id if company else None}, host={request.headers.get('host')}")
-        
-        # Frontend без субдомена -> редирект на выбор компании
+
+        logger.info(
+            "auth.context_resolved",
+            path=request.url.path,
+            context_type=rule.context_type,
+            company_id=company.company_id if company else None,
+            host=request.headers.get("host"),
+        )
+
         if rule.context_type == "frontend" and not company:
-            logger.info(f"🚨 Frontend без компании! Проверяем allows_no_subdomain для {request.url.path}")
             if not self.route_matcher.allows_no_subdomain(request.url.path):
-                logger.info(f"🚫 Путь {request.url.path} требует субдомен! Бросаем CompanyCreationRequired")
+                logger.info(
+                    "auth.subdomain_required",
+                    path=request.url.path,
+                )
                 raise CompanyCreationRequired()
-            else:
-                logger.info(f"✅ Путь {request.url.path} разрешен без субдомена")
+            logger.info("auth.frontend_no_subdomain_allowed", path=request.url.path)
         
         # Проверка доступа к удаляемой компании
         if company and company.status == "deleting":
@@ -292,7 +317,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         )
         context.metadata.update(metadata)
         
-        logger.info(f"{rule.channel.title()} webhook: компания {company.company_id}, trace_id={trace_id}")
+        logger.info(
+            "auth.webhook_context_resolved",
+            platform=rule.channel,
+            company_id=company.company_id if company else None,
+        )
         return context
     
     async def _extract_token(
@@ -309,15 +338,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = request.cookies.get("auth_token")
         path = request.url.path
         is_public_path = path.startswith(("/openapi", "/docs", "/static"))
-        
-        # Логирование для отладки (не для публичных путей)
-        if not token:
-            if not is_public_path:
-                logger.debug(f"Токен не найден в cookies для {path}")
-        else:
-            if not is_public_path:
-                logger.debug(f"Токен найден в cookies для {path}")
-        
+
+        if not is_public_path:
+            logger.debug(
+                "auth.cookie_lookup",
+                path=path,
+                cookie_present=bool(token),
+            )
+
         token_from_authorization = False
         if not token:
             auth_header = request.headers.get("authorization", "")
@@ -325,8 +353,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 token = auth_header[7:]
                 token_from_authorization = True
                 if not is_public_path:
-                    logger.debug(f"Токен найден в Authorization header")
-        
+                    logger.debug("auth.bearer_token_used", path=path)
+
         if not token:
             return None, None
 
@@ -339,19 +367,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 path=path,
             )
             if api_key_token_data is None:
-                logger.warning(f"API ключ невалиден или не имеет доступа к {path}")
+                logger.warning("auth.api_key_invalid", path=path)
                 return None, None
             return api_key_token_data, token
-        
+
         token_service = get_token_service()
         token_data = token_service.validate_token(token)
-        
+
         if token_data:
             if not is_public_path:
-                logger.debug(f"Токен валиден: user_id={token_data.user_id}, company_id={token_data.company_id}")
+                logger.debug(
+                    "auth.token_valid",
+                    user_id=token_data.user_id,
+                    company_id=token_data.company_id,
+                )
         else:
-            logger.warning(f"Токен невалиден или истёк для {path}")
-        
+            logger.warning("auth.token_invalid", path=path)
+
         return token_data, token if token_data else None
 
     @staticmethod
@@ -401,13 +433,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         """Получает пользователя по данным токена"""
         user = await container.user_repository.get(token_data.user_id)
         if user:
-            logger.debug(f"Пользователь найден: {token_data.user_id}")
+            logger.debug("auth.user_loaded", user_id=token_data.user_id)
         return user
-    
+
     async def _sync_active_company(self, container, user: User, company):
         """Синхронизирует активную компанию пользователя"""
         if user.active_company_id != company.company_id:
-            logger.info(f"Смена активной компании: {user.active_company_id} -> {company.company_id}")
+            logger.info(
+                "auth.active_company_switched",
+                previous_company_id=user.active_company_id,
+                company_id=company.company_id,
+            )
             user.active_company_id = company.company_id
             await container.user_repository.set(user)
 

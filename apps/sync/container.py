@@ -5,14 +5,12 @@ SyncContainer - DI контейнер для Sync сервиса.
 Добавляет Sync-специфичные репозитории (SQLAlchemy реляционные).
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from core.container import BaseContainer, lazy
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class SyncContainer(BaseContainer):
     """
     Контейнер для Sync сервиса.
@@ -82,12 +80,9 @@ class SyncContainer(BaseContainer):
 
         return CallSpeechEgressTrackRepository(db=self.sync_db)
 
-
-
 # === Глобальный контейнер ===
 
 _sync_container: Optional[SyncContainer] = None
-
 
 def get_sync_container() -> SyncContainer:
     """Получает контейнер (создает при первом вызове)"""
@@ -107,17 +102,14 @@ def get_sync_container() -> SyncContainer:
         logger.info(f"SyncContainer инициализирован с БД: {sync_db_url[:50]}...")
     return _sync_container
 
-
 def set_sync_container(container: SyncContainer):
     """Устанавливает контейнер (для тестов)"""
     global _sync_container
     _sync_container = container
 
-
 def reset_sync_container():
     """Сбрасывает контейнер (для тестов)"""
     global _sync_container
     _sync_container = None
-
 
 get_container = get_sync_container

@@ -2,7 +2,7 @@
 Определение компании из запроса.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from fastapi import Request, HTTPException
@@ -12,14 +12,12 @@ from core.models.identity_models import Company
 from core.utils.domain import extract_subdomain
 from core.utils.tokens import TokenData
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 # POST принятия инвайта: пользователь намеренно ещё не в members этой компании
 _INVITE_ACCEPT_PATHS = frozenset({
     "/api/invites/accept",
     "/frontend/api/invites/accept",
 })
-
 
 class CompanyResolver:
     """Определяет компанию из запроса"""

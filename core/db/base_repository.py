@@ -6,17 +6,15 @@
 - Каждый репозиторий знает свою таблицу
 """
 
-import logging
+from core.logging import get_logger
 from typing import Generic, TypeVar, Optional, List, Dict, Type
 from abc import ABC, abstractmethod
 
 from core.db.storage import Storage
 from core.context import get_context
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 T = TypeVar('T')
-
 
 class BaseRepository(ABC, Generic[T]):
     """

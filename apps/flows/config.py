@@ -181,15 +181,23 @@ def get_settings() -> FlowSettings:
     Возвращает настройки сервиса flows.
 
     Собирает FlowSettings из merged config (service_name=flows) и регистрирует в core.
+    Если core уже получил FlowSettings из create_service_app — переиспользует тот же объект.
     """
     global _settings
-    if _settings is None:
-        from core.config import set_settings as core_set_settings
-        
-        merged_config = load_merged_config(service_name="flows")
-        _settings = FlowSettings(**merged_config)
-        core_set_settings(_settings)
-    
+    if _settings is not None:
+        return _settings
+    from core.config import get_settings as core_get_settings
+    from core.config import set_settings as core_set_settings
+
+    core_candidate = core_get_settings()
+    if isinstance(core_candidate, FlowSettings):
+        _settings = core_candidate
+        return _settings
+
+    merged_config = load_merged_config(service_name="flows", silent=True)
+    _settings = FlowSettings(**merged_config)
+    core_set_settings(_settings)
+
     return _settings
 
 

@@ -12,7 +12,7 @@ from core.config.testing import is_testing
 
 from taskiq import TaskiqState
 
-from core.logging import get_logger, setup_logging
+from core.logging import get_logger
 from core.tasks.broker import (
     create_broker,
     create_scheduler,
@@ -22,7 +22,7 @@ from core.tasks.broker import (
 
 logger = get_logger(__name__)
 
-broker = create_broker(queue_name="idle")
+broker = create_broker(queue_name="idle", service_name="idle_worker")
 scheduler = create_scheduler(broker)
 
 recovery_handler = create_stale_tasks_recovery(queue_name="idle")
@@ -37,30 +37,30 @@ async def idle_worker_startup(state: TaskiqState) -> None:
     from core.tracing.tracer import set_span_repository, set_tracing_service_name
 
     settings = get_settings()
-    setup_logging(service_name="idle_worker")
 
     container = get_container()
     state.container = container
     container.use_worker = False
 
-    logger.info("Idle worker: connecting to Redis...")
+    logger.info("worker.redis_connecting", service="idle_worker")
     max_retries = 5
     for attempt in range(max_retries):
         try:
             await container.redis_client.connect()
-            logger.info("Idle worker: Redis connected")
+            logger.info("worker.redis_connected", service="idle_worker")
             break
         except Exception:
             if attempt < max_retries - 1:
                 wait_seconds = 2**attempt
                 logger.warning(
-                    "Idle worker: Redis connection attempt %s failed, retry in %ss",
-                    attempt + 1,
-                    wait_seconds,
+                    "worker.redis_connect_retry",
+                    service="idle_worker",
+                    attempt=attempt + 1,
+                    wait_seconds=wait_seconds,
                 )
                 await asyncio.sleep(wait_seconds)
             else:
-                logger.error("Idle worker: Failed to connect to Redis")
+                logger.error("worker.redis_connect_failed", service="idle_worker")
                 raise
 
     if settings.tracing.enabled:
@@ -72,7 +72,7 @@ async def idle_worker_startup(state: TaskiqState) -> None:
                 )
             set_tracing_service_name("idle_worker")
             set_span_repository(container.span_repository)
-        logger.info("Idle worker: трейсинг инициализирован")
+        logger.info("worker.tracing_initialized", service="idle_worker")
 
     if is_testing():
         from core.clients.llm.factory import get_llm
@@ -80,9 +80,9 @@ async def idle_worker_startup(state: TaskiqState) -> None:
 
         get_llm("mock-gpt-4")
         configure_mock_llm_redis(container.redis_client)
-        logger.info("Idle worker: MockLLM настроен для чтения из Redis")
+        logger.info("worker.mock_llm_configured", service="idle_worker")
 
-    logger.info("Idle worker: контейнер инициализирован")
+    logger.info("worker.container_initialized", service="idle_worker")
 
 
 async def idle_worker_shutdown(state: TaskiqState) -> None:
@@ -90,12 +90,21 @@ async def idle_worker_shutdown(state: TaskiqState) -> None:
     if hasattr(state, "container"):
         try:
             await state.container.redis_client.close()
-            logger.info("Idle worker: Redis disconnected")
-        except Exception as error:
-            logger.error(f"Idle worker: Error closing Redis: {error}")
-    logger.info("Idle worker: контейнер закрыт")
+            logger.info("worker.redis_disconnected", service="idle_worker")
+        except Exception as exc:
+            logger.exception(
+                "worker.redis_close_failed",
+                service="idle_worker",
+                **{"exception.type": type(exc).__name__},
+            )
+    logger.info("worker.container_closed", service="idle_worker")
 
 
-register_worker_events(broker, idle_worker_startup, idle_worker_shutdown)
+register_worker_events(
+    broker,
+    idle_worker_startup,
+    idle_worker_shutdown,
+    service_name="idle_worker",
+)
 
-logger.info("✅ Idle worker broker создан (queue='idle')")
+logger.info("worker.broker_created", queue="idle")

@@ -8,7 +8,7 @@
   GET    /{file_id}             — метаданные файла
 """
 
-import logging
+from core.logging import get_logger
 import mimetypes
 from pathlib import Path
 from typing import Callable
@@ -27,10 +27,8 @@ from core.files.streaming import stream_s3_file
 
 from .read_preview import build_stored_file_text_preview
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 _DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
-
 
 def _safe_original_name(raw: str | None) -> str:
     if not raw or not isinstance(raw, str):
@@ -38,13 +36,11 @@ def _safe_original_name(raw: str | None) -> str:
     name = Path(raw).name.strip()
     return name[:255] if name and name != "." else "file"
 
-
 def _is_http_url(url: str) -> bool:
     if not isinstance(url, str) or url == "":
         return False
     parsed = urlparse(url)
     return parsed.scheme in ("http", "https")
-
 
 def build_file_api_router(
     get_file_repo: Callable,

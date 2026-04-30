@@ -5,7 +5,7 @@ Sync Service - FastAPI приложение для инженерного чат
 БД: sync_db (service) + shared_db
 """
 
-import logging
+from core.logging import get_logger
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -24,9 +24,7 @@ from core.app import create_service_app
 from core.config import get_settings
 from core.websocket import WsCommandError
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 async def on_startup(app: FastAPI, container, settings):
     """Регистрация WS command-handler'ов и presence hook'ов в core.websocket.
 
@@ -37,7 +35,6 @@ async def on_startup(app: FastAPI, container, settings):
     register_sync_ws_commands()
     register_presence_hooks()
     logger.info("Sync Service: WS command-router и presence hooks готовы")
-
 
 app = create_service_app(
     service_name="sync",
@@ -53,7 +50,6 @@ app = create_service_app(
     api_version="v1",
     include_crud_routers=False,
 )
-
 
 @app.exception_handler(WsCommandError)
 async def _ws_command_error_handler(request: Request, exc: WsCommandError) -> JSONResponse:
@@ -78,7 +74,6 @@ if sync_ui_path.exists():
     app.mount("/sync/ui/static", StaticFiles(directory=sync_ui_path, html=True), name="sync_ui")
     logger.info(f"Sync UI смонтирован: {sync_ui_path}")
 
-
 @app.get("/sync/join/{token}")
 async def serve_call_join(container: ContainerDep, token: str):
     """Публичная страница входа в звонок по ссылке (без auth). SPA: sync-app, маршрут call_join."""
@@ -87,7 +82,6 @@ async def serve_call_join(container: ContainerDep, token: str):
     if not ui_index.exists():
         raise HTTPException(status_code=404, detail="Sync UI not found")
     return FileResponse(ui_index)
-
 
 @app.get("/sync")
 @app.get("/sync/")
@@ -108,7 +102,6 @@ async def serve_sync_ui(container: ContainerDep, path: str = ""):
     if not ui_file.exists():
         raise HTTPException(status_code=404, detail="Sync UI not found")
     return FileResponse(ui_file)
-
 
 if __name__ == "__main__":
     import uvicorn

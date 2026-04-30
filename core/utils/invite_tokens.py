@@ -6,7 +6,8 @@
 """
 
 import uuid
-import logging
+
+from core.logging import get_logger
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -15,13 +16,11 @@ from pydantic import BaseModel, Field
 
 from core.config import get_settings
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 INVITE_TOKEN_TYPE = "invite"
 INVITE_TOKEN_AUDIENCE = "invite"
 INVITE_EXPIRES_SECONDS = 60 * 60 * 24 * 7  # 7 дней
 INVITE_REDIS_KEY_PREFIX = "invite:used:"
-
 
 class InviteTokenData(BaseModel):
     """Данные инвайт-токена"""
@@ -34,7 +33,6 @@ class InviteTokenData(BaseModel):
     iat: datetime = Field(description="Время создания")
     typ: str = Field(default=INVITE_TOKEN_TYPE)
     aud: str = Field(default=INVITE_TOKEN_AUDIENCE)
-
 
 class InviteTokenService:
     """Сервис создания и проверки инвайт-токенов"""
@@ -111,7 +109,6 @@ class InviteTokenService:
             aud=payload["aud"],
         )
 
-
 async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
     """
     Атомарно «сжигает» инвайт-токен в Redis (SET NX).
@@ -140,7 +137,6 @@ async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
     finally:
         await client.aclose()
 
-
 async def invite_jti_already_used(jti: str) -> bool:
     """True, если jti отмечен использованным в Redis (одноразовый инвайт израсходован)."""
     try:
@@ -162,9 +158,7 @@ async def invite_jti_already_used(jti: str) -> bool:
     finally:
         await client.aclose()
 
-
 _invite_token_service: Optional[InviteTokenService] = None
-
 
 def get_invite_token_service() -> InviteTokenService:
     """Получает глобальный экземпляр сервиса инвайт-токенов"""

@@ -4,7 +4,7 @@
 Хранит данные в отдельной таблице usage.
 """
 
-import logging
+from core.logging import get_logger
 from datetime import datetime
 from typing import Any, List, Optional
 
@@ -15,10 +15,8 @@ from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _admin_ilike, _facet
 from core.db.storage import Storage
 from core.models.billing_models import UsageRecord
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 ADMIN_USAGE_MAX_LIMIT = 5000
-
 
 class UsageRepository(BaseRepository[UsageRecord]):
     """

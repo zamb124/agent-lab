@@ -3,7 +3,8 @@
 """
 
 import jwt
-import logging
+
+from core.logging import get_logger
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Optional, Dict, Any, List
@@ -11,15 +12,12 @@ from pydantic import BaseModel, Field
 
 from core.config import get_settings
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class TokenType(str, Enum):
     """Тип токена"""
     SESSION = "session"  # Обычный токен авторизации (7 дней)
     API = "api"          # Перманентный API токен (до 2 лет)
     EMBED_SESSION = "embed_session"  # Короткоживущий токен встраиваемого чата
-
 
 class TokenData(BaseModel):
     """Данные токена"""
@@ -32,7 +30,6 @@ class TokenData(BaseModel):
     iat: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Время создания")
     session_id: Optional[str] = Field(default=None, description="ID OAuth сессии (опционально)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
-
 
 class TokenService:
     """Единый сервис управления токенами"""
@@ -192,9 +189,7 @@ class TokenService:
         
         return token_data
 
-
 _token_service: Optional[TokenService] = None
-
 
 def get_token_service() -> TokenService:
     """Получает глобальный экземпляр сервиса токенов"""

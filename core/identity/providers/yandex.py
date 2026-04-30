@@ -4,7 +4,7 @@ Yandex OAuth провайдер авторизации.
 АДАПТИРОВАНО: убраны локальные импорты, try-except блоки
 """
 
-import logging
+from core.logging import get_logger
 from typing import Tuple, Optional
 from urllib.parse import urlencode
 
@@ -13,9 +13,7 @@ from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.config.models import AuthProviderConfig
 from core.http import request_public_oauth
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class YandexProvider(BaseAuthProvider):
     """Провайдер авторизации через Yandex OAuth"""
 

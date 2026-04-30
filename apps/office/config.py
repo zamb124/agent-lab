@@ -92,7 +92,7 @@ def get_office_settings() -> OfficeSettings:
     if _office_settings is None:
         from core.config import set_settings as core_set_settings
 
-        merged = load_merged_config(service_name="office")
+        merged = load_merged_config(service_name="office", silent=True)
         server_block = dict(merged.get("server") or {})
         server_block.setdefault("name", "documents")
         server_block.setdefault("port", 8008)

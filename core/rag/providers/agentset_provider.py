@@ -5,7 +5,8 @@ RAG провайдер на базе Agentset.ai.
 """
 
 import httpx
-import logging
+
+from core.logging import get_logger
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse, unquote
@@ -16,9 +17,7 @@ from core.http import get_httpx_client
 # S3ClientFactory используется через базовый класс BaseRAGProvider
 from core.utils.slug import generate_slug
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class AgentsetRAGProvider(BaseRAGProvider):
     """RAG провайдер на базе Agentset.ai"""
     

@@ -3,17 +3,15 @@ API для управления командой компании.
 
 GET /members перенесён в core/api/team.py (доступен во всех сервисах).
 """
-import logging
 
+from core.logging import get_logger
 from fastapi import APIRouter, HTTPException, Request
 
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import TeamMemberUpdate
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/team", tags=["team"])
-
 
 @router.patch("/members/{user_id}")
 async def update_member_role(
@@ -56,7 +54,6 @@ async def update_member_role(
     logger.info("Обновлены роли пользователя %s в компании %s", user_id, company.company_id)
 
     return {"success": True, "user_id": user_id, "roles": update.roles}
-
 
 @router.delete("/members/{user_id}")
 async def remove_member(

@@ -5,7 +5,7 @@ CRM Service - FastAPI приложение для управления CRM.
 БД: crm_db (service) + shared_db
 """
 
-import logging
+from core.logging import get_logger
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -21,9 +21,7 @@ from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 async def on_startup(app: FastAPI, container, settings):
     """Кастомная логика при старте"""
     from core.integrations.models import IntegrationCredential
@@ -62,7 +60,6 @@ async def on_startup(app: FastAPI, container, settings):
 
     set_oauth_credential_saved_hook(_on_oauth_credential_saved)
 
-
 def create_app() -> FastAPI:
     """Создает FastAPI приложение"""
     return create_service_app(
@@ -76,7 +73,6 @@ def create_app() -> FastAPI:
         description="API для управления CRM: сущности, заметки, задачи, связи",
         include_crud_routers=False,
     )
-
 
 app = create_app()
 
@@ -108,7 +104,6 @@ if vendor_three_path.exists():
     )
     logger.info(f"three vendor смонтирован: {vendor_three_path}")
 
-
 @app.get("/crm")
 @app.get("/crm/")
 @app.get("/crm/{path:path}")
@@ -125,7 +120,6 @@ async def serve_crm_ui(path: str = ""):
     if not ui_file.exists():
         raise HTTPException(status_code=404, detail="CRM UI not found")
     return FileResponse(ui_file)
-
 
 if __name__ == "__main__":
     import uvicorn

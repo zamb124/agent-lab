@@ -1,14 +1,12 @@
 """Репозиторий для работы с Git-ресурсами (SQLAlchemy)."""
 
-import logging
+from core.logging import get_logger
 from typing import Type
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncGitResourceRef
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class GitResourceRefRepository(BaseSyncRepository[SyncGitResourceRef]):
     """Репозиторий для Git-ресурсов с изоляцией по company_id."""
 

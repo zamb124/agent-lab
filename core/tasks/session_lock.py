@@ -15,7 +15,6 @@ Session Lock Middleware для TaskIQ.
 """
 
 import asyncio
-import logging
 from typing import Any
 
 from taskiq import TaskiqMiddleware, TaskiqMessage, TaskiqResult
@@ -27,7 +26,9 @@ except ImportError:
     REDIS_AVAILABLE = False
     redis = None
 
-logger = logging.getLogger(__name__)
+from core.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Время жизни lock в секундах (защита от зависших воркеров)
 LOCK_TTL_SECONDS = 300  # 5 минут
@@ -82,8 +83,8 @@ class SessionLockMiddleware(TaskiqMiddleware):
         
         if acquired:
             self._locks_held.add(session_id)
-            logger.debug(f"Lock acquired for session {session_id}")
-        
+            logger.debug("session_lock.acquired", session_id=session_id)
+
         return bool(acquired)
     
     async def _wait_for_lock(self, session_id: str) -> bool:
@@ -105,7 +106,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
             total_waited += delay_ms / 1000
             delay_ms = min(delay_ms * 2, LOCK_WAIT_MAX_MS)
         
-        logger.warning(f"Lock wait timeout for session {session_id}")
+        logger.warning("session_lock.wait_timeout", session_id=session_id)
         return False
     
     async def _release_lock(self, session_id: str) -> None:
@@ -118,7 +119,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
         
         await redis_client.delete(lock_key)
         self._locks_held.discard(session_id)
-        logger.debug(f"Lock released for session {session_id}")
+        logger.debug("session_lock.released", session_id=session_id)
     
     def _extract_session_id(self, message: TaskiqMessage) -> str | None:
         """Извлечь session_id из аргументов задачи"""
@@ -151,8 +152,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
             # Lock получен, сохраняем session_id для post_execute
             message.labels["_session_lock_id"] = session_id
         else:
-            # Таймаут ожидания - выполняем без lock (лучше чем зависнуть)
-            logger.error(f"Failed to acquire lock for session {session_id}, executing anyway")
+            logger.error("session_lock.acquire_failed", session_id=session_id)
         
         return message
     
@@ -189,7 +189,7 @@ class SessionLockMiddleware(TaskiqMiddleware):
         
         if session_id and session_id in self._locks_held:
             await self._release_lock(session_id)
-            logger.warning(f"Lock released after error for session {session_id}")
+            logger.warning("session_lock.released_after_error", session_id=session_id)
 
 
 # Экземпляр middleware для добавления в брокер

@@ -3,21 +3,18 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 from pydantic import BaseModel
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class SubdomainMapping(BaseModel):
     """Модель для маппинга subdomain → company_id"""
     subdomain: str
     company_id: str
-
 
 class SubdomainRepository(BaseRepository[SubdomainMapping]):
     """

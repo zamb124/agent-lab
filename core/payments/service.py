@@ -3,7 +3,8 @@
 """
 
 import uuid
-import logging
+
+from core.logging import get_logger
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
@@ -27,9 +28,7 @@ from core.utils.domain import PRIMARY_DOMAIN
 if TYPE_CHECKING:
     from core.db.repositories.company_repository import CompanyRepository
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class PaymentService:
     """Сервис для работы с платежами"""
     
@@ -108,8 +107,9 @@ class PaymentService:
         await self._save_transaction(transaction)
         
         logger.info(
-            f"✅ Транзакция создана: ID={transaction_id}, "
-            f"URL={payment_response.payment_url}"
+            "payments.transaction_created",
+            transaction_id=transaction_id,
+            payment_url=payment_response.payment_url,
         )
         
         return {
@@ -221,13 +221,14 @@ class PaymentService:
         
         # Если это тестовое уведомление - просто логируем и выходим
         if verification_result.status == "test":
-            logger.info("✅ Тестовое уведомление обработано успешно")
+            logger.info("payments.test_notification_ok")
             await self._save_notification(notification)
             return
         
         if await self._is_notification_duplicate(verification_result.external_payment_id):
             logger.warning(
-                f"⚠️ Дубликат уведомления: external_id={verification_result.external_payment_id}"
+                "payments.notification_duplicate",
+                external_payment_id=verification_result.external_payment_id,
             )
             return
         
@@ -242,8 +243,9 @@ class PaymentService:
             if len(label_parts) == 2:
                 company_id_from_label = label_parts[0]
                 logger.warning(
-                    f"⚠️ Транзакция {verification_result.transaction_id} не найдена в БД, "
-                    f"но можем определить компанию из label: {company_id_from_label}"
+                    "payments.transaction_recovered_from_label",
+                    transaction_id=verification_result.transaction_id,
+                    company_id=company_id_from_label,
                 )
                 
                 # Создаем транзакцию на лету (восстановление)
@@ -279,19 +281,22 @@ class PaymentService:
                 await self._save_notification(notification)
 
                 logger.info(
-                    f"✅ Транзакция восстановлена из webhook: {transaction.transaction_id}"
+                    "payments.transaction_restored",
+                    transaction_id=transaction.transaction_id,
                 )
                 return
             else:
                 logger.error(
-                    f"❌ Транзакция {verification_result.transaction_id} не найдена и не может быть восстановлена"
+                    "payments.transaction_not_found",
+                    transaction_id=verification_result.transaction_id,
                 )
                 raise ValueError(f"Transaction {verification_result.transaction_id} not found")
         
         if transaction.status != PaymentStatus.PENDING:
             logger.warning(
-                f"⚠️ Транзакция {transaction.transaction_id} уже обработана: "
-                f"статус={transaction.status}"
+                "payments.transaction_already_processed",
+                transaction_id=transaction.transaction_id,
+                status=transaction.status,
             )
             return
         
@@ -310,8 +315,10 @@ class PaymentService:
         await self._save_notification(notification)
         
         logger.info(
-            f"✅ Платеж успешно обработан: транзакция={transaction.transaction_id}, "
-            f"компания={transaction.company_id}, сумма={transaction.amount}₽"
+            "payments.payment_processed",
+            transaction_id=transaction.transaction_id,
+            company_id=transaction.company_id,
+            amount=transaction.amount,
         )
     
     async def get_transaction(self, transaction_id: str) -> Optional[Transaction]:
@@ -403,7 +410,7 @@ class PaymentService:
         
         logger.debug(f"Результат сохранения транзакции: {success}")
         
-        logger.debug(f"💾 Транзакция сохранена с ключом: {key}")
+        logger.debug("payments.transaction_saved", redis_key=key)
     
     async def _save_notification(self, notification: PaymentNotification):
         """Сохраняет уведомление"""
@@ -449,7 +456,10 @@ class PaymentService:
         await self._company_repository.set(company)
         
         logger.info(
-            f"💰 Баланс компании {company_id} обновлен: "
-            f"{old_balance:.2f}₽ → {company.balance:.2f}₽ (+{amount:.2f}₽)"
+            "payments.balance_updated",
+            company_id=company_id,
+            balance_before=round(old_balance, 2),
+            balance_after=round(company.balance, 2),
+            delta=round(amount, 2),
         )
 

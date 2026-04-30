@@ -1,6 +1,6 @@
 """Репозиторий для работы с тредами (SQLAlchemy)."""
 
-import logging
+from core.logging import get_logger
 from typing import List, Optional, Type
 
 from sqlalchemy import select
@@ -8,9 +8,7 @@ from sqlalchemy import select
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncThread
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class ThreadRepository(BaseSyncRepository[SyncThread]):
     """Репозиторий для тредов с изоляцией по company_id."""
 

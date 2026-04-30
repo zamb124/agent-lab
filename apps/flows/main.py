@@ -6,6 +6,16 @@ import asyncio
 from pathlib import Path
 import os
 
+from core.config.loader import load_merged_config
+from core.config.models import LoggingConfig
+from core.logging import setup_logging
+
+_FLOWS_BOOTSTRAP_MERGED = load_merged_config(service_name="flows", silent=True)
+setup_logging(
+    "flows",
+    LoggingConfig.model_validate(dict(_FLOWS_BOOTSTRAP_MERGED.get("logging") or {})),
+)
+
 from core.config.testing import is_testing
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
@@ -20,6 +30,7 @@ from core.identity.system_bootstrap import (
 )
 from core.models.context_models import Context, Language
 from core.models.identity_models import User, Company
+from core.utils.background import run_with_log_context
 from core.utils.tokens import get_token_service
 from apps.flows.src.api import a2a_router, chat_router, registry_router, websocket_router
 from apps.flows.src.api.v1 import api_v1_router
@@ -180,8 +191,12 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             finally:
                 clear_context()
 
-        asyncio.create_task(_tools_and_company_init_background())
-        logger.info("Загрузка tools и init_company_resources запущены в фоне")
+        run_with_log_context(
+            _tools_and_company_init_background(),
+            name="flows.tools_and_company_init_background",
+            background_kind="startup",
+        )
+        logger.info("flows.tools_and_company_init_scheduled")
 
     # Синхронизация LLM у провайдеров: не блокирует lifespan — иначе HTTP (в т.ч. /health)
     # недоступен, пока не отработают все внешние запросы (несколько провайдеров × ретраи).
@@ -213,8 +228,12 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                     exc_info=True,
                 )
 
-        asyncio.create_task(_llm_models_startup_background())
-        logger.info("Синхронизация LLM моделей запущена в фоне")
+        run_with_log_context(
+            _llm_models_startup_background(),
+            name="flows.llm_models_startup_background",
+            background_kind="startup",
+        )
+        logger.info("flows.llm_models_sync_scheduled")
     else:
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
         from core.clients.llm.factory import get_llm
@@ -257,12 +276,15 @@ async def on_shutdown(app: FastAPI, container):
     # Закрываем Redis с error handling
     try:
         await container.redis_client.close()
-        logger.info("Redis disconnected")
-    except Exception as e:
-        logger.error(f"Error closing Redis: {e}")
+        logger.info("flows.redis.disconnected")
+    except Exception as exc:
+        logger.exception(
+            "flows.redis.close_failed",
+            **{"exception.type": type(exc).__name__},
+        )
 
 
-_flow_settings = get_settings()
+_flow_settings = FlowSettings(**_FLOWS_BOOTSTRAP_MERGED)
 _cors_regex = _flow_settings.cors_allow_origin_regex
 if "*" in _flow_settings.cors_allow_origins:
     raise ValueError("flows.cors_allow_origins не может содержать '*' для embed/A2A")
@@ -286,7 +308,7 @@ app = create_service_app(
     on_shutdown=on_shutdown,
     extra_middlewares=[
         (SessionMiddleware, {
-            "secret_key": get_settings().auth.jwt_secret_key or "dev-secret-key-change-in-production",
+            "secret_key": _flow_settings.auth.jwt_secret_key or "dev-secret-key-change-in-production",
             "session_cookie": "platform_session",
             "same_site": "lax",
             "https_only": False,
@@ -314,7 +336,10 @@ if docs_path.exists():
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
 if core_frontend_path.exists():
     app.mount("/static/core", StaticFiles(directory=core_frontend_path), name="core_frontend")
-    logger.info(f"Core frontend библиотека смонтирована: {core_frontend_path}")
+    logger.info(
+        "flows.static.core_mounted",
+        path=str(core_frontend_path),
+    )
 
 # Статические файлы для чата (остальное под /static, кроме уже смонтированного /static/core)
 static_path = Path(__file__).parent / "static"

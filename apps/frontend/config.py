@@ -38,7 +38,7 @@ def get_frontend_settings() -> FrontendSettings:
     if _frontend_settings is None:
         from core.config.loader import load_merged_config
 
-        merged_config = load_merged_config(service_name="frontend")
+        merged_config = load_merged_config(service_name="frontend", silent=True)
         _frontend_settings = FrontendSettings(**merged_config)
     
     return _frontend_settings

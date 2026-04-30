@@ -3,15 +3,14 @@
 """
 
 import json
-import logging
+
+from core.logging import get_logger
 from typing import Optional, Tuple
 from fastapi import Request, HTTPException
 
 from core.models.identity_models import User, Company, UserStatus, AuthProvider
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class PlatformHandler:
     """Базовый обработчик платформы"""
     
@@ -37,7 +36,6 @@ class PlatformHandler:
             raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
         
         return company
-
 
 class TelegramHandler(PlatformHandler):
     """Обработчик Telegram webhook"""
@@ -75,7 +73,6 @@ class TelegramHandler(PlatformHandler):
         }
         
         return user, metadata
-
 
 class WhatsAppHandler(PlatformHandler):
     """Обработчик WhatsApp webhook"""
@@ -118,7 +115,6 @@ class WhatsAppHandler(PlatformHandler):
         }
         
         return user, metadata
-
 
 def get_platform_handler(platform: str, container) -> Optional[PlatformHandler]:
     """Возвращает обработчик для платформы"""

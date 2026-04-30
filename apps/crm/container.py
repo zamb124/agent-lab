@@ -5,14 +5,12 @@ CRMContainer - DI контейнер для CRM сервиса.
 Добавляет CRM-специфичные репозитории и сервисы.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from core.container import BaseContainer, lazy
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class CRMContainer(BaseContainer):
     """
     Контейнер для CRM сервиса.
@@ -249,11 +247,9 @@ class CRMContainer(BaseContainer):
             scheduler_client=self.scheduler_client,
         )
 
-
 # === Глобальный контейнер ===
 
 _crm_container: Optional[CRMContainer] = None
-
 
 def get_crm_container() -> CRMContainer:
     """Получает контейнер (создает при первом вызове)"""
@@ -275,17 +271,14 @@ def get_crm_container() -> CRMContainer:
         logger.info(f"CRMContainer инициализирован с БД: {settings.database.crm_url[:50]}...")
     return _crm_container
 
-
 def set_crm_container(container: CRMContainer):
     """Устанавливает контейнер (для тестов)"""
     global _crm_container
     _crm_container = container
 
-
 def reset_crm_container():
     """Сбрасывает контейнер (для тестов)"""
     global _crm_container
     _crm_container = None
-
 
 get_container = get_crm_container

@@ -2,14 +2,12 @@
 Контейнер зависимостей office.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from core.container import BaseContainer, lazy
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class OfficeContainer(BaseContainer):
     def __init__(self, db_url: str, shared_db_url: Optional[str] = None) -> None:
         super().__init__(db_url=db_url, shared_db_url=shared_db_url)
@@ -54,9 +52,7 @@ class OfficeContainer(BaseContainer):
 
         return FileProcessor(file_repository=self.file_repository)
 
-
 _office_container: Optional[OfficeContainer] = None
-
 
 def get_office_container() -> OfficeContainer:
     global _office_container
@@ -75,11 +71,9 @@ def get_office_container() -> OfficeContainer:
         logger.info("OfficeContainer инициализирован")
     return _office_container
 
-
 def set_office_container(container: OfficeContainer) -> None:
     global _office_container
     _office_container = container
-
 
 def reset_office_container() -> None:
     global _office_container
@@ -87,6 +81,5 @@ def reset_office_container() -> None:
     from apps.office.db.base import OfficeDatabase
 
     OfficeDatabase.reset()
-
 
 get_container = get_office_container

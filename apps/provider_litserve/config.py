@@ -30,6 +30,6 @@ _provider_litserve_settings: Optional[ProviderLitserveServiceSettings] = None
 def get_provider_litserve_settings() -> ProviderLitserveServiceSettings:
     global _provider_litserve_settings
     if _provider_litserve_settings is None:
-        merged = load_merged_config(service_name="provider_litserve")
+        merged = load_merged_config(service_name="provider_litserve", silent=True)
         _provider_litserve_settings = ProviderLitserveServiceSettings(**merged)
     return _provider_litserve_settings

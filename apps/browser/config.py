@@ -103,7 +103,7 @@ _browser_settings: Optional[BrowserSettings] = None
 def get_browser_settings() -> BrowserSettings:
     global _browser_settings
     if _browser_settings is None:
-        merged = load_merged_config(service_name="browser")
+        merged = load_merged_config(service_name="browser", silent=True)
         _browser_settings = BrowserSettings(**merged)
     return _browser_settings
 

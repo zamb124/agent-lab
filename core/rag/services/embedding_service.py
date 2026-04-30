@@ -6,7 +6,7 @@
 Биллинг: span'ы с billing_pending_settlement — фоновая джоба settlement.
 """
 
-import logging
+from core.logging import get_logger
 import tiktoken
 from typing import Any, List, Optional
 
@@ -18,9 +18,7 @@ from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 # Размерности известных моделей
 MODEL_DIMENSIONS = {
     # 1536
@@ -50,7 +48,6 @@ MODEL_DIMENSIONS = {
     "qwen/qwen3-embedding-8b": 4096,
     "google/gemini-embedding-001": 768,
 }
-
 
 class EmbeddingService:
     """

@@ -8,7 +8,7 @@ from taskiq import TaskiqState
 from apps.sync.container import get_sync_container
 from core.billing import set_billing_service
 from core.config import get_settings
-from core.logging import get_logger, setup_logging
+from core.logging import get_logger
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
 from core.push.fcm_credentials import resolve_fcm_credentials
@@ -26,7 +26,7 @@ from core.websocket.manager import notification_manager
 
 logger = get_logger(__name__)
 
-broker = create_broker(queue_name="sync")
+broker = create_broker(queue_name="sync", service_name="sync_worker")
 scheduler = create_scheduler(broker)
 
 recovery_handler = create_stale_tasks_recovery(queue_name="sync")
@@ -34,7 +34,6 @@ broker.on_event("startup")(recovery_handler)
 
 
 async def sync_worker_startup(state: TaskiqState) -> None:
-    setup_logging(service_name="sync_worker")
     settings = get_settings()
     container = get_sync_container()
     state.container = container
@@ -48,7 +47,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
                 )
             set_tracing_service_name("sync_worker")
             set_span_repository(container.span_repository)
-        logger.info("Sync Worker: трейсинг инициализирован")
+        logger.info("worker.tracing_initialized", service="sync_worker")
     await notification_manager.start_redis_listener(settings.database.redis_url)
     if settings.push.enabled:
         init_web_push_service(
@@ -56,7 +55,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
             vapid_public_key=settings.push.vapid_public_key or "",
             vapid_email=settings.push.vapid_email,
         )
-        logger.info("Sync Worker: WebPushService инициализирован")
+        logger.info("worker.web_push_initialized", service="sync_worker")
     apns = resolve_apns_credentials(settings)
     if apns:
         init_apns_push_service(
@@ -66,7 +65,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
             bundle_id=apns.bundle_id,
             use_sandbox=apns.use_sandbox,
         )
-        logger.info("Sync Worker: ApnsPushService инициализирован")
+        logger.info("worker.apns_initialized", service="sync_worker")
     fcm = resolve_fcm_credentials(settings)
     if fcm:
         init_fcm_push_service(
@@ -75,15 +74,24 @@ async def sync_worker_startup(state: TaskiqState) -> None:
             private_key_pem=fcm.private_key_pem,
             token_uri=fcm.token_uri,
         )
-        logger.info("Sync Worker: FcmPushService инициализирован project_id=%s", fcm.project_id)
-    logger.info("Sync Worker: запуск")
+        logger.info(
+            "worker.fcm_initialized",
+            service="sync_worker",
+            project_id=fcm.project_id,
+        )
+    logger.info("worker.starting", service="sync_worker")
 
 
 async def sync_worker_shutdown(state: TaskiqState) -> None:
     await notification_manager.stop_redis_listener()
-    logger.info("Sync Worker: остановка")
+    logger.info("worker.stopping", service="sync_worker")
 
 
-register_worker_events(broker, sync_worker_startup, sync_worker_shutdown)
+register_worker_events(
+    broker,
+    sync_worker_startup,
+    sync_worker_shutdown,
+    service_name="sync_worker",
+)
 
-logger.info("Sync realtime broker создан (queue='sync')")
+logger.info("worker.broker_created", queue="sync")

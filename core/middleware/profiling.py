@@ -2,7 +2,7 @@
 Middleware для профилирования запросов
 """
 
-import logging
+from core.logging import get_logger
 import time
 import cProfile
 import pstats
@@ -12,11 +12,9 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextvars import ContextVar
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 profiling_enabled: ContextVar[bool] = ContextVar("profiling_enabled", default=False)
 profiler_output: ContextVar[Optional[str]] = ContextVar("profiler_output", default=None)
-
 
 class ProfilingMiddleware(BaseHTTPMiddleware):
     """Middleware для профилирования запросов"""
@@ -75,13 +73,17 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
             # Логируем медленные запросы
             if self.log_slow_requests and process_time > self.slow_threshold_ms:
                 logger.warning(
-                    f"⚠️ МЕДЛЕННЫЙ ЗАПРОС: {request.method} {request.url.path} "
-                    f"[{process_time:.2f}ms]"
+                    "profiling.slow_request",
+                    http_method=request.method,
+                    http_path=request.url.path,
+                    duration_ms=round(process_time, 2),
                 )
             elif request.url.path.startswith("/frontend/"):
-                # Логируем все frontend запросы с временем
                 logger.info(
-                    f"📊 {request.method} {request.url.path} [{process_time:.2f}ms]"
+                    "profiling.frontend_request",
+                    http_method=request.method,
+                    http_path=request.url.path,
+                    duration_ms=round(process_time, 2),
                 )
             
             return response

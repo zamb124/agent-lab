@@ -1,7 +1,8 @@
 """
 API для управления компаниями
 """
-import logging
+
+from core.logging import get_logger
 import uuid
 from typing import Any
 from fastapi import APIRouter, HTTPException, Request
@@ -17,24 +18,19 @@ from core.config import get_settings
 from core.pagination import ListResponse
 from core.api.companies import build_my_companies_response
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/companies", tags=["public", "companies"])
-
 
 class CheckSlugRequest(BaseModel):
     slug: str
-
 
 class CheckSlugResponse(BaseModel):
     available: bool
     slug: str
 
-
 class CreateCompanyRequest(BaseModel):
     name: str
     slug: str
-
 
 class CreateCompanyResponse(BaseModel):
     company_id: str
@@ -42,24 +38,19 @@ class CreateCompanyResponse(BaseModel):
     subdomain: str
     redirect_url: str
 
-
 class SystemAccessRequest(BaseModel):
     role: str
 
-
 _SYSTEM_ASSIGNABLE_ROLES: tuple[str, ...] = ("admin", "developer", "viewer")
-
 
 def _require_authenticated_user(request: Request) -> User:
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
     return request.state.user
 
-
 def _ensure_user_is_system_member(user: User) -> None:
     if SYSTEM_COMPANY_ID not in user.companies:
         raise HTTPException(status_code=403, detail="Доступно только для участников компании system")
-
 
 @router.post("/check-slug", response_model=CheckSlugResponse)
 async def check_slug(request: CheckSlugRequest, container: ContainerDep):
@@ -86,7 +77,6 @@ async def check_slug(request: CheckSlugRequest, container: ContainerDep):
         available=company_id is None,
         slug=slug
     )
-
 
 @router.post("", response_model=CreateCompanyResponse)
 async def create_company(
@@ -130,7 +120,13 @@ async def create_company(
         raise HTTPException(status_code=400, detail="Этот адрес уже занят")
     
     company_id = str(uuid.uuid4())
-    logger.info(f"🆕 Создание компании: name={name}, slug={slug}, company_id={company_id}, owner={user.user_id}")
+    logger.info(
+        "frontend.company_create_started",
+        name=name,
+        slug=slug,
+        company_id=company_id,
+        owner_user_id=user.user_id,
+    )
     
     company = Company(
         company_id=company_id,
@@ -142,20 +138,36 @@ async def create_company(
     )
 
     await company_repo.set(company)
-    logger.info(f"✅ Создана компания {company.company_id} (subdomain: {slug})")
+    logger.info(
+        "frontend.company_created",
+        company_id=company.company_id,
+        company_subdomain=slug,
+    )
     
     await subdomain_repo.set_mapping(slug, company.company_id)
-    logger.info(f"✅ Зарегистрирован subdomain {slug} → {company.company_id}")
+    logger.info(
+        "frontend.subdomain_registered",
+        company_subdomain=slug,
+        company_id=company.company_id,
+    )
     
     # Проверяем что маппинг сохранился
     check_company_id = await subdomain_repo.get_company_id(slug)
-    logger.info(f"🔍 Проверка маппинга: subdomain '{slug}' → company_id '{check_company_id}'")
+    logger.info(
+        "frontend.subdomain_mapping_checked",
+        company_subdomain=slug,
+        company_id=check_company_id,
+    )
     
     if company.company_id not in user.companies:
         user.companies[company.company_id] = ["owner"]  # Список ролей, а не строка!
         user.active_company_id = company.company_id
         await user_repo.set(user)
-        logger.info(f"✅ Пользователь {user.user_id} добавлен в компанию {company.company_id} как owner")
+        logger.info(
+            "frontend.company_owner_added",
+            user_id=user.user_id,
+            company_id=company.company_id,
+        )
     
     # Инициализировать агенты и тулы для новой компании
     try:
@@ -199,7 +211,11 @@ async def create_company(
             }
         )
         space_id = space_response["id"]
-        logger.info(f"✅ Создано пространство {space_id} для компании {company_id}")
+        logger.info(
+            "frontend.space_created",
+            space_id=space_id,
+            company_id=company_id,
+        )
         
         # Создаем канал с названием компании в этом пространстве
         channel_response = await service_client.post(
@@ -217,7 +233,12 @@ async def create_company(
             }
         )
         channel_id = channel_response["id"]
-        logger.info(f"✅ Создан канал {channel_id} в пространстве {space_id} для компании {company_id}")
+        logger.info(
+            "frontend.channel_created",
+            channel_id=channel_id,
+            space_id=space_id,
+            company_id=company_id,
+        )
         
     except Exception as e:
         logger.error(
@@ -231,12 +252,12 @@ async def create_company(
         "/dashboard",
         slug
     )
-    logger.info(f"🔗 Redirect URL: {redirect_url}")
+    logger.info("frontend.company_create_redirect", redirect_url=redirect_url)
     
     # Перевыпускаем токен с company_id
     token_service = get_token_service()
     new_token = token_service.create_token(user.user_id, company.company_id)
-    logger.info(f"🔑 Перевыпущен токен с company_id={company.company_id}")
+    logger.info("frontend.session_token_reissued", company_id=company.company_id)
     
     # Обновляем cookie
     cookie_domain = get_cookie_domain(request.headers.get("host", ""))
@@ -260,7 +281,6 @@ async def create_company(
     )
     
     return response
-
 
 @router.get("/me", response_model=ListResponse[dict])
 async def get_my_companies(request: Request, container: ContainerDep) -> ListResponse[dict]:
@@ -286,7 +306,6 @@ async def get_my_companies(request: Request, container: ContainerDep) -> ListRes
         user=user,
         company_repository=container.company_repository,
     )
-
 
 @router.post("/{company_id}/system-access")
 async def enter_company_as_system_member(
@@ -336,7 +355,6 @@ async def enter_company_as_system_member(
         "company_id": target_company_id,
         "roles": user.companies[target_company_id],
     }
-
 
 @router.delete("/{company_id}/system-access")
 async def leave_company_as_system_member(

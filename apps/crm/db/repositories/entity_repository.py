@@ -7,7 +7,8 @@
 
 import base64
 import json
-import logging
+
+from core.logging import get_logger
 from datetime import date, datetime, timezone
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
 
@@ -34,9 +35,7 @@ from core.rag import RAGRepository
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class EntityRepository(BaseCRMRepository[CRMEntity]):
     """
     Репозиторий для CRM entities.

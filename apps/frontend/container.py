@@ -1,14 +1,13 @@
 """
 Dependency Injection контейнер для Frontend
 """
-import logging
+
+from core.logging import get_logger
 from typing import Optional
 from core.container import BaseContainer, lazy
 from core.identity.auth_service import AuthService
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class FrontendContainer(BaseContainer):
     """Контейнер зависимостей для Frontend"""
     
@@ -63,12 +62,9 @@ class FrontendContainer(BaseContainer):
         from core.payments import PaymentService
         return PaymentService(company_repository=self.company_repository)
 
-
-
 # === Глобальный контейнер ===
 
 _frontend_container: Optional[FrontendContainer] = None
-
 
 def get_frontend_container() -> FrontendContainer:
     """Получает контейнер (создает при первом вызове)"""
@@ -87,18 +83,15 @@ def get_frontend_container() -> FrontendContainer:
         logger.info("FrontendContainer инициализирован")
     return _frontend_container
 
-
 def set_frontend_container(container: FrontendContainer):
     """Устанавливает контейнер (для тестов)"""
     global _frontend_container
     _frontend_container = container
 
-
 def reset_frontend_container():
     """Сбрасывает контейнер (для тестов)"""
     global _frontend_container
     _frontend_container = None
-
 
 # Алиас для совместимости
 get_container = get_frontend_container

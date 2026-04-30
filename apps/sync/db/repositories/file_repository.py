@@ -1,14 +1,12 @@
 """Репозиторий для работы с файлами (SQLAlchemy)."""
 
-import logging
+from core.logging import get_logger
 from typing import Type
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncFile
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class SyncFileRepository(BaseSyncRepository[SyncFile]):
     """Репозиторий для SyncFile-записей с изоляцией по company_id."""
 

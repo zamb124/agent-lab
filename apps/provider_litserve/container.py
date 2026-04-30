@@ -4,20 +4,16 @@ DI-контейнер provider_litserve.
 
 from __future__ import annotations
 
-import logging
+from core.logging import get_logger
 from typing import Optional
 
 from core.container import BaseContainer
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class ProviderLitserveContainer(BaseContainer):
     """Контейнер зависимостей для HTTP-обвязки provider_litserve."""
 
-
 _provider_litserve_container: Optional[ProviderLitserveContainer] = None
-
 
 def get_provider_litserve_container() -> ProviderLitserveContainer:
     global _provider_litserve_container
@@ -34,15 +30,12 @@ def get_provider_litserve_container() -> ProviderLitserveContainer:
         logger.info("ProviderLitserveContainer инициализирован")
     return _provider_litserve_container
 
-
 def set_provider_litserve_container(container: ProviderLitserveContainer) -> None:
     global _provider_litserve_container
     _provider_litserve_container = container
 
-
 def reset_provider_litserve_container() -> None:
     global _provider_litserve_container
     _provider_litserve_container = None
-
 
 get_container = get_provider_litserve_container

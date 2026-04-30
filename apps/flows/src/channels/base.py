@@ -397,7 +397,7 @@ class BaseChannel(ABC):
         from core.config import get_settings
         
         broker_url = get_settings().tasks.broker_url
-        logger.info(f"[create_task] 🔧 TaskIQ broker URL: {broker_url}")
+        logger.info("flow.create_task.broker", broker_url=broker_url)
         logger.debug(f"[create_task] Kicking task_id={params.task_id} for flow_id={self.flow_id}")
         await process_flow_task.kiq(
             flow_id=self.flow_id,

@@ -1,20 +1,18 @@
 """
 API для настроек компании
 """
-import logging
 
+from core.logging import get_logger
 from fastapi import APIRouter, HTTPException, Request
 
 from core.config import get_settings
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import CompanySettingsUpdate
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 _RAG_EMBEDDING_OVERRIDE_KEY = "rag_embedding_override"
 _RAG_EMBEDDING_ALLOWED_PROVIDERS = {"openrouter", "provider_litserve"}
-
 
 @router.get("/company")
 async def get_company_settings(request: Request, container: ContainerDep):
@@ -63,7 +61,6 @@ async def get_company_settings(request: Request, container: ContainerDep):
             "model": effective_model,
         },
     }
-
 
 @router.patch("/company")
 async def update_company_settings(

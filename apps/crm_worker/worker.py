@@ -8,8 +8,12 @@ from core.config import set_settings
 from core.config.loader import load_merged_config
 
 from apps.crm.config import CRMSettings
+from core.tasks.logging_init import setup_worker_logging_early
 
-set_settings(CRMSettings(**load_merged_config(service_name="crm")))
+_merged_crm = load_merged_config(service_name="crm", silent=True)
+_crm_worker_settings = CRMSettings(**_merged_crm)
+setup_worker_logging_early("crm_worker", logging_config=_crm_worker_settings.logging)
+set_settings(_crm_worker_settings)
 
 from apps.crm_worker.broker import broker as worker_app
 

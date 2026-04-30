@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import logging
+from core.logging import get_logger
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 DOCUMENTATION_DIST = "documentation-dist"
-
 
 def mount_documentation_static(
     app: FastAPI,

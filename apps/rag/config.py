@@ -30,7 +30,7 @@ def get_rag_settings() -> RAGSettings:
     """
     global _rag_settings
     if _rag_settings is None:
-        merged_config = load_merged_config(service_name="rag")
+        merged_config = load_merged_config(service_name="rag", silent=True)
         _rag_settings = RAGSettings(**merged_config)
     
     return _rag_settings

@@ -6,7 +6,8 @@
 import copy
 import json
 import uuid
-import logging
+
+from core.logging import get_logger
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
@@ -38,8 +39,7 @@ from core.billing.settlement_rules import (
     resolve_matched_rules,
 )
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 STORAGE_SETTLEMENT_RULES_JSON = "billing:settlement_rules_json"
 
 BALANCE_BLOCK_OPERATION_LLM = "llm"
@@ -56,18 +56,14 @@ _BALANCE_BLOCK_OPERATION_I18N_KEYS: dict[str, str] = {
     BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS: "billing.notifications.blocked_operation.livekit_egress",
 }
 
-
 def company_resource_prices_storage_key(company_id: str) -> str:
     return f"billing:company:{company_id}:resource_base_prices_json"
-
 
 def company_settlement_rules_storage_key(company_id: str) -> str:
     return f"billing:company:{company_id}:settlement_rules_json"
 
-
 def _settlement_rules_document_to_storage_json(doc: SettlementRulesDocument) -> str:
     return json.dumps(doc.model_dump(mode="json"), ensure_ascii=False)
-
 
 class BillingService:
     """Сервис биллинга и контроля лимитов"""

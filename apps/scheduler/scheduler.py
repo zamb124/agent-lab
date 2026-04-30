@@ -5,8 +5,10 @@
 """
 
 from apps.scheduler.config import get_scheduler_settings
+from core.logging import setup_logging
 
 settings = get_scheduler_settings()
+setup_logging(service_name="scheduler", logging_config=settings.logging)
 
 # Импорты модулей с @broker.task — регистрируют задачи на брокерах до create_scheduler и проверки.
 import apps.flows.src.tasks.flow_tasks  # noqa: F401, E402

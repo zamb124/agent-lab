@@ -9,18 +9,25 @@
 Никакой бизнес-логики; никакой кастомной формы фрейма — фронту приходит
 ровно сериализованный `UIEvent` (type/payload/meta), как в контракте
 `core/ui_events/contract.py`.
+
+Каждое доставленное событие логируется в request-лог-скоупе на основе
+``meta.request_id`` и ``meta.trace_id`` из конверта (если их нет —
+генерируется уникальный ``ui-deliver:<uuid>``), чтобы факт пуша попадал
+в общий поток событий запроса в Loki/Grafana.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from typing import Dict, Optional, Set, Tuple
 
 import redis.asyncio as aioredis
 from fastapi import WebSocket
 
-from core.logging import get_logger
+from core.config import get_settings
+from core.logging import enter_request_scope, exit_request_scope, get_logger
 from core.ui_events.dispatcher import UI_EVENTS_REDIS_CHANNEL
 
 logger = get_logger(__name__)
@@ -151,35 +158,56 @@ class NotificationManager:
         target = envelope.get("target") or {}
         event = envelope.get("event")
         if not isinstance(event, dict) or "type" not in event:
-            logger.warning("UIEvent envelope without event/type, dropped")
+            logger.warning("ui_event.envelope_invalid")
             return
+
+        meta = event.get("meta") if isinstance(event.get("meta"), dict) else {}
+        request_id = meta.get("request_id") if isinstance(meta, dict) else None
+        trace_id = meta.get("trace_id") if isinstance(meta, dict) else None
+
+        if not isinstance(request_id, str) or not request_id.strip():
+            request_id = f"ui-deliver:{uuid.uuid4().hex}"
+        if not isinstance(trace_id, str) or not trace_id.strip():
+            trace_id = f"ui-deliver:{uuid.uuid4().hex}"
+
+        settings = get_settings()
+        scope_token = enter_request_scope(
+            request_id=request_id,
+            trace_id=trace_id,
+            service_name=settings.server.name,
+            ui_event_type=event.get("type"),
+            ui_event_id=event.get("id"),
+        )
 
         event_text = json.dumps(event, ensure_ascii=False)
         user_id = target.get("user_id")
         company_id = target.get("company_id")
         broadcast = bool(target.get("broadcast"))
 
-        if user_id:
-            sockets = self._connections.get(user_id)
-            if not sockets:
+        try:
+            if user_id:
+                sockets = self._connections.get(user_id)
+                if not sockets:
+                    return
+                await self._send_event_to_sockets(sockets, event_text, f"user={user_id}")
                 return
-            await self._send_event_to_sockets(sockets, event_text, f"user={user_id}")
-            return
 
-        if company_id:
-            matched: Set[WebSocket] = set()
-            for ws, (uid, cid) in self._socket_meta.items():
-                if cid == company_id:
-                    matched.add(ws)
-            await self._send_event_to_sockets(matched, event_text, f"company={company_id}")
-            return
+            if company_id:
+                matched: Set[WebSocket] = set()
+                for ws, (uid, cid) in self._socket_meta.items():
+                    if cid == company_id:
+                        matched.add(ws)
+                await self._send_event_to_sockets(matched, event_text, f"company={company_id}")
+                return
 
-        if broadcast:
-            all_sockets: Set[WebSocket] = set(self._socket_meta.keys())
-            await self._send_event_to_sockets(all_sockets, event_text, "broadcast")
-            return
+            if broadcast:
+                all_sockets: Set[WebSocket] = set(self._socket_meta.keys())
+                await self._send_event_to_sockets(all_sockets, event_text, "broadcast")
+                return
 
-        logger.warning("UIEvent envelope without valid target, dropped")
+            logger.warning("ui_event.target_invalid")
+        finally:
+            exit_request_scope(scope_token)
 
     async def start_redis_listener(self, redis_url: str) -> None:
         if self._redis_task is not None:

@@ -7,7 +7,8 @@ https://humanitec.ru/api/v1/payments/webhook/yoomoney_main
 YooMoney отправляет POST application/x-www-form-urlencoded,
 ожидает HTTP 200 OK в ответ.
 """
-import logging
+
+from core.logging import get_logger
 from typing import Optional
 
 from fastapi import APIRouter, Form, HTTPException, Response
@@ -15,10 +16,8 @@ from fastapi import APIRouter, Form, HTTPException, Response
 from apps.frontend.dependencies import ContainerDep
 from core.clients.payment import PaymentProviderFactory
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/payments", tags=["payments-webhook"])
-
 
 @router.post("/webhook/{provider_name}")
 async def payment_webhook(

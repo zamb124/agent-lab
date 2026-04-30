@@ -8,7 +8,8 @@ namespace_integration_job.
 from __future__ import annotations
 
 import hashlib
-import logging
+
+from core.logging import get_logger
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
@@ -31,15 +32,13 @@ from apps.crm.services.knowledge_import_text_redis import (
 from core.context import get_context
 from core.utils.knowledge_text_split import validate_chunk_max_chars
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 MAX_SOURCE_TEXT_INLINE_CHARS = 100_000
 MAX_SOURCE_FILES_PER_IMPORT = 80
 ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 
 KnowledgeImportMode = Literal["notes_only", "graph"]
 NamespaceIntegrationJobKind = Literal["entities", "custom_fields"]
-
 
 class ActiveTaskExistsError(ValueError):
     """Бросается при попытке стартовать задачу, для которой уже есть активная (pending/running)."""
@@ -58,7 +57,6 @@ class ActiveTaskExistsError(ValueError):
         self.task_type = task_type
         self.existing_task_id = existing_task_id
         self.dedup = dict(dedup) if dedup else {}
-
 
 def _normalize_import_file_ids(
     source_file_id: Optional[str],
@@ -82,7 +80,6 @@ def _normalize_import_file_ids(
             seen.add(s)
             out.append(s)
     return out
-
 
 class TaskService:
     def __init__(

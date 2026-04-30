@@ -2,7 +2,8 @@
 Заявки с лендинга: запись в shared storage (ключи company:system:request:*).
 """
 import json
-import logging
+
+from core.logging import get_logger
 import re
 import uuid
 from datetime import datetime, timezone
@@ -14,13 +15,11 @@ from pydantic import BaseModel, field_validator, model_validator
 from apps.frontend.dependencies import ContainerDep
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 REQUEST_STORAGE_PREFIX = f"company:{SYSTEM_COMPANY_ID}:request:"
 
 leads_router = APIRouter(prefix="/api/leads", tags=["leads"])
 lead_requests_router = APIRouter(prefix="/api/lead-requests", tags=["lead-requests"])
-
 
 class LeadCreateBody(BaseModel):
     name: str
@@ -54,7 +53,6 @@ class LeadCreateBody(BaseModel):
             raise ValueError("Укажите email или телефон")
         return self
 
-
 @leads_router.post("")
 async def create_lead(body: LeadCreateBody, container: ContainerDep):
     rid = str(uuid.uuid4())
@@ -77,7 +75,6 @@ async def create_lead(body: LeadCreateBody, container: ContainerDep):
         "message": "Заявка принята. Мы свяжемся с вами в ближайшее время.",
         "id": rid,
     }
-
 
 @lead_requests_router.get("")
 async def list_lead_requests(request: Request, container: ContainerDep):

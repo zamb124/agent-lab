@@ -5,7 +5,7 @@
 с автоматической изоляцией по company_id из контекста.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Generic, TypeVar, Optional, List, Type
 from abc import ABC, abstractmethod
 
@@ -15,10 +15,8 @@ from sqlalchemy.orm import DeclarativeBase
 
 from core.context import get_context
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 T = TypeVar('T', bound=DeclarativeBase)
-
 
 class SyncDatabase:
     """
@@ -63,7 +61,6 @@ class SyncDatabase:
     def session(self) -> AsyncSession:
         """Создает новую сессию"""
         return self._session_factory()
-
 
 class BaseSyncRepository(ABC, Generic[T]):
     """
@@ -182,7 +179,6 @@ class BaseSyncRepository(ABC, Generic[T]):
                 stmt = stmt.where(company_col == cid)
             result = await session.execute(stmt)
             return result.scalar() or 0
-
 
 def get_sync_db() -> SyncDatabase:
     """Получает singleton Sync database"""

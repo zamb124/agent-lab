@@ -95,7 +95,7 @@ def get_crm_settings() -> CRMSettings:
         from core.config import set_settings as core_set_settings
         from core.config.loader import load_merged_config
 
-        merged_config = load_merged_config(service_name="crm")
+        merged_config = load_merged_config(service_name="crm", silent=True)
         _crm_settings = CRMSettings(**merged_config)
         core_set_settings(_crm_settings)
     

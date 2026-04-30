@@ -8,7 +8,7 @@ RAG Repository: in-process ``BaseRAGProvider`` и опционально HTTP-п
 
 from __future__ import annotations
 
-import logging
+from core.logging import get_logger
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlencode
 
@@ -20,17 +20,14 @@ from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
 from core.rag.rag_resource_bind import RagResourceBindParams
 from core.rag.rag_worker_tasks_port import RagWorkerTasksPort
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 COMPANY_ID_HEADER = "X-Company-Id"
 _SEARCH_REQUEST_OPTION_KEYS = frozenset({"channels", "rrf_k", "per_channel_top_k", "rerank"})
-
 
 def _filter_search_options(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not raw:
         return {}
     return {k: v for k, v in raw.items() if k in _SEARCH_REQUEST_OPTION_KEYS}
-
 
 def _merge_search_options(
     bind_opts: Optional[Dict[str, Any]],
@@ -40,7 +37,6 @@ def _merge_search_options(
     merged.update(_filter_search_options(bind_opts))
     merged.update(_filter_search_options(call_opts))
     return merged if merged else None
-
 
 class RAGRepository:
     """

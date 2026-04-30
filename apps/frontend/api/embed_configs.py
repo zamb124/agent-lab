@@ -2,7 +2,7 @@
 API для управления конфигурациями встраиваемых виджетов.
 """
 
-import logging
+from core.logging import get_logger
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -16,10 +16,8 @@ from core.utils.tokens import get_token_service
 from apps.frontend.dependencies import ContainerDep
 from core.clients.service_client import ServiceClientError
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
-
 
 class CreateEmbedConfigRequest(BaseModel):
     """Запрос на создание конфигурации виджета"""
@@ -39,7 +37,6 @@ class CreateEmbedConfigRequest(BaseModel):
     placeholder: str = Field(default="Введите сообщение...", description="Placeholder")
     branding: bool = Field(default=True, description="Показывать брендинг")
 
-
 class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
     name: Optional[str] = None
@@ -58,7 +55,6 @@ class UpdateEmbedConfigRequest(BaseModel):
     interface_locale: Optional[str] = None
     placeholder: Optional[str] = None
     branding: Optional[bool] = None
-
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -85,7 +81,6 @@ class EmbedConfigResponse(BaseModel):
     created_by: str
     updated_at: datetime
 
-
 class EmbedCodeResponse(BaseModel):
     """Код для встраивания виджета"""
     html_code: str
@@ -93,11 +88,9 @@ class EmbedCodeResponse(BaseModel):
     embed_id: str
     token_endpoint: str
 
-
 class EmbedSessionTokenRequest(BaseModel):
     origin: Optional[str] = Field(default=None, description="Origin внешнего сайта")
     expires_in_seconds: int = Field(default=300, ge=60, le=900, description="TTL токена в секундах")
-
 
 class EmbedSessionTokenResponse(BaseModel):
     token: str
@@ -106,13 +99,11 @@ class EmbedSessionTokenResponse(BaseModel):
     flow_id: str
     skill_id: str
 
-
 def _normalize_interface_locale(value: str) -> str:
     normalized = str(value).strip().lower()
     if normalized not in {"auto", "ru", "en"}:
         raise HTTPException(status_code=400, detail="interface_locale должен быть auto, ru или en")
     return normalized
-
 
 @router.post("", response_model=EmbedConfigResponse)
 async def create_embed_config(
@@ -231,7 +222,6 @@ async def create_embed_config(
         updated_at=config.updated_at,
     )
 
-
 @router.get("", response_model=OffsetPage[EmbedConfigResponse])
 async def list_embed_configs(
     request: Request,
@@ -287,7 +277,6 @@ async def list_embed_configs(
     ]
     return OffsetPage[EmbedConfigResponse](items=items, total=len(items), limit=limit, offset=offset)
 
-
 @router.get("/{embed_id}", response_model=EmbedConfigResponse)
 async def get_embed_config(
     embed_id: str,
@@ -328,7 +317,6 @@ async def get_embed_config(
         created_by=config.created_by,
         updated_at=config.updated_at,
     )
-
 
 @router.patch("/{embed_id}", response_model=EmbedConfigResponse)
 async def update_embed_config(
@@ -386,7 +374,6 @@ async def update_embed_config(
         updated_at=config.updated_at,
     )
 
-
 @router.delete("/{embed_id}")
 async def delete_embed_config(
     embed_id: str,
@@ -419,7 +406,6 @@ async def delete_embed_config(
     logger.info(f"Удалена конфигурация виджета {embed_id}")
     
     return {"success": True, "message": "Конфигурация успешно удалена"}
-
 
 @router.get("/{embed_id}/code", response_model=EmbedCodeResponse)
 async def get_embed_code(
@@ -569,7 +555,6 @@ async def get_embed_code(
         embed_id=embed_id,
         token_endpoint=token_endpoint,
     )
-
 
 @router.post("/{embed_id}/session-token", response_model=EmbedSessionTokenResponse)
 async def issue_embed_session_token(

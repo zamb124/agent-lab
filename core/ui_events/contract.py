@@ -53,6 +53,10 @@ class UIEventMeta(BaseModel):
     causation_id: Optional[str] = None
     correlation_id: Optional[str] = None
     trace_id: Optional[str] = None
+    request_id: Optional[str] = Field(
+        default=None,
+        description="E2E request_id запроса-инициатора UI-события (HTTP/WS/TaskIQ).",
+    )
 
 
 class UIEvent(BaseModel):

@@ -7,7 +7,7 @@ HTTP прокси для удаленных репозиториев.
 ЛЮБОЙ метод репозитория автоматически проксируется через HTTP.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Generic, TypeVar, Type, Any, Callable
 
 from pydantic import BaseModel
@@ -15,10 +15,8 @@ from pydantic import BaseModel
 from core.context import get_context
 from core.http import get_httpx_client
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 T = TypeVar('T', bound=BaseModel)
-
 
 class HTTPRepositoryProxy(Generic[T]):
     """

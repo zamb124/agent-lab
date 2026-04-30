@@ -14,18 +14,17 @@
 from __future__ import annotations
 
 import datetime
-import logging
+
+from core.logging import get_logger
 import ssl
 from email.utils import parsedate_to_datetime
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 _clock_patch_applied: bool = False
 _original_get_current_datetime: Optional[object] = None
-
 
 def _read_date_header(req: Request) -> Optional[str]:
     ctx = ssl.create_default_context()
@@ -36,7 +35,6 @@ def _read_date_header(req: Request) -> Optional[str]:
         return exc.headers.get("Date")
     except (URLError, OSError, TimeoutError):
         return None
-
 
 def _http_date_for_endpoint(base_url: str) -> Optional[str]:
     b = base_url.strip().rstrip("/")
@@ -50,7 +48,6 @@ def _http_date_for_endpoint(base_url: str) -> Optional[str]:
         if date_hdr:
             return date_hdr
     return None
-
 
 def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
     global _clock_patch_applied, _original_get_current_datetime
@@ -92,7 +89,6 @@ def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
         "SigV4: сдвиг времени относительно HTTP Date S3 endpoint: %s",
         offset,
     )
-
 
 def ensure_sigv4_clock_aligned_with_endpoint(endpoint_url: str | None) -> None:
     """

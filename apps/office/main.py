@@ -2,7 +2,7 @@
 Документы OnlyOffice — BFF и Lit UI (процесс office, публичный путь /documents).
 """
 
-import logging
+from core.logging import get_logger
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -17,12 +17,9 @@ from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from apps.office.config import get_office_settings
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 def _api_routers():
     return [bff_router]
-
 
 app = create_service_app(
     service_name="office",
@@ -51,13 +48,11 @@ if office_ui_path.exists():
     )
     logger.info("Documents UI: %s", office_ui_path)
 
-
 @app.get("/documents/health")
 async def documents_health(container: ContainerDep):
     """Тот же JSON, что /health и /office/health; публичный префикс UI — /documents."""
     _ = container
     return build_health_payload(get_office_settings())
-
 
 @app.get("/documents")
 @app.get("/documents/")
@@ -75,7 +70,6 @@ async def serve_documents_ui(container: ContainerDep, path: str = "") -> FileRes
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="Documents UI not found")
     return FileResponse(index_file)
-
 
 if __name__ == "__main__":
     import uvicorn

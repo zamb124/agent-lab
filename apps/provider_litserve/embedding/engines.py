@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+from core.logging import get_logger
 import time
 from typing import Any
 
@@ -18,9 +18,7 @@ from apps.provider_litserve.openai_server_contracts import (
 )
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 def parse_embedding_body(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise HTTPException(status_code=422, detail="Тело запроса: ожидается JSON-объект")
@@ -29,7 +27,6 @@ def parse_embedding_body(raw: Any) -> dict[str, Any]:
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
     return {"model": b.model, "input": b.input}
-
 
 class LocalEmbeddingEngine:
     """SentenceTransformer; ответ совпадает с тем, что парсит ``EmbeddingService``."""

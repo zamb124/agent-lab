@@ -21,7 +21,6 @@
     )
 """
 
-import logging
 import os
 from pathlib import Path
 from typing import Type, Callable, List, Optional, Any, Tuple
@@ -40,7 +39,12 @@ from pydantic_settings import BaseSettings as PydanticBaseSettings
 from core.config.loader import get_project_root, load_merged_config
 from core.config import set_settings
 from core.app.health_payload import build_health_payload
-from core.logging import setup_logging
+from core.logging import (
+    SystemLogScope,
+    get_logger,
+    setup_logging,
+)
+from core.middleware.access_log import AccessLogMiddleware
 from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
 from core.middleware.dev_inter_service_proxy import (
@@ -65,7 +69,7 @@ from core.push.service import init_web_push_service
 from core.app.pwa_routes import register_platform_pwa_routes
 from core.app.i18n_routes import register_platform_i18n_routes
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def load_service_settings(
@@ -73,18 +77,20 @@ def load_service_settings(
     settings_class: Type[PydanticBaseSettings]
 ) -> Tuple[Any, Path]:
     """
-    Загружает настройки сервиса.
-    
+    Загружает настройки сервиса (merge без логов до setup_logging).
+
+    Вызов set_settings(settings) — ответственность create_service_app после
+    setup_logging.
+
     Returns:
         (settings, project_root)
     """
     project_root = get_project_root()
 
-    merged_config = load_merged_config(service_name=service_name)
-    
+    merged_config = load_merged_config(service_name=service_name, silent=True)
+
     settings = settings_class(**merged_config)
-    set_settings(settings)
-    
+
     return settings, project_root
 
 
@@ -146,19 +152,27 @@ def create_service_app(
         Настроенное FastAPI приложение
     """
     
-    # Загрузка конфигурации
+    # Загрузка конфигурации (silent: без записей до setup_logging)
     settings, project_root = load_service_settings(service_name, settings_class)
-    
-    # Настройка логирования
+
+    # Настройка логирования и публикация settings в глобальный синглтон
     setup_logging(service_name, settings.logging)
-    
+    set_settings(settings)
+
     # Получение контейнера
     container = get_container()
     
-    # Lifespan
+    # Lifespan: системный скоуп — нет request_id/user_id, но нужен canonical service.name
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        logger.info(f"Запуск {service_name} Service...")
+        async with SystemLogScope(lifecycle_phase="startup"):
+            await _run_startup(app)
+            yield
+        async with SystemLogScope(lifecycle_phase="shutdown"):
+            await _run_shutdown(app)
+
+    async def _run_startup(app: FastAPI) -> None:
+        logger.info("service.starting", service=service_name)
         
         # Инициализация трейсинга
         if settings.tracing.enabled:
@@ -221,16 +235,14 @@ def create_service_app(
         if on_startup:
             await on_startup(app, container, settings)
         
-        logger.info(f"{service_name} Service запущен")
-        
-        yield
-        
-        logger.info(f"Остановка {service_name} Service...")
-        
-        # Кастомный shutdown
+        logger.info("service.started", service=service_name)
+
+    async def _run_shutdown(app: FastAPI) -> None:
+        logger.info("service.stopping", service=service_name)
+
         if on_shutdown:
             await on_shutdown(app, container)
-        
+
         # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
         # stop_redis_listener обнуляет глобальный клиент и ломает notify_user в чужих тестах.
         if not is_testing():
@@ -261,6 +273,27 @@ def create_service_app(
             status_code=403,
             content={"detail": str(exc), "code": "billing_balance_blocked"},
         )
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        """
+        Гарантирует одну structured-запись на каждое необработанное исключение.
+
+        Не глотает: после логирования возвращает 500 JSON. Текст исключения
+        в ответе скрыт — реальные детали ищите в логах по trace_id/request_id.
+        """
+        logger.exception(
+            "http_unhandled_exception",
+            **{
+                "exception.type": type(exc).__name__,
+                "http.path": request.url.path,
+                "http.method": request.method,
+            },
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error", "code": "internal_error"},
+        )
     
     # Дополнительные атрибуты state
     if extra_state:
@@ -283,10 +316,14 @@ def create_service_app(
         ProxyHeadersMiddleware,
         trusted_hosts=["*"]
     )
-    
-    # Auth middleware
+
+    # Auth middleware (внутренний слой: bind user/company/session, set_context)
     if include_auth_middleware:
         app.add_middleware(AuthMiddleware)
+
+    # Access log (внешний слой: вход в request-скоуп — request_id/trace_id;
+    # видит финальный status_code и duration_ms; снимает скоуп в finally).
+    app.add_middleware(AccessLogMiddleware, service_name=service_name)
     
     # Дополнительные middleware
     if extra_middlewares:
@@ -311,7 +348,7 @@ def create_service_app(
         api_prefix = f"/{url_route_segment}/api/{api_version}"
     else:
         api_prefix = f"/{url_route_segment}"
-    logger.info(f"API prefix: {api_prefix}")
+    logger.info("service.api_prefix", api_prefix=api_prefix)
     
     # Инициализация репозиториев для CRUD роутеров
     if repository_names:
@@ -321,7 +358,7 @@ def create_service_app(
     # CRUD роутеры
     if include_crud_routers:
         crud_routers = container.get_crud_routers()
-        logger.info(f"Найдено {len(crud_routers)} CRUD роутеров")
+        logger.info("service.crud_routers_loaded", count=len(crud_routers))
         for router in crud_routers:
             app.include_router(router, prefix=api_prefix)
     
@@ -340,50 +377,44 @@ def create_service_app(
         service_api_prefix=files_api_prefix,
     )
     app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
-    logger.info(f"Файловый роутер подключён: {files_api_prefix}/files")
+    logger.info("service.router_attached", router="files", prefix=f"{files_api_prefix}/files")
 
     public_segment = url_route_segment
 
-    # Core auth роутер (автоматически для всех сервисов)
     auth_prefix = f"/{public_segment}/api/auth"
-    logger.info(f"Подключение core auth роутера ({auth_prefix}/*)")
+    logger.info("service.router_attached", router="core_auth", prefix=auth_prefix)
     app.include_router(core_auth_router, prefix=auth_prefix, tags=["auth"])
     if service_name == "frontend":
-        logger.info("Подключение core auth роутера (/auth/*) для единого OAuth callback")
+        logger.info("service.router_attached", router="core_auth_oauth", prefix="/auth")
         app.include_router(core_auth_router, prefix="/auth", tags=["auth"])
 
     calendar_prefix = f"/{public_segment}/api/calendar"
-    logger.info(f"Подключение core calendar роутера ({calendar_prefix}/*)")
+    logger.info("service.router_attached", router="core_calendar", prefix=calendar_prefix)
     app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
 
     integrations_prefix = f"/{public_segment}"
-    logger.info("Подключение core integrations роутера (/api/v1/integrations/*)")
+    logger.info("service.router_attached", router="core_integrations", prefix=integrations_prefix)
     app.include_router(core_integrations_router, prefix=integrations_prefix, tags=["integrations"])
 
     team_prefix = f"/{public_segment}/api/team"
-    logger.info(f"Подключение core team роутера ({team_prefix}/*)")
+    logger.info("service.router_attached", router="core_team", prefix=team_prefix)
     app.include_router(core_team_router, prefix=team_prefix, tags=["team"])
 
-    # Core companies роутер (автоматически для всех сервисов)
     if service_name == "frontend":
         companies_prefix = "/frontend/api/companies"
     else:
         companies_prefix = f"/{public_segment}/api/companies"
-    logger.info(f"Подключение core companies роутер ({companies_prefix}/*)")
+    logger.info("service.router_attached", router="core_companies", prefix=companies_prefix)
     app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
-    
-    # Push notifications роутер (автоматически для всех сервисов)
+
     push_prefix = f"/{public_segment}"
-    logger.info(f"Подключение push роутера ({push_prefix}/api/push/*)")
+    logger.info("service.router_attached", router="push", prefix=f"{push_prefix}/api/push")
     app.include_router(push_router, prefix=push_prefix, tags=["push"])
-    
-    # WebSocket роутер для уведомлений (автоматически для всех сервисов).
-    # Монтируем с префиксом /<service>/api — каноничный путь
-    # `/<svc>/api/ws/notifications` (см. `architecture.mdc`, раздел про
-    # «REST-зеркало команд» и единый WS).
+
+    # WebSocket роутер для уведомлений (`/<svc>/api/ws/notifications`).
     ws_prefix = f"/{public_segment}/api" if service_name != "core" else ""
     ws_path = f"{ws_prefix}/ws/notifications" if service_name != "core" else "/ws/notifications"
-    logger.info(f"Подключение WebSocket роутера для уведомлений ({ws_path})")
+    logger.info("service.router_attached", router="ws_notifications", path=ws_path)
     app.include_router(ws_router, prefix=ws_prefix, tags=["websocket"])
     
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
@@ -511,10 +542,14 @@ def create_service_app(
 </body>
 </html>"""
         
-        logger.info(f"✅ Test endpoint enabled: /{service_name}/test (TESTING mode)")
+        logger.info(
+            "service.test_endpoint_enabled",
+            service=service_name,
+            path=f"/{service_name}/test",
+        )
 
     app.add_middleware(CORSMiddleware, **_cors_kw)
 
-    logger.info(f"{service_name} Service создан")
+    logger.info("service.created", service=service_name)
 
     return app

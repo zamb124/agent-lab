@@ -1,24 +1,22 @@
 """Скачивание аудио с YouTube и других видеоплатформ через yt-dlp."""
 
 import asyncio
-import logging
+
+from core.logging import get_logger
 import re
 import tempfile
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 _YOUTUBE_URL_PATTERN = re.compile(
     r"(https?://)?(www\.)?"
     r"(youtube\.com/(watch\?v=|shorts/|embed/|v/)|youtu\.be/|"
     r"music\.youtube\.com/watch\?v=)"
 )
 
-
 def is_youtube_url(url: str) -> bool:
     """Проверяет, является ли URL ссылкой на YouTube."""
     return bool(_YOUTUBE_URL_PATTERN.search(url))
-
 
 def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
     """Синхронно скачивает аудио через yt-dlp в указанную директорию."""
@@ -64,7 +62,6 @@ def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
     file_name = f"{safe_title}.mp3"
     return audio_bytes, file_name, "audio/mpeg"
 
-
 async def download_audio_from_url(*, url: str) -> tuple[bytes, str, str]:
     """Скачивает аудиодорожку по URL (YouTube и другие платформы, поддерживаемые yt-dlp).
 
@@ -88,7 +85,6 @@ async def download_audio_from_url(*, url: str) -> tuple[bytes, str, str]:
         )
     return audio_bytes, file_name, mime_type
 
-
 def _looks_like_video_platform_url(url: str) -> bool:
     """Эвристика: URL с видеоплатформы (vimeo, dailymotion, rutube и т.п.)."""
     platforms = (
@@ -102,7 +98,6 @@ def _looks_like_video_platform_url(url: str) -> bool:
     )
     lowered = url.lower()
     return any(p in lowered for p in platforms)
-
 
 async def _download_direct_media(url: str) -> tuple[bytes, str, str]:
     """Скачивает медиафайл по прямой ссылке через httpx."""

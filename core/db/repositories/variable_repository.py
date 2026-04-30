@@ -3,23 +3,20 @@
 Использует таблицу variables, is_global=False (изолирован по компаниям).
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional, Dict, List
 from pydantic import BaseModel
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class VariableData(BaseModel):
     """Данные переменной (хранятся в БД без ключа)"""
     value: str
     secret: bool = False
     groups: List[str] = []
     description: str = ""
-
 
 class Variable(BaseModel):
     """Модель переменной с ключом (используется в API)"""
@@ -28,7 +25,6 @@ class Variable(BaseModel):
     secret: bool = False
     groups: List[str] = []
     description: str = ""
-
 
 class VariableRepository(BaseRepository[VariableData]):
     """

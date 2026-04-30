@@ -5,7 +5,7 @@ GET /api/billing/yoomoney/authorize — формирует URL авториза�
 GET /api/billing/yoomoney/callback — обменивает code на access_token
 """
 
-import logging
+from core.logging import get_logger
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,10 +22,8 @@ from core.clients.payment.yoomoney_provider import (
 from core.http import request_public_oauth
 from core.utils.domain import PRIMARY_DOMAIN
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/billing/yoomoney", tags=["yoomoney-oauth"])
-
 
 def _get_yoomoney_provider() -> YooMoneyProvider:
     """Возвращает активный YooMoney провайдер."""
@@ -33,7 +31,6 @@ def _get_yoomoney_provider() -> YooMoneyProvider:
         if isinstance(provider, YooMoneyProvider):
             return provider
     raise HTTPException(status_code=503, detail="YooMoney провайдер не настроен")
-
 
 def _build_callback_url(request: Request) -> str:
     """Формирует абсолютный URL для OAuth callback на apex-домене."""
@@ -45,7 +42,6 @@ def _build_callback_url(request: Request) -> str:
         return f"http://{host}/frontend/api/billing/yoomoney/callback"
 
     return f"https://{PRIMARY_DOMAIN}/frontend/api/billing/yoomoney/callback"
-
 
 @router.get("/authorize")
 async def yoomoney_authorize(request: Request, container: ContainerDep):
@@ -86,7 +82,6 @@ async def yoomoney_authorize(request: Request, container: ContainerDep):
 
     authorize_url = f"{YOOMONEY_OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
     return JSONResponse(content={"authorize_url": authorize_url})
-
 
 @router.get("/callback")
 async def yoomoney_callback(request: Request, container: ContainerDep, code: str = ""):

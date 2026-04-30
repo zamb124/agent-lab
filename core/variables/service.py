@@ -3,7 +3,7 @@
 Поддерживает резолюцию @var:key ссылок.
 """
 
-import logging
+from core.logging import get_logger
 import re
 from typing import Optional, Dict, Any, Set, List, TYPE_CHECKING
 
@@ -13,9 +13,7 @@ from core.variables.resolver import VarResolver
 if TYPE_CHECKING:
     from core.db.repositories.variable_repository import VariableRepository
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class VariablesService:
     """Управление переменными компании с поддержкой ссылок @var:key"""
     

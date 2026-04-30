@@ -34,6 +34,7 @@ from a2a.utils.message import get_message_text, new_agent_text_message
 
 from core.config import get_settings
 from core.config.testing import is_testing as _is_testing
+from core.clients.llm.logging import log_llm_stream_response
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -657,8 +658,8 @@ class LLMClient:
             final=False,
         )
 
-        logger.log_llm_stream_response(
-            f"{self.base_url}/chat/completions",
+        log_llm_stream_response(
+            url=f"{self.base_url}/chat/completions",
             content=full_content,
             reasoning=full_reasoning if full_reasoning else None,
             tool_calls=list(tool_calls_buffer.values()) if tool_calls_buffer else None,

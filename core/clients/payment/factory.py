@@ -5,7 +5,7 @@
 АДАПТИРОВАНО: убраны try-except блоки
 """
 
-import logging
+from core.logging import get_logger
 from typing import Dict, Optional
 
 from core.config import get_settings
@@ -13,9 +13,7 @@ from core.clients.payment.base_provider import BasePaymentProvider
 from core.clients.payment.yoomoney_provider import YooMoneyProvider, YooMoneyConfig, load_access_token, save_access_token
 from core.clients.payment.yukassa_provider import YuKassaProvider, YuKassaConfig
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class PaymentProviderFactory:
     """Фабрика для управления платежными провайдерами"""
     

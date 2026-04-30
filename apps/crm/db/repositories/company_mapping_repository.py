@@ -3,7 +3,7 @@
 Работает с SQLAlchemy напрямую.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Optional, Type
 
 from sqlalchemy import select
@@ -11,9 +11,7 @@ from sqlalchemy import select
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CompanyMapping
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class CompanyMappingRepository(BaseCRMRepository[CompanyMapping]):
     """
     Репозиторий для связи company (tenant) и entity в crm_entities.

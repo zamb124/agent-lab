@@ -10,7 +10,7 @@ HTTP-клиент реранкера (OpenAI-совместимый POST на HT
 
 from __future__ import annotations
 
-import logging
+from core.logging import get_logger
 from typing import TYPE_CHECKING, Any, List, Optional
 
 import httpx
@@ -24,9 +24,7 @@ from core.rag.models import RAGSearchResult
 if TYPE_CHECKING:
     from core.billing.service import BillingService
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class RerankerClientError(Exception):
     """Ошибка вызова реранкера; ``status_code`` — 422 или 503 для HTTP API."""
 
@@ -37,14 +35,12 @@ class RerankerClientError(Exception):
         self.detail = detail
         super().__init__(str(detail))
 
-
 def _response_body_as_detail(response: httpx.Response) -> Any:
     try:
         return response.json()
     except Exception:
         text = response.text
         return {"message": text[:8000] if text else ""}
-
 
 class RerankerHTTPClient:
     """Асинхронный клиент к сервису реранкера."""

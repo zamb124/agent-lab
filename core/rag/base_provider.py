@@ -3,7 +3,7 @@
 Определяет единый интерфейс работы с векторными хранилищами.
 """
 
-import logging
+from core.logging import get_logger
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -13,24 +13,19 @@ from core.files.s3_client import S3ClientFactory
 from core.files.types import ext_to_mime
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 _LOGICAL_OPERATORS: frozenset[str] = frozenset({"$and", "$or"})
 _COMPARISON_OPERATORS: frozenset[str] = frozenset(
     {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"}
 )
-
 
 def _is_scalar_filter_value(value: Any) -> bool:
     if isinstance(value, bool):
         return True
     return isinstance(value, (str, int, float))
 
-
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
-
 
 def _validate_in_values(field_name: str, operator: str, value: Any) -> None:
     if not isinstance(value, list) or not value:
@@ -57,7 +52,6 @@ def _validate_in_values(field_name: str, operator: str, value: Any) -> None:
             raise ValueError(
                 f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
             )
-
 
 def validate_metadata_filters(filters: Dict[str, Any]) -> None:
     """
@@ -121,7 +115,6 @@ def validate_metadata_filters(filters: Dict[str, Any]) -> None:
                     )
 
     _validate_node(filters, "filters")
-
 
 class BaseRAGProvider(ABC):
     """

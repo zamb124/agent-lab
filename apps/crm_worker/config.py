@@ -18,6 +18,6 @@ _settings: CRMWorkerSettings | None = None
 def get_settings() -> CRMWorkerSettings:
     global _settings
     if _settings is None:
-        merged = load_merged_config(service_name="crm_worker")
+        merged = load_merged_config(service_name="crm_worker", silent=True)
         _settings = CRMWorkerSettings(**merged)
     return _settings

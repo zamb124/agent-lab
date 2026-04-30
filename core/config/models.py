@@ -78,21 +78,37 @@ class DatabaseConfig(BaseModel):
 
 
 class LoggingConfig(BaseModel):
-    """Конфигурация логирования"""
+    """
+    Конфигурация логирования платформы.
 
-    level: str = "INFO"
-    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    json_format: bool = True
-    console_format: str = "structured"
-    console_colors: bool = True
-    file_enabled: bool = True
-    file_path: str = "logs/app.log"
-    file_max_bytes: int = 10 * 1024 * 1024
-    file_backup_count: int = 5
-    console_enabled: bool = True
-    app_file_path: str = "logs/app.log"
-    worker_file_path: str = "logs/worker.log"
-    loggers_levels: Dict[str, str] = Field(default_factory=dict)
+    Все процессы пишут структурированный JSON (или цветной console в dev) в
+    stdout. Файловые хендлеры запрещены: ротация — забота оркестратора
+    контейнеров, не приложения.
+    """
+
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    format: Literal["json", "console"] = "json"
+    console_colors: bool = False
+    sample_rate_info: float = Field(
+        default=1.0,
+        description="Доля INFO-записей у hot-path логгеров (sampled_loggers); 1.0 — без сэмплинга",
+    )
+    sampled_loggers: List[str] = Field(
+        default_factory=list,
+        description="Префиксы логгеров, к которым применяется sample_rate_info",
+    )
+    loggers_levels: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Точные уровни для конкретных логгеров: {'sqlalchemy.engine': 'WARNING'}",
+    )
+    drop_keys: List[str] = Field(
+        default_factory=list,
+        description="Ключи лог-записи, значение которых заменяется на REDACT_PLACEHOLDER",
+    )
+    max_string_len: int = Field(
+        default=8192,
+        description="Максимальная длина строкового значения; обрезанные помечаются _truncated",
+    )
 
 
 class ServerConfig(BaseModel):

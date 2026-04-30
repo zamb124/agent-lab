@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-import logging
+from core.logging import get_logger
 import re
 from typing import Final
 
@@ -17,14 +17,12 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 _PG_AUTH_HINT = (
     "Аутентификация PostgreSQL не удалась. Проверьте .env / DATABASE__* и conf.local.json (перекрывают conf.json). "
     "Пароль суперпользователя в Docker задаётся при первом создании тома; смена POSTGRES_PASSWORD в compose "
     "старый volume не обновляет — пересоздайте том или поправьте URL."
 )
-
 
 def _pg_target_debug(shared_url: str) -> str:
     u = make_url(shared_url)
@@ -41,11 +39,9 @@ def _pg_target_debug(shared_url: str) -> str:
 
 _SAFE_IDENT: Final[re.Pattern[str]] = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
-
 def _require_safe_ident(name: str, context: str) -> None:
     if not _SAFE_IDENT.match(name):
         raise ValueError(f"{context}: недопустимый идентификатор PostgreSQL: {name!r}")
-
 
 async def ensure_postgres_service_databases_async(
     *,

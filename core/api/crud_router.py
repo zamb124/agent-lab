@@ -3,7 +3,7 @@
 Автоматически создает эндпоинты для ВСЕХ методов репозитория.
 """
 
-import logging
+from core.logging import get_logger
 import inspect
 from typing import TypeVar, List, Dict, Any, Callable
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -13,8 +13,7 @@ from typing import Annotated
 from core.db.base_repository import BaseRepository
 from core.pagination import ListResponse
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 T = TypeVar('T', bound=BaseModel)
 
 # Методы которые не нужно экспонировать как API
@@ -22,7 +21,6 @@ EXCLUDED_METHODS = {
     '_get_key', '_get_prefix', '_get_table_name', '_extract_entity_id',
     '_build_final_key', 'get_service_url'
 }
-
 
 class CRUDRouterGenerator:
     """

@@ -1,6 +1,6 @@
 .PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base stats
 .PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test-runner test-runner-down test-runner-unit test-integration prod-up prod-down prod-logs
-.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon build-i18n
+.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging build-i18n
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
@@ -84,6 +84,11 @@ test-frontend:
 # Канон UI (apps: без LitElement, без /static/core/lib в импортах JS, без ServiceRegistry)
 check-ui-canon:
 	@./scripts/check_ui_canon.sh
+
+# Канон единого логирования (запреты logging.getLogger / print / эмодзи в логах /
+# файловых хендлеров / прямого setup_logging в воркерах / голого asyncio.create_task).
+check-logging:
+	@./scripts/check_logging_canon.sh
 
 # Lint UI-фабрик (createAsyncOp / createResourceCollection / createCursorList / createFacets / createForm)
 # Уникальность name, namespace по сервису, парность toast-i18n-ключей, idField для update/remove/get.

@@ -3,7 +3,7 @@
 Запасной механизм на случай если webhook не приходят.
 """
 
-import logging
+from core.logging import get_logger
 import json
 from datetime import datetime, timezone
 from typing import Dict, Any
@@ -12,9 +12,7 @@ from core.clients.payment.factory import PaymentProviderFactory
 from core.models.payment_models import PaymentStatus
 from .service import PaymentService
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class PaymentSyncService:
     """Сервис для синхронизации статусов транзакций с провайдерами"""
     
@@ -136,8 +134,10 @@ class PaymentSyncService:
                         stats["updated"] += 1
                         
                         logger.info(
-                            f"✅ Транзакция {transaction_id} обновлена через синхронизацию: "
-                            f"operation_id={op.get('operation_id')}, amount={op.get('amount')}"
+                            "payments.transaction_synced",
+                            transaction_id=transaction_id,
+                            operation_id=op.get("operation_id"),
+                            amount=op.get("amount"),
                         )
                 
             except Exception as e:

@@ -1,8 +1,8 @@
 """
 API для биллинга, пополнения баланса и управления подпиской.
 """
-import logging
 
+from core.logging import get_logger
 from fastapi import APIRouter, HTTPException, Request
 
 from apps.frontend.dependencies import ContainerDep
@@ -11,10 +11,8 @@ from core.clients.payment import PaymentProviderFactory
 from core.models.billing_models import TariffPlan
 from core.models.payment_models import CreatePaymentRequest, TransactionResponse
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/billing", tags=["billing"])
-
 
 @router.get("/subscription", response_model=BillingSubscription)
 async def get_subscription(request: Request, container: ContainerDep):
@@ -32,7 +30,6 @@ async def get_subscription(request: Request, container: ContainerDep):
         billing_period_start=company.billing_period_start,
     )
 
-
 @router.get("/usage", response_model=BillingUsage)
 async def get_usage_stats(request: Request, container: ContainerDep):
     if not hasattr(request.state, "user") or not request.state.user:
@@ -48,7 +45,6 @@ async def get_usage_stats(request: Request, container: ContainerDep):
 
     stats = await container.billing_service.get_company_usage_stats(company.company_id)
     return BillingUsage(**stats)
-
 
 @router.patch("/plan")
 async def change_plan(
@@ -89,7 +85,6 @@ async def change_plan(
         "message": f"Тариф успешно изменен на {tariff.value}",
     }
 
-
 @router.post("/topup")
 async def create_topup_payment(
     payment_request: CreatePaymentRequest,
@@ -125,7 +120,6 @@ async def create_topup_payment(
         "payment_url": result["payment_url"],
         "amount": result["amount"],
     }
-
 
 @router.get("/history")
 async def get_payment_history(

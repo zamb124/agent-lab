@@ -5,7 +5,8 @@ BFF: привязки документов OnlyOffice, выдача JWT реда
 from __future__ import annotations
 
 import hashlib
-import logging
+
+from core.logging import get_logger
 import re
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -69,8 +70,7 @@ from core.files.s3_client import S3ClientFactory
 from core.models.i18n_models import Language
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 router = APIRouter(tags=["office-bff"])
 
 _EMPTY_DOCX = Path(__file__).resolve().parent.parent / "templates" / "empty.docx"
@@ -78,7 +78,6 @@ _EMPTY_DOCX = Path(__file__).resolve().parent.parent / "templates" / "empty.docx
 _HUMANITEC_PLATFORM_LOGO_PATH = "/static/core/assets/service_logos/frontend_logo.svg"
 
 _CRM_API_V1_PREFIX = "/crm/api/v1"
-
 
 def _http_exception_from_service_client(service: str, exc: ServiceClientError) -> HTTPException:
     msg = str(exc)
@@ -91,7 +90,6 @@ def _http_exception_from_service_client(service: str, exc: ServiceClientError) -
         status_code=502,
         detail=f"Сервис {service} недоступен или вернул ошибку: {msg}",
     )
-
 
 async def _resolve_catalog_for_create(
     c: OfficeContainer,
@@ -127,7 +125,6 @@ async def _resolve_catalog_for_create(
         detail="Укажите catalog_id: доступно несколько каталогов",
     )
 
-
 async def _require_binding_catalog_access(
     c: OfficeContainer,
     row,
@@ -142,13 +139,11 @@ async def _require_binding_catalog_access(
     if not allowed:
         raise HTTPException(status_code=403, detail="Нет доступа к каталогу документа")
 
-
 async def _user_display(c: OfficeContainer, user_id: str) -> tuple[str, str | None]:
     u = await c.user_repository.get(user_id)
     if u is not None:
         return u.name or user_id, u.avatar_url
     return user_id, None
-
 
 def _safe_filename_stem(title: str) -> str:
     s = title.strip()
@@ -158,14 +153,12 @@ def _safe_filename_stem(title: str) -> str:
         return "document"
     return s
 
-
 def _office_inline_content_disposition(original_name: str) -> str:
     name = (original_name or "document").replace("\r", "").replace("\n", "")[:800]
     ascii_fallback = name.encode("ascii", "ignore").decode("ascii").strip() or "document"
     ascii_fallback = ascii_fallback.replace("\\", "_").replace('"', "'")[:200]
     encoded = quote(name, safe="")
     return f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
-
 
 def _editor_header_brand_base_url(settings: OfficeSettings) -> str:
     """Origin для логотипа в шапке OnlyOffice (браузер пользователя, не host.docker.internal)."""
@@ -179,7 +172,6 @@ def _editor_header_brand_base_url(settings: OfficeSettings) -> str:
         if candidate is not None and str(candidate).strip():
             return str(candidate).strip().rstrip("/")
     return ""
-
 
 def _onlyoffice_editor_customization_payload() -> dict[str, object]:
     settings = get_office_settings()
@@ -213,7 +205,6 @@ def _onlyoffice_editor_customization_payload() -> dict[str, object]:
             customization["customer"] = {"name": "HUMANITEC", "www": www}
     return customization
 
-
 def _integration_configured() -> tuple[bool, str]:
     s = get_office_settings().office
     if not s.jwt_secret.strip():
@@ -223,7 +214,6 @@ def _integration_configured() -> tuple[bool, str]:
     if not s.callback_public_base_url.strip():
         return False, "Не задан office.callback_public_base_url (доступен с контейнера Document Server)"
     return True, ""
-
 
 async def _require_explicit_namespace(container: OfficeContainer) -> str:
     """
@@ -263,12 +253,10 @@ async def _require_explicit_namespace(container: OfficeContainer) -> str:
         )
     return found.name
 
-
 @router.get("/integration/status", response_model=OfficeIntegrationStatusResponse)
 async def integration_status(container: ContainerDep) -> OfficeIntegrationStatusResponse:
     ok, detail = _integration_configured()
     return OfficeIntegrationStatusResponse(configured=ok, detail=detail)
-
 
 @router.get("/namespaces", response_model=OffsetPage[OfficeNamespaceItem])
 async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespaceItem]:
@@ -284,7 +272,6 @@ async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespace
         if ns.name and ns.name.strip()
     ]
     return OffsetPage[OfficeNamespaceItem](items=items, total=len(items), limit=len(items), offset=0)
-
 
 @router.get("/namespaces/templates", response_model=OffsetPage[OfficeNamespaceTemplateItem])
 async def list_namespace_templates_proxy(
@@ -332,7 +319,6 @@ async def list_namespace_templates_proxy(
         )
     return OffsetPage[OfficeNamespaceTemplateItem](items=out, total=len(out), limit=len(out), offset=0)
 
-
 @router.post("/namespaces", response_model=OfficeNamespaceCreateResponse, status_code=201)
 async def create_namespace_proxy(
     body: OfficeNamespaceCreateRequest,
@@ -369,7 +355,6 @@ async def create_namespace_proxy(
         is_default=bool(raw.get("is_default")),
     )
 
-
 @router.get("/company-members")
 async def list_company_members_for_catalogs(
     container: ContainerDep,
@@ -402,7 +387,6 @@ async def list_company_members_for_catalogs(
         )
     return out
 
-
 @router.get("/catalogs", response_model=OfficeCatalogListResponse)
 async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
     namespace = await _require_explicit_namespace(container)
@@ -429,7 +413,6 @@ async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
         )
     return OfficeCatalogListResponse(items=out)
 
-
 @router.post("/catalogs", response_model=OfficeCatalogDetailResponse)
 async def create_catalog(
     body: OfficeCatalogCreateRequest,
@@ -454,7 +437,6 @@ async def create_catalog(
         is_owner=True,
         is_public=cat.is_public,
     )
-
 
 @router.get("/catalogs/{catalog_id}", response_model=OfficeCatalogDetailResponse)
 async def get_catalog(
@@ -488,7 +470,6 @@ async def get_catalog(
         is_owner=cat.owner_user_id == ctx.user.user_id,
         is_public=cat.is_public,
     )
-
 
 @router.patch("/catalogs/{catalog_id}", response_model=OfficeCatalogDetailResponse)
 async def patch_catalog(
@@ -529,7 +510,6 @@ async def patch_catalog(
         is_public=updated.is_public,
     )
 
-
 @router.delete("/catalogs/{catalog_id}", status_code=204)
 async def delete_catalog_endpoint(
     catalog_id: str,
@@ -556,7 +536,6 @@ async def delete_catalog_endpoint(
     if not ok:
         raise HTTPException(status_code=404, detail="Каталог не найден")
     return Response(status_code=204)
-
 
 @router.get("/catalogs/{catalog_id}/members", response_model=OfficeCatalogMembersResponse)
 async def list_catalog_members(
@@ -595,7 +574,6 @@ async def list_catalog_members(
         )
     return OfficeCatalogMembersResponse(members=items)
 
-
 @router.post("/catalogs/{catalog_id}/members", response_model=OfficeCatalogMembersResponse)
 async def add_catalog_member(
     catalog_id: str,
@@ -622,7 +600,6 @@ async def add_catalog_member(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return await list_catalog_members(catalog_id, container)
-
 
 @router.delete("/catalogs/{catalog_id}/members/{member_user_id}", status_code=204)
 async def remove_catalog_member(
@@ -653,7 +630,6 @@ async def remove_catalog_member(
     if not ok:
         raise HTTPException(status_code=404, detail="Участник не найден")
     return Response(status_code=204)
-
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 async def list_documents(
@@ -726,7 +702,6 @@ async def list_documents(
         )
     return OfficeDocumentListResponse(items=items)
 
-
 @router.post("/documents", response_model=OfficeDocumentCreateResponse)
 async def upload_document(
     container: ContainerDep,
@@ -787,7 +762,6 @@ async def upload_document(
         file_id=row.file_id,
         catalog_id=row.catalog_id,
     )
-
 
 @router.post("/documents/empty", response_model=OfficeDocumentCreateResponse)
 async def create_empty_document(
@@ -865,7 +839,6 @@ async def create_empty_document(
         catalog_id=row.catalog_id,
     )
 
-
 @router.patch(
     "/documents/{binding_id}",
     response_model=OfficeDocumentRenameResponse,
@@ -898,7 +871,6 @@ async def rename_document(
         title=updated.title,
     )
 
-
 @router.delete("/documents/{binding_id}", status_code=204)
 async def delete_document(binding_id: str, container: ContainerDep) -> Response:
     namespace = await _require_explicit_namespace(container)
@@ -919,7 +891,6 @@ async def delete_document(binding_id: str, container: ContainerDep) -> Response:
     if not ok:
         raise HTTPException(status_code=404, detail="Привязка не найдена")
     return Response(status_code=204)
-
 
 @router.get(
     "/documents/{binding_id}/editor-config",
@@ -1012,7 +983,6 @@ async def editor_config(
     ds = integ.document_server_public_url.rstrip("/")
     return OfficeEditorConfigResponse(document_server_url=ds, token=token)
 
-
 @router.get("/office-download")
 async def office_download(
     container: ContainerDep,
@@ -1064,7 +1034,6 @@ async def office_download(
         media_type=ct,
         headers={"Content-Disposition": _office_inline_content_disposition(meta.original_name)},
     )
-
 
 @router.post(
     "/onlyoffice/callback",

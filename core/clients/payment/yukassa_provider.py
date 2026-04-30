@@ -3,7 +3,7 @@
 В будущем здесь будет полная реализация через API ЮKassa.
 """
 
-import logging
+from core.logging import get_logger
 from typing import Dict, Any, Literal
 from pydantic import Field
 
@@ -15,9 +15,7 @@ from core.clients.payment.base_provider import (
     WebhookVerificationResult
 )
 
-logger = logging.getLogger(__name__)
-
-
+logger = get_logger(__name__)
 class YuKassaConfig(PaymentProviderConfig):
     """Конфигурация ЮKassa провайдера"""
     provider_type: Literal["yukassa"] = "yukassa"
@@ -27,7 +25,6 @@ class YuKassaConfig(PaymentProviderConfig):
         default="https://api.yookassa.ru/v3",
         description="URL API ЮKassa"
     )
-
 
 class YuKassaProvider(BasePaymentProvider):
     """
@@ -67,11 +64,4 @@ class YuKassaProvider(BasePaymentProvider):
         """Заглушка: возврат не реализован"""
         logger.error("ЮKassa провайдер не реализован")
         return False
-
-
-
-
-
-
-
 

@@ -6,15 +6,14 @@
 """
 
 import json
-import logging
+
+from core.logging import get_logger
 import os
 from pathlib import Path
 from typing import Any, Dict, Union
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 _PROJECT_ROOT_ENV = "AGENT_LAB_PROJECT_ROOT"
-
 
 def get_project_root() -> Path:
     """
@@ -44,21 +43,25 @@ def get_project_root() -> Path:
         f"Задайте {_PROJECT_ROOT_ENV} или запускайте из дерева исходников (uv sync из корня репозитория)."
     )
 
-
-def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
+def load_json_config(config_path: Union[str, Path], *, silent: bool = False) -> Dict[str, Any]:
     config_path = Path(config_path)
 
     if not config_path.exists():
-        logger.info(
-            f"Файл конфигурации {config_path} не найден, используем значения по умолчанию"
-        )
+        if not silent:
+            logger.info(
+                "config.loader.file_missing_default",
+                path=str(config_path),
+            )
         return {}
 
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
-        logger.info(f"Конфигурация загружена из {config_path}")
+        if not silent:
+            logger.info(
+                "config.loader.file_loaded",
+                path=str(config_path),
+            )
         return config
-
 
 def merge_configs(
     base_config: Dict[str, Any], override_config: Dict[str, Any]
@@ -72,7 +75,6 @@ def merge_configs(
             result[key] = value
 
     return result
-
 
 def get_config_paths() -> list[Path]:
     project_root = get_project_root()
@@ -88,19 +90,28 @@ def get_config_paths() -> list[Path]:
 
     return config_paths
 
-
-def remove_env_overridden_values(config: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+def remove_env_overridden_values(
+    config: Dict[str, Any],
+    prefix: str = "",
+    *,
+    silent: bool = False,
+) -> Dict[str, Any]:
     result = {}
 
     for key, value in config.items():
         env_key = f"{prefix}__{key}".upper() if prefix else key.upper()
 
         if os.getenv(env_key):
-            logger.debug(f"Пропускаем {key} из JSON, используется env переменная {env_key}")
+            if not silent:
+                logger.debug(
+                    "config.loader.env_override_skip",
+                    key=key,
+                    env_key=env_key,
+                )
             continue
 
         if isinstance(value, dict):
-            nested_result = remove_env_overridden_values(value, env_key)
+            nested_result = remove_env_overridden_values(value, env_key, silent=silent)
             if nested_result:
                 result[key] = nested_result
         else:
@@ -108,33 +119,45 @@ def remove_env_overridden_values(config: Dict[str, Any], prefix: str = "") -> Di
 
     return result
 
-
-def load_merged_config(service_name: str | None = None) -> Dict[str, Any]:
+def load_merged_config(
+    service_name: str | None = None,
+    *,
+    silent: bool = False,
+) -> Dict[str, Any]:
     """
     Загружает конфигурацию: conf.json + conf.local.json (+ AGENT_CONFIG_PATH),
     затем при service_name — сливает services.<service_name> поверх общего слоя.
 
     Ключ services не передаётся в Pydantic (удаляется из результата).
+
+    silent=True — без записей в лог (до setup_logging в HTTP и воркерах).
     """
     merged: Dict[str, Any] = {}
 
     for config_path in get_config_paths():
-        config = load_json_config(config_path)
+        config = load_json_config(config_path, silent=silent)
         if config:
             merged = merge_configs(merged, config)
-            logger.debug(f"Применена конфигурация из {config_path}")
+            if not silent:
+                logger.debug(
+                    "config.loader.layer_merged",
+                    path=str(config_path),
+                )
 
     if service_name:
         overrides = merged.get("services", {}).get(service_name, {})
         if overrides:
             merged = merge_configs(merged, overrides)
-            logger.info(f"Применён слой services.{service_name}")
+            if not silent:
+                logger.info(
+                    "config.loader.service_layer_merged",
+                    service_name=service_name,
+                )
 
     merged.pop("services", None)
-    merged = remove_env_overridden_values(merged)
+    merged = remove_env_overridden_values(merged, silent=silent)
 
     return merged
-
 
 def get_nested_value(config: Dict[str, Any], key_path: str, default: Any = None) -> Any:
     keys = key_path.split(".")
@@ -148,7 +171,6 @@ def get_nested_value(config: Dict[str, Any], key_path: str, default: Any = None)
 
     return current
 
-
 def set_nested_value(config: Dict[str, Any], key_path: str, value: Any) -> None:
     keys = key_path.split(".")
     current = config
@@ -159,7 +181,6 @@ def set_nested_value(config: Dict[str, Any], key_path: str, value: Any) -> None:
         current = current[key]
 
     current[keys[-1]] = value
-
 
 def get_env_or_config(
     env_key: str, config_key: str, config: Dict[str, Any], default: Any = None

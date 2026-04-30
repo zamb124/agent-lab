@@ -1,7 +1,8 @@
 """
 Роутер авторизации для Frontend сервиса
 """
-import logging
+
+from core.logging import get_logger
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -13,9 +14,8 @@ from core.utils.tokens import TokenService
 from core.utils.domain import get_cookie_domain, build_url
 from apps.frontend.dependencies import ContainerDep
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
 
 @router.get("/callback")
 async def auth_callback(
