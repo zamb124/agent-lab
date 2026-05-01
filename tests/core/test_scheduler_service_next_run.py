@@ -285,3 +285,61 @@ async def test_get_redis_snapshot_handles_missing_schedule_id_without_redis_call
 
     assert snapshot.exists_in_redis is False
     assert snapshot.missing_reason == "schedule_id is null"
+
+
+@pytest.mark.asyncio
+async def test_run_now_adds_required_logging_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    task = PlatformScheduledTask(
+        id="task-run-now",
+        company_id="system",
+        schedule_id="schedule-run-now",
+        target_service="flows",
+        task_name="sync_llm_models_task",
+        queue_name="idle",
+        schedule_type=PlatformScheduleType.INTERVAL,
+        cron=None,
+        interval_seconds=60,
+        run_at=None,
+        timezone="UTC",
+        payload={"scheduler_task_id": "task-run-now", "company_id": "system"},
+        status=ScheduledTaskStatus.PENDING,
+        created_by_user_id=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        last_run_at=None,
+        next_run_at=datetime.now(timezone.utc) + timedelta(seconds=60),
+        error_message=None,
+    )
+    repository = _InMemorySchedulerRepository(task=task)
+    service = SchedulerService(
+        repository=repository,
+        redis_url="redis://localhost:6379/0",
+        broker_for_queue=lambda _q: object(),
+    )
+    captured_labels: dict[str, str] = {}
+
+    class _FakeKicker:
+        def __init__(self, task_name: str, broker, labels: dict[str, str]) -> None:
+            _ = broker
+            assert task_name == "sync_llm_models_task"
+            captured_labels.update(labels)
+
+        async def kiq(self, **kwargs) -> None:
+            assert kwargs["scheduler_task_id"] == "task-run-now"
+
+    monkeypatch.setattr("core.scheduler.service.AsyncKicker", _FakeKicker)
+    monkeypatch.setattr(
+        "core.scheduler.service.build_log_labels",
+        lambda *, background_kind: {
+            "request_id": "req-1",
+            "trace_id": "trace-1",
+            "service_name": "scheduler",
+        },
+    )
+
+    await service.run_now(company_id="system", schedule_task_id="task-run-now")
+
+    assert captured_labels["queue_name"] == "idle"
+    assert captured_labels["request_id"] == "req-1"
+    assert captured_labels["trace_id"] == "trace-1"
+    assert captured_labels["service_name"] == "scheduler"

@@ -21,6 +21,7 @@ from core.scheduler.models import (
 )
 from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.source import get_schedule_source
+from core.tasks.kicker import build_log_labels
 
 
 class SchedulerService:
@@ -262,10 +263,12 @@ class SchedulerService:
         if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
             raise ValueError(f"cannot run-now task with status={self._status_value(task.status)}")
         broker = self._broker_for_queue(task.queue_name)
+        labels = self._build_task_labels(task)
+        labels.update(build_log_labels(background_kind="sched"))
         kicker = AsyncKicker(
             task_name=task.task_name,
             broker=broker,
-            labels=self._build_task_labels(task),
+            labels=labels,
         )
         await kicker.kiq(**task.payload)
         next_run_at = task.next_run_at
