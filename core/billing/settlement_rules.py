@@ -135,8 +135,8 @@ def quantity_from_span(quantity_from: str, span_dict: Dict[str, Any]) -> int:
     if quantity_from.startswith("const:"):
         rest = quantity_from[len("const:") :].strip()
         q = int(rest)
-        if q < 1:
-            raise ValueError(f"const quantity должна быть >= 1: {quantity_from!r}")
+        if q < 0:
+            raise ValueError(f"const quantity должна быть >= 0: {quantity_from!r}")
         return q
     if quantity_from.startswith("attr:"):
         key = quantity_from[len("attr:") :].strip()
@@ -149,7 +149,7 @@ def quantity_from_span(quantity_from: str, span_dict: Dict[str, Any]) -> int:
         if raw is None:
             raise ValueError(f"атрибут {key!r} отсутствует для quantity_from")
         q = int(raw)
-        if q < 1:
-            raise ValueError(f"quantity из атрибута {key!r} должна быть >= 1")
+        if q < 0:
+            raise ValueError(f"quantity из атрибута {key!r} должна быть >= 0")
         return q
     raise ValueError(f"неизвестный формат quantity_from: {quantity_from!r}")

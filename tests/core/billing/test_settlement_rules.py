@@ -393,13 +393,12 @@ def test_quantity_const_and_attr() -> None:
     assert quantity_from_span("attr:platform.llm.input_tokens", span) == 7
 
 
-def test_quantity_const_zero_raises() -> None:
-    with pytest.raises(ValueError, match=">= 1"):
-        quantity_from_span("const:0", _span())
+def test_quantity_const_zero_allowed() -> None:
+    assert quantity_from_span("const:0", _span()) == 0
 
 
 def test_quantity_const_negative_raises() -> None:
-    with pytest.raises(ValueError, match=">= 1"):
+    with pytest.raises(ValueError, match=">= 0"):
         quantity_from_span("const:-1", _span())
 
 
@@ -428,6 +427,5 @@ def test_quantity_attr_not_int_raises() -> None:
         quantity_from_span("attr:platform.x", _span(attributes={"platform.x": "nope"}))
 
 
-def test_quantity_attr_zero_raises() -> None:
-    with pytest.raises(ValueError, match=">= 1"):
-        quantity_from_span("attr:platform.x", _span(attributes={"platform.x": 0}))
+def test_quantity_attr_zero_allowed() -> None:
+    assert quantity_from_span("attr:platform.x", _span(attributes={"platform.x": 0})) == 0
