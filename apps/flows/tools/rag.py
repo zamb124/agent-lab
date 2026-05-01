@@ -35,6 +35,7 @@ _RAG_ADD_TEXT_DESCRIPTION = """
 
 Параметры:
 - namespace_id (строка): имя существующего namespace (то же значение, что поле name при создании).
+- collection_id (строка): обязательный тег подкорпуса внутри namespace; попадает в metadata.collection_id (не передавай другое значение в metadata для этого ключа).
 - text (строка): полный текст для индексации (не пустой после trim).
 - document_name (строка, опционально): логическое имя документа; если не задано, сервер сгенерирует.
 - metadata (объект, опционально): плоские или вложенные метаданные (ограничены размером и глубиной на API).
@@ -51,9 +52,10 @@ _RAG_SEARCH_DESCRIPTION = """
 
 Параметры:
 - namespace_id (строка): имя namespace, зарегистрированного для компании.
+- collection_id (строка): обязательный тег подкорпуса; мерджится в filters.collection_id для ограничения выдачи документами этой коллекции.
 - query (строка): запрос естественным языком.
 - limit (целое, по умолчанию 5): максимум результатов (разумно 3–20).
-- filters (объект, опционально): фильтры по metadata на стороне провайдера, если поддерживаются.
+- filters (объект, опционально): дополнительные фильтры по metadata на стороне провайдера; collection_id вшивается поверх.
 
 Когда вызывать: нужно найти релевантные куски из ранее добавленных в RAG текстов.
 """.strip()
@@ -73,6 +75,11 @@ class RagAddTextArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     namespace_id: str = Field(..., min_length=1, description="Имя существующего namespace.")
+    collection_id: str = Field(
+        ...,
+        min_length=1,
+        description="Подкорпус внутри namespace; кладётся в metadata.collection_id.",
+    )
     text: str = Field(..., min_length=1, description="Текст для индексации.")
     document_name: Optional[str] = Field(None, description="Имя документа; опционально.")
     metadata: Optional[Dict[str, Any]] = Field(
@@ -92,6 +99,11 @@ class RagSearchArgs(BaseModel):
         ...,
         min_length=1,
         description="Имя namespace, в который уже загружали документы (как при rag_create_namespace / rag_add_text).",
+    )
+    collection_id: str = Field(
+        ...,
+        min_length=1,
+        description="Подкорпус; мерджится в filters.collection_id.",
     )
     query: str = Field(
         ...,
@@ -128,18 +140,25 @@ async def rag_create_namespace(
 )
 async def rag_add_text(
     namespace_id: str,
+    collection_id: str,
     text: str,
     document_name: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
     document_id: Optional[str] = None,
 ) -> dict:
+    merged_meta: Dict[str, Any] = dict(metadata) if metadata is not None else {}
+    if "collection_id" in merged_meta and merged_meta["collection_id"] != collection_id:
+        raise ValueError(
+            "metadata.collection_id не совпадает с аргументом collection_id",
+        )
+    merged_meta["collection_id"] = collection_id
     client = RagClient()
     try:
         raw = await client.ingest_text(
             namespace_id,
             text,
             document_name=document_name,
-            metadata=metadata,
+            metadata=merged_meta,
             document_id=document_id,
         )
     except ServiceClientError as exc:
@@ -155,17 +174,24 @@ async def rag_add_text(
 )
 async def rag_search(
     namespace_id: str,
+    collection_id: str,
     query: str,
     limit: int = 5,
     filters: Optional[Dict[str, Any]] = None,
 ) -> dict:
+    merged_filters: Dict[str, Any] = dict(filters) if filters is not None else {}
+    if "collection_id" in merged_filters and merged_filters["collection_id"] != collection_id:
+        raise ValueError(
+            "filters.collection_id не совпадает с аргументом collection_id",
+        )
+    merged_filters["collection_id"] = collection_id
     client = RagClient()
     try:
         raw = await client.search(
             namespace_id,
             query,
             limit=limit,
-            filters=filters,
+            filters=merged_filters,
         )
     except ServiceClientError as exc:
         return {"success": False, "error": str(exc)}

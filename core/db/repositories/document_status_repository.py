@@ -5,7 +5,7 @@
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-from sqlalchemy import bindparam, delete, func, select, text, update
+from sqlalchemy import bindparam, delete, func, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.db.database import get_session_factory
@@ -40,9 +40,12 @@ class DocumentStatusRepository:
         namespace_id: str,
         document_name: str,
         file_size: Optional[int] = None,
+        ttl_seconds: int = 864000,
         extra_metadata: Optional[dict] = None,
     ) -> DocumentStatusModel:
         """Создаёт или сбрасывает строку статуса в pending (повторная загрузка)."""
+        if int(ttl_seconds) < 0:
+            raise ValueError("ttl_seconds не может быть отрицательным")
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
@@ -62,6 +65,7 @@ class DocumentStatusRepository:
                 document_name=document_name,
                 status="pending",
                 file_size=file_size,
+                ttl_seconds=int(ttl_seconds),
                 extra_metadata=em,
                 created_at=now,
                 updated_at=now,
@@ -74,6 +78,7 @@ class DocumentStatusRepository:
                     "document_name": document_name,
                     "status": "pending",
                     "file_size": file_size,
+                    "ttl_seconds": int(ttl_seconds),
                     "extra_metadata": em,
                     "updated_at": now,
                     "completed_at": None,
@@ -434,3 +439,77 @@ class DocumentStatusRepository:
                     document_id,
                 )
             return n
+
+    async def list_expired_document_candidates(
+        self,
+        *,
+        utc_now: datetime,
+        limit: int,
+    ) -> List[tuple[str, str]]:
+        """
+        Пары (namespace_id, document_id) с истёкшим TTL (UTC).
+
+        Учитываются завершённые документы со строкой статуса (`completed_at` + `ttl_seconds`)
+        и чанки только в ``vector_documents`` без строки статуса (`min(created_at)` + TTL из metadata).
+        """
+        if limit < 1:
+            raise ValueError("limit должен быть >= 1")
+
+        expiry_status = DBDocumentStatus.completed_at + DBDocumentStatus.ttl_seconds * literal_column(
+            "interval '1 second'"
+        )
+
+        session_factory = await self._get_session_factory()
+        async with session_factory() as session:
+            q_status = (
+                select(DBDocumentStatus.namespace_id, DBDocumentStatus.document_id)
+                .where(
+                    DBDocumentStatus.status == "completed",
+                    DBDocumentStatus.completed_at.isnot(None),
+                    DBDocumentStatus.ttl_seconds > 0,
+                    expiry_status <= utc_now,
+                )
+                .order_by(DBDocumentStatus.completed_at.asc())
+                .limit(limit)
+            )
+            r1 = await session.execute(q_status)
+            from_status_rows = [(str(ns), str(d)) for ns, d in r1.all()]
+
+        remain = limit - len(from_status_rows)
+        from_vector_rows: List[tuple[str, str]] = []
+        if remain > 0:
+            orphan_sql = text(
+                """
+                WITH per_doc AS (
+                  SELECT vd.namespace_id AS namespace_id,
+                         vd.document_id AS document_id,
+                         MIN(vd.created_at) AS anchor_at,
+                         MIN((vd.metadata->>'ttl_seconds')::bigint) AS ttl_eff
+                  FROM vector_documents vd
+                  WHERE NOT EXISTS (
+                    SELECT 1 FROM document_processing_status dps
+                    WHERE dps.document_id = vd.document_id
+                  )
+                  GROUP BY vd.namespace_id, vd.document_id
+                )
+                SELECT namespace_id, document_id
+                FROM per_doc
+                WHERE ttl_eff > 0
+                  AND ttl_eff IS NOT NULL
+                  AND anchor_at + (ttl_eff * interval '1 second') <= :boundary
+                ORDER BY anchor_at ASC
+                LIMIT :lim
+                """
+            )
+            async with session_factory() as session:
+                r2 = await session.execute(
+                    orphan_sql,
+                    {"boundary": utc_now, "lim": remain},
+                )
+                from_vector_rows = [(str(row[0]), str(row[1])) for row in r2.all()]
+
+        merged: List[tuple[str, str]] = []
+
+        merged.extend(from_status_rows)
+        merged.extend(from_vector_rows)
+        return merged

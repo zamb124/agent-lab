@@ -13,6 +13,16 @@ import operator
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from urllib.parse import quote
 
+from core.clients.pravo import (
+    PravoClientError,
+    build_catalog_search_url,
+    extract_legislation_document_hash,
+    fetch_catalog_search_html,
+    fetch_legislation_document,
+    legislation_document_api_url,
+    parse_catalog_search_html,
+    rag_document_id_for_pravo_legislation,
+)
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
@@ -217,6 +227,14 @@ class PythonNamespaceBuilder:
         namespace["ServiceClient"] = ServiceClient
         namespace["ServiceClientError"] = ServiceClientError
         namespace["RagClient"] = RagClient
+        namespace["PravoClientError"] = PravoClientError
+        namespace["build_catalog_search_url"] = build_catalog_search_url
+        namespace["fetch_catalog_search_html"] = fetch_catalog_search_html
+        namespace["parse_catalog_search_html"] = parse_catalog_search_html
+        namespace["fetch_legislation_document"] = fetch_legislation_document
+        namespace["legislation_document_api_url"] = legislation_document_api_url
+        namespace["extract_legislation_document_hash"] = extract_legislation_document_hash
+        namespace["rag_document_id_for_pravo_legislation"] = rag_document_id_for_pravo_legislation
         namespace["get_context"] = get_context
         namespace["get_operator_handoff_service"] = get_operator_handoff_service
         namespace["get_schedule_service"] = get_schedule_service

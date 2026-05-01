@@ -2,13 +2,16 @@
 Tasks для обслуживания и очистки vector_documents.
 """
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
+from core.files.processors import FileProcessor
 from core.logging import get_logger
+from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
 
 logger = get_logger(__name__)
@@ -109,7 +112,10 @@ async def reindex_document_task(
 
         settings = get_settings()
         binding = UploadProfileBinding(config=settings.rag.document_indexing)
-        base_meta = dict(metadata)
+        base_meta = ensure_ttl_seconds_in_metadata(
+            dict(metadata),
+            default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
+        )
         last_document = await provider.upload_document_from_s3(
             namespace_id=namespace_id,
             s3_key=s3_key,
@@ -130,3 +136,77 @@ async def reindex_document_task(
         }
     finally:
         clear_context()
+
+
+@broker.task(
+    task_name="rag_cleanup_expired_documents_tick",
+    queue_name="rag",
+    retry_on_error=True,
+    max_retries=2,
+)
+async def rag_cleanup_expired_documents_tick(
+    scheduler_task_id: str | None = None,
+    company_id: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Удаляет просроченные по ``rag.ttl`` документы: shared FileRecord (если есть),
+    строка ``document_processing_status``, вектора/внешний индекс через провайдер.
+
+    ``company_id`` зарезервирован для будущей изоляции по тенанту; сейчас не применяется.
+    """
+    _ = company_id
+    settings = get_settings()
+    ttl_cfg = settings.rag.ttl
+    if not ttl_cfg.cleanup_enabled:
+        return {
+            "skipped": True,
+            "scheduler_task_id": scheduler_task_id,
+            "candidates_total": 0,
+            "deleted_documents": 0,
+            "failed_documents": 0,
+        }
+
+    container = get_rag_container()
+    status_repo = container.document_status_repository
+    provider = container.rag_provider
+    processor = FileProcessor(file_repository=container.file_repository)
+    now = datetime.now(timezone.utc)
+
+    candidates = await status_repo.list_expired_document_candidates(
+        utc_now=now,
+        limit=ttl_cfg.cleanup_batch_size,
+    )
+
+    deleted = 0
+    failed = 0
+    for namespace_id, document_id in candidates:
+        try:
+            file_record = await container.file_repository.get(document_id)
+            if file_record is not None:
+                await processor.delete_file(document_id)
+            await status_repo.delete_by_document_id(document_id)
+            await provider.delete_document(namespace_id, document_id)
+            deleted += 1
+        except Exception:
+            logger.exception(
+                "rag.cleanup_expired.document_failed",
+                document_id=document_id,
+                namespace_id=namespace_id,
+            )
+            failed += 1
+
+    logger.info(
+        "rag.cleanup_expired.tick_done",
+        scheduler_task_id=scheduler_task_id,
+        candidates=len(candidates),
+        deleted_documents=deleted,
+        failed_documents=failed,
+    )
+
+    return {
+        "skipped": False,
+        "scheduler_task_id": scheduler_task_id,
+        "candidates_total": len(candidates),
+        "deleted_documents": deleted,
+        "failed_documents": failed,
+    }

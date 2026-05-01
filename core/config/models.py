@@ -580,6 +580,35 @@ class ProviderLitserveConfig(BaseModel):
         return normalize_openai_v1_base_url(str(raw).strip())
 
 
+class RagTtlConfig(BaseModel):
+    """
+    TTL по умолчанию и параметры фоновой очистки просроченных документов RAG.
+
+    Клиент задаёт время жизни через ``ttl_seconds`` в metadata при загрузке;
+    ``0`` — бессрочно. Если ключ отсутствует, применяется ``default_ttl_seconds``.
+    Джоба планируется процессом ``scheduler``, исполняется в очереди ``rag``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cleanup_enabled: bool = True
+    default_ttl_seconds: int = Field(
+        default=864000,
+        ge=1,
+        description="Интервал в секундах при отсутствии ttl_seconds в metadata (864000 с = 10 суток).",
+    )
+    cleanup_cron: str = Field(
+        default="0 * * * *",
+        description="Cron (UTC) для тика удаления просроченных документов.",
+    )
+    cleanup_batch_size: int = Field(
+        default=100,
+        ge=1,
+        le=5000,
+        description="Максимум документов за один проход удаления.",
+    )
+
+
 class RAGConfig(BaseModel):
     """Конфигурация RAG системы"""
 
@@ -594,6 +623,10 @@ class RAGConfig(BaseModel):
     document_indexing: IndexProfileConfig = Field(
         default_factory=IndexProfileConfig,
         description="Парсинг, нарезка, lexical/search_defaults для индексации и поиска (без БД-профилей).",
+    )
+    ttl: RagTtlConfig = Field(
+        default_factory=RagTtlConfig,
+        description="TTL индексируемых документов и периодическая очистка.",
     )
 
     def get_enabled_provider_key(self, override: Optional[str] = None) -> str:
@@ -714,7 +747,7 @@ class LLMConfig(BaseModel):
     )
     temperature: float = Field(default=0.2)
     max_tokens: Optional[int] = Field(default=None)
-    timeout: float = Field(default=120.0)
+    timeout: float = Field(default=300.0)
     openai: Optional[OpenAIProviderConfig] = Field(default=None)
     openrouter: Optional[OpenRouterProviderConfig] = Field(default=None)
     bothub: Optional[BothubProviderConfig] = Field(default=None)

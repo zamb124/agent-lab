@@ -16,6 +16,7 @@ from core.files.processors import FileProcessor
 from core.logging import get_logger
 from core.rag.factory import get_rag_provider
 from core.rag.models import RAGDocument
+from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from apps.rag.config import get_rag_settings
 from ..dependencies import ContainerDep
 from .namespace_access import (
@@ -82,6 +83,14 @@ async def ingest_text(
         merged_meta["document_id"] = request.document_id
 
     settings = get_rag_settings()
+    try:
+        merged_meta = ensure_ttl_seconds_in_metadata(
+            merged_meta,
+            default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
     provider_name = provider or settings.rag.default_provider
 
@@ -188,6 +197,15 @@ async def upload_document(
     metadata_dict["company_id"] = company_id
     metadata_dict["uploaded_by_user_id"] = user_id
 
+    try:
+        metadata_dict = ensure_ttl_seconds_in_metadata(
+            metadata_dict,
+            default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    ttl_sec = int(metadata_dict["ttl_seconds"])
+
     task_id_placeholder = f"pending_{document_id}"
     status_repo = container.document_status_repository
     await status_repo.create_status(
@@ -196,6 +214,7 @@ async def upload_document(
         namespace_id=namespace_id,
         document_name=file.filename or "document",
         file_size=len(file_data),
+        ttl_seconds=ttl_sec,
         extra_metadata={},
     )
 

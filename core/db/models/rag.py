@@ -55,6 +55,11 @@ class DocumentProcessingStatus(Base):
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     extra_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    ttl_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("864000"),
+    )
 
     __table_args__ = (
         Index("ix_document_status_task_id", "task_id"),

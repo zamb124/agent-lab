@@ -2,7 +2,7 @@
   "id": "lawyer",
   "name": "Юридический аналитик (РФ)",
   "description": "ИИ-аналитик по праву РФ: структурированный разбор, ориентиры по реестрам и НПА. Не замена очной консультации; требуется сверка с актуальными источниками.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "tags": ["demo", "landing", "law"],
   "permission": [],
   "branches": {},
@@ -17,7 +17,17 @@
         "model": "qwen/qwen3.5-397b-a17b",
         "temperature": 0.18
       },
-      "tools": ["ask_user", "read_file", "create_file", "calculator"],
+      "tools": [
+        "ask_user",
+        "read_file",
+        "create_file",
+        "calculator",
+        "rag_create_namespace",
+        "rag_add_text",
+        "rag_search",
+        "pravo_catalog_search",
+        "pravo_document_rag_search"
+      ],
       "output_key": "response"
     }
   },

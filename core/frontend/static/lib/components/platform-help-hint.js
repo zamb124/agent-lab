@@ -11,6 +11,7 @@ import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 const PORTAL_STYLE_ID = 'platform-help-hint-portal-styles-v2';
 const PORTAL_GAP_PX = 8;
 const VIEWPORT_TOP_INSET_PX = 4;
+const VIEWPORT_SIDE_INSET_PX = 8;
 
 function ensurePortalBubbleStyles() {
     if (typeof document === 'undefined' || document.getElementById(PORTAL_STYLE_ID)) {
@@ -262,7 +263,22 @@ export class PlatformHelpHint extends PlatformElement {
             this._portalBubble.classList.add('platform-help-hint-portal-bubble--below');
             this._portalBubble.style.top = `${r.bottom + PORTAL_GAP_PX}px`;
         }
-        this._portalBubble.style.left = `${r.left + r.width / 2}px`;
+        const anchorCenterX = r.left + r.width / 2;
+        this._portalBubble.style.left = `${anchorCenterX}px`;
+
+        const br = this._portalBubble.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const bubbleW = br.width;
+        const idealLeft = anchorCenterX - bubbleW / 2;
+        const maxLeft = vw - VIEWPORT_SIDE_INSET_PX - bubbleW;
+        const clampedLeft = Math.max(
+            VIEWPORT_SIDE_INSET_PX,
+            Math.min(idealLeft, Math.max(VIEWPORT_SIDE_INSET_PX, maxLeft)),
+        );
+        const clampedCenterX = clampedLeft + bubbleW / 2;
+        if (Math.abs(clampedCenterX - anchorCenterX) > 0.5) {
+            this._portalBubble.style.left = `${clampedCenterX}px`;
+        }
     }
 
     _mountPortal() {

@@ -195,7 +195,8 @@
       "base_url": "https://bothub.chat/api/v2/openai/v1"
     },
     "default_model": "x-ai/grok-code-fast-1",
-    "default_summarization_model": "x-ai/grok-4-fast"
+    "default_summarization_model": "x-ai/grok-4-fast",
+    "timeout": 300
   },
   "s3": {
     "enabled": true,
@@ -293,6 +294,12 @@
       }
     },
     "document_indexing": {},
+    "ttl": {
+      "cleanup_enabled": true,
+      "default_ttl_seconds": 864000,
+      "cleanup_cron": "0 * * * *",
+      "cleanup_batch_size": 100
+    },
     "providers": {
       "pgvector": {
         "enabled": true,
@@ -340,7 +347,7 @@
         "default_model": "anthropic/claude-sonnet-4.5",
         "vision_model": "google/gemini-2.5-pro",
         "temperature": 0.2,
-        "timeout": 120,
+        "timeout": 300,
         "openrouter": {
           "base_url": "https://openrouter.ai/api/v1",
           "site_url": "https://humanitec.ru",

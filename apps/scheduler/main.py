@@ -25,6 +25,7 @@ CALENDAR_SYNC_TASK_NAME = "calendar_sync_tick"
 CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME = "calendar_sync_meeting_reminder_tick"
 SPAN_BILLING_SETTLEMENT_TASK_NAME = "span_billing_settlement_tick"
 PAYMENT_SYNC_TASK_NAME = "payment_sync_tick"
+RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME = "rag_cleanup_expired_documents_tick"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 
 
@@ -76,6 +77,54 @@ async def _ensure_calendar_schedule(
     logger.info("%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id)
 
 
+async def _ensure_rag_ttl_cleanup_schedule(
+    *,
+    container,
+    config_enabled: bool,
+    task_name: str,
+    cron: str,
+    log_label: str,
+) -> None:
+    if not config_enabled:
+        logger.info("%s: disabled in config", log_label)
+        return
+    tasks = await container.scheduler_service.list(
+        company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+        filters=PlatformScheduleFilter(
+            task_name=task_name,
+            limit=200,
+            offset=0,
+        ),
+    )
+    pending_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PENDING]
+    if len(pending_tasks) > 0:
+        logger.info("%s schedule already exists, count=%s", log_label, len(pending_tasks))
+        return
+    paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
+    if len(paused_tasks) > 0:
+        resumed = await container.scheduler_service.resume(
+            company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+            schedule_task_id=paused_tasks[0].id,
+        )
+        logger.info("%s schedule resumed: task_id=%s schedule_id=%s", log_label, resumed.id, resumed.schedule_id)
+        return
+    request = PlatformScheduleCreateRequest(
+        target_service="rag",
+        task_name=task_name,
+        queue_name="rag",
+        schedule_type=PlatformScheduleType.CRON,
+        cron=cron,
+        timezone="UTC",
+        payload={},
+    )
+    created = await container.scheduler_service.create(
+        company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+        user_id=None,
+        request=request,
+    )
+    logger.info("%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id)
+
+
 async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> None:
     if not is_testing():
         await ensure_system_company_exists(container)
@@ -109,6 +158,14 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
         task_name=PAYMENT_SYNC_TASK_NAME,
         cron=payment_cfg.sync_cron,
         log_label="Payment sync",
+    )
+    rag_ttl = settings.rag.ttl
+    await _ensure_rag_ttl_cleanup_schedule(
+        container=container,
+        config_enabled=rag_ttl.cleanup_enabled,
+        task_name=RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
+        cron=rag_ttl.cleanup_cron,
+        log_label="RAG TTL cleanup",
     )
 
 

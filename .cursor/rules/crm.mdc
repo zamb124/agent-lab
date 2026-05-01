@@ -311,6 +311,10 @@ NoteProcessingService.apply дополнительно:
 - < 0.7 → create new entity
 - Настройки: `dedup_rag_search_limit`, `dedup_batch_max_pairs_per_request` (1–5), `dedup_llm_max_concurrent_batch_requests`
 
+### Индексация RAG для CRM
+
+- При загрузке вложений в RAG (`AttachmentService`) и при индексации текста сущности (`EntityRepository` → провайдер) в metadata всегда задаётся `ttl_seconds: 0`, чтобы retention RAG по умолчанию не удалял индекс CRM.
+
 ### ai_analysis_draft в attributes
 
 ```python

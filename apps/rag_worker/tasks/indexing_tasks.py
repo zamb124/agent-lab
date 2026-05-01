@@ -11,6 +11,7 @@ from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.rag.upload_profile_binding import UploadProfileBinding
+from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
@@ -95,7 +96,10 @@ async def index_rag_document_s3_task(
             await status_repo.try_mark_processing(document_id)
 
             provider = container.rag_provider
-            meta = dict(metadata)
+            meta = ensure_ttl_seconds_in_metadata(
+                dict(metadata),
+                default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
+            )
 
             try:
                 document = await provider.upload_document_from_s3(
@@ -248,12 +252,16 @@ async def process_document_upload(
 
             settings = get_settings()
             binding = UploadProfileBinding(config=settings.rag.document_indexing)
+            upload_meta = ensure_ttl_seconds_in_metadata(
+                {**metadata, "document_id": document_id},
+                default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
+            )
 
             document = await provider.upload_document_from_s3(
                 namespace_id=namespace_id,
                 s3_key=s3_key,
                 document_name=document_name,
-                metadata={**metadata, "document_id": document_id},
+                metadata=upload_meta,
                 upload_profile=binding,
             )
             logger.info(f"RAG Worker: документ проиндексирован: {document.document_id}")

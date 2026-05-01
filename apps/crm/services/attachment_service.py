@@ -74,7 +74,8 @@ class AttachmentService:
             "entity_type": entity.entity_type,
             "entity_subtype": entity.entity_subtype or "",
             "company_id": company_id,
-            "filename": filename
+            "filename": filename,
+            "ttl_seconds": 0,
         }
         
         files = {"file": (filename, BytesIO(file_data), "application/octet-stream")}

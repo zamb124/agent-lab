@@ -296,6 +296,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "convention",
         "doc": (
             "В окружении кода ноды по имени доступны встроенные tools платформы: calculator, read_file, create_file, "
+            "rag_create_namespace, rag_add_text, rag_search, pravo_catalog_search, pravo_document_rag_search, "
             "reason, final_answer, finish, self_check, задачи планировщика (schedule_*), … "
             "Новый системный tool подключается разработчиками платформы в реестр пакета tools."
         ),

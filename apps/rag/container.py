@@ -17,6 +17,16 @@ class RAGContainer(BaseContainer):
         from core.db.repositories.document_status_repository import DocumentStatusRepository
         return DocumentStatusRepository(self.db_url)
 
+    @lazy
+    def rag_provider(self):
+        """Активный RAG-провайдер (``rag.default_provider``)."""
+        from core.rag.factory import get_rag_provider
+
+        from .config import get_rag_settings
+
+        settings = get_rag_settings()
+        return get_rag_provider(settings=settings)
+
 
 _container: Optional[RAGContainer] = None
 

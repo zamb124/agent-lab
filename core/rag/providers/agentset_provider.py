@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse, unquote
 
+from core.config import get_settings
 from ..base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
+from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.http import get_httpx_client
 # S3ClientFactory используется через базовый класс BaseRAGProvider
 from core.utils.slug import generate_slug
@@ -292,7 +294,10 @@ class AgentsetRAGProvider(BaseRAGProvider):
         doc_name = document_name or Path(s3_key).name
         
         # Сохраняем оригинальный s3_key для генерации новых signed URL
-        doc_metadata = metadata or {}
+        doc_metadata = ensure_ttl_seconds_in_metadata(
+            dict(metadata or {}),
+            default_ttl_seconds=get_settings().rag.ttl.default_ttl_seconds,
+        )
         doc_metadata["s3_key"] = s3_key
         
         ingest_data = await self._create_ingest_job_from_url(
@@ -342,8 +347,11 @@ class AgentsetRAGProvider(BaseRAGProvider):
         # Загружаем текст в S3 через базовый метод
         s3_key, bucket_name = await self._upload_text_to_s3(text, namespace_id, filename)
 
-        # Обновляем метаданные
-        doc_metadata = metadata or {}
+        # Обновляем метаданные (канонический ``ttl_seconds`` для политики retention)
+        doc_metadata = ensure_ttl_seconds_in_metadata(
+            dict(metadata or {}),
+            default_ttl_seconds=get_settings().rag.ttl.default_ttl_seconds,
+        )
         doc_metadata.update({
             "original_text_length": len(text),
             "s3_key": s3_key,

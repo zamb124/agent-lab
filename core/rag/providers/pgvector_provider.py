@@ -20,6 +20,8 @@ from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
 from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.rag.services.embedding_service import EmbeddingService
+from core.rag.ttl import ensure_ttl_seconds_in_metadata
+from core.config import get_settings
 
 logger = get_logger(__name__)
 # Значения из шаблонного conf.json — не отправлять в OpenRouter как ключ
@@ -381,7 +383,17 @@ class PgVectorProvider(BaseRAGProvider):
         metadata: Dict[str, Any],
     ) -> RAGDocument:
         """Chunk + embed из FileReadResult (единая схема с flows FileReader)."""
-        document_id = metadata.get("document_id") or str(uuid.uuid4())
+        md = dict(metadata)
+        document_id_raw = md.get("document_id")
+        document_id = str(document_id_raw).strip() if document_id_raw else ""
+        if not document_id:
+            document_id = str(uuid.uuid4())
+        md["document_id"] = document_id
+
+        metadata = ensure_ttl_seconds_in_metadata(
+            md,
+            default_ttl_seconds=get_settings().rag.ttl.default_ttl_seconds,
+        )
 
         async with self._session_factory() as session:
             stmt = delete(VectorDocument).where(

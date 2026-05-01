@@ -110,6 +110,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             "document_id": entity.entity_id,
             "company_id": entity.company_id,
             "entity_type": entity.entity_type,
+            "ttl_seconds": 0,
         }
 
     @staticmethod

@@ -103,3 +103,4 @@ class DocumentProcessingStatus(BaseModel):
     updated_at: datetime
     completed_at: Optional[datetime] = None
     extra_metadata: Optional[Dict[str, Any]] = None
+    ttl_seconds: int = 864000
