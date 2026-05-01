@@ -86,6 +86,8 @@ x-common-env: &common-env
   PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCESS_TOKEN: ${YOOMONEY_ACCESS_TOKEN:-}
   # Observability: OTLP трейсы → Alloy → Tempo (zero-touch для сервисов)
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy:4317"
+  # Loki query API из контейнеров: localhost из conf.json недоступен (это loopback контейнера).
+  LOGGING__LOKI_QUERY_URL: http://loki:3100
 
 x-healthcheck: &healthcheck
   interval: 30s
@@ -626,6 +628,7 @@ services:
       GF_AUTH_PROXY_HEADER_NAME: "X-Auth-User"
       GF_AUTH_PROXY_HEADER_PROPERTY: "email"
       GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: "Admin"
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"
     volumes:

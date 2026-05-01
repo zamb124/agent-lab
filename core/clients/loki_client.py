@@ -2,8 +2,8 @@
 LokiClient — HTTP-клиент для поиска логов в Grafana Loki.
 
 Поддерживает только whitelist-шаблоны LogQL. По trace_id — сервисы платформы, где в лог
-попадает тот же OTel trace_id (frontend, flows, воркеры и т.д.); session/request/span/user —
-селектор flows. Произвольный LogQL от внешнего клиента не принимается.
+Попадает тот же OTel trace_id (frontend, agents HTTP flows, flows_worker, …); session/request/span/user —
+селектор processes, где крутится runtime flows (agents + *flows* в имени контейнера в Loki). Произвольный LogQL от внешнего клиента не принимается.
 """
 
 import json
@@ -18,13 +18,13 @@ logger = get_logger(__name__)
 
 _DEFAULT_QUERY_LOOKBACK = timedelta(days=7)
 
-# Селектор «только flows» — для session_agent и полей, специфичных в основном для flows.
-_FLOWS_SELECTOR = 'service=~".*flows.*"'
+# Селектор сервисов, где в Loki label service совпадает с именем контейнера после agentlab_:
+# в docker-compose-prod HTTP flows — контейнер agentlab_agents → service=agents; воркеры — *flows*.
+_FLOWS_SELECTOR = 'service=~"(agents|.*flows.*)"'
 
-# По trace_id ищем во всех основных процессах платформы: тот же trace_id в OTel уходит в
-# логи frontend, flows, воркеров и т.д.; ограничение только .*flows.* отрезает линии с тем же trace.
+# По trace_id — те же процессы; agents обязателен: иначе логи flows-сервиса на проде не попадают в выборку.
 _PLATFORM_TRACE_SELECTOR = (
-    'service=~"(frontend|flows|flows_worker|crm|crm_worker|rag|rag_worker|'
+    'service=~"(agents|frontend|flows|flows_worker|crm|crm_worker|rag|rag_worker|'
     'sync|sync_worker|office|voice|scheduler|browser|idle_worker|provider_litserve|.*flows.*)"'
 )
 

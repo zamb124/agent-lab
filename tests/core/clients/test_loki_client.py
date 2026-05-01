@@ -28,13 +28,15 @@ class TestQueryBuilders:
     def test_trace_query_contains_trace_id(self):
         q = _build_trace_query("abc123")
         assert 'trace_id="abc123"' in q
+        assert "agents" in q
         assert "flows" in q
         assert "frontend" in q
 
-    def test_session_query_still_uses_flows_only_selector(self):
+    def test_session_query_includes_agents_and_flows_services(self):
         q = _build_session_query("flow1:ctx1")
         assert "| json |" in q
         assert 'session_agent="flow1:ctx1"' in q
+        assert "agents" in q
         assert "flows" in q
 
     def test_trace_query_sanitizes_quotes(self):
