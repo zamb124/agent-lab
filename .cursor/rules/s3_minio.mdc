@@ -80,13 +80,17 @@ minio-test:
 
 ### conf.local.json (для локальной разработки)
 
+`conf.json` в репозитории может задавать облачный `default_bucket` (шаблон для прод/общей копии). **Локальный MinIO** подключается не правкой `conf.json`, а **`conf.local.json`** (мердж поверх базы): задайте `s3.default_bucket` равным **ключу** из `s3.buckets`, у которого `endpoint_url` указывает на ваш MinIO (в базовом конфиге это обычно `files` или `test-bucket`).
+
 ```json
 {
   "s3": {
-    "default_bucket": "test-bucket"
+    "default_bucket": "files"
   }
 }
 ```
+
+Допустимо и `"default_bucket": "test-bucket"`, если такой ключ есть в `s3.buckets` и endpoint совпадает с портом MinIO (dev: см. `docker-compose-dev.yaml`, хост обычно `http://127.0.0.1:19001`).
 
 ### Переменные окружения
 
@@ -100,6 +104,10 @@ export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://localhost:9000
 # Для test окружения (внутри контейнера)
 export S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
 ```
+
+### flows и flows_worker
+
+Оба процесса берут `load_merged_config(service_name="flows")` и те же `S3__…` из окружения. Разный эффективный endpoint или бакет между HTTP и воркером даёт запись в одном MinIO и чтение в другом: в БД есть `file_id`, в S3 — `NoSuchKey`. Тестовый MinIO на хосте (например порт `19002`) задаётся только в pytest/`tests/fixtures/workers.py` для субпроцессов, не отдельной логикой в `apps/flows_worker`.
 
 ### HTTP(S)_PROXY и локальный MinIO
 

@@ -184,7 +184,7 @@ def find_file(files: List[Dict[str, Any]], name: Optional[str] = None) -> Option
     Ищет файл в списке state.files по имени.
 
     Точное совпадение по полю name, затем case-insensitive подстрока.
-    Без name — первый элемент списка.
+    Без name — последний элемент списка (как у read_file без file_name).
 
     Args:
         files: Список записей файлов (state.files)
@@ -196,7 +196,7 @@ def find_file(files: List[Dict[str, Any]], name: Optional[str] = None) -> Option
     if not files:
         return None
     if not name:
-        return files[0]
+        return files[-1]
     for f in files:
         if f.get("name") == name:
             return f

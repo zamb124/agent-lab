@@ -14,6 +14,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union
 
+from botocore.exceptions import ClientError
+
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
 from core.context import get_context
@@ -82,10 +84,22 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     if isinstance(s3_bucket, str) and s3_bucket != "" and isinstance(s3_key, str) and s3_key != "":
         s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
         try:
-            raw = await s3_client.download_bytes(s3_key)
+            try:
+                raw = await s3_client.download_bytes(s3_key)
+            except ClientError as exc:
+                err = exc.response.get("Error", {}) if exc.response else {}
+                code = err.get("Code", "") if isinstance(err, dict) else ""
+                if code in ("NoSuchKey", "404", "NotFound"):
+                    raise FileReadError(
+                        "Файл не найден в хранилище: метаданные есть, объект отсутствует "
+                        f"(очистка бакета, смена окружения или устаревший идентификатор). file_id={file_id}"
+                    ) from exc
+                raise FileReadError(
+                    f"Ошибка объектного хранилища при чтении файла (код {code}): {file_id}"
+                ) from exc
+            return raw, record.original_name
         finally:
             await s3_client.close()
-        return raw, record.original_name
     storage_url = getattr(record, "storage_url", None)
     if isinstance(storage_url, str) and storage_url.startswith(("http://", "https://")):
         raw = await _read_http_bytes(storage_url)

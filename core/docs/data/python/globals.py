@@ -149,7 +149,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "Найти файл по имени в списке state.files:\n"
             "finfo = find_file(get_files(state), 'report.docx')\n\n"
-            "Без имени — первый файл из списка:\n"
+            "Без имени — последний файл из списка (обычно последняя загрузка):\n"
             "finfo = find_file(get_files(state))\n\n"
             "Поиск: точное совпадение по полю name, затем case-insensitive подстрока.\n"
             "Возвращает dict записи файла или None."

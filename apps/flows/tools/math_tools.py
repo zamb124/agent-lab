@@ -8,6 +8,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.tools import tool
+from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 
 
 class CalculatorArgs(BaseModel):
@@ -29,6 +30,7 @@ class CalculatorArgs(BaseModel):
     description="Вычисляет математические выражения. Поддерживает: +, -, *, /, **, %, sqrt, sin, cos, tan, log, exp, pi, e",
     tags=["math"],
     args_schema=CalculatorArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def calculator(expression: str, state: Optional[dict] = None) -> str:
     ops = {

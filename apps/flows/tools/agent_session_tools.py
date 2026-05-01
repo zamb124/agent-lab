@@ -12,6 +12,7 @@ from apps.flows.src.eval.platform_services import get_operator_handoff_service
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools import tool
+from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 
 if TYPE_CHECKING:
@@ -140,6 +141,7 @@ async def reason(
     description="Задает вопрос пользователю и ожидает ответ. Используй когда нужна информация от пользователя.",
     tags=["misc"],
     args_schema=AskUserArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def ask_user(question: str, state: Optional[dict] = None) -> str:
     raise FlowInterrupt(question=question)

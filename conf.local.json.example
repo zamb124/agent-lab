@@ -45,6 +45,7 @@
     }
   },
   "s3": {
+    "default_bucket": "files",
     "buckets": {
       "secretbucket": {
         "access_key_id": "YOUR_YANDEX_S3_ACCESS_KEY_ID",

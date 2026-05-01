@@ -114,6 +114,13 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                 logger.error("Failed to connect to Redis on startup")
                 raise
 
+    if settings.server.env == "development" and not is_testing():
+        from apps.flows.src.services.landing_bundle_dev_sync import (
+            sync_landing_public_demo_flows_from_bundles,
+        )
+
+        await sync_landing_public_demo_flows_from_bundles(container, settings)
+
     # Загрузка tools + постановка init_company в worker не должны блокировать lifespan:
     # иначе Uvicorn не слушает порт, пока не отработают БД и TaskIQ (Docker health → unhealthy).
     if is_testing():
@@ -381,6 +388,13 @@ async def old_ui_redirect():
 async def old_flows_ui_redirect():
     """Редирект со старых путей /flows/ui на /flows."""
     return RedirectResponse(url="/flows", status_code=301)
+
+
+@app.get("/flows", response_class=HTMLResponse)
+@app.get("/flows/", response_class=HTMLResponse)
+async def ui_spa_flows_root():
+    """SPA: корень приложения (маршрут list с path '')."""
+    return HTMLResponse(content=_INDEX_HTML)
 
 
 @app.get("/flows/{flow_id}", response_class=HTMLResponse)

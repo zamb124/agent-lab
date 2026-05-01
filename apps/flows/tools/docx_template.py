@@ -28,7 +28,7 @@ _FILL_DOCX_DESCRIPTION = """
   даты как строки в ISO; в inline-коде допускаются date/datetime/Decimal (см. DocxTemplater, date_iso).
 - output_original_name: имя результата с расширением .docx (обязательно).
   Ключ должен быть СТРОГО `output_original_name` (snake_case, через `_`, без пробелов).
-- file_name: имя шаблона как в state.files[].name (как у read_file); если не указано — первый файл .docx в state.files.
+- file_name: имя шаблона как в state.files[].name (как у read_file); если не указано — последний файл .docx в state.files.
 - strict: если true — в variables должны быть ровно все переменные верхнего уровня из шаблона, без лишних ключей.
 
 Ожидается JSON-объект аргументов только с ключами:
@@ -88,7 +88,7 @@ class FillDocxTemplateArgs(BaseModel):
     )
     file_name: Optional[str] = Field(
         None,
-        description="Имя шаблона в state.files; не указано — первый .docx из вложений.",
+        description="Имя шаблона в state.files; не указано — последний .docx из вложений.",
     )
     strict: bool = Field(
         False,
@@ -123,9 +123,7 @@ async def fill_docx_template(
             return None
         normalized_name = _normalize_file_name(name)
         if not normalized_name:
-            return entries[0]
-        if not name:
-            return entries[0]
+            return entries[-1]
         for f in entries:
             if f.get("name") == normalized_name:
                 return f
@@ -161,7 +159,7 @@ async def fill_docx_template(
     if normalized_file_name:
         finfo = _pick_file(files, normalized_file_name)
     else:
-        finfo = docx_entries[0] if docx_entries else None
+        finfo = docx_entries[-1] if docx_entries else None
 
     if finfo is None:
         return {

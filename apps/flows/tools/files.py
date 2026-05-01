@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.tools import tool
+from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
@@ -64,7 +65,7 @@ def _read_file_mock(args: dict, state: Any = None) -> dict:
         if not entries:
             return None
         if not name:
-            return entries[0]
+            return entries[-1]
         for f in entries:
             if f.get("name") == name:
                 return f
@@ -117,7 +118,7 @@ class ReadFileArgs(BaseModel):
 
     file_name: Optional[str] = Field(
         None,
-        description="Имя вложения как в state.files[].name; не передавай — будет взят первый файл из списка.",
+        description="Имя вложения как в state.files[].name; не передавай — будет взято последнее вложение в списке (обычно последняя загрузка пользователя).",
     )
     include_asset_bytes: bool = Field(
         False,
@@ -151,13 +152,14 @@ class CreateFileArgs(BaseModel):
     name="read_file",
     description=(
         "Читает вложение из state.files. Передаёшь file_name (как в записи name) — tool сам находит объект файла в state "
-        "и вызывает FileReader.read. Если file_name не указан, берётся первый файл из state.files. "
+        "и вызывает FileReader.read. Если file_name не указан, берётся последний файл в state.files (порядок: файлы нод графа, затем вложения по мере добавления в диалоге). "
         "include_asset_bytes — base64 вложений в ответе PDF (тяжело). "
         "vision_prompt — для картинок: инструкция vision-модели."
     ),
     tags=["files", "ocr", "document"],
     mock_response=_read_file_mock,
     args_schema=ReadFileArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def read_file(
     file_name: Optional[str] = None,
@@ -169,7 +171,7 @@ async def read_file(
         if not files_list:
             return None
         if not name:
-            return files_list[0]
+            return files_list[-1]
         for f in files_list:
             if f.get("name") == name:
                 return f
@@ -223,6 +225,7 @@ def _create_file_mock(args: dict, state: Any = None) -> dict:
     tags=["files", "storage"],
     mock_response=_create_file_mock,
     args_schema=CreateFileArgs,
+    permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def create_file(
     content: str,

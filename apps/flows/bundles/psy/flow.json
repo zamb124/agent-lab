@@ -17,7 +17,7 @@
         "model": "qwen/qwen3.5-397b-a17b",
         "temperature": 0.35
       },
-      "tools": ["ask_user"],
+      "tools": ["ask_user", "read_file", "create_file", "calculator"],
       "output_key": "response"
     }
   },
