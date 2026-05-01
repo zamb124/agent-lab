@@ -426,9 +426,9 @@ class TestSkillsAPIVariables:
         assert response.status_code == 200
         data = response.json()
         
-        # Проверяем variables в skill_body
-        skill_body = data.get("skill_body", {})
-        variables = skill_body.get("variables", {})
+        # Проверяем variables в branch_body
+        branch_body = data.get("branch_body", {})
+        variables = branch_body.get("variables", {})
         
         assert "role" in variables
         role = variables["role"]
@@ -468,7 +468,7 @@ class TestSkillsAPIVariables:
                 "branch_id": "new_skill",
                 "name": "New Skill",
                 "description": "Created via API",
-                "skill_body": {
+                "branch_body": {
                     "variables": {
                         "param": {
                             "value": "param_value",
@@ -489,8 +489,8 @@ class TestSkillsAPIVariables:
         assert get_response.status_code == 200
         data = get_response.json()
         
-        skill_body = data.get("skill_body", {})
-        variables = skill_body.get("variables", {})
+        branch_body = data.get("branch_body", {})
+        variables = branch_body.get("variables", {})
         
         assert "param" in variables
         param = variables["param"]
@@ -534,7 +534,7 @@ class TestSkillsAPIVariables:
             f"/flows/api/v1/{flow_id}/branches/updatable",
             json={
                 "name": "Updated Skill",
-                "skill_body": {
+                "branch_body": {
                     "variables": {
                         "config": {
                             "value": "new_value",
@@ -555,8 +555,8 @@ class TestSkillsAPIVariables:
         assert get_response.status_code == 200
         data = get_response.json()
         
-        skill_body = data.get("skill_body", {})
-        variables = skill_body.get("variables", {})
+        branch_body = data.get("branch_body", {})
+        variables = branch_body.get("variables", {})
         
         config = variables["config"]
         assert config["value"] == "new_value"

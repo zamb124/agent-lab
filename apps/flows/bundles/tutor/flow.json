@@ -1,0 +1,31 @@
+{
+  "id": "tutor",
+  "name": "Демо: репетитор",
+  "description": "Публичное демо: объяснение школьных тем простыми словами и примеры. Не замена учителю и экзаменатору.",
+  "version": "1.0.0",
+  "tags": ["demo", "landing", "education"],
+  "permission": [],
+  "branches": {},
+  "store_card_image": "tutor.jpg",
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "name": "Демо-репетитор",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.25
+      },
+      "tools": ["ask_user"],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    }
+  ],
+  "variables": {}
+}

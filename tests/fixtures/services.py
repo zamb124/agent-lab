@@ -51,6 +51,7 @@ _COMMON_TEST_ENV = {
     "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
     "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
+    "SERVER__VOICE_SERVICE_URL": "http://localhost:9015",
     "STT__PROVIDER": "mock",
     "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
@@ -133,8 +134,28 @@ def rag_service():
         yield
 
 
+_VOICE_SERVER_LOCK = "/tmp/platform_test_voice_server.lock"
+_VOICE_SERVER_PID = "/tmp/platform_test_voice_server.pid"
+
+
 @pytest.fixture(scope="session")
-def crm_service():
+def voice_service():
+    """Voice gateway на 9015 для CRM transcribe и межсервисных вызовов."""
+    manager = SessionServerManager(
+        name="Voice",
+        lock_file=_VOICE_SERVER_LOCK,
+        pid_file=_VOICE_SERVER_PID,
+        app_path="apps.voice.main:app",
+        port=9015,
+        startup_wait=12.0,
+        env=_COMMON_TEST_ENV,
+    )
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def crm_service(flows_service, rag_service, voice_service):
     """
     CRM сервис как реальный HTTP сервер на порту 9003.
     
@@ -147,7 +168,7 @@ def crm_service():
     Зависимости:
     - PostgreSQL (порт 54322) - для entity_types, relationships, relationship_types, entities через pgvector
     - RAG service (порт 9002) - для attachments
-    - Agents service (порт 9001) - для AI анализа через A2A
+    - Voice gateway (порт 9015) — транскрипция и межсервисные вызовы
     """
     manager = SessionServerManager(
         name="CRM",
@@ -184,7 +205,7 @@ def frontend_service():
         pid_file=_FRONTEND_SERVER_PID,
         app_path="apps.frontend.main:app",
         port=9004,
-        startup_wait=2.0,
+        startup_wait=20.0,
         env=_COMMON_TEST_ENV
     )
     

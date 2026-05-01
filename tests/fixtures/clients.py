@@ -64,6 +64,9 @@ def patch_service_clients_asgi(monkeypatch: pytest.MonkeyPatch) -> None:
             elif service == "office":
                 from apps.office.main import app
                 _apps_cache[service] = app
+            elif service == "voice":
+                from apps.voice.main import app
+                _apps_cache[service] = app
             else:
                 return None
         except ImportError:
@@ -364,19 +367,20 @@ async def rag_client_http(rag_service):
 
 
 @pytest_asyncio.fixture
-async def crm_client_http(crm_service, crm_companies_initialized, rag_service):
+async def crm_client_http(crm_service, crm_companies_initialized, rag_service, flows_service):
     """
     HTTP клиент для CRM API (реальный HTTP).
-    
-    Использует реальный HTTP сервер на порту 8003.
+
+    Использует реальный HTTP сервер на порту 9003.
     Для E2E тестов всей платформы.
     Таблицы создаются через миграции в setup_database_before_tests.
-    
+
     Зависимости:
     - crm_companies_initialized: session-scoped, system/company2 компании
     - rag_service: для attachments через inter-service communication
+    - flows_service: HTTP flows на 9001 для TaskIQ/worker и CRM→flows вызовов
     """
-    async with AsyncClient(base_url="http://localhost:8003") as client:
+    async with AsyncClient(base_url="http://localhost:9003") as client:
         yield client
 
 

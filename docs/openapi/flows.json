@@ -2332,6 +2332,17 @@
             "type": "object",
             "title": "Resources",
             "default": {}
+          },
+          "store_card_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Card Image Url"
           }
         },
         "type": "object",
@@ -2653,6 +2664,17 @@
             "type": "object",
             "title": "Metadata",
             "default": {}
+          },
+          "store_card_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Card Image Url"
           },
           "source": {
             "type": "string",

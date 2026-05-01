@@ -201,7 +201,10 @@ async function staleWhileRevalidateStatic(request) {
       return response;
     })
     .catch((error) => {
-      console.error('[SW] staleWhileRevalidateStatic fetch failed:', error);
+      // Фоновое обновление: при уже отданном из кэша ответе сбой сети не ошибка сценария.
+      if (!cached) {
+        console.warn('[SW] staleWhileRevalidateStatic: нет кэша и сеть недоступна', request.url, error);
+      }
       return null;
     });
 

@@ -1,0 +1,31 @@
+{
+  "id": "lawyer",
+  "name": "Демо: юридический ориентир",
+  "description": "Публичное демо: общие ориентиры и формулировки вопроса к юристу. Не замена очной консультации.",
+  "version": "1.0.0",
+  "tags": ["demo", "landing", "law"],
+  "permission": [],
+  "branches": {},
+  "store_card_image": "lawyer.jpg",
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "name": "Юридический демо-ассистент",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.25
+      },
+      "tools": ["ask_user"],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    }
+  ],
+  "variables": {}
+}

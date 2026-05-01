@@ -13,6 +13,7 @@ import './platform-embed-chat.js';
  * Параметры URL страницы: см. embed-chat-url-params.js (embed_theme, embed_lang, embed_width, embed_assistant_name, …).
  * Имя в шапке: атрибут assistant-title или ?embed_assistant_name= / embed_chat_title= (UTF-8).
  * Закрытие панели скрывает её (panel--collapsed), экземпляр platform-embed-chat сохраняется.
+ * При изменении `open` диспатчится composed `humanitec-embed-drawer-open-changed` с `detail.open` для синхронизации с хостом.
  */
 export class PlatformEmbedChatDrawer extends LitElement {
     static properties = {
@@ -453,6 +454,15 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
         if (changed.has('open') && this.open) {
             this.updateComplete.then(() => this._syncPanelToViewport());
+        }
+        if (changed.has('open')) {
+            this.dispatchEvent(
+                new CustomEvent('humanitec-embed-drawer-open-changed', {
+                    bubbles: true,
+                    composed: true,
+                    detail: { open: this.open },
+                }),
+            );
         }
         const resolved = resolveEmbedChatTheme(this.theme);
         if (this.getAttribute('data-embed-theme') !== resolved) {

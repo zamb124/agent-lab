@@ -25,6 +25,7 @@ PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
     "llm": {"*": 0.0001},
     "embedding": {"*": 0.00005},
     "billing": {"rub": 1.0},
+    "voice": {"session_minute": 0.01, "*": 0.0},
     "livekit": {
         "room_minute": 0.01,
         "egress_composite_minute": 0.05,

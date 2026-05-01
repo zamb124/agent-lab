@@ -179,6 +179,18 @@
         "toast_required": "Please fill in the required fields",
         "toast_email_invalid": "Please enter a valid email"
     },
+    "digital_workers": {
+        "title": "Digital employees",
+        "subtitle": "Try ready-made assistants without signing up. Responses are informational only.",
+        "disclaimer": "This showcases the platform. It is not medical, legal, or other professional advice. Do not rely on it as the sole basis for health, legal, or safety decisions.",
+        "load_error": "Could not load the catalog. Please try again later.",
+        "empty": "No public demo agents are published yet.",
+        "card_fallback_desc": "Click Try to open a chat with the assistant.",
+        "cta_try": "Try",
+        "cta_hire": "Hire",
+        "session_error": "Could not start a session: {{detail}}",
+        "session_error_generic": "Could not start a chat session."
+    },
     "footer": {
         "docs": "Documentation",
         "privacy": "Privacy Policy",

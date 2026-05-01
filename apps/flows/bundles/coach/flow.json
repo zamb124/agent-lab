@@ -1,0 +1,31 @@
+{
+  "id": "coach",
+  "name": "Демо: карьерный коуч",
+  "description": "Публичное демо: формулировка целей, вопросы к себе, структура резюме. Не гарантия трудоустройства.",
+  "version": "1.0.0",
+  "tags": ["demo", "landing", "career"],
+  "permission": [],
+  "branches": {},
+  "store_card_image": "coach.jpg",
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "name": "Карьерный демо-коуч",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.3
+      },
+      "tools": ["ask_user"],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    }
+  ],
+  "variables": {}
+}

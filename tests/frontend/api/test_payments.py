@@ -1062,6 +1062,7 @@ class TestPaymentModels:
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("yoomoney_token_storage")
 class TestYooMoneyTokenStorage:
 
     async def test_save_and_load_token(self, frontend_container):

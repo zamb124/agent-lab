@@ -510,7 +510,15 @@ class FlowConfig(StrictBaseModel):
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)
     hidden: bool = Field(default=False, description="Скрытый flow (не отображается в UI)")
-    
+
+    store_card_image_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL обложки агента (витрина, публичные embed/лендинг). "
+            "В UI задаётся загрузкой файла; при установке из bundle поле материализуется из store_card_image."
+        ),
+    )
+
     # Mock конфигурация
     mock: Optional[Dict[str, Any]] = Field(
         default=None,

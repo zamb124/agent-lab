@@ -48,7 +48,11 @@
     "title": "Редактирование flow",
     "field_name": "Название",
     "field_description": "Описание",
-    "action_cancel": "Отмена",
+    "field_card_image": "Обложка (карточка агента)",
+    "action_upload_image": "Загрузить изображение",
+    "action_clear_image": "Убрать",
+        "toast_image_type": "Выберите файл изображения",
+        "action_cancel": "Отмена",
     "action_save": "Сохранить"
   },
   "branch_create_modal": {

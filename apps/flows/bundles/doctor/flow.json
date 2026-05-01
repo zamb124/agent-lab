@@ -1,0 +1,31 @@
+{
+  "id": "doctor",
+  "name": "Демо: здоровье (просветительский)",
+  "description": "Публичное демо: гигиена, когда обратиться к врачу, общие ориентиры. Не диагностика и не лечение.",
+  "version": "1.0.0",
+  "tags": ["demo", "landing", "health"],
+  "permission": [],
+  "branches": {},
+  "store_card_image": "doctor.jpg",
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "name": "Медицинский демо-ассистент",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.25
+      },
+      "tools": ["ask_user"],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    }
+  ],
+  "variables": {}
+}

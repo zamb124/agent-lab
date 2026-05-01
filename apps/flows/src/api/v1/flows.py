@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import yaml
 
 from apps.flows.src.container import FlowContainer
@@ -52,6 +52,7 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
             "updated_at",
             "source",
             "public_fields",
+            "store_card_image_url",
         },
     )
     return _drop_files_fields(payload)
@@ -421,6 +422,16 @@ class FlowCreateRequest(BaseModel):
     evaluation: Optional[Dict[str, Any]] = None
     triggers: Dict[str, Any] = {}
     resources: Dict[str, Any] = {}
+    store_card_image_url: Optional[str] = None
+
+    @field_validator("store_card_image_url", mode="before")
+    @classmethod
+    def _empty_store_card_image_url(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class FlowResponse(BaseModel):
@@ -464,6 +475,9 @@ class FlowResponse(BaseModel):
 
     # UI-метаданные (sticky_notes и пр.)
     metadata: Dict[str, Any] = {}
+
+    # URL обложки агента (после загрузки файла или из bundle)
+    store_card_image_url: Optional[str] = None
 
     # manual | api | file (bundle в репозитории)
     source: str = "manual"
@@ -599,6 +613,7 @@ async def list_flows(
             "hidden": hidden,
             "source": getattr(f, "source", None) or "manual",
             "has_bundle_update": bundle_update_flags.get(f.flow_id, False),
+            "store_card_image_url": getattr(f, "store_card_image_url", None),
         }
         
         # LOCAL flow
@@ -792,6 +807,7 @@ async def create_flow(
         branches=branches_payload,
         evaluation=request.evaluation,
         source="api",
+        store_card_image_url=request.store_card_image_url,
     )
 
     await container.flow_repository.set(flow_config)
@@ -821,6 +837,7 @@ async def create_flow(
         hidden=getattr(flow_config, 'hidden', False),
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
         source=flow_config.source,
+        store_card_image_url=getattr(flow_config, "store_card_image_url", None),
     )
 
 
@@ -896,6 +913,7 @@ async def get_flow(
             metadata=getattr(flow_cfg, "metadata", None) or {},
             source=getattr(flow_cfg, "source", None) or "manual",
             has_bundle_update=bundle_update,
+            store_card_image_url=getattr(flow_cfg, "store_card_image_url", None),
         )
     except HTTPException:
         raise
@@ -1008,6 +1026,7 @@ async def update_flow(
         triggers=triggers,
         resources=resources,
         metadata=getattr(existing, "metadata", None) or {},
+        store_card_image_url=request.store_card_image_url,
     )
 
     await container.flow_repository.set(flow_config)
@@ -1052,6 +1071,7 @@ async def update_flow(
         resources=flow_config.resources or {},
         metadata=getattr(flow_config, "metadata", None) or {},
         source=flow_config.source,
+        store_card_image_url=getattr(flow_config, "store_card_image_url", None),
     )
 
 
@@ -1117,6 +1137,7 @@ async def bulk_delete_nodes(
         source=existing.source,
         triggers=existing.triggers or {},
         resources=existing.resources or {},
+        store_card_image_url=getattr(existing, "store_card_image_url", None),
     )
     await container.flow_repository.set(flow_config)
 
@@ -1177,6 +1198,7 @@ async def update_flow_metadata(
         triggers=existing.triggers or {},
         resources=existing.resources or {},
         metadata=metadata,
+        store_card_image_url=getattr(existing, "store_card_image_url", None),
     )
     await container.flow_repository.set(flow_config)
 
@@ -1248,6 +1270,7 @@ async def get_version(
         hidden=getattr(version_cfg, 'hidden', False),
         url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, getattr(version_cfg, 'url', None)),
         source=getattr(version_cfg, "source", None) or "manual",
+        store_card_image_url=getattr(version_cfg, "store_card_image_url", None),
     )
 
 

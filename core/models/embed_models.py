@@ -112,6 +112,21 @@ class EmbedConfig(BaseModel):
         title="Брендинг",
         description="Показывать брендинг Humanitec",
     )
+    landing_visible: bool = Field(
+        default=False,
+        title="Показ в каталоге лендинга",
+        description="Публичный каталог демо-агентов (только привязка компании system и отдельный публичный API)",
+    )
+    landing_card_image_url: Optional[str] = Field(
+        default=None,
+        title="Картинка карточки на лендинге",
+        description="URL изображения для карточки демо-сотрудника (обязателен при landing_visible)",
+    )
+    landing_sort_order: int = Field(
+        default=0,
+        title="Порядок в каталоге лендинга",
+        description="Меньше — выше в списке",
+    )
     
     # Статистика
     usage_count: int = Field(

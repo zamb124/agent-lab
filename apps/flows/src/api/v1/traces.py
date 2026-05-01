@@ -1,7 +1,7 @@
 """
 Traces API — OTEL-трейсы flows.
 
-Эндпоинт GET /traces/search читает platform_tracing (SpanRepository, PostgreSQL).
+Эндпоинт GET /traces/search читает platform_tracing (SpanRepository, PostgreSQL), фильтры flow_id и task_id комбинируются.
 
 Прочие маршруты /session, /task, /trace — через Grafana Tempo HTTP API.
 Ответ совместим с platform-trace-viewer: { spans: [...] } где spans — дерево.
@@ -29,12 +29,14 @@ _ATTR_TASK_ID = "platform.task_id"
 async def search_traces(
     container: ContainerDep,
     flow_id: Optional[str] = Query(default=None),
+    task_id: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
-    """Поиск трейсов в platform_tracing по optional ``flow_id``."""
+    """Поиск трейсов в platform_tracing по ``flow_id`` и/или ``task_id`` (атрибут platform.task_id)."""
     traces, total = await container.span_repository.search_traces(
         flow_id=flow_id,
+        task_id=task_id,
         limit=limit,
         offset=offset,
     )

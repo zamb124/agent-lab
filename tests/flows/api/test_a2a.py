@@ -1016,7 +1016,7 @@ class TestA2ASkills:
         assert isinstance(skills, list)
         assert len(skills) > 0, "Agent MUST have at least one skill"
 
-        for skill in branches:
+        for skill in skills:
             assert "id" in skill, "Skill MUST have 'id'"
             assert "name" in skill, "Skill MUST have 'name'"
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import json
+import mimetypes
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict, List, Type
@@ -251,6 +252,8 @@ class FlowsLoader:
                     raise ValueError(msg)
                 triggers[trigger_key] = TriggerConfig.model_validate(trigger_obj)
 
+        store_card_image_url = await self._resolve_store_card_image_url(raw_config, bundle_dir)
+
         return FlowConfig(
             flow_id=raw_config.get("flow_id") or raw_config.get("id"),
             name=raw_config.get("name", ""),
@@ -264,7 +267,57 @@ class FlowsLoader:
             evaluation=evaluation,
             triggers=triggers,
             source="file",
+            store_card_image_url=store_card_image_url,
         )
+
+    async def _resolve_store_card_image_url(
+        self,
+        raw_config: Dict[str, Any],
+        bundle_dir: Path,
+    ) -> str | None:
+        """
+        Поле bundle-only ``store_card_image``: путь к файлу относительно каталога bundle или URL (http/https).
+        Файл загружается в S3 (публичный объект), в FlowConfig попадает ``store_card_image_url`` (download URL).
+
+        Если в JSON задано ``store_card_image_url`` и путь к файлу не задан — используется как есть.
+        """
+        raw_path = raw_config.get("store_card_image")
+        if isinstance(raw_path, str) and raw_path.strip():
+            s = raw_path.strip()
+            if s.startswith(("http://", "https://")):
+                return s
+            local_path = Path(s)
+            if not local_path.is_absolute():
+                local_path = bundle_dir / s
+            if not local_path.is_file():
+                msg = f"store_card_image: файл не найден: {local_path}"
+                raise ValueError(msg)
+            data = local_path.read_bytes()
+            original_name = local_path.name
+            guessed = mimetypes.guess_type(original_name)[0]
+            content_type = guessed if isinstance(guessed, str) and guessed else "application/octet-stream"
+            processor = await get_default_file_processor()
+            company_id = self._resolve_target_company_id()
+            prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
+            record = await processor.persist_uploaded_file(
+                data=data,
+                original_name=original_name,
+                content_type=content_type,
+                uploaded_by=None,
+                company_id=company_id,
+                public=True,
+                download_url_prefix=prefix,
+            )
+            url = record.download_url
+            if not isinstance(url, str) or not url.strip():
+                msg = "store_card_image: после загрузки в хранилище отсутствует download_url"
+                raise ValueError(msg)
+            return url.strip()
+
+        raw_url = raw_config.get("store_card_image_url")
+        if isinstance(raw_url, str) and raw_url.strip():
+            return raw_url.strip()
+        return None
 
     async def _load_nodes(self, bundle_dir: Path, nodes_path: Path) -> None:
         """Загружает ноды из nodes.json в БД."""

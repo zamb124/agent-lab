@@ -284,7 +284,7 @@ async def test_embed_session_token_rejects_wrong_embed_id(
 
 
 @pytest.mark.asyncio
-async def test_embed_session_token_rejects_wrong_skill(
+async def test_embed_session_token_rejects_wrong_branch(
     flows_client: AsyncClient,
     frontend_client: AsyncClient,
     embed_test_auth,
@@ -310,7 +310,7 @@ async def test_embed_session_token_rejects_wrong_skill(
                 "role": "user",
                 "parts": [{"kind": "text", "text": "Привет"}],
             },
-            "metadata": {"skill": "non-default"},
+            "metadata": {"branch": "non_embed_allowed_branch"},
         },
     }
     deny_response = await flows_client.post(
@@ -324,7 +324,7 @@ async def test_embed_session_token_rejects_wrong_skill(
     assert deny_response.status_code == 200
     deny_payload = deny_response.json()
     assert deny_payload["error"]["code"] == -32000
-    assert "not allowed for this skill" in deny_payload["error"]["message"]
+    assert "not allowed for this branch" in deny_payload["error"]["message"]
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 

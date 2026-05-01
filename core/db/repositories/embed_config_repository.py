@@ -4,7 +4,7 @@
 
 from core.logging import get_logger
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -35,6 +35,42 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
 
     def _extract_entity_id(self, entity: EmbedConfig) -> str:
         return entity.embed_id
+
+    def _final_key_for_company_identifier(self, company_identifier: str, embed_id: str) -> str:
+        base_key = self._get_key(embed_id)
+        return f"company:{company_identifier}:{base_key}"
+
+    def _final_prefix_for_company_identifier(self, company_identifier: str) -> str:
+        base_prefix = self._get_prefix()
+        return f"company:{company_identifier}:{base_prefix}"
+
+    async def get_for_company_identifier(
+        self, company_identifier: str, embed_id: str
+    ) -> Optional[EmbedConfig]:
+        final_key = self._final_key_for_company_identifier(company_identifier.strip(), embed_id)
+        table_name = self._get_table_name()
+        data = await self._storage._get_with_session_and_table(final_key, table_name)
+        if data is None:
+            return None
+        return self.model_class.model_validate_json(data)
+
+    async def list_for_company_identifier(
+        self, company_identifier: str, *, limit: int, offset: int = 0
+    ) -> List[EmbedConfig]:
+        final_prefix = self._final_prefix_for_company_identifier(company_identifier.strip())
+        table_name = self._get_table_name()
+        all_data = await self._storage._get_all_by_prefix_and_table(
+            final_prefix, table_name, limit, offset
+        )
+        entities: List[EmbedConfig] = []
+        for key, data in all_data.items():
+            try:
+                entity = self.model_class.model_validate_json(data)
+                entities.append(entity)
+            except Exception as e:
+                logger.error(f"Ошибка парсинга {key}: {e}")
+                continue
+        return entities
     
     async def increment_usage(self, embed_id: str) -> None:
         """Увеличение счетчика использований виджета"""

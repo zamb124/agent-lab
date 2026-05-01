@@ -1,7 +1,8 @@
 {
     "routes": {
         "dashboard": "Панель",
-        "platform_services": "Сервисы"
+        "platform_services": "Сервисы",
+        "digital_workers": "Цифровые сотрудники"
     },
     "title": "Панель управления",
     "console_sidebar": {
@@ -409,7 +410,15 @@
         "header_edit": "Редактировать виджет",
         "toast_updated": "Виджет обновлен",
         "saving": "Сохранение...",
-        "save": "Сохранить"
+        "save": "Сохранить",
+        "label_landing_visible": "Показывать в публичном каталоге лендинга",
+        "landing_visible_hint": "Доступно только для компании system: карточка на странице /demo/digital-workers и выдача гостевой сессии.",
+        "label_landing_card_image_url": "URL картинки карточки",
+        "placeholder_landing_card_image_url": "https://…",
+        "landing_card_image_hint": "Обязательно, если включён показ на лендинге",
+        "label_landing_sort_order": "Порядок в каталоге",
+        "landing_sort_order_hint": "Меньшее значение — выше в списке",
+        "err_landing_image": "Укажите URL картинки для карточки"
     },
     "embed_code_modal": {
         "header": "Код для встраивания",

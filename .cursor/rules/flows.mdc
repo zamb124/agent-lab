@@ -280,6 +280,7 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 При загрузке в БД `FlowsLoader` инлайнит:
 - `prompt: "prompts/foo.md"` — текст промпта из файла;
 - `output_schema_file: "schemas/bar.json"` — подставляет JSON Schema в `output_schema` (поле `output_schema_file` удаляется). Путь относительно каталога bundle.
+- `store_card_image: "assets/card.png"` — файл относительно каталога bundle загружается в S3 (публичный объект); в `FlowConfig` сохраняется `store_card_image_url` (каноничный download URL сервиса flows). Строка `https://...` в `store_card_image` трактуется как готовый URL без повторной загрузки. Альтернатива только с URL: поле `store_card_image_url` в `flow.json`. В UI flows — загрузка через POST `/flows/api/v1/files/`, значение записывается в flow при сохранении (модалка редактирования flow).
 
 У ноды `llm` в JSON — это `llm_override` (не `llm_config`).
 
@@ -299,7 +300,8 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
         "edges": [...],
         "branches": {...},
         "variables": {...},
-        "triggers": {...}
+        "triggers": {...},
+        "store_card_image_url": "https://..."
     }
 
 ## Triggers (точки входа)

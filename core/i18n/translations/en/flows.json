@@ -48,7 +48,11 @@
     "title": "Edit flow",
     "field_name": "Name",
     "field_description": "Description",
-    "action_cancel": "Cancel",
+    "field_card_image": "Card image",
+    "action_upload_image": "Upload image",
+    "action_clear_image": "Remove",
+        "toast_image_type": "Please choose an image file",
+        "action_cancel": "Cancel",
     "action_save": "Save"
   },
   "branch_create_modal": {

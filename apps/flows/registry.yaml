@@ -60,6 +60,26 @@ flows:
     public: true
     description: "Интерактивный агент управления браузером через MCP Browser Runtime (multi-turn): хранит browser_session_id в state, выполняет произвольные команды пользователя (navigate/observe/click/fill) и закрывает сессию по явной команде."
 
+  - id: lawyer
+    public: true
+    description: "Демо лендинга: юридический ориентир (общая информация, не консультация)"
+
+  - id: doctor
+    public: true
+    description: "Демо лендинга: просветительский ориентир по здоровью (не диагноз)"
+
+  - id: psy
+    public: true
+    description: "Демо лендинга: психологический ориентир (не терапия)"
+
+  - id: coach
+    public: true
+    description: "Демо лендинга: карьерный коуч (структура целей и резюме)"
+
+  - id: tutor
+    public: true
+    description: "Демо лендинга: репетитор (объяснение тем без списывания)"
+
 
 # Тулы
 # ВСЕ тулы загружаются в system namespace при старте

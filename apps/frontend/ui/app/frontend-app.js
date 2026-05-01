@@ -18,6 +18,7 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
 import { embedConfigsResource, embedCodeLoadOp } from '../events/resources/embed.resource.js';
+import { landingAgentsLoadOp, landingDemoSessionOp } from '../events/resources/landing-demo.resource.js';
 import { flowsCatalogOp } from '../events/resources/flows-catalog.resource.js';
 import {
     schedulerTasksResource,
@@ -75,6 +76,7 @@ import '../pages/products/product-sync-page.js';
 import '../pages/products/product-documents-page.js';
 import '../pages/legal-page.js';
 import '../pages/support-page.js';
+import '../pages/landing-digital-workers-page.js';
 import '../pages/login-page.js';
 import '../pages/join-page.js';
 import '../pages/select-company-page.js';
@@ -99,6 +101,7 @@ const FRONTEND_ROUTES = [
     { key: 'policy',            path: 'policy' },
     { key: 'terms',             path: 'terms' },
     { key: 'support',           path: 'support' },
+    { key: 'digital-workers',   path: 'demo/digital-workers', parent: 'landing' },
     { key: 'login',             path: 'login' },
     { key: 'join',              path: 'join' },
     { key: 'select-company',    path: 'select-company' },
@@ -119,6 +122,7 @@ const PUBLIC_ROUTE_KEYS = new Set([
     'landing',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms', 'support',
+    'digital-workers',
     'login', 'join', 'select-company',
 ]);
 
@@ -126,6 +130,7 @@ const LANDING_ROUTE_KEYS = new Set([
     'landing',
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms', 'support',
+    'digital-workers',
 ]);
 
 /** Страницы, где уже есть `<page-header>` — общий мобильный хедер не вставляем. */
@@ -150,6 +155,8 @@ export class FrontendApp extends PlatformApp {
         inviteGenerateOp,
         embedConfigsResource,
         embedCodeLoadOp,
+        landingAgentsLoadOp,
+        landingDemoSessionOp,
         flowsCatalogOp,
         schedulerTasksResource,
         schedulerPauseOp,
@@ -349,6 +356,7 @@ export class FrontendApp extends PlatformApp {
             case 'policy':             return html`<legal-page kind="policy"></legal-page>`;
             case 'terms':              return html`<legal-page kind="terms"></legal-page>`;
             case 'support':            return html`<support-page></support-page>`;
+            case 'digital-workers':    return html`<landing-digital-workers-page></landing-digital-workers-page>`;
             case 'login':              return html`<login-page></login-page>`;
             case 'join':               return html`<join-page></join-page>`;
             case 'select-company':     return html`<select-company-page></select-company-page>`;

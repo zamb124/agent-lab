@@ -17,7 +17,8 @@ setup_logging(
 )
 
 from core.config.testing import is_testing
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -375,19 +376,12 @@ async def old_flows_ui_redirect():
     return RedirectResponse(url="/flows", status_code=301)
 
 
-_API_LIKE_PREFIXES = ("api/", "static/", "ws/")
-
-
-@app.get("/flows", response_class=HTMLResponse)
-@app.get("/flows/", response_class=HTMLResponse)
-@app.get("/flows/operator", response_class=HTMLResponse)
-@app.get("/flows/operator/", response_class=HTMLResponse)
 @app.get("/flows/{flow_id}", response_class=HTMLResponse)
 @app.get("/flows/{flow_id}/{rest:path}", response_class=HTMLResponse)
-async def ui_spa(flow_id: str = "", rest: str = ""):
-    """SPA: маршруты flow_chat / flow_editor / operator / list."""
-    if flow_id and flow_id.split("/")[0] in [p.rstrip("/") for p in _API_LIKE_PREFIXES]:
-        raise HTTPException(status_code=404, detail="Not found")
+async def ui_spa_flow(flow_id: str, rest: str = ""):
+    """SPA: flow_chat / flow_editor и вложенные client-маршруты."""
+    if flow_id in ("api", "static", "ws"):
+        raise HTTPException(status_code=404, detail="Not Found")
     return HTMLResponse(content=_INDEX_HTML)
 
 

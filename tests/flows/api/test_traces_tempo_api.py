@@ -53,6 +53,22 @@ class MockTempoClient:
         return self._search_ids
 
 
+_TEMPO_SENTINEL = object()
+
+
+def _set_mock_tempo(container, mock_client):
+    prev = getattr(container, "_cached_tempo_client", _TEMPO_SENTINEL)
+    container._cached_tempo_client = mock_client
+    return prev
+
+
+def _restore_mock_tempo(container, prev):
+    if prev is _TEMPO_SENTINEL:
+        delattr(container, "_cached_tempo_client")
+    else:
+        container._cached_tempo_client = prev
+
+
 class TestTracesTempoApiByTrace:
     """GET /flows/api/v1/traces/trace/{trace_id}"""
 
@@ -60,8 +76,7 @@ class TestTracesTempoApiByTrace:
     async def test_returns_spans_tree(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original = container.__dict__.get("tempo_client", None)
-        container.__dict__["tempo_client"] = MockTempoClient(spans=_SAMPLE_SPANS)
+        prev = _set_mock_tempo(container, MockTempoClient(spans=_SAMPLE_SPANS))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/trace/trace001",
@@ -75,17 +90,13 @@ class TestTracesTempoApiByTrace:
             assert len(body["spans"]) == 1
             assert body["spans"][0]["operation_name"] == "flow.run"
         finally:
-            if original is None:
-                container.__dict__.pop("tempo_client", None)
-            else:
-                container.__dict__["tempo_client"] = original
+            _restore_mock_tempo(container, prev)
 
     @pytest.mark.asyncio
     async def test_returns_503_when_tempo_unavailable(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original = container.__dict__.get("tempo_client", None)
-        container.__dict__["tempo_client"] = MockTempoClient(raise_error=True)
+        prev = _set_mock_tempo(container, MockTempoClient(raise_error=True))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/trace/trace001",
@@ -93,17 +104,13 @@ class TestTracesTempoApiByTrace:
             )
             assert resp.status_code == 503
         finally:
-            if original is None:
-                container.__dict__.pop("tempo_client", None)
-            else:
-                container.__dict__["tempo_client"] = original
+            _restore_mock_tempo(container, prev)
 
     @pytest.mark.asyncio
     async def test_returns_empty_spans_when_not_found(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original = container.__dict__.get("tempo_client", None)
-        container.__dict__["tempo_client"] = MockTempoClient(spans=[])
+        prev = _set_mock_tempo(container, MockTempoClient(spans=[]))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/trace/nonexistent",
@@ -114,10 +121,7 @@ class TestTracesTempoApiByTrace:
             assert body["spans_count"] == 0
             assert body["spans"] == []
         finally:
-            if original is None:
-                container.__dict__.pop("tempo_client", None)
-            else:
-                container.__dict__["tempo_client"] = original
+            _restore_mock_tempo(container, prev)
 
 
 class TestTracesTempoApiBySession:
@@ -127,9 +131,9 @@ class TestTracesTempoApiBySession:
     async def test_returns_spans_tree_via_search_then_get(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original = container.__dict__.get("tempo_client", None)
-        container.__dict__["tempo_client"] = MockTempoClient(
-            spans=_SAMPLE_SPANS, search_ids=["trace001"]
+        prev = _set_mock_tempo(
+            container,
+            MockTempoClient(spans=_SAMPLE_SPANS, search_ids=["trace001"]),
         )
         try:
             resp = await client.get(
@@ -141,17 +145,13 @@ class TestTracesTempoApiBySession:
             assert body["session_id"] == "my_flow:ctx1"
             assert body["spans_count"] == 1
         finally:
-            if original is None:
-                container.__dict__.pop("tempo_client", None)
-            else:
-                container.__dict__["tempo_client"] = original
+            _restore_mock_tempo(container, prev)
 
     @pytest.mark.asyncio
     async def test_returns_503_when_tempo_unavailable(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original = container.__dict__.get("tempo_client", None)
-        container.__dict__["tempo_client"] = MockTempoClient(raise_error=True)
+        prev = _set_mock_tempo(container, MockTempoClient(raise_error=True))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/session/my_flow%3Actx1",
@@ -159,10 +159,7 @@ class TestTracesTempoApiBySession:
             )
             assert resp.status_code == 503
         finally:
-            if original is None:
-                container.__dict__.pop("tempo_client", None)
-            else:
-                container.__dict__["tempo_client"] = original
+            _restore_mock_tempo(container, prev)
 
 
 class TestTracesTempoApiByTask:
@@ -172,9 +169,9 @@ class TestTracesTempoApiByTask:
     async def test_returns_spans_tree(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original = container.__dict__.get("tempo_client", None)
-        container.__dict__["tempo_client"] = MockTempoClient(
-            spans=_SAMPLE_SPANS, search_ids=["trace001"]
+        prev = _set_mock_tempo(
+            container,
+            MockTempoClient(spans=_SAMPLE_SPANS, search_ids=["trace001"]),
         )
         try:
             resp = await client.get(
@@ -186,7 +183,4 @@ class TestTracesTempoApiByTask:
             assert body["task_id"] == "task001"
             assert body["spans_count"] == 1
         finally:
-            if original is None:
-                container.__dict__.pop("tempo_client", None)
-            else:
-                container.__dict__["tempo_client"] = original
+            _restore_mock_tempo(container, prev)

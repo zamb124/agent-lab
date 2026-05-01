@@ -75,6 +75,9 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         _assistantTitle: { state: true },
         _greetingMessage: { state: true },
         _placeholder: { state: true },
+        _landingVisible: { state: true },
+        _landingCardImageUrl: { state: true },
+        _landingSortOrder: { state: true },
     };
 
     constructor() {
@@ -93,11 +96,39 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._assistantTitle = '';
         this._greetingMessage = '';
         this._placeholder = '';
+        this._landingVisible = false;
+        this._landingCardImageUrl = '';
+        this._landingSortOrder = 0;
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
         this._catalog = this.useOp('frontend/flows_catalog');
+        this._activeCompanySel = this.select((s) => s.companies.active);
         this._loaded = false;
         this._populated = false;
+    }
+
+    _isSystemCompany() {
+        const c = this._activeCompanySel.value;
+        return c !== null && typeof c === 'object' && c.company_id === 'system';
+    }
+
+    _resetCreateFormFields() {
+        this._name = '';
+        this._flowId = '';
+        this._skillId = 'default';
+        this._theme = 'dark';
+        this._position = 'bottom-right';
+        this._interfaceLocale = 'auto';
+        this._allowedOrigins = '';
+        this._showLauncher = true;
+        this._branding = true;
+        this._primaryColor = '#6366f1';
+        this._assistantTitle = '';
+        this._greetingMessage = '';
+        this._placeholder = '';
+        this._landingVisible = false;
+        this._landingCardImageUrl = '';
+        this._landingSortOrder = 0;
     }
 
     willUpdate(changed) {
@@ -110,23 +141,34 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             this._loaded = true;
             this._catalog.run(null);
         }
-        if (changed.has('embedConfig') && this.embedConfig && !this._populated) {
+        if (changed.has('open') && this.open && !this.embedConfig) {
+            this._populated = false;
+            this._resetCreateFormFields();
+        }
+        if (changed.has('embedConfig')) {
+            this._populated = false;
+        }
+        if (this.embedConfig && !this._populated) {
             this._populated = true;
             const c = this.embedConfig;
-            const _str = (v, def) => (typeof v === 'string' && v !== '' ? v : def);
-            this._name = _str(c.name, '');
-            this._flowId = _str(c.flow_id, '');
-            this._skillId = _str(c.branch_id, 'default');
-            this._theme = _str(c.theme, 'dark');
-            this._position = _str(c.position, 'bottom-right');
-            this._interfaceLocale = _str(c.interface_locale, 'auto');
-            this._allowedOrigins = Array.isArray(c.allowed_origins) ? c.allowed_origins.join('\n') : '';
+            if (typeof c.name === 'string') this._name = c.name;
+            if (typeof c.flow_id === 'string') this._flowId = c.flow_id;
+            if (typeof c.branch_id === 'string') this._skillId = c.branch_id;
+            if (typeof c.theme === 'string') this._theme = c.theme;
+            if (typeof c.position === 'string') this._position = c.position;
+            if (typeof c.interface_locale === 'string') this._interfaceLocale = c.interface_locale;
+            if (Array.isArray(c.allowed_origins)) {
+                this._allowedOrigins = c.allowed_origins.join('\n');
+            }
             this._showLauncher = c.show_launcher !== false;
             this._branding = c.branding !== false;
-            this._primaryColor = _str(c.primary_color, '#6366f1');
-            this._assistantTitle = _str(c.assistant_title, '');
-            this._greetingMessage = _str(c.greeting_message, '');
-            this._placeholder = _str(c.placeholder, '');
+            if (typeof c.primary_color === 'string') this._primaryColor = c.primary_color;
+            if (typeof c.assistant_title === 'string') this._assistantTitle = c.assistant_title;
+            if (typeof c.greeting_message === 'string') this._greetingMessage = c.greeting_message;
+            if (typeof c.placeholder === 'string') this._placeholder = c.placeholder;
+            if (typeof c.landing_visible === 'boolean') this._landingVisible = c.landing_visible;
+            if (typeof c.landing_card_image_url === 'string') this._landingCardImageUrl = c.landing_card_image_url;
+            if (typeof c.landing_sort_order === 'number') this._landingSortOrder = c.landing_sort_order;
         }
     }
 
@@ -164,6 +206,9 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         const errors = {};
         if (!this._name.trim()) errors.name = this.t('embed_create_modal.err_name');
         if (!this._flowId) errors.flow_id = this.t('embed_create_modal.err_flow');
+        if (this._isSystemCompany() && this._landingVisible && !this._landingCardImageUrl.trim()) {
+            errors.landing_image = this.t('embed_create_modal.err_landing_image');
+        }
         return errors;
     }
 
@@ -176,6 +221,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
 
     async handleSubmit() {
         const isEdit = !!this.embedConfig;
+        const sys = this._isSystemCompany();
+        const landingOn = sys && this._landingVisible;
         const payload = {
             name: this._name.trim(),
             flow_id: this._flowId,
@@ -190,6 +237,9 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             greeting_message: this._greetingMessage.trim() || null,
             interface_locale: this._interfaceLocale,
             placeholder: this._placeholder.trim() || null,
+            landing_visible: landingOn,
+            landing_card_image_url: landingOn ? this._landingCardImageUrl.trim() : null,
+            landing_sort_order: landingOn ? this._landingSortOrder : 0,
         };
         if (isEdit) {
             this._configs.update(this.embedConfig.embed_id, payload);
@@ -269,7 +319,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                     .value=${this._skillId}
                                     @change=${(e) => { this._skillId = e.target.value; this.isDirty = true; }}
                                 >
-                                    ${branches.map((s) => html`
+                                    ${skills.map((s) => html`
                                         <option value=${s.id} ?selected=${this._skillId === s.id}>${s.name}</option>
                                     `)}
                                 </select>
@@ -277,6 +327,75 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             `
                             : html`<div class="hint">${this.t('embed_create_modal.skill_default_hint')}</div>`}
                     </div>
+
+                    ${this._isSystemCompany()
+                        ? html`
+                              <div class="form-group full">
+                                  <label class="switch-row">
+                                      <input
+                                          type="checkbox"
+                                          .checked=${this._landingVisible}
+                                          @change=${(e) => {
+                                              this._landingVisible = e.target.checked;
+                                              this.isDirty = true;
+                                          }}
+                                      />
+                                      <span>${this.t('embed_create_modal.label_landing_visible')}</span>
+                                  </label>
+                                  <div class="hint">${this.t('embed_create_modal.landing_visible_hint')}</div>
+                              </div>
+                              ${this._landingVisible
+                                  ? html`
+                                        <div class="form-group full">
+                                            <label class="form-label">${this.t(
+                                                'embed_create_modal.label_landing_card_image_url',
+                                            )}</label>
+                                            <input
+                                                class="form-input"
+                                                .value=${this._landingCardImageUrl}
+                                                placeholder=${this.t(
+                                                    'embed_create_modal.placeholder_landing_card_image_url',
+                                                )}
+                                                @input=${(e) => {
+                                                    this._landingCardImageUrl = e.target.value;
+                                                    this.isDirty = true;
+                                                }}
+                                            />
+                                            <div class="hint">${this.t('embed_create_modal.landing_card_image_hint')}</div>
+                                            ${this.renderFieldError('landing_image')}
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">${this.t(
+                                                'embed_create_modal.label_landing_sort_order',
+                                            )}</label>
+                                            <input
+                                                class="form-input"
+                                                type="number"
+                                                step="1"
+                                                .value=${String(this._landingSortOrder)}
+                                                @input=${(e) => {
+                                                    const raw = e.target.value.trim();
+                                                    if (raw === '') {
+                                                        this._landingSortOrder = 0;
+                                                        this.isDirty = true;
+                                                        return;
+                                                    }
+                                                    const n = Number(raw);
+                                                    if (!Number.isFinite(n)) {
+                                                        throw new Error(
+                                                            'embed_create_modal: landing_sort_order must be a number',
+                                                        );
+                                                    }
+                                                    this._landingSortOrder = Math.trunc(n);
+                                                    this.isDirty = true;
+                                                }}
+                                            />
+                                            <div class="hint">${this.t('embed_create_modal.landing_sort_order_hint')}</div>
+                                        </div>
+                                    `
+                                  : ''}
+                          `
+                        : ''}
 
                     <div class="form-group full">
                         <label class="form-label">${this.t('embed_create_modal.position_label')}</label>

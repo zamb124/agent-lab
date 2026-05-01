@@ -357,6 +357,7 @@ class SpanRepository:
         user_id: Optional[str] = None,
         session_id: Optional[str] = None,
         flow_id: Optional[str] = None,
+        task_id: Optional[str] = None,
         from_time: Optional[datetime] = None,
         to_time: Optional[datetime] = None,
         limit: int = 100,
@@ -376,6 +377,10 @@ class SpanRepository:
                 count_stmt = count_stmt.where(Spans.session_agent == session_id)
             if flow_id:
                 cond = _json_text_eq(Spans.attributes, trace_attr.ATTR_FLOW_ID, flow_id)
+                stmt = stmt.where(cond)
+                count_stmt = count_stmt.where(cond)
+            if task_id:
+                cond = _json_text_eq(Spans.attributes, trace_attr.ATTR_TASK_ID, task_id)
                 stmt = stmt.where(cond)
                 count_stmt = count_stmt.where(cond)
             if from_time:

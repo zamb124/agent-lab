@@ -682,7 +682,8 @@ async def create_branch(flow_id: str, request: Request, container: ContainerDep)
     try:
         result = await channel.create_branch(branch_id, data)
     except ValueError as e:
-        if "already exists" in str(e):
+        msg = str(e).lower()
+        if "already exists" in msg or "уже существует" in msg:
             raise HTTPException(status_code=409, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -713,7 +714,8 @@ async def update_branch(flow_id: str, branch_id: str, request: Request, containe
     try:
         result = await channel.update_branch(branch_id, data)
     except ValueError as e:
-        if "not found" in str(e):
+        msg = str(e)
+        if msg == f"Ветка '{branch_id}' не найдена":
             raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found. Use POST to create.")
         raise HTTPException(status_code=400, detail=str(e))
 

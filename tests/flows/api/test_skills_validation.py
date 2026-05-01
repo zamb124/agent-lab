@@ -577,7 +577,7 @@ class TestSkillValidationAndPersistence:
         
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 400
-        assert "validation failed" in resp.json()["detail"].lower()
+        assert "валидации ветки" in resp.json()["detail"].lower()
 
     async def test_create_skill_validates_edge_references(self, client, unique_id):
         """Создание skill валидирует ссылки в edges."""
@@ -620,7 +620,7 @@ class TestSkillValidationAndPersistence:
         
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 400
-        assert "validation failed" in resp.json()["detail"].lower()
+        assert "валидации ветки" in resp.json()["detail"].lower()
 
     async def test_update_skill_validates_result(self, client, container, unique_id):
         """Обновление skill валидирует результат."""
@@ -680,7 +680,7 @@ class TestSkillValidationAndPersistence:
         
         update_resp = await client.put(f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data)
         assert update_resp.status_code == 400
-        assert "validation failed" in update_resp.json()["detail"].lower()
+        assert "валидации ветки" in update_resp.json()["detail"].lower()
         
         # Проверяем что skill не изменился
         agent = await container.flow_repository.get(flow_id)

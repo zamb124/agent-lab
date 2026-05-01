@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Plai
 from apps.frontend.api.auth import router as auth_router
 from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
+from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.team import router as team_router
 from apps.frontend.api.api_keys import router as api_keys_router
@@ -49,6 +50,7 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/products/crm",
     "/products/sync",
     "/products/documents",
+    "/demo/digital-workers",
 )
 
 def _short_link_redirect_location(target: str) -> str:
@@ -153,6 +155,7 @@ app = create_service_app(
         auth_router,
         companies_router,
         embed_configs_router,
+        public_landing_agents_router,
         invites_router,
         team_router,
         api_keys_router,

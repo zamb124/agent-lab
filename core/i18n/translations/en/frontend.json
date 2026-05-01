@@ -1,7 +1,8 @@
 {
     "routes": {
         "dashboard": "Dashboard",
-        "platform_services": "Services"
+        "platform_services": "Services",
+        "digital_workers": "Digital employees"
     },
     "title": "Dashboard",
     "console_sidebar": {
@@ -409,7 +410,15 @@
         "header_edit": "Edit widget",
         "toast_updated": "Widget updated",
         "saving": "Saving...",
-        "save": "Save"
+        "save": "Save",
+        "label_landing_visible": "Show in public landing catalog",
+        "landing_visible_hint": "Only for the system company: card on /demo/digital-workers and guest session issuance.",
+        "label_landing_card_image_url": "Card image URL",
+        "placeholder_landing_card_image_url": "https://…",
+        "landing_card_image_hint": "Required when landing visibility is enabled",
+        "label_landing_sort_order": "Catalog sort order",
+        "landing_sort_order_hint": "Lower values appear first",
+        "err_landing_image": "Enter an image URL for the card"
     },
     "embed_code_modal": {
         "header": "Embed code",

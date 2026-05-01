@@ -588,14 +588,28 @@ class PgVectorProvider(BaseRAGProvider):
             return self._metadata_expr_for_scalar(key, op_value) == op_value
         if operator == "$ne":
             return self._metadata_expr_for_scalar(key, op_value) != op_value
-        if operator == "$gt":
-            return VectorDocument.metadata_[key].as_float() > float(op_value)
-        if operator == "$gte":
-            return VectorDocument.metadata_[key].as_float() >= float(op_value)
-        if operator == "$lt":
-            return VectorDocument.metadata_[key].as_float() < float(op_value)
-        if operator == "$lte":
-            return VectorDocument.metadata_[key].as_float() <= float(op_value)
+
+        if isinstance(op_value, int) and not isinstance(op_value, bool):
+            col_int = VectorDocument.metadata_[key].as_integer()
+            if operator == "$gt":
+                return col_int > op_value
+            if operator == "$gte":
+                return col_int >= op_value
+            if operator == "$lt":
+                return col_int < op_value
+            if operator == "$lte":
+                return col_int <= op_value
+        else:
+            fv = float(op_value)
+            if operator == "$gt":
+                return VectorDocument.metadata_[key].as_float() > fv
+            if operator == "$gte":
+                return VectorDocument.metadata_[key].as_float() >= fv
+            if operator == "$lt":
+                return VectorDocument.metadata_[key].as_float() < fv
+            if operator == "$lte":
+                return VectorDocument.metadata_[key].as_float() <= fv
+
         if operator == "$in":
             return self._metadata_expr_for_scalar(key, op_value[0]).in_(op_value)
         if operator == "$nin":

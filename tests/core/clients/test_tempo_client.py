@@ -37,10 +37,13 @@ class TestBytesToHex:
         assert _bytes_to_hex(b"\xab\xcd") == "abcd"
 
     def test_base64_input(self):
-        # b"\x00\x01\x02" → base64 → "AAEC"
+        # Строка только из hex-символов может быть и hex, и base64; OTLP отдаёт base64 с неоднозначными символами.
         import base64
-        encoded = base64.b64encode(b"\x00\x01\x02").decode()
-        assert _bytes_to_hex(encoded) == "000102"
+
+        raw = b"\x00\x01\x02\xfb"
+        encoded = base64.b64encode(raw).decode()
+        assert "+" in encoded or "/" in encoded
+        assert _bytes_to_hex(encoded) == raw.hex()
 
 
 # ---------------------------------------------------------------------------

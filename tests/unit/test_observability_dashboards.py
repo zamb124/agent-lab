@@ -10,7 +10,7 @@ OBSERVABILITY_DIR = Path(__file__).parents[2] / "deploy" / "observability"
 DASHBOARDS_DIR = OBSERVABILITY_DIR / "dashboards"
 ALERTS_DIR = OBSERVABILITY_DIR / "grafana-alerts"
 
-LOKI_DATASOURCE_UID = ""
+LOKI_DATASOURCE_UID = "loki"
 TEMPO_DATASOURCE_UID = "tempo"
 
 
@@ -178,8 +178,9 @@ class TestProvisioningConfig:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         uids = [ds.get("uid") for ds in data.get("datasources", [])]
-        # Tempo имеет фиксированный uid; Loki — без uid (Grafana генерирует)
+        # Tempo имеет фиксированный uid; Loki — uid `loki` в grafana-datasources.yaml.
         assert TEMPO_DATASOURCE_UID in uids
+        assert LOKI_DATASOURCE_UID in uids
         names = [ds.get("name") for ds in data.get("datasources", [])]
         assert "Loki" in names
         assert "Tempo" in names
@@ -190,13 +191,11 @@ class TestAlloyConfig:
         path = OBSERVABILITY_DIR / "alloy.config"
         assert path.exists()
         content = path.read_text(encoding="utf-8")
-        # svc должен быть service.name (не escaped quotes вида \\"service.name\\")
         assert 'svc   = "\\"service.name\\""' not in content, (
             "alloy.config contains escaped quotes for service.name"
         )
-        assert 'svc   = "service.name"' in content, (
-            "alloy.config: svc expression should use service.name"
-        )
+        assert "discovery.docker" in content
+        assert 'targets    = discovery.relabel.docker_labels.output' in content
 
     def test_alloy_has_loki_write_and_otlp(self):
         path = OBSERVABILITY_DIR / "alloy.config"

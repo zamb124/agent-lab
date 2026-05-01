@@ -253,7 +253,7 @@ class GraphService:
                         continue
                     
                     can_traverse, neighbor_id = self._can_traverse_edge(
-                        rel, current_id, direction_map, ignore_direction=True
+                        rel, current_id, direction_map, ignore_direction=False
                     )
                     if not can_traverse or not neighbor_id:
                         continue
@@ -400,7 +400,7 @@ class GraphService:
                     if relationship_types and rel.relationship_type not in relationship_types:
                         continue
                     can_traverse, neighbor_id = self._can_traverse_edge(
-                        rel, current_id, direction_map, ignore_direction=True
+                        rel, current_id, direction_map, ignore_direction=False
                     )
                     if not can_traverse or not neighbor_id:
                         continue

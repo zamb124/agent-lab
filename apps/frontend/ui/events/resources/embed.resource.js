@@ -33,6 +33,28 @@ export const embedConfigsResource = createResourceCollection({
         update: 'frontend:embed_create_modal.toast_updated',
         remove: 'frontend:embed_page.toast_deleted',
     },
+    mapItem: (raw) => {
+        if (!raw || typeof raw !== 'object') {
+            throw new Error('frontend/embed_configs: invalid item');
+        }
+        if (typeof raw.embed_id !== 'string' || raw.embed_id === '') {
+            throw new Error('frontend/embed_configs: embed_id required');
+        }
+        if (typeof raw.landing_visible !== 'boolean') {
+            throw new Error('frontend/embed_configs: landing_visible required');
+        }
+        if (raw.landing_card_image_url != null && typeof raw.landing_card_image_url !== 'string') {
+            throw new Error('frontend/embed_configs: landing_card_image_url invalid');
+        }
+        if (typeof raw.landing_sort_order !== 'number') {
+            throw new Error('frontend/embed_configs: landing_sort_order required');
+        }
+        return {
+            ...raw,
+            landing_card_image_url:
+                typeof raw.landing_card_image_url === 'string' ? raw.landing_card_image_url : null,
+        };
+    },
 });
 
 export const embedCodeLoadOp = createAsyncOp({

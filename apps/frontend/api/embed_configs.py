@@ -15,9 +15,61 @@ from core.models.embed_models import EmbedConfig, EmbedStatus, EmbedMapping
 from core.utils.tokens import get_token_service
 from apps.frontend.dependencies import ContainerDep
 from core.clients.service_client import ServiceClientError
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
+
+
+def _validate_landing_catalog_fields(
+    *,
+    landing_visible: bool,
+    landing_card_image_url: Optional[str],
+    company_id: str,
+) -> None:
+    if not landing_visible:
+        return
+    if company_id != SYSTEM_COMPANY_ID:
+        raise HTTPException(
+            status_code=400,
+            detail="Показ в каталоге лендинга доступен только для компании system",
+        )
+    url = (landing_card_image_url or "").strip()
+    if not url:
+        raise HTTPException(
+            status_code=400,
+            detail="Для показа на лендинге укажите landing_card_image_url",
+        )
+
+
+def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
+    return EmbedConfigResponse(
+        embed_id=config.embed_id,
+        name=config.name,
+        flow_id=config.flow_id,
+        branch_id=config.branch_id,
+        allowed_origins=config.allowed_origins,
+        status=config.status,
+        theme=config.theme,
+        position=config.position,
+        show_launcher=config.show_launcher,
+        show_reasoning=config.show_reasoning,
+        show_tool_calls=config.show_tool_calls,
+        primary_color=config.primary_color,
+        greeting_message=config.greeting_message,
+        assistant_title=config.assistant_title,
+        interface_locale=config.interface_locale,
+        placeholder=config.placeholder,
+        branding=config.branding,
+        landing_visible=config.landing_visible,
+        landing_card_image_url=config.landing_card_image_url,
+        landing_sort_order=config.landing_sort_order,
+        usage_count=config.usage_count,
+        last_used_at=config.last_used_at,
+        created_at=config.created_at,
+        created_by=config.created_by,
+        updated_at=config.updated_at,
+    )
 
 class CreateEmbedConfigRequest(BaseModel):
     """Запрос на создание конфигурации виджета"""
@@ -36,6 +88,9 @@ class CreateEmbedConfigRequest(BaseModel):
     interface_locale: str = Field(default="auto", description="Язык интерфейса embed-чата (auto, ru, en)")
     placeholder: str = Field(default="Введите сообщение...", description="Placeholder")
     branding: bool = Field(default=True, description="Показывать брендинг")
+    landing_visible: bool = Field(default=False, description="Показ в публичном каталоге лендинга (только company system)")
+    landing_card_image_url: Optional[str] = Field(default=None, description="Картинка карточки на лендинге")
+    landing_sort_order: int = Field(default=0, description="Порядок в каталоге (меньше — выше)")
 
 class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
@@ -55,6 +110,9 @@ class UpdateEmbedConfigRequest(BaseModel):
     interface_locale: Optional[str] = None
     placeholder: Optional[str] = None
     branding: Optional[bool] = None
+    landing_visible: Optional[bool] = None
+    landing_card_image_url: Optional[str] = None
+    landing_sort_order: Optional[int] = None
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -75,6 +133,9 @@ class EmbedConfigResponse(BaseModel):
     interface_locale: str
     placeholder: str
     branding: bool
+    landing_visible: bool
+    landing_card_image_url: Optional[str]
+    landing_sort_order: int
     usage_count: int
     last_used_at: Optional[datetime]
     created_at: datetime
@@ -165,6 +226,13 @@ async def create_embed_config(
             )
         allowed_origins.append(normalized)
 
+    card_url = (request_data.landing_card_image_url or "").strip() or None
+    _validate_landing_catalog_fields(
+        landing_visible=request_data.landing_visible,
+        landing_card_image_url=card_url,
+        company_id=company_id,
+    )
+
     # Создаем конфигурацию
     config = EmbedConfig(
         embed_id=embed_id,
@@ -184,6 +252,9 @@ async def create_embed_config(
         interface_locale=interface_locale,
         placeholder=request_data.placeholder,
         branding=request_data.branding,
+        landing_visible=request_data.landing_visible,
+        landing_card_image_url=card_url,
+        landing_sort_order=request_data.landing_sort_order,
         created_by=user.user_id,
     )
     
@@ -197,30 +268,7 @@ async def create_embed_config(
     
     logger.info(f"Создана конфигурация виджета {embed_id} для компании {company_id}")
     
-    return EmbedConfigResponse(
-        embed_id=config.embed_id,
-        name=config.name,
-        flow_id=config.flow_id,
-        branch_id=config.branch_id,
-        allowed_origins=config.allowed_origins,
-        status=config.status,
-        theme=config.theme,
-        position=config.position,
-        show_launcher=config.show_launcher,
-        show_reasoning=config.show_reasoning,
-        show_tool_calls=config.show_tool_calls,
-        primary_color=config.primary_color,
-        greeting_message=config.greeting_message,
-        assistant_title=config.assistant_title,
-        interface_locale=config.interface_locale,
-        placeholder=config.placeholder,
-        branding=config.branding,
-        usage_count=config.usage_count,
-        last_used_at=config.last_used_at,
-        created_at=config.created_at,
-        created_by=config.created_by,
-        updated_at=config.updated_at,
-    )
+    return _embed_config_to_response(config)
 
 @router.get("", response_model=OffsetPage[EmbedConfigResponse])
 async def list_embed_configs(
@@ -248,33 +296,7 @@ async def list_embed_configs(
     
     logger.info(f"Получен список из {len(configs)} конфигураций для компании {company_id}")
 
-    items = [
-        EmbedConfigResponse(
-            embed_id=c.embed_id,
-            name=c.name,
-            flow_id=c.flow_id,
-            branch_id=c.branch_id,
-            allowed_origins=c.allowed_origins,
-            status=c.status,
-            theme=c.theme,
-            position=c.position,
-            show_launcher=c.show_launcher,
-            show_reasoning=c.show_reasoning,
-            show_tool_calls=c.show_tool_calls,
-            primary_color=c.primary_color,
-            greeting_message=c.greeting_message,
-            assistant_title=c.assistant_title,
-            interface_locale=c.interface_locale,
-            placeholder=c.placeholder,
-            branding=c.branding,
-            usage_count=c.usage_count,
-            last_used_at=c.last_used_at,
-            created_at=c.created_at,
-            created_by=c.created_by,
-            updated_at=c.updated_at,
-        )
-        for c in configs
-    ]
+    items = [_embed_config_to_response(c) for c in configs]
     return OffsetPage[EmbedConfigResponse](items=items, total=len(items), limit=limit, offset=offset)
 
 @router.get("/{embed_id}", response_model=EmbedConfigResponse)
@@ -293,30 +315,7 @@ async def get_embed_config(
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
     
-    return EmbedConfigResponse(
-        embed_id=config.embed_id,
-        name=config.name,
-        flow_id=config.flow_id,
-        branch_id=config.branch_id,
-        allowed_origins=config.allowed_origins,
-        status=config.status,
-        theme=config.theme,
-        position=config.position,
-        show_launcher=config.show_launcher,
-        show_reasoning=config.show_reasoning,
-        show_tool_calls=config.show_tool_calls,
-        primary_color=config.primary_color,
-        greeting_message=config.greeting_message,
-        assistant_title=config.assistant_title,
-        interface_locale=config.interface_locale,
-        placeholder=config.placeholder,
-        branding=config.branding,
-        usage_count=config.usage_count,
-        last_used_at=config.last_used_at,
-        created_at=config.created_at,
-        created_by=config.created_by,
-        updated_at=config.updated_at,
-    )
+    return _embed_config_to_response(config)
 
 @router.patch("/{embed_id}", response_model=EmbedConfigResponse)
 async def update_embed_config(
@@ -339,40 +338,30 @@ async def update_embed_config(
     update_data = request_data.model_dump(exclude_unset=True)
     if "interface_locale" in update_data and update_data["interface_locale"] is not None:
         update_data["interface_locale"] = _normalize_interface_locale(update_data["interface_locale"])
-    
+    if "landing_card_image_url" in update_data and update_data["landing_card_image_url"] is not None:
+        s = str(update_data["landing_card_image_url"]).strip()
+        update_data["landing_card_image_url"] = s if s else None
+
     for field, value in update_data.items():
         if hasattr(config, field):
             setattr(config, field, value)
-    
+
+    user = request.state.user
+    company_id = user.active_company_id
+    if not company_id:
+        raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
+    _validate_landing_catalog_fields(
+        landing_visible=config.landing_visible,
+        landing_card_image_url=config.landing_card_image_url,
+        company_id=company_id,
+    )
+
     config.updated_at = datetime.now(timezone.utc)
     await embed_config_repo.set(config)
     
     logger.info(f"Обновлена конфигурация виджета {embed_id}")
     
-    return EmbedConfigResponse(
-        embed_id=config.embed_id,
-        name=config.name,
-        flow_id=config.flow_id,
-        branch_id=config.branch_id,
-        allowed_origins=config.allowed_origins,
-        status=config.status,
-        theme=config.theme,
-        position=config.position,
-        show_launcher=config.show_launcher,
-        show_reasoning=config.show_reasoning,
-        show_tool_calls=config.show_tool_calls,
-        primary_color=config.primary_color,
-        greeting_message=config.greeting_message,
-        assistant_title=config.assistant_title,
-        interface_locale=config.interface_locale,
-        placeholder=config.placeholder,
-        branding=config.branding,
-        usage_count=config.usage_count,
-        last_used_at=config.last_used_at,
-        created_at=config.created_at,
-        created_by=config.created_by,
-        updated_at=config.updated_at,
-    )
+    return _embed_config_to_response(config)
 
 @router.delete("/{embed_id}")
 async def delete_embed_config(

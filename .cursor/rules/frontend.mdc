@@ -240,6 +240,10 @@ await publish_ui_event_to_user(
 WS-эффект форвардит фрейм, фронт диспатчит как обычное событие.
 Подписанный компонент использует `this.useEvent('crm/note/updated', handler)`.
 
+## Публичный каталог лендинга (BFF frontend)
+
+Анонимные HTTP-эндпоинты сервиса frontend: `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу попадают только виджеты компании **`system`** с **`landing_visible`** и непустым **`landing_card_image_url`**. UI: маршрут **`digital-workers`** (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики **`frontend/landing_agents_load`** и **`frontend/landing_demo_session`** в `landing-demo.resource.js`; пробный чат через **`platform-embed-chat-drawer`** и гостевой JWT из POST session.
+
 ## Тесты
 
 - Reducers фабрик — чистые `(state, event) => state`, unit без mocks.

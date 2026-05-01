@@ -714,9 +714,13 @@ class TestSpanHierarchy:
             f"Должны быть child spans с parent_span_id. Spans: {[s.get('operation_name') for s in spans]}"
 
 
+@pytest.mark.timeout(30)
 class TestTracingAPI:
     """
     Тесты API для получения трейсов.
+
+    В интеграции без Tempo spans живут в PostgreSQL; дерево из Tempo (/task, /trace)
+    здесь не используется — проверяем GET /traces/search по flow_id и task_id.
     """
 
     @pytest.mark.asyncio
@@ -728,7 +732,7 @@ class TestTracingAPI:
         unique_id: str,
     ):
         """
-        Тест API /api/v1/traces/task/{task_id}
+        Тест API GET /traces/search?task_id=... (platform_tracing).
         """
         setup_mock_responses(response_queue=["API test response"])
 
@@ -748,28 +752,37 @@ class TestTracingAPI:
             },
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
+        assert response.status_code == 200, f"API error: {response.text}"
 
         result = response.json()
         task_id = result.get("result", {}).get("id")
         assert task_id, f"Не получили task_id из ответа: {result}"
 
         deadline = time.monotonic() + 8.0
-        data: Dict[str, Any] = {}
+        data: Dict[str, Any] = {"traces_count": 0}
         while time.monotonic() < deadline:
-            traces_response = await client.get(f"/flows/api/v1/traces/task/{task_id}")
+            traces_response = await client.get(
+                "/flows/api/v1/traces/search",
+                params={"task_id": task_id, "limit": 50},
+            )
             assert traces_response.status_code == 200, f"API error: {traces_response.text}"
             data = traces_response.json()
-            if data.get("spans_count", 0) > 0:
+            if data.get("traces_count", 0) > 0:
                 break
             await asyncio.sleep(0.05)
         
         logger.info(f"=== TEST: test_get_traces_by_task_api ===")
         logger.info(f"Task ID: {task_id}")
-        logger.info(f"Spans count: {data.get('spans_count')}")
+        logger.info(f"Traces count: {data.get('traces_count')}")
         
-        assert data["task_id"] == task_id
-        assert data["spans_count"] > 0, \
-            f"КРИТИЧЕСКАЯ ОШИБКА: API вернул 0 spans для task {task_id}"
+        assert data["traces_count"] > 0, (
+            f"КРИТИЧЕСКАЯ ОШИБКА: search вернул 0 traces для task {task_id}"
+        )
+        traces_list = data.get("traces")
+        assert isinstance(traces_list, list)
+        assert len(traces_list) > 0
+        span_total = sum(len(t.get("spans", [])) for t in traces_list)
+        assert span_total > 0
 
     @pytest.mark.asyncio
     async def test_get_traces_by_flow_api(
@@ -780,11 +793,11 @@ class TestTracingAPI:
         unique_id: str,
     ):
         """
-        Тест API /api/v1/traces/flow/{flow_id}
+        Тест API GET /traces/search?flow_id=... (platform_tracing).
         """
         setup_mock_responses(response_queue=["Agent API test"])
 
-        await client.post(
+        post_resp = await client.post(
             "/flows/api/v1/example_react",
             json={
                 "jsonrpc": "2.0",
@@ -800,22 +813,28 @@ class TestTracingAPI:
             },
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
+        assert post_resp.status_code == 200, f"API error: {post_resp.text}"
 
         deadline = time.monotonic() + 8.0
-        data: Dict[str, Any] = {"spans_count": 0}
+        data: Dict[str, Any] = {"traces_count": 0}
         while time.monotonic() < deadline:
-            flow_response = await client.get("/flows/api/v1/traces/flow/example_react?limit=10")
+            flow_response = await client.get(
+                "/flows/api/v1/traces/search",
+                params={"flow_id": "example_react", "limit": 50},
+            )
             assert flow_response.status_code == 200, f"API error: {flow_response.text}"
             data = flow_response.json()
-            if data.get("spans_count", 0) > 0:
+            if data.get("traces_count", 0) > 0:
                 break
             await asyncio.sleep(0.05)
 
         logger.info(f"=== TEST: test_get_traces_by_flow_api ===")
-        logger.info(f"Spans count for flow example_react: {data['spans_count']}")
+        logger.info(f"Traces count for flow example_react: {data['traces_count']}")
         
-        assert data["flow_id"] == "example_react"
-        assert data["spans_count"] > 0
+        assert data["traces_count"] > 0
+        traces_list = data.get("traces")
+        assert isinstance(traces_list, list)
+        assert len(traces_list) > 0
 
     @pytest.mark.asyncio
     async def test_search_traces_api(

@@ -1433,13 +1433,16 @@ class BaseChannel(ABC):
             capabilities=AgentCapabilities(
                 streaming=True, pushNotifications=False, stateTransitionHistory=True
             ),
-            branches=card_branch_entries,
+            skills=card_branch_entries,
             defaultInputModes=["text/plain"],
             defaultOutputModes=["text/plain"],
             supportsAuthenticatedExtendedCard=False,
         )
         
         card_dict = card.model_dump(by_alias=True, exclude_none=True)
+        skills_payload = card_dict.pop("skills", None)
+        if skills_payload is not None:
+            card_dict["branches"] = skills_payload
         
         # Добавляем публичные variables как дополнительное поле (не входит в стандарт A2A)
         public_vars = {}
