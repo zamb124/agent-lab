@@ -21,7 +21,8 @@ LOG_SPAN_ID = "span_id"
 LOG_USER_ID = "user_id"
 LOG_COMPANY_ID = "company_id"
 LOG_COMPANY_SUBDOMAIN = "company_subdomain"
-LOG_SESSION_ID = "session_id"
+LOG_SESSION_ID = "session_id"  # JWT / WebSocket — авторизационная сессия
+LOG_SESSION_AGENT = "session_agent"  # flow_id:context_id — сессия исполнения агента flows
 LOG_NAMESPACE = "namespace"
 
 # HTTP (OTel: http.request.method, http.route, http.response.status_code)

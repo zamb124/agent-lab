@@ -120,6 +120,23 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
+    def tempo_client(self):
+        from apps.flows.config import get_settings
+        from core.clients import TempoClient
+        settings = get_settings()
+        return TempoClient(base_url=settings.tracing.tempo_http_url)
+
+    @lazy
+    def loki_client(self):
+        from apps.flows.config import get_settings
+        from core.clients import LokiClient
+        settings = get_settings()
+        base = settings.logging.resolve_loki_query_http_base()
+        if not base:
+            return None
+        return LokiClient(base_url=base)
+
+    @lazy
     def a2a_client(self):
         from core.clients import A2AClient
         return A2AClient()

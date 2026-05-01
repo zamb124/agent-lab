@@ -23,6 +23,7 @@
 3. Worker запускается с флагом `-w 1` (один worker) для упрощения дебага
 """
 
+import runpy
 import sys
 from pathlib import Path
 
@@ -42,8 +43,6 @@ if __name__ == "__main__":
     sys.argv = ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "-w", "1"]
 
     try:
-        import runpy
-
         runpy.run_module("taskiq", run_name="__main__", alter_sys=True)
     finally:
         sys.argv = original_argv

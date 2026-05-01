@@ -27,6 +27,7 @@ import { variablesResource } from '../events/resources/variables.resource.js';
 import { nodesCatalogResource, nodeCatalogUpdateOp } from '../events/resources/nodes-catalog.resource.js';
 import { sessionsResource, sessionStateOp } from '../events/resources/sessions.resource.js';
 import { tracesBySessionOp, tracesByTaskOp, tracesByTraceOp } from '../events/resources/traces.resource.js';
+import { logsByTraceOp, logsBySessionOp } from '../events/resources/logs.resource.js';
 import {
     nodeTypesOp,
     resourceTypesOp,
@@ -101,6 +102,8 @@ export class FlowsApp extends PlatformApp {
         tracesBySessionOp,
         tracesByTaskOp,
         tracesByTraceOp,
+        logsByTraceOp,
+        logsBySessionOp,
         nodeTypesOp,
         resourceTypesOp,
         exceptionAbsorbAllowNamesOp,

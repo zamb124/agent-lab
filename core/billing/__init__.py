@@ -4,6 +4,11 @@
 
 from typing import Optional
 
+from .cbr_rate_provider import (
+    get_current_rate as get_cbr_usd_to_rub_rate,
+    refresh_loop_coro as cbr_rate_refresh_loop_coro,
+    refresh_rate_once as refresh_cbr_rate,
+)
 from .exceptions import BillingBalanceBlockedError
 from .service import (
     BALANCE_BLOCK_OPERATION_EMBEDDING,
@@ -29,10 +34,10 @@ def set_billing_service(service: BillingService) -> None:
 def get_billing_service() -> BillingService:
     """
     Получает глобальный BillingService.
-    
+
     Returns:
         BillingService
-        
+
     Raises:
         RuntimeError: если сервис не инициализирован
     """
@@ -52,7 +57,9 @@ __all__ = [
     "BALANCE_BLOCK_OPERATION_VISION",
     "BillingBalanceBlockedError",
     "BillingService",
+    "cbr_rate_refresh_loop_coro",
     "get_billing_service",
+    "get_cbr_usd_to_rub_rate",
+    "refresh_cbr_rate",
     "set_billing_service",
 ]
-

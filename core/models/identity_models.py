@@ -91,6 +91,14 @@ class User(BaseModel):
         title="Email адреса",
         description="Список email адресов пользователя"
     )
+
+    @property
+    def email(self) -> str:
+        """Первый email для JWT и вызовов, где ожидается одна строка."""
+        if not self.emails:
+            return ""
+        return self.emails[0]
+
     phones: List[str] = Field(
         default_factory=list,
         title="Телефоны",

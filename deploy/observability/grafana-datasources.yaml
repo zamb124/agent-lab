@@ -1,8 +1,15 @@
 # Provisioned datasources для Grafana.
-# Cross-linking: trace_id в логе (Loki) → Tempo waterfall, и обратно.
+# Loki → Tempo (derivedFields по trace_id в логах).
+# Связку Tempo → Loki в Explore при желании включите в UI datasources (избегаем циклических UID при provisioning).
 apiVersion: 1
 
 datasources:
+  # Tempo первым: у Loki derivedFields ссылаются на uid tempo (иначе provisioning падает).
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    url: http://tempo:3200
+
   - name: Loki
     type: loki
     uid: loki
@@ -14,16 +21,5 @@ datasources:
           matcherRegex: '"trace_id"\s*:\s*"(\w+)"'
           matcherType: regex
           name: trace_id
-          url: "${__value.raw}"
+          url: "$${__value.raw}"
           urlDisplayLabel: "View Trace"
-
-  - name: Tempo
-    type: tempo
-    uid: tempo
-    url: http://tempo:3200
-    jsonData:
-      tracesToLogsV2:
-        datasourceUid: loki
-        filterByTraceID: true
-        customQuery: true
-        query: '{} | json | trace_id = "${__trace.traceId}"'

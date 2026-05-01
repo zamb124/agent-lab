@@ -195,6 +195,23 @@ def create_service_app(
         set_billing_service(container.billing_service)
         logger.info("BillingService инициализирован")
 
+        # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
+        # затем фоновое обновление каждые 5 минут.
+        # Fallback при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
+        from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
+        from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
+        from core.utils.background import run_with_log_context
+
+        _cbr_fallback = settings.billing.usd_to_rub_rate
+        await _cbr_refresh_once(fallback=_cbr_fallback)
+        if not is_testing():
+            run_with_log_context(
+                _cbr_loop_coro(fallback=_cbr_fallback),
+                name="billing.cbr_rate_refresh",
+                background_kind="startup",
+            )
+            logger.info("billing.cbr_rate.loop_scheduled")
+
         from core.files.processors import initialize_default_processors
 
         if hasattr(container, "file_repository"):

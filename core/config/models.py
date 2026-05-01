@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import urlparse
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -125,6 +126,32 @@ class LoggingConfig(BaseModel):
             "В prod/test логи собирает Alloy из stdout контейнеров."
         ),
     )
+    loki_query_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL Loki query API для поиска логов из приложения (GET /loki/api/v1/query_range). "
+            "Пример: http://localhost:3100 или http://loki:3100. "
+            "Если None, а задан loki_url (push), базовый URL берётся как scheme://netloc от loki_url. "
+            "Если оба пусты — API логов возвращает 503. "
+            "Используется flows logs API и admin logs API."
+        ),
+    )
+
+    def resolve_loki_query_http_base(self) -> Optional[str]:
+        """
+        Базовый URL хоста Loki для LokiClient (GET /loki/api/v1/query_range).
+
+        Приоритет: loki_query_url; иначе scheme://netloc из loki_url (например push …/loki/api/v1/push).
+        """
+        if self.loki_query_url:
+            base = self.loki_query_url.strip()
+            return base.rstrip("/") if base else None
+        if not self.loki_url:
+            return None
+        parsed = urlparse(self.loki_url.strip())
+        if not parsed.scheme or not parsed.netloc:
+            return None
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
 
 
 class ServerConfig(BaseModel):
@@ -593,6 +620,15 @@ class TracingConfig(BaseModel):
     postgres_enabled: bool = True
     tempo_enabled: bool = False
     tempo_endpoint: str = "http://localhost:4317"
+    tempo_http_url: str = Field(
+        default="http://localhost:3200",
+        description=(
+            "URL HTTP API Grafana Tempo для чтения трейсов (GET /api/traces/{id}, GET /api/search). "
+            "Порт 3200 — стандартный для Tempo HTTP. "
+            "Пример prod: http://tempo:3200. "
+            "Используется flows traces API и admin tracing API при чтении из Tempo."
+        ),
+    )
     sampling_rate: float = 1.0
     retention_days: int = 30
 
@@ -928,7 +964,13 @@ class BillingConfig(BaseModel):
     usd_to_rub_rate: float = Field(
         default=85.0,
         gt=0.0,
-        description="Курс: USD из platform.llm.provider_reported_cost × rate → platform.billing.settlement_quantity_rub (целые рубли).",
+        description=(
+            "Fallback-курс USD/RUB. При старте сервиса платформа получает актуальный курс"
+            " от ЦБ РФ (cbr.ru/scripts/XML_daily.asp) и обновляет его каждые 5 минут."
+            " Это значение используется только если ЦБ временно недоступен или до первого"
+            " успешного ответа. Влияет на platform.billing.settlement_quantity_rub"
+            " в spans OpenRouter (round(provider_reported_cost_usd × rate))."
+        ),
     )
     span_settlement: BillingSpanSettlementConfig = Field(
         default_factory=BillingSpanSettlementConfig,

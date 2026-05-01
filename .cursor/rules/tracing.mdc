@@ -135,16 +135,35 @@ alwaysApply: false
 
 **Pytest:** `tests/conftest.py` создаёт БД `platform_tracing` при отсутствии (через подключение к `…/postgres`) и при необходимости догружает только дерево **`tracing`** без дропа shared.
 
-## Tempo (визуализация трейсов)
+## Tempo и Loki — источники трейсов и логов для flows UI
 
-OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Waterfall view в Grafana.
+OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Alloy → **Loki** (stdout логов).
 
-**Dual-write (переходный период):** трейсы пишутся одновременно в PostgreSQL `platform_tracing` (через SpanRepository) и в Tempo (через OTLP exporter). PostgreSQL остаётся source of truth для `tracing-page.js` и биллинга. Tempo добавляет waterfall визуализацию и корреляцию с логами в Grafana.
+**Dual-write:** трейсы пишутся одновременно в PostgreSQL `platform_tracing` (через SpanRepository) и в Tempo (через OTLP exporter). PostgreSQL — source of truth для `tracing-page.js` (admin) и биллинга. **Flows UI** читает трейсы **только из Tempo** (Tempo-only).
 
 **OTLP endpoint:** задаётся через ENV `OTEL_EXPORTER_OTLP_ENDPOINT` в docker-compose → `core/tracing/provider.py` автодетектит. Сервисы не модифицируются.
+
+**Flows Traces API (Tempo-only):** `apps/flows/src/api/v1/traces.py` использует `TempoClient` (`core/clients/tempo_client.py`).
+- `GET /flows/api/v1/traces/session/{session_id}` → Tempo search по `platform.session.agent` → fetch каждого trace.
+- `GET /flows/api/v1/traces/task/{task_id}` → Tempo search по `platform.task_id`.
+- `GET /flows/api/v1/traces/trace/{trace_id}` → Tempo GET trace напрямую.
+- Ответ совместим с `platform-trace-viewer` (те же поля что у `_serialize_span`).
+- `tracing.tempo_http_url` — URL Tempo HTTP API (порт 3200, по умолчанию `http://localhost:3200`). Конфиг: `core/config/models.py`.
+
+**Flows Logs API (Loki whitelist):** `apps/flows/src/api/v1/observability_logs.py` использует `LokiClient` (`core/clients/loki_client.py`).
+- `GET /flows/api/v1/observability/logs/by-trace/{trace_id}` — whitelist LogQL по `trace_id`.
+- `GET /flows/api/v1/observability/logs/by-session/{session_id}` — whitelist LogQL по полю JSON `session_agent` (сессия агента `flow_id:context_id`, см. `LOG_SESSION_AGENT` в `core/logging/attributes.py`), не по `session_id` (это JWT).
+- Произвольный LogQL от клиента запрещён — только серверные whitelist-шаблоны.
+- `logging.loki_query_url` — URL Loki query API (порт 3100). Если не задан, но есть `logging.loki_url` (push), база для query — `scheme://netloc` из push URL. Если оба пусты — API логов возвращает 503.
+
+**FlowsLogsModal:** `apps/flows/ui/modals/flows-logs-modal.js` — встроенный log viewer без Grafana.
+- Кнопка «Логи» рядом с «Трейсы» в `flows-execution-panel.js` (вкладка Trace) и `chat-page.js` (header + overflow-меню).
 
 Подробнее: `infrastructure.mdc` → секция Observability.
 
 ## Ключевые файлы
 
 `core/tracing/tracer.py`, `core/tracing/repository.py`, `core/tracing/span_tree.py`, `core/tracing/context.py`, `core/tracing/attributes.py`, `core/app/factory.py` (lifespan), `apps/frontend/api/platform_tracing.py`, `apps/flows_worker/broker.py`, `apps/idle_worker/broker.py`, `core/container/base.py`, `tests/fixtures/test_database_env.py`, `tests/core/tracing/test_span_repository_service_api.py`, `tests/frontend/api/test_platform_tracing_api.py`.
+
+Observability-клиенты: `core/clients/tempo_client.py`, `core/clients/loki_client.py`.
+Тесты: `tests/core/clients/test_tempo_client.py`, `tests/core/clients/test_loki_client.py`, `tests/flows/api/test_traces_tempo_api.py`, `tests/flows/api/test_observability_logs_api.py`.

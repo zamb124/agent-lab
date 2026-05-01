@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import struct
 from typing import Any, Optional
 
 from apps.voice.providers.base import BaseVADProvider
@@ -49,8 +50,6 @@ class SileroVADProvider(BaseVADProvider):
             raise ValueError(
                 f"Ожидается sample_rate={self._sample_rate}, получено {sample_rate}"
             )
-
-        import struct
 
         audio_int16 = struct.unpack("<" + "h" * (len(audio_pcm) // 2), audio_pcm)
         import torch

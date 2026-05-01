@@ -3,6 +3,7 @@ Redis клиент для кэширования, сессий и Pub/Sub stream
 """
 
 import asyncio
+import time
 from typing import Any, AsyncIterator, Optional
 from urllib.parse import urlparse
 
@@ -232,7 +233,6 @@ class RedisClient:
             if ready_event:
                 ready_event.set()
             
-            import time
             start_time = time.monotonic()
             last_activity = start_time
             

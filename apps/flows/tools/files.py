@@ -4,6 +4,7 @@
 read_file — чтение вложений; create_file — FileWriter() + create_file (процесс настроен через FileWriter.configure_process_upload при старте).
 """
 
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -59,8 +60,6 @@ file_size, checksum (если есть), is_public.
 
 
 def _read_file_mock(args: dict, state: Any = None) -> dict:
-    from pathlib import Path
-
     def _pick(entries, name):
         if not entries:
             return None

@@ -22,6 +22,8 @@ from core.clients.service_client import (
 from core.clients.scheduler_client import SchedulerClient
 from core.clients.google_docs_client import GoogleDocsClient, GoogleDocsClientError
 from core.clients.rag_client import RagClient
+from core.clients.tempo_client import TempoClient, TempoClientError
+from core.clients.loki_client import LokiClient, LokiClientError
 
 __all__ = [
     "NanoBananaClient",
@@ -45,4 +47,8 @@ __all__ = [
     "GoogleDocsClient",
     "GoogleDocsClientError",
     "RagClient",
+    "TempoClient",
+    "TempoClientError",
+    "LokiClient",
+    "LokiClientError",
 ]

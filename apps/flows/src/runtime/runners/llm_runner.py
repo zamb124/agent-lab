@@ -5,7 +5,11 @@ Zero-Guess: все методы работают с ExecutionState.
 Stream-first: LLM ВСЕГДА вызывается как stream.
 """
 
+import asyncio
+import hashlib
+import json
 import time
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from a2a.types import (
@@ -27,6 +31,7 @@ from apps.flows.src.runtime.llm_override_params import (
     split_llm_override_for_client,
     stream_kwargs_from_override,
 )
+from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.config import get_settings
 from core.context import get_context
@@ -456,7 +461,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 and provider_reported_cost is not None
                                 and provider_reported_cost > 0
                             ):
-                                rate = get_settings().billing.usd_to_rub_rate
+                                rate = get_cbr_usd_to_rub_rate(
+                                    fallback=get_settings().billing.usd_to_rub_rate
+                                )
                                 rub = int(round(provider_reported_cost * rate))
                                 if rub >= 1:
                                     settlement_quantity_rub = rub
@@ -615,7 +622,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             # Structured Output - всегда завершаем после первого ответа
                             if structured_output and output_schema:
                                 try:
-                                    import json
                                     parsed_output = json.loads(content)
                                     setattr(state, "structured_output_result", parsed_output)
                                     final_response = content
@@ -751,8 +757,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         Каждый tool получает копию state.
         Результаты мержатся: messages extend, остальное - кто последний.
         """
-        import asyncio
-        
         if len(tool_calls) == 1:
             # Один tool - выполняем напрямую без копирования
             return await self._execute_single_tool(tool_calls[0], state, trace_ctx)
@@ -952,9 +956,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         node_id: str,
     ) -> None:
         """Сохраняет промпт в историю если он изменился."""
-        import hashlib
-        from datetime import datetime, timezone
-        
         prompt_hash = hashlib.md5(rendered.encode()).hexdigest()
         
         if state.prompt_history:

@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
+import json
 import random
+import sys
 import zlib
 from typing import Any, Callable
 
@@ -277,9 +279,6 @@ def _emit_contract_violation(
     enforce_required_fields. Этот лог — диагностический; реальные ERROR
     остаются в логах после правки причины (точки входа без request scope).
     """
-    import json
-    import sys
-
     payload = {
         "level": "ERROR",
         "logger": "platform.logging.contract",

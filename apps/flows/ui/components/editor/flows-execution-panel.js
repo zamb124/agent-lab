@@ -709,6 +709,12 @@ export class FlowsExecutionPanel extends PlatformElement {
         this.openModal('flows.tracing', { sessionId });
     }
 
+    _openLogs() {
+        const sessionId = this._buildSessionId();
+        if (!sessionId) return;
+        this.openModal('flows.logs', { sessionId });
+    }
+
     _openMocks() {
         this.openModal('flows.mocks', {});
     }
@@ -860,6 +866,13 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     title=${this.t('execution_panel.full_trace_title')}
                                     @click=${this._openTracing}
                                 >${this.t('execution_panel.full_trace')}</glass-button>
+                                <glass-button
+                                    variant="secondary"
+                                    size="sm"
+                                    ?disabled=${!hasContext}
+                                    title=${this.t('execution_panel.open_logs_title')}
+                                    @click=${this._openLogs}
+                                >${this.t('execution_panel.open_logs')}</glass-button>
                             ` : nothing}
                             ${tab === 'chat' ? html`
                                 <glass-button

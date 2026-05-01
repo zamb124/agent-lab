@@ -370,6 +370,17 @@ export class ChatPage extends PlatformPage {
         this._openTracingModalFromDetail(e.detail);
     }
 
+    _openLogs() {
+        this._overflowOpen = false;
+        const state = this._chat.state;
+        const ctxId = state?.currentContextId;
+        if (!ctxId || !this.flowId) {
+            return;
+        }
+        const sessionId = `${this.flowId}:${ctxId}`;
+        this.openModal('flows.logs', { sessionId });
+    }
+
     _openLara() {
         this._overflowOpen = false;
         dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
@@ -421,6 +432,15 @@ export class ChatPage extends PlatformPage {
                 @click=${this._openTracing}
             >
                 <platform-icon name="chart" size="16"></platform-icon>
+            </button>
+            <button
+                type="button"
+                class="action-btn"
+                title=${this.t('platform_chat.btn_logs')}
+                aria-label=${this.t('platform_chat.btn_logs')}
+                @click=${this._openLogs}
+            >
+                <platform-icon name="file-text" size="16"></platform-icon>
             </button>
             <button
                 type="button"
@@ -484,6 +504,10 @@ export class ChatPage extends PlatformPage {
                                 <button type="button" class="action-btn-menu" @click=${this._openTracing}>
                                     <platform-icon name="chart" size="16"></platform-icon>
                                     ${this.t('platform_chat.btn_traces')}
+                                </button>
+                                <button type="button" class="action-btn-menu" @click=${this._openLogs}>
+                                    <platform-icon name="file-text" size="16"></platform-icon>
+                                    ${this.t('platform_chat.btn_logs')}
                                 </button>
                                 <button type="button" class="action-btn-menu" @click=${this._openEditor}>
                                     <platform-icon name="edit" size="16"></platform-icon>

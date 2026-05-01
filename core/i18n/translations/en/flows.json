@@ -335,6 +335,7 @@
     "base_skill": "Base flow",
     "btn_sessions": "Sessions history",
     "btn_traces": "Traces",
+    "btn_logs": "Logs",
     "btn_editor": "Open editor",
     "btn_clear": "Clear chat",
     "overflow_aria": "More actions"
@@ -727,6 +728,16 @@
     "title": "Trace",
     "empty": "No traces found"
   },
+  "logs_modal": {
+    "title": "Logs",
+    "tab_session": "By session",
+    "tab_trace": "By trace ID",
+    "count": "{{count}} entries",
+    "reload": "Refresh",
+    "empty": "No log entries found",
+    "toast_copied": "Entry copied",
+    "toast_copy_failed": "Failed to copy"
+  },
   "span_details_modal": {
     "title": "Span details",
     "action_raw": "Raw JSON"
@@ -985,6 +996,8 @@
     "status_failed": "Failed",
     "full_trace": "Full trace",
     "full_trace_title": "Open trace viewer (timeline)",
+    "open_logs": "Logs",
+    "open_logs_title": "Open session logs viewer",
     "state_tab_hint": "Inspect session variables and node snapshots in the state viewer.",
     "open_state": "Open state",
     "error_human_title": "What went wrong",

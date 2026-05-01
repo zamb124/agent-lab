@@ -49,6 +49,20 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     set_billing_service(container.billing_service)
     logger.info("worker.billing_initialized", service=service_name)
 
+    # Курс USD/RUB от ЦБ РФ: один запрос при старте, затем фоновое обновление.
+    from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
+    from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
+    from core.utils.background import run_with_log_context
+
+    _cbr_fallback = settings.billing.usd_to_rub_rate
+    await _cbr_refresh_once(fallback=_cbr_fallback)
+    run_with_log_context(
+        _cbr_loop_coro(fallback=_cbr_fallback),
+        name="billing.cbr_rate_refresh",
+        background_kind="startup",
+    )
+    logger.info("worker.cbr_rate_initialized", service=service_name)
+
     from core.files.processors import initialize_default_processors
     from core.files.writer import FileWriter
 

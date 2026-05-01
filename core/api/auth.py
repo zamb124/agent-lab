@@ -5,18 +5,20 @@ API эндпоинты для авторизации.
 Контейнер получается через request.app.state.container.
 """
 
-from core.logging import get_logger
-from typing import Annotated, Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Request, Depends, Form, Query
-from fastapi.responses import RedirectResponse, JSONResponse
+from datetime import datetime, timezone
+from typing import Annotated, Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field as PydanticField
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.config import get_settings
-from core.models import AuthProvider, AuthRequest
 from core.identity import AuthService
+from core.logging import get_logger
+from core.models import AuthProvider, AuthRequest
+from core.utils.domain import build_url, get_cookie_domain
 from core.utils.tokens import TokenService, get_token_service
-from core.utils.domain import get_cookie_domain, build_url
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["auth"])
@@ -510,8 +512,6 @@ async def update_current_user(
     """
     Обновляет данные текущего пользователя.
     """
-    from datetime import datetime, timezone
-    
     token_data = getattr(request.state, "token_data", None)
     
     if not token_data:
@@ -581,8 +581,6 @@ async def update_service_attrs(
         service: Имя сервиса (crm, agents, rag)
         attrs: Атрибуты для обновления (merge с существующими)
     """
-    from datetime import datetime, timezone
-    
     token_data = getattr(request.state, "token_data", None)
     
     if not token_data:
@@ -615,8 +613,6 @@ async def grafana_auth_check(request: Request):
     При успехе возвращает 200 + заголовок X-Auth-User (email пользователя),
     который nginx пробрасывает в Grafana как X-WEBAUTH-USER (auth.proxy).
     """
-    from starlette.responses import Response
-
     token_data = getattr(request.state, "token_data", None)
     if not token_data:
         return Response(status_code=401)

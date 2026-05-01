@@ -11,6 +11,7 @@ from .sessions import router as sessions_router
 from .tasks import router as tasks_router
 from .tools import router as tools_router
 from .traces import router as traces_router
+from .observability_logs import router as observability_logs_router
 from .triggers import router as triggers_router
 from .variables import router as variables_router
 from .prompts import router as prompts_router
@@ -31,6 +32,7 @@ api_v1_router.include_router(sessions_router, prefix="/sessions")
 api_v1_router.include_router(tools_router, prefix="/tools")
 api_v1_router.include_router(tasks_router, prefix="/tasks")
 api_v1_router.include_router(traces_router, prefix="/traces")
+api_v1_router.include_router(observability_logs_router, prefix="/observability/logs")
 api_v1_router.include_router(triggers_router)
 api_v1_router.include_router(variables_router, prefix="/variables")
 api_v1_router.include_router(prompts_router, prefix="/prompts")

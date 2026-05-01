@@ -335,6 +335,7 @@
     "base_skill": "Базовый flow",
     "btn_sessions": "История сессий",
     "btn_traces": "Трейсы",
+    "btn_logs": "Логи",
     "btn_editor": "Открыть редактор",
     "btn_clear": "Очистить чат",
     "overflow_aria": "Дополнительные действия"
@@ -727,6 +728,16 @@
     "title": "Трейс",
     "empty": "Трейсы не найдены"
   },
+  "logs_modal": {
+    "title": "Логи",
+    "tab_session": "По сессии",
+    "tab_trace": "По trace_id",
+    "count": "{{count}} записей",
+    "reload": "Обновить",
+    "empty": "Логи не найдены",
+    "toast_copied": "Запись скопирована",
+    "toast_copy_failed": "Не удалось скопировать"
+  },
   "span_details_modal": {
     "title": "Детали span'а",
     "action_raw": "Raw JSON"
@@ -985,6 +996,8 @@
     "status_failed": "Ошибка",
     "full_trace": "Полный трейс",
     "full_trace_title": "Открыть просмотр трейса (таймлайн)",
+    "open_logs": "Логи",
+    "open_logs_title": "Открыть просмотр логов сессии",
     "state_tab_hint": "Переменные сессии и снимки нод — в просмотрщике состояния.",
     "open_state": "Открыть состояние",
     "error_human_title": "Что пошло не так",

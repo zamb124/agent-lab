@@ -117,10 +117,6 @@ export class ChatMessages extends PlatformElement {
         });
     }
 
-    _onShowTracing(e) {
-        this.emit('show-tracing', e.detail);
-    }
-
     render() {
         const trace = asArray(this.runTrace);
         if (this.messages.length === 0 && !this.loading && trace.length === 0) {
@@ -173,7 +169,6 @@ export class ChatMessages extends PlatformElement {
                             ?isLastUserMessage=${isLastUser}
                             .runTraceEntries=${isLastUser ? trace : []}
                             .traceTaskId=${isLastUser ? asString(this.currentTaskId) : ''}
-                            @show-tracing=${this._onShowTracing}
                         ></chat-message>
                     `;
                     }

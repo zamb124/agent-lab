@@ -8,6 +8,7 @@ access_token у oauth2.googleapis.com, токен кешируется.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Optional
 
@@ -178,8 +179,6 @@ class FcmPushService:
 
 def _error_status_from_body(body: str) -> Optional[str]:
     try:
-        import json
-
         parsed = json.loads(body)
     except (ValueError, TypeError):
         return None

@@ -5,6 +5,9 @@
 Все связи ТОЛЬКО здесь (нет linked_entity_ids в CRMEntity)!
 """
 
+import base64
+import json as _json
+
 from typing import List, Optional, Dict, Tuple
 from sqlalchemy import select, delete, or_, update, tuple_
 
@@ -223,9 +226,6 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         Returns:
             (relationships, next_cursor, has_more)
         """
-        import base64
-        import json as _json
-
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(Relationship).where(

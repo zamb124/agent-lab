@@ -8,6 +8,7 @@ HTTP клиент с поддержкой прокси и автоматичес
 
 from enum import Enum
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -280,7 +281,6 @@ class SmartProxyClient:
     def _is_local_url(self, url: str) -> bool:
         """Проверяет что URL ведёт на localhost или приватную сеть."""
         try:
-            from urllib.parse import urlparse
             hostname = urlparse(url).hostname or ""
             return (
                 hostname in ("localhost", "127.0.0.1", "::1")

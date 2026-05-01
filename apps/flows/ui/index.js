@@ -92,6 +92,7 @@ import './modals/flows-code-modal.js';
 import './modals/flows-code-docs-modal.js';
 import './modals/flows-tracing-modal.js';
 import './modals/flows-span-details-modal.js';
+import './modals/flows-logs-modal.js';
 import './modals/flows-raw-json-modal.js';
 import './modals/flows-state-modal.js';
 import './modals/flows-mocks-modal.js';

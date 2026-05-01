@@ -36,7 +36,8 @@ from core.billing.exceptions import BillingBalanceBlockedError
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from core.context import Context, User, clear_context, get_context, set_context
-from core.logging import get_logger
+from core.logging import bind_log_context, get_logger
+from core.logging.attributes import LOG_SESSION_AGENT
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.flow_config import Edge, FlowConfig, SkillConfig
 from apps.flows.src.models.enums import MergeMode, NodeType
@@ -487,7 +488,8 @@ class BaseChannel(ABC):
         
         # Устанавливаем в ContextVar для доступа из других компонентов
         set_context(self.context)
-        
+        bind_log_context(**{LOG_SESSION_AGENT: params.session_id})
+
         # Загружаем state для определения task_id, resume и закреплённой версии flow
         container = get_container()
         saved_state = await container.state_manager.get_state(params.session_id)

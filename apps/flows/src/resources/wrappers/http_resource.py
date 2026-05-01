@@ -4,6 +4,7 @@ HTTPResource - wrapper для http ресурса.
 Предоставляет доступ к внешним HTTP API.
 """
 
+import base64
 from typing import Any, Dict, Optional
 
 from core.logging import get_logger
@@ -43,7 +44,6 @@ class HTTPResource:
             elif auth_type == "api_key":
                 self.headers["X-API-Key"] = auth_value
             elif auth_type == "basic":
-                import base64
                 encoded = base64.b64encode(auth_value.encode()).decode()
                 self.headers["Authorization"] = f"Basic {encoded}"
     
