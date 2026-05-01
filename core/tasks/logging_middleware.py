@@ -11,9 +11,11 @@ TaskIQ middleware: контекст лог-скоупа для каждой за
    вызывающий не выставил их явно через ``with_labels(...)`` — RAISE
    (нарушение мега-правила).
 
-2. ``pre_execute`` (на стороне воркера): входит в request-лог-скоуп с
-   полями из labels. Если labels не содержат ``request_id`` или
-   ``trace_id`` (значит, ``pre_send`` где-то упустил) — RAISE.
+2. ``pre_execute`` (на стороне воркера): при отсутствии обязательных
+   меток (устаревшее сообщение в Redis, обход ``pre_send``) подставляет
+   значения через ``build_log_labels(background_kind='taskiq_recover')``
+   и пишет ``task.execute_log_labels_recovered``; затем входит в
+   request-лог-скоуп с полями из labels.
 
 3. ``post_execute``/``on_error``: выходят из скоупа.
 
@@ -115,7 +117,32 @@ class LoggingMiddleware(TaskiqMiddleware):
         return message
 
     async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
-        labels = message.labels or {}
+        from core.tasks.kicker import build_log_labels
+
+        labels = dict(message.labels or {})
+        if (
+            not _label_present(labels, _LABEL_REQUEST_ID)
+            or not _label_present(labels, _LABEL_TRACE_ID)
+            or not _label_present(labels, _LABEL_SERVICE_NAME)
+        ):
+            fb = build_log_labels(
+                background_kind="taskiq_recover",
+                service_name=self._service_name,
+            )
+            if not _label_present(labels, _LABEL_REQUEST_ID):
+                labels[_LABEL_REQUEST_ID] = fb[_LABEL_REQUEST_ID]
+            if not _label_present(labels, _LABEL_TRACE_ID):
+                labels[_LABEL_TRACE_ID] = fb[_LABEL_TRACE_ID]
+            if not _label_present(labels, _LABEL_SERVICE_NAME):
+                labels[_LABEL_SERVICE_NAME] = fb[_LABEL_SERVICE_NAME]
+            message.labels = labels
+            self._logger.warning(
+                "task.execute_log_labels_recovered",
+                task_name=message.task_name,
+                task_id=message.task_id,
+                queue=self._queue_name,
+            )
+
         request_id = self._require_label(labels, _LABEL_REQUEST_ID, message)
         trace_id = self._require_label(labels, _LABEL_TRACE_ID, message)
         service_name = self._service_or_default(labels)

@@ -11,6 +11,7 @@
     "example"
   ],
   "permission": [],
+  "branches": {},
   "entry": "plan_queries",
   "nodes": {
     "plan_queries": {

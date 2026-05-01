@@ -300,7 +300,10 @@ except ProviderError as exc:
    текущего лог-контекста в `message.labels`. Если `request_id`/`trace_id`
    нет — генерирует `kiq-orphan:<uuid>` и пишет WARNING
    `task.kiq_request_id_missing` для диагностики.
-2. `pre_execute` (на воркере): входит в request-лог-скоуп с этими полями.
+2. `pre_execute` (на воркере): если в сообщении нет `request_id` / `trace_id` /
+   `service_name` (устаревшие записи stream, обход `pre_send`), подставляет
+   значения через `build_log_labels(background_kind='taskiq_recover')` и пишет
+   WARNING `task.execute_log_labels_recovered`; затем входит в request-лог-скоуп.
 3. `post_execute` / `on_error`: `exit_request_scope(...)`.
 
 Каждый воркер инициализируется через

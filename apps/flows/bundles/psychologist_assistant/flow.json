@@ -4,6 +4,7 @@
   "description": "Эмпатичный ассистент психолога Лары Швед с доступом к базе знаний через RAG",
   "version": "1.0.0",
   "tags": ["psychology", "assistant", "rag"],
+  "branches": {},
   "entry": "main",
   "nodes": {
     "main": {

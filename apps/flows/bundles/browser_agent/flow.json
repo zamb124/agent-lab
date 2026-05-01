@@ -11,6 +11,7 @@
     "example"
   ],
   "permission": [],
+  "branches": {},
   "entry": "ensure_browser_session_state",
   "nodes": {
     "ensure_browser_session_state": {
