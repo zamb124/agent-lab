@@ -732,6 +732,8 @@
     "title": "Логи",
     "tab_session": "По сессии",
     "tab_trace": "По trace_id",
+    "tab_trace_resolving_hint": "Определяем trace в Tempo…",
+    "tab_trace_disabled_hint": "Нужен текущий task_id запуска (отправьте сообщение) или явный trace_id",
     "count": "{{count}} записей",
     "reload": "Обновить",
     "empty": "Логи не найдены",

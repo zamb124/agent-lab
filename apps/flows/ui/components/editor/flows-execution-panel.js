@@ -35,6 +35,7 @@ import {
     asString,
     deriveRunPanelStatus,
 } from '../../_helpers/flows-resolvers.js';
+import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-id.js';
 
 const ACCEPT_FILE_TYPES = '*/*';
 const EMPTY_TRACE = Object.freeze([]);
@@ -712,9 +713,14 @@ export class FlowsExecutionPanel extends PlatformElement {
     _openLogs() {
         const sessionId = this._buildSessionId();
         if (!sessionId) return;
-        this.openModal('flows.logs', { sessionId });
+        const chatState = asObject(this._chat.state);
+        const taskId = resolveFlowsChatTaskId(chatState);
+        const props = { sessionId };
+        if (taskId.length > 0) {
+            props.taskId = taskId;
+        }
+        this.openModal('flows.logs', props);
     }
-
     _openMocks() {
         this.openModal('flows.mocks', {});
     }

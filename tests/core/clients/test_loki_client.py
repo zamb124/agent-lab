@@ -12,6 +12,9 @@ from core.clients.loki_client import (
     LokiClientError,
     _build_trace_query,
     _build_session_query,
+    _build_request_id_query,
+    _build_span_id_query,
+    _build_user_id_query,
     _parse_loki_response,
     _parse_entry,
 )
@@ -26,8 +29,9 @@ class TestQueryBuilders:
         q = _build_trace_query("abc123")
         assert 'trace_id="abc123"' in q
         assert "flows" in q
+        assert "frontend" in q
 
-    def test_session_query_uses_json_and_session_agent_field(self):
+    def test_session_query_still_uses_flows_only_selector(self):
         q = _build_session_query("flow1:ctx1")
         assert "| json |" in q
         assert 'session_agent="flow1:ctx1"' in q
@@ -46,6 +50,22 @@ class TestQueryBuilders:
     def test_session_query_strips_quotes_in_session_id(self):
         q = _build_session_query('flow"inj:ctx')
         assert 'session_agent="flowinj:ctx"' in q
+
+    def test_user_query_uses_json_user_id(self):
+        q = _build_user_id_query("user_abc")
+        assert '| json |' in q
+        assert 'user_id="user_abc"' in q
+        assert "flows" in q
+
+    def test_request_id_query(self):
+        q = _build_request_id_query("req-1")
+        assert 'request_id="req-1"' in q
+        assert "flows" in q
+
+    def test_span_id_query(self):
+        q = _build_span_id_query("span01")
+        assert 'span_id="span01"' in q
+        assert "flows" in q
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +222,30 @@ class TestLokiClientQueryBySessionId:
         client = LokiClient(base_url="http://loki:3100")
         with pytest.raises(ValueError, match="session_id обязателен"):
             await client.query_by_session_id("")
+
+
+class TestLokiClientQueryByRequestId:
+    @pytest.mark.asyncio
+    async def test_empty_request_id_raises(self):
+        client = LokiClient(base_url="http://loki:3100")
+        with pytest.raises(ValueError, match="request_id обязателен"):
+            await client.query_by_request_id("")
+
+
+class TestLokiClientQueryBySpanId:
+    @pytest.mark.asyncio
+    async def test_empty_span_id_raises(self):
+        client = LokiClient(base_url="http://loki:3100")
+        with pytest.raises(ValueError, match="span_id обязателен"):
+            await client.query_by_span_id("")
+
+
+class TestLokiClientQueryByUserId:
+    @pytest.mark.asyncio
+    async def test_empty_user_id_raises(self):
+        client = LokiClient(base_url="http://loki:3100")
+        with pytest.raises(ValueError, match="user_id обязателен"):
+            await client.query_by_user_id("")
 
 
 # ---------------------------------------------------------------------------

@@ -732,6 +732,8 @@
     "title": "Logs",
     "tab_session": "By session",
     "tab_trace": "By trace ID",
+    "tab_trace_resolving_hint": "Resolving trace from Tempo…",
+    "tab_trace_disabled_hint": "Run the assistant once (current task) or open logs with an explicit trace ID",
     "count": "{{count}} entries",
     "reload": "Refresh",
     "empty": "No log entries found",

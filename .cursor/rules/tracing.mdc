@@ -13,6 +13,8 @@ alwaysApply: false
 
 **Связь с логированием:** `trace_id` и `span_id`, попадающие в каждую запись лога, берутся из того же OTel-спана (процессор `add_otel_trace_context`); fallback — `core.context.trace_id`. Пройдя по `trace_id`, можно найти и spans в `platform_tracing`, и все записи в логах того же запроса/задачи. Контракт лог-записи и канон вызова `get_logger` — в **`logging.mdc`**.
 
+**Список логов в UI (Loki):** массив `entries` из whitelist-ответа API отображается только через **`<platform-log-viewer>`**; загрузка — у родителя. Запрещено дублировать разметку списка логов в `apps/**` для того же контракта. Компонент и правила — **`ui_components.mdc`** (Platform Log Viewer). LogQL whitelist — **`core/clients/loki_client.py`**, HTTP flows — **`apps/flows/src/api/v1/observability_logs.py`**.
+
 ## Конфигурация
 
 | Уровень | Поле / ENV |
@@ -157,7 +159,7 @@ OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Alloy → **Lo
 - `logging.loki_query_url` — URL Loki query API (порт 3100). Если не задан, но есть `logging.loki_url` (push), база для query — `scheme://netloc` из push URL. Если оба пусты — API логов возвращает 503.
 
 **FlowsLogsModal:** `apps/flows/ui/modals/flows-logs-modal.js` — встроенный log viewer без Grafana.
-- Кнопка «Логи» рядом с «Трейсы» в `flows-execution-panel.js` (вкладка Trace) и `chat-page.js` (header + overflow-меню).
+- Кнопка «Логи» рядом с «Трейсы» в `flows-execution-panel.js` (вкладка Trace) и `chat-page.js` (header + overflow-меню); в модалку передаётся `sessionId` и при наличии `currentTaskId` — `taskId`; вкладка «По trace_id» резолвит `trace_id` через op `flows/traces_by_task` (Tempo), либо принимает явный props `traceId`.
 
 Подробнее: `infrastructure.mdc` → секция Observability.
 

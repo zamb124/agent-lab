@@ -10,6 +10,7 @@ const SERVICE_DEV_PORTS = Object.freeze({
     sync: '8005',
     documents: '8008',
     litserve: '8014',
+    grafana: '3000',
 });
 
 function isLocalHost(hostname) {
@@ -28,6 +29,18 @@ function isLocalHost(hostname) {
 export function buildServiceEntryUrl(serviceId) {
     if (typeof serviceId !== 'string' || serviceId.length === 0) {
         throw new Error('buildServiceEntryUrl: serviceId required');
+    }
+    if (serviceId === 'grafana') {
+        const hostname = window.location.hostname;
+        if (isLocalHost(hostname)) {
+            return `${window.location.protocol}//${hostname}:${SERVICE_DEV_PORTS.grafana}/`;
+        }
+        const hostParts = hostname.split('.');
+        if (hostParts.length >= 2) {
+            const baseDomain = hostParts.slice(-2).join('.');
+            return `${window.location.protocol}//grafana.${baseDomain}/`;
+        }
+        return `${window.location.protocol}//grafana.${hostname}/`;
     }
     const servicePath =
         serviceId === 'frontend' ? '/dashboard' : serviceId === 'documents' ? '/documents' : `/${serviceId}`;

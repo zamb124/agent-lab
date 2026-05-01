@@ -78,10 +78,14 @@ export class DashboardServicesGrid extends PlatformElement {
     constructor() {
         super();
         this._status = this.useOp('frontend/services_status_load');
-        this._countOps = DASHBOARD_SERVICES.map((svc) => this.useOp(svc.countOp));
+        this._countOps = DASHBOARD_SERVICES.map((svc) => (svc.countOp ? this.useOp(svc.countOp) : null));
         this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
         this._countsBootstrapped = false;
         this._prevCompanyId = null;
+    }
+
+    _visibleServices(activeCompanyId) {
+        return DASHBOARD_SERVICES.filter((svc) => activeCompanyId === 'system' || svc.id !== 'grafana');
     }
 
     updated() {
@@ -91,10 +95,14 @@ export class DashboardServicesGrid extends PlatformElement {
             this._status.run(null);
             for (let i = 0; i < this._countOps.length; i++) {
                 const svc = DASHBOARD_SERVICES[i];
+                const op = this._countOps[i];
+                if (!op) {
+                    continue;
+                }
                 if (svc.id === 'litserve' && cid !== 'system') {
                     continue;
                 }
-                this._countOps[i].run(null);
+                op.run(null);
             }
             this._prevCompanyId = cid;
             return;
@@ -102,7 +110,7 @@ export class DashboardServicesGrid extends PlatformElement {
         if (cid !== this._prevCompanyId) {
             this._prevCompanyId = cid;
             const litIdx = DASHBOARD_SERVICES.findIndex((s) => s.id === 'litserve');
-            if (litIdx >= 0 && cid === 'system') {
+            if (litIdx >= 0 && cid === 'system' && this._countOps[litIdx]) {
                 this._countOps[litIdx].run(null);
             }
         }
@@ -116,17 +124,23 @@ export class DashboardServicesGrid extends PlatformElement {
     }
 
     _metricValue(idx, metricKey, svcId, activeCompanyId) {
+        if (!metricKey) {
+            return this.t('console_home.stat_loading');
+        }
         if (svcId === 'litserve' && activeCompanyId !== 'system') {
             return this.t('console_home.stat_loading');
         }
         const op = this._countOps[idx];
+        if (!op) return this.t('console_home.stat_loading');
         const result = op.lastResult;
         if (!result) return this.t('console_home.stat_loading');
         return this.t(metricKey, { count: result.total });
     }
 
     _serviceTiles(statusResult, activeCompanyId) {
-        return DASHBOARD_SERVICES.map((svc, idx) => {
+        const visible = this._visibleServices(activeCompanyId);
+        return visible.map((svc) => {
+            const idx = DASHBOARD_SERVICES.indexOf(svc);
             const health = this._healthForService(statusResult, svc.healthName, activeCompanyId);
             const litserveLocked = svc.id === 'litserve' && activeCompanyId !== 'system';
             const descriptionKey = descriptionKeyFromNameKey(svc.nameKey);
@@ -150,7 +164,7 @@ export class DashboardServicesGrid extends PlatformElement {
 
     _serviceLaunchersHealthMap(statusResult, activeCompanyId) {
         const healthMap = Object.create(null);
-        for (const svc of DASHBOARD_SERVICES) {
+        for (const svc of this._visibleServices(activeCompanyId)) {
             const h = this._healthForService(statusResult, svc.healthName, activeCompanyId);
             healthMap[svc.id] = h.state;
         }
@@ -160,7 +174,7 @@ export class DashboardServicesGrid extends PlatformElement {
     render() {
         const statusResult = this._status.lastResult;
         const activeCompanyId = this._activeCompanyId.value;
-        const ids = DASHBOARD_SERVICES.map((s) => s.id);
+        const ids = this._visibleServices(activeCompanyId).map((s) => s.id);
         const healthByServiceId = this._serviceLaunchersHealthMap(statusResult, activeCompanyId);
         return html`
             <div class="header">

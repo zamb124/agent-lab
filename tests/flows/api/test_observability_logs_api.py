@@ -1,6 +1,5 @@
 """
-Тесты для API логов flows: GET /flows/api/v1/observability/logs/by-trace/{trace_id}
-и GET /flows/api/v1/observability/logs/by-session/{session_id}.
+Тесты для API логов flows: by-trace, by-session, by-request, by-span, by-user.
 
 Loki-клиент мокается через DI контейнер.
 """
@@ -52,6 +51,24 @@ class MockLokiClient:
         return self._entries
 
     async def query_by_session_id(self, session_id, time_from=None, time_to=None, limit=200):
+        if self._raise_error:
+            from core.clients.loki_client import LokiClientError
+            raise LokiClientError("Loki недоступен")
+        return self._entries
+
+    async def query_by_request_id(self, request_id, time_from=None, time_to=None, limit=200):
+        if self._raise_error:
+            from core.clients.loki_client import LokiClientError
+            raise LokiClientError("Loki недоступен")
+        return self._entries
+
+    async def query_by_span_id(self, span_id, time_from=None, time_to=None, limit=200):
+        if self._raise_error:
+            from core.clients.loki_client import LokiClientError
+            raise LokiClientError("Loki недоступен")
+        return self._entries
+
+    async def query_by_user_id(self, user_id, time_from=None, time_to=None, limit=200):
         if self._raise_error:
             from core.clients.loki_client import LokiClientError
             raise LokiClientError("Loki недоступен")
@@ -164,5 +181,68 @@ class TestLogsBySessionApi:
                 headers=auth_headers_system,
             )
             assert resp.status_code == 503
+        finally:
+            _restore_loki_client_cache(container, had_key, previous)
+
+
+class TestLogsByRequestApi:
+    """GET /flows/api/v1/observability/logs/by-request/{request_id}"""
+
+    @pytest.mark.asyncio
+    async def test_returns_entries(self, client, app, auth_headers_system, loki_entries):
+        from apps.flows.src.container import get_container
+        container = get_container()
+        had_key, previous = _swap_loki_client_cache(container, MockLokiClient(entries=loki_entries))
+        try:
+            resp = await client.get(
+                "/flows/api/v1/observability/logs/by-request/req-1",
+                headers=auth_headers_system,
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["request_id"] == "req-1"
+            assert body["count"] == 1
+        finally:
+            _restore_loki_client_cache(container, had_key, previous)
+
+
+class TestLogsBySpanApi:
+    """GET /flows/api/v1/observability/logs/by-span/{span_id}"""
+
+    @pytest.mark.asyncio
+    async def test_returns_entries(self, client, app, auth_headers_system, loki_entries):
+        from apps.flows.src.container import get_container
+        container = get_container()
+        had_key, previous = _swap_loki_client_cache(container, MockLokiClient(entries=loki_entries))
+        try:
+            resp = await client.get(
+                "/flows/api/v1/observability/logs/by-span/span01",
+                headers=auth_headers_system,
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["span_id"] == "span01"
+            assert body["count"] == 1
+        finally:
+            _restore_loki_client_cache(container, had_key, previous)
+
+
+class TestLogsByUserApi:
+    """GET /flows/api/v1/observability/logs/by-user/{user_id}"""
+
+    @pytest.mark.asyncio
+    async def test_returns_entries(self, client, app, auth_headers_system, loki_entries):
+        from apps.flows.src.container import get_container
+        container = get_container()
+        had_key, previous = _swap_loki_client_cache(container, MockLokiClient(entries=loki_entries))
+        try:
+            resp = await client.get(
+                "/flows/api/v1/observability/logs/by-user/user_test",
+                headers=auth_headers_system,
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["user_id"] == "user_test"
+            assert body["count"] == 1
         finally:
             _restore_loki_client_cache(container, had_key, previous)

@@ -1,8 +1,8 @@
 """
 Logs API — поиск логов flows из Grafana Loki.
 
-Поддерживает только whitelist-шаблоны (по trace_id и session_id).
-Произвольный LogQL от клиента не принимается.
+Поддерживает только whitelist-шаблоны: trace_id, session_id (session_agent),
+request_id, span_id, user_id. Произвольный LogQL от клиента не принимается.
 """
 
 from datetime import datetime
@@ -110,6 +110,108 @@ async def get_logs_by_session_id(
 
     return {
         "session_id": session_id,
+        "count": len(entries),
+        "entries": entries,
+    }
+
+
+@router.get("/by-request/{request_id}")
+async def get_logs_by_request_id(
+    request_id: str,
+    container: ContainerDep,
+    limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
+    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+) -> dict[str, Any]:
+    """
+    Возвращает записи логов для request_id из flows/flows_worker (поле request_id в JSON).
+    """
+    if not request_id:
+        raise HTTPException(status_code=422, detail="request_id обязателен")
+    _validate_limit(limit)
+    loki = _require_loki(container)
+    try:
+        entries = await loki.query_by_request_id(
+            request_id, time_from=time_from, time_to=time_to, limit=limit
+        )
+    except LokiClientError as exc:
+        logger.warning(
+            "observability_logs.by_request.loki_error",
+            request_id=request_id,
+            error=str(exc),
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return {
+        "request_id": request_id,
+        "count": len(entries),
+        "entries": entries,
+    }
+
+
+@router.get("/by-span/{span_id}")
+async def get_logs_by_span_id(
+    span_id: str,
+    container: ContainerDep,
+    limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
+    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+) -> dict[str, Any]:
+    """
+    Возвращает записи логов для span_id из flows/flows_worker (поле span_id в JSON).
+    """
+    if not span_id:
+        raise HTTPException(status_code=422, detail="span_id обязателен")
+    _validate_limit(limit)
+    loki = _require_loki(container)
+    try:
+        entries = await loki.query_by_span_id(
+            span_id, time_from=time_from, time_to=time_to, limit=limit
+        )
+    except LokiClientError as exc:
+        logger.warning(
+            "observability_logs.by_span.loki_error",
+            span_id=span_id,
+            error=str(exc),
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return {
+        "span_id": span_id,
+        "count": len(entries),
+        "entries": entries,
+    }
+
+
+@router.get("/by-user/{user_id}")
+async def get_logs_by_user_id(
+    user_id: str,
+    container: ContainerDep,
+    limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
+    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+) -> dict[str, Any]:
+    """
+    Возвращает записи логов для user_id из flows/flows_worker (поле user_id в JSON).
+    """
+    if not user_id:
+        raise HTTPException(status_code=422, detail="user_id обязателен")
+    _validate_limit(limit)
+    loki = _require_loki(container)
+    try:
+        entries = await loki.query_by_user_id(
+            user_id, time_from=time_from, time_to=time_to, limit=limit
+        )
+    except LokiClientError as exc:
+        logger.warning(
+            "observability_logs.by_user.loki_error",
+            user_id=user_id,
+            error=str(exc),
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return {
+        "user_id": user_id,
         "count": len(entries),
         "entries": entries,
     }

@@ -201,6 +201,8 @@ export class PlatformServicesLauncher extends PlatformElement {
     }
 
     _servicesToRender() {
+        const activeCompanyId = this._activeCompanyId.value;
+        const isSystemCompany = activeCompanyId === 'system';
         const ids = this.includeServiceIds;
         if (Array.isArray(ids) && ids.length > 0) {
             return ids.map((id) => {
@@ -209,9 +211,9 @@ export class PlatformServicesLauncher extends PlatformElement {
                     throw new Error(`platform-services-launcher: unknown service id "${id}"`);
                 }
                 return s;
-            });
+            }).filter((s) => isSystemCompany || s.id !== 'grafana');
         }
-        return PLATFORM_SERVICES;
+        return PLATFORM_SERVICES.filter((s) => isSystemCompany || s.id !== 'grafana');
     }
 
     _healthForItem(id) {

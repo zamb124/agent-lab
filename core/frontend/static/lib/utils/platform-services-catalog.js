@@ -76,4 +76,14 @@ export const PLATFORM_SERVICES = Object.freeze([
         countOp: 'frontend/dashboard_litserve_models_count',
         metricKey: 'console_home.stat_models_count',
     }),
+    Object.freeze({
+        id: 'grafana',
+        nameKey: 'apps.grafana.name',
+        logoSrc: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,
+        brandFrom: '#f97316',
+        brandTo: '#f59e0b',
+        healthName: 'grafana',
+        countOp: null,
+        metricKey: null,
+    }),
 ]);

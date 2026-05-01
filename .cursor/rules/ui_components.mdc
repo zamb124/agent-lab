@@ -16,11 +16,11 @@ alwaysApply: true
 1. **Presentational** (`glass-button`, `glass-input`, `glass-textarea`,
    `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`,
    `tag-input`, `platform-icon-picker`, `platform-help-hint`,
-   `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
+   `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
    - Не читают state платформы (только `t()` для подписей).
    - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
    - Локальные DOM-события `this.emit('change', detail)` для родителя
-     (у `platform-trace-viewer` — см. секцию ниже).
+     (у `platform-trace-viewer` — см. секцию ниже; у `platform-log-viewer` — `copy-request`).
 
 2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`,
    `platform-user-info-modal`, `platform-notification-manager`,
@@ -156,6 +156,29 @@ timeline, локальный поиск, выбор span для детализа
   на platform-trace-viewer.
 
 **См. также:** `tracing.mdc` (запись spans, API чтения, админ-страница).
+
+## Platform Log Viewer (список записей логов)
+
+**Файл:** `core/frontend/static/lib/components/platform-log-viewer.js`.
+
+**Назначение:** единый **презентационный** список строк лога в форме записей из Loki-клиента (`timestamp`, `level`, `message`, `logger`, `service`, `trace_id`, `request_id`, `user_id`, `session_agent`, `raw`, …): уровень, время, сообщение; раскрытие строки для `raw`; копирование через `this.emit('copy-request', { text })` (родитель вызывает `copyToClipboard`, без bus из кита).
+
+**Границы ответственности**
+
+- Компонент **не** грузит данные: нет `useOp` / `useResource` / `fetch` / доменного `dispatch`.
+- Родитель передаёт `.entries`, `?loading`, опционально `.emptyLabel` (при пустой строке — подпись из `log_viewer.empty` в `platform.json`).
+- i18n: `static i18nNamespace = 'platform'`; секция `log_viewer` в `core/i18n/translations/{ru,en}/platform.json`.
+
+**Обязательное применение**
+
+- Любой UI платформы, который показывает **список записей логов** из ответа whitelist-API Loki, **должен** использовать `<platform-log-viewer>`.
+- **Запрещено** в `apps/<svc>/ui/**` добавлять отдельные компоненты уровня «таблица логов», «.log-entry список» для того же контракта — только вложение `platform-log-viewer` или тонкая обёртка без дублирования разметки списка.
+
+**Если возможностей не хватает**
+
+- Расширять **только в core**: `platform-log-viewer.js` (поля строки, фильтры, режимы отображения).
+
+**См. также:** `tracing.mdc` (связь trace/log, API Loki), `logging.mdc`.
 
 ## Витрина сервисов (launcher + модалка)
 

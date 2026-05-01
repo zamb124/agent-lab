@@ -1,8 +1,9 @@
 """
 LokiClient — HTTP-клиент для поиска логов в Grafana Loki.
 
-Поддерживает только whitelist-шаблоны LogQL (по trace_id и session_id).
-Произвольный LogQL от внешнего клиента не принимается.
+Поддерживает только whitelist-шаблоны LogQL. По trace_id — сервисы платформы, где в лог
+попадает тот же OTel trace_id (frontend, flows, воркеры и т.д.); session/request/span/user —
+селектор flows. Произвольный LogQL от внешнего клиента не принимается.
 """
 
 import json
@@ -17,19 +18,40 @@ logger = get_logger(__name__)
 
 _DEFAULT_QUERY_LOOKBACK = timedelta(days=7)
 
-# События flows и flows_worker: label service на push/Alloy может быть flows, flows_worker
-# или суффикс/префикс от имени контейнера — держим широкий, но связанный с «flows» матч.
+# Селектор «только flows» — для session_agent и полей, специфичных в основном для flows.
 _FLOWS_SELECTOR = 'service=~".*flows.*"'
+
+# По trace_id ищем во всех основных процессах платформы: тот же trace_id в OTel уходит в
+# логи frontend, flows, воркеров и т.д.; ограничение только .*flows.* отрезает линии с тем же trace.
+_PLATFORM_TRACE_SELECTOR = (
+    'service=~"(frontend|flows|flows_worker|crm|crm_worker|rag|rag_worker|'
+    'sync|sync_worker|office|voice|scheduler|browser|idle_worker|provider_litserve|.*flows.*)"'
+)
 
 
 def _build_trace_query(trace_id: str) -> str:
     safe = trace_id.replace('"', "").replace("\\", "")
-    return f'{{{_FLOWS_SELECTOR}}} | json | trace_id="{safe}"'
+    return f'{{{_PLATFORM_TRACE_SELECTOR}}} | json | trace_id="{safe}"'
 
 
 def _build_session_query(session_id: str) -> str:
     safe = session_id.replace('"', "").replace("\\", "")
     return f'{{{_FLOWS_SELECTOR}}} | json | session_agent="{safe}"'
+
+
+def _build_request_id_query(request_id: str) -> str:
+    safe = request_id.replace('"', "").replace("\\", "")
+    return f'{{{_FLOWS_SELECTOR}}} | json | request_id="{safe}"'
+
+
+def _build_span_id_query(span_id: str) -> str:
+    safe = span_id.replace('"', "").replace("\\", "")
+    return f'{{{_FLOWS_SELECTOR}}} | json | span_id="{safe}"'
+
+
+def _build_user_id_query(user_id: str) -> str:
+    safe = user_id.replace('"', "").replace("\\", "")
+    return f'{{{_FLOWS_SELECTOR}}} | json | user_id="{safe}"'
 
 
 def _parse_entry(ts_ns: str, line: str, stream: dict[str, str]) -> dict[str, Any]:
@@ -53,6 +75,7 @@ def _parse_entry(ts_ns: str, line: str, stream: dict[str, str]) -> dict[str, Any
         "logger": parsed.get("logger", ""),
         "service": parsed.get("service.name", stream.get("service", "")),
         "trace_id": parsed.get("trace_id", ""),
+        "span_id": parsed.get("span_id", ""),
         "request_id": parsed.get("request_id", ""),
         "user_id": parsed.get("user_id", ""),
         "session_id": parsed.get("session_id", ""),
@@ -80,7 +103,7 @@ class LokiClient:
     """
     HTTP-клиент для Grafana Loki.
 
-    Использует только whitelist-шаблоны LogQL: по trace_id и session_id.
+    Whitelist-шаблоны LogQL на сервере; по trace_id — расширенный набор service-лейблов.
     """
 
     def __init__(self, base_url: str, timeout: float = 15.0) -> None:
@@ -133,7 +156,7 @@ class LokiClient:
         time_to: datetime | None = None,
         limit: int = 200,
     ) -> list[dict[str, Any]]:
-        """Возвращает записи логов с указанным trace_id из flows/flows_worker."""
+        """Возвращает записи логов с указанным trace_id (платформенные сервисы, см. селектор)."""
         if not trace_id:
             raise ValueError("LokiClient.query_by_trace_id: trace_id обязателен")
         return await self._query_range(
@@ -152,4 +175,46 @@ class LokiClient:
             raise ValueError("LokiClient.query_by_session_id: session_id обязателен")
         return await self._query_range(
             _build_session_query(session_id), time_from, time_to, limit
+        )
+
+    async def query_by_request_id(
+        self,
+        request_id: str,
+        time_from: datetime | None = None,
+        time_to: datetime | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Возвращает записи логов с указанным request_id из flows/flows_worker."""
+        if not request_id:
+            raise ValueError("LokiClient.query_by_request_id: request_id обязателен")
+        return await self._query_range(
+            _build_request_id_query(request_id), time_from, time_to, limit
+        )
+
+    async def query_by_span_id(
+        self,
+        span_id: str,
+        time_from: datetime | None = None,
+        time_to: datetime | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Возвращает записи логов с указанным span_id из flows/flows_worker."""
+        if not span_id:
+            raise ValueError("LokiClient.query_by_span_id: span_id обязателен")
+        return await self._query_range(
+            _build_span_id_query(span_id), time_from, time_to, limit
+        )
+
+    async def query_by_user_id(
+        self,
+        user_id: str,
+        time_from: datetime | None = None,
+        time_to: datetime | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Возвращает записи логов с указанным user_id из flows/flows_worker."""
+        if not user_id:
+            raise ValueError("LokiClient.query_by_user_id: user_id обязателен")
+        return await self._query_range(
+            _build_user_id_query(user_id), time_from, time_to, limit
         )

@@ -62,6 +62,11 @@
             "menu_description": "Local embeddings and rerank",
             "description": "LitServe model registry: embeddings and rerank on your hardware for RAG and flows without external inference APIs"
         },
+        "grafana": {
+            "name": "Grafana",
+            "menu_description": "Platform dashboards and observability",
+            "description": "Central platform dashboards: metrics, logs, alerts, and tracing for service diagnostics"
+        },
         "frontend": {
             "name": "Console",
             "menu_description": "Company, billing, app hub",
@@ -158,6 +163,10 @@
         "kind_span": "Span",
         "detail_title": "Span details",
         "detail_attributes": "Attributes (JSON)"
+    },
+    "log_viewer": {
+        "empty": "No log entries",
+        "copy_aria": "Copy row JSON"
     },
     "timezone_picker": {
         "aria_list": "IANA time zones",

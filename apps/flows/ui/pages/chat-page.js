@@ -16,6 +16,7 @@ import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { a2aStateMessagesToChatMessages } from '../_helpers/chat-session-messages.js';
+import { resolveFlowsChatTaskId } from '../_helpers/resolve-flows-chat-task-id.js';
 
 export class ChatPage extends PlatformPage {
     static properties = {
@@ -378,7 +379,12 @@ export class ChatPage extends PlatformPage {
             return;
         }
         const sessionId = `${this.flowId}:${ctxId}`;
-        this.openModal('flows.logs', { sessionId });
+        const taskId = resolveFlowsChatTaskId(this._chat.state);
+        const props = { sessionId };
+        if (taskId.length > 0) {
+            props.taskId = taskId;
+        }
+        this.openModal('flows.logs', props);
     }
 
     _openLara() {
