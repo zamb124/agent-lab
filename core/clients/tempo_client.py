@@ -187,8 +187,13 @@ class TempoClient:
         if not trace_id:
             raise ValueError("TempoClient.get_trace: trace_id обязателен")
         url = f"{self._base_url}/api/traces/{trace_id}"
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.get(url, headers={"Accept": "application/json"})
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(url, headers={"Accept": "application/json"})
+        except httpx.RequestError as exc:
+            raise TempoClientError(
+                f"Tempo GET /api/traces/{trace_id} request error: {type(exc).__name__}"
+            ) from exc
         if resp.status_code == 404:
             return []
         if resp.status_code != 200:
@@ -214,8 +219,13 @@ class TempoClient:
             )
         url = f"{self._base_url}/api/search"
         params = {"tags": f"{attr_name}={attr_value}", "limit": limit}
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.get(url, params=params)
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(url, params=params)
+        except httpx.RequestError as exc:
+            raise TempoClientError(
+                f"Tempo GET /api/search request error: {type(exc).__name__}"
+            ) from exc
         if resp.status_code != 200:
             raise TempoClientError(
                 f"Tempo GET /api/search вернул {resp.status_code}: {resp.text[:300]}"

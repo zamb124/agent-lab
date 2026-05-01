@@ -43,6 +43,7 @@
     "enabled": true,
     "postgres_enabled": true,
     "tempo_enabled": true,
+    "tempo_http_url": "http://tempo:3200",
     "sampling_rate": 1.0,
     "retention_days": 30
   },
@@ -380,6 +381,7 @@
         "enabled": true,
         "postgres_enabled": true,
         "tempo_enabled": true,
+        "tempo_http_url": "http://tempo:3200",
         "service_name": "flows",
         "retention_days": 30
       }
