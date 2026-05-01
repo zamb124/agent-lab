@@ -18,8 +18,10 @@ import httpx
 from bs4 import BeautifulSoup
 
 from core.http import get_httpx_client
+from core.http.client import ProxyStrategy
 
 _PRAVO_IPS_NETLOC = "ips.pravo.gov.ru"
+_PRAVO_IPS_SCHEME = "http"
 _LEGISLATION_HASH_RE = re.compile(r"(?i)hash=([a-f0-9]{64})")
 _STANDALONE_HASH_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 _DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -88,7 +90,7 @@ class PravoClient:
         h = document_hash.strip().lower()
         if not _STANDALONE_HASH_RE.match(h):
             raise ValueError("document_hash должен быть 64 hex-символа")
-        return f"https://{_PRAVO_IPS_NETLOC}/api/ips/legislation/document?baseid=None&hash={h}"
+        return f"{_PRAVO_IPS_SCHEME}://{_PRAVO_IPS_NETLOC}/api/ips/legislation/document?baseid=None&hash={h}"
 
     @staticmethod
     def rag_document_id(document_hash: str) -> str:
@@ -139,6 +141,7 @@ class PravoClient:
         try:
             async with get_httpx_client(
                 timeout=self._timeout,
+                strategy=ProxyStrategy.DIRECT_ONLY,
                 follow_redirects=True,
             ) as client:
                 response = await client.get(url, headers=self._headers)
@@ -161,7 +164,7 @@ class PravoClient:
             raise ValueError("keyword не должен быть пустым")
         enc = quote(kw, safe="")
         return (
-            f"https://{_PRAVO_IPS_NETLOC}/?"
+            f"{_PRAVO_IPS_SCHEME}://{_PRAVO_IPS_NETLOC}/?"
             f"advanced_search%5Bactual%5D=1&page={page}&search%5Boneof_lexemes%5D={enc}"
         )
 
@@ -234,7 +237,7 @@ class PravoClient:
     @classmethod
     def _parse_catalog_search_html(cls, html: str, *, page_base_url: str | None = None) -> list[PravoCatalogHit]:
         soup = BeautifulSoup(html, "html.parser")
-        base = page_base_url or f"https://{_PRAVO_IPS_NETLOC}/"
+        base = page_base_url or f"{_PRAVO_IPS_SCHEME}://{_PRAVO_IPS_NETLOC}/"
         seen: set[str] = set()
         out: list[PravoCatalogHit] = []
 
