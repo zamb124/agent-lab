@@ -88,7 +88,7 @@ class ContextFactory:
             "context_type": context_type,
             "authenticated": user is not None,
         }
-        
+
         if platform:
             metadata["platform"] = platform
 
