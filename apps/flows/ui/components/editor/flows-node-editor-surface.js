@@ -20,7 +20,7 @@ import '../nodes/flows-base-node-editor.js';
  * @param {object} ctx.node
  * @param {string} ctx.nodeId
  * @param {string} ctx.flowId
- * @param {string} ctx.skillId
+ * @param {string} ctx.branchId
  * @param {object} ctx.flowVariables
  * @param {Array<{id:string,name:string,type:string}>} ctx.graphNodes
  * @param {object} ctx.previewExecutionState
@@ -41,7 +41,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
         throw new Error('flows-node-editor-surface: nodeId is required');
     }
     const flowId = asString(ctx.flowId);
-    const skillId = asString(ctx.skillId);
+    const branchId = asString(ctx.branchId);
     const flowVariables = isPlainObject(ctx.flowVariables) ? ctx.flowVariables : {};
     const graphNodes = Array.isArray(ctx.graphNodes) ? ctx.graphNodes : [];
     const preview = ctx.previewExecutionState;
@@ -67,7 +67,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
     switch (node.type) {
         case 'llm_node':
             return html`<flows-llm-node-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -77,7 +77,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-llm-node-editor>`;
         case 'code':
             return html`<flows-code-node-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -87,7 +87,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-code-node-editor>`;
         case 'channel':
             return html`<flows-channel-node-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -97,7 +97,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-channel-node-editor>`;
         case 'flow':
             return html`<flows-flow-node-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -107,7 +107,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-flow-node-editor>`;
         case 'mcp':
             return html`<flows-mcp-node-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -117,7 +117,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-mcp-node-editor>`;
         case 'hitl_node':
             return html`<flows-hitl-node-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -127,7 +127,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-hitl-node-editor>`;
         case 'external_api':
             return html`<flows-external-api-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -137,7 +137,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-external-api-editor>`;
         case 'remote_flow':
             return html`<flows-remote-flow-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
@@ -147,7 +147,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
             ></flows-remote-flow-editor>`;
         default:
             return html`<flows-base-node-editor
-                .nodeId=${nodeId} .flowId=${flowId} .skillId=${skillId}
+                .nodeId=${nodeId} .flowId=${flowId} .branchId=${branchId}
                 .nodeConfig=${node} .nodeType=${asString(node.type)}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}

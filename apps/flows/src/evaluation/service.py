@@ -31,16 +31,16 @@ class EvaluationService:
     async def get_test_cases(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
     ) -> Dict[str, TestCaseConfig]:
         """
-        Получает тест-кейсы для skill.
+        Получает тест-кейсы для ветки.
 
-        Фильтрует по skill_ids: включает тесты где skill_id в списке или "*".
+        Фильтрует по branch_ids: включает тесты где branch_id в списке или "*".
 
         Args:
             flow_id: ID агента
-            skill_id: ID skill
+            branch_id: ID ветки
 
         Returns:
             Словарь {test_case_id: config}
@@ -53,11 +53,11 @@ class EvaluationService:
 
         result = {}
         for test_id, test_case in flow_config.evaluation.items():
-            skill_ids = test_case.skill_ids
+            branch_ids = test_case.branch_ids
 
-            if skill_ids == "*":
+            if branch_ids == "*":
                 result[test_id] = test_case
-            elif isinstance(skill_ids, list) and skill_id in skill_ids:
+            elif isinstance(branch_ids, list) and branch_id in branch_ids:
                 result[test_id] = test_case
 
         return result
@@ -65,7 +65,7 @@ class EvaluationService:
     async def run_test(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         test_case_id: str,
     ) -> EvaluationResult:
         """
@@ -73,13 +73,13 @@ class EvaluationService:
 
         Args:
             flow_id: ID агента
-            skill_id: ID skill
+            branch_id: ID ветки
             test_case_id: ID тест-кейса
 
         Returns:
             Результат выполнения
         """
-        test_cases = await self.get_test_cases(flow_id, skill_id)
+        test_cases = await self.get_test_cases(flow_id, branch_id)
 
         if test_case_id not in test_cases:
             raise ValueError(f"Test case not found: {test_case_id}")
@@ -87,9 +87,9 @@ class EvaluationService:
         test_case = test_cases[test_case_id]
 
         run_date = date.today()
-        iteration = await self._repository.get_next_iteration(flow_id, skill_id, run_date)
+        iteration = await self._repository.get_next_iteration(flow_id, branch_id, run_date)
 
-        runner = await self._create_runner(flow_id, skill_id, run_date, iteration, test_case)
+        runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
         # Собираем результат из стриминга
         result_event = None
@@ -108,7 +108,7 @@ class EvaluationService:
         saved_dialog = result_event.get("dialog", dialog)
         result = EvaluationResult(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             run_date=run_date,
             iteration=iteration,
             test_case_id=test_case_id,
@@ -133,29 +133,29 @@ class EvaluationService:
     async def run_all_tests(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
     ) -> EvaluationRunSummary:
         """
-        Запускает все тест-кейсы для skill.
+        Запускает все тест-кейсы для ветки.
 
         Args:
             flow_id: ID агента
-            skill_id: ID skill
+            branch_id: ID ветки
 
         Returns:
             Сводка по запуску
         """
-        test_cases = await self.get_test_cases(flow_id, skill_id)
+        test_cases = await self.get_test_cases(flow_id, branch_id)
 
         if not test_cases:
-            raise ValueError(f"No test cases found for {flow_id}/{skill_id}")
+            raise ValueError(f"No test cases found for {flow_id}/{branch_id}")
 
         run_date = date.today()
-        iteration = await self._repository.get_next_iteration(flow_id, skill_id, run_date)
+        iteration = await self._repository.get_next_iteration(flow_id, branch_id, run_date)
 
         summary = EvaluationRunSummary(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             run_date=run_date,
             iteration=iteration,
             started_at=datetime.now(timezone.utc),
@@ -165,7 +165,7 @@ class EvaluationService:
         total_scores: List[float] = []
 
         for test_case_id, test_case in test_cases.items():
-            runner = await self._create_runner(flow_id, skill_id, run_date, iteration, test_case)
+            runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
             # Собираем результат из стриминга
             result_event = None
@@ -185,7 +185,7 @@ class EvaluationService:
             saved_dialog = result_event.get("dialog", dialog)
             result = EvaluationResult(
                 flow_id=flow_id,
-                skill_id=skill_id,
+                branch_id=branch_id,
                 run_date=run_date,
                 iteration=iteration,
                 test_case_id=test_case_id,
@@ -235,7 +235,7 @@ class EvaluationService:
     async def run_test_stream(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         test_case_id: str,
         task_id: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
@@ -250,7 +250,7 @@ class EvaluationService:
             - {"type": "result", "status": ..., "duration_ms": ..., ...}
             - {"type": "error", "message": ...}
         """
-        test_cases = await self.get_test_cases(flow_id, skill_id)
+        test_cases = await self.get_test_cases(flow_id, branch_id)
 
         if test_case_id not in test_cases:
             yield {"type": "error", "message": f"Test case not found: {test_case_id}"}
@@ -259,7 +259,7 @@ class EvaluationService:
         test_case = test_cases[test_case_id]
 
         run_date = date.today()
-        iteration = await self._repository.get_next_iteration(flow_id, skill_id, run_date)
+        iteration = await self._repository.get_next_iteration(flow_id, branch_id, run_date)
 
         yield {
             "type": "start",
@@ -267,7 +267,7 @@ class EvaluationService:
             "name": test_case.name,
         }
 
-        runner = await self._create_runner(flow_id, skill_id, run_date, iteration, test_case)
+        runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
         dialog = []
         result_event = None
@@ -288,7 +288,7 @@ class EvaluationService:
             saved_dialog = result_event.get("dialog", dialog)
             result = EvaluationResult(
                 flow_id=flow_id,
-                skill_id=skill_id,
+                branch_id=branch_id,
                 run_date=run_date,
                 iteration=iteration,
                 test_case_id=test_case_id,
@@ -306,7 +306,7 @@ class EvaluationService:
     async def run_all_tests_stream(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Запускает все тесты со streaming результатов.
@@ -314,19 +314,19 @@ class EvaluationService:
         Yields:
             События: run_start, test_start, dialog, test_result, summary
         """
-        test_cases = await self.get_test_cases(flow_id, skill_id)
+        test_cases = await self.get_test_cases(flow_id, branch_id)
 
         if not test_cases:
-            yield {"type": "error", "message": f"No test cases found for {flow_id}/{skill_id}"}
+            yield {"type": "error", "message": f"No test cases found for {flow_id}/{branch_id}"}
             return
 
         run_date = date.today()
-        iteration = await self._repository.get_next_iteration(flow_id, skill_id, run_date)
+        iteration = await self._repository.get_next_iteration(flow_id, branch_id, run_date)
 
         yield {
             "type": "run_start",
             "flow_id": flow_id,
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "run_date": run_date.isoformat(),
             "iteration": iteration,
             "total_tests": len(test_cases),
@@ -344,7 +344,7 @@ class EvaluationService:
                 "name": test_case.name,
             }
 
-            runner = await self._create_runner(flow_id, skill_id, run_date, iteration, test_case)
+            runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
             result_event = None
             dialog = []
@@ -369,7 +369,7 @@ class EvaluationService:
             saved_dialog = result_event.get("dialog", dialog)
             result = EvaluationResult(
                 flow_id=flow_id,
-                skill_id=skill_id,
+                branch_id=branch_id,
                 run_date=run_date,
                 iteration=iteration,
                 test_case_id=test_case_id,
@@ -423,7 +423,7 @@ class EvaluationService:
     async def get_results(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         run_date: Optional[date] = None,
         iteration: Optional[int] = None,
         limit: int = 10,
@@ -433,7 +433,7 @@ class EvaluationService:
 
         Args:
             flow_id: ID агента
-            skill_id: ID skill
+            branch_id: ID ветки
             run_date: Дата запуска (если указана с iteration - конкретный запуск)
             iteration: Номер итерации
             limit: Максимум записей
@@ -442,9 +442,9 @@ class EvaluationService:
             Список результатов
         """
         if run_date and iteration is not None:
-            return await self._repository.get_by_run(flow_id, skill_id, run_date, iteration)
+            return await self._repository.get_by_run(flow_id, branch_id, run_date, iteration)
 
-        return await self._repository.get_latest_results(flow_id, skill_id, limit)
+        return await self._repository.get_latest_results(flow_id, branch_id, limit)
 
     # ========================================================================
     # Создание runner и target callable
@@ -453,14 +453,14 @@ class EvaluationService:
     async def _create_runner(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         run_date: date,
         iteration: int,
         test_case: TestCaseConfig,
     ) -> TestRunner:
         """Создает TestRunner с нужным target callable."""
         target_callable, target_id = await self._create_target_callable(
-            test_case, flow_id, skill_id
+            test_case, flow_id, branch_id
         )
         return TestRunner(target_id, target_callable, run_date, iteration)
 
@@ -468,7 +468,7 @@ class EvaluationService:
         self,
         test_case: TestCaseConfig,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
     ) -> tuple[Callable, str]:
         """
         Создает callable и target_id на основе target конфигурации.
@@ -480,14 +480,14 @@ class EvaluationService:
         
         # target не указан — тестируем текущий flow
         if not target:
-            callable_ = await self._create_flow_callable(flow_id, skill_id)
-            return callable_, f"{flow_id}:{skill_id}"
+            callable_ = await self._create_flow_callable(flow_id, branch_id)
+            return callable_, f"{flow_id}:{branch_id}"
         
         if target.type == TestTargetType.FLOW:
             target_flow_id = target.flow_id or flow_id
-            target_skill_id = target.skill_id or skill_id
-            callable_ = await self._create_flow_callable(target_flow_id, target_skill_id)
-            return callable_, f"{target_flow_id}:{target_skill_id}"
+            target_branch_id = target.branch_id or branch_id
+            callable_ = await self._create_flow_callable(target_flow_id, target_branch_id)
+            return callable_, f"{target_flow_id}:{target_branch_id}"
         
         if target.type == TestTargetType.NODE:
             callable_ = self._create_node_callable(target)
@@ -497,11 +497,11 @@ class EvaluationService:
         raise ValueError(f"Unknown target type: {target.type}")
 
     async def _create_flow_callable(
-        self, flow_id: str, skill_id: str
+        self, flow_id: str, branch_id: str
     ) -> Callable[[ExecutionState], ExecutionState]:
         """Callable `run` для собранного flow (FlowFactory)."""
         container = get_container()
-        runtime_flow = await container.flow_factory.get_flow(flow_id, skill_id)
+        runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
         
         if not runtime_flow:
             raise ValueError(f"Flow not found: {flow_id}")

@@ -56,36 +56,36 @@ export function colorOrDefault(value, defaultColor) {
 }
 
 /**
- * Безопасное чтение skillsData из editor slice. Slice гарантирует форму через
+ * Безопасное чтение branchData из editor slice. Slice гарантирует форму через
  * extraInitial, но защита от undefined нужна на момент монтирования.
  */
-export function getSkillsData(state) {
+export function getBranchData(state) {
     if (!isPlainObject(state)) {
         return { nodes: {}, edges: [], entry: null, variables: {}, resources: {} };
     }
-    const skills = state.skillsData;
-    if (!isPlainObject(skills)) {
+    const branchDraft = state.branchData;
+    if (!isPlainObject(branchDraft)) {
         return { nodes: {}, edges: [], entry: null, variables: {}, resources: {} };
     }
-    return skills;
+    return branchDraft;
 }
 
-export function getSkillsNodes(state) {
-    const data = getSkillsData(state);
+export function getBranchNodes(state) {
+    const data = getBranchData(state);
     return isPlainObject(data.nodes) ? data.nodes : {};
 }
 
-export function getSkillsEdges(state) {
-    const data = getSkillsData(state);
+export function getBranchEdges(state) {
+    const data = getBranchData(state);
     return Array.isArray(data.edges) ? data.edges : [];
 }
 
 /**
  * Возвращает ноду по id или null. Не бросает — рендер должен уметь скипать.
  */
-export function getNodeByIdOrNull(skillsData, nodeId) {
-    if (!isPlainObject(skillsData)) return null;
-    const nodes = skillsData.nodes;
+export function getNodeByIdOrNull(branchData, nodeId) {
+    if (!isPlainObject(branchData)) return null;
+    const nodes = branchData.nodes;
     if (!isPlainObject(nodes)) return null;
     if (typeof nodeId !== 'string' || nodeId.length === 0) return null;
     const node = nodes[nodeId];
@@ -159,11 +159,11 @@ export function resolveFlowId(state) {
 }
 
 /**
- * Resolve активного skill id (или 'base' если null).
+ * Resolve активного branch id (или null).
  */
-export function resolveSkillId(state) {
+export function resolveBranchId(state) {
     if (!isPlainObject(state)) return null;
-    return isNonEmptyString(state.currentSkillId) ? state.currentSkillId : null;
+    return isNonEmptyString(state.currentBranchId) ? state.currentBranchId : null;
 }
 
 function _deepEqual(a, b) {
@@ -188,20 +188,20 @@ function _deepEqual(a, b) {
 }
 
 /**
- * Фрагмент ноды для `skills[skillId].nodes` при merge: отличия effective от base.
- * Бэкенд делает deep_merge(base_node, skill_fragment) — см. FlowFactory._merge_nodes.
+ * Фрагмент ноды для `branches[branchId].nodes` при merge: отличия effective от base.
+ * Бэкенд делает deep_merge(base_node, branch_fragment) — см. FlowFactory._merge_nodes.
  */
-export function buildSkillNodeOverride(baseNode, effectiveNode) {
+export function buildBranchNodeOverride(baseNode, effectiveNode) {
     if (!isPlainObject(effectiveNode)) {
-        throw new Error('buildSkillNodeOverride: effectiveNode object required');
+        throw new Error('buildBranchNodeOverride: effectiveNode object required');
     }
     if (!isPlainObject(baseNode)) {
         return { ...effectiveNode };
     }
-    return _diffForSkillOverride(baseNode, effectiveNode);
+    return _diffForBranchOverride(baseNode, effectiveNode);
 }
 
-function _diffForSkillOverride(base, effective) {
+function _diffForBranchOverride(base, effective) {
     const out = {};
     for (const key of Object.keys(effective)) {
         const ev = effective[key];
@@ -212,7 +212,7 @@ function _diffForSkillOverride(base, effective) {
         }
         const bv = base[key];
         if (isPlainObject(ev) && !Array.isArray(ev) && isPlainObject(bv) && !Array.isArray(bv)) {
-            const sub = _diffForSkillOverride(bv, ev);
+            const sub = _diffForBranchOverride(bv, ev);
             if (isPlainObject(sub) && Object.keys(sub).length > 0) {
                 out[key] = sub;
             }
@@ -237,9 +237,9 @@ export function buildFlowPublishBody(state) {
     if (!isPlainObject(state) || !isPlainObject(state.flowConfig)) {
         return null;
     }
-    const data = isPlainObject(state.skillsData) ? state.skillsData : {};
-    const skillId = state.currentSkillId;
-    const isBase = !skillId || skillId === 'base';
+    const data = isPlainObject(state.branchData) ? state.branchData : {};
+    const branchId = state.currentBranchId;
+    const isBase = !branchId || branchId === 'base';
     const body = { ...state.flowConfig };
     if (isBase) {
         body.nodes = data.nodes;
@@ -248,8 +248,8 @@ export function buildFlowPublishBody(state) {
         body.variables = data.variables;
         body.resources = data.resources;
     } else {
-        const existingSkills = body.skills && typeof body.skills === 'object' ? body.skills : {};
-        const existingSkill = isPlainObject(existingSkills[skillId]) ? existingSkills[skillId] : { name: skillId };
+        const existingBranches = body.branches && typeof body.branches === 'object' ? body.branches : {};
+        const existingBranch = isPlainObject(existingBranches[branchId]) ? existingBranches[branchId] : { name: branchId };
         const inheritedNodeIds = asArray(state.inheritedNodeIds);
         const inheritedEdgeKeys = asArray(state.inheritedEdgeKeys);
         const baseNodes = isPlainObject(state.flowConfig?.nodes) ? state.flowConfig.nodes : {};
@@ -259,7 +259,7 @@ export function buildFlowPublishBody(state) {
                 ownNodes[id] = node;
             } else {
                 const baseN = baseNodes[id];
-                const fragment = buildSkillNodeOverride(baseN, node);
+                const fragment = buildBranchNodeOverride(baseN, node);
                 if (isPlainObject(fragment) && Object.keys(fragment).length > 0) {
                     ownNodes[id] = fragment;
                 }
@@ -270,10 +270,10 @@ export function buildFlowPublishBody(state) {
             const key = `${from}->${to}`;
             return !inheritedEdgeKeys.includes(key);
         });
-        body.skills = {
-            ...existingSkills,
-            [skillId]: {
-                ...existingSkill,
+        body.branches = {
+            ...existingBranches,
+            [branchId]: {
+                ...existingBranch,
                 nodes: ownNodes,
                 edges: ownEdges,
                 entry: data.entry,

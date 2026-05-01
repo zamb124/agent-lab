@@ -4,10 +4,10 @@
     "operator": "Operator",
     "platform_services": "Services",
     "flow_chat": "Flow",
-    "flow_chat_skill": "Flow",
+    "flow_chat_branch": "Flow",
     "flow_chat_session": "Session",
     "flow_editor": "Editor",
-    "flow_editor_skill": "Editor"
+    "flow_editor_branch": "Editor"
   },
   "flow_create_modal": {
     "title": "Create flow",
@@ -51,12 +51,12 @@
     "action_cancel": "Cancel",
     "action_save": "Save"
   },
-  "skill_create_modal": {
-    "title": "Create skill",
-    "field_skill_id": "Skill ID (snake_case)",
+  "branch_create_modal": {
+    "title": "Create branch",
+    "field_branch_id": "Branch ID (snake_case)",
     "field_name": "Name",
     "field_description": "Description (optional)",
-    "err_skill_id_pattern": "Skill ID: latin letters, digits, underscores.",
+    "err_branch_id_pattern": "Branch ID: latin letters, digits, underscores.",
     "action_cancel": "Cancel",
     "action_create": "Create"
   },
@@ -187,9 +187,9 @@
     "verify_error_no_type": "Select a trigger type.",
     "verify_error_network": "Request failed.",
     "verify_error_http": "Error: {{message}}",
-    "field_skill": "Skill",
-    "hint_skill": "Which skill to run: base flow (default) or a named skill from the flow.",
-    "skill_option_default": "Base flow (default)",
+    "field_branch": "Branch",
+    "hint_branch": "Which graph branch to run: base flow (default) or a named branch.",
+    "branch_option_default": "Base flow (default)",
     "post_flow_output_label": "Send after the flow responds",
     "post_flow_output_hint": "When off, no output actions run after the graph finishes.",
     "field_config_json": "Config (JSON)",
@@ -289,7 +289,7 @@
     "error_id_invalid": "ID must be snake_case starting with a letter",
     "error_name_required": "Name is required",
     "error_type_required": "Select a trigger type",
-    "error_skill_required": "Select a skill",
+    "error_branch_required": "Select a branch",
     "action_cancel": "Cancel",
     "action_save": "Save",
     "action_create": "Create"
@@ -332,7 +332,7 @@
     "warn_no_session": "No active session",
     "warn_no_task_tracing": "No task ID for tracing",
     "no_flow": "No flow selected",
-    "base_skill": "Base flow",
+    "base_branch": "Base flow",
     "btn_sessions": "Sessions history",
     "btn_traces": "Traces",
     "btn_logs": "Logs",
@@ -391,9 +391,9 @@
     "save": "Save"
   },
   "flow_card": {
-    "skills_title": "Skills",
-    "add_skill_title": "Add skill",
-    "no_skills": "No skills",
+    "branches_title": "Branches",
+    "add_branch_title": "Add branch",
+    "no_branches": "No branches",
     "delete_title": "Delete",
     "open_chat_title": "Open chat",
     "edit_title": "Edit",
@@ -552,9 +552,9 @@
   "flow_node_editor": {
     "field_flow_id": "Flow",
     "field_flow_pick": "pick a flow",
-    "field_skill_id": "Skill",
+    "field_branch_id": "Branch",
     "flow_id": "Flow",
-    "skill_id": "Skill",
+    "branch_id": "Branch",
     "from_list": "From list",
     "custom_id": "Custom ID",
     "custom_id_hint": "Enter flow_id manually"
@@ -598,13 +598,13 @@
   },
   "remote_flow_editor": {
     "field_url": "URL",
-    "field_skill_id": "Skill",
+    "field_branch_id": "Branch",
     "field_auth_headers": "Auth headers (JSON)",
     "mode_url": "Direct URL",
     "mode_id": "Registry flow_id",
     "url": "URL",
     "flow_id": "Flow ID",
-    "skill_id": "Skill",
+    "branch_id": "Branch",
     "auth_headers": "Auth headers (JSON)"
   },
   "base_resource_editor": {
@@ -750,7 +750,8 @@
     "download_aria": "Download as JSON file"
   },
   "state_modal": {
-    "modal_title": "State"
+    "modal_title": "State",
+    "load_failed": "Could not load state: {detail}"
   },
   "property_panel": {
     "flow_settings_title": "Flow limits",
@@ -840,8 +841,8 @@
     "footer_vars": "Variables",
     "delete_flow_title": "Delete flow?",
     "delete_flow_message": "Delete flow \"{{id}}\"? This cannot be undone.",
-    "delete_skill_title": "Delete skill?",
-    "delete_skill_message": "Delete skill \"{{id}}\"?",
+    "delete_branch_title": "Delete branch?",
+    "delete_branch_message": "Delete branch \"{{id}}\"?",
     "footer_triggers": "Triggers",
     "footer_integrations": "Integrations",
     "action_cancel": "Cancel"
@@ -861,7 +862,7 @@
     "col_actions": "Actions",
     "filter_user": "user_id",
     "filter_flow": "flow_id",
-    "filter_skill": "skill_id",
+    "filter_branch": "branch_id",
     "filter_date_from": "Created from",
     "filter_date_to": "Created to",
     "filter_apply": "Apply",
@@ -871,7 +872,7 @@
     "continue_aria": "Continue chat",
     "filter_user_aria": "User (user_id)",
     "filter_flow_aria": "Flow (flow_id)",
-    "filter_skill_aria": "Skill (skill_id)",
+    "filter_branch_aria": "Branch (branch_id)",
     "filter_empty": "Any"
   },
   "editor_header": {
@@ -1028,10 +1029,10 @@
     "close": "Close",
     "output_title": "Output"
   },
-  "skills_tabs": {
+  "branches_tabs": {
     "base": "Base Flow",
-    "add": "Skill",
-    "delete": "Delete skill"
+    "add": "Branch",
+    "delete": "Delete branch"
   },
   "canvas": {
     "context_menu": {
@@ -1137,12 +1138,12 @@
     "flow_remove_error": "Failed to remove flow",
     "flow_reloaded": "Flow reloaded",
     "flow_reload_error": "Failed to reload flow",
-    "skill_created": "Skill created",
-    "skill_create_error": "Failed to create skill",
-    "skill_updated": "Skill updated",
-    "skill_update_error": "Failed to update skill",
-    "skill_removed": "Skill removed",
-    "skill_remove_error": "Failed to remove skill",
+    "branch_created": "Branch created",
+    "branch_create_error": "Failed to create branch",
+    "branch_updated": "Branch updated",
+    "branch_update_error": "Failed to update branch",
+    "branch_removed": "Branch removed",
+    "branch_remove_error": "Failed to remove branch",
     "session_removed": "Session removed",
     "session_remove_error": "Failed to remove session",
     "variable_created": "Variable created",

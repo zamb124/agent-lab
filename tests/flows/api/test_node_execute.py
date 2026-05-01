@@ -82,7 +82,7 @@ async def remote_flow_server():
         return web.json_response({
             "name": "Test Remote Agent",
             "url": public["base"],
-            "skills": [{"id": "default", "name": "Default"}],
+            "branches": [{"id": "default", "name": "Default"}],
         })
 
     async def handle_send_task(request):
@@ -974,7 +974,7 @@ class TestRemoteFlowNode:
     
     @pytest.mark.asyncio
     async def test_remote_flow_with_skill_id(self, client, app, remote_flow_server):
-        """skill_id передаётся."""
+        """branch_id передаётся."""
         state = {"content": "Test"}
         
         response = await client.post(
@@ -983,7 +983,7 @@ class TestRemoteFlowNode:
                 "node_type": "remote_flow",
                 "node_config": {
                     "url": remote_flow_server,
-                    "skill_id": "custom_skill"
+                    "branch_id": "custom_skill"
                 },
                 "state": state
             }
@@ -1168,7 +1168,7 @@ class TestFlowNode:
     
     @pytest.mark.asyncio
     async def test_subflow_with_skill_id(self, client, app, container):
-        """skill_id='fast_track'."""
+        """branch_id='fast_track'."""
         state = {"content": "заказ"}
         
         response = await client.post(
@@ -1177,7 +1177,7 @@ class TestFlowNode:
                 "node_type": "flow",
                 "node_config": {
                     "flow_id": "example_graph",
-                    "skill_id": "fast_track"
+                    "branch_id": "fast_track"
                 },
                 "state": state
             }

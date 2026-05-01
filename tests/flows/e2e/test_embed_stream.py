@@ -389,7 +389,7 @@ async def test_embed_session_token_contains_expected_claims(
     assert token_data.token_type.value == "embed_session"
     assert token_data.metadata["embed_id"] == embed_id
     assert token_data.metadata["embed_flow_id"] == flow_id
-    assert token_data.metadata["embed_skill_id"] == "default"
+    assert token_data.metadata["embed_branch_id"] == "default"
     assert token_data.metadata["allowed_origin"] == "https://larashved.ru"
     assert token_data.exp > datetime.now(timezone.utc)
 

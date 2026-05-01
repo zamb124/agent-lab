@@ -41,6 +41,24 @@ from core.utils.tokens import TokenData, TokenType
 logger = get_logger(__name__)
 
 
+def _embed_session_branch_from_token_metadata(metadata: Dict[str, Any]) -> str | None:
+    if not isinstance(metadata, dict):
+        return None
+    b = metadata.get("embed_branch_id")
+    if isinstance(b, str) and b.strip():
+        return b.strip()
+    return None
+
+
+def _metadata_effective_branch(metadata: Dict[str, Any] | None) -> str | None:
+    if not isinstance(metadata, dict):
+        return None
+    b = metadata.get("branch")
+    if b is not None and str(b).strip():
+        return str(b).strip()
+    return None
+
+
 def _get_user_groups(request: Request) -> list[str]:
     """Извлекает группы пользователя из request.state.user."""
     if not hasattr(request.state, "user") or request.state.user is None:
@@ -84,7 +102,7 @@ def _validate_embed_session_request(
     flow_id: str,
     method: str,
     params_dict: Dict[str, Any],
-    expected_skill_id: str | None = None,
+    expected_branch_id: str | None = None,
 ) -> Optional[Dict[str, Any]]:
     """Проверяет claims embed-session токена для A2A вызова."""
     metadata = token_data.metadata if isinstance(token_data.metadata, dict) else {}
@@ -110,28 +128,28 @@ def _validate_embed_session_request(
         if origin != allowed_origin.strip():
             return {"code": -32000, "message": "Origin is not allowed for this embed session token"}
 
-    allowed_skill_id = metadata.get("embed_skill_id")
-    if expected_skill_id is not None and isinstance(allowed_skill_id, str) and allowed_skill_id.strip():
-        if allowed_skill_id.strip() != expected_skill_id:
-            return {"code": -32000, "message": "Embed session token skill mismatch"}
-    if isinstance(allowed_skill_id, str) and allowed_skill_id.strip():
-        effective_skill_id = allowed_skill_id.strip()
+    allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
+    if expected_branch_id is not None and isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
+        if allowed_branch_id.strip() != expected_branch_id:
+            return {"code": -32000, "message": "Embed session token branch mismatch"}
+    if isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
+        effective_branch_id = allowed_branch_id.strip()
         metadata_dict = params_dict.get("metadata")
         if metadata_dict is None:
-            params_dict["metadata"] = {"skill": effective_skill_id}
+            params_dict["metadata"] = {"branch": effective_branch_id}
         elif isinstance(metadata_dict, dict):
-            request_skill = metadata_dict.get("skill")
-            if request_skill is None:
-                metadata_dict["skill"] = effective_skill_id
-            elif str(request_skill).strip() != effective_skill_id:
-                return {"code": -32000, "message": "Embed session token is not allowed for this skill"}
+            request_branch = _metadata_effective_branch(metadata_dict)
+            if request_branch is None:
+                metadata_dict["branch"] = effective_branch_id
+            elif request_branch != effective_branch_id:
+                return {"code": -32000, "message": "Embed session token is not allowed for this branch"}
         else:
             return {"code": -32602, "message": "Invalid params: metadata must be object"}
 
     logger.info(
-        "embed_session_validated flow_id=%s skill_id=%s company_id=%s origin=%s issuer=%s",
+        "embed_session_validated flow_id=%s branch_id=%s company_id=%s origin=%s issuer=%s",
         flow_id,
-        metadata.get("embed_skill_id", "default"),
+        _embed_session_branch_from_token_metadata(metadata) or "default",
         token_data.company_id,
         origin,
         metadata.get("issued_by", "unknown"),
@@ -330,7 +348,7 @@ async def _json_rpc_handler_internal(
             flow_id=flow_id,
             method=method,
             params_dict=params_dict,
-            expected_skill_id=embed_target.skill_id if embed_target is not None else None,
+            expected_branch_id=embed_target.branch_id if embed_target is not None else None,
         )
         if embed_error is not None:
             return {"jsonrpc": "2.0", "id": rpc_id, "error": embed_error}
@@ -338,16 +356,16 @@ async def _json_rpc_handler_internal(
     if embed_target is not None:
         metadata_dict = params_dict.get("metadata")
         if metadata_dict is None:
-            params_dict["metadata"] = {"skill": embed_target.skill_id}
+            params_dict["metadata"] = {"branch": embed_target.branch_id}
         elif isinstance(metadata_dict, dict):
-            request_skill = metadata_dict.get("skill")
-            if request_skill is None:
-                metadata_dict["skill"] = embed_target.skill_id
-            elif str(request_skill).strip() != embed_target.skill_id:
+            request_branch = _metadata_effective_branch(metadata_dict)
+            if request_branch is None:
+                metadata_dict["branch"] = embed_target.branch_id
+            elif request_branch != embed_target.branch_id:
                 return {
                     "jsonrpc": "2.0",
                     "id": rpc_id,
-                    "error": {"code": -32000, "message": "Embed config skill mismatch"},
+                    "error": {"code": -32000, "message": "Embed config branch mismatch"},
                 }
         else:
             return {
@@ -589,63 +607,63 @@ async def json_rpc_embed_handler(
     )
 
 
-@router.get("/{flow_id}/skills")
-async def list_skills(flow_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
+@router.get("/{flow_id}/branches")
+async def list_branches(flow_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-    return await channel.list_skills()
+    return await channel.list_branches()
 
 
-@router.get("/{flow_id}/skills/{skill_id}")
-async def get_skill(flow_id: str, skill_id: str, container: ContainerDep) -> Dict[str, Any]:
+@router.get("/{flow_id}/branches/{branch_id}")
+async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> Dict[str, Any]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     
-    result = await channel.get_skill(skill_id)
+    result = await channel.get_branch(branch_id)
     if result is None:
-        raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
     return result
 
 
-@router.get("/{flow_id}/skills/{skill_id}/tools")
-async def get_skill_tools(flow_id: str, skill_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
-    """Получить список tools для skill с полной информацией."""
+@router.get("/{flow_id}/branches/{branch_id}/tools")
+async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
+    """Получить список tools для ветки с полной информацией."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     
-    # 'base' — это базовый агент без конкретного skill
-    if skill_id != "base":
-        skill = await channel.get_skill(skill_id)
-        if skill is None:
-            raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")
+    # 'base' — это базовый агент без конкретной ветки
+    if branch_id != "base":
+        branch = await channel.get_branch(branch_id)
+        if branch is None:
+            raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
     
-    return await channel.get_skill_tools(skill_id)
+    return await channel.get_branch_tools(branch_id)
 
 
 @router.get("/{flow_id}/schema")
-async def get_skill_schema(flow_id: str, container: ContainerDep) -> Dict[str, Any]:
-    """Получить JSON Schema для создания навыка в формате ISchema."""
+async def get_branch_schema(flow_id: str, container: ContainerDep) -> Dict[str, Any]:
+    """Получить JSON Schema для создания ветки в формате ISchema."""
     _ = container
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     try:
-        return await channel.get_skill_schema()
+        return await channel.get_branch_schema()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/{flow_id}/skills")
-async def create_skill(flow_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
-    """Создать новый skill."""
+@router.post("/{flow_id}/branches")
+async def create_branch(flow_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
+    """Создать новую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     config = await _get_flow_config(flow_id, container)
@@ -657,12 +675,12 @@ async def create_skill(flow_id: str, request: Request, container: ContainerDep) 
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    skill_id = data.get("skill_id")
-    if not skill_id:
-        raise HTTPException(status_code=400, detail="Field 'skill_id' is required")
+    branch_id = data.get("branch_id")
+    if not branch_id:
+        raise HTTPException(status_code=400, detail="Field 'branch_id' is required")
 
     try:
-        result = await channel.create_skill(skill_id, data)
+        result = await channel.create_branch(branch_id, data)
     except ValueError as e:
         if "already exists" in str(e):
             raise HTTPException(status_code=409, detail=str(e))
@@ -671,16 +689,16 @@ async def create_skill(flow_id: str, request: Request, container: ContainerDep) 
     if context and context.user and context.user.user_id:
         await publish_ui_event_to_user(
             user_id=context.user.user_id,
-            type="flows/skill/created",
-            payload={"flow_id": flow_id, "skill_id": skill_id},
+            type="flows/branch/created",
+            payload={"flow_id": flow_id, "branch_id": branch_id},
         )
 
     return JSONResponse(result, status_code=201)
 
 
-@router.put("/{flow_id}/skills/{skill_id}")
-async def update_skill(flow_id: str, skill_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
-    """Обновить существующий skill."""
+@router.put("/{flow_id}/branches/{branch_id}")
+async def update_branch(flow_id: str, branch_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
+    """Обновить существующую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     config = await _get_flow_config(flow_id, container)
@@ -693,25 +711,25 @@ async def update_skill(flow_id: str, skill_id: str, request: Request, container:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     try:
-        result = await channel.update_skill(skill_id, data)
+        result = await channel.update_branch(branch_id, data)
     except ValueError as e:
         if "not found" in str(e):
-            raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found. Use POST to create.")
+            raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found. Use POST to create.")
         raise HTTPException(status_code=400, detail=str(e))
 
     if context and context.user and context.user.user_id:
         await publish_ui_event_to_user(
             user_id=context.user.user_id,
-            type="flows/skill/updated",
-            payload={"flow_id": flow_id, "skill_id": skill_id},
+            type="flows/branch/updated",
+            payload={"flow_id": flow_id, "branch_id": branch_id},
         )
 
     return result
 
 
-@router.delete("/{flow_id}/skills/{skill_id}")
-async def delete_skill(flow_id: str, skill_id: str, container: ContainerDep) -> Dict[str, Any]:
-    """Удалить skill."""
+@router.delete("/{flow_id}/branches/{branch_id}")
+async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -> Dict[str, Any]:
+    """Удалить ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
     config = await _get_flow_config(flow_id, container)
@@ -719,15 +737,15 @@ async def delete_skill(flow_id: str, skill_id: str, container: ContainerDep) -> 
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     try:
-        result = await channel.delete_skill(skill_id)
+        result = await channel.delete_branch(branch_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
     if context and context.user and context.user.user_id:
         await publish_ui_event_to_user(
             user_id=context.user.user_id,
-            type="flows/skill/deleted",
-            payload={"flow_id": flow_id, "skill_id": skill_id},
+            type="flows/branch/deleted",
+            payload={"flow_id": flow_id, "branch_id": branch_id},
         )
 
     return result

@@ -19,6 +19,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
+        branchId: { type: String, attribute: 'branch-id' },
         skillId: { type: String, attribute: 'skill-id' },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
@@ -323,6 +324,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.flowsBaseUrl = '';
         this.flowId = '';
         this.embedId = '';
+        this.branchId = '';
         this.skillId = '';
         this.useCredentials = false;
         this.enableVoice = true;
@@ -377,8 +379,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
         if (p.assistantTitle) {
             this.assistantTitle = p.assistantTitle;
         }
-        if (p.skillId) {
-            this.skillId = p.skillId;
+        if (p.branchId) {
+            this.branchId = p.branchId;
         }
         applyEmbedChatDrawerSizeVars(this, p);
     }
@@ -961,7 +963,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     .flowsBaseUrl=${this.flowsBaseUrl}
                     flow-id=${this.flowId || ''}
                     embed-id=${this.embedId || ''}
-                    skill-id=${this.skillId || ''}
+                    branch-id=${(this.branchId || this.skillId || '').trim()}
+                    skill-id=${(this.skillId || this.branchId || '').trim()}
                     .assistantTitle=${headTitle}
                     .title=${headTitle}
                     .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}

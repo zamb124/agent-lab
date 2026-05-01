@@ -59,7 +59,7 @@ async def _create_test_flow(flows_client, unique_id: str, auth_headers_system: d
         "edges": [{"from": "main", "to": None}],
         "variables": {},
         "tags": ["test", "lara"],
-        "skills": {},
+        "branches": {},
         "triggers": {},
         "resources": {},
     }
@@ -81,13 +81,13 @@ async def test_flows_read_context_returns_selected_node(
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
 
     raw = await flows_read_context._run_impl(
-        {"flow_id": flow_id, "skill_id": "base", "node_id": "main"},
+        {"flow_id": flow_id, "branch_id": "base", "node_id": "main"},
         state,
     )
     data = json.loads(raw)
     assert data["success"] is True
     assert data["flow_id"] == flow_id
-    assert data["skill_id"] == "base"
+    assert data["branch_id"] == "base"
     assert data["node_id"] == "main"
     assert data["node"]["prompt"] == "Initial prompt"
 
@@ -108,7 +108,7 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     propose_raw = await flows_patch_node._run_impl(
         {
             "flow_id": flow_id,
-            "skill_id": "base",
+            "branch_id": "base",
             "node_id": "main",
             "patch_json": json.dumps({"prompt": new_prompt}),
             "mode": "propose",
@@ -128,7 +128,7 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     apply_raw = await flows_patch_node._run_impl(
         {
             "flow_id": flow_id,
-            "skill_id": "base",
+            "branch_id": "base",
             "node_id": "main",
             "patch_json": json.dumps({"prompt": new_prompt}),
             "mode": "apply",

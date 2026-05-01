@@ -2787,7 +2787,7 @@ class EntityService:
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base_url}/flows/api/v1/crm",
             content=text,
-            skill_id="analyze",
+            branch_id="analyze",
             metadata={
                 "variables": variables
             },
@@ -3443,7 +3443,7 @@ class EntityService:
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base}/flows/api/v1/crm",
             content="Daily summary: chunk",
-            skill_id="summarize_chunk",
+            branch_id="summarize_chunk",
             metadata={"variables": variables, "company_id": company_id},
         )
         return self._extract_data_from_a2a_response(response)
@@ -3466,7 +3466,7 @@ class EntityService:
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base}/flows/api/v1/crm",
             content="Daily summary: merge partials",
-            skill_id="summarize_merge",
+            branch_id="summarize_merge",
             metadata={"variables": variables, "company_id": company_id},
         )
         return self._extract_data_from_a2a_response(response)
@@ -3491,7 +3491,7 @@ class EntityService:
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base}/flows/api/v1/crm",
             content="Period summary: merge daily summaries",
-            skill_id="period_summarize_merge",
+            branch_id="period_summarize_merge",
             metadata={"variables": variables, "company_id": company_id},
         )
         return self._extract_data_from_a2a_response(response)
@@ -3509,7 +3509,7 @@ class EntityService:
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base}/flows/api/v1/crm",
             content="Summarize attachment",
-            skill_id="summarize_attachment",
+            branch_id="summarize_attachment",
             metadata={"variables": variables, "company_id": company_id},
         )
         data = self._extract_data_from_a2a_response(response)
@@ -4675,7 +4675,7 @@ class EntityService:
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base_url}/flows/api/v1/crm",
             content=f"Compare: {extracted.name} vs {candidate.name}",
-            skill_id="deduplicate",
+            branch_id="deduplicate",
             metadata={"variables": variables}
         )
         
@@ -4781,7 +4781,7 @@ class EntityService:
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base_url}/flows/api/v1/crm",
             content="Batch deduplicate entity pairs",
-            skill_id="deduplicate_batch",
+            branch_id="deduplicate_batch",
             metadata={"variables": variables},
         )
 

@@ -82,9 +82,9 @@ export function toolRefToInitialNode(raw, toolId) {
         const base = { ...raw, node_id: rid, type: 'flow' };
         const fid = asString(base.flow_id);
         const outFlowId = fid.length > 0 ? fid : toolId;
-        const sid = asString(base.skill_id);
+        const sid = asString(base.branch_id);
         const outSkill = sid.length > 0 ? sid : 'default';
-        return { ...base, flow_id: outFlowId, skill_id: outSkill };
+        return { ...base, flow_id: outFlowId, branch_id: outSkill };
     }
     if (explicitType === 'channel') {
         return { ...raw, node_id: rid, type: 'channel' };
@@ -126,7 +126,7 @@ export function registryToolItemToNode(t) {
             name: displayTitle,
             description: typeof t.description === 'string' ? t.description : '',
             flow_id: toolId,
-            skill_id: 'default',
+            branch_id: 'default',
         };
     }
     if (isMcpToolRegistryItem(t)) {

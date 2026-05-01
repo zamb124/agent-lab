@@ -60,7 +60,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
         nodeConfig: { type: Object },
         nodeType: { type: String },
         flowVariables: { type: Object },
@@ -185,7 +185,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         super();
         this.nodeId = '';
         this.flowId = '';
-        this.skillId = '';
+        this.branchId = '';
         this.nodeConfig = null;
         this.nodeType = 'llm_node';
         this.flowVariables = null;
@@ -351,7 +351,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     _onEditTool(toolRef) {
         const { tool_id: toolId, raw } = normalizeToolRef(toolRef);
         const st = asObject(this._editor.state);
-        const skillsData = isPlainObject(st.skillsData) ? st.skillsData : {};
+        const skillsData = isPlainObject(st.branchData) ? st.branchData : {};
         const graphNodes = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
         if (graphNodes[toolId] !== undefined) {
             this._editor.selectNode({ nodeId: toolId });
@@ -360,7 +360,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.openModal('flows.embedded_tool_config', {
             toolRef: raw,
             flowId: this.flowId,
-            skillId: this.skillId,
+            branchId: this.branchId,
             onSave: (updated) => {
                 if (updated === null || updated === undefined || typeof updated !== 'object') {
                     return;
@@ -618,7 +618,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
-                .skillId=${this.skillId}
+                .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
                 .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'llm_node'}
                 .flowVariables=${this.flowVariables}

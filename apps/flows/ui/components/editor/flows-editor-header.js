@@ -34,7 +34,7 @@ import {
 export class FlowsEditorHeader extends PlatformElement {
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
-        skillId: { type: String, attribute: 'skill-id' },
+        branchId: { type: String, attribute: 'branch-id' },
     };
 
     static styles = [
@@ -174,7 +174,7 @@ export class FlowsEditorHeader extends PlatformElement {
     constructor() {
         super();
         this.flowId = '';
-        this.skillId = 'base';
+        this.branchId = 'base';
         this._editor = this.useOp('flows/editor');
         this._update = this.useOp('flows/flow_update');
         this._reload = this.useOp('flows/flow_reload_from_bundle');
@@ -233,7 +233,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openLara() {
-        this.dispatch('flows/lara/open_requested', { flowId: this.flowId, skillId: this.skillId });
+        this.dispatch('flows/lara/open_requested', { flowId: this.flowId, branchId: this.branchId });
     }
 
     _openTriggers() {

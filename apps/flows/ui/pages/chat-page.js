@@ -21,7 +21,7 @@ import { resolveFlowsChatTaskId } from '../_helpers/resolve-flows-chat-task-id.j
 export class ChatPage extends PlatformPage {
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
-        skillId: { type: String, attribute: 'skill-id' },
+        branchId: { type: String, attribute: 'branch-id' },
         sessionId: { type: String, attribute: 'session-id' },
         _isMobile: { state: true },
         _overflowOpen: { state: true },
@@ -41,7 +41,7 @@ export class ChatPage extends PlatformPage {
                 background: transparent;
                 box-sizing: border-box;
             }
-            .chat-skill-hint {
+            .chat-branch-hint {
                 flex-shrink: 0;
                 padding: 0 var(--space-4) var(--space-2);
                 font-size: var(--text-xs);
@@ -121,7 +121,7 @@ export class ChatPage extends PlatformPage {
     constructor() {
         super();
         this.flowId = '';
-        this.skillId = 'base';
+        this.branchId = 'base';
         this.sessionId = '';
         this._isMobile =
             typeof window !== 'undefined' &&
@@ -188,7 +188,7 @@ export class ChatPage extends PlatformPage {
         if (super.updated) {
             super.updated(changed);
         }
-        if (changed.has('flowId') || changed.has('sessionId') || changed.has('skillId')) {
+        if (changed.has('flowId') || changed.has('sessionId') || changed.has('branchId')) {
             this._initOrLoadSession();
         }
     }
@@ -281,7 +281,7 @@ export class ChatPage extends PlatformPage {
         };
 
         const metadata = {};
-        if (this.skillId && this.skillId !== 'base') metadata.skill = this.skillId;
+        if (this.branchId && this.branchId !== 'base') metadata.branch = this.branchId;
 
         const params = { message: a2aMessage };
         if (Object.keys(metadata).length > 0) params.metadata = metadata;
@@ -324,8 +324,8 @@ export class ChatPage extends PlatformPage {
     _openEditor() {
         this._overflowOpen = false;
         if (!this.flowId) return;
-        if (this.skillId && this.skillId !== 'base') {
-            this.navigate('flow_editor_skill', { flowId: this.flowId, skillId: this.skillId });
+        if (this.branchId && this.branchId !== 'base') {
+            this.navigate('flow_editor_branch', { flowId: this.flowId, branchId: this.branchId });
         } else {
             this.navigate('flow_editor', { flowId: this.flowId });
         }
@@ -541,7 +541,7 @@ export class ChatPage extends PlatformPage {
         } else {
             flowName = this.t('platform_chat.no_flow');
         }
-        const skillLabel = this.skillId === 'base' ? this.t('platform_chat.base_skill') : this.skillId;
+        const branchLabel = this.branchId === 'base' ? this.t('platform_chat.base_branch') : this.branchId;
         const hasFlow = typeof this.flowId === 'string' && this.flowId.length > 0;
         const messages = this._currentMessages();
         const runTrace = this._currentRunTrace();
@@ -551,7 +551,7 @@ export class ChatPage extends PlatformPage {
         return html`
             <page-header
                 title=${flowName}
-                subtitle=${skillLabel}
+                subtitle=${branchLabel}
                 actions-overflow="visible"
             >
                 <div slot="actions">
@@ -560,7 +560,7 @@ export class ChatPage extends PlatformPage {
                         : html`<div class="flow-chat-header-actions">${this._renderDesktopActions(hasFlow)}</div>`}
                 </div>
             </page-header>
-            ${this._isMobile ? html`<div class="chat-skill-hint">${skillLabel}</div>` : nothing}
+            ${this._isMobile ? html`<div class="chat-branch-hint">${branchLabel}</div>` : nothing}
             <div class="chat-body">
                 <chat-messages
                     .messages=${messages}

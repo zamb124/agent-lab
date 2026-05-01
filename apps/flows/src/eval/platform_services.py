@@ -110,7 +110,7 @@ async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
         "session_id": state.session_id,
         "task_id": state.task_id,
         "context_id": state.context_id,
-        "skill_id": state.skill_id,
+        "branch_id": state.branch_id,
         "channel": "a2a",
         "user_id": ctx.user.user_id,
         "context_data": ctx.model_dump(mode="json"),

@@ -6,17 +6,17 @@
 import pytest
 
 from apps.flows.src.runtime import Flow
-from apps.flows.src.models import Edge, FlowConfig, MergeMode, SkillConfig
+from apps.flows.src.models import Edge, FlowConfig, MergeMode, BranchConfig
 from apps.flows.src.services.flow_factory import FlowFactory
 from core.state import ExecutionState
 
 
-class TestSkillConfig:
-    """Тесты SkillConfig модели."""
+class TestBranchConfig:
+    """Тесты BranchConfig модели."""
 
     def test_skill_config_defaults(self):
         """Значения по умолчанию."""
-        skill = SkillConfig(name="Test Skill")
+        skill = BranchConfig(name="Test Skill")
 
         assert skill.name == "Test Skill"
         assert skill.description == ""
@@ -31,7 +31,7 @@ class TestSkillConfig:
 
     def test_skill_config_full(self):
         """Полный конфиг skill."""
-        skill = SkillConfig(
+        skill = BranchConfig(
             name="Refund",
             description="Обработка возвратов",
             tags=["refund", "support"],
@@ -65,7 +65,7 @@ class TestFlowConfigWithSkills:
             edges=[Edge(from_node="main", to_node=None)],
         )
 
-        assert config.skills == {}
+        assert config.branches == {}
 
     def test_agent_config_with_skills(self):
         """FlowConfig со skills."""
@@ -75,9 +75,9 @@ class TestFlowConfigWithSkills:
             entry="main",
             nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "default": SkillConfig(name="Default", description="Default skill"),
-                "refund": SkillConfig(
+            branches={
+                "default": BranchConfig(name="Default", description="Default skill"),
+                "refund": BranchConfig(
                     name="Refund",
                     description="Refund processing",
                     entry="refund_main",
@@ -86,10 +86,10 @@ class TestFlowConfigWithSkills:
             },
         )
 
-        assert len(config.skills) == 2
-        assert "default" in config.skills
-        assert "refund" in config.skills
-        assert config.skills["refund"].entry == "refund_main"
+        assert len(config.branches) == 2
+        assert "default" in config.branches
+        assert "refund" in config.branches
+        assert config.branches["refund"].entry == "refund_main"
 
 
 class TestApplySkill:
@@ -109,12 +109,12 @@ class TestApplySkill:
                 Edge(from_node="default_entry", to_node=None),
                 Edge(from_node="skill_entry", to_node=None),
             ],
-            skills={
-                "custom": SkillConfig(name="Custom", entry="skill_entry"),
+            branches={
+                "custom": BranchConfig(name="Custom", entry="skill_entry"),
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "custom")
+        effective = container.flow_factory._apply_branch(config, "custom")
 
         assert effective["entry"] == "skill_entry"
 
@@ -127,15 +127,15 @@ class TestApplySkill:
             nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={"base_var": "base_value", "shared": "from_flow"},
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     variables={"skill_var": "skill_value", "shared": "from_skill"},
                 ),
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "custom")
+        effective = container.flow_factory._apply_branch(config, "custom")
 
         assert effective["variables"]["base_var"] == "base_value"
         assert effective["variables"]["skill_var"] == "skill_value"
@@ -150,8 +150,8 @@ class TestApplySkill:
             nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={"base_var": "base_value"},
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     variables={"skill_var": "skill_value"},
                     variables_mode=MergeMode.REPLACE,
@@ -159,7 +159,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "custom")
+        effective = container.flow_factory._apply_branch(config, "custom")
 
         # effective["variables"] содержит простые значения (после извлечения из FlowVariableConfig)
         assert "base_var" not in effective["variables"]
@@ -176,8 +176,8 @@ class TestApplySkill:
                 "helper": {"type": "code", "code": "def run(s): return s"},
             },
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     entry="custom_main",
                     nodes={
@@ -187,7 +187,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "custom")
+        effective = container.flow_factory._apply_branch(config, "custom")
 
         assert "main" not in effective["nodes"]
         assert "helper" not in effective["nodes"]
@@ -203,8 +203,8 @@ class TestApplySkill:
                 "main": {"type": "llm_node", "prompt": "Default prompt", "tools": ["tool1"]},
             },
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     nodes={
                         "main": {"prompt": "Custom prompt", "llm": {"temperature": 0.1}},
@@ -215,7 +215,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "custom")
+        effective = container.flow_factory._apply_branch(config, "custom")
 
         assert effective["nodes"]["main"]["prompt"] == "Custom prompt"
         assert effective["nodes"]["main"]["tools"] == ["tool1"]
@@ -233,15 +233,15 @@ class TestApplySkill:
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None),
             ],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     edges=[Edge(from_node="main", to_node=None)],
                 ),
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "custom")
+        effective = container.flow_factory._apply_branch(config, "custom")
 
         assert len(effective["edges"]) == 1
         assert effective["edges"][0].from_node == "main"
@@ -258,8 +258,8 @@ class TestApplySkill:
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None),
             ],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     edges=[Edge(from_node="main", to_node="step3")],
                     edges_mode=MergeMode.MERGE,
@@ -267,7 +267,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "custom")
+        effective = container.flow_factory._apply_branch(config, "custom")
 
         assert len(effective["edges"]) == 3
         from_nodes = [e.from_node for e in effective["edges"]]
@@ -287,12 +287,12 @@ class TestApplySkill:
             entry="main",
             nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "known": SkillConfig(name="Known", entry="other"),
+            branches={
+                "known": BranchConfig(name="Known", entry="other"),
             },
         )
 
-        effective = container.flow_factory._apply_skill(config, "unknown")
+        effective = container.flow_factory._apply_branch(config, "unknown")
 
         assert effective["entry"] == "main"
 
@@ -306,7 +306,7 @@ class TestApplySkill:
             edges=[Edge(from_node="main", to_node=None)],
         )
 
-        effective = container.flow_factory._apply_skill(config, "default")
+        effective = container.flow_factory._apply_branch(config, "default")
 
         assert effective["entry"] == "main"
 
@@ -335,8 +335,8 @@ class TestFlowWithSkills:
                 Edge(from_node="default_start", to_node=None),
                 Edge(from_node="skill_start", to_node=None),
             ],
-            skills={
-                "custom": SkillConfig(name="Custom", entry="skill_start"),
+            branches={
+                "custom": BranchConfig(name="Custom", entry="skill_start"),
             },
         )
 

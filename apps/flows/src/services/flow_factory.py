@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from apps.flows.src.runtime import Flow
 from apps.flows.src.container import get_container
 from apps.flows.src.db import FlowRepository
-from apps.flows.src.models import FlowConfig, SkillConfig
+from apps.flows.src.models import BranchConfig, FlowConfig
 from apps.flows.src.models.flow_config import Edge, FlowVariableConfig
 from apps.flows.src.models.enums import MergeMode
 from apps.flows.src.utils.merge import deep_merge
@@ -60,16 +60,16 @@ class FlowFactory:
     async def get_flow(
         self,
         flow_id: str,
-        skill_id: str = "default",
+        branch_id: str = "default",
         config_version: Optional[str] = None,
     ) -> Optional[Flow]:
         """
         Загружает flow из БД и создаёт Flow.
-        Применяет skill overrides если указан skill_id.
+        Применяет skill overrides если указан branch_id.
 
         Args:
             flow_id: ID flow
-            skill_id: ID skill (по умолчанию "default")
+            branch_id: ID skill (по умолчанию "default")
             config_version: версия из flows_versions; None = последняя запись в flows
 
         Returns:
@@ -84,12 +84,12 @@ class FlowFactory:
             logger.warning(f"Flow не найден: {flow_id}")
             return None
 
-        return await self._create_flow(config, skill_id)
+        return await self._create_flow(config, branch_id)
 
     async def get_resource_maps(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         config_version: Optional[str] = None,
     ) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
         """
@@ -108,8 +108,8 @@ class FlowFactory:
 
         flow_resources = self._resource_map_to_plain(config.resources)
         skill_resources: Optional[Dict[str, Any]] = None
-        if skill_id and skill_id != "default" and config.skills and skill_id in config.skills:
-            sk = config.skills[skill_id]
+        if branch_id and branch_id != "default" and config.branches and branch_id in config.branches:
+            sk = config.branches[branch_id]
             raw_skill_res = sk.resources or {}
             if raw_skill_res:
                 skill_resources = self._resource_map_to_plain(raw_skill_res)
@@ -119,7 +119,7 @@ class FlowFactory:
     async def get_effective_nodes_map(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         config_version: Optional[str] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """Ноды графа после применения skill (для evaluation и отладки)."""
@@ -130,7 +130,7 @@ class FlowFactory:
                     f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
                 )
             raise ValueError(f"Flow '{flow_id}' не найден")
-        effective = self._apply_skill(config, skill_id)
+        effective = self._apply_branch(config, branch_id)
         nodes = effective["nodes"]
         source = getattr(config, "source", None) or "manual"
         if source == "file":
@@ -140,13 +140,13 @@ class FlowFactory:
     async def get_resolved_variables_map(
         self,
         flow_id: str,
-        skill_id: str = "default",
+        branch_id: str = "default",
         *,
         config_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Словарь resolved variables для flow+skill — тот же, что попадает в ``Flow.variables``
-        (после ``_apply_skill`` и ``_resolve_variables``), без сборки графа.
+        (после ``_apply_branch`` и ``_resolve_variables``), без сборки графа.
         """
         config = await self.get_flow_config_snapshot(flow_id, config_version)
         if config is None:
@@ -155,10 +155,10 @@ class FlowFactory:
                     f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
                 )
             raise ValueError(f"Flow '{flow_id}' не найден")
-        effective = self._apply_skill(config, skill_id)
+        effective = self._apply_branch(config, branch_id)
         return await self._resolve_variables(effective["variables"])
 
-    async def _create_flow(self, config: FlowConfig, skill_id: str = "default") -> Flow:
+    async def _create_flow(self, config: FlowConfig, branch_id: str = "default") -> Flow:
         """
         Создаёт Flow из FlowConfig с применением skill.
 
@@ -166,12 +166,12 @@ class FlowFactory:
 
         Args:
             config: FlowConfig из БД
-            skill_id: ID skill для применения
+            branch_id: ID skill для применения
 
         Returns:
             Flow
         """
-        effective = self._apply_skill(config, skill_id)
+        effective = self._apply_branch(config, branch_id)
         source = getattr(config, "source", None) or "manual"
         if source == "file":
             effective = {
@@ -182,7 +182,7 @@ class FlowFactory:
             }
 
         # Валидация графа через GraphCompiler
-        self.compiler.compile(config, skill_config=None, variables=effective["variables"])
+        self.compiler.compile(config, branch_config=None, variables=effective["variables"])
 
         resolved_variables = await self._resolve_variables(effective["variables"])
 
@@ -205,13 +205,13 @@ class FlowFactory:
 
         return await Flow.from_config(config_dict)
 
-    def _apply_skill(self, config: FlowConfig, skill_id: str) -> Dict[str, Any]:
+    def _apply_branch(self, config: FlowConfig, branch_id: str) -> Dict[str, Any]:
         """
-        Применяет skill к конфигу flow.
+        Применяет ветку (branch) к конфигу flow.
 
         Args:
             config: FlowConfig
-            skill_id: ID skill
+            branch_id: ID ветки
 
         Returns:
             Dict с effective конфигом (entry, nodes, edges, variables)
@@ -231,48 +231,46 @@ class FlowFactory:
             "variables": variables_dict,
         }
 
-        # Если нет skills или запрошен default при пустых skills
-        if not config.skills:
+        if not config.branches:
             return result
 
-        skill = config.skills.get(skill_id)
-        if skill is None:
-            if skill_id != "default":
-                logger.warning(f"Skill '{skill_id}' не найден во flow '{config.flow_id}'")
+        branch = config.branches.get(branch_id)
+        if branch is None:
+            if branch_id != "default":
+                logger.warning(f"Branch '{branch_id}' не найдена во flow '{config.flow_id}'")
             return result
 
         # Entry (всегда replace)
-        if skill.entry:
-            result["entry"] = skill.entry
+        if branch.entry:
+            result["entry"] = branch.entry
 
         # Nodes
-        if skill.nodes is not None:
-            if skill.nodes_mode == MergeMode.MERGE:
-                self._merge_nodes(result["nodes"], skill.nodes)
+        if branch.nodes is not None:
+            if branch.nodes_mode == MergeMode.MERGE:
+                self._merge_nodes(result["nodes"], branch.nodes)
             else:
-                result["nodes"] = copy.deepcopy(skill.nodes)
+                result["nodes"] = copy.deepcopy(branch.nodes)
 
         # Edges
-        if skill.edges is not None:
-            if skill.edges_mode == MergeMode.MERGE:
-                self._merge_edges(result["edges"], skill.edges)
+        if branch.edges is not None:
+            if branch.edges_mode == MergeMode.MERGE:
+                self._merge_edges(result["edges"], branch.edges)
             else:
-                result["edges"] = list(skill.edges)
+                result["edges"] = list(branch.edges)
 
         # Variables
-        if skill.variables:
-            # Извлекаем значения из FlowVariableConfig объектов
-            skill_vars = {}
-            for key, value in skill.variables.items():
+        if branch.variables:
+            branch_vars = {}
+            for key, value in branch.variables.items():
                 if isinstance(value, FlowVariableConfig):
-                    skill_vars[key] = value.value
+                    branch_vars[key] = value.value
                 else:
-                    skill_vars[key] = value
+                    branch_vars[key] = value
             
-            if skill.variables_mode == MergeMode.MERGE:
-                result["variables"].update(skill_vars)
+            if branch.variables_mode == MergeMode.MERGE:
+                result["variables"].update(branch_vars)
             else:
-                result["variables"] = skill_vars
+                result["variables"] = branch_vars
 
         return result
 
@@ -349,46 +347,44 @@ class FlowFactory:
 
         return VarResolver.resolve_for_flow_variable(value, company_variables)
 
-    async def create_flow(self, config: FlowConfig, skill_id: str = "default") -> Flow:
+    async def create_flow(self, config: FlowConfig, branch_id: str = "default") -> Flow:
         """
         Сохраняет FlowConfig в БД и создаёт Flow.
 
         Args:
             config: FlowConfig
-            skill_id: ID skill (по умолчанию "default")
+            branch_id: ID skill (по умолчанию "default")
 
         Returns:
             Flow
         """
         await self.flow_repository.set(config)
         logger.info(f"Flow сохранён: {config.flow_id}")
-        return await self._create_flow(config, skill_id)
+        return await self._create_flow(config, branch_id)
 
     async def delete_flow(self, flow_id: str) -> bool:
         """Удаляет flow из БД"""
         return await self.flow_repository.delete(flow_id)
 
-    async def get_skills(self, flow_id: str) -> Dict[str, SkillConfig]:
+    async def get_branches(self, flow_id: str) -> Dict[str, BranchConfig]:
         """
-        Возвращает skills для flow.
-        Если skills не заданы - возвращает default skill.
+        Возвращает ветки flow.
+        Если branches не заданы — возвращает default-ветку.
 
         Args:
-            flow_id: ID агента
-
+            flow_id: ID flow
         Returns:
-            Dict skill_id -> SkillConfig
+            Dict branch_id -> BranchConfig
         """
         config = await self.flow_repository.get(flow_id)
         if config is None:
             return {}
 
-        if config.skills:
-            return config.skills
+        if config.branches:
+            return config.branches
 
-        # Генерируем default skill из конфига flow
         return {
-            "default": SkillConfig(
+            "default": BranchConfig(
                 name=config.name,
                 description=config.description or "",
                 tags=config.tags,
@@ -456,27 +452,27 @@ class FlowFactory:
 
     async def get_flow_schema(self, flow_id: str) -> Optional[Dict[str, Any]]:
         """
-        Возвращает схему flow для всех skills (для визуализации).
+        Возвращает схему flow для всех веток (для визуализации).
 
         Args:
             flow_id: ID flow
 
         Returns:
-            Dict с метаданными flow и схемами для каждого skill
+            Dict с метаданными flow и схемами для каждой ветки
         """
         config = await self.flow_repository.get(flow_id)
         if config is None:
             return None
 
-        # Определяем список skills
-        if config.skills:
-            skill_ids = ["default"] + list(config.skills.keys())
+        # Определяем список веток
+        if config.branches:
+            branch_ids = ["default"] + list(config.branches.keys())
         else:
-            skill_ids = ["default"]
+            branch_ids = ["default"]
 
-        skills_schema = {}
-        for skill_id in skill_ids:
-            effective = self._apply_skill(config, skill_id)
+        branches_schema: Dict[str, Any] = {}
+        for branch_id in branch_ids:
+            effective = self._apply_branch(config, branch_id)
 
             # Конвертируем edges в простой формат (могут быть Edge или dict)
             edges = []
@@ -519,14 +515,13 @@ class FlowFactory:
 
                 nodes[node_id] = node_info
 
-            # Получаем метаданные skill
-            skill_config = config.skills.get(skill_id) if config.skills else None
-            skill_name = skill_config.name if skill_config else config.name
-            skill_desc = skill_config.description if skill_config else (config.description or "")
+            branch_cfg = config.branches.get(branch_id) if config.branches else None
+            branch_name = branch_cfg.name if branch_cfg else config.name
+            branch_desc = branch_cfg.description if branch_cfg else (config.description or "")
 
-            skills_schema[skill_id] = {
-                "name": skill_name,
-                "description": skill_desc,
+            branches_schema[branch_id] = {
+                "name": branch_name,
+                "description": branch_desc,
                 "entry": effective["entry"],
                 "nodes": nodes,
                 "edges": edges,
@@ -536,5 +531,5 @@ class FlowFactory:
             "flow_id": config.flow_id,
             "name": config.name,
             "description": config.description or "",
-            "skills": skills_schema,
+            "branches": branches_schema,
         }

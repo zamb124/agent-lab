@@ -199,7 +199,7 @@ class TestTarget(StrictBaseModel):
     Цель тестирования -- что именно тестируем.
     
     Примеры:
-    - {"type": "flow", "flow_id": "my_flow", "skill_id": "default"}
+    - {"type": "flow", "flow_id": "my_flow", "branch_id": "default"}
     - {"type": "node", "node_config": {"type": "llm_node", "prompt": "..."}}
     """
 
@@ -209,7 +209,7 @@ class TestTarget(StrictBaseModel):
     
     # FLOW -- тестируем другой flow (если None, используется flow_id из контекста)
     flow_id: Optional[str] = Field(default=None, description="ID flow")
-    skill_id: Optional[str] = Field(default="default", description="ID skill")
+    branch_id: Optional[str] = Field(default="default", description="ID ветки графа (branch)")
     
     # NODE -- только inline конфиг ноды
     node_config: Optional[Dict[str, Any]] = Field(
@@ -245,29 +245,29 @@ class TestCaseConfig(StrictBaseModel):
         description="Начальное состояние для теста (переменные, данные)"
     )
     
-    skill_ids: Union[Literal["*"], List[str]] = Field(
-        default="*", description="Skill IDs для теста. '*' = все"
+    branch_ids: Union[Literal["*"], List[str]] = Field(
+        default="*", description="ID веток для теста. '*' = все"
     )
     turns: List[TestTurn] = Field(..., description="Список ходов теста")
     max_turns: int = Field(default=10, description="Макс. итераций для flow-flow")
     timeout: int = Field(default=300, description="Таймаут в секундах")
 
 
-class SkillConfig(StrictBaseModel):
+class BranchConfig(StrictBaseModel):
     """
-    Конфигурация skill (навыка) агента.
+    Конфигурация ветки графа (варианта flow) внутри одного flow_id.
 
-    Skill имеет ту же структуру что и агент: entry, nodes, edges, variables.
+    Ветка имеет ту же структуру, что и базовый граф: entry, nodes, edges, variables.
     Для каждого поля можно указать режим применения через *_mode.
-    Если skills не указаны в FlowConfig, автоматически создаётся default skill.
+    Если branches не указаны в FlowConfig, автоматически создаётся default-ветка.
     """
 
-    name: str = Field(..., description="Название skill")
-    description: str = Field(default="", description="Описание skill")
-    tags: List[str] = Field(default_factory=list, description="Теги skill")
+    name: str = Field(..., description="Название ветки")
+    description: str = Field(default="", description="Описание ветки")
+    tags: List[str] = Field(default_factory=list, description="Теги ветки")
     permission: List[str] = Field(
         default_factory=list,
-        description="Группы с доступом к skill. Пустой список = доступ для всех",
+        description="Группы с доступом к ветке. Пустой список = доступ для всех",
     )
     
     @field_validator("permission", mode="before")
@@ -284,7 +284,7 @@ class SkillConfig(StrictBaseModel):
     entry: Optional[str] = Field(default=None, description="Точка входа")
 
     # Ноды
-    nodes: Optional[Dict[str, Dict[str, Any]]] = Field(default=None, description="Ноды skill")
+    nodes: Optional[Dict[str, Dict[str, Any]]] = Field(default=None, description="Ноды ветки")
     nodes_mode: MergeMode = Field(
         default=MergeMode.REPLACE, description="Режим применения nodes: 'merge' или 'replace'"
     )
@@ -297,7 +297,7 @@ class SkillConfig(StrictBaseModel):
 
     # Переменные
     variables: Dict[str, Union[FlowVariableConfig, Any]] = Field(
-        default_factory=dict, description="Переменные skill с метаданными"
+        default_factory=dict, description="Переменные ветки с метаданными"
     )
     variables_mode: MergeMode = Field(
         default=MergeMode.MERGE, description="Режим применения variables: 'merge' или 'replace'"
@@ -306,13 +306,13 @@ class SkillConfig(StrictBaseModel):
     # Mock конфигурация
     mock: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Mock конфигурация для skill. Переопределяет mock агента."
+        description="Mock конфигурация для ветки. Переопределяет mock flow.",
     )
     
     # Ресурсы skill
     resources: Dict[str, ResourceReference] = Field(
         default_factory=dict,
-        description="Ресурсы skill (мержатся с flow-level)"
+        description="Ресурсы ветки (мержатся с flow-level)",
     )
     resources_mode: MergeMode = Field(
         default=MergeMode.MERGE,
@@ -336,7 +336,7 @@ class SkillConfig(StrictBaseModel):
         return data
 
     @model_validator(mode="after")
-    def _convert_variables_to_objects(self) -> "SkillConfig":
+    def _convert_variables_to_objects(self) -> "BranchConfig":
         """Конвертирует variables в FlowVariableConfig объекты."""
         if isinstance(self.variables, dict):
             converted = {}
@@ -455,7 +455,8 @@ class FlowConfig(StrictBaseModel):
         default_factory=dict,
         description=(
             "UI-метаданные flow editor (sticky_notes, layout-подсказки и пр.). "
-            "Не влияет на исполнение; обновляется через PATCH /flows/{flow_id}/metadata."
+            "Не влияет на исполнение; обновляется через PATCH /flows/{flow_id}/metadata. "
+            "viewBox preference и заметки на канвасе."
         ),
     )
 
@@ -469,13 +470,10 @@ class FlowConfig(StrictBaseModel):
                 normalized = {}
                 for key, value in variables.items():
                     if isinstance(value, FlowVariableConfig):
-                        # Уже объект FlowVariableConfig
                         normalized[key] = value
                     elif isinstance(value, dict) and "value" in value:
-                        # Уже FlowVariableConfig формат (dict)
                         normalized[key] = value
                     else:
-                        # Простое значение -> FlowVariableConfig формат
                         normalized[key] = {"value": value, "public": False}
                 data["variables"] = normalized
         return data
@@ -495,8 +493,9 @@ class FlowConfig(StrictBaseModel):
             object.__setattr__(self, "variables", converted)
         return self
 
-    skills: Dict[str, SkillConfig] = Field(
-        default_factory=dict, description="Skills flow. Если пусто - автоматически default skill"
+    branches: Dict[str, BranchConfig] = Field(
+        default_factory=dict,
+        description="Ветки flow (варианты графа). Если пусто — автоматически default-ветка",
     )
     channels: Dict[str, Dict[str, Any]] = Field(
         default_factory=lambda: {"a2a": {}}, description="Каналы"
@@ -542,12 +541,6 @@ class FlowConfig(StrictBaseModel):
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
 
-    # Метаданные UI flow: sticky_notes на канвасе, дополнительные UX-данные.
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="UI-метаданные flow (sticky_notes, viewBox preference, заметки)"
-    )
-    
     @model_validator(mode="after")
     def validate_flow_type_fields(self) -> "FlowConfig":
         """Валидация полей в зависимости от типа flow."""

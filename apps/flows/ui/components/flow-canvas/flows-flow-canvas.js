@@ -39,9 +39,9 @@ import {
     asArray,
     asObject,
     isPlainObject,
-    getSkillsData,
-    getSkillsNodes,
-    getSkillsEdges,
+    getBranchData,
+    getBranchNodes,
+    getBranchEdges,
     getEdgeEndpoints,
     colorOrDefault,
 } from '../../_helpers/flows-resolvers.js';
@@ -83,7 +83,7 @@ function midpoint(srcX, srcY, dstX, dstY) {
 export class FlowsFlowCanvas extends PlatformElement {
     static properties = {
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
         _drag: { state: true },
         _connection: { state: true },
         _selectionRect: { state: true },
@@ -430,7 +430,7 @@ export class FlowsFlowCanvas extends PlatformElement {
     constructor() {
         super();
         this.flowId = '';
-        this.skillId = 'base';
+        this.branchId = 'base';
         this._drag = null;
         this._connection = null;
         this._selectionRect = null;
@@ -467,8 +467,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (!state) return;
         const fid = state.flowId;
         if (typeof fid !== 'string' || fid.length === 0) return;
-        const sid = typeof state.currentSkillId === 'string' && state.currentSkillId.length > 0
-            ? state.currentSkillId
+        const sid = typeof state.currentBranchId === 'string' && state.currentBranchId.length > 0
+            ? state.currentBranchId
             : 'base';
         const key = `${fid}:${sid}`;
         if (this._lastAutoFitKey === key) return;
@@ -479,9 +479,9 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _state() { return asObject(this._editor.state); }
-    _skillsData() { return getSkillsData(this._state()); }
-    _nodes() { return getSkillsNodes(this._state()); }
-    _edges() { return getSkillsEdges(this._state()); }
+    _branchData() { return getBranchData(this._state()); }
+    _nodes() { return getBranchNodes(this._state()); }
+    _edges() { return getBranchEdges(this._state()); }
     _viewBox() {
         const vb = this._state().viewBox;
         return isPlainObject(vb) ? vb : { x: 0, y: 0, w: 1600, h: 1000 };
@@ -601,7 +601,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             this.toast('flows:toast.cant_delete_inherited', { type: 'warning' });
         }
         void this._bulkDelete.run({ flow_id: this.flowId, node_ids: deletableIds });
-        const data = this._skillsData();
+        const data = this._branchData();
         const newNodes = { ...asObject(data.nodes) };
         for (const id of deletableIds) delete newNodes[id];
         const newEdges = asArray(data.edges).filter((edge) => {
@@ -609,7 +609,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             return !deletableIds.includes(from) && !deletableIds.includes(to);
         });
         const next = { ...data, nodes: newNodes, edges: newEdges };
-        this._editor.updateSkillsData({ data: next });
+        this._editor.updateBranchData({ data: next });
         this._editor.pushHistory({ snapshot: next });
         this._editor.setDirty({ dirty: true });
         this._editor.setMultiSelection({ nodeIds: [] });
@@ -626,7 +626,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         const single = this._state().selectedNodeId;
         const targetIds = ids.length > 0 ? ids : (single ? [single] : []);
         if (targetIds.length === 0) return;
-        const data = this._skillsData();
+        const data = this._branchData();
         const nodes = { ...asObject(data.nodes) };
         const newIds = [];
         for (const id of targetIds) {
@@ -641,7 +641,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             newIds.push(copyId);
         }
         const next = { ...data, nodes };
-        this._editor.updateSkillsData({ data: next });
+        this._editor.updateBranchData({ data: next });
         this._editor.pushHistory({ snapshot: next });
         this._editor.setDirty({ dirty: true });
         this._editor.setMultiSelection({ nodeIds: newIds });
@@ -654,7 +654,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (targetIds.length === 0) return;
         const dx = key === 'ArrowLeft' ? -10 : key === 'ArrowRight' ? 10 : 0;
         const dy = key === 'ArrowUp' ? -10 : key === 'ArrowDown' ? 10 : 0;
-        const data = this._skillsData();
+        const data = this._branchData();
         const nodes = { ...asObject(data.nodes) };
         for (const id of targetIds) {
             if (!nodes[id]) continue;
@@ -665,7 +665,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             };
         }
         const next = { ...data, nodes };
-        this._editor.updateSkillsData({ data: next });
+        this._editor.updateBranchData({ data: next });
         this._editor.setDirty({ dirty: true });
     }
 
@@ -785,7 +785,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const startLocal = this._localPoint(this._drag.startX, this._drag.startY);
             const dx = local.x - startLocal.x;
             const dy = local.y - startLocal.y;
-            const data = this._skillsData();
+            const data = this._branchData();
             const nodes = { ...asObject(data.nodes) };
             const guides = [];
             for (const id of this._drag.ids) {
@@ -800,7 +800,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 }
                 nodes[id] = { ...nodes[id], pos_x: newX, pos_y: newY };
             }
-            this._editor.updateSkillsData({ data: { ...data, nodes } });
+            this._editor.updateBranchData({ data: { ...data, nodes } });
             this._editor.setSmartGuides({ guides });
             return;
         }
@@ -866,7 +866,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             this._drag = null;
             this._editor.setSmartGuides({ guides: [] });
             if (this._pointerMoved) {
-                this._editor.pushHistory({ snapshot: { ...this._skillsData() } });
+                this._editor.pushHistory({ snapshot: { ...this._branchData() } });
                 this._editor.setDirty({ dirty: true });
             } else {
                 const nodeId = drag.primaryId;
@@ -888,10 +888,10 @@ export class FlowsFlowCanvas extends PlatformElement {
             const targetNodeId = target?.dataset?.nodeId;
             const targetSide = target?.dataset?.portSide;
             if (targetNodeId && targetSide === 'in' && targetNodeId !== this._connection.fromNode) {
-                const data = this._skillsData();
+                const data = this._branchData();
                 const edges = [...asArray(data.edges), { from_node: this._connection.fromNode, to_node: targetNodeId }];
                 const next = { ...data, edges };
-                this._editor.updateSkillsData({ data: next });
+                this._editor.updateBranchData({ data: next });
                 this._editor.pushHistory({ snapshot: next });
                 this._editor.setDirty({ dirty: true });
             }
@@ -978,12 +978,12 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _handleMenuAction(kind, target, targetId) {
-        const data = this._skillsData();
+        const data = this._branchData();
         if (target === 'node' && targetId) {
             if (kind === 'open_properties') { this._editor.selectNode({ nodeId: targetId }); return; }
             if (kind === 'toggle_entry') {
                 const next = { ...data, entry: data.entry === targetId ? null : targetId };
-                this._editor.updateSkillsData({ data: next });
+                this._editor.updateBranchData({ data: next });
                 this._editor.setDirty({ dirty: true });
                 this._editor.pushHistory({ snapshot: next });
                 return;
@@ -999,7 +999,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             if (kind === 'delete_edge') {
                 const edges = asArray(data.edges).filter((_, i) => i !== edgeIndex);
                 const next = { ...data, edges };
-                this._editor.updateSkillsData({ data: next });
+                this._editor.updateBranchData({ data: next });
                 this._editor.pushHistory({ snapshot: next });
                 this._editor.setDirty({ dirty: true });
                 return;
@@ -1051,7 +1051,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (!nodeType && !resourceType) return;
         e.preventDefault();
         const local = this._localPoint(e.clientX, e.clientY);
-        const data = this._skillsData();
+        const data = this._branchData();
         if (nodeType) {
             if (nodeType === 'code') {
                 this._onDropCodeNode({ local });
@@ -1075,7 +1075,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             };
             const nodes = { ...asObject(data.nodes), [id]: newNode };
             const next = { ...data, nodes };
-            this._editor.updateSkillsData({ data: next });
+            this._editor.updateBranchData({ data: next });
             this._editor.pushHistory({ snapshot: next });
             this._editor.setDirty({ dirty: true });
             this._editor.selectNode({ nodeId: id });
@@ -1085,7 +1085,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             const id = genId('r');
             const resources = { ...asObject(data.resources), [id]: { type: resourceType, name: resourceType, config: {} } };
             const next = { ...data, resources };
-            this._editor.updateSkillsData({ data: next });
+            this._editor.updateBranchData({ data: next });
             this._editor.pushHistory({ snapshot: next });
             this._editor.setDirty({ dirty: true });
             this._editor.selectResource({ resourceId: id });
@@ -1121,7 +1121,7 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     _placeCodeNode(p) {
         const { nodeId, local, name, config } = p;
-        const data = this._skillsData();
+        const data = this._branchData();
         const newNode = {
             type: 'code',
             name,
@@ -1131,7 +1131,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        this._editor.updateSkillsData({ data: next });
+        this._editor.updateBranchData({ data: next });
         this._editor.pushHistory({ snapshot: next });
         this._editor.setDirty({ dirty: true });
         this._editor.selectNode({ nodeId });
@@ -1162,17 +1162,17 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     _placeFlowNode(p) {
         const { nodeId, local, name, flowId } = p;
-        const data = this._skillsData();
+        const data = this._branchData();
         const newNode = {
             type: 'flow',
             name,
             pos_x: local.x - NODE_W / 2,
             pos_y: local.y - NODE_H / 2,
-            config: { flow_id: flowId, skill_id: 'default' },
+            config: { flow_id: flowId, branch_id: 'default' },
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        this._editor.updateSkillsData({ data: next });
+        this._editor.updateBranchData({ data: next });
         this._editor.pushHistory({ snapshot: next });
         this._editor.setDirty({ dirty: true });
         this._editor.selectNode({ nodeId });
@@ -1229,7 +1229,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (!isPlainObject(state_mapping)) {
             throw new Error('flows-flow-canvas: _placeMcpNode state_mapping must be a plain object');
         }
-        const data = this._skillsData();
+        const data = this._branchData();
         const newNode = {
             type: 'mcp',
             name,
@@ -1242,7 +1242,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         };
         const nodes = { ...asObject(data.nodes), [nodeId]: newNode };
         const next = { ...data, nodes };
-        this._editor.updateSkillsData({ data: next });
+        this._editor.updateBranchData({ data: next });
         this._editor.pushHistory({ snapshot: next });
         this._editor.setDirty({ dirty: true });
         this._editor.selectNode({ nodeId });
@@ -1677,9 +1677,9 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     render() {
         const state = this._state();
-        const skillsData = getSkillsData(state);
-        const nodes = getSkillsNodes(state);
-        const edges = getSkillsEdges(state);
+        const skillsData = getBranchData(state);
+        const nodes = getBranchNodes(state);
+        const edges = getBranchEdges(state);
         const activeTool = typeof state.activeTool === 'string' && state.activeTool.length > 0 ? state.activeTool : 'select';
         const vb = this._viewBox();
         const vbStr = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;

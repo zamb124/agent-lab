@@ -1,12 +1,12 @@
 """
-Строгие тесты валидации и сохранения skills через API.
+Строгие тесты валидации и сохранения веток (branches) через API.
 
-Проверяет что create_skill и update_skill:
-- Сохраняют переменные (включая переопределение в skill)
+Проверяет что create_branch и update_branch:
+- Сохраняют переменные (включая переопределение во ветке)
 - Сохраняют свойства нод
 - Сохраняют ноды
 - Сохраняют условия (conditions)
-- Валидируют результат применения skill
+- Валидируют результат применения ветки
 - Отклоняют невалидные конфигурации
 """
 
@@ -15,7 +15,7 @@ import pytest
 
 @pytest.mark.asyncio
 class TestSkillValidationAndPersistence:
-    """Тесты валидации и сохранения skills."""
+    """Тесты валидации и сохранения веток."""
 
     async def test_create_skill_saves_variables(self, client, container, unique_id):
         """Создание skill сохраняет переменные."""
@@ -43,12 +43,12 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с переменными
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Test Skill",
             "description": "Skill with variables",
-            "skill_body": {
+            "branch_body": {
                 "variables": {
                     "skill_var": "skill_value",
                     "shared_var": "from_skill"
@@ -56,15 +56,15 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 201
         
         # Проверяем что skill сохранён
         agent = await container.flow_repository.get(flow_id)
         assert agent is not None
-        assert skill_id in agent.skills
+        assert branch_id in agent.branches
         
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         # Переменные могут быть как простыми значениями, так и FlowVariableConfig
         skill_var = skill.variables["skill_var"]
         shared_var = skill.variables["shared_var"]
@@ -72,7 +72,7 @@ class TestSkillValidationAndPersistence:
         assert (shared_var == "from_skill" or (hasattr(shared_var, "value") and shared_var.value == "from_skill"))
         
         # Проверяем что при применении skill переменные мержатся правильно
-        effective = container.flow_factory._apply_skill(agent, skill_id)
+        effective = container.flow_factory._apply_branch(agent, branch_id)
         assert effective["variables"]["base_var"] == "base_value"
         assert effective["variables"]["skill_var"] == "skill_value"
         assert effective["variables"]["shared_var"] == "from_skill"
@@ -101,11 +101,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с изменёнными свойствами ноды (MERGE mode по умолчанию)
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Test Skill",
-            "skill_body": {
+            "branch_body": {
                 "nodes": {
                     "main": {
                         "type": "llm_node",  # Нужен type для валидации
@@ -117,19 +117,19 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 201
         
         # Проверяем что skill сохранён
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         assert skill.nodes["main"]["prompt"] == "Skill prompt"
         assert skill.nodes["main"]["llm"]["temperature"] == 0.1
         assert skill.nodes["main"]["llm"]["max_tokens"] == 1000
         
         # Проверяем что при применении skill свойства мержатся
-        effective = container.flow_factory._apply_skill(agent, skill_id)
+        effective = container.flow_factory._apply_branch(agent, branch_id)
         # По умолчанию nodes_mode = MERGE - deep_merge мержит dict рекурсивно
         assert effective["nodes"]["main"]["prompt"] == "Skill prompt"
         assert effective["nodes"]["main"]["llm"]["temperature"] == 0.1
@@ -160,11 +160,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с новыми нодами
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Test Skill",
-            "skill_body": {
+            "branch_body": {
                 "entry": "skill_main",
                 "nodes": {
                     "skill_main": {
@@ -183,12 +183,12 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 201
         
         # Проверяем что skill сохранён
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         assert skill.entry == "skill_main"
         assert "skill_main" in skill.nodes
@@ -197,7 +197,7 @@ class TestSkillValidationAndPersistence:
         assert "state['path'] = 'skill'" in skill.nodes["skill_main"]["code"]
         
         # Проверяем что при применении skill ноды заменяются (nodes_mode = REPLACE по умолчанию)
-        effective = container.flow_factory._apply_skill(agent, skill_id)
+        effective = container.flow_factory._apply_branch(agent, branch_id)
         assert effective["entry"] == "skill_main"
         assert "skill_main" in effective["nodes"]
         assert "skill_helper" in effective["nodes"]
@@ -236,11 +236,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с условными переходами
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Test Skill",
-            "skill_body": {
+            "branch_body": {
                 "edges": [
                     {"from": "main", "to": "branch_a", "condition": "state.get('value', 0) > 5"},
                     {"from": "main", "to": "branch_b", "condition": "state.get('value', 0) <= 5"},
@@ -250,12 +250,12 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 201
         
         # Проверяем что skill сохранён с условиями
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         assert len(skill.edges) == 4
         
@@ -270,7 +270,7 @@ class TestSkillValidationAndPersistence:
         assert edge_to_b.condition == "state.get('value', 0) <= 5"
         
         # Проверяем что при применении skill условия сохраняются
-        effective = container.flow_factory._apply_skill(agent, skill_id)
+        effective = container.flow_factory._apply_branch(agent, branch_id)
         effective_edge_to_a = next(e for e in effective["edges"] if e.from_node == "main" and e.to_node == "branch_a")
         assert effective_edge_to_a.condition == "state.get('value', 0) > 5"
 
@@ -297,23 +297,23 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Test Skill",
-            "skill_body": {
+            "branch_body": {
                 "variables": {"skill_var": "original"}
             }
         }
         
-        create_skill_resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        create_skill_resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert create_skill_resp.status_code == 201
         
         # Обновляем skill с новыми переменными
         update_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Updated Skill",
-            "skill_body": {
+            "branch_body": {
                 "variables": {
                     "skill_var": "updated",
                     "new_var": "new_value"
@@ -321,12 +321,12 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        update_resp = await client.put(f"/flows/api/v1/{flow_id}/skills/{skill_id}", json=update_data)
+        update_resp = await client.put(f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data)
         assert update_resp.status_code == 200
         
         # Проверяем что переменные обновлены
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         assert skill.name == "Updated Skill"
         skill_var = skill.variables["skill_var"]
@@ -370,11 +370,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с полной конфигурацией переменных
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Test Skill",
-            "skill_body": {
+            "branch_body": {
                 "variables": {
                     "api_key": {
                         "value": "skill_secret_key",
@@ -392,12 +392,12 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 201
         
         # Проверяем что skill сохранён с полной конфигурацией переменных
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         # Проверяем переопределённую переменную
         api_key = skill.variables["api_key"]
@@ -427,7 +427,7 @@ class TestSkillValidationAndPersistence:
             assert max_retries["description"] == "Maximum number of retry attempts"
         
         # Проверяем что при применении skill переменные мержатся с полными метаданными
-        effective = container.flow_factory._apply_skill(agent, skill_id)
+        effective = container.flow_factory._apply_branch(agent, branch_id)
         # В effective переменные извлекаются как простые значения (только value)
         assert effective["variables"]["api_key"] == "skill_secret_key"
         assert effective["variables"]["timeout"] == "30"
@@ -462,11 +462,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с начальной конфигурацией
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Test Skill",
-            "skill_body": {
+            "branch_body": {
                 "variables": {
                     "skill_var": {
                         "value": "original",
@@ -478,14 +478,14 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        create_skill_resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        create_skill_resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert create_skill_resp.status_code == 201
         
         # Обновляем skill с изменённой конфигурацией переменных
         update_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Updated Skill",
-            "skill_body": {
+            "branch_body": {
                 "variables": {
                     "skill_var": {
                         "value": "updated",
@@ -503,12 +503,12 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        update_resp = await client.put(f"/flows/api/v1/{flow_id}/skills/{skill_id}", json=update_data)
+        update_resp = await client.put(f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data)
         assert update_resp.status_code == 200
         
         # Проверяем что ВСЕ поля переменных обновлены в БД
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         assert skill.name == "Updated Skill"
         
@@ -560,11 +560,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Пытаемся создать skill с невалидным entry
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Invalid Skill",
-            "skill_body": {
+            "branch_body": {
                 "entry": "nonexistent_node",
                 "nodes": {
                     "some_node": {
@@ -575,7 +575,7 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 400
         assert "validation failed" in resp.json()["detail"].lower()
 
@@ -601,11 +601,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Пытаемся создать skill с edge на несуществующую ноду
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Invalid Skill",
-            "skill_body": {
+            "branch_body": {
                 "nodes": {
                     "node_a": {
                         "type": "code",
@@ -618,7 +618,7 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 400
         assert "validation failed" in resp.json()["detail"].lower()
 
@@ -644,11 +644,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём валидный skill
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Valid Skill",
-            "skill_body": {
+            "branch_body": {
                 "nodes": {
                     "skill_node": {
                         "type": "code",
@@ -660,14 +660,14 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        create_skill_resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        create_skill_resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert create_skill_resp.status_code == 201
         
         # Пытаемся обновить skill с невалидным entry
         update_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Invalid Update",
-            "skill_body": {
+            "branch_body": {
                 "entry": "nonexistent_entry",
                 "nodes": {
                     "skill_node": {
@@ -678,13 +678,13 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        update_resp = await client.put(f"/flows/api/v1/{flow_id}/skills/{skill_id}", json=update_data)
+        update_resp = await client.put(f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data)
         assert update_resp.status_code == 400
         assert "validation failed" in update_resp.json()["detail"].lower()
         
         # Проверяем что skill не изменился
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         assert skill.name == "Valid Skill"
         assert skill.entry == "skill_node"
 
@@ -710,11 +710,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с inline code
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "Skill with Code",
-            "skill_body": {
+            "branch_body": {
                 "entry": "code_node",
                 "nodes": {
                     "code_node": {
@@ -729,12 +729,12 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 201
         
         # Проверяем что код сохранён корректно
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         assert "code_node" in skill.nodes
         assert "state['result']" in skill.nodes["code_node"]["code"]
@@ -762,11 +762,11 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Создаём skill с llm_node
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "React Skill",
-            "skill_body": {
+            "branch_body": {
                 "entry": "react_main",
                 "nodes": {
                     "react_main": {
@@ -796,12 +796,12 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         assert resp.status_code == 201
         
         # Проверяем что llm_node с tools сохранён
         agent = await container.flow_repository.get(flow_id)
-        skill = agent.skills[skill_id]
+        skill = agent.branches[branch_id]
         
         assert "react_main" in skill.nodes
         llm_node = skill.nodes["react_main"]
@@ -812,12 +812,12 @@ class TestSkillValidationAndPersistence:
         assert "a + b" in llm_node["tools"][0]["code"]
         assert llm_node["llm"]["temperature"] == 0.2
 
-    async def test_create_skill_rejects_unsupported_fields_in_skill_body(self, client, unique_id):
+    async def test_create_skill_rejects_unsupported_fields_in_branch_body(self, client, unique_id):
         """
-        Создание skill отклоняет неподдерживаемые поля в skill_body.
+        Создание skill отклоняет неподдерживаемые поля в branch_body.
         
         Поля flow, goal, role, examples, success_criteria, additional_information
-        не поддерживаются в SkillConfig.
+        не поддерживаются в BranchConfig.
         """
         flow_id = f"test_agent_unsupported_{unique_id}"
         
@@ -839,13 +839,13 @@ class TestSkillValidationAndPersistence:
         assert create_resp.status_code == 200
         
         # Пытаемся создать skill с неподдерживаемыми полями
-        skill_id = f"test_skill_{unique_id}"
+        branch_id = f"test_skill_{unique_id}"
         skill_data = {
-            "skill_id": skill_id,
+            "branch_id": branch_id,
             "name": "новый навык",
             "description": "тут описание",
             "tags": ["eee"],
-            "skill_body": {
+            "branch_body": {
                 "flow": "Some flow",
                 "goal": "You need to help the user 1",
                 "role": "You are a helpful assistant 1",
@@ -855,7 +855,7 @@ class TestSkillValidationAndPersistence:
             }
         }
         
-        resp = await client.post(f"/flows/api/v1/{flow_id}/skills", json=skill_data)
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=skill_data)
         # Ожидаем 400 Bad Request с описанием ошибки
         assert resp.status_code == 400
         detail = resp.json()["detail"].lower()

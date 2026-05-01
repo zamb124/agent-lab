@@ -41,7 +41,7 @@ async def send_a2a_message(
     client,
     flow_id: str,
     content: str,
-    skill_id: str = "default",
+    branch_id: str = "default",
     session_id: str = None,
 ) -> Dict[str, Any]:
     """Отправляет сообщение через A2A API."""

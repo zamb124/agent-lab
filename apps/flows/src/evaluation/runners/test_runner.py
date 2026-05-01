@@ -481,7 +481,7 @@ class TestRunner:
             container = get_container()
             nodes_map = await container.flow_factory.get_effective_nodes_map(
                 execution_state.session_flow_id,
-                execution_state.skill_id,
+                execution_state.branch_id,
                 execution_state.flow_config_version,
             )
             node_dict = nodes_map.get(node_id)
@@ -618,7 +618,7 @@ class TestRunner:
             container = get_container()
             nodes_map = await container.flow_factory.get_effective_nodes_map(
                 execution_state.session_flow_id,
-                execution_state.skill_id,
+                execution_state.branch_id,
                 execution_state.flow_config_version,
             )
             node_dict = nodes_map.get(node_id)

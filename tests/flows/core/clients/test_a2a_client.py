@@ -26,7 +26,7 @@ class TestA2AClient:
                 "name": "Test Agent",
                 "url": public["base"],
                 "version": "1.0.0",
-                "skills": [{"id": "default", "name": "Default Skill"}],
+                "branches": [{"id": "default", "name": "Default Skill"}],
             })
 
         async def handle_send_task(request):
@@ -94,7 +94,7 @@ class TestA2AClient:
         result = await client.get_agent_card(mock_agent_server)
 
         assert result["name"] == "Test Agent"
-        assert len(result["skills"]) == 1
+        assert len(result["branches"]) == 1
 
     @pytest.mark.asyncio
     async def test_get_agent_card_not_found(self, error_server):
@@ -119,12 +119,12 @@ class TestA2AClient:
 
     @pytest.mark.asyncio
     async def test_send_task_with_skill_id(self, mock_agent_server):
-        """Отправка с указанием skill_id."""
+        """Отправка с указанием branch_id."""
         client = A2AClient()
         result = await client.send_task(
             base_url=mock_agent_server,
             content="Test",
-            skill_id="custom_skill",
+            branch_id="custom_skill",
         )
 
         assert "response" in result

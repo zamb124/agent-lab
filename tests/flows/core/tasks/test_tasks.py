@@ -276,7 +276,7 @@ class TestProcessAgentTaskResume:
                 "session_id": session_id,
                 "current_node": "main",
                 "interrupt": {"question": "What is your name?"},
-                "skill_id": "default",
+                "branch_id": "default",
                 "content": "Hello",
             },
         )

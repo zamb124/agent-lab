@@ -171,8 +171,8 @@ class TestA2AClientWithRealAgent:
 
         card = response.json()
         assert card["name"] == "Test External Agent"
-        assert "skills" in card
-        assert len(card["skills"]) > 0
+        assert "branches" in card
+        assert len(card["branches"]) > 0
 
     @pytest.mark.asyncio
     async def test_health_check_asgi(self, asgi_external_agent):

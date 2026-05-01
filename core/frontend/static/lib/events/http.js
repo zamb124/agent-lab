@@ -33,12 +33,51 @@ function _buildQuery(params) {
     return `?${qs}`;
 }
 
+/**
+ * Извлекает поля платформы из JSON тела ошибки (request_id / trace_id / service / observability).
+ */
+function _platformErrorEnvelopeFromBody(body) {
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        return {
+            request_id: null,
+            trace_id: null,
+            service: null,
+            observability: null,
+        };
+    }
+    const request_id =
+        typeof body.request_id === 'string' && body.request_id.length > 0 ? body.request_id : null;
+    const trace_id =
+        typeof body.trace_id === 'string' && body.trace_id.length > 0 ? body.trace_id : null;
+    const service =
+        typeof body.service === 'string' && body.service.length > 0 ? body.service : null;
+
+    let observability = null;
+    const rawObs = body.observability;
+    if (
+        rawObs !== null &&
+        typeof rawObs === 'object' &&
+        !Array.isArray(rawObs) &&
+        typeof rawObs.logs_explore_url === 'string' &&
+        rawObs.logs_explore_url.length > 0
+    ) {
+        observability = Object.freeze({ logs_explore_url: rawObs.logs_explore_url });
+    }
+
+    return { request_id, trace_id, service, observability };
+}
+
 export class HttpError extends Error {
     constructor(message, status, body) {
         super(message);
         this.name = 'HttpError';
         this.status = status;
         this.body = body;
+        const env = _platformErrorEnvelopeFromBody(body);
+        this.request_id = env.request_id;
+        this.trace_id = env.trace_id;
+        this.service = env.service;
+        this.observability = env.observability;
     }
 }
 

@@ -24,7 +24,31 @@ export class FlowsStateModal extends PlatformModal {
     static styles = [
         ...PlatformModal.styles,
         css`
-            flows-code-editor { display: block; height: 100%; min-height: 50vh; }
+            :host .modal.full .modal-content,
+            :host .modal.fullscreen .modal-content {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+            /* Цепочка flex + fill-parent: иначе CM растягивается по документу, :host режет overflow:hidden без скролла. */
+            .state-modal-editor-wrap {
+                flex: 1 1 auto;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                max-height: 100%;
+            }
+            flows-code-editor[fill-parent] {
+                min-height: 0;
+            }
+            .state-load-error {
+                margin: 0;
+                font-family: var(--font-sans);
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
         `,
     ];
 
@@ -48,11 +72,26 @@ export class FlowsStateModal extends PlatformModal {
 
     renderBody() {
         const result = this._stateOp.lastResult;
+        const err = this._stateOp.error;
         const json = result ? JSON.stringify(result, null, 2) : '';
-        if (this._stateOp.busy && !result) {
+        if (this._stateOp.busy && !result && !err) {
             return html`<glass-spinner></glass-spinner>`;
         }
-        return html`<flows-code-editor language="json" readonly .value=${json}></flows-code-editor>`;
+        if (err) {
+            return html`<p class="state-load-error">
+                ${this.t('state_modal.load_failed', { detail: String(err) })}
+            </p>`;
+        }
+        return html`
+            <div class="state-modal-editor-wrap">
+                <flows-code-editor
+                    language="json"
+                    readonly
+                    fill-parent
+                    .value=${json}
+                ></flows-code-editor>
+            </div>
+        `;
     }
 }
 

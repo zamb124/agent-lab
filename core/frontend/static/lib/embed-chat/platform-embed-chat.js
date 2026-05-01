@@ -22,7 +22,7 @@ const ASSISTANT_EVENT_SCHEMA_VERSION = '1.0.0';
  * Автономный чат: A2A stream + блоки. Без apps/crm, apps/flows.
  *
  * Свойства:
- * - flowsBaseUrl, flowId, embedId, skillId (embedId приоритетен для внешнего embed-route)
+ * - flowsBaseUrl, flowId, embedId, branchId или skillId (легаси атрибут skill-id; embedId приоритетен для внешнего embed-route)
  * - title
  * - labels: { send, placeholder, newChat, greeting, ... }
  * - useCredentials: boolean (fetch credentials: include — cookie при том же site / см. хост)
@@ -45,6 +45,7 @@ export class PlatformEmbedChat extends LitElement {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
+        branchId: { type: String, attribute: 'branch-id' },
         skillId: { type: String, attribute: 'skill-id' },
         title: { type: String },
         assistantTitle: { type: String, attribute: 'assistant-title' },
@@ -369,6 +370,7 @@ export class PlatformEmbedChat extends LitElement {
         this.flowsBaseUrl = '';
         this.flowId = '';
         this.embedId = '';
+        this.branchId = '';
         this.skillId = '';
         this.title = '';
         this.assistantTitle = '';
@@ -409,6 +411,12 @@ export class PlatformEmbedChat extends LitElement {
         this._nackEventName = null;
         this._onCredClickOutside = this._onCredClickOutside.bind(this);
         registerBuiltinEmbedBlocks();
+    }
+
+    _embedBranchId() {
+        const a = this.branchId != null ? String(this.branchId).trim() : '';
+        const b = this.skillId != null ? String(this.skillId).trim() : '';
+        return a || b;
     }
 
     static _SCROLL_STICK_PX = 56;
@@ -913,7 +921,7 @@ export class PlatformEmbedChat extends LitElement {
         const variables = { ...langVars, ...extraVars, ...contextVars };
         this._emitAssistantEvent('context_requested', {
             flow_id: this.flowId || null,
-            skill_id: this.skillId || null,
+            branch_id: this._embedBranchId() || null,
             embed_id: this.embedId || null,
             variables,
         });
@@ -926,7 +934,7 @@ export class PlatformEmbedChat extends LitElement {
                     embedId: this.embedId || null,
                     message,
                     contextId: this._contextId,
-                    skillId: this.skillId || null,
+                    branchId: this._embedBranchId() || null,
                     files: fileParts,
                     metadata: { variables },
                     getHeaders,
@@ -940,7 +948,7 @@ export class PlatformEmbedChat extends LitElement {
             this._emitAssistantEvent('error', {
                 message: m,
                 flow_id: this.flowId || null,
-                skill_id: this.skillId || null,
+                branch_id: this._embedBranchId() || null,
                 embed_id: this.embedId || null,
             });
         } finally {

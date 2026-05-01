@@ -25,7 +25,7 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
         node_name = namespace.get("name", name)
         node_description = namespace.get("description", f"LLM агент {node_name}")
         model = namespace.get("model", "gpt-4o")
-        skills = namespace.get("skills", [])
+        agent_skills = namespace.get("agent_skills", [])
         
         def __init__(self):
             config = NodeConfig(
@@ -37,7 +37,7 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
                 llm_override=NodeLLMOverride(model=model, temperature=0.2),
             )
             self.runner = LlmNodeRunner(config, tools, None, prompt, llm_node=None)
-            self.skills = skills
+            self.agent_skills = agent_skills
         
         async def execute(self, context: RequestContext, event_queue: EventQueue):
             session_id = f"{node_id}:{context.context_id}"
@@ -92,7 +92,7 @@ class SimpleLlmNodeExecutor(AgentExecutor, metaclass=SimpleLlmNodeExecutorMeta):
     class MyAgent(SimpleLlmNodeExecutor):
         tools = [MyTool()]
         prompt = "Ты помощник..."
-        skills = [AgentSkill(id="default", name="Default", description="...", tags=[])]
+        agent_skills = [AgentSkill(id="default", name="Default", description="...", tags=[])]
     """
     
     tools = []
@@ -101,4 +101,4 @@ class SimpleLlmNodeExecutor(AgentExecutor, metaclass=SimpleLlmNodeExecutorMeta):
     name = "LlmNode"
     description = ""
     model = "gpt-4o"
-    skills = []
+    agent_skills = []

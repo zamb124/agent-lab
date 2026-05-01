@@ -26,7 +26,7 @@ class TestRemoteFlowNode:
             return web.json_response({
                 "name": "Remote Test Agent",
                 "url": public["base"],
-                "skills": [{"id": "default", "name": "Default"}],
+                "branches": [{"id": "default", "name": "Default"}],
             })
 
         async def handle_send_task(request):
@@ -65,24 +65,24 @@ class TestRemoteFlowNode:
         node_config = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
-            "skill_id": "custom",
+            "branch_id": "custom",
         }
         node = await create_node("remote_test", node_config)
 
         assert isinstance(node, RemoteFlowNode)
         assert node.url == "http://example.com:8080"
-        assert node.skill_id == "custom"
+        assert node.branch_id == "custom"
 
     @pytest.mark.asyncio
     async def test_create_remote_flow_node_default_skill(self):
-        """skill_id по умолчанию = 'default'."""
+        """branch_id по умолчанию = 'default'."""
         node_config = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
         }
         node = await create_node("remote_test", node_config)
 
-        assert node.skill_id == "default"
+        assert node.branch_id == "default"
 
     @pytest.mark.asyncio
     async def test_remote_flow_node_execution(self, remote_flow_server):
@@ -140,7 +140,7 @@ class TestFlowWithRemoteAgent:
             return web.json_response({
                 "name": "Agent Remote Agent",
                 "url": public["base"],
-                "skills": [{"id": "default", "name": "Default"}],
+                "branches": [{"id": "default", "name": "Default"}],
             })
 
         async def handle_send_task(request):
@@ -328,7 +328,7 @@ class TestRemoteAgentInputMapping:
             return web.json_response({
                 "name": "Input Logging Agent",
                 "url": public["base"],
-                "skills": [{"id": "default", "name": "Default"}],
+                "branches": [{"id": "default", "name": "Default"}],
             })
 
         async def handle_send_task(request):

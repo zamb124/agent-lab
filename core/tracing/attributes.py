@@ -32,7 +32,7 @@ ATTR_IS_RESUME = "platform.is_resume"
 ATTR_FLOW_ID = "platform.flow_id"
 ATTR_FLOW_ENTRY = "platform.flow.entry_node"
 ATTR_FLOW_VARIABLES_COUNT = "platform.flow.variables_count"
-ATTR_SKILL_ID = "platform.skill_id"
+ATTR_BRANCH_ID = "platform.branch_id"
 
 # Node
 ATTR_NODE_ID = "platform.node_id"

@@ -41,7 +41,7 @@ const FLOW_PRESETS = Object.freeze([
                 },
             },
             edges: [],
-            variables: {}, tags: ['preset:react'], skills: {}, triggers: {}, resources: {},
+            variables: {}, tags: ['preset:react'], branches: {}, triggers: {}, resources: {},
         }),
     },
     {
@@ -57,7 +57,7 @@ const FLOW_PRESETS = Object.freeze([
                 end:   { type: 'code', name: 'End',   config: { code: 'def run(state):\n    return state\n' } },
             },
             edges: [{ from: 'start', to: 'end' }],
-            variables: {}, tags: ['preset:graph'], skills: {}, triggers: {}, resources: {},
+            variables: {}, tags: ['preset:graph'], branches: {}, triggers: {}, resources: {},
         }),
     },
     {
@@ -76,7 +76,7 @@ const FLOW_PRESETS = Object.freeze([
                 },
             },
             edges: [],
-            variables: {}, tags: ['preset:multi'], skills: {}, triggers: {}, resources: {},
+            variables: {}, tags: ['preset:multi'], branches: {}, triggers: {}, resources: {},
         }),
     },
     {
@@ -95,7 +95,7 @@ const FLOW_PRESETS = Object.freeze([
                 },
             },
             edges: [],
-            variables: {}, tags: ['preset:code'], skills: {}, triggers: {}, resources: {},
+            variables: {}, tags: ['preset:code'], branches: {}, triggers: {}, resources: {},
         }),
     },
     {
@@ -114,7 +114,7 @@ const FLOW_PRESETS = Object.freeze([
                 },
             },
             edges: [],
-            variables: {}, tags: ['preset:external'], skills: {}, triggers: {}, resources: {},
+            variables: {}, tags: ['preset:external'], branches: {}, triggers: {}, resources: {},
         }),
     },
 ]);

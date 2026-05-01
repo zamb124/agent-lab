@@ -77,7 +77,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             )
         
         if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.skill_id)
+            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.branch_id)
         bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
         if not bot_token:
             raise TriggerRegistrationError(
@@ -166,7 +166,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             return
         
         if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.skill_id)
+            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.branch_id)
         bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
         if not bot_token:
             logger.warning(
@@ -294,7 +294,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             "context.message_id": "@trigger:message.message_id",
         }
     
-    async def _resolve_variable(self, var_ref: str, flow_id: str, skill_id: str) -> str:
+    async def _resolve_variable(self, var_ref: str, flow_id: str, branch_id: str) -> str:
         """Резолвит @var:key через тот же словарь, что у runtime flow (см. FlowFactory)."""
         from apps.flows.src.container import get_container
         from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
@@ -306,7 +306,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 container,
                 flow_id,
                 var_ref,
-                skill_id=skill_id,
+                branch_id=branch_id,
             )
         except VariableResolutionError as e:
             raise TriggerRegistrationError(

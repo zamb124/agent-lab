@@ -1,12 +1,12 @@
 /**
  * FlowCard - карточка flow в sidebar
- * Expandable с отображением skills
+ * Expandable с отображением веток (branches)
  */
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import './skill-item.js';
+import './branch-item.js';
 import { asString } from '../_helpers/flows-resolvers.js';
 
 export class FlowCard extends PlatformElement {
@@ -201,20 +201,20 @@ export class FlowCard extends PlatformElement {
                 }
             }
 
-            .skills-section {
+            .branches-section {
                 background: var(--glass-solid-subtle);
                 border-radius: var(--radius-lg);
                 padding: var(--space-3);
             }
 
-            .skills-header {
+            .branches-header {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 margin-bottom: var(--space-2);
             }
 
-            .skills-title {
+            .branches-title {
                 font-size: var(--text-xs);
                 font-weight: var(--font-semibold);
                 text-transform: uppercase;
@@ -222,7 +222,7 @@ export class FlowCard extends PlatformElement {
                 color: var(--text-tertiary);
             }
 
-            .skill-add-btn {
+            .branch-add-btn {
                 width: 22px;
                 height: 22px;
                 display: flex;
@@ -236,22 +236,22 @@ export class FlowCard extends PlatformElement {
                 transition: all var(--duration-fast);
             }
 
-            .skill-add-btn platform-icon {
+            .branch-add-btn platform-icon {
                 pointer-events: none;
             }
 
-            .skill-add-btn:hover {
+            .branch-add-btn:hover {
                 background: var(--accent-subtle);
                 color: var(--accent);
             }
 
-            .skills-list {
+            .branches-list {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
             }
 
-            .skills-empty {
+            .branches-empty {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
                 padding: var(--space-2);
@@ -327,21 +327,21 @@ export class FlowCard extends PlatformElement {
         return colors[hash % colors.length];
     }
 
-    _getSkills() {
-        if (!this.flow?.skills) return [];
-        return Object.entries(this.flow.skills).map(([id, skill]) => ({
+    _getBranches() {
+        if (!this.flow?.branches) return [];
+        return Object.entries(this.flow.branches).map(([id, br]) => ({
             id,
-            name: skill.name,
-            description: skill.description,
+            name: br.name,
+            description: br.description,
         }));
     }
 
-    _emitAction(action, e, skillId = null) {
+    _emitAction(action, e, branchId = null) {
         e?.stopPropagation();
         this.emit('flow-action', {
             action,
             flowId: this.flow.flow_id,
-            skillId,
+            branchId,
         });
     }
 
@@ -364,7 +364,7 @@ export class FlowCard extends PlatformElement {
             'expanded': this.expanded,
         };
 
-        const skills = this._getSkills();
+        const branches = this._getBranches();
 
         return html`
             <div class=${classMap(cardClasses)}>
@@ -417,30 +417,30 @@ export class FlowCard extends PlatformElement {
 
                 ${this.expanded ? html`
                     <div class="flow-details">
-                        <div class="skills-section">
-                            <div class="skills-header">
-                                <span class="skills-title">${this.t('flow_card.skills_title')}</span>
+                        <div class="branches-section">
+                            <div class="branches-header">
+                                <span class="branches-title">${this.t('flow_card.branches_title')}</span>
                                 <button 
-                                    class="skill-add-btn" 
-                                    @click=${(e) => this._emitAction('create-skill', e)}
-                                    title=${this.t('flow_card.add_skill_title')}
+                                    class="branch-add-btn" 
+                                    @click=${(e) => this._emitAction('create-branch', e)}
+                                    title=${this.t('flow_card.add_branch_title')}
                                 >
                                     <platform-icon name="plus" size="12"></platform-icon>
                                 </button>
                             </div>
 
-                            ${skills.length > 0 ? html`
-                                <div class="skills-list">
-                                    ${skills.map(skill => html`
-                                        <skill-item
-                                            .skill=${skill}
+                            ${branches.length > 0 ? html`
+                                <div class="branches-list">
+                                    ${branches.map((br) => html`
+                                        <branch-item
+                                            .branch=${br}
                                             .flowId=${this.flow.flow_id}
-                                            @skill-action=${(e) => this._emitAction(e.detail.action, e, skill.id)}
-                                        ></skill-item>
+                                            @branch-action=${(e) => this._emitAction(e.detail.action, e, br.id)}
+                                        ></branch-item>
                                     `)}
                                 </div>
                             ` : html`
-                                <div class="skills-empty">${this.t('flow_card.no_skills')}</div>
+                                <div class="branches-empty">${this.t('flow_card.no_branches')}</div>
                             `}
                         </div>
                     </div>

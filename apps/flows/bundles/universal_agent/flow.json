@@ -3,8 +3,18 @@
   "name": "Универсальный агент",
   "description": "Серия ассистентов общего назначения: уточнения, расчёты, код в песочнице (sandbox_codegen); навыки — базовый, усиленный код, RAG.",
   "version": "1.0.0",
-  "tags": ["store", "assistant", "universal", "eval", "general", "humanitec"],
-  "permission": ["admin", "developers"],
+  "tags": [
+    "store",
+    "assistant",
+    "universal",
+    "eval",
+    "general",
+    "humanitec"
+  ],
+  "permission": [
+    "admin",
+    "developers"
+  ],
   "entry": "main",
   "nodes": {
     "main": {
@@ -33,11 +43,15 @@
     "interface_language_code": "ru",
     "interface_language_name": "русском"
   },
-  "skills": {
+  "branches": {
     "code_focus": {
       "name": "Универсальный агент: песочница кода",
       "description": "Тот же агент с упором на sandbox_codegen и чёткие ТЗ для генерации кода в sandbox.",
-      "tags": ["universal", "eval", "code"],
+      "tags": [
+        "universal",
+        "eval",
+        "code"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -60,7 +74,11 @@
     "with_rag": {
       "name": "Универсальный агент + RAG",
       "description": "Базовые возможности плюс семантический поиск и загрузка текста в namespace RAG.",
-      "tags": ["universal", "rag", "knowledge"],
+      "tags": [
+        "universal",
+        "rag",
+        "knowledge"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {

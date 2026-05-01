@@ -34,16 +34,16 @@ describe('flows/editor extraReducer', () => {
         expect(s.historyStack).toEqual([]);
     });
 
-    it('flow_loaded заполняет flowConfig и skillsData', () => {
+    it('flow_loaded заполняет flowConfig и branchData', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/flow_loaded', {
             flow: { flow_id: 'demo', name: 'Demo', nodes: { a: { type: 'code' } }, edges: [], variables: {} },
-            skillId: 'base',
+            branchId: 'base',
         });
         const s = getState().flowsEditor;
         expect(s.flowId).toBe('demo');
         expect(s.flowConfig.name).toBe('Demo');
-        expect(s.skillsData.nodes.a.type).toBe('code');
+        expect(s.branchData.nodes.a.type).toBe('code');
         expect(s.isDirty).toBe(false);
         expect(s.historyStack).toEqual([]);
     });
@@ -59,11 +59,11 @@ describe('flows/editor extraReducer', () => {
                 entry: 'a',
                 variables: {},
             },
-            skillId: 'base',
+            branchId: 'base',
         });
         const s = getState().flowsEditor;
         expect(s.isDirty).toBe(true);
-        expect(s.skillsData.nodes.b.pos_x).toBeGreaterThan(0);
+        expect(s.branchData.nodes.b.pos_x).toBeGreaterThan(0);
     });
 
     it('node_selected открывает panel и сбрасывает resource', () => {
@@ -165,7 +165,7 @@ describe('flows/editor extraReducer', () => {
                 edges: [{ from: 'a', to: 'b' }],
                 variables: {},
             },
-            skillId: 'base',
+            branchId: 'base',
         });
         bus.dispatch('flows/run/flow_started', { task_id: 't1' });
         bus.dispatch('flows/run/edge_executed', { edge_index: 0, from_node: 'a', to_node: 'b' });
@@ -189,7 +189,7 @@ describe('flows/editor extraReducer', () => {
                 edges: [{ from: 'a', to: 'b' }],
                 variables: {},
             },
-            skillId: 'base',
+            branchId: 'base',
         });
         bus.dispatch('flows/run/flow_started', { task_id: 't1' });
         bus.dispatch('flows/run/edge_error', {
@@ -284,20 +284,20 @@ describe('flows/editor extraReducer', () => {
                 ],
                 entry: 'old',
             },
-            skillId: 'base',
+            branchId: 'base',
         });
         bus.dispatch('flows/editor/node_selected', { nodeId: 'old' });
         bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'old' });
         bus.dispatch('flows/editor/node_id_changed', { oldId: 'old', newId: 'fresh' });
         const s = getState().flowsEditor;
-        expect(s.skillsData.nodes.fresh).toBeDefined();
-        expect(s.skillsData.nodes.fresh.node_id).toBe('fresh');
-        expect(s.skillsData.nodes.old).toBeUndefined();
-        expect(s.skillsData.edges).toEqual([
+        expect(s.branchData.nodes.fresh).toBeDefined();
+        expect(s.branchData.nodes.fresh.node_id).toBe('fresh');
+        expect(s.branchData.nodes.old).toBeUndefined();
+        expect(s.branchData.edges).toEqual([
             { from_node: 'fresh', to_node: 'b' },
             { from_node: 'b', to_node: 'fresh' },
         ]);
-        expect(s.skillsData.entry).toBe('fresh');
+        expect(s.branchData.entry).toBe('fresh');
         expect(s.entryNodeId).toBe('fresh');
         expect(s.selectedNodeId).toBe('fresh');
         expect(s.multiSelection).toEqual(['fresh']);
@@ -313,12 +313,12 @@ describe('flows/editor extraReducer', () => {
                 nodes: { a: { type: 'code' }, b: { type: 'code' } },
                 edges: [],
             },
-            skillId: 'base',
+            branchId: 'base',
         });
         bus.dispatch('flows/editor/node_id_changed', { oldId: 'a', newId: 'b' });
         const s = getState().flowsEditor;
-        expect(s.skillsData.nodes.a).toBeDefined();
-        expect(s.skillsData.nodes.b).toBeDefined();
+        expect(s.branchData.nodes.a).toBeDefined();
+        expect(s.branchData.nodes.b).toBeDefined();
     });
 
     it('node_deleted удаляет ноду + edges + чистит selection/breakpoints', () => {
@@ -333,7 +333,7 @@ describe('flows/editor extraReducer', () => {
                 ],
                 entry: 'a',
             },
-            skillId: 'base',
+            branchId: 'base',
         });
         bus.dispatch('flows/editor/node_selected', { nodeId: 'a' });
         bus.dispatch('flows/editor/breakpoint_toggled', { nodeId: 'a' });
@@ -341,10 +341,10 @@ describe('flows/editor extraReducer', () => {
         bus.dispatch('flows/run/node_failed', { node_id: 'a', task_id: 't1', error: 'x' });
         bus.dispatch('flows/editor/node_deleted', { nodeId: 'a' });
         const s = getState().flowsEditor;
-        expect(s.skillsData.nodes.a).toBeUndefined();
-        expect(s.skillsData.nodes.b).toBeDefined();
-        expect(s.skillsData.edges).toEqual([]);
-        expect(s.skillsData.entry).toBeNull();
+        expect(s.branchData.nodes.a).toBeUndefined();
+        expect(s.branchData.nodes.b).toBeDefined();
+        expect(s.branchData.edges).toEqual([]);
+        expect(s.branchData.entry).toBeNull();
         expect(s.entryNodeId).toBeNull();
         expect(s.selectedNodeId).toBeNull();
         expect(s.panelOpen).toBe(false);
@@ -365,7 +365,7 @@ describe('flows/editor extraReducer', () => {
                 entry: 'a',
                 metadata: { sticky_notes: [{ id: 'n1', x: 10, y: 10, width: 100, height: 80, text: 'hi' }] },
             },
-            skillId: 'base',
+            branchId: 'base',
         });
         const s = getState().flowsEditor;
         expect(s.stickyNotes).toEqual([{ id: 'n1', x: 10, y: 10, width: 100, height: 80, text: 'hi' }]);

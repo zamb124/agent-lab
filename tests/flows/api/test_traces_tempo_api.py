@@ -25,7 +25,7 @@ _SAMPLE_SPANS = [
         "flow_id": "my_flow",
         "task_id": None,
         "context_id": "ctx1",
-        "skill_id": None,
+        "branch_id": None,
         "node_id": None,
         "agent_name": None,
         "session_agent": "my_flow:ctx1",

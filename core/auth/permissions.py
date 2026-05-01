@@ -1,5 +1,5 @@
 """
-Проверка permissions для agents, skills и tools.
+Проверка permissions для agents, branches и tools.
 
 Permissions основаны на группах пользователя из JWT (claim grps).
 """
@@ -15,8 +15,8 @@ DEFAULT_PERMISSION = [ADMIN_GROUP]
 
 class PermissionChecker:
     """
-    Проверка permissions для agents, skills и tools.
-    
+    Проверка permissions для agents, branches и tools.
+
     Источник групп - claim grps из JWT токена.
     """
 
@@ -47,15 +47,15 @@ class PermissionChecker:
         required = self.normalize(flow_permission)
         return self.check(user_groups, required)
 
-    def check_skill_permission(
+    def check_branch_permission(
         self,
         user_groups: List[str],
-        skill_permission: Optional[Union[str, List[str]]],
+        branch_permission: Optional[Union[str, List[str]]],
         flow_permission: Optional[Union[str, List[str]]] = None,
     ) -> bool:
-        """Проверяет доступ к skill. Fallback на permission flow."""
-        if skill_permission:
-            required = self.normalize(skill_permission)
+        """Проверяет доступ к ветке графа. Fallback на permission flow."""
+        if branch_permission:
+            required = self.normalize(branch_permission)
         else:
             required = self.normalize(flow_permission)
         return self.check(user_groups, required)

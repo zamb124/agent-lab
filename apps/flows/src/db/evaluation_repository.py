@@ -22,7 +22,7 @@ class EvaluationRepository:
     Репозиторий для работы с результатами оценки.
 
     Таблица evaluation_results имеет составной уникальный ключ:
-    (flow_id, skill_id, run_date, iteration, test_case_id)
+    (flow_id, branch_id, run_date, iteration, test_case_id)
     """
 
     def __init__(self, storage: Storage):
@@ -41,11 +41,11 @@ class EvaluationRepository:
         async with self._storage._get_session() as session:
             query = text("""
                 INSERT INTO evaluation_results
-                    (flow_id, skill_id, run_date, iteration, test_case_id, task_id,
+                    (flow_id, branch_id, run_date, iteration, test_case_id, task_id,
                      status, duration_ms, turns_count, dialog, scores,
                      judge_feedback, error, created_at)
                 VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8, :p9, :p10, :p11, :p12, :p13, :p14)
-                ON CONFLICT (flow_id, skill_id, run_date, iteration, test_case_id)
+                ON CONFLICT (flow_id, branch_id, run_date, iteration, test_case_id)
                 DO UPDATE SET
                     task_id = EXCLUDED.task_id,
                     status = EXCLUDED.status,
@@ -60,7 +60,7 @@ class EvaluationRepository:
             
             result_proxy = await session.execute(query, {
                 "p1": result.flow_id,
-                "p2": result.skill_id,
+                "p2": result.branch_id,
                 "p3": result.run_date,
                 "p4": result.iteration,
                 "p5": result.test_case_id,
@@ -81,7 +81,7 @@ class EvaluationRepository:
     async def get_by_run(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         run_date: date,
         iteration: Optional[int] = None,
     ) -> List[EvaluationResult]:
@@ -90,7 +90,7 @@ class EvaluationRepository:
 
         Args:
             flow_id: ID агента
-            skill_id: ID skill
+            branch_id: ID skill
             run_date: Дата запуска
             iteration: Номер итерации (если None - все итерации за день)
 
@@ -101,25 +101,25 @@ class EvaluationRepository:
             if iteration is not None:
                 query = text("""
                     SELECT * FROM evaluation_results
-                    WHERE flow_id = :flow_id AND skill_id = :skill_id
+                    WHERE flow_id = :flow_id AND branch_id = :branch_id
                           AND run_date = :run_date AND iteration = :iteration
                     ORDER BY test_case_id
                 """)
                 result = await session.execute(query, {
                     "flow_id": flow_id,
-                    "skill_id": skill_id,
+                    "branch_id": branch_id,
                     "run_date": run_date,
                     "iteration": iteration,
                 })
             else:
                 query = text("""
                     SELECT * FROM evaluation_results
-                    WHERE flow_id = :flow_id AND skill_id = :skill_id AND run_date = :run_date
+                    WHERE flow_id = :flow_id AND branch_id = :branch_id AND run_date = :run_date
                     ORDER BY iteration, test_case_id
                 """)
                 result = await session.execute(query, {
                     "flow_id": flow_id,
-                    "skill_id": skill_id,
+                    "branch_id": branch_id,
                     "run_date": run_date,
                 })
             
@@ -129,7 +129,7 @@ class EvaluationRepository:
     async def get_latest_results(
         self,
         flow_id: str,
-        skill_id: str,
+        branch_id: str,
         limit: int = 10,
     ) -> List[EvaluationResult]:
         """
@@ -140,7 +140,7 @@ class EvaluationRepository:
 
         Args:
             flow_id: ID агента
-            skill_id: ID skill
+            branch_id: ID skill
             limit: Максимум записей
 
         Returns:
@@ -149,25 +149,25 @@ class EvaluationRepository:
         async with self._storage._get_session() as session:
             query = text("""
                 SELECT * FROM evaluation_results
-                WHERE flow_id = :flow_id AND skill_id = :skill_id
+                WHERE flow_id = :flow_id AND branch_id = :branch_id
                 ORDER BY run_date DESC, iteration DESC, created_at DESC, id DESC
                 LIMIT :limit
             """)
             result = await session.execute(query, {
                 "flow_id": flow_id,
-                "skill_id": skill_id,
+                "branch_id": branch_id,
                 "limit": limit,
             })
             rows = result.mappings().all()
             return [self._row_to_model(row) for row in rows]
 
-    async def get_next_iteration(self, flow_id: str, skill_id: str, run_date: date) -> int:
+    async def get_next_iteration(self, flow_id: str, branch_id: str, run_date: date) -> int:
         """
         Возвращает следующий номер итерации для даты.
 
         Args:
             flow_id: ID агента
-            skill_id: ID skill
+            branch_id: ID skill
             run_date: Дата
 
         Returns:
@@ -177,11 +177,11 @@ class EvaluationRepository:
             query = text("""
                 SELECT COALESCE(MAX(iteration), 0) + 1 as next_iteration
                 FROM evaluation_results
-                WHERE flow_id = :flow_id AND skill_id = :skill_id AND run_date = :run_date
+                WHERE flow_id = :flow_id AND branch_id = :branch_id AND run_date = :run_date
             """)
             result = await session.execute(query, {
                 "flow_id": flow_id,
-                "skill_id": skill_id,
+                "branch_id": branch_id,
                 "run_date": run_date,
             })
             row = result.first()
@@ -220,7 +220,7 @@ class EvaluationRepository:
 
         return EvaluationResult(
             flow_id=row["flow_id"],
-            skill_id=row["skill_id"],
+            branch_id=row["branch_id"],
             run_date=row["run_date"],
             iteration=row["iteration"],
             test_case_id=row["test_case_id"],

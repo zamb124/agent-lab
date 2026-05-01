@@ -578,7 +578,7 @@ class TestTriggersAPI:
                     "type": "telegram",
                     "config": {"bot_token": "(redacted)"},
                     "trigger_id": "tg_one",
-                    "skill_id": "default",
+                    "branch_id": "default",
                 },
             )
         assert response.status_code == 200
@@ -2591,7 +2591,7 @@ class TestProcessTaskTriggerOutput:
             session_id=session_id,
             user_id="tg:1",
             content="question",
-            skill_id="default",
+            branch_id="default",
             channel="a2a",
             task_id=f"task_{unique_id}",
             context_id=context_id,

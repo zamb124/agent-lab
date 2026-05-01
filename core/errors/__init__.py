@@ -151,19 +151,19 @@ class CyclicDependencyError(ConfigError):
 
 class NodeConflictError(ConfigError):
     """
-    Конфликт нод при применении skills.
-    
-    Выбрасывается GraphCompiler когда два skill пытаются
+    Конфликт нод при применении веток (branches).
+
+    Выбрасывается GraphCompiler когда две ветки пытаются
     модифицировать одну и ту же ноду несовместимым образом.
     """
-    
+
     code = "NODE_CONFLICT"
-    message = "Конфликт нод в skills"
-    
-    def __init__(self, node_id: str, skills: list, **kwargs):
+    message = "Конфликт нод между ветками"
+
+    def __init__(self, node_id: str, branches: list, **kwargs):
         super().__init__(
-            message=f"Нода '{node_id}' конфликтует между skills: {', '.join(skills)}",
-            payload={"node_id": node_id, "skills": skills},
+            message=f"Нода '{node_id}' конфликтует между ветками: {', '.join(branches)}",
+            payload={"node_id": node_id, "branches": branches},
             **kwargs,
         )
 

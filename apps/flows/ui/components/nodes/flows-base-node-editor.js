@@ -42,7 +42,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
         nodeConfig: { type: Object },
         nodeType: { type: String },
         flowVariables: { type: Object },
@@ -332,7 +332,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         super();
         this.nodeId = '';
         this.flowId = '';
-        this.skillId = '';
+        this.branchId = '';
         this.nodeConfig = null;
         this.nodeType = '';
         this.flowVariables = null;
@@ -508,14 +508,14 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             this.toast('flows:test_panel.toast_state_invalid', { type: 'error' });
             return;
         }
-        const skill = typeof this.skillId === 'string' && this.skillId.length > 0 ? this.skillId : 'base';
+        const skill = typeof this.branchId === 'string' && this.branchId.length > 0 ? this.branchId : 'base';
         setCodeExecuteRequestClientId(this._codeExecuteClientId);
         await this._nodeExecute.run({
             node_type: this.nodeType,
             node_config: asObject(this.nodeConfig),
             state,
             flow_id: this.flowId,
-            skill_id: skill,
+            branch_id: skill,
         });
     }
 

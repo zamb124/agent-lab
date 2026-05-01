@@ -108,53 +108,53 @@ export const flowValidateOp = createAsyncOp({
     },
 });
 
-// Skills (через A2A router в a2a.py — тот же base prefix /flows/api/v1).
-export const skillCreateOp = createAsyncOp({
-    name: 'flows/skill_create',
-    successToastKey: 'flows:toast.skill_created',
-    errorToastKey: 'flows:toast.skill_create_error',
-    restMirror: { method: 'POST', path: '/flows/api/v1/{flow_id}/skills' },
+// Ветки графа (HTTP в `apps/flows/src/api/a2a.py`, тот же prefix `/flows/api/v1`).
+export const branchCreateOp = createAsyncOp({
+    name: 'flows/branch_create',
+    successToastKey: 'flows:toast.branch_created',
+    errorToastKey: 'flows:toast.branch_create_error',
+    restMirror: { method: 'POST', path: '/flows/api/v1/{flow_id}/branches' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.flow_id !== 'string' || !payload.body) {
-            throw new Error('skillCreateOp: { flow_id, body } required');
+            throw new Error('branchCreateOp: { flow_id, body } required');
         }
         return httpRequest({
             method: 'POST',
-            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/skills`,
+            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/branches`,
             body: payload.body,
         });
     },
 });
 
-export const skillUpdateOp = createAsyncOp({
-    name: 'flows/skill_update',
-    successToastKey: 'flows:toast.skill_updated',
-    errorToastKey: 'flows:toast.skill_update_error',
-    restMirror: { method: 'PUT', path: '/flows/api/v1/{flow_id}/skills/{skill_id}' },
+export const branchUpdateOp = createAsyncOp({
+    name: 'flows/branch_update',
+    successToastKey: 'flows:toast.branch_updated',
+    errorToastKey: 'flows:toast.branch_update_error',
+    restMirror: { method: 'PUT', path: '/flows/api/v1/{flow_id}/branches/{branch_id}' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.flow_id !== 'string' || typeof payload.skill_id !== 'string' || !payload.body) {
-            throw new Error('skillUpdateOp: { flow_id, skill_id, body } required');
+        if (!payload || typeof payload.flow_id !== 'string' || typeof payload.branch_id !== 'string' || !payload.body) {
+            throw new Error('branchUpdateOp: { flow_id, branch_id, body } required');
         }
         return httpRequest({
             method: 'PUT',
-            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/skills/${encodeURIComponent(payload.skill_id)}`,
+            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/branches/${encodeURIComponent(payload.branch_id)}`,
             body: payload.body,
         });
     },
 });
 
-export const skillRemoveOp = createAsyncOp({
-    name: 'flows/skill_remove',
-    successToastKey: 'flows:toast.skill_removed',
-    errorToastKey: 'flows:toast.skill_remove_error',
-    restMirror: { method: 'DELETE', path: '/flows/api/v1/{flow_id}/skills/{skill_id}' },
+export const branchRemoveOp = createAsyncOp({
+    name: 'flows/branch_remove',
+    successToastKey: 'flows:toast.branch_removed',
+    errorToastKey: 'flows:toast.branch_remove_error',
+    restMirror: { method: 'DELETE', path: '/flows/api/v1/{flow_id}/branches/{branch_id}' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.flow_id !== 'string' || typeof payload.skill_id !== 'string') {
-            throw new Error('skillRemoveOp: { flow_id, skill_id } required');
+        if (!payload || typeof payload.flow_id !== 'string' || typeof payload.branch_id !== 'string') {
+            throw new Error('branchRemoveOp: { flow_id, branch_id } required');
         }
         return httpRequest({
             method: 'DELETE',
-            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/skills/${encodeURIComponent(payload.skill_id)}`,
+            url: `/flows/api/v1/${encodeURIComponent(payload.flow_id)}/branches/${encodeURIComponent(payload.branch_id)}`,
         });
     },
 });

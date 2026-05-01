@@ -330,7 +330,7 @@ class NodeAsToolWrapper(BaseTool):
             variables=parent_state.variables.copy(),
             content=text if isinstance(text, str) else str(text),
             messages=[],
-            skill_id=parent_state.skill_id,
+            branch_id=parent_state.branch_id,
             flow_config_version=parent_state.flow_config_version,
         )
         

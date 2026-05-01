@@ -125,7 +125,7 @@ export class FlowsSidebar extends PlatformElement {
         this.mobileOpen = false;
         this._expanded = {};
         this._flows = this.useResource('flows/flows', { autoload: true });
-        this._skillRemove = this.useOp('flows/skill_remove');
+        this._branchRemove = this.useOp('flows/branch_remove');
         this._currentFlowSel = this.select((s) => {
             const params = isPlainObject(s.router) && isPlainObject(s.router.params) ? s.router.params : {};
             return typeof params.flowId === 'string' ? params.flowId : null;
@@ -153,19 +153,19 @@ export class FlowsSidebar extends PlatformElement {
     }
 
     _onFlowAction(e) {
-        const { action, flowId, skillId } = isPlainObject(e.detail) ? e.detail : {};
+        const { action, flowId, branchId } = isPlainObject(e.detail) ? e.detail : {};
         switch (action) {
             case 'chat':
-                if (skillId) {
-                    this.navigate('flow_chat_skill', { flowId, skillId });
+                if (branchId) {
+                    this.navigate('flow_chat_branch', { flowId, branchId });
                 } else {
                     this.navigate('flow_chat', { flowId });
                 }
                 this.closeMobile();
                 break;
             case 'edit':
-                if (skillId) {
-                    this.navigate('flow_editor_skill', { flowId, skillId });
+                if (branchId) {
+                    this.navigate('flow_editor_branch', { flowId, branchId });
                 } else {
                     this.navigate('flow_editor', { flowId });
                 }
@@ -173,11 +173,11 @@ export class FlowsSidebar extends PlatformElement {
             case 'delete':
                 this._confirmDeleteFlow(flowId);
                 break;
-            case 'delete-skill':
-                this._confirmDeleteSkill(flowId, skillId);
+            case 'delete-branch':
+                this._confirmDeleteBranch(flowId, branchId);
                 break;
-            case 'create-skill':
-                this.openModal('flows.skill_create', { flowId });
+            case 'create-branch':
+                this.openModal('flows.branch_create', { flowId });
                 break;
             case 'toggle':
                 this._expanded = { ...this._expanded, [flowId]: !this._expanded[flowId] };
@@ -200,11 +200,11 @@ export class FlowsSidebar extends PlatformElement {
         await this._flows.remove(flowId);
     }
 
-    async _confirmDeleteSkill(flowId, skillId) {
+    async _confirmDeleteBranch(flowId, branchId) {
         const ok = await platformConfirm(
-            this.t('flows_sidebar.delete_skill_message', { id: skillId }),
+            this.t('flows_sidebar.delete_branch_message', { id: branchId }),
             {
-                title: this.t('flows_sidebar.delete_skill_title'),
+                title: this.t('flows_sidebar.delete_branch_title'),
                 variant: 'danger',
                 confirmVariant: 'danger',
                 confirmText: this.t('context_menu.delete'),
@@ -212,7 +212,7 @@ export class FlowsSidebar extends PlatformElement {
             },
         );
         if (!ok) return;
-        await this._skillRemove.run({ flow_id: flowId, skill_id: skillId });
+        await this._branchRemove.run({ flow_id: flowId, branch_id: branchId });
         await this._flows.get(flowId);
     }
 
@@ -232,7 +232,7 @@ export class FlowsSidebar extends PlatformElement {
     _openVariables() {
         const flowId = this._currentFlowSel.value;
         const routeKey = this._routeKeySel.value;
-        const inFlowEditor = routeKey === 'flow_editor' || routeKey === 'flow_editor_skill';
+        const inFlowEditor = routeKey === 'flow_editor' || routeKey === 'flow_editor_branch';
         if (inFlowEditor && typeof flowId === 'string' && flowId.length > 0) {
             this.openModal('flows.variables', { scope: 'flow', flowId });
             return;

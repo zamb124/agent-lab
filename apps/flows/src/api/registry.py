@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from apps.flows.src.dependencies import ContainerDep
 from core.logging import get_logger
-from apps.flows.src.models import FlowConfig, SkillConfig
+from apps.flows.src.models import FlowConfig, BranchConfig
 from apps.flows.src.services.flows_loader import get_all_flows
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 
@@ -46,13 +46,13 @@ def get_base_url(request: Request) -> str:
     return f"{scheme}://{host}"
 
 
-def build_skill_info(skill_id: str, skill: SkillConfig) -> Dict[str, Any]:
-    """Конвертирует SkillConfig в A2A формат."""
+def build_branch_info(branch_id: str, branch: BranchConfig) -> Dict[str, Any]:
+    """Конвертирует BranchConfig в элемент списка branches карточки агента (A2A)."""
     return {
-        "id": skill_id,
-        "name": skill.name,
-        "description": skill.description or "",
-        "tags": skill.tags,
+        "id": branch_id,
+        "name": branch.name,
+        "description": branch.description or "",
+        "tags": branch.tags,
         "inputModes": ["text"],
         "outputModes": ["text"],
         "examples": None,
@@ -61,7 +61,7 @@ def build_skill_info(skill_id: str, skill: SkillConfig) -> Dict[str, Any]:
 
 
 def build_flow_card(
-    config: FlowConfig, base_url: str = "", skills: Dict[str, SkillConfig] = None
+    config: FlowConfig, base_url: str = "", branches: Dict[str, BranchConfig] = None
 ) -> Dict[str, Any]:
     """
     Собирает AgentCard из FlowConfig.
@@ -70,26 +70,23 @@ def build_flow_card(
     Args:
         config: FlowConfig
         base_url: Базовый URL сервера
-        skills: Словарь skills (если не передан, берется из config или генерируется default)
+        branches: Словарь веток (если не передан, берётся из config или генерируется default)
     """
     flow_id = config.flow_id
     name = config.name
     description = config.description or ""
     tags = config.tags
-    config_skills = config.skills
+    config_branches = config.branches
 
-    # Определяем skills
-    if skills is not None:
-        effective_skills = skills
-    elif config_skills:
-        effective_skills = config_skills
+    if branches is not None:
+        effective_branches = branches
+    elif config_branches:
+        effective_branches = config_branches
     else:
-        # Генерируем default skill
-        effective_skills = {"default": SkillConfig(name=name, description=description, tags=tags)}
+        effective_branches = {"default": BranchConfig(name=name, description=description, tags=tags)}
 
-    # Конвертируем skills в A2A формат
-    skills_list = [
-        build_skill_info(skill_id, skill) for skill_id, skill in effective_skills.items()
+    branches_list = [
+        build_branch_info(branch_id, br) for branch_id, br in effective_branches.items()
     ]
 
     card_dict = {
@@ -108,7 +105,7 @@ def build_flow_card(
             "stateTransitionHistory": None,
             "extensions": None,
         },
-        "skills": skills_list,
+        "branches": branches_list,
         "tags": tags,
         "provider": None,
         "documentationUrl": None,
@@ -244,8 +241,8 @@ def _add_subflows_recursive(lines: list, parent_id: str, subflows: list, depth: 
             _add_subflows_recursive(lines, sub_safe_id, nested, depth + 1)
 
 
-def _generate_mermaid(skill_schema: Dict[str, Any]) -> str:
-    """Генерирует Mermaid код для схемы skill."""
+def _generate_mermaid(branch_schema: Dict[str, Any]) -> str:
+    """Генерирует Mermaid код для схемы ветки (branch)."""
     lines = ["flowchart TD"]
 
     lines.append("    classDef react fill:#6366f1,stroke:#818cf8,color:#fff,stroke-width:2px")
@@ -254,9 +251,9 @@ def _generate_mermaid(skill_schema: Dict[str, Any]) -> str:
     lines.append("    classDef flow fill:#ec4899,stroke:#f472b6,color:#fff,stroke-width:2px")
     lines.append("    classDef terminal fill:#374151,stroke:#6b7280,color:#fff,stroke-width:2px")
 
-    nodes = skill_schema["nodes"]
-    edges = skill_schema["edges"]
-    entry = skill_schema["entry"]
+    nodes = branch_schema["nodes"]
+    edges = branch_schema["edges"]
+    entry = branch_schema["entry"]
 
     # Собираем ноды которые реально используются в edges
     used_nodes = {entry}
@@ -341,29 +338,29 @@ def _generate_html(schema: Dict[str, Any]) -> str:
     flow_id = schema["flow_id"]
     flow_title = schema["name"]
     flow_description = schema["description"]
-    skills = schema["skills"]
+    branches_map = schema["branches"]
 
-    skill_ids = list(skills.keys())
+    branch_ids = list(branches_map.keys())
 
     # Генерируем табы и контент
     tabs_html = []
     content_html = []
 
-    for i, skill_id in enumerate(skill_ids):
-        skill = skills[skill_id]
+    for i, branch_id in enumerate(branch_ids):
+        branch_payload = branches_map[branch_id]
         active = "active" if i == 0 else ""
         hidden = "" if i == 0 else "hidden"
 
         tabs_html.append(
-            f'<button class="tab {active}" data-skill="{skill_id}">'
-            f"{skill['name']} ({skill_id})</button>"
+            f'<button class="tab {active}" data-branch="{branch_id}">'
+            f"{branch_payload['name']} ({branch_id})</button>"
         )
 
-        mermaid_code = _generate_mermaid(skill)
+        mermaid_code = _generate_mermaid(branch_payload)
         content_html.append(f"""
-        <div id="tab-{skill_id}" class="tab-content {hidden}">
-            <p class="skill-desc">{skill["description"]}</p>
-            <p class="skill-entry">Entry: <code>{skill["entry"]}</code></p>
+        <div id="tab-{branch_id}" class="tab-content {hidden}">
+            <p class="branch-desc">{branch_payload["description"]}</p>
+            <p class="branch-entry">Entry: <code>{branch_payload["entry"]}</code></p>
             <pre class="mermaid">
 {mermaid_code}
             </pre>
@@ -450,17 +447,17 @@ def _generate_html(schema: Dict[str, Any]) -> str:
         .tab-content.hidden {{
             display: none;
         }}
-        .skill-desc {{
+        .branch-desc {{
             color: #a0a0b8;
             margin-bottom: 12px;
             font-size: 14px;
         }}
-        .skill-entry {{
+        .branch-entry {{
             color: #6b6b80;
             font-size: 12px;
             margin-bottom: 20px;
         }}
-        .skill-entry code {{
+        .branch-entry code {{
             background: rgba(99, 102, 241, 0.2);
             color: #a5b4fc;
             padding: 3px 8px;
@@ -629,10 +626,10 @@ def _generate_html(schema: Dict[str, Any]) -> str:
         // Обработчик клика на табы
         document.querySelectorAll('.tab').forEach(btn => {{
             btn.addEventListener('click', () => {{
-                const skillId = btn.dataset.skill;
+                const branchId = btn.dataset.branch;
                 document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
                 document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-                document.getElementById('tab-' + skillId).classList.remove('hidden');
+                document.getElementById('tab-' + branchId).classList.remove('hidden');
                 btn.classList.add('active');
             }});
         }});
@@ -644,7 +641,7 @@ def _generate_html(schema: Dict[str, Any]) -> str:
 @router.get("/flows/{flow_id}/schema", response_class=HTMLResponse)
 async def get_flow_schema(flow_id: str, container: ContainerDep) -> HTMLResponse:
     """
-    HTML страница с визуализацией схемы агента для всех skills.
+    HTML страница с визуализацией схемы агента для всех веток (branches).
     Использует Mermaid.js для отрисовки графов.
     """
     schema = await container.flow_factory.get_flow_schema(flow_id)

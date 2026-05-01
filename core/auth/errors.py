@@ -19,7 +19,7 @@ class PermissionDeniedA2AError(BaseModel):
     """
     Ошибка отсутствия прав доступа для A2A протокола.
     
-    Используется для отказа в доступе к flow, skill или tool.
+    Используется для отказа в доступе к flow, branch или tool.
     Код -32008 - кастомный код для permission denied.
     """
     
@@ -49,13 +49,13 @@ class PermissionDeniedA2AError(BaseModel):
         )
 
     @classmethod
-    def for_skill(cls, skill_id: str, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
-        """Создает ошибку для отказа доступа к skill."""
+    def for_branch(cls, branch_id: str, flow_id: str, required_groups: list[str]) -> "PermissionDeniedA2AError":
+        """Создает ошибку для отказа доступа к ветке графа."""
         return cls(
-            message=f"Permission denied for skill '{skill_id}' in flow '{flow_id}'",
+            message=f"Permission denied for branch '{branch_id}' in flow '{flow_id}'",
             data={
-                "entity_type": "skill",
-                "entity_id": skill_id,
+                "entity_type": "branch",
+                "entity_id": branch_id,
                 "flow_id": flow_id,
                 "required_groups": required_groups,
             },

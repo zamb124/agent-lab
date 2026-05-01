@@ -8,7 +8,7 @@
  * - embed_max_height | embed-panel-max-height: число (px) или CSS
  * - embed_locale_control | embed-locale-control: 1 | 0 — показывать переключатель языка в композере
  * - embed_assistant_name | embed-assistant-name | embed_chat_title | embed-chat-title: подпись в шапке панели (имя ассистента), UTF-8 в query
- * - embed_skill | embed-skill | embed_skill_id | embed-skill-id: id skill flows (например crm для Lara); уходит в metadata A2A как skill
+ * - embed_branch | embed-branch | embed_branch_id | embed-branch-id: id ветки flow (например crm для Lara); уходит в metadata A2A как branch
  */
 
 /**
@@ -20,10 +20,10 @@
  *   panelMaxHeight?: string,
  *   showLocaleControl?: boolean,
  *   assistantTitle?: string,
- *   skillId?: string,
+ *   branchId?: string,
  * }}
  */
-function normalizeEmbedSkillId(raw) {
+function normalizeEmbedBranchId(raw) {
     if (raw == null) {
         return null;
     }
@@ -104,10 +104,10 @@ export function readEmbedChatUrlParams(search) {
         }
     }
 
-    const skillRaw = pick(['embed_skill', 'embed-skill', 'embed_skill_id', 'embed-skill-id']);
-    const skillNorm = normalizeEmbedSkillId(skillRaw);
-    if (skillNorm) {
-        out.skillId = skillNorm;
+    const branchRaw = pick(['embed_branch', 'embed-branch', 'embed_branch_id', 'embed-branch-id']);
+    const mergedNorm = normalizeEmbedBranchId(branchRaw);
+    if (mergedNorm) {
+        out.branchId = mergedNorm;
     }
 
     return out;

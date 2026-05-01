@@ -13,7 +13,7 @@
  *
  * Skip-link очищает условие (`null`).
  *
- * Сохранение идёт в editor-resource: `updateSkillsData` с новым
+ * Сохранение идёт в editor-resource: `updateBranchData` с новым
  * `edges[edgeIndex].condition` + `setDirty: true`. Backend хранит поле в
  * `Edge.condition: Optional[Union[str, Dict]]` и понимает оба формата.
  */
@@ -257,7 +257,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     }
 
     _currentEdges() {
-        const data = this._editor.state?.skillsData;
+        const data = this._editor.state?.branchData;
         if (!data || !Array.isArray(data.edges)) return [];
         return data.edges;
     }
@@ -308,7 +308,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
     _collectVariables() {
         const set = new Set();
-        const data = this._editor.state?.skillsData;
+        const data = this._editor.state?.branchData;
         if (data) {
             const variables = data.variables;
             if (variables && typeof variables === 'object') {
@@ -385,7 +385,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     }
 
     _persist(condition) {
-        const data = this._editor.state?.skillsData;
+        const data = this._editor.state?.branchData;
         if (!data || this.edgeIndex < 0) {
             this.closeAfterSave();
             return;
@@ -396,7 +396,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             return;
         }
         edges[this.edgeIndex] = { ...edges[this.edgeIndex], condition };
-        this._editor.updateSkillsData({ data: { ...data, edges } });
+        this._editor.updateBranchData({ data: { ...data, edges } });
         this._editor.setDirty({ dirty: true });
         this.closeAfterSave();
     }

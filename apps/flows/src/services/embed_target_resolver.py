@@ -15,7 +15,7 @@ class EmbedTarget:
     embed_id: str
     company_id: str
     flow_id: str
-    skill_id: str
+    branch_id: str
     allowed_origins: list[str]
     active: bool
 
@@ -38,7 +38,7 @@ async def resolve_embed_target(container: FlowContainer, embed_id: str) -> Embed
         embed_id=embed_id,
         company_id=company.company_id,
         flow_id=config.flow_id,
-        skill_id=config.skill_id,
+        branch_id=config.branch_id,
         allowed_origins=list(config.allowed_origins or []),
         active=config.status == EmbedStatus.ACTIVE,
     )

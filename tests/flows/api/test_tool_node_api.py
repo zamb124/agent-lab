@@ -403,7 +403,7 @@ class TestUpdateFlowWithCodeNode:
                     "b": {"type": "code", "code": "async def run(s):\n    return s"},
                 },
                 "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": None}],
-                "skills": {
+                "branches": {
                     "sk1": {
                         "name": "Skill",
                         "description": "",
@@ -421,9 +421,9 @@ class TestUpdateFlowWithCodeNode:
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["skills"]["sk1"]["nodes_mode"] == "merge"
-        assert body["skills"]["sk1"]["edges_mode"] == "merge"
-        assert body["skills"]["sk1"]["variables_mode"] == "merge"
+        assert body["branches"]["sk1"]["nodes_mode"] == "merge"
+        assert body["branches"]["sk1"]["edges_mode"] == "merge"
+        assert body["branches"]["sk1"]["variables_mode"] == "merge"
 
         await client.delete(f"/flows/api/v1/{flow_id}", headers=auth_headers_system)
 

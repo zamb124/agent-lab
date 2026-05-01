@@ -70,7 +70,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-llm-node-editor рендерит секции', async () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
         const el = await fixture(html`
-            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
@@ -86,7 +86,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-llm-node-editor structured_output скрывает react секцию', async () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', structured_output: true };
         const el = await fixture(html`
-            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
             </flows-llm-node-editor>
         `);
@@ -99,7 +99,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-code-node-editor — вкладки Код / Схема', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A', code: 'print(1)' };
         const el = await fixture(html`
-            <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'code'}>
             </flows-code-node-editor>
         `);
@@ -115,7 +115,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-channel-node-editor — поля channel/action', async () => {
         const node = { node_id: 'a', type: 'channel', name: 'A', channel: 'telegram', action: 'send_message', channel_config: {} };
         const el = await fixture(html`
-            <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-channel-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'channel'}>
             </flows-channel-node-editor>
         `);
@@ -132,7 +132,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-hitl-node-editor — operator_queue_slug устанавливается', async () => {
         const node = { node_id: 'a', type: 'hitl_node', name: 'A' };
         const el = await fixture(html`
-            <flows-hitl-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-hitl-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'hitl_node'} .flowVariables=${{}}>
             </flows-hitl-node-editor>
         `);
@@ -149,7 +149,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-external-api-editor — добавление параметра', async () => {
         const node = { node_id: 'a', type: 'external_api', name: 'API', url: 'https://x', method: 'POST', parameters: [] };
         const el = await fixture(html`
-            <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'external_api'}>
             </flows-external-api-editor>
         `);
@@ -165,7 +165,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-mcp-node-editor — server select', async () => {
         const node = { node_id: 'a', type: 'mcp', name: 'M' };
         const el = await fixture(html`
-            <flows-mcp-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-mcp-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'mcp'}>
             </flows-mcp-node-editor>
         `);
@@ -175,9 +175,9 @@ describe('node editors — top-level NodeConfig contract', () => {
     });
 
     it('flows-flow-node-editor — toggle ручного ID', async () => {
-        const node = { node_id: 'a', type: 'flow', name: 'F', flow_id: 'subflow_x', skill_id: 'default' };
+        const node = { node_id: 'a', type: 'flow', name: 'F', flow_id: 'subflow_x', branch_id: 'default' };
         const el = await fixture(html`
-            <flows-flow-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-flow-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'flow'}>
             </flows-flow-node-editor>
         `);
@@ -190,7 +190,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-remote-flow-editor — toggle url ↔ flow_id', async () => {
         const node = { node_id: 'a', type: 'remote_flow', name: 'R', url: 'https://api/x' };
         const el = await fixture(html`
-            <flows-remote-flow-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-remote-flow-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'remote_flow'}>
             </flows-remote-flow-editor>
         `);
@@ -206,7 +206,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-base-node-editor — rename emit события', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A' };
         const el = await fixture(html`
-            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'code'}>
             </flows-base-node-editor>
         `);
@@ -223,7 +223,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-base-node-editor — compact: одна колонка без panel-layout', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A' };
         const el = await fixture(html`
-            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'code'}>
             </flows-base-node-editor>
         `);
@@ -235,7 +235,7 @@ describe('node editors — top-level NodeConfig contract', () => {
     it('flows-base-node-editor — expanded: master-detail layout', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A' };
         const el = await fixture(html`
-            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .skillId=${'base'}
+            <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'code'} ?expanded=${true}>
             </flows-base-node-editor>
         `);

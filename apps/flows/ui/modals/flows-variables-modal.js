@@ -5,7 +5,7 @@
  *
  * Scope:
  *   - 'company' — глобальные переменные company-уровня. Источник: useResource('flows/variables').
- *   - 'flow'    — переменные конкретного flow. Источник: state.skillsData.variables
+ *   - 'flow'    — переменные конкретного flow. Источник: state.branchData.variables
  *                 (черновик editor'а). Финальная фиксация — общим Save в editor-header.
  *
  * Во flow-режиме рядом со «своими» переменными показываются глобальные
@@ -182,7 +182,7 @@ export class FlowsVariablesModal extends PlatformModal {
 
     _flowVariablesEntries() {
         const state = this._editor.state;
-        const skills = isPlainObject(state.skillsData) ? state.skillsData : null;
+        const skills = isPlainObject(state.branchData) ? state.branchData : null;
         const skillVars = skills !== null && isPlainObject(skills.variables) ? skills.variables : {};
         return Object.entries(skillVars).map(([key, raw]) => ({
             key,
@@ -256,10 +256,10 @@ export class FlowsVariablesModal extends PlatformModal {
         );
         if (!ok) return;
         const state = this._editor.state;
-        const skillsData = state.skillsData;
+        const skillsData = state.branchData;
         const nextVars = { ...skillsData.variables };
         delete nextVars[entry.key];
-        this._editor.updateSkillsData({ data: { ...skillsData, variables: nextVars } });
+        this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } });
         this._editor.setDirty({ dirty: true });
         this.toast('flows:toast.variable_applied', { type: 'success' });
     }

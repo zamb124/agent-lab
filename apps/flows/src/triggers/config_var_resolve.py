@@ -15,7 +15,7 @@ async def resolve_at_var_for_flow(
     flow_id: str,
     raw: str,
     *,
-    skill_id: str = "default",
+    branch_id: str = "default",
     config_version: Optional[str] = None,
 ) -> str:
     if not raw:
@@ -26,7 +26,7 @@ async def resolve_at_var_for_flow(
     try:
         var_map = await container.flow_factory.get_resolved_variables_map(
             flow_id,
-            skill_id,
+            branch_id,
             config_version=config_version,
         )
     except ValueError as e:

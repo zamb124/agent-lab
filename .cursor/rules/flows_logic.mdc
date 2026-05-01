@@ -1,5 +1,5 @@
 ---
-description: "Runtime flows: ноды, tools, skills, FlowInterrupt, InterruptManager"
+description: "Runtime flows: ноды, tools, ветки (branches), FlowInterrupt, InterruptManager"
 alwaysApply: false
 ---
 # Flows — краткий справочник
@@ -10,7 +10,7 @@ alwaysApply: false
 |-----|----------|
 | llm_node | LLM + tools |
 | code | Python код: execute(args, state) |
-| flow | Вызов skill (flow_id + skill_id) |
+| flow | Вызов ветки (flow_id + branch_id) |
 | remote_flow | A2A вызов удалённого flow |
 | external_api | HTTP запрос |
 | mcp | MCP tool |
@@ -35,7 +35,7 @@ NodeAsToolWrapper оборачивает ЛЮБУЮ ноду для LlmNode; `Ba
 
     tools: [
       {"tool_id": "calc", "type": "code", "code": "..."},
-      {"tool_id": "skill", "type": "flow", "flow_id": "self", "skill_id": "math"},
+      {"tool_id": "math_branch", "type": "flow", "flow_id": "self", "branch_id": "math"},
       {"tool_id": "api", "type": "external_api", "url": "..."},
     ]
 
@@ -82,15 +82,15 @@ output_mapping - куда пишем результат:
         "result": "calculation_result"  # result → state.calculation_result
     }
 
-## Skills как Tools
+## Ветки как tools (type: flow)
 
-Один flow может вызывать свои skills как tools:
+Один flow может вызывать свои ветки как tools:
 
     {
-        "tool_id": "my_skill",
+        "tool_id": "my_branch",
         "type": "flow",
-        "flow_id": "self_flow",  // тот же flow
-        "skill_id": "math_skill",
+        "flow_id": "self_flow",
+        "branch_id": "math_branch",
         "args_schema": {"x": {"type": "integer"}}
     }
 
@@ -103,8 +103,8 @@ output_mapping - куда пишем результат:
         "main": {"type": "llm_node", "prompt": "...", "tools": [...]}
       },
       "edges": [{"from_node": "main", "to_node": null}],
-      "skills": {
-        "math_skill": {"name": "Math", "entry": "calc", "nodes": {...}}
+      "branches": {
+        "math_branch": {"name": "Math", "entry": "calc", "nodes": {...}}
       }
     }
 
@@ -135,14 +135,14 @@ output_mapping - куда пишем результат:
     "triggers": {
       "tg": {
         "type": "telegram",
-        "skill_id": "default",
+        "branch_id": "default",
         "config": {"bot_token": "@var:bot_token"},
         "output_mapping": {"content": "message.text"},
         "output_actions": [...]
       }
     }
 
-У триггера задаётся **`skill_id`**: какой сценарий стартует; резолв `@var` в `config` идёт для той же пары `flow_id` + `skill_id`, что и рантайм (см. **`flows.mdc`**, `FlowFactory.get_resolved_variables_map`).
+У триггера задаётся **`branch_id`**: какой сценарий стартует; резолв `@var` в `config` идёт для той же пары `flow_id` + `branch_id`, что и рантайм (см. **`flows.mdc`**, `FlowFactory.get_resolved_variables_map`).
 
 ## ChannelNode (отправка сообщений)
 
@@ -168,7 +168,7 @@ output_mapping - куда пишем результат:
 
     state.interrupt: InterruptData          # body (union) + system (конверт)
     state.interrupt_path: List[PathItem]    # Путь к месту прерывания
-    state.nested_states: Dict[str, Data]    # Состояния вложенных вызовов (skills/tools)
+    state.nested_states: Dict[str, Data]    # Состояния вложенных вызовов (веток flow / tools)
     state.current_nodes: List[str]          # Где остановились на графе
 
 ### Сценарий 1: ask_user tool в LlmNode

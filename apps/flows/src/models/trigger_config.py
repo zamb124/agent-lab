@@ -79,9 +79,9 @@ class TriggerConfig(StrictBaseModel):
         description="Выполнять output_actions после завершения flow (без interrupt)",
     )
     
-    skill_id: str = Field(
+    branch_id: str = Field(
         default="default",
-        description="ID skill из FlowConfig.skills: какой сценарий запускать при срабатывании триггера",
+        description="ID ветки из FlowConfig.branches: какой сценарий запускать при срабатывании триггера",
     )
 
     # Runtime данные (заполняются при регистрации)

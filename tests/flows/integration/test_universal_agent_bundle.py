@@ -44,8 +44,8 @@ async def test_universal_agent_loaded_in_database(app):
     config = await container.flow_repository.get(FLOW_ID)
     assert config is not None
     assert config.flow_id == FLOW_ID
-    assert "code_focus" in config.skills
-    assert "with_rag" in config.skills
+    assert "code_focus" in config.branches
+    assert "with_rag" in config.branches
 
 
 @pytest.mark.asyncio
@@ -177,7 +177,7 @@ async def test_universal_agent_code_focus_skill_runs_calculator(
         ]
     )
     container = get_container()
-    flow = await container.flow_factory.get_flow(FLOW_ID, skill_id="code_focus")
+    flow = await container.flow_factory.get_flow(FLOW_ID, branch_id="code_focus")
     context_id = f"ua-cf-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",
@@ -209,7 +209,7 @@ async def test_universal_agent_with_rag_create_namespace(
         ]
     )
     container = get_container()
-    flow = await container.flow_factory.get_flow(FLOW_ID, skill_id="with_rag")
+    flow = await container.flow_factory.get_flow(FLOW_ID, branch_id="with_rag")
     context_id = f"ua-ragc-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",
@@ -259,7 +259,7 @@ async def test_universal_agent_with_rag_ingest_and_search(
         ]
     )
     container = get_container()
-    flow = await container.flow_factory.get_flow(FLOW_ID, skill_id="with_rag")
+    flow = await container.flow_factory.get_flow(FLOW_ID, branch_id="with_rag")
     context_id = f"ua-ragf-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",

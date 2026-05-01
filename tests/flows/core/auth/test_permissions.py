@@ -3,7 +3,7 @@
 
 Покрывает все случаи:
 - Нет прав на flow → JSON-RPC error -32008
-- Нет прав на skill → JSON-RPC error -32008
+- Нет прав на branch → JSON-RPC error -32008
 - Нет прав на tool → возвращает строку агенту
 - Есть права → успешный доступ
 - permissions_enabled=false → проверка отключена
@@ -62,29 +62,23 @@ class TestPermissionChecker:
         assert permission_checker.normalize("managers") == ["managers"]
         assert permission_checker.normalize(["managers", "users"]) == ["managers", "users"]
 
-    def test_skill_permission_inherits_from_flow(self):
-        """Skill без permission наследует от flow."""
-        # Skill permission = None, flow permission = "managers"
-        # Пользователь с "managers" имеет доступ
-        assert permission_checker.check_skill_permission(
+    def test_branch_permission_inherits_from_flow(self):
+        """Ветка без permission наследует от flow."""
+        assert permission_checker.check_branch_permission(
             ["managers"], None, "managers"
         ) is True
 
-        # Пользователь без "managers" - нет доступа
-        assert permission_checker.check_skill_permission(
+        assert permission_checker.check_branch_permission(
             ["users"], None, "managers"
         ) is False
 
-    def test_skill_permission_overrides_flow(self):
-        """Skill permission переопределяет flow permission."""
-        # Agent требует "managers", skill требует "vip"
-        # Пользователь с "vip" имеет доступ к skill
-        assert permission_checker.check_skill_permission(
+    def test_branch_permission_overrides_flow(self):
+        """Permission ветки переопределяет flow permission."""
+        assert permission_checker.check_branch_permission(
             ["vip"], "vip", "managers"
         ) is True
 
-        # Пользователь с "managers" НЕ имеет доступ к skill (требуется vip)
-        assert permission_checker.check_skill_permission(
+        assert permission_checker.check_branch_permission(
             ["managers"], "vip", "managers"
         ) is False
 
@@ -116,13 +110,13 @@ class TestPermissionDeniedA2AError:
         assert error.data["entity_type"] == "flow"
         assert error.data["entity_id"] == "my_flow"
 
-    def test_for_skill_creates_correct_message(self):
-        """for_skill создаёт правильное сообщение."""
-        error = PermissionDeniedA2AError.for_skill("my_skill", "my_flow", ["vip"])
-        assert "my_skill" in error.message
+    def test_for_branch_creates_correct_message(self):
+        """for_branch создаёт правильное сообщение."""
+        error = PermissionDeniedA2AError.for_branch("my_branch", "my_flow", ["vip"])
+        assert "my_branch" in error.message
         assert "my_flow" in error.message
-        assert error.data["entity_type"] == "skill"
-        assert error.data["entity_id"] == "my_skill"
+        assert error.data["entity_type"] == "branch"
+        assert error.data["entity_id"] == "my_branch"
 
     def test_for_tool_creates_correct_message(self):
         """for_tool создаёт правильное сообщение."""

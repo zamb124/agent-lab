@@ -375,7 +375,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         this._outputActions = [];
         this._outputTelegramExpanded = false;
         this._postFlowOutputEnabled = true;
-        this._skillId = 'default';
+        this._branchId = 'default';
         this._hydrated = false;
         this._validationError = '';
         this._verifyHintText = '';
@@ -391,7 +391,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     updated(changed) {
         super.updated?.(changed);
         if (changed.has('flowId') && this.flowId) {
-            this._ensureFlowForSkills();
+            this._ensureFlowForBranches();
         }
         if (this._hydrated) return;
         if (changed.has('trigger') || changed.has('flowId')) {
@@ -399,7 +399,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         }
     }
 
-    _ensureFlowForSkills() {
+    _ensureFlowForBranches() {
         if (!this.flowId) return;
         const ed = this._editor.state;
         const fromEditor = isPlainObject(ed.flowConfig) && ed.flowConfig.flow_id === this.flowId;
@@ -409,7 +409,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         void this._flowsCat.get(this.flowId);
     }
 
-    _flowConfigForSkillPicker() {
+    _flowConfigForBranchPicker() {
         if (!this.flowId) return null;
         const ed = this._editor.state;
         if (isPlainObject(ed.flowConfig) && ed.flowConfig.flow_id === this.flowId) {
@@ -420,31 +420,31 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         return null;
     }
 
-    _skillSelectRows() {
+    _branchSelectRows() {
         const out = [
-            { value: 'default', label: this.t('trigger_editor_modal.skill_option_default') },
+            { value: 'default', label: this.t('trigger_editor_modal.branch_option_default') },
         ];
-        const flow = this._flowConfigForSkillPicker();
-        if (!isPlainObject(flow) || !isPlainObject(flow.skills)) {
-            if (!out.some((o) => o.value === this._skillId) && asString(this._skillId).length > 0) {
-                out.push({ value: this._skillId, label: this._skillId });
+        const flow = this._flowConfigForBranchPicker();
+        if (!isPlainObject(flow) || !isPlainObject(flow.branches)) {
+            if (!out.some((o) => o.value === this._branchId) && asString(this._branchId).length > 0) {
+                out.push({ value: this._branchId, label: this._branchId });
             }
             return out;
         }
-        for (const [id, sk] of Object.entries(flow.skills)) {
+        for (const [id, sk] of Object.entries(flow.branches)) {
             if (id === 'default') {
                 continue;
             }
             if (typeof id !== 'string' || id.length === 0) {
-                throw new Error('flows-trigger-editor-modal: skills key must be non-empty string');
+                throw new Error('flows-trigger-editor-modal: branch key must be non-empty string');
             }
             const title = isPlainObject(sk) && typeof sk.name === 'string' && sk.name.length > 0
                 ? sk.name
                 : id;
             out.push({ value: id, label: `${title} (${id})` });
         }
-        if (!out.some((o) => o.value === this._skillId) && asString(this._skillId).length > 0) {
-            out.push({ value: this._skillId, label: this._skillId });
+        if (!out.some((o) => o.value === this._branchId) && asString(this._branchId).length > 0) {
+            out.push({ value: this._branchId, label: this._branchId });
         }
         return out;
     }
@@ -457,10 +457,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             this._name = t.name;
             this._type = t.type;
             this._enabled = Boolean(t.enabled);
-            if (typeof t.skill_id === 'string' && t.skill_id.length > 0) {
-                this._skillId = t.skill_id;
+            if (typeof t.branch_id === 'string' && t.branch_id.length > 0) {
+                this._branchId = t.branch_id;
             } else {
-                this._skillId = 'default';
+                this._branchId = 'default';
             }
             this._config = { ...t.config };
             const mapping = Object.keys(t.output_mapping).length > 0 ? t.output_mapping : t.input_mapping;
@@ -478,7 +478,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             this._name = '';
             this._type = '';
             this._enabled = true;
-            this._skillId = 'default';
+            this._branchId = 'default';
             this._config = {};
             this._outputMapping = [];
             this._outputActions = [];
@@ -596,7 +596,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const body = {
             type: this._type,
             config: { ...this._config },
-            skill_id: this._skillId,
+            branch_id: this._branchId,
         };
         const tid = asString(this._triggerId);
         if (tid.length > 0) {
@@ -663,19 +663,19 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const editing = Boolean(this.trigger);
         return html`
             <div class="field">
-                <label>${this.t('trigger_editor_modal.field_skill')}</label>
+                <label>${this.t('trigger_editor_modal.field_branch')}</label>
                 <select
-                    .value=${this._skillId}
+                    .value=${this._branchId}
                     @change=${(e) => {
-                    this._skillId = e.target.value;
+                    this._branchId = e.target.value;
                     this.isDirty = true;
                 }}
                 >
-                    ${this._skillSelectRows().map(
+                    ${this._branchSelectRows().map(
         (o) => html`<option value=${o.value}>${o.label}</option>`,
     )}
                 </select>
-                <span class="hint">${this.t('trigger_editor_modal.hint_skill')}</span>
+                <span class="hint">${this.t('trigger_editor_modal.hint_branch')}</span>
             </div>
 
             <div class="field">
@@ -1309,8 +1309,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         if (!this._type) {
             return { type: this.t('trigger_editor_modal.error_type_required') };
         }
-        if (!this._skillId.trim()) {
-            return { skill_id: this.t('trigger_editor_modal.error_skill_required') };
+        if (!this._branchId.trim()) {
+            return { branch_id: this.t('trigger_editor_modal.error_branch_required') };
         }
         return {};
     }
@@ -1356,7 +1356,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             output_mapping: outputMapping,
             output_actions: outputActions,
             post_flow_output_enabled: postFlow,
-            skill_id: this._skillId.trim(),
+            branch_id: this._branchId.trim(),
         };
 
         if (this.trigger) {
@@ -1370,7 +1370,7 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     output_mapping: body.output_mapping,
                     output_actions: body.output_actions,
                     post_flow_output_enabled: body.post_flow_output_enabled,
-                    skill_id: body.skill_id,
+                    branch_id: body.branch_id,
                 },
             });
         } else {

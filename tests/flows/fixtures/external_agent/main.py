@@ -21,11 +21,11 @@ AGENT_CARD = {
         "streaming": False,
         "pushNotifications": False,
     },
-    "skills": [
+    "branches": [
         {
             "id": "default",
             "name": "Default Skill",
-            "description": "Echo skill для тестов",
+            "description": "Echo branch для тестов",
             "tags": ["test"],
         }
     ],

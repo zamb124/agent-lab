@@ -49,7 +49,7 @@ async def test_embed_config_repository_basic(storage):
     assert loaded_config.embed_id == "embed_test123"
     assert loaded_config.name == "Test Widget"
     assert loaded_config.flow_id == "embed_flow_fixture"
-    assert loaded_config.skill_id == "default"
+    assert loaded_config.branch_id == "default"
     assert loaded_config.allowed_origins == ["https://example.com"]
     assert loaded_config.status == EmbedStatus.ACTIVE
     assert loaded_config.show_reasoning is True

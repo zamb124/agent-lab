@@ -31,24 +31,24 @@ class TestRegistryAgents:
             # Обязательные поля A2A протокола
             assert "name" in agent
             assert "url" in agent
-            assert "skills" in agent
+            assert "branches" in agent
             assert "version" in agent
             assert "protocolVersion" in agent
 
     @pytest.mark.asyncio
-    async def test_agent_card_has_skills(self, client):
-        """AgentCard содержит как минимум один skill."""
+    async def test_agent_card_has_branches(self, client):
+        """AgentCard содержит как минимум одну ветку (branch)."""
         response = await client.get("/flows/api/v1/registry/flows")
         agents = response.json()
 
         if len(agents) > 0:
             agent = agents[0]
-            skills = agent.get("skills", [])
+            branches = agent.get("branches", [])
 
-            assert len(skills) >= 1
-            # У каждого skill есть id и name
-            assert "id" in skills[0]
-            assert "name" in skills[0]
+            assert len(branches) >= 1
+            # У каждой ветки в карточке есть id и name
+            assert "id" in branches[0]
+            assert "name" in branches[0]
 
     @pytest.mark.asyncio
     async def test_agent_url_is_absolute(self, client):
@@ -156,7 +156,7 @@ class TestFlowSchema:
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
 
-        # example_graph имеет skills: fast_track, orders_only
+        # example_graph имеет branches: fast_track, orders_only
         assert "fast_track" in html
         assert "orders_only" in html
 

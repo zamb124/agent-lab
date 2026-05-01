@@ -1,6 +1,6 @@
 /**
  * Слой раскладка нод flow-канваса (слева направо) при отсутствии явных pos_x/pos_y.
- * Вызывается при загрузке flow в редакторе — см. canvasNeedsAutoLayout / applyAutoLayoutToSkillsData.
+ * Вызывается при загрузке flow в редакторе — см. canvasNeedsAutoLayout / applyAutoLayoutToBranchData.
  */
 
 import { isPlainObject, asNumber, getEdgeEndpoints } from './flows-resolvers.js';
@@ -10,12 +10,12 @@ export const H_GAP = 100;
 export const V_GAP = 48;
 
 /**
- * @param {unknown} skillsData
+ * @param {unknown} branchData
  * @returns {boolean}
  */
-export function canvasNeedsAutoLayout(skillsData) {
-    if (!isPlainObject(skillsData)) return false;
-    const nodes = skillsData.nodes;
+export function canvasNeedsAutoLayout(branchData) {
+    if (!isPlainObject(branchData)) return false;
+    const nodes = branchData.nodes;
     if (!isPlainObject(nodes)) return false;
     const ids = Object.keys(nodes);
     if (ids.length < 2) return false;
@@ -141,22 +141,22 @@ function nodeHeightOrThrow(id, nodes) {
 }
 
 /**
- * @param {unknown} skillsData
- * @returns {typeof skillsData}
+ * @param {unknown} branchData
+ * @returns {typeof branchData}
  */
-export function applyAutoLayoutToSkillsData(skillsData) {
-    if (!canvasNeedsAutoLayout(skillsData)) {
-        return skillsData;
+export function applyAutoLayoutToBranchData(branchData) {
+    if (!canvasNeedsAutoLayout(branchData)) {
+        return branchData;
     }
-    if (!isPlainObject(skillsData)) {
-        return skillsData;
+    if (!isPlainObject(branchData)) {
+        return branchData;
     }
-    const rawNodes = skillsData.nodes;
+    const rawNodes = branchData.nodes;
     if (!isPlainObject(rawNodes)) {
-        return skillsData;
+        return branchData;
     }
     const nodeIds = new Set(Object.keys(rawNodes));
-    const edges = Array.isArray(skillsData.edges) ? skillsData.edges : [];
+    const edges = Array.isArray(branchData.edges) ? branchData.edges : [];
     const directed = [];
     for (const e of edges) {
         const { from, to } = getEdgeEndpoints(e);
@@ -165,7 +165,7 @@ export function applyAutoLayoutToSkillsData(skillsData) {
         directed.push({ from, to });
     }
 
-    const entryRaw = skillsData.entry;
+    const entryRaw = branchData.entry;
     const entryId = typeof entryRaw === 'string' && entryRaw.length > 0 && nodeIds.has(entryRaw)
         ? entryRaw
         : null;
@@ -187,7 +187,7 @@ export function applyAutoLayoutToSkillsData(skillsData) {
     }
     const topo = topologicalOrderOrCycle(reachable, directedR);
     if ('cycle' in topo) {
-        return skillsData;
+        return branchData;
     }
     const layer = assignLayersFromTopo(topo.order, predsR);
 
@@ -233,7 +233,7 @@ export function applyAutoLayoutToSkillsData(skillsData) {
         nextNodes[id] = { ...old, pos_x: p.x, pos_y: p.y };
     }
     return {
-        ...skillsData,
+        ...branchData,
         nodes: nextNodes,
     };
 }

@@ -510,7 +510,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "Фасад confirm-first операций Lara:\n"
             "facade = get_lara_facade()\n"
-            "preview = await facade.preview_node_patch(flow_id=..., node_id=..., patch=..., skill_id='base', state=state, idempotency_key=None)\n"
+            "preview = await facade.preview_node_patch(flow_id=..., node_id=..., patch=..., branch_id='base', state=state, idempotency_key=None)\n"
             "applied = await facade.apply_node_patch(pending_action_id=..., state=state, idempotency_key=None)"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],

@@ -1,7 +1,9 @@
 """
-Traces API — OTEL-трейсы flows через Grafana Tempo.
+Traces API — OTEL-трейсы flows.
 
-Читает данные из Tempo HTTP API (не из platform_tracing PostgreSQL).
+Эндпоинт GET /traces/search читает platform_tracing (SpanRepository, PostgreSQL).
+
+Прочие маршруты /session, /task, /trace — через Grafana Tempo HTTP API.
 Ответ совместим с platform-trace-viewer: { spans: [...] } где spans — дерево.
 """
 
@@ -21,6 +23,22 @@ router = APIRouter(tags=["Traces"])
 
 _ATTR_SESSION_AGENT = "platform.session.agent"
 _ATTR_TASK_ID = "platform.task_id"
+
+
+@router.get("/search")
+async def search_traces(
+    container: ContainerDep,
+    flow_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    """Поиск трейсов в platform_tracing по optional ``flow_id``."""
+    traces, total = await container.span_repository.search_traces(
+        flow_id=flow_id,
+        limit=limit,
+        offset=offset,
+    )
+    return {"traces_count": total, "traces": traces}
 
 
 @router.get("/session/{session_id}")

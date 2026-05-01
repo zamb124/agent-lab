@@ -136,6 +136,23 @@ class LoggingConfig(BaseModel):
             "Используется flows logs API и admin logs API."
         ),
     )
+    grafana_public_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "Публичный origin Grafana без завершающего слэша (ссылки Explore для company_id system). "
+            "Пример: https://grafana.humanitec.ru."
+        ),
+    )
+    grafana_loki_datasource_uid: Optional[str] = Field(
+        default=None,
+        description=(
+            "UID источника Loki в Grafana (Provisioning). Совместно с grafana_public_url даёт logs_explore_url в ошибках для system."
+        ),
+    )
+    grafana_org_id: str = Field(
+        default="1",
+        description="orgId в URL Grafana Explore для deep-link.",
+    )
 
     def resolve_loki_query_http_base(self) -> Optional[str]:
         """

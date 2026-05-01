@@ -117,7 +117,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
                 <td>${c.name || c.embed_id}</td>
                 <td class="embed-id">${c.embed_id}</td>
                 <td>${c.flow_id || ''}</td>
-                <td>${c.skill_id || ''}</td>
+                <td>${c.branch_id || ''}</td>
                 <td><span class="status-tag ${status === 'active' ? 'active' : 'disabled'}">${status}</span></td>
                 <td>${typeof c.usage_count === 'number' ? c.usage_count : 0}</td>
                 <td class="actions">

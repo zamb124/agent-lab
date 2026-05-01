@@ -33,8 +33,8 @@ export const sessionsResource = createResourceCollection({
             if (typeof payload.flow_id === 'string' && payload.flow_id.length > 0) {
                 query.flow_id = payload.flow_id;
             }
-            if (typeof payload.skill_id === 'string' && payload.skill_id.length > 0) {
-                query.skill_id = payload.skill_id;
+            if (typeof payload.branch_id === 'string' && payload.branch_id.length > 0) {
+                query.branch_id = payload.branch_id;
             }
             if (typeof payload.date_from === 'string' && payload.date_from.length > 0) {
                 query.date_from = payload.date_from;

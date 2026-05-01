@@ -47,6 +47,7 @@ from core.logging import (
 from core.middleware.access_log import AccessLogMiddleware
 from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
+from core.middleware.platform_error_envelope import PlatformHttpErrorEnvelopeMiddleware
 from core.middleware.dev_inter_service_proxy import (
     DevInterServiceProxyMiddleware,
     DevInterServiceWsProxyMiddleware,
@@ -353,6 +354,9 @@ def create_service_app(
     app.add_middleware(DevInterServiceProxyMiddleware, service_name=service_name)
     # Тот же прокси, но для WebSocket-апгрейдов: ASGI-уровневый, BaseHTTPMiddleware WS не покрывает.
     app.add_middleware(DevInterServiceWsProxyMiddleware, service_name=service_name)
+
+    # Наружный слой — обогащение JSON ошибок (последний в цепочке add_middleware).
+    app.add_middleware(PlatformHttpErrorEnvelopeMiddleware, service_name=service_name)
 
     # Первый сегмент публичного URL: обычно совпадает с service_name.
     # Исключение — office (документы): в браузере /documents/..., задаётся

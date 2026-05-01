@@ -5,7 +5,7 @@
  * useOp('flows/editor'). Маршрутизирует по `node.type` (NodeType enum).
  *
  * Действия от base-node-editor:
- *   - 'change' { nodeId, patch } → updateSkillsData(merge node)
+ *   - 'change' { nodeId, patch } → updateBranchData(merge node)
  *   - 'rename-node' { oldId, newId } → renameNodeId(action) + bus event
  *     `flows/editor/node_id_changed` → reducer обновляет nodes/edges/entry
  *   - 'delete-node' { nodeId } → bulk_delete + локальный removeNode
@@ -15,14 +15,14 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { renderFlowsNodeEditorSurface } from './flows-node-editor-surface.js';
-import { asArray, asObject, asNumber, asString, isPlainObject, getSkillsData, getSkillsNodes } from '../../_helpers/flows-resolvers.js';
+import { asArray, asObject, asNumber, asString, isPlainObject, getBranchData, getBranchNodes } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsPropertyPanel extends PlatformElement {
     static i18nNamespace = 'flows';
 
     static properties = {
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
     };
 
     static styles = [
@@ -52,7 +52,7 @@ export class FlowsPropertyPanel extends PlatformElement {
     constructor() {
         super();
         this.flowId = '';
-        this.skillId = 'base';
+        this.branchId = 'base';
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
     }
@@ -62,13 +62,13 @@ export class FlowsPropertyPanel extends PlatformElement {
         if (!nodeId || !patch || typeof patch !== 'object') return;
         const state = this._editor.state;
         if (!state) return;
-        const skillsData = state.skillsData;
+        const skillsData = state.branchData;
         if (!skillsData || typeof skillsData !== 'object') return;
         const nodes = skillsData.nodes && typeof skillsData.nodes === 'object' ? { ...skillsData.nodes } : {};
         const node = nodes[nodeId];
         if (!node) return;
         nodes[nodeId] = { ...node, ...patch };
-        this._editor.updateSkillsData({ data: { ...skillsData, nodes } });
+        this._editor.updateBranchData({ data: { ...skillsData, nodes } });
         this._editor.setDirty({ dirty: true });
         this._editor.pushHistory({ snapshot: { ...skillsData, nodes } });
     }
@@ -77,7 +77,7 @@ export class FlowsPropertyPanel extends PlatformElement {
         const { oldId, newId } = isPlainObject(e.detail) ? e.detail : {};
         if (typeof oldId !== 'string' || typeof newId !== 'string') return;
         const state = this._editor.state;
-        const nodes = state?.skillsData?.nodes;
+        const nodes = state?.branchData?.nodes;
         if (!nodes || !(oldId in nodes)) return;
         if (newId in nodes) {
             this.toast('flows:base_node_editor.rename_collision', { type: 'error' });
@@ -98,7 +98,7 @@ export class FlowsPropertyPanel extends PlatformElement {
         const { nodeId } = isPlainObject(e.detail) ? e.detail : {};
         if (typeof nodeId !== 'string' || !nodeId) return;
         const state = this._editor.state;
-        const skillsData = state?.skillsData;
+        const skillsData = state?.branchData;
         const nodes = skillsData?.nodes;
         if (!nodes || !nodes[nodeId]) return;
         const baseId = `${nodeId}_copy`;
@@ -120,7 +120,7 @@ export class FlowsPropertyPanel extends PlatformElement {
         }
         const nextNodes = { ...nodes, [newId]: copy };
         const nextData = { ...skillsData, nodes: nextNodes };
-        this._editor.updateSkillsData({ data: nextData });
+        this._editor.updateBranchData({ data: nextData });
         this._editor.setDirty({ dirty: true });
         this._editor.pushHistory({ snapshot: nextData });
         this._editor.selectNode({ nodeId: newId });
@@ -163,7 +163,7 @@ export class FlowsPropertyPanel extends PlatformElement {
 
     _renderEditor(node, nodeId) {
         const state = asObject(this._editor.state);
-        const skillsData = isPlainObject(state.skillsData) ? state.skillsData : {};
+        const skillsData = isPlainObject(state.branchData) ? state.branchData : {};
         const flowVariables = skillsData.variables && typeof skillsData.variables === 'object' ? skillsData.variables : {};
         const graphNodes = skillsData.nodes && typeof skillsData.nodes === 'object'
             ? Object.entries(skillsData.nodes).map(([id, n]) => ({ id, name: typeof n?.name === 'string' && n.name.length > 0 ? n.name : id, type: asString(n?.type) }))
@@ -174,7 +174,7 @@ export class FlowsPropertyPanel extends PlatformElement {
             node,
             nodeId,
             flowId: this.flowId,
-            skillId: this.skillId,
+            branchId: this.branchId,
             flowVariables,
             graphNodes,
             previewExecutionState,
@@ -196,7 +196,7 @@ export class FlowsPropertyPanel extends PlatformElement {
                 <div style="padding: var(--space-3); color: var(--text-tertiary)">${this.t('property_panel.select_node')}</div>
             `;
         }
-        const skillsData = isPlainObject(state.skillsData) ? state.skillsData : { nodes: {} };
+        const skillsData = isPlainObject(state.branchData) ? state.branchData : { nodes: {} };
         const node = skillsData.nodes?.[nodeId];
         if (!node) return html`<div></div>`;
         const isInherited = asArray(state.inheritedNodeIds).includes(nodeId);

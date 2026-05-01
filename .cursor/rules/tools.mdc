@@ -134,7 +134,7 @@ Tools = inline конфиги внутри ноды / FlowConfig. Встроен
         "tool_id": "call_skill",
         "type": "flow",
         "flow_id": "helper_flow",
-        "skill_id": "translate",
+        "branch_id": "translate",
         "args_schema": {"text": {"type": "string"}}
     }
 

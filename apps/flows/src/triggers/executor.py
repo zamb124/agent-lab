@@ -115,7 +115,7 @@ class TriggerExecutor:
             session_id=session_id,
             user_id=effective_user_id,
             content=content,
-            skill_id=trigger.skill_id,
+            branch_id=trigger.branch_id,
             channel="a2a",  # Используем A2A канал для триггеров
             task_id=task_id,
             context_id=context_id,

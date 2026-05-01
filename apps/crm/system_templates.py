@@ -3873,7 +3873,7 @@ _SEED_RECRUITING = {
                 "Извлекай нового кандидата с указанием стека и текущей "
                 "стадии в работе агентства.\n"
                 "Примеры: «Иван — Senior Backend на Go, готов к "
-                "submission» → candidate stage='ready', skills=['Go', "
+                "submission» → candidate stage='ready', branches=['Go', "
                 "'Backend'].\n"
                 "НЕ создавай candidate без имени и без минимального "
                 "контекста подходимости."

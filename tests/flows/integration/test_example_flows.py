@@ -109,17 +109,17 @@ class TestExampleReactAgent:
     @pytest.mark.asyncio
     async def test_flow_has_skills(self, flow_config):
         """Agent имеет skills."""
-        assert "concise" in flow_config.skills
-        assert "detailed" in flow_config.skills
-        assert "no_subflow" in flow_config.skills
-        assert "direct_mode" in flow_config.skills
+        assert "concise" in flow_config.branches
+        assert "detailed" in flow_config.branches
+        assert "no_subflow" in flow_config.branches
+        assert "direct_mode" in flow_config.branches
 
     @pytest.mark.asyncio
     async def test_skill_concise_overrides_variables(self, flow_config, container):
         """Skill 'concise' переопределяет max_response_length."""
         from apps.flows.src.models.flow_config import FlowVariableConfig
         
-        skill = flow_config.skills["concise"]
+        skill = flow_config.branches["concise"]
         assert skill.name == "Краткие ответы"
         var = skill.variables["max_response_length"]
         assert isinstance(var, FlowVariableConfig)
@@ -127,7 +127,7 @@ class TestExampleReactAgent:
         assert skill.variables_mode == "merge"
 
         # Применяем skill
-        effective = container.flow_factory._apply_skill(flow_config, "concise")
+        effective = container.flow_factory._apply_branch(flow_config, "concise")
         assert effective["variables"]["max_response_length"] == "200"
         # Остальные variables сохраняются (merge mode)
         assert effective["variables"]["company_name"] == "@var:company_name"
@@ -137,23 +137,23 @@ class TestExampleReactAgent:
         """Skill 'detailed' переопределяет max_response_length."""
         from apps.flows.src.models.flow_config import FlowVariableConfig
         
-        skill = flow_config.skills["detailed"]
+        skill = flow_config.branches["detailed"]
         assert skill.name == "Подробные ответы"
         var = skill.variables["max_response_length"]
         assert isinstance(var, FlowVariableConfig)
         assert var.value == "2000"
 
-        effective = container.flow_factory._apply_skill(flow_config, "detailed")
+        effective = container.flow_factory._apply_branch(flow_config, "detailed")
         assert effective["variables"]["max_response_length"] == "2000"
 
     @pytest.mark.asyncio
     async def test_skill_no_subflow_replaces_nodes(self, flow_config, container):
         """Skill 'no_subflow' заменяет nodes."""
-        skill = flow_config.skills["no_subflow"]
+        skill = flow_config.branches["no_subflow"]
         assert skill.name == "Без вложенного subflow"
         assert skill.nodes_mode == "replace"
 
-        effective = container.flow_factory._apply_skill(flow_config, "no_subflow")
+        effective = container.flow_factory._apply_branch(flow_config, "no_subflow")
         # Должен быть только один node из skill
         assert "main" in effective["nodes"]
         # tools без субагента
@@ -162,11 +162,11 @@ class TestExampleReactAgent:
     @pytest.mark.asyncio
     async def test_skill_direct_mode_changes_entry(self, flow_config, container):
         """Skill 'direct_mode' меняет точку входа."""
-        skill = flow_config.skills["direct_mode"]
+        skill = flow_config.branches["direct_mode"]
         assert skill.name == "Прямой вход в subflow"
         assert skill.entry == "direct_subflow"
 
-        effective = container.flow_factory._apply_skill(flow_config, "direct_mode")
+        effective = container.flow_factory._apply_branch(flow_config, "direct_mode")
         assert effective["entry"] == "direct_subflow"
 
     @pytest.mark.asyncio
@@ -174,7 +174,7 @@ class TestExampleReactAgent:
         """FlowFactory применяет entry из skill."""
         container = get_container()
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="direct_mode")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="direct_mode")
         assert flow is not None
         assert flow.entry == "direct_subflow"
 
@@ -245,7 +245,7 @@ class TestExampleReactAgent:
         """FlowFactory применяет skill при создании flow."""
         container = get_container()
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="concise")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="concise")
         assert flow is not None
         # Variables из skill должны быть применены
         assert flow.variables.get("max_response_length") == "200"
@@ -363,17 +363,17 @@ class TestExampleGraphAgent:
     @pytest.mark.asyncio
     async def test_flow_has_skills(self, flow_config):
         """Agent имеет skills."""
-        assert "fast_track" in flow_config.skills
-        assert "orders_only" in flow_config.skills
+        assert "fast_track" in flow_config.branches
+        assert "orders_only" in flow_config.branches
 
     @pytest.mark.asyncio
     async def test_skill_fast_track_replaces_edges(self, flow_config, container):
         """Skill 'fast_track' заменяет edges: LLM-процессоры → null, hitl-ноды → formatter."""
-        skill = flow_config.skills["fast_track"]
+        skill = flow_config.branches["fast_track"]
         assert skill.name == "Быстрая обработка"
         assert skill.edges_mode == "replace"
 
-        effective = container.flow_factory._apply_skill(flow_config, "fast_track")
+        effective = container.flow_factory._apply_branch(flow_config, "fast_track")
 
         # LLM-процессоры ведут в null (пропуск formatter)
         for processor in ["order_processor", "complaint_processor", "general_processor"]:
@@ -394,11 +394,11 @@ class TestExampleGraphAgent:
     @pytest.mark.asyncio
     async def test_skill_orders_only_merges_nodes(self, flow_config, container):
         """Skill 'orders_only' мержит nodes с новым classifier."""
-        skill = flow_config.skills["orders_only"]
+        skill = flow_config.branches["orders_only"]
         assert skill.name == "Только заказы"
         assert skill.nodes_mode == "merge"
 
-        effective = container.flow_factory._apply_skill(flow_config, "orders_only")
+        effective = container.flow_factory._apply_branch(flow_config, "orders_only")
         
         # Classifier заменен на упрощенный
         classifier_code = effective["nodes"]["classifier"]["code"]
@@ -554,13 +554,13 @@ class TestExampleFlowsIntegration:
         assert ask_user.code is not None, "ask_user должен иметь inline code"
 
     @pytest.mark.asyncio
-    async def test_skill_ids_preserved_in_state(self, app):
-        """skill_id сохраняется в state при выполнении."""
+    async def test_branch_id_preserved_in_state(self, app):
+        """branch_id сохраняется в state при выполнении."""
         container = get_container()
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="concise")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="concise")
         
-        # Проверяем что skill применен через variables
+        # Проверяем что ветка применена через variables
         assert flow.variables.get("max_response_length") == "200"
 
 
@@ -672,7 +672,7 @@ class TestExampleReactE2E:
         ])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", skill_id="concise")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="concise")
         
         # Проверяем переменные
         assert flow.variables.get("max_response_length") == "200"
@@ -698,7 +698,7 @@ class TestExampleReactE2E:
         ])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", skill_id="detailed")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="detailed")
         
         assert flow.variables.get("max_response_length") == "2000"
         
@@ -721,7 +721,7 @@ class TestExampleReactE2E:
         ])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", skill_id="direct_mode")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="direct_mode")
         
         # Entry изменен на direct_subflow
         assert flow.entry == "direct_subflow"
@@ -748,7 +748,7 @@ class TestExampleReactE2E:
         ])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", skill_id="no_subflow")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="no_subflow")
         
         state = ExecutionState(
             task_id="test-task",
@@ -868,7 +868,7 @@ class TestExampleGraphE2E:
         ])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="fast_track")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
         
         state = ExecutionState(
             task_id="test-task",
@@ -892,7 +892,7 @@ class TestExampleGraphE2E:
         ])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="orders_only")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
         
         # Жалоба идет в general (так как complaint route убран)
         state = ExecutionState(
@@ -1048,7 +1048,7 @@ class TestExampleFlowsEdgeCases:
         ])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", skill_id="unknown_skill")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="unknown_skill")
         
         # Используется базовый entry
         assert flow.entry == "main"

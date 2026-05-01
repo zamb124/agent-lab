@@ -177,7 +177,7 @@ def _operator_task_dump(task: Any) -> dict[str, Any]:
         "status",
         "claimed_by_user_id",
         "end_user_id",
-        "skill_id",
+        "branch_id",
         "created_at",
         "updated_at",
     ):

@@ -105,7 +105,7 @@ def upgrade() -> None:
         "evaluation_results",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
         sa.Column("flow_id", sa.String(), nullable=False),
-        sa.Column("skill_id", sa.String(), nullable=False),
+        sa.Column("branch_id", sa.String(), nullable=False),
         sa.Column("run_date", sa.Date(), nullable=False),
         sa.Column("iteration", sa.Integer(), nullable=False),
         sa.Column("test_case_id", sa.String(), nullable=False),
@@ -119,11 +119,11 @@ def upgrade() -> None:
         sa.Column("error", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.UniqueConstraint(
-            "flow_id", "skill_id", "run_date", "iteration", "test_case_id",
+            "flow_id", "branch_id", "run_date", "iteration", "test_case_id",
             name="uq_evaluation_results",
         ),
     )
-    op.create_index("ix_evaluation_results_flow_skill", "evaluation_results", ["flow_id", "skill_id"])
+    op.create_index("ix_evaluation_results_flow_skill", "evaluation_results", ["flow_id", "branch_id"])
 
     op.create_table(
         "scheduled_tasks",

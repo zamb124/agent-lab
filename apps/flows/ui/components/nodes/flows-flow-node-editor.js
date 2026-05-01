@@ -3,7 +3,7 @@
  *
  * Поля точно по `FlowNode` (apps/flows/src/runtime/nodes.py):
  *   - flow_id (combobox: список доступных flows + ручной ввод)
- *   - skill_id (default 'default')
+ *   - branch_id (default 'default')
  */
 
 import { html, css } from 'lit';
@@ -15,7 +15,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
         nodeConfig: { type: Object },
         nodeType: { type: String },
         flowVariables: { type: Object },
@@ -58,7 +58,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         super();
         this.nodeId = '';
         this.flowId = '';
-        this.skillId = '';
+        this.branchId = '';
         this.nodeConfig = null;
         this.nodeType = 'flow';
         this.flowVariables = null;
@@ -96,32 +96,32 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         return typeof inner.flow_id === 'string' && inner.flow_id.length > 0 ? inner.flow_id : '';
     }
 
-    _resolvedSkillId(cfg) {
+    _resolvedBranchId(cfg) {
         if (cfg === null) {
             return 'default';
         }
-        const root = typeof cfg.skill_id === 'string' && cfg.skill_id.length > 0 ? cfg.skill_id : '';
+        const root = typeof cfg.branch_id === 'string' && cfg.branch_id.length > 0 ? cfg.branch_id : '';
         if (root.length > 0) {
             return root;
         }
         const inner = asObject(cfg.config);
-        return typeof inner.skill_id === 'string' && inner.skill_id.length > 0 ? inner.skill_id : 'default';
+        return typeof inner.branch_id === 'string' && inner.branch_id.length > 0 ? inner.branch_id : 'default';
     }
 
-    _skillIdOptions(resolvedFlowId, skillId) {
+    _branchIdOptions(resolvedFlowId, branchId) {
         const detail = this._flows.byId && typeof this._flows.byId === 'object' && resolvedFlowId.length > 0
             ? this._flows.byId[resolvedFlowId]
             : null;
         const sk = detail !== null && detail !== undefined && typeof detail === 'object'
-            && detail.skills !== null && detail.skills !== undefined && typeof detail.skills === 'object'
-            ? Object.keys(detail.skills)
+            && detail.branches !== null && detail.branches !== undefined && typeof detail.branches === 'object'
+            ? Object.keys(detail.branches)
             : [];
         if (sk.length === 0) {
-            return skillId.length > 0 ? [skillId] : ['default'];
+            return branchId.length > 0 ? [branchId] : ['default'];
         }
         const set = new Set(sk);
-        if (skillId.length > 0) {
-            set.add(skillId);
+        if (branchId.length > 0) {
+            set.add(branchId);
         }
         const arr = Array.from(set);
         arr.sort((a, b) => {
@@ -144,15 +144,15 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         this._emitPatch({ flow_id: e.target.value });
     }
 
-    _onSkillId(e) {
-        this._emitPatch({ skill_id: e.target.value });
+    _onBranchId(e) {
+        this._emitPatch({ branch_id: e.target.value });
     }
 
     render() {
         const cfg = asObject(this.nodeConfig);
         const flowId = this._resolvedFlowId(cfg);
-        const skillId = this._resolvedSkillId(cfg);
-        const skillOptions = this._skillIdOptions(flowId, skillId);
+        const branchId = this._resolvedBranchId(cfg);
+        const branchOptions = this._branchIdOptions(flowId, branchId);
         const flows = Array.isArray(this._flows.items) ? this._flows.items.filter((f) => f && f.flow_id !== this.flowId) : [];
         const isInList = flows.some((f) => f.flow_id === flowId);
         const useCustom = this._showCustom || (flowId.length > 0 && !isInList);
@@ -160,7 +160,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
-                .skillId=${this.skillId}
+                .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
                 .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'flow'}
                 .flowVariables=${this.flowVariables}
@@ -191,13 +191,13 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                         `}
                     </div>
                     <div class="field">
-                        <label>${this.t('flow_node_editor.skill_id')}</label>
+                        <label>${this.t('flow_node_editor.branch_id')}</label>
                         <select
-                            .value=${skillId}
+                            .value=${branchId}
                             ?disabled=${flowId.length === 0}
-                            @change=${this._onSkillId}
+                            @change=${this._onBranchId}
                         >
-                            ${skillOptions.map(
+                            ${branchOptions.map(
                                 (sid) => html`<option value=${sid}>${sid}</option>`,
                             )}
                         </select>

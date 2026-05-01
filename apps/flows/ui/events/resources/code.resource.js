@@ -59,11 +59,11 @@ export const codeEditorStateOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/flows/api/v1/code/editor-state' },
     request: async ({ payload }) => {
         if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
-            throw new Error('codeEditorStateOp: { flow_id, skill_id? } required');
+            throw new Error('codeEditorStateOp: { flow_id, branch_id? } required');
         }
         const params = new URLSearchParams({
             flow_id: payload.flow_id,
-            skill_id: typeof payload.skill_id === 'string' && payload.skill_id.length > 0 ? payload.skill_id : 'default',
+            branch_id: typeof payload.branch_id === 'string' && payload.branch_id.length > 0 ? payload.branch_id : 'default',
         });
         return httpRequest({
             method: 'GET',

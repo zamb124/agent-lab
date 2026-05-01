@@ -7,7 +7,7 @@ URN (Universal Resource Name) для ресурсов платформы.
 - urn:iman:agent:customer_service
 - urn:iman:node:summarizer
 - urn:iman:tool:calculator
-- urn:iman:skill:refund_processing
+- urn:iman:branch:refund_processing
 
 URN обеспечивает:
 1. Явное разделение namespace (больше никаких "это tool или node?")
@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 
 # Типы ресурсов платформы
 URNNamespace = Literal["iman"]
-URNType = Literal["agent", "node", "tool", "skill", "variable"]
+URNType = Literal["agent", "node", "tool", "branch", "variable"]
 
 
 class URN(BaseModel):
@@ -75,7 +75,9 @@ class URN(BaseModel):
         if namespace != "iman":
             raise ValueError(f"Namespace должен быть 'iman', получено: '{namespace}'")
         
-        valid_types = ["agent", "node", "tool", "skill", "variable"]
+        valid_types = ["agent", "node", "tool", "branch", "variable"]
+        if resource_type == "skill":
+            resource_type = "branch"
         if resource_type not in valid_types:
             raise ValueError(
                 f"Неизвестный тип ресурса: '{resource_type}'. "
@@ -218,33 +220,33 @@ class ToolURN(URN):
         return cls(id=tool_id)
 
 
-class SkillURN(URN):
+class BranchURN(URN):
     """
-    URN для skills агента.
-    
+    URN для ветки графа (branch) flow.
+
     Примеры:
-    - urn:iman:skill:refund_processing
-    - urn:iman:skill:order_tracking
+    - urn:iman:branch:refund_processing
+    - urn:iman:branch:order_tracking
     """
-    
-    type: Literal["skill"] = Field(default="skill", description="Тип: skill")
-    
+
+    type: Literal["branch"] = Field(default="branch", description="Тип: branch")
+
     @classmethod
-    def create(cls, skill_id: str) -> "SkillURN":
+    def create(cls, branch_id: str) -> "BranchURN":
         """
-        Создаёт SkillURN из ID.
-        
+        Создаёт BranchURN из ID.
+
         Args:
-            skill_id: ID skill
-        
+            branch_id: ID ветки
+
         Returns:
-            SkillURN объект
-        
+            BranchURN объект
+
         Examples:
-            >>> SkillURN.create("refund_processing")
-            SkillURN('urn:iman:skill:refund_processing')
+            >>> BranchURN.create("refund_processing")
+            BranchURN('urn:iman:branch:refund_processing')
         """
-        return cls(id=skill_id)
+        return cls(id=branch_id)
 
 
 class VariableURN(URN):
@@ -370,7 +372,7 @@ __all__ = [
     "AgentURN",
     "NodeURN",
     "ToolURN",
-    "SkillURN",
+    "BranchURN",
     "VariableURN",
     "is_urn",
     "extract_id",

@@ -154,14 +154,14 @@ class TestMockViaFlowConfig:
         assert response.status_code == 200
 
 
-class TestMockViaSkillConfig:
+class TestMockViaBranchConfig:
     """Тесты mock через skill конфигурацию."""
 
     @pytest.mark.asyncio
     async def test_skill_mock_tools(self, client: AsyncClient, unique_id: str):
         """Skill с mock для tools."""
         flow_id = "example_react"
-        skill_id = "test_tools"  # Skill с mock для tools
+        branch_id = "test_tools"  # Skill с mock для tools
         
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -170,7 +170,7 @@ class TestMockViaSkillConfig:
                 "id": f"test-{unique_id}",
                 "method": "message/send",
                 "params": {
-                    "skillId": skill_id,
+                    "skillId": branch_id,
                     "message": make_message("Use calculator")
                 }
             }
@@ -182,7 +182,7 @@ class TestMockViaSkillConfig:
     async def test_skill_mock_llm(self, client: AsyncClient, unique_id: str):
         """Skill с mock для LLM."""
         flow_id = "example_react"
-        skill_id = "test_llm"  # Skill с mock LLM
+        branch_id = "test_llm"  # Skill с mock LLM
         
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -191,7 +191,7 @@ class TestMockViaSkillConfig:
                 "id": f"test-{unique_id}",
                 "method": "message/send",
                 "params": {
-                    "skillId": skill_id,
+                    "skillId": branch_id,
                     "message": {
                         "role": "user",
                         "parts": [{"kind": "text", "text": "Hello"}]
@@ -221,7 +221,7 @@ class TestMockHierarchy:
     async def test_metadata_overrides_skill(self, client: AsyncClient, unique_id: str):
         """Metadata.__mock__ переопределяет skill mock."""
         flow_id = "example_react"
-        skill_id = "test_llm"  # Skill с mock LLM
+        branch_id = "test_llm"  # Skill с mock LLM
         
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -230,7 +230,7 @@ class TestMockHierarchy:
                 "id": f"test-{unique_id}",
                 "method": "message/send",
                 "params": {
-                    "skillId": skill_id,
+                    "skillId": branch_id,
                     "message": make_message("Hello"),
                     "metadata": {
                         "__mock__": {
@@ -260,7 +260,7 @@ class TestMockHierarchy:
     async def test_tools_merge_across_levels(self, client: AsyncClient, unique_id: str):
         """Tools мержатся между уровнями."""
         flow_id = "example_react"
-        skill_id = "test_tools"  # Skill с mock для calculator
+        branch_id = "test_tools"  # Skill с mock для calculator
         
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -269,7 +269,7 @@ class TestMockHierarchy:
                 "id": f"test-{unique_id}",
                 "method": "message/send",
                 "params": {
-                    "skillId": skill_id,
+                    "skillId": branch_id,
                     "message": make_message("Test"),
                     "metadata": {
                         "__mock__": {
@@ -294,7 +294,7 @@ class TestMockWithGraphAgent:
     async def test_mock_function_node(self, client: AsyncClient, unique_id: str):
         """Mock function node в graph flow."""
         flow_id = "example_graph"
-        skill_id = "test_function_nodes"  # Skill с mock для function нод
+        branch_id = "test_function_nodes"  # Skill с mock для function нод
         
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -303,7 +303,7 @@ class TestMockWithGraphAgent:
                 "id": f"test-{unique_id}",
                 "method": "message/send",
                 "params": {
-                    "skillId": skill_id,
+                    "skillId": branch_id,
                     "message": make_message("Process order")
                 }
             }
@@ -315,7 +315,7 @@ class TestMockWithGraphAgent:
     async def test_mock_llm_node(self, client: AsyncClient, unique_id: str):
         """Mock llm_node node в graph flow."""
         flow_id = "example_graph"
-        skill_id = "test_llm_nodes"  # Skill с mock для react нод
+        branch_id = "test_llm_nodes"  # Skill с mock для react нод
         
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -324,7 +324,7 @@ class TestMockWithGraphAgent:
                 "id": f"test-{unique_id}",
                 "method": "message/send",
                 "params": {
-                    "skillId": skill_id,
+                    "skillId": branch_id,
                     "message": {
                         "role": "user",
                         "parts": [{"kind": "text", "text": "Hello"}]
@@ -339,7 +339,7 @@ class TestMockWithGraphAgent:
     async def test_mock_full_graph(self, client: AsyncClient, unique_id: str):
         """Full mock для всего graph flow."""
         flow_id = "example_graph"
-        skill_id = "test_full_graph"  # Skill с full mock
+        branch_id = "test_full_graph"  # Skill с full mock
         
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -348,7 +348,7 @@ class TestMockWithGraphAgent:
                 "id": f"test-{unique_id}",
                 "method": "message/send",
                 "params": {
-                    "skillId": skill_id,
+                    "skillId": branch_id,
                     "message": make_message("Test full mock")
                 }
             }

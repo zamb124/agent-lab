@@ -13,7 +13,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import { asObject, isPlainObject, getSkillsNodes } from '../../_helpers/flows-resolvers.js';
+import { asObject, isPlainObject, getBranchNodes } from '../../_helpers/flows-resolvers.js';
 import { computeFitViewBox, FLOWS_EDITOR_DEFAULT_VIEWBOX } from '../../_helpers/flows-viewbox.js';
 
 const ZOOM_FACTOR = 1.2;
@@ -93,7 +93,7 @@ export class FlowsBottomToolbar extends PlatformElement {
     }
 
     _fitView() {
-        const nodes = Object.values(getSkillsNodes(this._editor.state));
+        const nodes = Object.values(getBranchNodes(this._editor.state));
         const vb = computeFitViewBox(nodes);
         if (vb === null) {
             this._setViewBox({ ...FLOWS_EDITOR_DEFAULT_VIEWBOX });

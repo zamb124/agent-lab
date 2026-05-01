@@ -1,14 +1,14 @@
 /**
- * flows-skills-tabs — табы skills с кнопками удаления и создания.
+ * flows-branches-tabs — табы веток (branches) с кнопками удаления и создания.
  *
- * Источник: useResource('flows/flows').get(flowId) → flow.skills (объект).
+ * Источник: useResource('flows/flows').get(flowId) → flow.branches (объект).
  *
  * Actions:
- *   - select skill → this.navigate('flow_editor' | 'flow_editor_skill', ...)
- *   - delete skill → useOp('flows/skill_remove').run({ flow_id, skill_id })
- *   - create skill → this.openModal('flows.skill_create', { flowId })
+ *   - select branch → this.navigate('flow_editor' | 'flow_editor_branch', ...)
+ *   - delete branch → useOp('flows/branch_remove').run({ flow_id, branch_id })
+ *   - create branch → this.openModal('flows.branch_create', { flowId })
  *
- * `base` — синтетический skill, не редактируется и не удаляется.
+ * `base` — синтетическая базовая ветка, не редактируется и не удаляется.
  */
 
 import { html, css } from 'lit';
@@ -16,10 +16,10 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { asArray } from '../../_helpers/flows-resolvers.js';
 
-export class FlowsSkillsTabs extends PlatformElement {
+export class FlowsBranchesTabs extends PlatformElement {
     static properties = {
         flowId: { type: String },
-        activeSkillId: { type: String, attribute: 'active-skill-id' },
+        activeBranchId: { type: String, attribute: 'active-branch-id' },
     };
 
     static styles = [
@@ -83,7 +83,7 @@ export class FlowsSkillsTabs extends PlatformElement {
                 flex-shrink: 0;
             }
             .tab-close:hover { color: var(--error); }
-            .add-skill-btn {
+            .add-branch-btn {
                 display: inline-flex;
                 align-items: center;
                 gap: 4px;
@@ -100,69 +100,69 @@ export class FlowsSkillsTabs extends PlatformElement {
                 flex-shrink: 0;
                 white-space: nowrap;
             }
-            .add-skill-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-subtle); }
+            .add-branch-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-subtle); }
         `,
     ];
 
     constructor() {
         super();
         this.flowId = '';
-        this.activeSkillId = 'base';
+        this.activeBranchId = 'base';
         this._flows = this.useResource('flows/flows');
-        this._skillDelete = this.useOp('flows/skill_remove');
+        this._branchRemove = this.useOp('flows/branch_remove');
     }
 
-    _selectSkill(skillId) {
-        if (skillId === 'base') {
+    _selectBranch(branchId) {
+        if (branchId === 'base') {
             this.navigate('flow_editor', { flowId: this.flowId });
         } else {
-            this.navigate('flow_editor_skill', { flowId: this.flowId, skillId });
+            this.navigate('flow_editor_branch', { flowId: this.flowId, branchId });
         }
     }
 
     _create() {
-        this.openModal('flows.skill_create', { flowId: this.flowId });
+        this.openModal('flows.branch_create', { flowId: this.flowId });
     }
 
-    async _deleteSkill(e, skillId) {
+    async _deleteBranch(e, branchId) {
         e.stopPropagation();
-        if (!this.flowId || skillId === 'base') return;
-        await this._skillDelete.run({ flow_id: this.flowId, skill_id: skillId });
-        if (this.activeSkillId === skillId) {
+        if (!this.flowId || branchId === 'base') return;
+        await this._branchRemove.run({ flow_id: this.flowId, branch_id: branchId });
+        if (this.activeBranchId === branchId) {
             this.navigate('flow_editor', { flowId: this.flowId });
         }
     }
 
     render() {
         const flow = asArray(this._flows.items).find((f) => f && f.flow_id === this.flowId);
-        const skillIds = flow && flow.skills ? Object.keys(flow.skills) : [];
+        const branchIds = flow && flow.branches ? Object.keys(flow.branches) : [];
         return html`
             <div class="tabs-row">
-                <div class="tab-wrap" ?active=${this.activeSkillId === 'base'}>
-                    <button class="tab" type="button" @click=${() => this._selectSkill('base')}>
-                        ${this.t('skills_tabs.base')}
+                <div class="tab-wrap" ?active=${this.activeBranchId === 'base'}>
+                    <button class="tab" type="button" @click=${() => this._selectBranch('base')}>
+                        ${this.t('branches_tabs.base')}
                     </button>
                 </div>
-                ${skillIds.map((sid) => html`
-                    <div class="tab-wrap" ?active=${this.activeSkillId === sid}>
-                        <button class="tab" type="button" @click=${() => this._selectSkill(sid)}>
-                            ${flow.skills[sid] && flow.skills[sid].name ? flow.skills[sid].name : sid}
+                ${branchIds.map((bid) => html`
+                    <div class="tab-wrap" ?active=${this.activeBranchId === bid}>
+                        <button class="tab" type="button" @click=${() => this._selectBranch(bid)}>
+                            ${flow.branches[bid] && flow.branches[bid].name ? flow.branches[bid].name : bid}
                         </button>
                         <button
                             class="tab-close"
                             type="button"
-                            title=${this.t('skills_tabs.delete')}
-                            @click=${(e) => this._deleteSkill(e, sid)}
+                            title=${this.t('branches_tabs.delete')}
+                            @click=${(e) => this._deleteBranch(e, bid)}
                         >×</button>
                     </div>
                 `)}
-                <button class="add-skill-btn" type="button" @click=${this._create}>
+                <button class="add-branch-btn" type="button" @click=${this._create}>
                     <platform-icon name="plus" size="14"></platform-icon>
-                    ${this.t('skills_tabs.add')}
+                    ${this.t('branches_tabs.add')}
                 </button>
             </div>
         `;
     }
 }
 
-customElements.define('flows-skills-tabs', FlowsSkillsTabs);
+customElements.define('flows-branches-tabs', FlowsBranchesTabs);

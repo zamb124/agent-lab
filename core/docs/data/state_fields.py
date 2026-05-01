@@ -39,7 +39,7 @@ STATE_FIELDS: List[Dict[str, Any]] = [
         "readonly": True,
     },
     {
-        "name": "skill_id",
+        "name": "branch_id",
         "type": "str",
         "description": "Активный skill (по умолчанию `default`).",
         "readonly": True,

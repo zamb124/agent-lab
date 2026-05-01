@@ -27,7 +27,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         onSave: { type: Object, attribute: false },
         toolRef: { type: Object, attribute: false },
         flowId: { type: String, attribute: false },
-        skillId: { type: String, attribute: false },
+        branchId: { type: String, attribute: false },
         _node: { state: true },
         _loadPhase: { state: true },
         _registryToolId: { state: true },
@@ -68,7 +68,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         this.onSave = null;
         this.toolRef = null;
         this.flowId = '';
-        this.skillId = 'base';
+        this.branchId = 'base';
         this._node = null;
         this._loadPhase = 'idle';
         this._registryToolId = null;
@@ -93,7 +93,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
 
     _graphNodesList() {
         const st = asObject(this._editor.state);
-        const skillsData = isPlainObject(st.skillsData) ? st.skillsData : {};
+        const skillsData = isPlainObject(st.branchData) ? st.branchData : {};
         const raw = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
         return Object.entries(raw).map(([id, n]) => ({
             id,
@@ -122,7 +122,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         }
         const { tool_id: toolId, raw } = normalizeToolRef(this.toolRef);
         const st = asObject(this._editor.state);
-        const skillsData = isPlainObject(st.skillsData) ? st.skillsData : {};
+        const skillsData = isPlainObject(st.branchData) ? st.branchData : {};
         const graphNodes = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
         if (graphNodes[toolId] !== undefined) {
             this._loadPhase = 'error';
@@ -207,7 +207,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             return html`<div class="body-wrap">${this.t('embedded_tool_config.error')}</div>`;
         }
         const st = asObject(this._editor.state);
-        const skillsData = isPlainObject(st.skillsData) ? st.skillsData : {};
+        const skillsData = isPlainObject(st.branchData) ? st.branchData : {};
         const flowVariables = isPlainObject(skillsData.variables) ? skillsData.variables : {};
         const node = asObject(this._node);
         const id = asString(node.node_id);
@@ -215,7 +215,7 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             node,
             nodeId: id,
             flowId: this.flowId,
-            skillId: this.skillId,
+            branchId: this.branchId,
             flowVariables,
             graphNodes: this._graphNodesList(),
             previewExecutionState: st.previewExecutionState,

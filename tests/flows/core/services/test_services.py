@@ -207,8 +207,8 @@ class TestFlowsLoader:
             assert tg_flow is not None
             assert "tg_react" in tg_flow.triggers
             assert "tg_echo" in tg_flow.triggers
-            assert tg_flow.triggers["tg_react"].skill_id == "react_skill"
-            assert tg_flow.triggers["tg_echo"].skill_id == "echo_skill"
+            assert tg_flow.triggers["tg_react"].branch_id == "react_skill"
+            assert tg_flow.triggers["tg_echo"].branch_id == "echo_skill"
 
     @pytest.mark.asyncio
     async def test_load_tools_to_db(self, app):
@@ -250,7 +250,7 @@ class TestFlowDiscoveryService:
             return_value={
                 "name": "Test Agent",
                 "description": "Test Description",
-                "skills": [{"id": "default", "name": "Default Skill"}],
+                "branches": [{"id": "default", "name": "Default Skill"}],
             }
         )
         return client

@@ -21,7 +21,7 @@
     }
   },
   "edges": [],
-  "skills": {
+  "branches": {
     "analyze": {
       "name": "AI Analysis",
       "description": "Анализ текста и извлечение entities/relationships",

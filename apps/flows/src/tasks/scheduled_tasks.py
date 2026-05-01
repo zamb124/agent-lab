@@ -179,7 +179,7 @@ async def _execute_message_task(
         context_id=session_id,
         session_id=session_id,
         content=content,
-        skill_id="default",
+        branch_id="default",
         is_resume=False,
         files_data=[],
         message=None,

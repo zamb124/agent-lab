@@ -219,13 +219,13 @@ GET /flows/a2a/{flow_id}/skills
 ### Получение skill
 
 ```bash
-GET /flows/a2a/{flow_id}/skills/{skill_id}
+GET /flows/a2a/{flow_id}/skills/{branch_id}
 ```
 
 ### Tools в skill
 
 ```bash
-GET /flows/a2a/{flow_id}/skills/{skill_id}/tools
+GET /flows/a2a/{flow_id}/skills/{branch_id}/tools
 ```
 
 ### Создание skill
@@ -235,7 +235,7 @@ POST /flows/a2a/{flow_id}/skills
 Content-Type: application/json
 
 {
-  "skill_id": "my-skill",
+  "branch_id": "my-skill",
   "name": "My Skill",
   "description": "Skill description",
   ...
@@ -245,7 +245,7 @@ Content-Type: application/json
 ### Обновление skill
 
 ```bash
-PUT /flows/a2a/{flow_id}/skills/{skill_id}
+PUT /flows/a2a/{flow_id}/skills/{branch_id}
 Content-Type: application/json
 
 {
@@ -257,7 +257,7 @@ Content-Type: application/json
 ### Удаление skill
 
 ```bash
-DELETE /flows/a2a/{flow_id}/skills/{skill_id}
+DELETE /flows/a2a/{flow_id}/skills/{branch_id}
 ```
 
 ### Schema для создания skill

@@ -182,13 +182,13 @@ class FlowsReadContextArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     flow_id: str = Field(..., min_length=1, description="ID flow в сервисе flows.")
-    skill_id: Optional[str] = Field(
+    branch_id: Optional[str] = Field(
         None,
-        description="ID skill. Для базового графа передай base или оставь пустым.",
+        description="ID ветки (branch). Для базового графа передай base или оставь пустым.",
     )
     node_id: Optional[str] = Field(
         None,
-        description="ID ноды в выбранном графе. Если не передан, вернётся только контекст flow/skill.",
+        description="ID ноды в выбранном графе. Если не передан, вернётся только контекст flow/branch.",
     )
 
 
@@ -202,9 +202,9 @@ class FlowsPatchNodeArgs(BaseModel):
         min_length=2,
         description="JSON-объект изменений ноды. Пример: {\"prompt\": \"...\"}.",
     )
-    skill_id: Optional[str] = Field(
+    branch_id: Optional[str] = Field(
         None,
-        description="ID skill. Для base можно не передавать.",
+        description="ID ветки (branch). Для base можно не передавать.",
     )
     mode: Literal["propose", "apply"] = Field(
         "propose",
@@ -646,7 +646,7 @@ async def push_embed_blocks(blocks_json: str, state: Optional[dict] = None) -> s
 @tool(
     name="flows_read_context",
     description=(
-        "Возвращает контекст flow/skill/node для Lara в сервисе flows: текущий граф, "
+        "Возвращает контекст flow/branch/node для Lara в сервисе flows: текущий граф, "
         "конфиг ноды и метаданные для принятия решения."
     ),
     tags=["flows", "lara", "query"],
@@ -655,7 +655,7 @@ async def push_embed_blocks(blocks_json: str, state: Optional[dict] = None) -> s
         {
             "success": True,
             "flow_id": args.get("flow_id", "flow_mock"),
-            "skill_id": args.get("skill_id", "base"),
+            "branch_id": args.get("branch_id", "base"),
             "node_id": args.get("node_id"),
             "blocks": [{"type": "text", "text": "Mock: контекст flow получен."}],
         },
@@ -664,38 +664,46 @@ async def push_embed_blocks(blocks_json: str, state: Optional[dict] = None) -> s
 )
 async def flows_read_context(
     flow_id: str,
-    skill_id: Optional[str] = None,
+    branch_id: Optional[str] = None,
     node_id: Optional[str] = None,
     state: Optional[dict] = None,
 ) -> str:
-    def normalize_skill_id(raw_skill_id: Optional[str]) -> str:
-        if raw_skill_id is None:
+    def normalize_branch_id(raw_branch_id: Optional[str]) -> str:
+        if raw_branch_id is None:
             return "base"
-        cleaned_skill_id = raw_skill_id.strip()
-        if not cleaned_skill_id or cleaned_skill_id == "default":
+        cleaned = raw_branch_id.strip()
+        if not cleaned or cleaned == "default":
             return "base"
-        return cleaned_skill_id
+        return cleaned
 
-    def resolve_node_scope(flow_data: Dict[str, Any], resolved_skill: str) -> Dict[str, Any]:
-        if resolved_skill == "base":
+    def resolve_node_scope(flow_data: Dict[str, Any], resolved_branch: str) -> Dict[str, Any]:
+        if resolved_branch == "base":
             nodes = flow_data.get("nodes", {})
             if not isinstance(nodes, dict):
                 raise ValueError("Flow base nodes are invalid")
             return nodes
-        skills = flow_data.get("skills") or {}
-        skill = skills.get(resolved_skill)
-        if not isinstance(skill, dict):
-            raise ValueError(f"Skill '{resolved_skill}' not found in flow '{flow_data.get('flow_id')}'")
-        nodes = skill.get("nodes")
+        branch_map = flow_data.get("branches")
+        if not isinstance(branch_map, dict):
+            branch_map = {}
+        branch_payload = branch_map.get(resolved_branch)
+        if not isinstance(branch_payload, dict):
+            raise ValueError(
+                f"Ветка '{resolved_branch}' не найдена во flow '{flow_data.get('flow_id')}'"
+            )
+        nodes = branch_payload.get("nodes")
         if not isinstance(nodes, dict):
-            raise ValueError(f"Skill '{resolved_skill}' has no nodes")
+            raise ValueError(f"У ветки '{resolved_branch}' нет объекта nodes")
         return nodes
 
-    def require_node(flow_data: Dict[str, Any], resolved_skill: str, required_node_id: str) -> Dict[str, Any]:
-        nodes = resolve_node_scope(flow_data, resolved_skill)
+    def require_node(
+        flow_data: Dict[str, Any], resolved_branch: str, required_node_id: str
+    ) -> Dict[str, Any]:
+        nodes = resolve_node_scope(flow_data, resolved_branch)
         node = nodes.get(required_node_id)
         if not isinstance(node, dict):
-            raise ValueError(f"Node '{required_node_id}' not found in skill '{resolved_skill}'")
+            raise ValueError(
+                f"Node '{required_node_id}' not found in branch '{resolved_branch}'"
+            )
         return node
 
     client = ServiceClient()
@@ -703,15 +711,15 @@ async def flows_read_context(
     if not isinstance(flow_config, dict):
         raise ValueError("Invalid flow response")
 
-    resolved_skill_id = normalize_skill_id(skill_id)
+    resolved_branch_id = normalize_branch_id(branch_id)
     selected_node = None
     if node_id:
-        selected_node = require_node(flow_config, resolved_skill_id, node_id)
+        selected_node = require_node(flow_config, resolved_branch_id, node_id)
 
     payload = {
         "success": True,
         "flow_id": flow_id,
-        "skill_id": resolved_skill_id,
+        "branch_id": resolved_branch_id,
         "node_id": node_id or None,
         "flow": flow_config,
         "node": selected_node,
@@ -719,7 +727,7 @@ async def flows_read_context(
             {
                 "type": "card",
                 "title": flow_config.get("name") or flow_id,
-                "subtitle": f"Flow: {flow_id} | Skill: {resolved_skill_id}",
+                "subtitle": f"Flow: {flow_id} | Branch: {resolved_branch_id}",
             }
         ],
     }
@@ -738,7 +746,7 @@ async def flows_read_context(
         {
             "success": True,
             "flow_id": args.get("flow_id", "flow_mock"),
-            "skill_id": args.get("skill_id", "base"),
+            "branch_id": args.get("branch_id", "base"),
             "node_id": args.get("node_id", "main"),
             "mode": args.get("mode", "apply"),
             "blocks": [{"type": "text", "text": "Mock: patch ноды обработан."}],
@@ -750,7 +758,7 @@ async def flows_patch_node(
     flow_id: str,
     node_id: str,
     patch_json: str,
-    skill_id: Optional[str] = None,
+    branch_id: Optional[str] = None,
     mode: Literal["propose", "apply"] = "propose",
     pending_action_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
@@ -759,19 +767,19 @@ async def flows_patch_node(
     if state is None:
         raise ValueError("state is required")
 
-    def normalize_skill_id(raw_skill_id: Optional[str]) -> str:
-        if raw_skill_id is None:
+    def normalize_branch_id(raw_branch_id: Optional[str]) -> str:
+        if raw_branch_id is None:
             return "base"
-        cleaned_skill_id = raw_skill_id.strip()
-        if not cleaned_skill_id or cleaned_skill_id == "default":
+        cleaned = raw_branch_id.strip()
+        if not cleaned or cleaned == "default":
             return "base"
-        return cleaned_skill_id
+        return cleaned
 
     patch = json.loads(patch_json)
     if not isinstance(patch, dict):
         raise ValueError("patch_json must be a JSON object")
 
-    resolved_skill_id = normalize_skill_id(skill_id)
+    resolved_branch_id = normalize_branch_id(branch_id)
     facade = get_lara_facade()
 
     if mode == "propose":
@@ -779,7 +787,7 @@ async def flows_patch_node(
             flow_id=flow_id,
             node_id=node_id,
             patch=patch,
-            skill_id=resolved_skill_id,
+            branch_id=resolved_branch_id,
             state=state,
             idempotency_key=idempotency_key,
         )
@@ -792,7 +800,7 @@ async def flows_patch_node(
             "action": action,
             "patch_kind": "node",
             "flow_id": flow_id,
-            "skill_id": resolved_skill_id,
+            "branch_id": resolved_branch_id,
             "node_id": node_id,
             "changes": patch,
             "open_editor": True,
@@ -805,12 +813,12 @@ async def flows_patch_node(
             "arguments": {
                 "pending_action_id": action["pending_action_id"],
                 "flow_id": flow_id,
-                "skill_id": resolved_skill_id,
+                "branch_id": resolved_branch_id,
                 "node_id": node_id,
             },
             "context": {
                 "flow_id": flow_id,
-                "skill_id": resolved_skill_id,
+                "branch_id": resolved_branch_id,
                 "node_id": node_id,
                 "patch_kind": "node",
             },
@@ -832,7 +840,7 @@ async def flows_patch_node(
                 "success": True,
                 "mode": mode,
                 "flow_id": flow_id,
-                "skill_id": resolved_skill_id,
+                "branch_id": resolved_branch_id,
                 "node_id": node_id,
                 "pending_action_id": action["pending_action_id"],
                 "action": action,
@@ -859,7 +867,7 @@ async def flows_patch_node(
         "action": action,
         "patch_kind": "node",
         "flow_id": flow_id,
-        "skill_id": resolved_skill_id,
+        "branch_id": resolved_branch_id,
         "node_id": node_id,
         "changes": patch,
         "open_editor": True,
@@ -875,7 +883,7 @@ async def flows_patch_node(
         "success": True,
         "mode": mode,
         "flow_id": flow_id,
-        "skill_id": resolved_skill_id,
+        "branch_id": resolved_branch_id,
         "node_id": node_id,
         "pending_action_id": pending_action_id,
         "node_before": node_before,

@@ -246,7 +246,7 @@ async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_
     assert "embed_id" in data
     assert data["name"] == "Test Widget"
     assert data["flow_id"] == "test_agent"
-    assert data["skill_id"] == "default"
+    assert data["branch_id"] == "default"
     assert data["allowed_origins"] == ["https://example.com", "https://test.com"]
     assert data["status"] == "active"
     assert data["theme"] == "dark"
@@ -563,7 +563,7 @@ async def test_issue_embed_session_token(frontend_client: AsyncClient, test_auth
     assert payload["token"]
     assert payload["token_type"] == "Bearer"
     assert payload["flow_id"] == "test_agent"
-    assert payload["skill_id"] == "default"
+    assert payload["branch_id"] == "default"
 
     deny_response = await frontend_client.post(
         f"/frontend/api/embed/configs/{embed_id}/session-token",

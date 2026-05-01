@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     canvasNeedsAutoLayout,
-    applyAutoLayoutToSkillsData,
+    applyAutoLayoutToBranchData,
     H_GAP,
 } from '../../../../apps/flows/ui/_helpers/flow-graph-auto-layout.js';
 import { FLOW_NODE_W } from '../../../../apps/flows/ui/_helpers/flows-viewbox.js';
@@ -35,7 +35,7 @@ describe('flow-graph-auto-layout', () => {
             ],
             entry: 'a',
         };
-        const out = applyAutoLayoutToSkillsData(inData);
+        const out = applyAutoLayoutToBranchData(inData);
         expect(out).not.toBe(inData);
         const colW = FLOW_NODE_W + H_GAP;
         expect(out.nodes.a.pos_x).toBe(0);
@@ -56,7 +56,7 @@ describe('flow-graph-auto-layout', () => {
             ],
             entry: 'r',
         };
-        const out = applyAutoLayoutToSkillsData(inData);
+        const out = applyAutoLayoutToBranchData(inData);
         const colW = FLOW_NODE_W + H_GAP;
         expect(out.nodes.r.pos_x).toBe(0);
         expect(out.nodes.b.pos_x).toBe(colW);
@@ -77,14 +77,14 @@ describe('flow-graph-auto-layout', () => {
             ],
             entry: 'a',
         };
-        const out = applyAutoLayoutToSkillsData(inData);
+        const out = applyAutoLayoutToBranchData(inData);
         const colW = FLOW_NODE_W + H_GAP;
         expect(out.nodes.a.pos_x).toBe(0);
         expect(out.nodes.b.pos_x).toBe(colW);
         expect(out.nodes.u.pos_x).toBe(2 * colW);
     });
 
-    it('цикл: не меняет skillsData (та же ссылка)', () => {
+    it('цикл: не меняет branchData (та же ссылка)', () => {
         const inData = {
             nodes: { a: { type: 'code' }, b: { type: 'code' } },
             edges: [
@@ -93,7 +93,7 @@ describe('flow-graph-auto-layout', () => {
             ],
             entry: 'a',
         };
-        const out = applyAutoLayoutToSkillsData(inData);
+        const out = applyAutoLayoutToBranchData(inData);
         expect(out).toBe(inData);
     });
 

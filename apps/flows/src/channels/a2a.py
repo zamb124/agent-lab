@@ -57,6 +57,17 @@ from apps.flows.src.utils import extract_json_from_response
 logger = get_logger(__name__)
 
 
+def _branch_id_from_message_metadata(metadata: Optional[Dict]) -> str:
+    if not metadata:
+        return "default"
+    b = metadata.get("branch")
+    if b is not None:
+        s = str(b).strip()
+        if s:
+            return s
+    return "default"
+
+
 def _get_evaluation_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
     """Извлекает параметры evaluation из metadata."""
     if not metadata:
@@ -372,27 +383,27 @@ class A2AChannel(BaseChannel):
         """
         set_current_channel(self)
 
+        branch_for_perm = _branch_id_from_message_metadata(params.metadata)
+        await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
+
         # Проверяем evaluation mode
         eval_metadata = _get_evaluation_metadata(params.metadata)
         if eval_metadata and eval_metadata.get("test_case_id"):
+            eval_task_id = params.message.task_id or str(uuid.uuid4())
             # Собираем все события и формируем Task
-            events = [event async for event in self._run_evaluation(params, eval_metadata)]
+            events = [
+                event
+                async for event in self._run_evaluation(params, eval_metadata, task_id=eval_task_id)
+            ]
             return await _build_task_from_events(
                 events=events,
-                task_id=str(uuid.uuid4()),
+                task_id=eval_task_id,
                 context_id=params.message.context_id or str(uuid.uuid4()),
                 input_message=params.message,
                 flow_id=self.flow_id,
             )
 
         # Обычный режим
-        skill_id = "default"
-        if params.metadata and "skill" in params.metadata:
-            skill_id = params.metadata["skill"]
-
-        user_groups = self._get_user_groups_from_context(context)
-        await self.check_permissions(user_groups, skill_id)
-
         prepared = await self._prepare_a2a_params(params)
 
         # A2A Section 3.4.3: follow-up при активном operator takeover
@@ -441,6 +452,7 @@ class A2AChannel(BaseChannel):
         self,
         params: MessageSendParams,
         eval_metadata: Dict,
+        task_id: str,
     ) -> AsyncGenerator[Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
         """
         Запускает evaluation тест через EvaluationService и yield'ит A2A события.
@@ -451,18 +463,14 @@ class A2AChannel(BaseChannel):
         container = get_container()
         test_case_id = eval_metadata["test_case_id"]
 
-        skill_id = "default"
-        if params.metadata and "skill" in params.metadata:
-            skill_id = params.metadata["skill"]
-
-        task_id = str(uuid.uuid4())
+        branch_id = _branch_id_from_message_metadata(params.metadata)
         context_id = params.message.context_id or str(uuid.uuid4())
 
         service = container.evaluation_service
 
         try:
             async for event in service.run_test_stream(
-                self.flow_id, skill_id, test_case_id, task_id=task_id
+                self.flow_id, branch_id, test_case_id, task_id=task_id
             ):
                 event_type = event.get("type")
 
@@ -588,22 +596,18 @@ class A2AChannel(BaseChannel):
         """
         set_current_channel(self)
 
+        branch_for_perm = _branch_id_from_message_metadata(params.metadata)
+        await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
+
         # Проверяем evaluation mode
         eval_metadata = _get_evaluation_metadata(params.metadata)
         if eval_metadata and eval_metadata.get("test_case_id"):
-            async for event in self._run_evaluation(params, eval_metadata):
+            eval_task_id = params.message.task_id or str(uuid.uuid4())
+            async for event in self._run_evaluation(params, eval_metadata, task_id=eval_task_id):
                 yield event
             return
 
         # Обычный режим
-        skill_id = "default"
-        if params.metadata and "skill" in params.metadata:
-            skill_id = params.metadata["skill"]
-
-        user_groups = self._get_user_groups_from_context(context)
-        await self.check_permissions(user_groups, skill_id)
-
-        logger.info(f"[on_message_stream] Starting for flow_id={self.flow_id}")
         prepared = await self._prepare_a2a_params(params)
 
         # A2A Section 3.4.3: follow-up при активном operator takeover

@@ -37,13 +37,6 @@
   "variables": {
     "company_name": "@var:company_name"
   },
-  "skills": {
-    "with_preprocessing": {
-      "name": "С предобработкой",
-      "description": "Skill с нодой предобработки входных данных",
-      "entry": "preprocessor"
-    }
-  },
   "permission": [
     "admin",
     "developers"
@@ -57,5 +50,12 @@
       "from": "preprocessor",
       "to": null
     }
-  ]
+  ],
+  "branches": {
+    "with_preprocessing": {
+      "name": "С предобработкой",
+      "description": "Skill с нодой предобработки входных данных",
+      "entry": "preprocessor"
+    }
+  }
 }

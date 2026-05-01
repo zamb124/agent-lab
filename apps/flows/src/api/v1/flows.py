@@ -18,7 +18,7 @@ from core.context import get_context
 from core.logging import get_logger
 from core.pagination import OffsetPage, ListResponse
 from core.ui_events import publish_ui_event_to_user
-from apps.flows.src.models import Edge, FlowConfig, SkillConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig, MergeMode
+from apps.flows.src.models import Edge, FlowConfig, BranchConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig, MergeMode
 from apps.flows.src.services.bundle_node_repair import (
     get_bundle_base_nodes_for_flow,
     repair_node_map_with_canonical_top_level,
@@ -288,8 +288,8 @@ class EdgeRequest(BaseModel):
     condition: Optional[str] = None
 
 
-class SkillRequest(BaseModel):
-    """Skill в запросе"""
+class BranchRequest(BaseModel):
+    """Ветка (branch) в запросе"""
 
     name: str
     description: str = ""
@@ -303,8 +303,8 @@ class SkillRequest(BaseModel):
     variables_mode: Optional[str] = None
 
 
-class SkillResponse(BaseModel):
-    """Skill в ответе"""
+class BranchResponse(BaseModel):
+    """Ветка (branch) в ответе"""
 
     name: str
     description: str = ""
@@ -318,12 +318,12 @@ class SkillResponse(BaseModel):
     variables_mode: Optional[str] = None
 
 
-def _skill_config_to_response(skill: SkillConfig) -> SkillResponse:
-    """Конвертирует SkillConfig в SkillResponse."""
+def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
+    """Конвертирует BranchConfig в BranchResponse."""
     edges = None
-    if skill.edges:
+    if branch_cfg.edges:
         edges = []
-        for e in skill.edges:
+        for e in branch_cfg.edges:
             if e is None:
                 continue
             edges.append({
@@ -333,49 +333,49 @@ def _skill_config_to_response(skill: SkillConfig) -> SkillResponse:
             })
         if not edges:
             edges = None
-    
+
     # Конвертируем mode в строку (может быть Enum или уже строка)
     nodes_mode = None
-    if skill.nodes_mode:
-        nodes_mode = skill.nodes_mode.value if hasattr(skill.nodes_mode, 'value') else str(skill.nodes_mode)
-    
+    if branch_cfg.nodes_mode:
+        nodes_mode = branch_cfg.nodes_mode.value if hasattr(branch_cfg.nodes_mode, 'value') else str(branch_cfg.nodes_mode)
+
     edges_mode = None
-    if skill.edges_mode:
-        edges_mode = skill.edges_mode.value if hasattr(skill.edges_mode, 'value') else str(skill.edges_mode)
-    
+    if branch_cfg.edges_mode:
+        edges_mode = branch_cfg.edges_mode.value if hasattr(branch_cfg.edges_mode, 'value') else str(branch_cfg.edges_mode)
+
     variables_mode = None
-    if skill.variables_mode:
-        variables_mode = skill.variables_mode.value if hasattr(skill.variables_mode, 'value') else str(skill.variables_mode)
-    
-    return SkillResponse(
-        name=skill.name,
-        description=skill.description,
-        tags=skill.tags,
-        entry=skill.entry,
-        nodes=skill.nodes,
+    if branch_cfg.variables_mode:
+        variables_mode = branch_cfg.variables_mode.value if hasattr(branch_cfg.variables_mode, 'value') else str(branch_cfg.variables_mode)
+
+    return BranchResponse(
+        name=branch_cfg.name,
+        description=branch_cfg.description,
+        tags=branch_cfg.tags,
+        entry=branch_cfg.entry,
+        nodes=branch_cfg.nodes,
         edges=edges,
-        variables=skill.variables,
+        variables=branch_cfg.variables,
         nodes_mode=nodes_mode,
         edges_mode=edges_mode,
         variables_mode=variables_mode,
     )
 
 
-def _skill_request_to_config(
-    skill_id: str,
-    skill: SkillRequest,
-    existing: Optional[SkillConfig] = None,
-) -> SkillConfig:
-    """Конвертирует SkillRequest в SkillConfig."""
+def _branch_request_to_config(
+    branch_id: str,
+    branch_req: BranchRequest,
+    existing: Optional[BranchConfig] = None,
+) -> BranchConfig:
+    """Конвертирует BranchRequest в BranchConfig."""
     edges = None
-    if skill.edges:
+    if branch_req.edges:
         edges = [
             Edge(
                 from_node=e.get("from") or e.get("from_node"),
                 to_node=e.get("to") or e.get("to_node"),
                 condition=e.get("condition"),
             )
-            for e in skill.edges
+            for e in branch_req.edges
         ]
 
     def _mode(
@@ -392,17 +392,17 @@ def _skill_request_to_config(
     ex_n = existing.nodes_mode if existing is not None else None
     ex_e = existing.edges_mode if existing is not None else None
     ex_v = existing.variables_mode if existing is not None else None
-    return SkillConfig(
-        name=skill.name,
-        description=skill.description,
-        tags=skill.tags,
-        entry=skill.entry,
-        nodes=skill.nodes,
+    return BranchConfig(
+        name=branch_req.name,
+        description=branch_req.description,
+        tags=branch_req.tags,
+        entry=branch_req.entry,
+        nodes=branch_req.nodes,
         edges=edges,
-        variables=skill.variables,
-        nodes_mode=_mode(skill.nodes_mode, ex_n, MergeMode.REPLACE),
-        edges_mode=_mode(skill.edges_mode, ex_e, MergeMode.REPLACE),
-        variables_mode=_mode(skill.variables_mode, ex_v, MergeMode.MERGE),
+        variables=branch_req.variables,
+        nodes_mode=_mode(branch_req.nodes_mode, ex_n, MergeMode.REPLACE),
+        edges_mode=_mode(branch_req.edges_mode, ex_e, MergeMode.REPLACE),
+        variables_mode=_mode(branch_req.variables_mode, ex_v, MergeMode.MERGE),
     )
 
 
@@ -417,7 +417,7 @@ class FlowCreateRequest(BaseModel):
     edges: List[Dict[str, Any]]
     variables: Dict[str, Any] = {}
     tags: List[str] = []
-    skills: Dict[str, SkillRequest] = {}
+    branches: Dict[str, BranchRequest] = {}
     evaluation: Optional[Dict[str, Any]] = None
     triggers: Dict[str, Any] = {}
     resources: Dict[str, Any] = {}
@@ -438,7 +438,7 @@ class FlowResponse(BaseModel):
     edges: Optional[List[Dict[str, Any]]] = None
     variables: Dict[str, Any] = {}
     tags: List[str] = []
-    skills: Dict[str, SkillResponse] = {}
+    branches: Dict[str, BranchResponse] = {}
     evaluation: Optional[Dict[str, Any]] = None
     hidden: bool = False
     has_bundle_update: bool = False
@@ -580,9 +580,9 @@ async def list_flows(
 
     result = []
     for f in flows:
-        skills_response = {
-            skill_id: _skill_config_to_response(skill)
-            for skill_id, skill in (f.skills or {}).items()
+        branches_response = {
+            branch_id: _branch_config_to_response(branch_cfg)
+            for branch_id, branch_cfg in (f.branches or {}).items()
         }
         evaluation_dict = None
         if f.evaluation:
@@ -611,7 +611,7 @@ async def list_flows(
                     for e in f.edges
                 ],
                 "variables": f.variables,
-                "skills": skills_response,
+                "branches": branches_response,
                 "evaluation": evaluation_dict,
             })
         # EXTERNAL flow (A2A endpoint)
@@ -775,9 +775,9 @@ async def create_flow(
         for e in request.edges
     ]
 
-    skills = {
-        skill_id: _skill_request_to_config(skill_id, skill, None)
-        for skill_id, skill in request.skills.items()
+    branches_payload = {
+        branch_id: _branch_request_to_config(branch_id, branch_req, None)
+        for branch_id, branch_req in request.branches.items()
     }
 
     flow_config = FlowConfig(
@@ -789,16 +789,16 @@ async def create_flow(
         edges=edges,
         variables=request.variables,
         tags=request.tags,
-        skills=skills,
+        branches=branches_payload,
         evaluation=request.evaluation,
         source="api",
     )
 
     await container.flow_repository.set(flow_config)
 
-    skills_response = {
-        skill_id: _skill_config_to_response(skill)
-        for skill_id, skill in flow_config.skills.items()
+    branches_response = {
+        branch_id: _branch_config_to_response(branch_cfg)
+        for branch_id, branch_cfg in flow_config.branches.items()
     }
 
 
@@ -816,7 +816,7 @@ async def create_flow(
         ],
         variables=flow_config.variables,
         tags=flow_config.tags,
-        skills=skills_response,
+        branches=branches_response,
         evaluation=request.evaluation,
         hidden=getattr(flow_config, 'hidden', False),
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
@@ -841,16 +841,16 @@ async def get_flow(
             else:
                 evaluation_dict = flow_cfg.evaluation
         
-        skills_response = {}
-        if flow_cfg.skills:
-            for skill_id, skill in flow_cfg.skills.items():
+        branches_response = {}
+        if flow_cfg.branches:
+            for branch_id, branch_cfg in flow_cfg.branches.items():
                 try:
-                    skills_response[skill_id] = _skill_config_to_response(skill)
+                    branches_response[branch_id] = _branch_config_to_response(branch_cfg)
                 except Exception as e:
-                    logger.error(f"Ошибка конвертации skill '{skill_id}': {e}", exc_info=True)
+                    logger.error(f"Ошибка конвертации ветки '{branch_id}': {e}", exc_info=True)
                     raise HTTPException(
                         status_code=500,
-                        detail=f"Ошибка обработки skill '{skill_id}': {str(e)}"
+                        detail=f"Ошибка обработки ветки '{branch_id}': {str(e)}"
                     )
         
         edges_list = []
@@ -887,7 +887,7 @@ async def get_flow(
             edges=edges_list,
             variables=flow_cfg.variables or {},
             tags=flow_cfg.tags or [],
-            skills=skills_response,
+            branches=branches_response,
             evaluation=evaluation_dict,
             hidden=getattr(flow_cfg, 'hidden', False),
             url=_generate_flow_url(flow_cfg.flow_id, flow_cfg.type, getattr(flow_cfg, 'url', None)),
@@ -957,17 +957,17 @@ async def update_flow(
     merged_top_nodes = merge_incoming_node_dict_for_persist(
         dict(request.nodes), existing.nodes or {}
     )
-    skills: Dict[str, SkillConfig] = {}
-    for skill_id, sk in request.skills.items():
-        ex = (existing.skills or {}).get(skill_id)
+    branches: Dict[str, BranchConfig] = {}
+    for branch_id, branch_req in request.branches.items():
+        ex = (existing.branches or {}).get(branch_id)
         ex_n = (ex.nodes if ex else None) or {}
-        if sk.nodes is None:
-            merged_n = sk.nodes
+        if branch_req.nodes is None:
+            merged_n = branch_req.nodes
         else:
-            merged_n = merge_incoming_node_dict_for_persist(dict(sk.nodes), ex_n)
-        ex_cfg = (existing.skills or {}).get(skill_id)
-        skills[skill_id] = _skill_request_to_config(
-            skill_id, sk.model_copy(update={"nodes": merged_n}), ex_cfg
+            merged_n = merge_incoming_node_dict_for_persist(dict(branch_req.nodes), ex_n)
+        ex_cfg = (existing.branches or {}).get(branch_id)
+        branches[branch_id] = _branch_request_to_config(
+            branch_id, branch_req.model_copy(update={"nodes": merged_n}), ex_cfg
         )
 
     # Инлайним tools - заменяем tool_id на полные конфиги с кодом
@@ -1002,7 +1002,7 @@ async def update_flow(
         edges=edges,
         variables=request.variables,
         tags=request.tags,
-        skills=skills,
+        branches=branches,
         evaluation=request.evaluation,
         source=existing.source,
         triggers=triggers,
@@ -1020,9 +1020,9 @@ async def update_flow(
             payload={"flow_id": flow_id, "version": flow_config.version or ""},
         )
 
-    skills_response = {
-        skill_id: _skill_config_to_response(skill)
-        for skill_id, skill in flow_config.skills.items()
+    branches_response = {
+        branch_id: _branch_config_to_response(branch_cfg)
+        for branch_id, branch_cfg in flow_config.branches.items()
     }
 
     triggers_response = {
@@ -1044,7 +1044,7 @@ async def update_flow(
         ],
         variables=flow_config.variables,
         tags=flow_config.tags,
-        skills=skills_response,
+        branches=branches_response,
         evaluation=request.evaluation,
         hidden=getattr(flow_config, 'hidden', False),
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
@@ -1112,7 +1112,7 @@ async def bulk_delete_nodes(
         edges=new_edges,
         variables=existing.variables or {},
         tags=existing.tags or [],
-        skills=existing.skills or {},
+        branches=existing.branches or {},
         evaluation=existing.evaluation,
         source=existing.source,
         triggers=existing.triggers or {},
@@ -1171,7 +1171,7 @@ async def update_flow_metadata(
         edges=existing.edges or [],
         variables=existing.variables or {},
         tags=existing.tags or [],
-        skills=existing.skills or {},
+        branches=existing.branches or {},
         evaluation=existing.evaluation,
         source=existing.source,
         triggers=existing.triggers or {},
@@ -1223,9 +1223,9 @@ async def get_version(
     if version_cfg is None:
         raise HTTPException(status_code=404, detail="Version not found")
     
-    skills_response = {
-        skill_id: _skill_config_to_response(skill)
-        for skill_id, skill in (version_cfg.skills or {}).items()
+    branches_response = {
+        branch_id: _branch_config_to_response(branch_cfg)
+        for branch_id, branch_cfg in (version_cfg.branches or {}).items()
     }
     
     edges_list = [
@@ -1244,7 +1244,7 @@ async def get_version(
         edges=edges_list,
         variables=version_cfg.variables or {},
         tags=version_cfg.tags or [],
-        skills=skills_response,
+        branches=branches_response,
         hidden=getattr(version_cfg, 'hidden', False),
         url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, getattr(version_cfg, 'url', None)),
         source=getattr(version_cfg, "source", None) or "manual",

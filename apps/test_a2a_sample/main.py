@@ -70,7 +70,7 @@ def create_app():
         url=os.getenv("AGENT_URL", "http://localhost:8005"),
         version="1.0.0",
         capabilities=AgentCapabilities(streaming=True, pushNotifications=False),
-        skills=skills,
+        branches=skills,
         defaultInputModes=["text/plain"],
         defaultOutputModes=["text/plain"],
     )

@@ -12,7 +12,7 @@ class EvaluationResult(BaseModel):
     """
     Результат выполнения тест-кейса.
 
-    Первичный ключ: (flow_id, skill_id, run_date, iteration).
+    Первичный ключ: (flow_id, branch_id, run_date, iteration).
 
     scores - унифицированная структура оценок:
     {"attr_name": float_or_bool, ...}
@@ -21,7 +21,7 @@ class EvaluationResult(BaseModel):
     """
 
     flow_id: str = Field(..., description="ID агента")
-    skill_id: str = Field(..., description="ID skill")
+    branch_id: str = Field(..., description="ID skill")
     run_date: date = Field(..., description="Дата запуска")
     iteration: int = Field(..., description="Номер итерации за день")
     test_case_id: str = Field(..., description="ID тест-кейса")
@@ -45,7 +45,7 @@ class EvaluationResult(BaseModel):
 
     def get_id(self) -> str:
         """Возвращает составной ID для хранения."""
-        return f"{self.flow_id}:{self.skill_id}:{self.run_date.isoformat()}:{self.iteration}:{self.test_case_id}"
+        return f"{self.flow_id}:{self.branch_id}:{self.run_date.isoformat()}:{self.iteration}:{self.test_case_id}"
 
     def get_total_score(self) -> Optional[float]:
         """
@@ -93,7 +93,7 @@ class EvaluationRunSummary(BaseModel):
     """
 
     flow_id: str
-    skill_id: str
+    branch_id: str
     run_date: date
     iteration: int
     started_at: datetime

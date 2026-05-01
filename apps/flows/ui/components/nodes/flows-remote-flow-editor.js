@@ -3,7 +3,7 @@
  *
  * Поля точно по `RemoteFlowNode` (apps/flows/src/runtime/nodes.py):
  *   - url (direct URL) ИЛИ flow_id (внешний реестр)
- *   - skill_id (default 'default')
+ *   - branch_id (default 'default')
  *   - auth_headers (dict<str, str>)
  *
  * Toggle режима: direct URL ↔ by flow_id.
@@ -19,7 +19,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
         nodeConfig: { type: Object },
         nodeType: { type: String },
         flowVariables: { type: Object },
@@ -61,7 +61,7 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         super();
         this.nodeId = '';
         this.flowId = '';
-        this.skillId = '';
+        this.branchId = '';
         this.nodeConfig = null;
         this.nodeType = 'remote_flow';
         this.flowVariables = null;
@@ -98,8 +98,8 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         this._emitPatch({ flow_id: e.target.value });
     }
 
-    _onSkillId(e) {
-        this._emitPatch({ skill_id: e.target.value });
+    _onBranchId(e) {
+        this._emitPatch({ branch_id: e.target.value });
     }
 
     _onAuthHeaders(parsed) {
@@ -111,14 +111,14 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         const mode = this._mode();
         const url = typeof cfg.url === 'string' ? cfg.url : '';
         const flowIdValue = typeof cfg.flow_id === 'string' ? cfg.flow_id : '';
-        const skillId = typeof cfg.skill_id === 'string' ? cfg.skill_id : 'default';
+        const branchId = typeof cfg.branch_id === 'string' ? cfg.branch_id : 'default';
         const authHeaders = cfg.auth_headers && typeof cfg.auth_headers === 'object'
             ? JSON.stringify(cfg.auth_headers, null, 2) : '{}';
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
-                .skillId=${this.skillId}
+                .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
                 .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'remote_flow'}
                 .flowVariables=${this.flowVariables}
@@ -149,8 +149,8 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
                         </div>
                     `}
                     <div class="field">
-                        <label>${this.t('remote_flow_editor.skill_id')}</label>
-                        <input type="text" placeholder="default" .value=${skillId} @input=${this._onSkillId} />
+                        <label>${this.t('remote_flow_editor.branch_id')}</label>
+                        <input type="text" placeholder="default" .value=${branchId} @input=${this._onBranchId} />
                     </div>
                     <div class="field">
                         <label>${this.t('remote_flow_editor.auth_headers')}</label>

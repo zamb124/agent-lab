@@ -251,7 +251,7 @@
         }
       }
     },
-    "/flows/api/v1/{flow_id}/skills": {
+    "/flows/api/v1/{flow_id}/branches": {
       "get": {
         "tags": [
           "public",
@@ -259,8 +259,8 @@
           "public",
           "a2a"
         ],
-        "summary": "List Skills",
-        "operationId": "list_skills_flows_api_v1__flow_id__skills_get",
+        "summary": "List Branches",
+        "operationId": "list_branches_flows_api_v1__flow_id__branches_get",
         "parameters": [
           {
             "name": "flow_id",
@@ -283,7 +283,7 @@
                     "type": "object",
                     "additionalProperties": true
                   },
-                  "title": "Response List Skills Flows Api V1  Flow Id  Skills Get"
+                  "title": "Response List Branches Flows Api V1  Flow Id  Branches Get"
                 }
               }
             }
@@ -307,9 +307,9 @@
           "public",
           "a2a"
         ],
-        "summary": "Create Skill",
-        "description": "Создать новый skill.",
-        "operationId": "create_skill_flows_api_v1__flow_id__skills_post",
+        "summary": "Create Branch",
+        "description": "Создать новую ветку.",
+        "operationId": "create_branch_flows_api_v1__flow_id__branches_post",
         "parameters": [
           {
             "name": "flow_id",
@@ -329,7 +329,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Create Skill Flows Api V1  Flow Id  Skills Post"
+                  "title": "Response Create Branch Flows Api V1  Flow Id  Branches Post"
                 }
               }
             }
@@ -347,7 +347,7 @@
         }
       }
     },
-    "/flows/api/v1/{flow_id}/skills/{skill_id}": {
+    "/flows/api/v1/{flow_id}/branches/{branch_id}": {
       "get": {
         "tags": [
           "public",
@@ -355,8 +355,8 @@
           "public",
           "a2a"
         ],
-        "summary": "Get Skill",
-        "operationId": "get_skill_flows_api_v1__flow_id__skills__skill_id__get",
+        "summary": "Get Branch",
+        "operationId": "get_branch_flows_api_v1__flow_id__branches__branch_id__get",
         "parameters": [
           {
             "name": "flow_id",
@@ -368,12 +368,12 @@
             }
           },
           {
-            "name": "skill_id",
+            "name": "branch_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Skill Id"
+              "title": "Branch Id"
             }
           }
         ],
@@ -385,7 +385,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Get Skill Flows Api V1  Flow Id  Skills  Skill Id  Get"
+                  "title": "Response Get Branch Flows Api V1  Flow Id  Branches  Branch Id  Get"
                 }
               }
             }
@@ -409,9 +409,9 @@
           "public",
           "a2a"
         ],
-        "summary": "Update Skill",
-        "description": "Обновить существующий skill.",
-        "operationId": "update_skill_flows_api_v1__flow_id__skills__skill_id__put",
+        "summary": "Update Branch",
+        "description": "Обновить существующую ветку.",
+        "operationId": "update_branch_flows_api_v1__flow_id__branches__branch_id__put",
         "parameters": [
           {
             "name": "flow_id",
@@ -423,12 +423,12 @@
             }
           },
           {
-            "name": "skill_id",
+            "name": "branch_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Skill Id"
+              "title": "Branch Id"
             }
           }
         ],
@@ -440,7 +440,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Update Skill Flows Api V1  Flow Id  Skills  Skill Id  Put"
+                  "title": "Response Update Branch Flows Api V1  Flow Id  Branches  Branch Id  Put"
                 }
               }
             }
@@ -464,9 +464,9 @@
           "public",
           "a2a"
         ],
-        "summary": "Delete Skill",
-        "description": "Удалить skill.",
-        "operationId": "delete_skill_flows_api_v1__flow_id__skills__skill_id__delete",
+        "summary": "Delete Branch",
+        "description": "Удалить ветку.",
+        "operationId": "delete_branch_flows_api_v1__flow_id__branches__branch_id__delete",
         "parameters": [
           {
             "name": "flow_id",
@@ -478,12 +478,12 @@
             }
           },
           {
-            "name": "skill_id",
+            "name": "branch_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Skill Id"
+              "title": "Branch Id"
             }
           }
         ],
@@ -495,7 +495,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Delete Skill Flows Api V1  Flow Id  Skills  Skill Id  Delete"
+                  "title": "Response Delete Branch Flows Api V1  Flow Id  Branches  Branch Id  Delete"
                 }
               }
             }
@@ -513,7 +513,7 @@
         }
       }
     },
-    "/flows/api/v1/{flow_id}/skills/{skill_id}/tools": {
+    "/flows/api/v1/{flow_id}/branches/{branch_id}/tools": {
       "get": {
         "tags": [
           "public",
@@ -521,9 +521,9 @@
           "public",
           "a2a"
         ],
-        "summary": "Get Skill Tools",
-        "description": "Получить список tools для skill с полной информацией.",
-        "operationId": "get_skill_tools_flows_api_v1__flow_id__skills__skill_id__tools_get",
+        "summary": "Get Branch Tools",
+        "description": "Получить список tools для ветки с полной информацией.",
+        "operationId": "get_branch_tools_flows_api_v1__flow_id__branches__branch_id__tools_get",
         "parameters": [
           {
             "name": "flow_id",
@@ -535,12 +535,12 @@
             }
           },
           {
-            "name": "skill_id",
+            "name": "branch_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Skill Id"
+              "title": "Branch Id"
             }
           }
         ],
@@ -555,7 +555,7 @@
                     "type": "object",
                     "additionalProperties": true
                   },
-                  "title": "Response Get Skill Tools Flows Api V1  Flow Id  Skills  Skill Id  Tools Get"
+                  "title": "Response Get Branch Tools Flows Api V1  Flow Id  Branches  Branch Id  Tools Get"
                 }
               }
             }
@@ -581,9 +581,9 @@
           "public",
           "a2a"
         ],
-        "summary": "Get Skill Schema",
-        "description": "Получить JSON Schema для создания навыка в формате ISchema.",
-        "operationId": "get_skill_schema_flows_api_v1__flow_id__schema_get",
+        "summary": "Get Branch Schema",
+        "description": "Получить JSON Schema для создания ветки в формате ISchema.",
+        "operationId": "get_branch_schema_flows_api_v1__flow_id__schema_get",
         "parameters": [
           {
             "name": "flow_id",
@@ -603,7 +603,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Get Skill Schema Flows Api V1  Flow Id  Schema Get"
+                  "title": "Response Get Branch Schema Flows Api V1  Flow Id  Schema Get"
                 }
               }
             }
@@ -677,6 +677,214 @@
           "file"
         ],
         "title": "Body_upload_file_flows_api_v1_files__post"
+      },
+      "BranchRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "entry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry"
+          },
+          "nodes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes"
+          },
+          "nodes_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes Mode"
+          },
+          "edges": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges"
+          },
+          "edges_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges Mode"
+          },
+          "variables": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Variables",
+            "default": {}
+          },
+          "variables_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variables Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "BranchRequest",
+        "description": "Skill в запросе"
+      },
+      "BranchResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "entry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry"
+          },
+          "nodes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes"
+          },
+          "edges": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges"
+          },
+          "variables": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Variables",
+            "default": {}
+          },
+          "nodes_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes Mode"
+          },
+          "edges_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges Mode"
+          },
+          "variables_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variables Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "BranchResponse",
+        "description": "Skill в ответе"
       },
       "BulkDeleteNodesRequest": {
         "properties": {
@@ -1687,9 +1895,9 @@
             "title": "Flow Id",
             "description": "ID агента"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
-            "title": "Skill Id",
+            "title": "Branch Id",
             "description": "ID skill"
           },
           "run_date": {
@@ -1800,7 +2008,7 @@
         "type": "object",
         "required": [
           "flow_id",
-          "skill_id",
+          "branch_id",
           "run_date",
           "iteration",
           "test_case_id",
@@ -1808,7 +2016,7 @@
           "duration_ms"
         ],
         "title": "EvaluationResult",
-        "description": "Результат выполнения тест-кейса.\n\nПервичный ключ: (flow_id, skill_id, run_date, iteration).\n\nscores - унифицированная структура оценок:\n{\"attr_name\": float_or_bool, ...}\n\nЕсли тест возвращает одну оценку, она хранится как {\"result\": value}"
+        "description": "Результат выполнения тест-кейса.\n\nПервичный ключ: (flow_id, branch_id, run_date, iteration).\n\nscores - унифицированная структура оценок:\n{\"attr_name\": float_or_bool, ...}\n\nЕсли тест возвращает одну оценку, она хранится как {\"result\": value}"
       },
       "ExecuteRequest": {
         "properties": {
@@ -1839,7 +2047,7 @@
             ],
             "title": "Flow Id"
           },
-          "skill_id": {
+          "branch_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -1848,7 +2056,7 @@
                 "type": "null"
               }
             ],
-            "title": "Skill Id"
+            "title": "Branch Id"
           }
         },
         "type": "object",
@@ -2093,12 +2301,12 @@
             "title": "Tags",
             "default": []
           },
-          "skills": {
+          "branches": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SkillRequest"
+              "$ref": "#/components/schemas/BranchRequest"
             },
             "type": "object",
-            "title": "Skills",
+            "title": "Branches",
             "default": {}
           },
           "evaluation": {
@@ -2330,12 +2538,12 @@
             "title": "Tags",
             "default": []
           },
-          "skills": {
+          "branches": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SkillResponse"
+              "$ref": "#/components/schemas/BranchResponse"
             },
             "type": "object",
-            "title": "Skills",
+            "title": "Branches",
             "default": {}
           },
           "evaluation": {
@@ -3874,9 +4082,9 @@
             "type": "string",
             "title": "Flow Id"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
-            "title": "Skill Id"
+            "title": "Branch Id"
           },
           "flow_display_name": {
             "type": "string",
@@ -3886,7 +4094,7 @@
           "skill_display_name": {
             "type": "string",
             "title": "Skill Display Name",
-            "description": "Название skill из конфига; при отсутствии — skill_id"
+            "description": "Название skill из конфига; при отсутствии — branch_id"
           },
           "handoff_title": {
             "anyOf": [
@@ -3997,7 +4205,7 @@
           "session_id",
           "end_user_id",
           "flow_id",
-          "skill_id",
+          "branch_id",
           "flow_display_name",
           "skill_display_name"
         ],
@@ -4616,214 +4824,6 @@
         "title": "SessionResponse",
         "description": "Сессия в ответе"
       },
-      "SkillRequest": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "default": ""
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Tags",
-            "default": []
-          },
-          "entry": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Entry"
-          },
-          "nodes": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nodes"
-          },
-          "nodes_mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nodes Mode"
-          },
-          "edges": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Edges"
-          },
-          "edges_mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Edges Mode"
-          },
-          "variables": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Variables",
-            "default": {}
-          },
-          "variables_mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Variables Mode"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "SkillRequest",
-        "description": "Skill в запросе"
-      },
-      "SkillResponse": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "default": ""
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Tags",
-            "default": []
-          },
-          "entry": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Entry"
-          },
-          "nodes": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nodes"
-          },
-          "edges": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Edges"
-          },
-          "variables": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Variables",
-            "default": {}
-          },
-          "nodes_mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nodes Mode"
-          },
-          "edges_mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Edges Mode"
-          },
-          "variables_mode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Variables Mode"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "SkillResponse",
-        "description": "Skill в ответе"
-      },
       "SourceResponse": {
         "properties": {
           "path": {
@@ -4963,9 +4963,9 @@
             "type": "string",
             "title": "Content"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
-            "title": "Skill Id",
+            "title": "Branch Id",
             "default": "default"
           },
           "user_id": {
@@ -5403,9 +5403,9 @@
             "title": "Post Flow Output Enabled",
             "description": "Включить рассылку после flow; None — дефолт по типу триггера"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
-            "title": "Skill Id",
+            "title": "Branch Id",
             "description": "ID skill из flow.skills; default — entry базового flow",
             "default": "default"
           }
@@ -5466,9 +5466,9 @@
             "type": "boolean",
             "title": "Post Flow Output Enabled"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
-            "title": "Skill Id"
+            "title": "Branch Id"
           },
           "webhook_url": {
             "anyOf": [
@@ -5507,7 +5507,7 @@
           "input_mapping",
           "output_actions",
           "post_flow_output_enabled",
-          "skill_id",
+          "branch_id",
           "status"
         ],
         "title": "TriggerResponse",
@@ -5624,7 +5624,7 @@
             ],
             "title": "Post Flow Output Enabled"
           },
-          "skill_id": {
+          "branch_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -5633,7 +5633,7 @@
                 "type": "null"
               }
             ],
-            "title": "Skill Id"
+            "title": "Branch Id"
           }
         },
         "type": "object",
@@ -5664,9 +5664,9 @@
             "title": "Trigger Id",
             "description": "Черновой ID триггера (для подсказки пути webhook)"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
-            "title": "Skill Id",
+            "title": "Branch Id",
             "description": "Skill для резолва @var: (как при выполнении flow с этим skill)",
             "default": "default"
           }

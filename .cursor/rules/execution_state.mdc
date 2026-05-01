@@ -17,7 +17,7 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
     session_id: str        # flow_id:context_id
     flow_config_version: Optional[str]  # снимок FlowConfig в flows_versions; None = latest при загрузке
 
-Граф нод и полный JSON flow в state **не хранятся**. Ресурсы flow/skill: `FlowFactory.get_resource_maps(session_flow_id, skill_id, flow_config_version)`.
+Граф нод и полный JSON flow в state **не хранятся**. Ресурсы flow/skill: `FlowFactory.get_resource_maps(session_flow_id, branch_id, flow_config_version)`.
     
     content: str           # Входной запрос
     response: str          # Итоговый ответ
@@ -78,7 +78,7 @@ ExecutionState - нативный Pydantic объект ВЕЗДЕ в систе
 
 ## Системные поля и user-код (CodeNode / inline tool)
 
-Запрещено менять из тела кода ноды или inline tool (прямое присваивание, `merge_state` / `set_nested` с этими ключами, ключи в возвращаемом dict без `output_mapping` на безопасные поля): идентификаторы и привязка сессии (`task_id`, `context_id`, `user_id`, `session_id`, `flow_config_version`, `skill_id`), лимиты (`flow_deadline_monotonic`, `flow_timeout_effective_seconds`), управление графом (`current_nodes`, `join_arrived_preds`), HITL (`interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`), аудит и отладка (`node_history`, `execution_exceptions`, `prompt_history`, `reasoning_history`, `pending_reasoning`, `breakpoints`, `breakpoint_hit`, `breakpoint_state`, `mock`, `triggers`, `scheduled_tasks`, `nested_states`, `user_groups`).
+Запрещено менять из тела кода ноды или inline tool (прямое присваивание, `merge_state` / `set_nested` с этими ключами, ключи в возвращаемом dict без `output_mapping` на безопасные поля): идентификаторы и привязка сессии (`task_id`, `context_id`, `user_id`, `session_id`, `flow_config_version`, `branch_id`), лимиты (`flow_deadline_monotonic`, `flow_timeout_effective_seconds`), управление графом (`current_nodes`, `join_arrived_preds`), HITL (`interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`), аудит и отладка (`node_history`, `execution_exceptions`, `prompt_history`, `reasoning_history`, `pending_reasoning`, `breakpoints`, `breakpoint_hit`, `breakpoint_state`, `mock`, `triggers`, `scheduled_tasks`, `nested_states`, `user_groups`).
 
 Каноничный список: `core/state/mutation_policy.py` (`FROZEN_STATE_FIELDS`). Исключение: `FrozenStateFieldError` (`core.errors`).
 

@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column("session_id", sa.String(length=512), nullable=False),
         sa.Column("end_user_id", sa.String(length=255), nullable=False),
         sa.Column("flow_id", sa.String(length=255), nullable=False),
-        sa.Column("skill_id", sa.String(length=255), nullable=False),
+        sa.Column("branch_id", sa.String(length=255), nullable=False),
         sa.Column("a2a_task_id", sa.String(length=255), nullable=True),
         sa.Column("context_id", sa.String(length=255), nullable=True),
         sa.Column("correlation_id", sa.String(length=36), nullable=True),

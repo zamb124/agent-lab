@@ -241,7 +241,7 @@ class TestFlowVariables:
                         "order": 1,
                     }
                 },
-                "skills": {
+                "branches": {
                     "custom_skill": {
                         "name": "Custom Skill",
                         "description": "Test skill",
@@ -263,7 +263,7 @@ class TestFlowVariables:
         data = response.json()
         
         # Проверяем variables в skill
-        skill = data["skills"]["custom_skill"]
+        skill = data["branches"]["custom_skill"]
         skill_param = skill["variables"]["skill_param"]
         assert skill_param["value"] == "skill_value"
         assert skill_param["title"] == "Skill Param"
@@ -290,7 +290,7 @@ class TestFlowVariables:
                 },
                 "edges": [{"from": "main", "to": None}],
                 "variables": {},
-                "skills": {
+                "branches": {
                     "simple_skill": {
                         "name": "Simple Skill",
                         "variables": {
@@ -305,7 +305,7 @@ class TestFlowVariables:
         data = response.json()
         
         # Простое значение должно быть нормализовано
-        skill = data["skills"]["simple_skill"]
+        skill = data["branches"]["simple_skill"]
         role = skill["variables"]["role"]
         assert role["value"] == "Custom role value"
         # Остальные поля должны быть None/False по умолчанию
@@ -388,7 +388,7 @@ class TestSkillsAPIVariables:
 
     @pytest.mark.asyncio
     async def test_get_skill_returns_full_variables(self, client, app, unique_id):
-        """GET /flows/{id}/skills/{skill_id} возвращает полную структуру variables"""
+        """GET /flows/{id}/branches/{branch_id} возвращает полную структуру variables"""
         flow_id = f"test_skill_api_{unique_id}"
         
         # Создаём агента с skill
@@ -403,7 +403,7 @@ class TestSkillsAPIVariables:
                 },
                 "edges": [{"from": "main", "to": None}],
                 "variables": {},
-                "skills": {
+                "branches": {
                     "my_skill": {
                         "name": "My Skill",
                         "description": "Test skill",
@@ -422,7 +422,7 @@ class TestSkillsAPIVariables:
         )
         
         # Получаем skill через a2a API
-        response = await client.get(f"/flows/api/v1/{flow_id}/skills/my_skill")
+        response = await client.get(f"/flows/api/v1/{flow_id}/branches/my_skill")
         assert response.status_code == 200
         data = response.json()
         
@@ -463,9 +463,9 @@ class TestSkillsAPIVariables:
         
         # Создаём skill через API
         response = await client.post(
-            f"/flows/api/v1/{flow_id}/skills",
+            f"/flows/api/v1/{flow_id}/branches",
             json={
-                "skill_id": "new_skill",
+                "branch_id": "new_skill",
                 "name": "New Skill",
                 "description": "Created via API",
                 "skill_body": {
@@ -485,7 +485,7 @@ class TestSkillsAPIVariables:
         assert response.status_code == 201
         
         # Проверяем что skill создан с variables
-        get_response = await client.get(f"/flows/api/v1/{flow_id}/skills/new_skill")
+        get_response = await client.get(f"/flows/api/v1/{flow_id}/branches/new_skill")
         assert get_response.status_code == 200
         data = get_response.json()
         
@@ -503,7 +503,7 @@ class TestSkillsAPIVariables:
 
     @pytest.mark.asyncio
     async def test_update_skill_preserves_variables(self, client, app, unique_id):
-        """PUT /flows/{id}/skills/{skill_id} сохраняет все поля variables"""
+        """PUT /flows/{id}/branches/{branch_id} сохраняет все поля variables"""
         flow_id = f"test_update_skill_{unique_id}"
         
         # Создаём агента с skill
@@ -518,7 +518,7 @@ class TestSkillsAPIVariables:
                 },
                 "edges": [{"from": "main", "to": None}],
                 "variables": {},
-                "skills": {
+                "branches": {
                     "updatable": {
                         "name": "Updatable Skill",
                         "variables": {
@@ -531,7 +531,7 @@ class TestSkillsAPIVariables:
         
         # Обновляем skill
         response = await client.put(
-            f"/flows/api/v1/{flow_id}/skills/updatable",
+            f"/flows/api/v1/{flow_id}/branches/updatable",
             json={
                 "name": "Updated Skill",
                 "skill_body": {
@@ -551,7 +551,7 @@ class TestSkillsAPIVariables:
         assert response.status_code == 200
         
         # Проверяем обновлённый skill
-        get_response = await client.get(f"/flows/api/v1/{flow_id}/skills/updatable")
+        get_response = await client.get(f"/flows/api/v1/{flow_id}/branches/updatable")
         assert get_response.status_code == 200
         data = get_response.json()
         

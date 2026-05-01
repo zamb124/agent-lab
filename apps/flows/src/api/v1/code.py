@@ -182,7 +182,7 @@ async def get_code_templates(
 async def get_editor_state(
     container: ContainerDep,
     flow_id: str,
-    skill_id: str = "default",
+    branch_id: str = "default",
 ) -> Dict[str, Any]:
     """
     Стартовый ExecutionState как при реальном запуске flow: резолвнутые variables,
@@ -195,7 +195,7 @@ async def get_editor_state(
             detail="Требуется контекст пользователя",
         )
     user_id = context.user.user_id
-    runtime_flow = await container.flow_factory.get_flow(flow_id, skill_id)
+    runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
     if runtime_flow is None:
         raise HTTPException(status_code=404, detail="Flow not found")
 
@@ -209,7 +209,7 @@ async def get_editor_state(
         user_id=user_id,
         session_id=session_id,
         content="",
-        skill_id=skill_id,
+        branch_id=branch_id,
     )
     state.variables = {**state.variables, **runtime_flow.variables}
     cfg_ver = (runtime_flow.config or {}).get("version")
@@ -559,7 +559,7 @@ class ExecuteRequest(BaseModel):
     node_config: Dict[str, Any] = {}
     state: Dict[str, Any]
     flow_id: Optional[str] = None
-    skill_id: Optional[str] = None
+    branch_id: Optional[str] = None
 
 
 class DiffItem(BaseModel):
@@ -586,7 +586,7 @@ def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> L
     SKIP_KEYS = {
         "task_id", "context_id", "user_id", "session_id",
         "messages", "prompt_history", "node_history", "nested_states",
-        "current_nodes", "skill_id", "flow_config_version", "user_groups",
+        "current_nodes", "branch_id", "flow_config_version", "user_groups",
         "interrupt_path", "tool_results", "triggers", "files",
         "breakpoints", "scheduled_tasks", "reasoning_history",
         "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt",
@@ -634,14 +634,14 @@ async def _merge_execute_state_with_flow(
     input_state: Dict[str, Any],
     *,
     flow_id: str,
-    skill_id: str,
+    branch_id: str,
     container: "FlowContainer",
 ) -> None:
     """
     Приближает state к реальному старту flow: файлы из всех нод графа + резолвнутые variables flow.
     Записи state.files из запроса, которых нет среди файлов графа, дописываются в конец.
     """
-    runtime_flow = await container.flow_factory.get_flow(flow_id, skill_id)
+    runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
     if runtime_flow is None:
         raise ValueError(f"Flow не найден: {flow_id}")
 
@@ -703,7 +703,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             input_state_normalized["session_id"] = f"{flow_id}:{context_id}"
         
         input_state_normalized.setdefault("current_nodes", [])
-        input_state_normalized.setdefault("skill_id", "default")
+        input_state_normalized.setdefault("branch_id", "default")
         input_state_normalized.setdefault("messages", [])
         input_state_normalized.setdefault("user_groups", [])
         input_state_normalized.setdefault("variables", {})
@@ -731,15 +731,15 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
 
         resolved_flow_id = flow_id
         resolved_skill_id = (
-            request.skill_id
-            or input_state_normalized.get("skill_id")
+            request.branch_id
+            or input_state_normalized.get("branch_id")
             or "default"
         )
         if resolved_flow_id and resolved_flow_id not in ("", "test-flow"):
             await _merge_execute_state_with_flow(
                 input_state_normalized,
                 flow_id=resolved_flow_id,
-                skill_id=resolved_skill_id,
+                branch_id=resolved_skill_id,
                 container=container,
             )
 
@@ -820,7 +820,7 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
         request_dict = request.__dict__
         # Переносим поля из request в config (кроме node_type и state)
         for key, value in request_dict.items():
-            if key not in ("node_type", "state", "node_config", "flow_id", "skill_id") and value is not None:
+            if key not in ("node_type", "state", "node_config", "flow_id", "branch_id") and value is not None:
                 config[key] = value
     
     _validate_node_config(config)

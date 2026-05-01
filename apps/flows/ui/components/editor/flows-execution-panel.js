@@ -2,7 +2,7 @@
  * flows-execution-panel — плавающая панель «Запуск агента» в редакторе.
  *
  * Видна, пока `state.flowsEditor.executionPanelOpen === true`. Источники state:
- *   - useOp('flows/editor') — режим, currentSkillId, previewExecutionState.breakpoints;
+ *   - useOp('flows/editor') — режим, currentBranchId, previewExecutionState.breakpoints;
  *   - useResource('flows/chat') — currentContextId/currentTaskId/streaming, сообщения;
  *   - useOp('flows/chat_send') / useOp('flows/chat_cancel') — SSE A2A
  *     (`POST /flows/api/v1/{flow_id}` с `message/stream` / `tasks/cancel`);
@@ -63,7 +63,7 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     static properties = {
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
         _panelTab: { type: String, state: true },
         _layoutExpanded: { type: Boolean, state: true },
     };
@@ -401,7 +401,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     constructor() {
         super();
         this.flowId = '';
-        this.skillId = 'base';
+        this.branchId = 'base';
         this._panelTab = 'chat';
         this._editor = this.useOp('flows/editor');
         this._chat = this.useResource('flows/chat');
@@ -644,8 +644,8 @@ export class FlowsExecutionPanel extends PlatformElement {
         };
 
         const metadata = {};
-        if (this.skillId && this.skillId !== 'base') {
-            metadata.skill = this.skillId;
+        if (this.branchId && this.branchId !== 'base') {
+            metadata.branch = this.branchId;
         }
         const preview = editorState.previewExecutionState;
         const bps = preview && preview.breakpoints;

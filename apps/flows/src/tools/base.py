@@ -368,7 +368,7 @@ class CodeTool(BaseTool):
         
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
-            state.skill_id,
+            state.branch_id,
             state.flow_config_version,
         )
         

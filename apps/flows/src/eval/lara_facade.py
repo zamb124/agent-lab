@@ -118,7 +118,7 @@ class LaraFacade:
         flow_id: str,
         node_id: str,
         patch: dict[str, Any],
-        skill_id: str | None,
+        branch_id: str | None,
         state: Any,
         idempotency_key: str | None,
     ) -> dict[str, Any]:
@@ -127,22 +127,22 @@ class LaraFacade:
         flow_config = await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
         if not isinstance(flow_config, dict):
             raise ValueError("Flow config is missing in response")
-        resolved_skill_id = skill_id or "base"
-        if resolved_skill_id == "base":
+        resolved_branch_id = branch_id or "base"
+        if resolved_branch_id == "base":
             graph_nodes = flow_config.get("nodes")
             if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
                 raise ValueError(f"Node '{node_id}' not found in flow '{flow_id}'")
             node_before = graph_nodes[node_id]
         else:
-            skills = flow_config.get("skills")
-            if not isinstance(skills, dict) or resolved_skill_id not in skills:
-                raise ValueError(f"Skill '{resolved_skill_id}' not found in flow '{flow_id}'")
-            skill_config = skills[resolved_skill_id]
-            if not isinstance(skill_config, dict):
-                raise ValueError(f"Skill '{resolved_skill_id}' payload is invalid")
-            graph_nodes = skill_config.get("nodes")
+            branches = flow_config.get("branches")
+            if not isinstance(branches, dict) or resolved_branch_id not in branches:
+                raise ValueError(f"Branch '{resolved_branch_id}' not found in flow '{flow_id}'")
+            branch_cfg = branches[resolved_branch_id]
+            if not isinstance(branch_cfg, dict):
+                raise ValueError(f"Branch '{resolved_branch_id}' payload is invalid")
+            graph_nodes = branch_cfg.get("nodes")
             if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
-                raise ValueError(f"Node '{node_id}' not found in skill '{resolved_skill_id}'")
+                raise ValueError(f"Node '{node_id}' not found in branch '{resolved_branch_id}'")
             node_before = graph_nodes[node_id]
         node_after = deepcopy(node_before)
         node_after.update(patch)
@@ -152,7 +152,7 @@ class LaraFacade:
             context_id=context_id,
             capability="flows.node",
             operation="patch",
-            target={"flow_id": flow_id, "skill_id": resolved_skill_id, "node_id": node_id},
+            target={"flow_id": flow_id, "branch_id": resolved_branch_id, "node_id": node_id},
             payload={"patch": patch},
             preview={
                 "summary": "Изменение ноды flow",
@@ -179,26 +179,26 @@ class LaraFacade:
             payload = action["payload"]
             flow_id = target["flow_id"]
             node_id = target["node_id"]
-            skill_id = target.get("skill_id") or "base"
+            branch_id = target.get("branch_id") or "base"
             encoded_flow_id = self._encode_flow_id(flow_id)
             flow_config = await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
             if not isinstance(flow_config, dict):
                 raise ValueError("Flow config is missing in response")
-            if skill_id == "base":
+            if branch_id == "base":
                 graph_nodes = flow_config.get("nodes")
                 if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
                     raise ValueError(f"Node '{node_id}' not found in flow '{flow_id}'")
                 graph_nodes[node_id].update(payload["patch"])
             else:
-                skills = flow_config.get("skills")
-                if not isinstance(skills, dict) or skill_id not in skills:
-                    raise ValueError(f"Skill '{skill_id}' not found in flow '{flow_id}'")
-                skill_config = skills[skill_id]
-                if not isinstance(skill_config, dict):
-                    raise ValueError(f"Skill '{skill_id}' payload is invalid")
-                graph_nodes = skill_config.get("nodes")
+                branches = flow_config.get("branches")
+                if not isinstance(branches, dict) or branch_id not in branches:
+                    raise ValueError(f"Branch '{branch_id}' not found in flow '{flow_id}'")
+                branch_cfg = branches[branch_id]
+                if not isinstance(branch_cfg, dict):
+                    raise ValueError(f"Branch '{branch_id}' payload is invalid")
+                graph_nodes = branch_cfg.get("nodes")
                 if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
-                    raise ValueError(f"Node '{node_id}' not found in skill '{skill_id}'")
+                    raise ValueError(f"Node '{node_id}' not found in branch '{branch_id}'")
                 graph_nodes[node_id].update(payload["patch"])
             await self._client.put(
                 "flows",

@@ -5,7 +5,7 @@
  * Без него — режим создания (POST /configs).
  *
  * Поля соответствуют CreateEmbedConfigRequest/UpdateEmbedConfigRequest
- * (apps/frontend/api/embed_configs.py): name, flow_id, skill_id,
+ * (apps/frontend/api/embed_configs.py): name, flow_id, branch_id,
  * allowed_origins, theme, position, show_launcher, primary_color,
  * greeting_message, assistant_title, interface_locale, placeholder, branding.
  *
@@ -116,7 +116,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             const _str = (v, def) => (typeof v === 'string' && v !== '' ? v : def);
             this._name = _str(c.name, '');
             this._flowId = _str(c.flow_id, '');
-            this._skillId = _str(c.skill_id, 'default');
+            this._skillId = _str(c.branch_id, 'default');
             this._theme = _str(c.theme, 'dark');
             this._position = _str(c.position, 'bottom-right');
             this._interfaceLocale = _str(c.interface_locale, 'auto');
@@ -179,7 +179,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         const payload = {
             name: this._name.trim(),
             flow_id: this._flowId,
-            skill_id: this._skillSelectorEnabled() ? this._skillId : 'default',
+            branch_id: this._skillSelectorEnabled() ? this._skillId : 'default',
             allowed_origins: this._parseOrigins(),
             theme: this._theme,
             position: this._position,
@@ -269,7 +269,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                     .value=${this._skillId}
                                     @change=${(e) => { this._skillId = e.target.value; this.isDirty = true; }}
                                 >
-                                    ${skills.map((s) => html`
+                                    ${branches.map((s) => html`
                                         <option value=${s.id} ?selected=${this._skillId === s.id}>${s.name}</option>
                                     `)}
                                 </select>

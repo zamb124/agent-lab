@@ -26,8 +26,12 @@
             "bot_token": "@var:bot_token_1"
           },
           "args_schema": {
-            "chat_id": {"type": "string"},
-            "text": {"type": "string"}
+            "chat_id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
           },
           "input_mapping": {
             "recipient": "@state:triggers.tg_react.context.chat_id",
@@ -38,16 +42,49 @@
     }
   },
   "edges": [
-    {"from": "react_main", "to": null}
+    {
+      "from": "react_main",
+      "to": null
+    }
   ],
-  "skills": {
+  "triggers": {
+    "tg_react": {
+      "trigger_id": "tg_react",
+      "name": "Telegram Bot 1",
+      "type": "telegram",
+      "enabled": true,
+      "config": {
+        "bot_token": "@var:bot_token_1"
+      },
+      "output_mapping": {
+        "content": "message.text",
+        "context.chat_id": "message.chat.id"
+      },
+      "branch_id": "react_skill"
+    },
+    "tg_echo": {
+      "trigger_id": "tg_echo",
+      "name": "Telegram Bot 2",
+      "type": "telegram",
+      "enabled": true,
+      "config": {
+        "bot_token": "@var:bot_token_2"
+      },
+      "output_mapping": {
+        "content": "message.text",
+        "context.chat_id": "message.chat.id"
+      },
+      "branch_id": "echo_skill"
+    }
+  },
+  "branches": {
     "react_skill": {
       "name": "React Skill",
       "description": "LlmNode с tool telegram",
       "entry": "react_main"
     },
     "echo_skill": {
-      "name": "Echo Skill", 
+      "name": "Echo Skill",
       "description": "CodeNode + ChannelNode эхо",
       "entry": "echo_process",
       "nodes": {
@@ -69,39 +106,15 @@
         }
       },
       "edges": [
-        {"from": "echo_process", "to": "echo_send"},
-        {"from": "echo_send", "to": null}
+        {
+          "from": "echo_process",
+          "to": "echo_send"
+        },
+        {
+          "from": "echo_send",
+          "to": null
+        }
       ]
-    }
-  },
-  "triggers": {
-    "tg_react": {
-      "trigger_id": "tg_react",
-      "name": "Telegram Bot 1",
-      "type": "telegram",
-      "enabled": true,
-      "config": {
-        "bot_token": "@var:bot_token_1"
-      },
-      "output_mapping": {
-        "content": "message.text",
-        "context.chat_id": "message.chat.id"
-      },
-      "skill_id": "react_skill"
-    },
-    "tg_echo": {
-      "trigger_id": "tg_echo",
-      "name": "Telegram Bot 2",
-      "type": "telegram",
-      "enabled": true,
-      "config": {
-        "bot_token": "@var:bot_token_2"
-      },
-      "output_mapping": {
-        "content": "message.text",
-        "context.chat_id": "message.chat.id"
-      },
-      "skill_id": "echo_skill"
     }
   }
 }

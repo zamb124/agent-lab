@@ -27,7 +27,7 @@ class TestFastTrackSkill:
     async def flow(self, app):
         """Загружает flow с fast_track skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="fast_track")
+        return await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -69,7 +69,7 @@ class TestFastTrackSkill:
         mock_llm_with_queue(["Mock response для теста"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="fast_track")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
 
         state = ExecutionState(
             task_id="test-task",
@@ -91,7 +91,7 @@ class TestFastTrackSkill:
     async def test_route_greeting_in_fast_track(self, app):
         """fast_track: greeting -> greeting_node -> formatter (полное покрытие маршрутов)."""
         container = get_container()
-        agent = await container.flow_factory.get_flow("example_graph", skill_id="fast_track")
+        agent = await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
 
         state = ExecutionState(
             task_id="test-task",
@@ -114,7 +114,7 @@ class TestOrdersOnlySkill:
     async def flow(self, app):
         """Загружает flow с orders_only skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="orders_only")
+        return await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -136,7 +136,7 @@ class TestOrdersOnlySkill:
         mock_llm_with_queue(["Ваш заказ обработан"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="orders_only")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
 
         state = ExecutionState(
             task_id="test-task",
@@ -157,7 +157,7 @@ class TestOrdersOnlySkill:
         mock_llm_with_queue(["Для жалоб обратитесь в службу поддержки"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="orders_only")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
 
         state = ExecutionState(
             task_id="test-task",
@@ -179,7 +179,7 @@ class TestOrdersOnlySkill:
         mock_llm_with_queue(["Мы работаем с 9 до 18"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="orders_only")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
 
         state = ExecutionState(
             task_id="test-task",
@@ -208,7 +208,7 @@ class TestCodeNodesSkill:
     async def flow(self, app):
         """Загружает flow с test_function_nodes skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="test_function_nodes")
+        return await container.flow_factory.get_flow("example_graph", branch_id="test_function_nodes")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -221,7 +221,7 @@ class TestCodeNodesSkill:
         mock_llm_with_queue(["Mock response"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_function_nodes")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_function_nodes")
 
         # Базовый classifier определяет route по содержимому
         state = ExecutionState(
@@ -250,7 +250,7 @@ class TestCodeNodesSkill:
         mock_llm_with_queue(["Mock response от LLM"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_function_nodes")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_function_nodes")
 
         state = ExecutionState(
             task_id="test-task",
@@ -278,7 +278,7 @@ class TestLlmNodesSkill:
     async def flow(self, app):
         """Загружает flow с test_llm_nodes skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="test_llm_nodes")
+        return await container.flow_factory.get_flow("example_graph", branch_id="test_llm_nodes")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -291,7 +291,7 @@ class TestLlmNodesSkill:
         mock_llm_with_queue(["Заказ обработан успешно"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_llm_nodes")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_nodes")
 
         state = ExecutionState(
             task_id="test-task",
@@ -312,7 +312,7 @@ class TestLlmNodesSkill:
         mock_llm_with_queue(["Жалоба зарегистрирована"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_llm_nodes")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_nodes")
 
         state = ExecutionState(
             task_id="test-task",
@@ -333,7 +333,7 @@ class TestLlmNodesSkill:
         mock_llm_with_queue(["Общий ответ"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_llm_nodes")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_nodes")
 
         state = ExecutionState(
             task_id="test-task",
@@ -361,7 +361,7 @@ class TestLlmGraphSkill:
     async def flow(self, app):
         """Загружает flow с test_llm_graph skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="test_llm_graph")
+        return await container.flow_factory.get_flow("example_graph", branch_id="test_llm_graph")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -381,7 +381,7 @@ class TestLlmGraphSkill:
         mock_llm_with_queue(["Mock LLM ответ"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_llm_graph")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_graph")
 
         state = ExecutionState(
             task_id="test-task",
@@ -409,7 +409,7 @@ class TestRouteOrderSkill:
     async def flow(self, app):
         """Загружает flow с test_route_order skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="test_route_order")
+        return await container.flow_factory.get_flow("example_graph", branch_id="test_route_order")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -422,7 +422,7 @@ class TestRouteOrderSkill:
         mock_llm_with_queue(["Заказ обработан"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_route_order")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_order")
 
         state = ExecutionState(
             task_id="test-task",
@@ -443,7 +443,7 @@ class TestRouteOrderSkill:
         mock_llm_with_queue(["Жалоба обработана"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_route_order")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_order")
 
         state = ExecutionState(
             task_id="test-task",
@@ -472,7 +472,7 @@ class TestRouteComplaintSkill:
     async def flow(self, app):
         """Загружает flow с test_route_complaint skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="test_route_complaint")
+        return await container.flow_factory.get_flow("example_graph", branch_id="test_route_complaint")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -485,7 +485,7 @@ class TestRouteComplaintSkill:
         mock_llm_with_queue(["Жалоба зарегистрирована"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_route_complaint")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_complaint")
 
         state = ExecutionState(
             task_id="test-task",
@@ -506,7 +506,7 @@ class TestRouteComplaintSkill:
         mock_llm_with_queue(["Заказ обработан"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_route_complaint")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_complaint")
 
         state = ExecutionState(
             task_id="test-task",
@@ -535,7 +535,7 @@ class TestFullGraphSkill:
     async def flow(self, app):
         """Загружает flow с test_full_graph skill."""
         container = get_container()
-        return await container.flow_factory.get_flow("example_graph", skill_id="test_full_graph")
+        return await container.flow_factory.get_flow("example_graph", branch_id="test_full_graph")
 
     @pytest.mark.asyncio
     async def test_flow_created_with_skill(self, flow):
@@ -548,7 +548,7 @@ class TestFullGraphSkill:
         mock_llm_with_queue(["Полный ответ"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_full_graph")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_full_graph")
 
         state = ExecutionState(
             task_id="test-task",
@@ -570,7 +570,7 @@ class TestFullGraphSkill:
         mock_llm_with_queue(["Response"])
         
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="test_full_graph")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="test_full_graph")
 
         for content, expected_route in [("заказ", "order"), ("жалоба", "complaint"), ("вопрос", "general")]:
             state = ExecutionState(
@@ -586,7 +586,7 @@ class TestFullGraphSkill:
 
 
 class TestDefaultSkill:
-    """Тесты для default skill (без указания skill_id)."""
+    """Тесты для default skill (без указания branch_id)."""
 
     @pytest_asyncio.fixture
     async def flow(self, app):
@@ -733,7 +733,7 @@ class TestSkillStatePreservation:
         mock_llm_with_queue(["Response"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="fast_track")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
 
         state = ExecutionState(
             task_id="test-task",
@@ -755,7 +755,7 @@ class TestSkillStatePreservation:
         mock_llm_with_queue(["Response"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="orders_only")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
 
         state = ExecutionState(
             task_id="test-task",
@@ -777,8 +777,8 @@ class TestSkillStatePreservation:
 
         container = get_container()
         
-        for skill_id in ["fast_track", "orders_only", "test_function_nodes"]:
-            flow = await container.flow_factory.get_flow("example_graph", skill_id=skill_id)
+        for branch_id in ["fast_track", "orders_only", "test_function_nodes"]:
+            flow = await container.flow_factory.get_flow("example_graph", branch_id=branch_id)
             
             state = ExecutionState(
             task_id="test-task",
@@ -789,8 +789,8 @@ class TestSkillStatePreservation:
         )
             result = await flow.run(state)
             
-            assert "variables" in result, f"Variables отсутствуют в skill {skill_id}"
-            assert "order_prefix" in result["variables"], f"order_prefix отсутствует в skill {skill_id}"
+            assert "variables" in result, f"Variables отсутствуют в skill {branch_id}"
+            assert "order_prefix" in result["variables"], f"order_prefix отсутствует в skill {branch_id}"
 
 
 class TestSkillEdgeCases:
@@ -823,7 +823,7 @@ class TestSkillEdgeCases:
         mock_llm_with_queue(["Response"])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="nonexistent_skill")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="nonexistent_skill")
 
         # Если skill не найден, должен работать default конфиг
         if flow is not None:
@@ -845,7 +845,7 @@ class TestSkillEdgeCases:
         ])
 
         container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", skill_id="fast_track")
+        flow = await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
 
         state = ExecutionState(
             task_id="test-task",

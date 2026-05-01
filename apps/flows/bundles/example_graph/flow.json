@@ -2,7 +2,12 @@
   "id": "example_graph",
   "name": "Пример графового flow",
   "description": "Skills (merge/replace), маршрутизация code→ветки; HITL: ветка operator → hitl_node single_reply (очередь example_hitl), ветка takeover → hitl_node takeover (полный перехват диалога). Напишите «оператор» или «перехват»/«takeover».",
-  "tags": ["example", "graph", "skills", "modes"],
+    "tags": [
+        "example",
+        "graph",
+        "branching",
+        "modes"
+    ],
   "permission": [],
   "entry": "classifier",
   "nodes": {
@@ -18,7 +23,9 @@
       },
       "prompt": "Ты обрабатываешь заказы. Спроси номер заказа если не указан.",
       "tools": [
-        {"tool_id": "ask_user"}
+        {
+          "tool_id": "ask_user"
+        }
       ]
     },
     "complaint_processor": {
@@ -29,7 +36,9 @@
       },
       "prompt": "Ты обрабатываешь жалобы. Спроси детали если не указаны.",
       "tools": [
-        {"tool_id": "ask_user"}
+        {
+          "tool_id": "ask_user"
+        }
       ]
     },
     "general_processor": {
@@ -74,23 +83,82 @@
     }
   },
   "edges": [
-    {"from": "classifier", "to": "order_processor", "condition": "route == 'order'"},
-    {"from": "classifier", "to": "complaint_processor", "condition": "route == 'complaint'"},
-    {"from": "classifier", "to": "general_processor", "condition": "route == 'general'"},
-    {"from": "classifier", "to": "prepare_user_data", "condition": "route == 'general'"},
-    {"from": "classifier", "to": "cat_fact_api", "condition": "route == 'cat'"},
-    {"from": "classifier", "to": "greeting_node", "condition": "route == 'greeting'"},
-    {"from": "classifier", "to": "hitl_queue_demo", "condition": "route == 'operator'"},
-    {"from": "classifier", "to": "hitl_takeover_demo", "condition": "route == 'takeover'"},
-    {"from": "hitl_queue_demo", "to": "formatter"},
-    {"from": "hitl_takeover_demo", "to": "formatter"},
-    {"from": "order_processor", "to": "formatter"},
-    {"from": "complaint_processor", "to": "formatter"},
-    {"from": "general_processor", "to": "formatter"},
-    {"from": "prepare_user_data", "to": "general_processor"},
-    {"from": "cat_fact_api", "to": "formatter"},
-    {"from": "greeting_node", "to": "formatter"},
-    {"from": "formatter", "to": null}
+    {
+      "from": "classifier",
+      "to": "order_processor",
+      "condition": "route == 'order'"
+    },
+    {
+      "from": "classifier",
+      "to": "complaint_processor",
+      "condition": "route == 'complaint'"
+    },
+    {
+      "from": "classifier",
+      "to": "general_processor",
+      "condition": "route == 'general'"
+    },
+    {
+      "from": "classifier",
+      "to": "prepare_user_data",
+      "condition": "route == 'general'"
+    },
+    {
+      "from": "classifier",
+      "to": "cat_fact_api",
+      "condition": "route == 'cat'"
+    },
+    {
+      "from": "classifier",
+      "to": "greeting_node",
+      "condition": "route == 'greeting'"
+    },
+    {
+      "from": "classifier",
+      "to": "hitl_queue_demo",
+      "condition": "route == 'operator'"
+    },
+    {
+      "from": "classifier",
+      "to": "hitl_takeover_demo",
+      "condition": "route == 'takeover'"
+    },
+    {
+      "from": "hitl_queue_demo",
+      "to": "formatter"
+    },
+    {
+      "from": "hitl_takeover_demo",
+      "to": "formatter"
+    },
+    {
+      "from": "order_processor",
+      "to": "formatter"
+    },
+    {
+      "from": "complaint_processor",
+      "to": "formatter"
+    },
+    {
+      "from": "general_processor",
+      "to": "formatter"
+    },
+    {
+      "from": "prepare_user_data",
+      "to": "general_processor"
+    },
+    {
+      "from": "cat_fact_api",
+      "to": "formatter"
+    },
+    {
+      "from": "greeting_node",
+      "to": "formatter"
+    },
+    {
+      "from": "formatter",
+      "to": null
+    }
   ],
   "variables": {
     "company_name": {
@@ -129,7 +197,7 @@
       "order": null
     }
   },
-  "skills": {
+  "branches": {
     "fast_track": {
       "name": "Быстрая обработка",
       "description": "Пропускает форматирование, сразу к ответу",
@@ -137,23 +205,82 @@
       "nodes": {},
       "nodes_mode": "merge",
       "edges": [
-        {"from": "classifier", "to": "order_processor", "condition": "route == 'order'"},
-        {"from": "classifier", "to": "complaint_processor", "condition": "route == 'complaint'"},
-        {"from": "classifier", "to": "general_processor", "condition": "route == 'general'"},
-        {"from": "classifier", "to": "prepare_user_data", "condition": "route == 'general'"},
-        {"from": "classifier", "to": "cat_fact_api", "condition": "route == 'cat'"},
-        {"from": "classifier", "to": "greeting_node", "condition": "route == 'greeting'"},
-        {"from": "classifier", "to": "hitl_queue_demo", "condition": "route == 'operator'"},
-        {"from": "classifier", "to": "hitl_takeover_demo", "condition": "route == 'takeover'"},
-        {"from": "cat_fact_api", "to": "formatter"},
-        {"from": "greeting_node", "to": "formatter"},
-        {"from": "hitl_queue_demo", "to": "formatter"},
-        {"from": "hitl_takeover_demo", "to": "formatter"},
-        {"from": "formatter", "to": null},
-        {"from": "order_processor", "to": null},
-        {"from": "complaint_processor", "to": null},
-        {"from": "general_processor", "to": null},
-        {"from": "prepare_user_data", "to": "general_processor"}
+        {
+          "from": "classifier",
+          "to": "order_processor",
+          "condition": "route == 'order'"
+        },
+        {
+          "from": "classifier",
+          "to": "complaint_processor",
+          "condition": "route == 'complaint'"
+        },
+        {
+          "from": "classifier",
+          "to": "general_processor",
+          "condition": "route == 'general'"
+        },
+        {
+          "from": "classifier",
+          "to": "prepare_user_data",
+          "condition": "route == 'general'"
+        },
+        {
+          "from": "classifier",
+          "to": "cat_fact_api",
+          "condition": "route == 'cat'"
+        },
+        {
+          "from": "classifier",
+          "to": "greeting_node",
+          "condition": "route == 'greeting'"
+        },
+        {
+          "from": "classifier",
+          "to": "hitl_queue_demo",
+          "condition": "route == 'operator'"
+        },
+        {
+          "from": "classifier",
+          "to": "hitl_takeover_demo",
+          "condition": "route == 'takeover'"
+        },
+        {
+          "from": "cat_fact_api",
+          "to": "formatter"
+        },
+        {
+          "from": "greeting_node",
+          "to": "formatter"
+        },
+        {
+          "from": "hitl_queue_demo",
+          "to": "formatter"
+        },
+        {
+          "from": "hitl_takeover_demo",
+          "to": "formatter"
+        },
+        {
+          "from": "formatter",
+          "to": null
+        },
+        {
+          "from": "order_processor",
+          "to": null
+        },
+        {
+          "from": "complaint_processor",
+          "to": null
+        },
+        {
+          "from": "general_processor",
+          "to": null
+        },
+        {
+          "from": "prepare_user_data",
+          "to": "general_processor"
+        }
       ],
       "edges_mode": "replace",
       "variables": {
@@ -188,13 +315,37 @@
       },
       "nodes_mode": "merge",
       "edges": [
-        {"from": "classifier", "to": "order_processor", "condition": "route == 'order'"},
-        {"from": "classifier", "to": "general_processor", "condition": "route == 'general'"},
-        {"from": "classifier", "to": "hitl_queue_demo", "condition": "route == 'operator'"},
-        {"from": "hitl_queue_demo", "to": "formatter"},
-        {"from": "order_processor", "to": "formatter"},
-        {"from": "general_processor", "to": "formatter"},
-        {"from": "formatter", "to": null}
+        {
+          "from": "classifier",
+          "to": "order_processor",
+          "condition": "route == 'order'"
+        },
+        {
+          "from": "classifier",
+          "to": "general_processor",
+          "condition": "route == 'general'"
+        },
+        {
+          "from": "classifier",
+          "to": "hitl_queue_demo",
+          "condition": "route == 'operator'"
+        },
+        {
+          "from": "hitl_queue_demo",
+          "to": "formatter"
+        },
+        {
+          "from": "order_processor",
+          "to": "formatter"
+        },
+        {
+          "from": "general_processor",
+          "to": "formatter"
+        },
+        {
+          "from": "formatter",
+          "to": null
+        }
       ],
       "edges_mode": "replace",
       "variables": {},

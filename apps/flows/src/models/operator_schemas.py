@@ -57,14 +57,14 @@ class OperatorTaskOut(StrictBaseModel):
     session_id: str
     end_user_id: str
     flow_id: str
-    skill_id: str
+    branch_id: str
     flow_display_name: str = Field(
         ...,
         description="Название flow из конфига; при отсутствии конфига — flow_id",
     )
     skill_display_name: str = Field(
         ...,
-        description="Название skill из конфига; при отсутствии — skill_id",
+        description="Название skill из конфига; при отсутствии — branch_id",
     )
     handoff_title: Optional[str] = Field(
         default=None,

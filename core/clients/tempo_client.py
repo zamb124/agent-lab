@@ -150,7 +150,7 @@ def parse_otlp_trace(body: dict) -> list[dict[str, Any]]:
                     "flow_id": attrs.get("platform.flow_id"),
                     "task_id": attrs.get("platform.task_id"),
                     "context_id": attrs.get("platform.context_id"),
-                    "skill_id": attrs.get("platform.skill_id"),
+                    "branch_id": attrs.get("platform.branch_id"),
                     "node_id": attrs.get("platform.node_id"),
                     "agent_name": attrs.get("platform.agent.name"),
                     "is_resume": attrs.get("platform.is_resume"),

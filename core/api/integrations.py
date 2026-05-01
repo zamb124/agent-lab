@@ -167,7 +167,7 @@ async def _resume_flow(
 
     task_id = flow_context.get("task_id", "")
     context_id = flow_context.get("context_id", session_id)
-    skill_id = flow_context.get("skill_id", "default")
+    branch_id = flow_context.get("branch_id", "default")
     channel = flow_context.get("channel", "a2a")
     user_id = flow_context.get("user_id", "")
     trace_context = flow_context.get("trace_context")
@@ -177,7 +177,7 @@ async def _resume_flow(
         session_id=session_id,
         user_id=user_id,
         content=f"oauth_completed:{provider}:{service}",
-        skill_id=skill_id,
+        branch_id=branch_id,
         channel=channel,
         task_id=task_id,
         context_id=context_id,

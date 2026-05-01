@@ -16,7 +16,7 @@ class PreparedTaskParams:
         context_id: str,
         session_id: str,
         content: str,
-        skill_id: str,
+        branch_id: str,
         is_resume: bool,
         files_data: List[Dict],
         message: Optional[Message],
@@ -29,7 +29,7 @@ class PreparedTaskParams:
         self.context_id = context_id
         self.session_id = session_id
         self.content = content
-        self.skill_id = skill_id
+        self.branch_id = branch_id
         self.is_resume = is_resume
         self.files_data = files_data
         self.message = message

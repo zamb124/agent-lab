@@ -45,7 +45,7 @@ class TraceContext(BaseModel):
     task_id: Optional[str] = None
     context_id: Optional[str] = None
     flow_id: Optional[str] = None
-    skill_id: Optional[str] = None
+    branch_id: Optional[str] = None
     channel: Optional[str] = None
     is_resume: bool = False
 

@@ -25,7 +25,7 @@ state = create_initial_state(
     user_id=user_id,
     session_id=session_id,
     content=content,
-    skill_id="default",
+    branch_id="default",
 )
 ```
 

@@ -155,7 +155,7 @@ class ExecutionState(FlexibleBaseModel):
     # ========================================================================
     
     current_nodes: List[str] = Field(default_factory=list, description="Текущие ноды для выполнения")
-    skill_id: str = Field(default="default", description="ID skill")
+    branch_id: str = Field(default="default", description="ID skill")
     
     @field_validator("session_id")
     @classmethod
@@ -481,7 +481,7 @@ class ExecutionState(FlexibleBaseModel):
         user_id: str,
         session_id: str,
         content: Optional[str] = None,
-        skill_id: str = "default",
+        branch_id: str = "default",
         **kwargs
     ) -> ExecutionState:
         """
@@ -493,7 +493,7 @@ class ExecutionState(FlexibleBaseModel):
             user_id: ID пользователя
             session_id: ID сессии в формате flow_id:context_id
             content: Входное сообщение
-            skill_id: ID skill
+            branch_id: ID skill
             **kwargs: Дополнительные поля
         
         Returns:
@@ -505,7 +505,7 @@ class ExecutionState(FlexibleBaseModel):
             user_id=user_id,
             session_id=session_id,
             content=content,
-            skill_id=skill_id,
+            branch_id=branch_id,
             **kwargs
         )
     

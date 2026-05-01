@@ -230,7 +230,7 @@ class BaseNode(ABC):
         
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
-            state.skill_id,
+            state.branch_id,
             state.flow_config_version,
         )
         
@@ -734,7 +734,7 @@ class LlmNode(BaseNode):
         if state is not None:
             fr, sr = await container.flow_factory.get_resource_maps(
                 state.session_flow_id,
-                state.skill_id,
+                state.branch_id,
                 state.flow_config_version,
             )
             flow_resources = fr or {}
@@ -874,14 +874,14 @@ class FlowNode(BaseNode):
             self.flow_id = i_f
         else:
             self.flow_id = None
-        r_s = cfg.get("skill_id")
-        i_s = inner.get("skill_id")
+        r_s = cfg.get("branch_id")
+        i_s = inner.get("branch_id")
         if isinstance(r_s, str) and r_s.strip():
-            self.skill_id = r_s
+            self.branch_id = r_s
         elif isinstance(i_s, str) and i_s.strip():
-            self.skill_id = i_s
+            self.branch_id = i_s
         else:
-            self.skill_id = "default"
+            self.branch_id = "default"
         self._nested_flow = None
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
@@ -897,7 +897,7 @@ class FlowNode(BaseNode):
 
         if self._nested_flow is None:
             container = get_container()
-            self._nested_flow = await container.flow_factory.get_flow(self.flow_id, self.skill_id)
+            self._nested_flow = await container.flow_factory.get_flow(self.flow_id, self.branch_id)
 
         result = await self._nested_flow.run(nested_state)
         self._copy_state_back(result, state, full_trust=False)
@@ -914,7 +914,7 @@ class RemoteFlowNode(BaseNode):
         
         self.url = cfg.get("url")
         self.remote_registry_flow_id = cfg.get("flow_id")
-        self.skill_id = cfg.get("skill_id", "default")
+        self.branch_id = cfg.get("branch_id", "default")
         self.auth_headers_config = cfg.get("auth_headers", {})
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
@@ -935,7 +935,7 @@ class RemoteFlowNode(BaseNode):
             base_url=url,
             content=content,
             session_id=state.session_id,
-            skill_id=self.skill_id,
+            branch_id=self.branch_id,
             auth_headers=auth_headers,
         )
 
@@ -1294,7 +1294,7 @@ class HitlNode(BaseNode):
 
 def _infer_node_type_from_fields(node_config: Dict[str, Any]) -> None:
     """
-    Выставляет type по полям, если type отсутствует (частичные данные в БД / мердж skills).
+    Выставляет type по полям, если type отсутствует (частичные данные в БД / мердж веток).
     """
     if node_config.get("type"):
         return

@@ -9,7 +9,10 @@ WebSocket-роутер: единый endpoint `/ws/notifications`.
 2. **RPC request-reply** (client -> server -> client): клиент шлёт
    `{ request_id, type, payload }`, сервер ищет handler в
    `core.websocket.command_router` и отвечает обратным фреймом
-   `{ request_id, type: *_succeeded|*_failed, payload }`.
+   `{ request_id, type: *_succeeded|*_failed, payload }`. Для фрейма
+   с `*_failed` объект `payload` дополняется полями `request_id` (скоуп
+   команды, напр. `ws-cmd:…`), `trace_id`, `service` и опционально
+   `observability`, по тем же правилам что HTTP JSON ошибки.
 
 Команды без зарегистрированного handler'а возвращают `*_failed` с
 `error_code = ws_handler_not_found`. Невалидный JSON или фрейм без `type` —
@@ -55,8 +58,28 @@ from core.websocket.command_router import (
     dispatch_ws_command,
 )
 from core.websocket.manager import notification_manager
+from core.observability.error_payload import try_merge_platform_error_into_dict
 
 logger = get_logger(__name__)
+
+
+def _merge_ws_failure_payload(
+    payload: dict[str, Any],
+    *,
+    trace_id: str | None,
+    platform_request_id: str | None,
+    service_name: str,
+    active_company_id: str | None,
+) -> dict[str, Any]:
+    settings = get_settings()
+    return try_merge_platform_error_into_dict(
+        payload,
+        trace_id=trace_id,
+        platform_request_id=platform_request_id,
+        service_name=service_name,
+        logging_cfg=settings.logging,
+        active_company_id=active_company_id,
+    )
 
 
 async def _build_ws_context(websocket: WebSocket, user: User) -> Context:
@@ -80,13 +103,27 @@ async def _build_ws_context(websocket: WebSocket, user: User) -> Context:
 router = APIRouter()
 
 
-def _build_failure_frame(request_id: str | None, command_type: str | None, code: str, detail: str) -> dict[str, Any]:
+def _build_failure_frame(
+    client_request_id: str | None,
+    command_type: str | None,
+    code: str,
+    detail: str,
+    *,
+    trace_id_for_correlation: str | None,
+    platform_request_id_for_correlation: str | None,
+    service_name: str,
+    active_company_id: str | None,
+) -> dict[str, Any]:
     fail_type = derive_failed_type(command_type) if command_type else "system/ws/invalid_frame"
-    return {
-        "request_id": request_id,
-        "type": fail_type,
-        "payload": {"error_code": code, "error_detail": detail},
-    }
+    base_payload: dict[str, Any] = {"error_code": code, "error_detail": detail}
+    merged = _merge_ws_failure_payload(
+        base_payload,
+        trace_id=trace_id_for_correlation,
+        platform_request_id=platform_request_id_for_correlation,
+        service_name=service_name,
+        active_company_id=active_company_id,
+    )
+    return {"request_id": client_request_id, "type": fail_type, "payload": merged}
 
 
 async def _handle_command_frame(
@@ -96,19 +133,44 @@ async def _handle_command_frame(
     *,
     service_name: str,
     connection_request_id: str,
+    connection_trace_id: str,
 ) -> None:
     request_id = frame.get("request_id")
     command_type = frame.get("type")
     payload = frame.get("payload")
+    company_scope = (
+        user.active_company_id
+        if isinstance(user.active_company_id, str) and user.active_company_id
+        else None
+    )
+
     if not isinstance(request_id, str) or not request_id:
         await websocket.send_text(json.dumps(
-            _build_failure_frame(None, None, "ws_invalid_frame", "request_id required (string)"),
+            _build_failure_frame(
+                None,
+                None,
+                "ws_invalid_frame",
+                "request_id required (string)",
+                trace_id_for_correlation=connection_trace_id,
+                platform_request_id_for_correlation=connection_request_id,
+                service_name=service_name,
+                active_company_id=company_scope,
+            ),
             ensure_ascii=False,
         ))
         return
     if not isinstance(command_type, str) or not command_type:
         await websocket.send_text(json.dumps(
-            _build_failure_frame(request_id, None, "ws_invalid_frame", "type required (string)"),
+            _build_failure_frame(
+                request_id,
+                None,
+                "ws_invalid_frame",
+                "type required (string)",
+                trace_id_for_correlation=connection_trace_id,
+                platform_request_id_for_correlation=connection_request_id,
+                service_name=service_name,
+                active_company_id=company_scope,
+            ),
             ensure_ascii=False,
         ))
         return
@@ -116,11 +178,7 @@ async def _handle_command_frame(
     command_request_id = f"ws-cmd:{uuid.uuid4().hex}"
     trace_id = f"ws:{uuid.uuid4().hex}"
 
-    company_id = (
-        user.active_company_id
-        if isinstance(user.active_company_id, str) and user.active_company_id
-        else None
-    )
+    company_id = company_scope
 
     scope_token = enter_request_scope(
         request_id=command_request_id,
@@ -153,13 +211,22 @@ async def _handle_command_frame(
             )
             reply_type = derive_failed_type(command_type)
             reply_payload = {"error_code": "ws_internal_error", "error_detail": str(exc)}
+        out_payload = reply_payload
+        if isinstance(reply_payload, dict) and reply_type.endswith("_failed"):
+            out_payload = _merge_ws_failure_payload(
+                reply_payload,
+                trace_id=trace_id,
+                platform_request_id=command_request_id,
+                service_name=service_name,
+                active_company_id=company_scope,
+            )
+        await websocket.send_text(json.dumps(
+            {"request_id": request_id, "type": reply_type, "payload": out_payload},
+            ensure_ascii=False,
+        ))
     finally:
         clear_context()
         exit_request_scope(scope_token)
-    await websocket.send_text(json.dumps(
-        {"request_id": request_id, "type": reply_type, "payload": reply_payload},
-        ensure_ascii=False,
-    ))
 
 
 @router.websocket("/ws/notifications")
@@ -215,6 +282,7 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
                 user,
                 service_name=service_name,
                 connection_request_id=connection_request_id,
+                connection_trace_id=connection_trace_id,
             )
             # После выхода из scope команды восстановим бинд connection-полей,
             # чтобы записи `notification_manager.disconnect` несли user_id.

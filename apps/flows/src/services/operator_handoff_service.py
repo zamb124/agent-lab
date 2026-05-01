@@ -83,7 +83,7 @@ class OperatorHandoffService:
             session_id=state.session_id,
             end_user_id=state.user_id,
             flow_id=state.session_flow_id,
-            skill_id=state.skill_id,
+            branch_id=state.branch_id,
             a2a_task_id=state.task_id,
             context_id=state.context_id,
             correlation_id=cid_str,
@@ -166,7 +166,7 @@ class OperatorHandoffService:
             context_id=ctx_id,
             user_id=task.end_user_id,
             session_id=task.session_id,
-            skill_id=task.skill_id,
+            branch_id=task.branch_id,
         )
         container = get_container()
         emitter = Emitter(container.redis_client, exec_state)
@@ -270,7 +270,7 @@ class OperatorHandoffService:
                     context_id=ctx_id,
                     user_id=task.end_user_id,
                     session_id=task.session_id,
-                    skill_id=task.skill_id,
+                    branch_id=task.branch_id,
                 )
                 emitter = Emitter(container.redis_client, exec_state)
                 await emitter.emit_text(
@@ -311,7 +311,7 @@ class OperatorHandoffService:
             session_id=task.session_id,
             user_id=task.end_user_id,
             content=content_for_resume,
-            skill_id=task.skill_id,
+            branch_id=task.branch_id,
             channel=channel,
             task_id=tid,
             context_id=cid,

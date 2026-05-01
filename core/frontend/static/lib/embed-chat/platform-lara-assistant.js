@@ -10,6 +10,7 @@ export class PlatformLaraAssistant extends LitElement {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
+        branchId: { type: String, attribute: 'branch-id' },
         skillId: { type: String, attribute: 'skill-id' },
         theme: { type: String, attribute: 'theme' },
         showLauncher: { type: Boolean, attribute: 'show-launcher' },
@@ -33,6 +34,7 @@ export class PlatformLaraAssistant extends LitElement {
         this.flowsBaseUrl = '';
         this.flowId = 'lara';
         this.embedId = '';
+        this.branchId = '';
         this.skillId = '';
         this.theme = 'auto';
         this.showLauncher = false;
@@ -55,7 +57,8 @@ export class PlatformLaraAssistant extends LitElement {
                 .flowsBaseUrl=${this.flowsBaseUrl}
                 flow-id=${this.flowId || 'lara'}
                 embed-id=${this.embedId || ''}
-                skill-id=${this.skillId || ''}
+                branch-id=${(this.branchId || this.skillId || '').trim()}
+                skill-id=${(this.skillId || this.branchId || '').trim()}
                 .assistantTitle=${this.assistantTitle || 'Lara'}
                 .locale=${this.locale || 'ru'}
                 ?use-credentials=${this.useCredentials}

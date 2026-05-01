@@ -3,7 +3,7 @@
 
 Тестирует все сценарии:
 - Нет прав на flow → JSON-RPC error -32008
-- Нет прав на skill → JSON-RPC error -32008
+- Нет прав на branch → JSON-RPC error -32008
 - Нет прав на tool → агент получает сообщение об ошибке
 - Есть права → успешный доступ
 - permissions_enabled=false → проверка отключена
@@ -17,7 +17,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from apps.flows.src.models import Edge, FlowConfig, SkillConfig
+from apps.flows.src.models import Edge, FlowConfig, BranchConfig
 
 
 # =============================================================================
@@ -108,9 +108,9 @@ async def flow_with_skill_permission(container, unique_id):
             Edge(from_node="main", to_node=None),
             Edge(from_node="vip_main", to_node=None),
         ],
-        skills={
-            "default": SkillConfig(name="Default"),
-            "vip": SkillConfig(
+        branches={
+            "default": BranchConfig(name="Default"),
+            "vip": BranchConfig(
                 name="VIP Skill",
                 entry="vip_main",
                 permission="vip",
@@ -319,14 +319,14 @@ class TestFlowPermission:
 
 
 class TestSkillPermission:
-    """Тесты permission на уровне skill."""
+    """Тесты permission на уровне branch (legacy class name: skill)."""
 
     @pytest.mark.asyncio
     async def test_skill_permission_denied(
         self, client, flow_with_skill_permission, monkeypatch
     ):
         """
-        Пользователь без vip группы не имеет доступа к vip skill.
+        Пользователь без vip группы не имеет доступа к ветке vip.
         """
         from apps.flows.config import get_settings
         config = get_settings()
@@ -341,7 +341,7 @@ class TestSkillPermission:
                 {
                     "message": _msg("Hello"),
                     "metadata": {
-                        "skill": "vip",
+                        "branch": "vip",
                         "__user_groups__": ["users"],
                     },
                 },
@@ -353,14 +353,14 @@ class TestSkillPermission:
         
         assert "error" in data
         assert data["error"]["code"] == -32008
-        assert "skill" in data["error"]["message"].lower() or "vip" in str(data["error"])
+        assert "branch" in data["error"]["message"].lower() or "vip" in str(data["error"])
 
     @pytest.mark.asyncio
     async def test_skill_permission_granted(
         self, client, flow_with_skill_permission, monkeypatch
     ):
         """
-        Пользователь с vip группой имеет доступ к vip skill.
+        Пользователь с vip группой имеет доступ к ветке vip.
         """
         from apps.flows.config import get_settings
         config = get_settings()
@@ -375,7 +375,7 @@ class TestSkillPermission:
                 {
                     "message": _msg("Hello"),
                     "metadata": {
-                        "skill": "vip",
+                        "branch": "vip",
                         "__user_groups__": ["vip"],
                     },
                 },
@@ -392,9 +392,9 @@ class TestSkillPermission:
         self, client, flow_with_skill_permission, monkeypatch
     ):
         """
-        Default skill наследует permission от flow.
-        Agent требует ["users", "vip"], users имеют доступ к flow и default skill.
-        Но не к vip skill.
+        Ветка default наследует permission от flow.
+        Agent требует ["users", "vip"], users имеют доступ к flow и default branch.
+        Но не к vip branch.
         """
         from apps.flows.config import get_settings
         config = get_settings()
@@ -402,7 +402,7 @@ class TestSkillPermission:
         
         flow_id = flow_with_skill_permission
         
-        # users имеют доступ к flow и default skill
+        # users имеют доступ к flow и default branch
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json=_rpc_request(
@@ -410,7 +410,7 @@ class TestSkillPermission:
                 {
                     "message": _msg("Hello"),
                     "metadata": {
-                        "skill": "default",
+                        "branch": "default",
                         "__user_groups__": ["users"],
                     },
                 },
@@ -420,7 +420,7 @@ class TestSkillPermission:
         
         data = response.json()
         
-        # users имеют доступ к default skill
+        # users имеют доступ к default branch
         assert "result" in data, f"Expected result, got: {data}"
 
 

@@ -1472,7 +1472,7 @@
             "title": "Flow Id",
             "description": "ID агента"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
             "title": "Skill Id",
             "description": "Skill flow (LOCAL); для EXTERNAL не используется",
@@ -1722,7 +1722,7 @@
             "type": "string",
             "title": "Flow Id"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
             "title": "Skill Id"
           },
@@ -1830,7 +1830,7 @@
           "embed_id",
           "name",
           "flow_id",
-          "skill_id",
+          "branch_id",
           "allowed_origins",
           "status",
           "theme",
@@ -1898,7 +1898,7 @@
             "type": "string",
             "title": "Flow Id"
           },
-          "skill_id": {
+          "branch_id": {
             "type": "string",
             "title": "Skill Id"
           }
@@ -1909,7 +1909,7 @@
           "token_type",
           "expires_at",
           "flow_id",
-          "skill_id"
+          "branch_id"
         ],
         "title": "EmbedSessionTokenResponse"
       },
@@ -3374,7 +3374,7 @@
             ],
             "title": "Flow Id"
           },
-          "skill_id": {
+          "branch_id": {
             "anyOf": [
               {
                 "type": "string"

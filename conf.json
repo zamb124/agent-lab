@@ -30,6 +30,9 @@
   "logging": {
     "format": "json",
     "loki_url": "http://localhost:3100/loki/api/v1/push",
+    "grafana_public_url": "https://grafana.humanitec.ru",
+    "grafana_loki_datasource_uid": "loki",
+    "grafana_org_id": "1",
     "loggers_levels": {
       "taskiq": "WARNING",
       "taskiq.receiver": "WARNING"

@@ -143,7 +143,7 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
     updated(changed) {
         super.updated?.(changed);
         if (!this._hydrated && this.nodeId) {
-            const node = this._editor.state?.skillsData?.nodes?.[this.nodeId];
+            const node = this._editor.state?.branchData?.nodes?.[this.nodeId];
             if (node) {
                 this._policy = node.incoming_policy === 'all' ? 'all' : 'any';
                 this._hydrated = true;
@@ -152,7 +152,7 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
     }
 
     _displayNodeName() {
-        const n = this._editor.state?.skillsData?.nodes?.[this.nodeId];
+        const n = this._editor.state?.branchData?.nodes?.[this.nodeId];
         if (n && typeof n.name === 'string' && n.name.length > 0) {
             return n.name;
         }
@@ -204,7 +204,7 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
     }
 
     _pick(policy) {
-        const data = this._editor.state?.skillsData;
+        const data = this._editor.state?.branchData;
         if (!data || !this.nodeId) {
             this.close();
             return;
@@ -217,7 +217,7 @@ export class FlowsIncomingPolicyModal extends PlatformModal {
         }
         nodes[this.nodeId] = { ...node, incoming_policy: policy };
         const next = { ...data, nodes };
-        this._editor.updateSkillsData({ data: next });
+        this._editor.updateBranchData({ data: next });
         this._editor.pushHistory({ snapshot: next });
         this._editor.setDirty({ dirty: true });
         this.close();

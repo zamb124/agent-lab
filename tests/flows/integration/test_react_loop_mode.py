@@ -849,7 +849,7 @@ class TestExampleReactExplicitMode:
         container = get_container()
         
         # Загружаем flow с skill explicit_mode
-        flow = await container.flow_factory.get_flow("example_react", skill_id="explicit_mode")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
         
         assert flow is not None
     
@@ -866,7 +866,7 @@ class TestExampleReactExplicitMode:
             {"type": "tool_call", "tool": "finish", "args": {"answer": "7+8 = 15"}},
         ])
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="explicit_mode")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -891,7 +891,7 @@ class TestExampleReactExplicitMode:
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "Что именно посчитать?"}},
         ])
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="explicit_mode")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -916,7 +916,7 @@ class TestExampleReactExplicitMode:
             {"type": "tool_call", "tool": "finish", "args": {"answer": "Результат: 10+5 = 15"}},
         ])
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="test_explicit")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="test_explicit")
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -935,7 +935,7 @@ class TestExampleReactExplicitMode:
         """
         container = get_container()
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="explicit_relaxed_mode")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_relaxed_mode")
         
         assert flow is not None
     
@@ -949,7 +949,7 @@ class TestExampleReactExplicitMode:
             {"type": "text", "content": "Простой текстовый ответ"},
         ])
         
-        flow = await container.flow_factory.get_flow("example_react", skill_id="explicit_relaxed_mode")
+        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_relaxed_mode")
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",

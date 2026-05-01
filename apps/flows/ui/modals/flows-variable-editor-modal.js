@@ -7,7 +7,7 @@
  *   - 'company' — useResource('flows/variables').create({ key, value, secret })
  *                 (REST POST /flows/api/v1/variables идемпотентен по key).
  *   - 'flow'    — обновление черновика skillsData.variables через editor op
- *                 (`updateSkillsData` + `setDirty`). A2A-поля
+ *                 (`updateBranchData` + `setDirty`). A2A-поля
  *                 (public/title/description/order) сохраняются неизменными
  *                 при обновлении существующего ключа. Финальная фиксация —
  *                 общим Save в editor-header.
@@ -146,7 +146,7 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
 
     _submitFlow(key) {
         const state = this._editor.state;
-        const skillsData = state.skillsData;
+        const skillsData = state.branchData;
         const prevVars = isPlainObject(skillsData.variables) ? skillsData.variables : {};
         const prevRaw = prevVars[key];
         const prevConfig = isPlainObject(prevRaw) ? prevRaw : null;
@@ -156,7 +156,7 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
             secret: this._secret,
         };
         const nextVars = { ...prevVars, [key]: merged };
-        this._editor.updateSkillsData({ data: { ...skillsData, variables: nextVars } });
+        this._editor.updateBranchData({ data: { ...skillsData, variables: nextVars } });
         this._editor.setDirty({ dirty: true });
         this.toast('flows:toast.variable_applied', { type: 'success' });
     }

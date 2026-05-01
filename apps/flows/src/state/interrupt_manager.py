@@ -1,7 +1,7 @@
 """
 InterruptManager - управление interrupt/resume для вложенных вызовов.
 
-Работает с любой вложенностью делегирования в другой flow (tool с flow_id / skill_id — исполняется как вложенный subflow):
+Работает с любой вложенностью делегирования в другой flow (tool с flow_id / branch_id — исполняется как вложенный subflow):
 - flow → нода → subflow → … → ask_user
 - flow → граф из нод → нода, внутри которой снова subflow → ask_user
 - цепочка из нескольких subflow: каждый уровень — свой снимок в nested_states и сегмент в interrupt_path

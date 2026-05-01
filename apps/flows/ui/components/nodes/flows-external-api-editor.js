@@ -32,7 +32,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
     static properties = {
         nodeId: { type: String },
         flowId: { type: String },
-        skillId: { type: String },
+        branchId: { type: String },
         nodeConfig: { type: Object },
         nodeType: { type: String },
         flowVariables: { type: Object },
@@ -89,7 +89,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
         super();
         this.nodeId = '';
         this.flowId = '';
-        this.skillId = '';
+        this.branchId = '';
         this.nodeConfig = null;
         this.nodeType = 'external_api';
         this.flowVariables = null;
@@ -204,7 +204,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
                 .flowId=${this.flowId}
-                .skillId=${this.skillId}
+                .branchId=${this.branchId}
                 .nodeConfig=${this.nodeConfig}
                 .nodeType=${typeof this.nodeType === 'string' && this.nodeType.length > 0 ? this.nodeType : 'external_api'}
                 .flowVariables=${this.flowVariables}

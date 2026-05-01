@@ -22,7 +22,7 @@ async def process_flow_task(
     session_id: str,
     user_id: str,
     content: str,
-    skill_id: str = "default",
+    branch_id: str = "default",
     channel: str = "a2a",
     task_id: Optional[str] = None,
     context_id: Optional[str] = None,
@@ -42,7 +42,7 @@ async def process_flow_task(
         session_id: ID сессии
         user_id: ID пользователя
         content: Содержимое сообщения
-        skill_id: ID skill для агента
+        branch_id: ID skill для агента
         channel: Канал ("a2a", "telegram", "whatsapp")
         task_id: ID задачи A2A
         context_id: ID контекста A2A
@@ -72,7 +72,7 @@ async def process_flow_task(
         context_id=context_id or session_id,
         session_id=session_id,
         content=content,
-        skill_id=skill_id,
+        branch_id=branch_id,
         is_resume=is_resume,
         files_data=files or [],
         message=None,

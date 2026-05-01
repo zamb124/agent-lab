@@ -298,8 +298,8 @@ class TestDeepMergeToolReference:
         assert result["mock_map"]["error_case"] == "error"
 
 
-class TestDeepMergeSkillConfig:
-    """Тесты на реальных примерах SkillConfig."""
+class TestDeepMergeBranchConfig:
+    """Тесты на реальных примерах BranchConfig."""
 
     def test_skill_variables_merge(self):
         """Merge переменных skill."""

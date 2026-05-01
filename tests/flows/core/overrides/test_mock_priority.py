@@ -8,7 +8,7 @@
 """
 
 import pytest
-from apps.flows.src.models import FlowConfig, Edge, SkillConfig
+from apps.flows.src.models import FlowConfig, Edge, BranchConfig
 from apps.flows.src.mock.config import MockConfig
 from apps.flows.src.mock.resolver import (
     resolve_mock_config,

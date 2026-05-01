@@ -29,7 +29,7 @@ USER_FORGE_GUARD_FIELDS: tuple[str, ...] = (
     "user_groups",
     "flow_deadline_monotonic",
     "flow_timeout_effective_seconds",
-    "skill_id",
+    "branch_id",
     "flow_config_version",
 )
 

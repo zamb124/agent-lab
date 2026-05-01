@@ -690,7 +690,7 @@ class TestE2EExternalA2AInFlow:
                     "call_remote": {
                         "type": "remote_flow",
                         "url": "http://external-agent:8080",
-                        "skill_id": "default",
+                        "branch_id": "default",
                     },
                     "process_result": {
                         "type": "code",

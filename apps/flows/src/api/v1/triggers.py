@@ -90,9 +90,9 @@ class TriggerCreateRequest(BaseModel):
         default=None,
         description="Включить рассылку после flow; None — дефолт по типу триггера",
     )
-    skill_id: str = Field(
+    branch_id: str = Field(
         default="default",
-        description="ID skill из flow.skills; default — entry базового flow",
+        description="ID ветки из FlowConfig.branches; default — entry базового flow",
     )
 
 
@@ -105,7 +105,7 @@ class TriggerUpdateRequest(BaseModel):
     input_mapping: Optional[Dict[str, str]] = None
     output_actions: Optional[List[OutputAction]] = None
     post_flow_output_enabled: Optional[bool] = None
-    skill_id: Optional[str] = None
+    branch_id: Optional[str] = None
 
 
 class TriggerResponse(BaseModel):
@@ -119,7 +119,7 @@ class TriggerResponse(BaseModel):
     input_mapping: Dict[str, str]
     output_actions: List[OutputAction]
     post_flow_output_enabled: bool
-    skill_id: str
+    branch_id: str
     webhook_url: Optional[str] = None
     status: TriggerStatus
     last_error: Optional[str] = None
@@ -133,9 +133,9 @@ class TriggerVerifyRequest(BaseModel):
         default=None,
         description="Черновой ID триггера (для подсказки пути webhook)",
     )
-    skill_id: str = Field(
+    branch_id: str = Field(
         default="default",
-        description="Skill для резолва @var: (как при выполнении flow с этим skill)",
+        description="Ветка (branch_id) для резолва @var: (как при выполнении flow с этой веткой)",
     )
 
 
@@ -168,7 +168,7 @@ async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerRe
             input_mapping=t.input_mapping,
             output_actions=effective_output_actions_for_trigger(t),
             post_flow_output_enabled=t.post_flow_output_enabled,
-            skill_id=t.skill_id,
+            branch_id=t.branch_id,
             webhook_url=t.webhook_url,
             status=t.status,
             last_error=t.last_error,
@@ -200,7 +200,7 @@ async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) ->
         input_mapping=trigger.input_mapping,
         output_actions=effective_output_actions_for_trigger(trigger),
         post_flow_output_enabled=trigger.post_flow_output_enabled,
-        skill_id=trigger.skill_id,
+        branch_id=trigger.branch_id,
         webhook_url=trigger.webhook_url,
         status=trigger.status,
         last_error=trigger.last_error,
@@ -248,7 +248,7 @@ async def verify_trigger_draft(
                     container,
                     flow_id,
                     raw_token,
-                    skill_id=request.skill_id,
+                    branch_id=request.branch_id,
                 )
             except VariableResolutionError as e:
                 return TriggerVerifyResponse(
@@ -301,7 +301,7 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         input_mapping=request.input_mapping,
         output_actions=out_actions,
         post_flow_output_enabled=post_enabled,
-        skill_id=request.skill_id,
+        branch_id=request.branch_id,
     )
 
     # Сохраняем старый конфиг для sync
@@ -334,7 +334,7 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
         input_mapping=updated_trigger.input_mapping,
         output_actions=effective_output_actions_for_trigger(updated_trigger),
         post_flow_output_enabled=updated_trigger.post_flow_output_enabled,
-        skill_id=updated_trigger.skill_id,
+        branch_id=updated_trigger.branch_id,
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
@@ -378,8 +378,8 @@ async def update_trigger(
         trigger.output_actions = request.output_actions
     if request.post_flow_output_enabled is not None:
         trigger.post_flow_output_enabled = request.post_flow_output_enabled
-    if request.skill_id is not None:
-        trigger.skill_id = request.skill_id
+    if request.branch_id is not None:
+        trigger.branch_id = request.branch_id
 
     cur = flow_config.triggers[trigger_id]
     flow_config.triggers[trigger_id] = TriggerConfig.model_validate(cur.model_dump())
@@ -408,7 +408,7 @@ async def update_trigger(
         input_mapping=updated_trigger.input_mapping,
         output_actions=effective_output_actions_for_trigger(updated_trigger),
         post_flow_output_enabled=updated_trigger.post_flow_output_enabled,
-        skill_id=updated_trigger.skill_id,
+        branch_id=updated_trigger.branch_id,
         webhook_url=updated_trigger.webhook_url,
         status=updated_trigger.status,
         last_error=updated_trigger.last_error,
@@ -470,7 +470,7 @@ async def reregister_flow_trigger(
         input_mapping=out.input_mapping,
         output_actions=effective_output_actions_for_trigger(out),
         post_flow_output_enabled=out.post_flow_output_enabled,
-        skill_id=out.skill_id,
+        branch_id=out.branch_id,
         webhook_url=out.webhook_url,
         status=out.status,
         last_error=out.last_error,
@@ -642,7 +642,7 @@ async def generic_webhook(
                 container,
                 flow_id,
                 str(raw_secret),
-                skill_id=trigger.skill_id,
+                branch_id=trigger.branch_id,
             )
         except VariableResolutionError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e

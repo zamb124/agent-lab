@@ -133,8 +133,8 @@ class PlatformTracer:
                 all_attrs[attr.ATTR_TASK_ID] = trace_ctx.task_id
             if trace_ctx.context_id and attr.ATTR_CONTEXT_ID not in all_attrs:
                 all_attrs[attr.ATTR_CONTEXT_ID] = trace_ctx.context_id
-            if trace_ctx.skill_id and attr.ATTR_SKILL_ID not in all_attrs:
-                all_attrs[attr.ATTR_SKILL_ID] = trace_ctx.skill_id
+            if trace_ctx.branch_id and attr.ATTR_BRANCH_ID not in all_attrs:
+                all_attrs[attr.ATTR_BRANCH_ID] = trace_ctx.branch_id
             if trace_ctx.channel and attr.ATTR_CHANNEL not in all_attrs:
                 all_attrs[attr.ATTR_CHANNEL] = trace_ctx.channel
             if trace_ctx.is_resume and attr.ATTR_IS_RESUME not in all_attrs:
@@ -213,7 +213,7 @@ class PlatformTracer:
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
         flow_id: Optional[str] = None,
-        skill_id: Optional[str] = None,
+        branch_id: Optional[str] = None,
         channel: Optional[str] = None,
         is_resume: bool = False,
     ) -> TraceContext:
@@ -230,7 +230,7 @@ class PlatformTracer:
             task_id=task_id,
             context_id=context_id,
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             channel=channel,
             is_resume=is_resume,
         )
@@ -257,8 +257,8 @@ class PlatformTracer:
             attrs[attr.ATTR_CONTEXT_ID] = trace_ctx.context_id
         if trace_ctx.flow_id:
             attrs[attr.ATTR_FLOW_ID] = trace_ctx.flow_id
-        if trace_ctx.skill_id:
-            attrs[attr.ATTR_SKILL_ID] = trace_ctx.skill_id
+        if trace_ctx.branch_id:
+            attrs[attr.ATTR_BRANCH_ID] = trace_ctx.branch_id
         if trace_ctx.channel:
             attrs[attr.ATTR_CHANNEL] = trace_ctx.channel
         if trace_ctx.is_resume:

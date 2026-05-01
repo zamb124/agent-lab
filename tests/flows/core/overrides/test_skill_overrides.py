@@ -1,7 +1,7 @@
 """
 Строгие тесты для Skill overrides.
 
-Проверяем все уровни переопределений через skills:
+Проверяем все уровни переопределений через branches:
 - variables (merge/replace)
 - nodes (merge/replace)
 - edges (merge/replace)
@@ -10,7 +10,7 @@
 """
 
 import pytest
-from apps.flows.src.models import FlowConfig, Edge, MergeMode, SkillConfig
+from apps.flows.src.models import FlowConfig, Edge, MergeMode, BranchConfig
 from apps.flows.src.container import get_container
 
 
@@ -29,8 +29,8 @@ class TestSkillVariablesOverride:
                 "company_name": "BaseCompany",
                 "max_length": 500
             },
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     variables={"new_var": "new_value"},
                     variables_mode=MergeMode.MERGE
@@ -38,7 +38,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert result["variables"]["company_name"] == "BaseCompany"
         assert result["variables"]["max_length"] == 500
@@ -56,8 +56,8 @@ class TestSkillVariablesOverride:
                 "max_length": 500,
                 "mode": "default"
             },
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     variables={"max_length": 200, "mode": "custom"},
                     variables_mode=MergeMode.MERGE
@@ -65,7 +65,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert result["variables"]["max_length"] == 200
         assert result["variables"]["mode"] == "custom"
@@ -82,8 +82,8 @@ class TestSkillVariablesOverride:
                 "base_var1": "value1",
                 "base_var2": "value2"
             },
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     variables={"skill_var": "skill_value"},
                     variables_mode=MergeMode.REPLACE
@@ -91,7 +91,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert "base_var1" not in result["variables"]
         assert "base_var2" not in result["variables"]
@@ -112,8 +112,8 @@ class TestSkillVariablesOverride:
                     "title": "Название компании"
                 }
             },
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     variables={
                         "company_name": {
@@ -126,7 +126,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         # После apply_skill переменные извлекаются как простые значения
         assert result["variables"]["company_name"] == "CustomCompany"
@@ -146,8 +146,8 @@ class TestSkillNodesOverride:
                 "helper": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     entry="custom_main",
                     nodes={
@@ -158,7 +158,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert "main" not in result["nodes"]
         assert "helper" not in result["nodes"]
@@ -174,8 +174,8 @@ class TestSkillNodesOverride:
                 "main": {"type": "llm_node", "prompt": "Base"}
             },
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     nodes={
                         "new_node": {"type": "code", "code": "def run(s): return s"}
@@ -185,7 +185,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert "main" in result["nodes"]
         assert "new_node" in result["nodes"]
@@ -205,8 +205,8 @@ class TestSkillNodesOverride:
                 }
             },
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     nodes={
                         "main": {
@@ -219,7 +219,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         node = result["nodes"]["main"]
         assert node["type"] == "llm_node"  # Сохранен
@@ -242,8 +242,8 @@ class TestSkillNodesOverride:
                 }
             },
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     nodes={
                         "main": {"tools": ["only_one"]}
@@ -253,7 +253,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert result["nodes"]["main"]["tools"] == ["only_one"]
 
@@ -275,8 +275,8 @@ class TestSkillEdgesOverride:
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None)
             ],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     edges=[Edge(from_node="main", to_node=None)],
                     edges_mode=MergeMode.REPLACE
@@ -284,7 +284,7 @@ class TestSkillEdgesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert len(result["edges"]) == 1
         assert result["edges"][0].from_node == "main"
@@ -305,8 +305,8 @@ class TestSkillEdgesOverride:
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None)
             ],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     edges=[Edge(from_node="main", to_node="step3")],
                     edges_mode=MergeMode.MERGE
@@ -314,7 +314,7 @@ class TestSkillEdgesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert len(result["edges"]) == 3
         from_nodes = [e.from_node for e in result["edges"]]
@@ -343,8 +343,8 @@ class TestSkillEdgesOverride:
                 Edge(from_node="route_a", to_node=None),
                 Edge(from_node="route_b", to_node=None)
             ],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     edges=[
                         Edge(from_node="classifier", to_node="route_a", condition="route == 'a' and priority == 'high'")
@@ -354,7 +354,7 @@ class TestSkillEdgesOverride:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert len(result["edges"]) == 4
         
@@ -385,15 +385,15 @@ class TestSkillEntryOverride:
                 Edge(from_node="default_start", to_node=None),
                 Edge(from_node="skill_start", to_node=None)
             ],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     entry="skill_start"
                 )
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert result["entry"] == "skill_start"
 
@@ -407,15 +407,15 @@ class TestSkillEntryOverride:
                 "default_start": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[Edge(from_node="default_start", to_node=None)],
-            skills={
-                "custom": SkillConfig(
+            branches={
+                "custom": BranchConfig(
                     name="Custom",
                     variables={"var": "value"}
                 )
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "custom")
+        result = container.flow_factory._apply_branch(config, "custom")
 
         assert result["entry"] == "default_start"
 
@@ -538,8 +538,8 @@ class TestSkillCombinedOverrides:
                 "mode": "default"
             },
             mock={"enabled": False},
-            skills={
-                "full": SkillConfig(
+            branches={
+                "full": BranchConfig(
                     name="Full Override",
                     entry="custom_entry",
                     nodes={
@@ -558,7 +558,7 @@ class TestSkillCombinedOverrides:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "full")
+        result = container.flow_factory._apply_branch(config, "full")
 
         # Entry
         assert result["entry"] == "custom_entry"
@@ -578,7 +578,7 @@ class TestSkillCombinedOverrides:
         assert result["variables"]["skill_var"] == "value"  # Добавлен
 
         # Mock резолвится отдельно
-        skill = config.skills["full"]
+        skill = config.branches["full"]
         mock_config = resolve_mock_config(
             flow_mock=config.mock,
             skill_mock=skill.mock
@@ -600,8 +600,8 @@ class TestSkillCombinedOverrides:
                 "company_name": {"value": "@var:company_name", "public": True},
                 "max_response_length": {"value": "500", "public": True}
             },
-            skills={
-                "concise": SkillConfig(
+            branches={
+                "concise": BranchConfig(
                     name="Краткие ответы",
                     description="Режим коротких ответов",
                     variables={
@@ -612,7 +612,7 @@ class TestSkillCombinedOverrides:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "concise")
+        result = container.flow_factory._apply_branch(config, "concise")
 
         # max_response_length переопределен
         assert result["variables"]["max_response_length"] == "200"
@@ -642,8 +642,8 @@ class TestSkillCombinedOverrides:
                 Edge(from_node="complaint_processor", to_node=None),
                 Edge(from_node="general_processor", to_node=None)
             ],
-            skills={
-                "orders_only": SkillConfig(
+            branches={
+                "orders_only": BranchConfig(
                     name="Только заказы",
                     nodes={
                         "classifier": {
@@ -663,7 +663,7 @@ class TestSkillCombinedOverrides:
             }
         )
 
-        result = container.flow_factory._apply_skill(config, "orders_only")
+        result = container.flow_factory._apply_branch(config, "orders_only")
 
         # classifier переопределен
         assert "order" in result["nodes"]["classifier"]["code"]

@@ -103,7 +103,7 @@ class A2AClient:
         base_url: str,
         content: str,
         session_id: Optional[str] = None,
-        skill_id: str = "default",
+        branch_id: str = "default",
         metadata: Optional[Dict[str, Any]] = None,
         auth_headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
@@ -114,7 +114,7 @@ class A2AClient:
             base_url: Базовый URL агента
             content: Текст сообщения
             session_id: ID сессии (опционально)
-            skill_id: ID навыка агента
+            branch_id: ID навыка агента
             metadata: Дополнительные данные
             auth_headers: Заголовки авторизации
 
@@ -147,8 +147,8 @@ class A2AClient:
 
         # Добавляем metadata с skill и переданными данными
         final_metadata = metadata.copy() if metadata else {}
-        if skill_id and skill_id != "default":
-            final_metadata["skill"] = skill_id
+        if branch_id and branch_id != "default":
+            final_metadata["skill"] = branch_id
         
         if final_metadata:
             payload["params"]["metadata"] = final_metadata

@@ -26,7 +26,7 @@ export class FlowsSessionsModal extends PlatformModal {
         flowId: { type: String },
         _filterUserId: { type: String, state: true },
         _filterFlowId: { type: String, state: true },
-        _filterSkillId: { type: String, state: true },
+        _filterBranchId: { type: String, state: true },
         _dateFromValue: { state: true },
         _dateToValue: { state: true },
     };
@@ -211,7 +211,7 @@ export class FlowsSessionsModal extends PlatformModal {
         this.flowId = '';
         this._filterUserId = '';
         this._filterFlowId = '';
-        this._filterSkillId = '';
+        this._filterBranchId = '';
         this._dateFromValue = null;
         this._dateToValue = null;
         this._sessions = this.useResource('flows/sessions');
@@ -291,8 +291,8 @@ export class FlowsSessionsModal extends PlatformModal {
         if (this._filterFlowId.length > 0) {
             payload.flow_id = this._filterFlowId;
         }
-        if (this._filterSkillId.length > 0) {
-            payload.skill_id = this._filterSkillId;
+        if (this._filterBranchId.length > 0) {
+            payload.branch_id = this._filterBranchId;
         }
         if (this._dateFromValue !== null && typeof this._dateFromValue === 'string' && this._dateFromValue.length > 0) {
             payload.date_from = this._dateFromValue;
@@ -322,7 +322,7 @@ export class FlowsSessionsModal extends PlatformModal {
     _resetFilters() {
         this._filterUserId = '';
         this._filterFlowId = typeof this.flowId === 'string' ? this.flowId : '';
-        this._filterSkillId = '';
+        this._filterBranchId = '';
         this._dateFromValue = null;
         this._dateToValue = null;
         this._loadSessions();
@@ -481,12 +481,12 @@ export class FlowsSessionsModal extends PlatformModal {
                             @change=${this._onFlowFilterCombobox}
                         ></flows-searchable-combobox>
                         <glass-input
-                            .inputTitle=${this.t('sessions_modal.filter_skill_aria')}
-                            .value=${this._filterSkillId}
-                            placeholder=${this.t('sessions_modal.filter_skill')}
+                            .inputTitle=${this.t('sessions_modal.filter_branch_aria')}
+                            .value=${this._filterBranchId}
+                            placeholder=${this.t('sessions_modal.filter_branch')}
                             @input=${(e) => {
                                 const t = e.target;
-                                this._filterSkillId = t && 'value' in t ? t.value : '';
+                                this._filterBranchId = t && 'value' in t ? t.value : '';
                             }}
                         ></glass-input>
                         <div class="flows-sessions-dt">

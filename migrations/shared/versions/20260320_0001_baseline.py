@@ -119,7 +119,7 @@ def upgrade() -> None:
         sa.Column("flow_id", sa.String(), nullable=True),
         sa.Column("task_id", sa.String(), nullable=True),
         sa.Column("context_id", sa.String(), nullable=True),
-        sa.Column("skill_id", sa.String(), nullable=True),
+        sa.Column("branch_id", sa.String(), nullable=True),
         sa.Column("channel", sa.String(), nullable=True),
         sa.Column("node_id", sa.String(), nullable=True),
         sa.Column("agent_name", sa.String(), nullable=True),

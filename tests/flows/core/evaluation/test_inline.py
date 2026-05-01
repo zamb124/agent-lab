@@ -501,7 +501,7 @@ class TestSerialization:
         tc = TestCaseConfig(
             name="Full test",
             description="Full description",
-            skill_ids=["default", "premium"],
+            branch_ids=["default", "premium"],
             max_turns=10,
             timeout=600,
             turns=[

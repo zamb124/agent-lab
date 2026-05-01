@@ -28,7 +28,7 @@
         "flow_id"
       ],
       "payload_optional": [
-        "skill_id",
+        "branch_id",
         "variables"
       ]
     },
@@ -37,7 +37,7 @@
       "payload_required": [],
       "payload_optional": [
         "flow_id",
-        "skill_id",
+        "branch_id",
         "node_id",
         "open_editor"
       ]
@@ -62,7 +62,7 @@
       "payload_optional": [
         "patch_kind",
         "flow_id",
-        "skill_id",
+        "branch_id",
         "node_id",
         "changes",
         "flow_changes"
@@ -76,7 +76,7 @@
       "payload_optional": [
         "patch_kind",
         "flow_id",
-        "skill_id",
+        "branch_id",
         "node_id",
         "changes",
         "flow_changes",
@@ -108,7 +108,7 @@
       ],
       "payload_optional": [
         "flow_id",
-        "skill_id",
+        "branch_id",
         "source"
       ]
     },

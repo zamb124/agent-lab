@@ -98,6 +98,10 @@ def _normalize_evaluation(evaluation: Any) -> None:
     for _case_id, case in evaluation.items():
         if not isinstance(case, dict):
             continue
+        if "skill_ids" in case:
+            raise ValueError(
+                f"evaluation['{_case_id}']: поле skill_ids удалено; используйте branch_ids"
+            )
         turns = case.get("turns")
         if isinstance(turns, list):
             for turn in turns:
@@ -110,18 +114,11 @@ def normalize_flow_config_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
     nodes = out.get("nodes")
     if isinstance(nodes, dict):
         out["nodes"] = {k: normalize_node_config(v) for k, v in nodes.items()}
-    skills = out.get("skills")
-    if isinstance(skills, dict):
-        new_skills: Dict[str, Any] = {}
-        for skill_id, skill in skills.items():
-            sc = copy.deepcopy(skill)
-            sn = sc.get("nodes")
-            if isinstance(sn, dict):
-                sc["nodes"] = {
-                    k: normalize_node_config(n) for k, n in sn.items()
-                }
-            new_skills[skill_id] = sc
-        out["skills"] = new_skills
+    if "skills" in out:
+        raise ValueError(
+            "Конфиг flow содержит удалённый ключ 'skills'. "
+            "Используйте 'branches'. Для строк в БД agents выполните ревизию Alembic agents_0005."
+        )
     ev = out.get("evaluation")
     if ev is not None:
         _normalize_evaluation(ev)

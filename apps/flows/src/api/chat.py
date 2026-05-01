@@ -64,7 +64,7 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
     Возвращает HTML интерфейс чата для указанного агента.
     
     Проверяет существование агента и возвращает шаблон с настройками авторизации.
-    Загружает список skills для выбора в интерфейсе.
+    Загружает список веток (branches) для выбора в интерфейсе.
     """
     config = await _get_flow_config(flow_id, container)
     if not config:
@@ -72,10 +72,10 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
     
     base_url = _get_base_url(request)
     
-    # Получаем список skills
+    # Получаем список веток
     context = get_context()
     channel = A2AChannel(flow_id, context=context)
-    skills_list = await channel.list_skills()
+    branches_list = await channel.list_branches()
     
     # Получаем email пользователя из контекста или request.state
     user_email = ""
@@ -91,7 +91,7 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
     # Если шаблона нет в static, используем встроенный
     if not (template_dir / template_file).exists():
         # Используем встроенный шаблон
-        html_content = _get_embedded_template(flow_id, base_url, skills_list)
+        html_content = _get_embedded_template(flow_id, base_url, branches_list)
         return HTMLResponse(content=html_content)
     
     # Загружаем шаблон через Jinja2
@@ -105,16 +105,16 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
         flow_id=flow_id,
         base_url=base_url,
         flow_name=config.name or flow_id,
-        skills=skills_list,
+        branches=branches_list,
         user_email=user_email,
     )
     
     return HTMLResponse(content=html_content)
 
 
-def _get_embedded_template(flow_id: str, base_url: str, skills: List[dict]) -> str:
+def _get_embedded_template(flow_id: str, base_url: str, branches: List[dict]) -> str:
     """Возвращает встроенный HTML шаблон если файл не найден."""
-    skills_json = json.dumps(skills)
+    branches_json = json.dumps(branches)
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -131,7 +131,7 @@ def _get_embedded_template(flow_id: str, base_url: str, skills: List[dict]) -> s
         window.CHAT_CONFIG = {{
             flowId: "{flow_id}",
             baseUrl: "{base_url}",
-            skills: {skills_json}
+            branches: {branches_json}
         }};
     </script>
     <script src="/static/chat.js"></script>

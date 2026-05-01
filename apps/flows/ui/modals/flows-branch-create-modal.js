@@ -1,8 +1,8 @@
 /**
- * flows-skill-create-modal — создание skill для flow.
+ * flows-branch-create-modal — создание ветки графа для flow.
  *
- * Использует useOp('flows/skill_create'). После успеха страница редактора
- * загружает обновлённый flow через push `flows/skill/created` (см. Stage 10).
+ * Использует useOp('flows/branch_create'). После успеха страница редактора
+ * загружает обновлённый flow через push `flows/branch/created`.
  */
 
 import { html, css } from 'lit';
@@ -10,16 +10,16 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 
-const SKILL_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
+const BRANCH_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
-export class FlowsSkillCreateModal extends PlatformFormModal {
-    static modalKind = 'flows.skill_create';
+export class FlowsBranchCreateModal extends PlatformFormModal {
+    static modalKind = 'flows.branch_create';
     static i18nNamespace = 'flows';
 
     static properties = {
         ...PlatformFormModal.properties,
         flowId: { type: String },
-        _skillId: { state: true },
+        _branchId: { state: true },
         _name: { state: true },
         _description: { state: true },
     };
@@ -45,15 +45,15 @@ export class FlowsSkillCreateModal extends PlatformFormModal {
     constructor() {
         super();
         this.flowId = '';
-        this._skillId = '';
+        this._branchId = '';
         this._name = '';
         this._description = '';
-        this._createSkill = this.useOp('flows/skill_create');
+        this._createBranch = this.useOp('flows/branch_create');
         this._flows = this.useResource('flows/flows');
     }
 
     renderHeader() {
-        return html`<h3>${this.t('skill_create_modal.title')}</h3>`;
+        return html`<h3>${this.t('branch_create_modal.title')}</h3>`;
     }
 
     renderSaveHeaderButton() {
@@ -61,22 +61,22 @@ export class FlowsSkillCreateModal extends PlatformFormModal {
     }
 
     renderBody() {
-        const validId = SKILL_ID_PATTERN.test(this._skillId);
+        const validId = BRANCH_ID_PATTERN.test(this._branchId);
         return html`
             <div class="field">
-                <label>${this.t('skill_create_modal.field_skill_id')}</label>
+                <label>${this.t('branch_create_modal.field_branch_id')}</label>
                 <input
                     type="text"
-                    .value=${this._skillId}
-                    placeholder="my_skill"
-                    @input=${(e) => { this._skillId = e.target.value; this.isDirty = true; }}
+                    .value=${this._branchId}
+                    placeholder="my_branch"
+                    @input=${(e) => { this._branchId = e.target.value; this.isDirty = true; }}
                 />
-                ${this._skillId && !validId
-                    ? html`<div class="form-error">${this.t('skill_create_modal.err_skill_id_pattern')}</div>`
+                ${this._branchId && !validId
+                    ? html`<div class="form-error">${this.t('branch_create_modal.err_branch_id_pattern')}</div>`
                     : ''}
             </div>
             <div class="field">
-                <label>${this.t('skill_create_modal.field_name')}</label>
+                <label>${this.t('branch_create_modal.field_name')}</label>
                 <input
                     type="text"
                     .value=${this._name}
@@ -84,7 +84,7 @@ export class FlowsSkillCreateModal extends PlatformFormModal {
                 />
             </div>
             <div class="field">
-                <label>${this.t('skill_create_modal.field_description')}</label>
+                <label>${this.t('branch_create_modal.field_description')}</label>
                 <textarea
                     .value=${this._description}
                     @input=${(e) => { this._description = e.target.value; this.isDirty = true; }}
@@ -94,22 +94,22 @@ export class FlowsSkillCreateModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        const validId = SKILL_ID_PATTERN.test(this._skillId);
+        const validId = BRANCH_ID_PATTERN.test(this._branchId);
         const validName = this._name.trim().length > 0;
         return html`
-            <platform-button @click=${() => this.close()}>${this.t('skill_create_modal.action_cancel')}</platform-button>
+            <platform-button @click=${() => this.close()}>${this.t('branch_create_modal.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${!(validId && validName)} @click=${this._onSubmit}>
-                ${this.t('skill_create_modal.action_create')}
+                ${this.t('branch_create_modal.action_create')}
             </platform-button>
         `;
     }
 
     async _onSubmit() {
         if (!this.flowId) return;
-        await this._createSkill.run({
+        await this._createBranch.run({
             flow_id: this.flowId,
             body: {
-                skill_id: this._skillId.trim(),
+                branch_id: this._branchId.trim(),
                 name: this._name.trim(),
                 description: this._description,
                 nodes: {},
@@ -121,5 +121,5 @@ export class FlowsSkillCreateModal extends PlatformFormModal {
     }
 }
 
-customElements.define('flows-skill-create-modal', FlowsSkillCreateModal);
-registerModalKind(FlowsSkillCreateModal.modalKind, 'flows-skill-create-modal');
+customElements.define('flows-branch-create-modal', FlowsBranchCreateModal);
+registerModalKind(FlowsBranchCreateModal.modalKind, 'flows-branch-create-modal');

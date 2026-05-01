@@ -10,7 +10,8 @@
  * @param {string} [options.embedId]
  * @param {string} options.message
  * @param {string} [options.contextId]
- * @param {string|null} [options.skillId]
+ * @param {string|null} [options.branchId]
+ * @param {string|null} [options.skillId] - легаси-алиас для branchId
  * @param {Array<object>} [options.files] - либо { name, mimeType|type, data: base64 }, либо уже A2A: { file: { bytes, name, mimeType } }
  * @param {object|null} [options.metadata]
  * @param {() => Promise<Record<string, string>>} [options.getHeaders] - доп. заголовки (Authorization)
@@ -24,6 +25,7 @@ export async function streamEmbedA2A(options, onEvent) {
         embedId,
         message,
         contextId = null,
+        branchId = null,
         skillId = null,
         files = [],
         metadata = null,
@@ -91,8 +93,13 @@ export async function streamEmbedA2A(options, onEvent) {
     };
 
     const meta = metadata && typeof metadata === 'object' ? { ...metadata } : {};
-    if (skillId) {
-        meta.skill = skillId;
+    const effectiveBranchRaw = branchId != null && String(branchId).trim() !== '' ? branchId : skillId;
+    const effectiveBranch =
+        effectiveBranchRaw != null && String(effectiveBranchRaw).trim() !== ''
+            ? String(effectiveBranchRaw).trim()
+            : null;
+    if (effectiveBranch) {
+        meta.branch = effectiveBranch;
     }
     if (Object.keys(meta).length > 0) {
         body.params.metadata = meta;

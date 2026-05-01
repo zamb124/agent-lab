@@ -26,7 +26,7 @@ def create_initial_state(
     user_id: str,
     session_id: str,
     content: str = "",
-    skill_id: str = "default",
+    branch_id: str = "default",
 ) -> ExecutionState:
     """Создает начальный ExecutionState."""
     return ExecutionState(
@@ -35,7 +35,7 @@ def create_initial_state(
         user_id=user_id,
         session_id=session_id,
         content=content,
-        skill_id=skill_id,
+        branch_id=branch_id,
     )
 
 

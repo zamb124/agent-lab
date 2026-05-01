@@ -271,6 +271,13 @@ export class FlowsCodeEditor extends PlatformElement {
                     changes: { from: 0, to: current.length, insert: asString(this.value) },
                 });
             }
+            if (this.fillParent) {
+                queueMicrotask(() => {
+                    if (this._editorView) {
+                        this._editorView.requestMeasure();
+                    }
+                });
+            }
         }
         if (changed.has('readonly') && this._readonlyCompartment) {
             this._editorView.dispatch({

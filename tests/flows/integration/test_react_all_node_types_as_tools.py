@@ -302,7 +302,7 @@ class TestAgentSkillsAsTools:
                 }
             },
             edges=[Edge(from_node="default", to_node=None)],
-            skills={
+            branches={
                 "math_skill": {
                     "name": "Math Skill",
                     "entry": "calc",
@@ -348,7 +348,7 @@ async def execute(args, state):
             "type": "flow",
             "description": "Math",
             "flow_id": "skills_agent",
-            "skill_id": "math_skill",
+            "branch_id": "math_skill",
             "args_schema": {"x": {"type": "integer"}, "y": {"type": "integer"}},
         }
         
@@ -357,7 +357,7 @@ async def execute(args, state):
             "type": "flow",
             "description": "Text",
             "flow_id": "skills_agent",
-            "skill_id": "text_skill",
+            "branch_id": "text_skill",
             "args_schema": {"text": {"type": "string"}},
         }
         
@@ -472,7 +472,7 @@ async def execute(args, state):
             entry="main",
             nodes={"main": {"type": "code", "code": "async def execute(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
+            branches={
                 "my_skill": {
                     "name": "My Skill",
                     "entry": "do_work",
@@ -500,7 +500,7 @@ async def execute(args, state):
             "type": "flow",
             "description": "Skill",
             "flow_id": "skill_test_agent",
-            "skill_id": "my_skill",
+            "branch_id": "my_skill",
             "args_schema": {"param": {"type": "string"}},
         }
         
@@ -650,7 +650,7 @@ class TestAgentCallsOwnSkillsAsTools:
                             "type": "flow",
                             "description": "Use Skill A - compute square",
                             "flow_id": "self_skill_agent",
-                            "skill_id": "skill_a",
+                            "branch_id": "skill_a",
                             "args_schema": {"number": {"type": "integer"}},
                         },
                         # Свой скилл B как tool
@@ -659,14 +659,14 @@ class TestAgentCallsOwnSkillsAsTools:
                             "type": "flow",
                             "description": "Use Skill B - uppercase text",
                             "flow_id": "self_skill_agent",
-                            "skill_id": "skill_b",
+                            "branch_id": "skill_b",
                             "args_schema": {"text": {"type": "string"}},
                         },
                     ],
                 },
             },
             edges=[Edge(from_node="main_react", to_node=None)],
-            skills={
+            branches={
                 "skill_a": {
                     "name": "Skill A - Math",
                     "entry": "calc",
@@ -744,7 +744,7 @@ async def execute(args, state):
             entry="main",
             nodes={"main": {"type": "code", "code": "async def execute(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
+            branches={
                 "helper_skill": {
                     "name": "Helper Skill",
                     "entry": "help",
@@ -783,7 +783,7 @@ async def execute(args, state):
                             "type": "flow",
                             "description": "My own skill",
                             "flow_id": "main_agent",  # СВОЙ
-                            "skill_id": "own_skill",
+                            "branch_id": "own_skill",
                             "args_schema": {"value": {"type": "integer"}},
                         },
                         # Скилл ДРУГОГО агента
@@ -792,14 +792,14 @@ async def execute(args, state):
                             "type": "flow",
                             "description": "Helper agent skill",
                             "flow_id": "helper_agent",  # ДРУГОЙ агент
-                            "skill_id": "helper_skill",
+                            "branch_id": "helper_skill",
                             "args_schema": {"request": {"type": "string"}},
                         },
                     ],
                 },
             },
             edges=[Edge(from_node="main_react", to_node=None)],
-            skills={
+            branches={
                 "own_skill": {
                     "name": "Own Skill",
                     "entry": "do_own",

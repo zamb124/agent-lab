@@ -155,7 +155,7 @@ class EvaluationResults(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     flow_id: Mapped[str] = mapped_column(String)
-    skill_id: Mapped[str] = mapped_column(String)
+    branch_id: Mapped[str] = mapped_column(String)
     run_date: Mapped[date] = mapped_column(Date)
     iteration: Mapped[int] = mapped_column(Integer)
     test_case_id: Mapped[str] = mapped_column(String)
@@ -171,10 +171,10 @@ class EvaluationResults(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "flow_id", "skill_id", "run_date", "iteration", "test_case_id",
+            "flow_id", "branch_id", "run_date", "iteration", "test_case_id",
             name="uq_evaluation_results"
         ),
-        Index("ix_evaluation_results_flow_skill", "flow_id", "skill_id"),
+        Index("ix_evaluation_results_flow_skill", "flow_id", "branch_id"),
     )
 
     def __repr__(self) -> str:
@@ -357,7 +357,7 @@ class OperatorTasks(Base):
     session_id: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     end_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     flow_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    skill_id: Mapped[str] = mapped_column(String(255), nullable=False, default="default")
+    branch_id: Mapped[str] = mapped_column(String(255), nullable=False, default="default")
     a2a_task_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
     context_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
     correlation_id: Mapped[Optional[str]] = mapped_column(String(36), default=None, index=True)

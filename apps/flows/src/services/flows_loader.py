@@ -229,8 +229,8 @@ class FlowsLoader:
         nodes = self._inline_tools_in_nodes(nodes)
 
         edges = raw_config.get("edges", [])
-        skills = await self._load_skills_with_prompts(bundle_dir, raw_config)
-        skills = self._inline_tools_in_skills(skills)
+        branches = await self._load_branches_with_prompts(bundle_dir, raw_config)
+        branches = self._inline_tools_in_branches(branches)
 
         evaluation = raw_config.get("evaluation")
         if evaluation:
@@ -260,7 +260,7 @@ class FlowsLoader:
             nodes=nodes,
             edges=edges,
             variables=raw_config.get("variables", {}),
-            skills=skills,
+            branches=branches,
             evaluation=evaluation,
             triggers=triggers,
             source="file",
@@ -592,44 +592,44 @@ class FlowsLoader:
         except Exception as e:
             logger.error(f"Node '{node_id}': не удалось загрузить код из {function_path}: {e}")
 
-    async def _load_skills_with_prompts(
+    async def _load_branches_with_prompts(
         self, bundle_dir: Path, config: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Загружает skills и встраивает промпты для нод в каждом skill."""
-        raw_skills = config.get("skills", {})
-        if not raw_skills:
+        """Загружает ветки (branches) и встраивает промпты для нод в каждой ветке."""
+        raw_branches = config.get("branches")
+        if raw_branches is None:
+            raise ValueError("flow.json: обязательно поле branches (объект веток)")
+        if not raw_branches:
             return {}
+        if not isinstance(raw_branches, dict):
+            raise ValueError("flow.json: поле branches должно быть объектом")
 
-        skills = {}
-        for skill_id, skill_config in raw_skills.items():
-            skill = dict(skill_config)
+        branches: Dict[str, Any] = {}
+        for branch_id, branch_payload in raw_branches.items():
+            branch_cfg = dict(branch_payload)
 
-            # Загружаем промпты и инлайним function для нод в skill
-            skill_nodes = skill.get("nodes", {})
-            if skill_nodes:
+            branch_nodes = branch_cfg.get("nodes", {})
+            if branch_nodes:
                 processed_nodes = {}
-                for node_id, node_config in skill_nodes.items():
+                for node_id, node_config in branch_nodes.items():
                     node = dict(node_config)
-                    
-                    # Если нода ссылается на node_id из nodes.json - мержим с данными из кеша
+
                     ref_node_id = node.get("node_id")
                     if ref_node_id:
                         node = self._merge_node_with_cache(node, ref_node_id, bundle_dir)
-                    
-                    # Инлайним промпт из файла
+
                     node = self._inline_prompt_from_file(node, bundle_dir)
                     node = self._inline_output_schema_file(node, bundle_dir)
 
-                    # Инлайним function -> code
-                    self._inline_function_to_code(node, f"{skill_id}.{node_id}")
-                    node = await self._materialize_node_files(node, bundle_dir, f"{skill_id}.{node_id}")
+                    self._inline_function_to_code(node, f"{branch_id}.{node_id}")
+                    node = await self._materialize_node_files(node, bundle_dir, f"{branch_id}.{node_id}")
                     processed_nodes[node_id] = node
-                
-                skill["nodes"] = processed_nodes
 
-            skills[skill_id] = skill
+                branch_cfg["nodes"] = processed_nodes
 
-        return skills
+            branches[branch_id] = branch_cfg
+
+        return branches
 
     def _apply_defaults(self, nodes: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """
@@ -894,15 +894,13 @@ class FlowsLoader:
                 f"найдено {len(exit_tools)}: {names}"
             )
 
-    def _inline_tools_in_skills(self, skills: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Рекурсивно инлайнит tools в nodes внутри skills.
-        """
-        for skill_id, skill_config in skills.items():
-            skill_nodes = skill_config.get("nodes", {})
-            if skill_nodes:
-                skill_config["nodes"] = self._inline_tools_in_nodes(skill_nodes)
-        return skills
+    def _inline_tools_in_branches(self, branches: Dict[str, Any]) -> Dict[str, Any]:
+        """Рекурсивно инлайнит tools в nodes внутри каждой ветки."""
+        for _branch_id, branch_cfg in branches.items():
+            branch_nodes = branch_cfg.get("nodes", {})
+            if branch_nodes:
+                branch_cfg["nodes"] = self._inline_tools_in_nodes(branch_nodes)
+        return branches
 
     async def load_all_for_company(
         self, 

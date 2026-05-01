@@ -513,7 +513,7 @@ export class OperatorPage extends PlatformPage {
                             </div>
                             <div class="task-card-meta">${asString(task.handoff_message_preview)}</div>
                             <div class="task-card-meta"><code>${task.flow_id}</code> / ${
-                                typeof task.skill_id === 'string' && task.skill_id.length > 0 ? task.skill_id : 'base'
+                                typeof task.branch_id === 'string' && task.branch_id.length > 0 ? task.branch_id : 'base'
                             }</div>
                         </div>
                     `;

@@ -36,7 +36,7 @@ class CompiledGraph(StrictBaseModel):
     """
     Неизменяемый скомпилированный граф агента.
     
-    Результат компиляции FlowConfig + SkillConfig.
+    Результат компиляции FlowConfig + BranchConfig.
     Все проверки пройдены, граф готов к выполнению.
     
     Zero-Guess гарантии:
@@ -48,7 +48,7 @@ class CompiledGraph(StrictBaseModel):
     """
     
     flow_id: str = Field(..., description="ID агента")
-    skill_id: str = Field(default="default", description="ID применённого skill")
+    branch_id: str = Field(default="default", description="ID применённой ветки")
     entry_node: str = Field(..., description="Стартовая нода")
     
     nodes: Dict[str, Dict[str, Any]] = Field(..., description="Ноды графа")
@@ -87,42 +87,42 @@ class GraphCompiler:
     
     Examples:
         >>> compiler = GraphCompiler()
-        >>> graph = compiler.compile(flow_config, skill_id="default")
+        >>> graph = compiler.compile(flow_config, branch_config=None)
         >>> # Граф валиден и готов к исполнению
     """
     
     def compile(
         self,
         flow_config: Any,  # FlowConfig
-        skill_config: Optional[Any] = None,  # SkillConfig
+        branch_config: Optional[Any] = None,  # BranchConfig
         variables: Optional[Dict[str, Any]] = None,
     ) -> CompiledGraph:
         """
         Компилирует агента в неизменяемый граф.
-        
+
         Проверки:
         1. entry нода существует
         2. Все ноды в edges существуют
         3. Нет недостижимых нод
         4. Нет циклов без выхода
-        5. Skills не конфликтуют
-        
+        5. Ветки не конфликтуют с базовым графом
+
         Args:
             flow_config: Конфигурация агента
-            skill_config: Конфигурация skill (опционально)
+            branch_config: Конфигурация ветки (опционально)
             variables: Предрезолвнутые переменные
-        
+
         Returns:
             CompiledGraph - неизменяемый граф
-        
+
         Raises:
             ConfigError: Если конфиг невалиден
             CyclicDependencyError: Если есть циклы
-            NodeConflictError: Если skill конфликтует
+            NodeConflictError: Если ветка конфликтует
             InvalidGraphError: Если структура графа невалидна
         """
-        # Применяем skill к базовой конфигурации
-        effective_config = self._apply_skill(flow_config, skill_config)
+        # Применяем ветку к базовой конфигурации
+        effective_config = self._apply_branch(flow_config, branch_config)
         
         # Валидируем entry ноду
         self._validate_entry_node(effective_config)
@@ -151,7 +151,7 @@ class GraphCompiler:
         
         return CompiledGraph(
             flow_id=flow_config.flow_id,
-            skill_id=skill_config.name if skill_config else "default",
+            branch_id=branch_config.name if branch_config else "default",
             entry_node=effective_config["entry"],
             nodes=effective_config["nodes"],
             edges=compiled_edges,
@@ -159,14 +159,14 @@ class GraphCompiler:
             checksum=checksum,
         )
     
-    def _apply_skill(
+    def _apply_branch(
         self,
         flow_config: Any,
-        skill_config: Optional[Any],
+        branch_config: Optional[Any],
     ) -> Dict[str, Any]:
         """
-        Применяет skill к базовой конфигурации агента.
-        
+        Применяет ветку к базовой конфигурации агента.
+
         TODO: Эта логика будет перенесена из FlowFactory.
         Пока возвращаем базовую конфигурацию.
         """

@@ -45,7 +45,7 @@ async def send_a2a_message(
     client,
     flow_id: str,
     content: str,
-    skill_id: str = "default",
+    branch_id: str = "default",
     session_id: str = None,
     metadata: Dict = None,
 ) -> Dict[str, Any]:
@@ -80,16 +80,16 @@ async def run_evaluation(
     client,
     flow_id: str,
     test_case_id: str,
-    skill_id: str = "default",
+    branch_id: str = "default",
 ) -> Dict[str, Any]:
     """Запускает evaluation тест через A2A."""
     return await send_a2a_message(
         client=client,
         flow_id=flow_id,
         content=f"[Test: {test_case_id}]",
-        skill_id=skill_id,
+        branch_id=branch_id,
         metadata={
-            "skill": skill_id,
+            "branch": branch_id,
             "evaluation": {"test_case_id": test_case_id},
         },
     )
@@ -261,26 +261,26 @@ class TestEvaluationDialogType:
         assert state in ("completed", "failed")
 
 
-class TestEvaluationSkillFiltering:
-    """Тесты фильтрации по skill_ids."""
+class TestEvaluationBranchFiltering:
+    """Тесты фильтрации тест-кейсов по branch_ids."""
 
-    async def test_wildcard_skill_available_for_any(self, client, mock_llm):
+    async def test_wildcard_branch_available_for_any(self, client, mock_llm):
         """
-        skill_ids='*' означает тест доступен для любого skill.
-        contains_check имеет skill_ids='*'.
+        branch_ids='*' означает тест доступен для любой ветки.
+        contains_check имеет branch_ids='*'.
         """
         setup_mock_llm(mock_llm, ["Привет!"])
 
-        # Запускаем для разных skills - не должно быть ошибки "test not found"
+        # Запускаем для разных веток — не должно быть ошибки "test not found"
         data = await run_evaluation(client, "example_react", "contains_check", "default")
         assert "error" not in data or "test not found" not in str(data.get("error", ""))
 
-    async def test_specific_skill_mismatch_returns_error(self, client, mock_llm):
+    async def test_specific_branch_mismatch_returns_error(self, client, mock_llm):
         """
-        Тест для конкретного skill недоступен для другого skill.
+        Тест для конкретной ветки недоступен для другой ветки.
 
-        mock_skill_test имеет skill_ids=["test_full"]
-        При запуске для skill="default" должна быть ошибка.
+        mock_skill_test имеет branch_ids=["test_full"]
+        При запуске для branch_id="default" должна быть ошибка.
         """
         setup_mock_llm(mock_llm, ["Test response"])
 
@@ -320,7 +320,7 @@ class TestEvaluationDBStorage:
         # Проверяем БД
         results = await container.evaluation_repository.get_latest_results(
             flow_id="example_react",
-            skill_id="test_full",
+            branch_id="test_full",
             limit=50,
         )
 
@@ -336,7 +336,7 @@ class TestEvaluationDBStorage:
 
         assert found is not None, f"Результат {test_case_id} не найден в БД"
         assert found.flow_id == "example_react"
-        assert found.skill_id == "test_full"
+        assert found.branch_id == "test_full"
         assert found.status in ("passed", "failed", "error")
         assert found.duration_ms >= 0
 
@@ -355,7 +355,7 @@ class TestEvaluationDBStorage:
         today = date.today()
         results = await container.evaluation_repository.get_by_run(
             flow_id="example_react",
-            skill_id="test_full",
+            branch_id="test_full",
             run_date=today,
         )
 
@@ -379,7 +379,7 @@ class TestEvaluationDBStorage:
 
         results = await container.evaluation_repository.get_latest_results(
             flow_id="example_react",
-            skill_id="test_full",
+            branch_id="test_full",
             limit=50,
         )
 
@@ -399,7 +399,7 @@ class TestEvaluationResultsAPI:
 
         response = await client.get(
             "/flows/api/v1/evaluation/results",
-            params={"flow_id": "example_react", "skill_id": "test_full"},
+            params={"flow_id": "example_react", "branch_id": "test_full"},
         )
 
         assert response.status_code == 200
@@ -411,7 +411,7 @@ class TestEvaluationResultsAPI:
 
         result = data[0]
         assert "flow_id" in result
-        assert "skill_id" in result
+        assert "branch_id" in result
         assert "test_case_id" in result
         assert "status" in result
         assert "duration_ms" in result
@@ -427,7 +427,7 @@ class TestEvaluationResultsAPI:
         # Запрашиваем с limit=2
         response = await client.get(
             "/flows/api/v1/evaluation/results",
-            params={"flow_id": "example_react", "skill_id": "test_full", "limit": 2},
+            params={"flow_id": "example_react", "branch_id": "test_full", "limit": 2},
         )
 
         assert response.status_code == 200
@@ -438,7 +438,7 @@ class TestEvaluationResultsAPI:
         """GET /api/v1/evaluation/results для несуществующего flow возвращает пустой список."""
         response = await client.get(
             "/flows/api/v1/evaluation/results",
-            params={"flow_id": "nonexistent_flow_12345", "skill_id": "default"},
+            params={"flow_id": "nonexistent_flow_12345", "branch_id": "default"},
         )
 
         assert response.status_code == 200
@@ -452,7 +452,7 @@ class TestEvaluationResultsAPI:
 
         response = await client.get(
             "/flows/api/v1/evaluation/results/summary",
-            params={"flow_id": "example_react", "skill_id": "test_full"},
+            params={"flow_id": "example_react", "branch_id": "test_full"},
         )
 
         assert response.status_code == 200
@@ -460,7 +460,7 @@ class TestEvaluationResultsAPI:
 
         # Проверяем все поля
         assert data["flow_id"] == "example_react"
-        assert data["skill_id"] == "test_full"
+        assert data["branch_id"] == "test_full"
         assert "run_date" in data
         assert "total" in data
         assert "passed" in data
@@ -492,7 +492,7 @@ class TestEvaluationResultsAPI:
 
         response = await client.get(
             "/flows/api/v1/evaluation/results/summary",
-            params={"flow_id": "example_react", "skill_id": "test_full"},
+            params={"flow_id": "example_react", "branch_id": "test_full"},
         )
 
         assert response.status_code == 200
@@ -509,7 +509,7 @@ class TestEvaluationResultsAPI:
 
         response = await client.get(
             f"/flows/api/v1/evaluation/results/{test_case_id}",
-            params={"flow_id": "example_react", "skill_id": "test_full"},
+            params={"flow_id": "example_react", "branch_id": "test_full"},
         )
 
         assert response.status_code == 200
@@ -518,7 +518,7 @@ class TestEvaluationResultsAPI:
         assert data is not None
         assert data["test_case_id"] == test_case_id
         assert data["flow_id"] == "example_react"
-        assert data["skill_id"] == "test_full"
+        assert data["branch_id"] == "test_full"
         assert data["status"] in ("passed", "failed", "error")
         assert isinstance(data["duration_ms"], int)
         assert isinstance(data["dialog"], list)
@@ -527,7 +527,7 @@ class TestEvaluationResultsAPI:
         """GET /api/v1/evaluation/results/{test_case_id} для несуществующего теста возвращает null."""
         response = await client.get(
             "/flows/api/v1/evaluation/results/nonexistent_test_12345",
-            params={"flow_id": "example_react", "skill_id": "test_full"},
+            params={"flow_id": "example_react", "branch_id": "test_full"},
         )
 
         assert response.status_code == 200
@@ -560,7 +560,7 @@ class TestEvaluationResultsAPI:
         # Запрос с сегодняшней датой должен вернуть результаты
         response = await client.get(
             "/flows/api/v1/evaluation/results",
-            params={"flow_id": "example_react", "skill_id": "test_full", "run_date": today},
+            params={"flow_id": "example_react", "branch_id": "test_full", "run_date": today},
         )
 
         assert response.status_code == 200

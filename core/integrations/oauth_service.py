@@ -148,7 +148,7 @@ class OAuthService:
         после успешного OAuth; должен быть в том же тенант-кластере, что и platform_public_base_url.
 
         flow_context (если передан) содержит идентификаторы flow-сессии
-        (flow_id, session_id, task_id, context_id, skill_id, channel, context_data)
+        (flow_id, session_id, task_id, context_id, branch_id, channel, context_data)
         для auto-resume после OAuth callback.
         """
         if not return_path.startswith("/") or return_path.startswith("//"):

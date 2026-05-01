@@ -3,8 +3,17 @@
   "name": "Lara",
   "description": "Мультисервисный ассистент: навыки по сервисам (CRM — skill crm)",
   "version": "1.0.0",
-  "tags": ["lara", "assistant", "multiservice", "crm", "flows"],
-  "permission": ["admin", "developers"],
+  "tags": [
+    "lara",
+    "assistant",
+    "multiservice",
+    "crm",
+    "flows"
+  ],
+  "permission": [
+    "admin",
+    "developers"
+  ],
   "entry": "main",
   "nodes": {
     "main": {
@@ -15,7 +24,9 @@
         "model": "qwen/qwen3.5-397b-a17b",
         "temperature": 0.2
       },
-      "tools": ["ask_user"],
+      "tools": [
+        "ask_user"
+      ],
       "output_key": "response"
     }
   },
@@ -38,11 +49,14 @@
     "active_namespace": "default",
     "user_language": "ru"
   },
-  "skills": {
+  "branches": {
     "crm": {
       "name": "CRM NetWorkle",
       "description": "Lara для CRM: сущности, заметки, файлы, UI-блоки в чате",
-      "tags": ["crm", "lara"],
+      "tags": [
+        "crm",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -70,7 +84,10 @@
     "flows": {
       "name": "Flows Builder",
       "description": "Lara для работы с flow/skill/node и patch-изменениями редактора",
-      "tags": ["flows", "lara"],
+      "tags": [
+        "flows",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {

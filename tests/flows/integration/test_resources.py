@@ -1716,7 +1716,7 @@ def triple(x):
             }
         }
         
-        from apps.flows.src.models.flow_config import Edge, FlowConfig, SkillConfig
+        from apps.flows.src.models.flow_config import Edge, FlowConfig, BranchConfig
 
         flow_id = "test_res_hierarchy_skill"
         fc = FlowConfig(
@@ -1725,8 +1725,8 @@ def triple(x):
             entry="main",
             nodes={"main": self._stub_entry_node()},
             edges=[Edge(from_node="main", to_node=None)],
-            skills={
-                "math_skill": SkillConfig(
+            branches={
+                "math_skill": BranchConfig(
                     name="Math",
                     resources={"math": ResourceReference.model_validate(skill_resource)},
                 )
@@ -1748,7 +1748,7 @@ async def execute(args, state):
         
         state = make_state(
             input=10,
-            skill_id="math_skill",
+            branch_id="math_skill",
             session_id=f"{flow_id}:test-context",
             flow_config_version=fc.version,
         )
@@ -1783,7 +1783,7 @@ def compute(x):
             }
         }
         
-        from apps.flows.src.models.flow_config import Edge, FlowConfig, SkillConfig
+        from apps.flows.src.models.flow_config import Edge, FlowConfig, BranchConfig
 
         flow_id = "test_res_hierarchy_override"
         fc = FlowConfig(
@@ -1793,8 +1793,8 @@ def compute(x):
             nodes={"main": self._stub_entry_node()},
             edges=[Edge(from_node="main", to_node=None)],
             resources={"helper": ResourceReference.model_validate(agent_resource)},
-            skills={
-                "premium": SkillConfig(
+            branches={
+                "premium": BranchConfig(
                     name="Premium",
                     resources={"helper": ResourceReference.model_validate(skill_resource)},
                 )
@@ -1816,7 +1816,7 @@ async def execute(args, state):
         
         state = make_state(
             input=5,
-            skill_id="premium",
+            branch_id="premium",
             session_id=f"{flow_id}:test-context",
             flow_config_version=fc.version,
         )

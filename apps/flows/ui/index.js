@@ -34,7 +34,7 @@ import './pages/operator-page.js';
 // Компоненты
 import './components/flows-sidebar.js';
 import './components/flow-card.js';
-import './components/skill-item.js';
+import './components/branch-item.js';
 import './components/chat/chat-input.js';
 import './components/chat/chat-message.js';
 import './components/chat/chat-messages.js';
@@ -77,7 +77,7 @@ import './components/editor/flows-bottom-toolbar.js';
 import './components/editor/flows-node-types-sidebar.js';
 import './components/editor/flows-property-panel.js';
 import './components/editor/flows-resource-property-panel.js';
-import './components/editor/flows-skills-tabs.js';
+import './components/editor/flows-branches-tabs.js';
 import './components/editor/flows-execution-panel.js';
 import './components/flow-canvas/flows-flow-canvas.js';
 
@@ -100,7 +100,7 @@ import './modals/flows-mocks-modal.js';
 // CRUD-модалки
 import './modals/flows-flow-create-modal.js';
 import './modals/flows-flow-edit-modal.js';
-import './modals/flows-skill-create-modal.js';
+import './modals/flows-branch-create-modal.js';
 import './modals/flows-sessions-modal.js';
 import './modals/flows-mcp-servers-modal.js';
 import './modals/flows-variable-editor-modal.js';

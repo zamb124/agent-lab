@@ -201,7 +201,7 @@ async def test_operator_get_task_includes_message_text_for_a2a_messages(
         session_id=session_id,
         end_user_id=system_user_id,
         flow_id=flow_id,
-        skill_id="default",
+        branch_id="default",
         a2a_task_id=a2a_tid,
         context_id=ctx_id,
         correlation_id=cor_id,

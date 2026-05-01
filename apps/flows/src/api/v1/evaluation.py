@@ -21,7 +21,7 @@ router = APIRouter(tags=["evaluation"])
 async def get_evaluation_results(
     container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
-    skill_id: str = Query("default", description="ID skill"),
+    branch_id: str = Query("default", description="ID ветки (branch)"),
     run_date: Optional[date] = Query(None, description="Дата запуска (по умолчанию сегодня)"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -29,13 +29,13 @@ async def get_evaluation_results(
     if run_date:
         results = await container.evaluation_repository.get_by_run(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             run_date=run_date,
         )
     else:
         results = await container.evaluation_repository.get_latest_results(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             limit=limit,
         )
 
@@ -47,7 +47,7 @@ async def get_evaluation_results(
 async def get_evaluation_summary(
     container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
-    skill_id: str = Query("default", description="ID skill"),
+    branch_id: str = Query("default", description="ID ветки (branch)"),
     run_date: Optional[date] = Query(None, description="Дата запуска"),
 ):
     """
@@ -59,13 +59,13 @@ async def get_evaluation_summary(
     if run_date:
         results = await container.evaluation_repository.get_by_run(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             run_date=run_date,
         )
     else:
         results = await container.evaluation_repository.get_latest_results(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             limit=500,
         )
 
@@ -86,7 +86,7 @@ async def get_evaluation_summary(
 
     return {
         "flow_id": flow_id,
-        "skill_id": skill_id,
+        "branch_id": branch_id,
         "run_date": run_date or date.today().isoformat(),
         "total": total,
         "passed": passed,
@@ -115,7 +115,7 @@ async def get_test_result(
     test_case_id: str,
     container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
-    skill_id: str = Query("default", description="ID skill"),
+    branch_id: str = Query("default", description="ID ветки (branch)"),
     run_date: Optional[date] = Query(None, description="Дата запуска"),
 ) -> Optional[EvaluationResult]:
     """
@@ -127,13 +127,13 @@ async def get_test_result(
     if run_date:
         results = await container.evaluation_repository.get_by_run(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             run_date=run_date,
         )
     else:
         results = await container.evaluation_repository.get_latest_results(
             flow_id=flow_id,
-            skill_id=skill_id,
+            branch_id=branch_id,
             limit=100,
         )
 

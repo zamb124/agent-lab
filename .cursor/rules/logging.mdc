@@ -373,7 +373,26 @@ class LoggingConfig(BaseModel):
     loggers_levels: dict[str, str] = {}
     max_string_len: int = 8192
     drop_keys: list[str] = []               # пароли, токены и т. п.
+    grafana_public_url: Optional[str] = None
+    grafana_loki_datasource_uid: Optional[str] = None
+    grafana_org_id: str = "1"
 ```
+
+### JSON ошибок HTTP и ссылки Grafana Explore
+
+Для ответов с HTTP статусом ≥ 400 и телом JSON `PlatformHttpErrorEnvelopeMiddleware`
+сливает в объект ответа **`request_id`**, **`trace_id`**, **`service`**.
+Если активная компания запроса — **`company_id == "system"`** (поле из
+`AuthMiddleware` в `request.state.company`), и одновременно заданы
+**`logging.grafana_public_url`** без завершающего слэша и **`logging.grafana_loki_datasource_uid`**
+(UID provisioning Loki в Grafana), добавляется **`observability.logs_explore_url`**.
+LogQL следует whitelist сервисов как в **`core.clients.loki_client`**; при наличии
+`trace_id` фильтруется он, иначе — `request_id`. Поля `observability` без доверенной
+выдачи сервер удаляет.
+
+Конструктор Explore — **`core.observability.grafana_explore`**, формат URL `left=` (Grafana Explore).
+
+Клиентские ошибки через **`HttpError`** см. **`core/frontend/static/lib/events/http.js`**.
 
 Удалённые поля (НЕ возвращать): `file_enabled`, `file_path`, `app_file_path`,
 `worker_file_path`, `file_max_bytes`, `file_backup_count`, `console_enabled`,

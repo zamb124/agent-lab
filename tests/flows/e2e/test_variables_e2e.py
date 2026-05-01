@@ -56,11 +56,16 @@ class TestVariablesE2E:
         agents = resp.json()
         flow_id = None
         for agent in agents:
+            if agent.get("flow_id") == "example_react":
+                flow_id = "example_react"
+                break
             url = agent.get("url", "")
             if "example_react" in url:
-                flow_id = url.split("/flows/")[-1]
-                break
-        assert flow_id, "В реестре flows не найден example_react (url должен содержать example_react)"
+                fid = agent.get("flow_id")
+                if isinstance(fid, str) and fid:
+                    flow_id = fid
+                    break
+        assert flow_id, "В реестре flows не найден example_react (flow_id или url)"
         return flow_id
 
     @pytest.mark.asyncio

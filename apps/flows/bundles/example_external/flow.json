@@ -16,7 +16,7 @@
       "auth_headers": {
         "X-API-Key": "@var:cat_flow_api_key"
       },
-      "skill_id": "default"
+      "branch_id": "default"
     }
   },
   "variables": {

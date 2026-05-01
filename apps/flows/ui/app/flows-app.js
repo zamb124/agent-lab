@@ -16,8 +16,8 @@ import { createRouterEffect } from '@platform/lib/events/effects/router.effect.j
 import '@platform/lib/embed-chat/platform-lara-assistant.js';
 
 import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
-         flowStoreBundlesOp, flowValidateOp, skillCreateOp, skillUpdateOp,
-         skillRemoveOp } from '../events/resources/flows.resource.js';
+         flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
+         branchRemoveOp } from '../events/resources/flows.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
 import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp } from '../events/resources/mcp.resource.js';
@@ -59,10 +59,10 @@ const FLOWS_ROUTES = [
     { key: 'operator',            path: 'operator' },
     { key: 'platform_services',   path: 'services', parent: 'list' },
     { key: 'flow_chat',           path: ':flowId' },
-    { key: 'flow_chat_skill',     path: ':flowId/skill/:skillId' },
+    { key: 'flow_chat_branch',     path: ':flowId/branch/:branchId' },
     { key: 'flow_chat_session',   path: ':flowId/session/:sessionId' },
     { key: 'flow_editor',         path: ':flowId/editor' },
-    { key: 'flow_editor_skill',   path: ':flowId/editor/:skillId' },
+    { key: 'flow_editor_branch',   path: ':flowId/editor/:branchId' },
 ];
 
 export class FlowsApp extends PlatformApp {
@@ -75,9 +75,9 @@ export class FlowsApp extends PlatformApp {
         flowVersionsListOp,
         flowStoreBundlesOp,
         flowValidateOp,
-        skillCreateOp,
-        skillUpdateOp,
-        skillRemoveOp,
+        branchCreateOp,
+        branchUpdateOp,
+        branchRemoveOp,
         toolsResource,
         toolsAllOp,
         resourcesBundleResource,
@@ -205,19 +205,19 @@ export class FlowsApp extends PlatformApp {
         this.useEvent('flows/flow/deleted', () => {
             this._flows.load();
         });
-        this.useEvent('flows/skill/created', (event) => {
+        this.useEvent('flows/branch/created', (event) => {
             const id = event?.payload?.flow_id;
             if (typeof id === 'string' && id.length > 0) {
                 this._flows.get(id);
             }
         });
-        this.useEvent('flows/skill/updated', (event) => {
+        this.useEvent('flows/branch/updated', (event) => {
             const id = event?.payload?.flow_id;
             if (typeof id === 'string' && id.length > 0) {
                 this._flows.get(id);
             }
         });
-        this.useEvent('flows/skill/deleted', (event) => {
+        this.useEvent('flows/branch/deleted', (event) => {
             const id = event?.payload?.flow_id;
             if (typeof id === 'string' && id.length > 0) {
                 this._flows.get(id);
@@ -304,7 +304,7 @@ export class FlowsApp extends PlatformApp {
             case 'operator':
                 return html`<operator-page></operator-page>`;
             case 'flow_chat':
-            case 'flow_chat_skill':
+            case 'flow_chat_branch':
             case 'flow_chat_session':
                 return html`
                     <div class="sidebar">
@@ -318,7 +318,7 @@ export class FlowsApp extends PlatformApp {
                         >
                             <chat-page
                                 .flowId=${params.flowId}
-                                .skillId=${typeof params.skillId === 'string' && params.skillId.length > 0 ? params.skillId : 'base'}
+                                .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'base'}
                                 .sessionId=${asString(params.sessionId)}
                             ></chat-page>
                         </platform-island>
@@ -326,11 +326,11 @@ export class FlowsApp extends PlatformApp {
                     ${this._renderLara()}
                 `;
             case 'flow_editor':
-            case 'flow_editor_skill':
+            case 'flow_editor_branch':
                 return html`
                     <flow-editor-page
                         .flowId=${params.flowId}
-                        .skillId=${typeof params.skillId === 'string' && params.skillId.length > 0 ? params.skillId : 'base'}
+                        .branchId=${typeof params.branchId === 'string' && params.branchId.length > 0 ? params.branchId : 'base'}
                     ></flow-editor-page>
                     ${this._renderLara()}
                 `;
@@ -359,7 +359,7 @@ export class FlowsApp extends PlatformApp {
                 toggle-event-name="flows-lara-open"
                 event-namespace="assistant"
                 flow-id="lara"
-                skill-id="flows"
+                branch-id="flows"
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
                 .assistantTitle=${'Lara'}
@@ -384,15 +384,15 @@ export class FlowsApp extends PlatformApp {
             return null;
         };
         const flowId = pickString(editorState.flowId, params.flowId, options.flow_id);
-        const skillId = pickString(editorState.currentSkillId, params.skillId, options.skill_id, 'base');
+        const branchId = pickString(editorState.currentBranchId, params.branchId, options.branch_id, 'base');
         const nodeId = pickString(editorState.selectedNodeId, options.node_id);
-        const skillsData = isPlainObject(editorState.skillsData) ? editorState.skillsData : { nodes: {} };
-        const nodes = isPlainObject(skillsData.nodes) ? skillsData.nodes : {};
+        const branchData = isPlainObject(editorState.branchData) ? editorState.branchData : { nodes: {} };
+        const nodes = isPlainObject(branchData.nodes) ? branchData.nodes : {};
         const node = nodeId && isPlainObject(nodes[nodeId]) ? nodes[nodeId] : null;
         return {
             app_surface: 'flows',
             flow_id: flowId,
-            target_skill_id: skillId,
+            target_branch_id: branchId,
             node_id: nodeId,
             node_type: node && typeof node.type === 'string' ? node.type : null,
             node_payload: node,
@@ -408,9 +408,9 @@ export class FlowsApp extends PlatformApp {
             app_surface: context.app_surface,
             screen: context.screen,
             flow_id: asString(context.flow_id),
-            target_skill_id: typeof context.target_skill_id === 'string' && context.target_skill_id.length > 0 ? context.target_skill_id : 'base',
-            skill_id: typeof context.target_skill_id === 'string' && context.target_skill_id.length > 0 ? context.target_skill_id : 'base',
-            assistant_skill_id: 'flows',
+            target_branch_id: typeof context.target_branch_id === 'string' && context.target_branch_id.length > 0 ? context.target_branch_id : 'base',
+            branch_id: typeof context.target_branch_id === 'string' && context.target_branch_id.length > 0 ? context.target_branch_id : 'base',
+            assistant_branch_id: 'flows',
             node_id: asString(context.node_id),
             node_type: asString(context.node_type),
             node_payload_json: context.node_payload ? JSON.stringify(context.node_payload) : '',

@@ -33,7 +33,7 @@ router = APIRouter(tags=["tasks"])
 class TaskSubmitRequest(BaseModel):
     flow_id: str
     content: str
-    skill_id: str = "default"
+    branch_id: str = "default"
     user_id: Optional[str] = None
     session_id: Optional[str] = None
     metadata: Dict[str, Any] = {}
@@ -65,11 +65,11 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Di
     state = await container.state_manager.get_state(session_id)
 
     if state is None:
-        skill_id = request.skill_id
+        branch_id = request.branch_id
         is_resume = False
         logger.info(f"API: New session {session_id}, is_resume=False")
     else:
-        skill_id = state.skill_id
+        branch_id = state.branch_id
         is_resume = bool(state.interrupt)
         logger.info(
             f"API: Existing session {session_id}, "
@@ -88,7 +88,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Di
         session_id=session_id,
         user_id=user_id,
         content=request.content,
-        skill_id=skill_id,
+        branch_id=branch_id,
         channel="a2a",
         task_id=task_id,
         context_id=context_id,

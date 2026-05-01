@@ -39,7 +39,7 @@ from core.context import Context, User, clear_context, get_context, set_context
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import LOG_SESSION_AGENT
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
-from apps.flows.src.models.flow_config import Edge, FlowConfig, SkillConfig
+from apps.flows.src.models.flow_config import Edge, FlowConfig, BranchConfig
 from apps.flows.src.models.enums import MergeMode, NodeType
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
@@ -186,8 +186,8 @@ class BaseChannel(ABC):
         - вложенные структуры считаем данными UI-контекста и не интерпретируем как переменные.
         """
         normalized: Dict[str, Any] = dict(request_variables)
-        if "target_skill_id" not in normalized and "skill_id" in normalized:
-            normalized["target_skill_id"] = normalized["skill_id"]
+        if "target_branch_id" not in normalized and "branch_id" in normalized:
+            normalized["target_branch_id"] = normalized["branch_id"]
 
         container = get_container()
         resolved: Dict[str, Any] = {}
@@ -202,17 +202,17 @@ class BaseChannel(ABC):
     async def check_permissions(
         self,
         user_groups: List[str],
-        skill_id: str = "default",
+        branch_id: str = "default",
     ) -> None:
         """
-        Проверяет permissions на агента и skill.
-        
+        Проверяет permissions на агента и ветку (branch).
+
         Args:
             user_groups: группы пользователя из JWT (grps claim)
-            skill_id: ID skill
-            
+            branch_id: ID ветки
+
         Raises:
-            PermissionDenied: если нет доступа к агенту или skill
+            PermissionDenied: если нет доступа к агенту или ветке
         """
         config = get_settings()
         
@@ -233,19 +233,19 @@ class BaseChannel(ABC):
                 PermissionDeniedA2AError.for_flow(self.flow_id, required)
             )
         
-        # Проверка permission на skill
-        skill_config = None
-        if flow_config.skills and skill_id in flow_config.skills:
-            skill_config = flow_config.skills[skill_id]
-        
-        if skill_config is not None:
-            if not permission_checker.check_skill_permission(
-                user_groups, skill_config.permission, flow_config.permission
+        # Проверка permission на ветку графа
+        branch_config = None
+        if flow_config.branches and branch_id in flow_config.branches:
+            branch_config = flow_config.branches[branch_id]
+
+        if branch_config is not None:
+            if not permission_checker.check_branch_permission(
+                user_groups, branch_config.permission, flow_config.permission
             ):
-                effective_perm = skill_config.permission if skill_config.permission else flow_config.permission
+                effective_perm = branch_config.permission if branch_config.permission else flow_config.permission
                 required = permission_checker.normalize(effective_perm)
                 raise PermissionDenied(
-                    PermissionDeniedA2AError.for_skill(skill_id, self.flow_id, required)
+                    PermissionDeniedA2AError.for_branch(branch_id, self.flow_id, required)
                 )
     
     async def _get_state(self, session_id: str) -> Optional[ExecutionState]:
@@ -317,12 +317,14 @@ class BaseChannel(ABC):
         takeover_operator_task_id: str | None = None
 
         if state is None:
-            skill_id = "default"
-            if metadata and "skill" in metadata:
-                skill_id = metadata["skill"]
+            branch_id = "default"
+            if metadata and "branch" in metadata:
+                b = metadata["branch"]
+                if b is not None and str(b).strip():
+                    branch_id = str(b).strip()
             is_resume = False
         else:
-            skill_id = state.skill_id
+            branch_id = state.branch_id
             # Resume если есть interrupt ИЛИ breakpoint_hit
             is_resume = bool(state.interrupt) or bool(state.breakpoint_hit)
             task_id = effective_stream_task_id_for_session(task_id, state)
@@ -353,7 +355,7 @@ class BaseChannel(ABC):
             context_id=context_id,
             session_id=session_id,
             content=content,
-            skill_id=skill_id,
+            branch_id=branch_id,
             is_resume=is_resume,
             files_data=files_data or [],
             message=message,
@@ -388,7 +390,7 @@ class BaseChannel(ABC):
                 task_id=params.task_id,
                 context_id=params.context_id,
                 flow_id=self.flow_id,
-                skill_id=params.skill_id,
+                branch_id=params.branch_id,
                 channel=self.name,
                 is_resume=params.is_resume,
             )
@@ -405,7 +407,7 @@ class BaseChannel(ABC):
             session_id=params.session_id,
             user_id=params.user_id,
             content=params.content,
-            skill_id=params.skill_id,
+            branch_id=params.branch_id,
             channel=self.name,
             task_id=params.task_id,
             context_id=params.context_id,
@@ -509,7 +511,7 @@ class BaseChannel(ABC):
             user_id=params.user_id,
             user_groups=self._get_user_groups_from_context(self.context),
             session_id=params.session_id,
-            skill_id=params.skill_id,
+            branch_id=params.branch_id,
             breakpoints=breakpoints,
         )
         emitter = Emitter(container.redis_client, exec_state)
@@ -520,7 +522,7 @@ class BaseChannel(ABC):
             pinned_version = saved_state.flow_config_version if saved_state else None
             try:
                 runtime_flow = await container.flow_factory.get_flow(
-                    self.flow_id, params.skill_id, config_version=pinned_version
+                    self.flow_id, params.branch_id, config_version=pinned_version
                 )
             except ValueError as verr:
                 await emitter.emit_error(str(verr))
@@ -560,7 +562,7 @@ class BaseChannel(ABC):
                     user_id=user_id,
                     session_id=params.session_id,
                     content=params.content,
-                    skill_id=params.skill_id,
+                    branch_id=params.branch_id,
                 )
                 cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
                 state.files = collect_flow_node_files(cfg_nodes)
@@ -614,10 +616,10 @@ class BaseChannel(ABC):
             )
             root_flow_mock = flow_config.mock if flow_config else None
             
-            skill_mock = None
-            if flow_config and flow_config.skills and params.skill_id in flow_config.skills:
-                skill_config = flow_config.skills[params.skill_id]
-                skill_mock = skill_config.mock
+            branch_mock = None
+            if flow_config and flow_config.branches and params.branch_id in flow_config.branches:
+                branch_cfg_snapshot = flow_config.branches[params.branch_id]
+                branch_mock = branch_cfg_snapshot.mock
             
             request_mock = params.metadata.get("mock") if params.metadata else None
             
@@ -625,7 +627,7 @@ class BaseChannel(ABC):
             if request_mock:
                 config = get_settings()
                 global_mock = config.mock.model_dump() if config.mock else None
-                mock_config = resolve_mock_config(global_mock, root_flow_mock, skill_mock, request_mock)
+                mock_config = resolve_mock_config(global_mock, root_flow_mock, branch_mock, request_mock)
                 
                 if not check_mock_permission(user_groups, mock_config):
                     logger.warning(f"Mock access denied for user {user_id}")
@@ -634,7 +636,7 @@ class BaseChannel(ABC):
             # Резолвим итоговый mock конфиг
             config = get_settings()
             global_mock = config.mock.model_dump() if config.mock else None
-            mock_config = resolve_mock_config(global_mock, root_flow_mock, skill_mock, request_mock)
+            mock_config = resolve_mock_config(global_mock, root_flow_mock, branch_mock, request_mock)
             
             if mock_config.enabled:
                 state.mock = mock_config.model_dump(exclude_none=False)
@@ -650,6 +652,13 @@ class BaseChannel(ABC):
             else:
                 _flow_t = int(get_settings().default_flow_timeout_seconds)
             apply_flow_wall_clock_deadline(state, _flow_t)
+
+            logger.info(
+                "flow.process_task.state_checkpoint_before_run",
+                session_id=params.session_id,
+                messages_count=len(state.messages),
+            )
+            await self._save_state(params.session_id, state)
 
             cancellation_token = CancellationToken(effective_task_id, container.redis_client)
             set_cancellation_token(cancellation_token)
@@ -895,93 +904,93 @@ class BaseChannel(ABC):
         """Получение расширенной карточки агента."""
         raise NotImplementedError(f"Channel '{self.name}' does not support extended card")
     
-    # === Skills CRUD ===
-    
-    async def list_skills(self) -> List[Dict[str, Any]]:
-        """Получить список skills."""
+    # === Branches CRUD ===
+
+    async def list_branches(self) -> List[Dict[str, Any]]:
+        """Получить список веток (branches)."""
         container = get_container()
-        skills = await container.flow_factory.get_skills(self.flow_id)
+        branches_map = await container.flow_factory.get_branches(self.flow_id)
         return [
             {
-                "id": skill_id,
-                "name": skill.name,
-                "description": skill.description,
-                "tags": skill.tags or [],
+                "id": branch_id,
+                "name": branch_cfg.name,
+                "description": branch_cfg.description,
+                "tags": branch_cfg.tags or [],
             }
-            for skill_id, skill in skills.items()
+            for branch_id, branch_cfg in branches_map.items()
         ]
-    
-    async def get_skill(self, skill_id: str) -> Optional[Dict[str, Any]]:
-        """Получить skill по ID."""
+
+    async def get_branch(self, branch_id: str) -> Optional[Dict[str, Any]]:
+        """Получить ветку по ID."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             return None
-        
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        skill = skills.get(skill_id)
-        if skill is None:
+
+        branches_map = await container.flow_factory.get_branches(self.flow_id)
+        branch_cfg = branches_map.get(branch_id)
+        if branch_cfg is None:
             return None
-        
-        # Формируем skill_body из SkillConfig
-        skill_body = {}
-        if skill.entry is not None:
-            skill_body["entry"] = skill.entry
-        if skill.nodes is not None:
-            skill_body["nodes"] = skill.nodes
-        if skill.edges is not None:
-            skill_body["edges"] = [
+
+        # Формируем branch_body из BranchConfig
+        branch_body = {}
+        if branch_cfg.entry is not None:
+            branch_body["entry"] = branch_cfg.entry
+        if branch_cfg.nodes is not None:
+            branch_body["nodes"] = branch_cfg.nodes
+        if branch_cfg.edges is not None:
+            branch_body["edges"] = [
                 {
                     "from": edge.from_node,
                     "to": edge.to_node,
                     "condition": edge.condition,
                 }
-                for edge in skill.edges
+                for edge in branch_cfg.edges
             ]
-        if skill.variables:
-            skill_body["variables"] = skill.variables
-        
-        skill_body["nodes_mode"] = skill.nodes_mode
-        skill_body["edges_mode"] = skill.edges_mode
-        skill_body["variables_mode"] = skill.variables_mode
-        
+        if branch_cfg.variables:
+            branch_body["variables"] = branch_cfg.variables
+
+        branch_body["nodes_mode"] = branch_cfg.nodes_mode
+        branch_body["edges_mode"] = branch_cfg.edges_mode
+        branch_body["variables_mode"] = branch_cfg.variables_mode
+
         return {
-            "id": skill_id,
-            "name": skill.name,
-            "description": skill.description,
-            "tags": skill.tags or [],
-            "permission": skill.permission,
-            "skill_body": skill_body,
+            "id": branch_id,
+            "name": branch_cfg.name,
+            "description": branch_cfg.description,
+            "tags": branch_cfg.tags or [],
+            "permission": branch_cfg.permission,
+            "branch_body": branch_body,
         }
     
-    async def create_skill(self, skill_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Создать новый skill."""
+    async def create_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Создать новую ветку (branch)."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
 
-        if config.skills and skill_id in config.skills:
-            raise ValueError(f"Skill '{skill_id}' already exists")
+        if config.branches and branch_id in config.branches:
+            raise ValueError(f"Ветка '{branch_id}' уже существует")
         
-        skill_body = data.get("skill_body", {})
+        branch_body = data.get("branch_body", {})
         
-        # Zero-Guess: валидация неизвестных полей в skill_body
-        allowed_skill_body_fields = {
+        # Zero-Guess: валидация неизвестных полей в branch_body
+        allowed_branch_body_fields = {
             "entry", "nodes", "nodes_mode", "edges", "edges_mode",
             "variables", "variables_mode", "mock"
         }
-        unknown_fields = set(skill_body.keys()) - allowed_skill_body_fields
+        unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
             raise ValueError(
-                f"Unknown fields in skill_body: {sorted(unknown_fields)}. "
-                f"Allowed fields: {sorted(allowed_skill_body_fields)}"
+                f"Unknown fields in branch_body: {sorted(unknown_fields)}. "
+                f"Allowed fields: {sorted(allowed_branch_body_fields)}"
             )
         
         edges = None
-        if skill_body.get("edges"):
+        if branch_body.get("edges"):
             edges = []
-            for edge in skill_body["edges"]:
+            for edge in branch_body["edges"]:
                 if isinstance(edge, dict):
                     edges.append(
                         Edge(
@@ -993,31 +1002,31 @@ class BaseChannel(ABC):
                 else:
                     edges.append(edge)
         
-        skill_kwargs: dict[str, Any] = {
-            "name": data.get("name", skill_id),
+        branch_kwargs: dict[str, Any] = {
+            "name": data.get("name", branch_id),
             "description": data.get("description", ""),
             "tags": data.get("tags", []),
-            "entry": skill_body.get("entry"),
-            "nodes": skill_body.get("nodes"),
+            "entry": branch_body.get("entry"),
+            "nodes": branch_body.get("nodes"),
             "edges": edges,
-            "variables": skill_body.get("variables", {}),
+            "variables": branch_body.get("variables", {}),
         }
-        if "nodes_mode" in skill_body:
-            skill_kwargs["nodes_mode"] = MergeMode(skill_body["nodes_mode"])
-        if "edges_mode" in skill_body:
-            skill_kwargs["edges_mode"] = MergeMode(skill_body["edges_mode"])
-        if "variables_mode" in skill_body:
-            skill_kwargs["variables_mode"] = MergeMode(skill_body["variables_mode"])
+        if "nodes_mode" in branch_body:
+            branch_kwargs["nodes_mode"] = MergeMode(branch_body["nodes_mode"])
+        if "edges_mode" in branch_body:
+            branch_kwargs["edges_mode"] = MergeMode(branch_body["edges_mode"])
+        if "variables_mode" in branch_body:
+            branch_kwargs["variables_mode"] = MergeMode(branch_body["variables_mode"])
 
-        skill_config = SkillConfig(**skill_kwargs)
+        new_branch_cfg = BranchConfig(**branch_kwargs)
         
-        if config.skills is None:
-            config.skills = {}
+        if config.branches is None:
+            config.branches = {}
         
-        config.skills[skill_id] = skill_config
+        config.branches[branch_id] = new_branch_cfg
         
-        # Применяем skill к текущему конфигу и валидируем
-        effective = container.flow_factory._apply_skill(config, skill_id)
+        # Применяем ветку к текущему конфигу и валидируем
+        effective = container.flow_factory._apply_branch(config, branch_id)
         
         validator = FlowValidator(
             flow_repository=container.flow_repository,
@@ -1034,46 +1043,46 @@ class BaseChannel(ABC):
         
         if not validation_result.valid:
             errors = [e.message for e in validation_result.errors if e.severity == ValidationSeverity.ERROR]
-            raise ValueError(f"Skill validation failed: {'; '.join(errors)}")
+            raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
         
         await container.flow_repository.set(config)
         
-        logger.info(f"Created skill: {skill_id}")
+        logger.info(f"Создана ветка: {branch_id}")
         
         return {
             "status": "success",
-            "message": f"Skill '{skill_id}' created successfully",
-            "skill_id": skill_id,
+            "message": f"Ветка '{branch_id}' создана",
+            "branch_id": branch_id,
         }
     
-    async def update_skill(self, skill_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Обновить существующий skill."""
+    async def update_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Обновить существующую ветку (branch)."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
 
-        if not config.skills or skill_id not in config.skills:
-            raise ValueError(f"Skill '{skill_id}' not found")
+        if not config.branches or branch_id not in config.branches:
+            raise ValueError(f"Ветка '{branch_id}' не найдена")
         
-        skill_body = data.get("skill_body", {})
+        branch_body = data.get("branch_body", {})
         
-        # Zero-Guess: валидация неизвестных полей в skill_body
-        allowed_skill_body_fields = {
+        # Zero-Guess: валидация неизвестных полей в branch_body
+        allowed_branch_body_fields = {
             "entry", "nodes", "nodes_mode", "edges", "edges_mode",
             "variables", "variables_mode", "mock"
         }
-        unknown_fields = set(skill_body.keys()) - allowed_skill_body_fields
+        unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
             raise ValueError(
-                f"Unknown fields in skill_body: {sorted(unknown_fields)}. "
-                f"Allowed fields: {sorted(allowed_skill_body_fields)}"
+                f"Unknown fields in branch_body: {sorted(unknown_fields)}. "
+                f"Allowed fields: {sorted(allowed_branch_body_fields)}"
             )
         
         edges = None
-        if skill_body.get("edges"):
+        if branch_body.get("edges"):
             edges = []
-            for edge in skill_body["edges"]:
+            for edge in branch_body["edges"]:
                 if isinstance(edge, dict):
                     edges.append(
                         Edge(
@@ -1085,52 +1094,52 @@ class BaseChannel(ABC):
                 else:
                     edges.append(edge)
         
-        existing_skill = config.skills.get(skill_id) if config.skills else None
+        existing_branch = config.branches.get(branch_id) if config.branches else None
         nodes_mode = MergeMode(
-            skill_body["nodes_mode"]
-            if "nodes_mode" in skill_body
-            else (existing_skill.nodes_mode if existing_skill else "merge")
+            branch_body["nodes_mode"]
+            if "nodes_mode" in branch_body
+            else (existing_branch.nodes_mode if existing_branch else "merge")
         )
         edges_mode = MergeMode(
-            skill_body["edges_mode"]
-            if "edges_mode" in skill_body
-            else (existing_skill.edges_mode if existing_skill else "merge")
+            branch_body["edges_mode"]
+            if "edges_mode" in branch_body
+            else (existing_branch.edges_mode if existing_branch else "merge")
         )
         variables_mode = MergeMode(
-            skill_body["variables_mode"]
-            if "variables_mode" in skill_body
-            else (existing_skill.variables_mode if existing_skill else "merge")
+            branch_body["variables_mode"]
+            if "variables_mode" in branch_body
+            else (existing_branch.variables_mode if existing_branch else "merge")
         )
 
-        raw_skill_nodes = skill_body.get("nodes")
-        if raw_skill_nodes is not None and isinstance(raw_skill_nodes, dict):
-            prev_skill_nodes = (existing_skill.nodes or {}) if existing_skill else {}
-            skill_nodes = merge_incoming_node_dict_for_persist(
-                dict(raw_skill_nodes), prev_skill_nodes
+        raw_branch_nodes = branch_body.get("nodes")
+        if raw_branch_nodes is not None and isinstance(raw_branch_nodes, dict):
+            prev_branch_nodes = (existing_branch.nodes or {}) if existing_branch else {}
+            merged_branch_nodes = merge_incoming_node_dict_for_persist(
+                dict(raw_branch_nodes), prev_branch_nodes
             )
         else:
-            skill_nodes = raw_skill_nodes
+            merged_branch_nodes = raw_branch_nodes
 
-        skill_config = SkillConfig(
-            name=data.get("name", skill_id),
+        updated_branch_cfg = BranchConfig(
+            name=data.get("name", branch_id),
             description=data.get("description", ""),
             tags=data.get("tags", []),
-            entry=skill_body.get("entry"),
-            nodes=skill_nodes,
+            entry=branch_body.get("entry"),
+            nodes=merged_branch_nodes,
             nodes_mode=nodes_mode,
             edges=edges,
             edges_mode=edges_mode,
-            variables=skill_body.get("variables", {}),
+            variables=branch_body.get("variables", {}),
             variables_mode=variables_mode,
         )
         
-        if config.skills is None:
-            config.skills = {}
+        if config.branches is None:
+            config.branches = {}
         
-        config.skills[skill_id] = skill_config
+        config.branches[branch_id] = updated_branch_cfg
         
-        # Применяем skill к текущему конфигу и валидируем
-        effective = container.flow_factory._apply_skill(config, skill_id)
+        # Применяем ветку к текущему конфигу и валидируем
+        effective = container.flow_factory._apply_branch(config, branch_id)
         
         validator = FlowValidator(
             flow_repository=container.flow_repository,
@@ -1147,47 +1156,47 @@ class BaseChannel(ABC):
         
         if not validation_result.valid:
             errors = [e.message for e in validation_result.errors if e.severity == ValidationSeverity.ERROR]
-            raise ValueError(f"Skill validation failed: {'; '.join(errors)}")
+            raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
         
         await container.flow_repository.set(config)
         
-        logger.info(f"Updated skill: {skill_id}")
+        logger.info(f"Обновлена ветка: {branch_id}")
         
         return {
             "status": "success",
-            "message": f"Skill '{skill_id}' updated successfully",
-            "skill_id": skill_id,
+            "message": f"Ветка '{branch_id}' обновлена",
+            "branch_id": branch_id,
         }
     
-    async def delete_skill(self, skill_id: str) -> Dict[str, Any]:
-        """Удалить skill."""
+    async def delete_branch(self, branch_id: str) -> Dict[str, Any]:
+        """Удалить ветку (branch)."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
 
-        if not config.skills or skill_id not in config.skills:
-            raise ValueError(f"Skill '{skill_id}' not found")
+        if not config.branches or branch_id not in config.branches:
+            raise ValueError(f"Ветка '{branch_id}' не найдена")
 
-        del config.skills[skill_id]
+        del config.branches[branch_id]
         await container.flow_repository.set(config)
-        logger.info(f"Deleted skill: {skill_id}")
+        logger.info(f"Удалена ветка: {branch_id}")
         return {
             "status": "success",
-            "message": f"Skill '{skill_id}' deleted successfully",
-            "skill_id": skill_id,
+            "message": f"Ветка '{branch_id}' удалена",
+            "branch_id": branch_id,
         }
     
     # === Tools ===
     
-    async def get_skill_tools(self, skill_id: str) -> List[Dict[str, Any]]:
-        """Получить список tools для skill."""
+    async def get_branch_tools(self, branch_id: str) -> List[Dict[str, Any]]:
+        """Получить список tools для ветки."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             return []
         
-        effective = container.flow_factory._apply_skill(config, skill_id)
+        effective = container.flow_factory._apply_branch(config, branch_id)
         # Graph flow если есть реальные переходы между нодами (не только to: null)
         real_edges = [
             e for e in effective["edges"]
@@ -1363,8 +1372,8 @@ class BaseChannel(ABC):
     
     # === Schema ===
     
-    async def get_skill_schema(self) -> Dict[str, Any]:
-        """Получить JSON Schema для создания skill."""
+    async def get_branch_schema(self) -> Dict[str, Any]:
+        """Получить JSON Schema для создания ветки."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
@@ -1373,7 +1382,7 @@ class BaseChannel(ABC):
         return {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "type": "object",
-            "title": f"Skill Body - {config.name}",
+            "title": f"Branch body — {config.name}",
             "properties": {},
             "required": [],
             "additionalProperties": True,
@@ -1388,23 +1397,23 @@ class BaseChannel(ABC):
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
         
-        skills = await container.flow_factory.get_skills(self.flow_id)
-        
-        card_skills = []
-        for skill_id, skill in skills.items():
-            card_skills.append(
+        branches_map = await container.flow_factory.get_branches(self.flow_id)
+
+        card_branch_entries = []
+        for branch_id, branch_cfg in branches_map.items():
+            card_branch_entries.append(
                 AgentSkill(
-                    id=skill_id,
-                    name=skill.name,
-                    description=skill.description,
-                    tags=skill.tags or [],
+                    id=branch_id,
+                    name=branch_cfg.name,
+                    description=branch_cfg.description,
+                    tags=branch_cfg.tags or [],
                     inputModes=["text/plain"],
                     outputModes=["text/plain"],
                 )
             )
-        
-        if not card_skills:
-            card_skills.append(
+
+        if not card_branch_entries:
+            card_branch_entries.append(
                 AgentSkill(
                     id="default",
                     name=config.name,
@@ -1414,7 +1423,7 @@ class BaseChannel(ABC):
                     outputModes=["text/plain"],
                 )
             )
-        
+
         svc = get_settings().server.name
         card = AgentCard(
             name=config.name,
@@ -1424,7 +1433,7 @@ class BaseChannel(ABC):
             capabilities=AgentCapabilities(
                 streaming=True, pushNotifications=False, stateTransitionHistory=True
             ),
-            skills=card_skills,
+            branches=card_branch_entries,
             defaultInputModes=["text/plain"],
             defaultOutputModes=["text/plain"],
             supportsAuthenticatedExtendedCard=False,

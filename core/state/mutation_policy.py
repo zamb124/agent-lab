@@ -20,7 +20,7 @@ FROZEN_STATE_FIELDS: frozenset[str] = frozenset(
         "user_id",
         "session_id",
         "flow_config_version",
-        "skill_id",
+        "branch_id",
         "flow_deadline_monotonic",
         "flow_timeout_effective_seconds",
         "current_nodes",

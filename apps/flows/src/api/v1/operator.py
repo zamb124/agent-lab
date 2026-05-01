@@ -144,13 +144,13 @@ def _flow_display_name(flow_cfg: Optional[FlowConfig], flow_id: str) -> str:
     return n if n else flow_id
 
 
-def _skill_display_name(flow_cfg: Optional[FlowConfig], skill_id: str) -> str:
-    if flow_cfg is not None and flow_cfg.skills:
-        sk = flow_cfg.skills.get(skill_id)
+def _skill_display_name(flow_cfg: Optional[FlowConfig], branch_id: str) -> str:
+    if flow_cfg is not None and flow_cfg.branches:
+        sk = flow_cfg.branches.get(branch_id)
         if sk is not None:
             sn = sk.name.strip()
-            return sn if sn else skill_id
-    return skill_id
+            return sn if sn else branch_id
+    return branch_id
 
 
 def _task_to_out(
@@ -168,9 +168,9 @@ def _task_to_out(
         session_id=row.session_id,
         end_user_id=row.end_user_id,
         flow_id=row.flow_id,
-        skill_id=row.skill_id,
+        branch_id=row.branch_id,
         flow_display_name=_flow_display_name(flow_cfg, row.flow_id),
-        skill_display_name=_skill_display_name(flow_cfg, row.skill_id),
+        skill_display_name=_skill_display_name(flow_cfg, row.branch_id),
         handoff_title=ht,
         handoff_message_preview=hp,
         handoff_mode=handoff_mode,

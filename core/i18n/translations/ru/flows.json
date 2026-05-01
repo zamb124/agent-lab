@@ -4,10 +4,10 @@
     "operator": "Оператор",
     "platform_services": "Сервисы",
     "flow_chat": "Flow",
-    "flow_chat_skill": "Flow",
+    "flow_chat_branch": "Flow",
     "flow_chat_session": "Сессия",
     "flow_editor": "Редактор",
-    "flow_editor_skill": "Редактор"
+    "flow_editor_branch": "Редактор"
   },
   "flow_create_modal": {
     "title": "Создать flow",
@@ -51,12 +51,12 @@
     "action_cancel": "Отмена",
     "action_save": "Сохранить"
   },
-  "skill_create_modal": {
-    "title": "Создать скилл",
-    "field_skill_id": "Skill ID (snake_case)",
+  "branch_create_modal": {
+    "title": "Создать ветку",
+    "field_branch_id": "Branch ID (snake_case)",
     "field_name": "Название",
     "field_description": "Описание (опционально)",
-    "err_skill_id_pattern": "Skill ID: латиница, цифры, нижнее подчёркивание.",
+    "err_branch_id_pattern": "Branch ID: латиница, цифры, нижнее подчёркивание.",
     "action_cancel": "Отмена",
     "action_create": "Создать"
   },
@@ -187,9 +187,9 @@
     "verify_error_no_type": "Выберите тип триггера.",
     "verify_error_network": "Запрос не выполнен.",
     "verify_error_http": "Ошибка: {{message}}",
-    "field_skill": "Сценарий (skill)",
-    "hint_skill": "Какой skill из flow запускается: базовый (entry) или выбранный в списке Skills.",
-    "skill_option_default": "Базовый flow (default)",
+    "field_branch": "Сценарий (ветка)",
+    "hint_branch": "Какую ветку графа запускает триггер: базовый flow (entry) или выбранную в списке веток.",
+    "branch_option_default": "Базовый flow (default)",
     "post_flow_output_label": "Рассылка после ответа flow",
     "post_flow_output_hint": "Если выключено, после завершения графа действия вывода не выполняются.",
     "field_config_json": "Config (JSON)",
@@ -289,7 +289,7 @@
     "error_id_invalid": "ID: латиница, цифры и _, начинается с буквы",
     "error_name_required": "Укажите название",
     "error_type_required": "Выберите тип триггера",
-    "error_skill_required": "Укажите сценарий (skill)",
+    "error_branch_required": "Укажите ветку",
     "action_cancel": "Отмена",
     "action_save": "Сохранить",
     "action_create": "Создать"
@@ -332,7 +332,7 @@
     "warn_no_session": "Нет активной сессии",
     "warn_no_task_tracing": "Нет taskId для отображения трейсинга",
     "no_flow": "Flow не выбран",
-    "base_skill": "Базовый flow",
+    "base_branch": "Базовый flow",
     "btn_sessions": "История сессий",
     "btn_traces": "Трейсы",
     "btn_logs": "Логи",
@@ -391,9 +391,9 @@
     "save": "Сохранить"
   },
   "flow_card": {
-    "skills_title": "Skills",
-    "add_skill_title": "Добавить skill",
-    "no_skills": "Нет skills",
+    "branches_title": "Ветки",
+    "add_branch_title": "Добавить ветку",
+    "no_branches": "Нет веток",
     "delete_title": "Удалить",
     "open_chat_title": "Открыть чат",
     "edit_title": "Редактировать",
@@ -552,9 +552,9 @@
   "flow_node_editor": {
     "field_flow_id": "Flow",
     "field_flow_pick": "выберите flow",
-    "field_skill_id": "Skill",
+    "field_branch_id": "Ветка",
     "flow_id": "Flow",
-    "skill_id": "Skill",
+    "branch_id": "Ветка",
     "from_list": "Из списка",
     "custom_id": "Свой ID",
     "custom_id_hint": "Введите flow_id вручную"
@@ -598,13 +598,13 @@
   },
   "remote_flow_editor": {
     "field_url": "URL",
-    "field_skill_id": "Skill",
+    "field_branch_id": "Ветка",
     "field_auth_headers": "Auth headers (JSON)",
     "mode_url": "Прямой URL",
     "mode_id": "Реестровый flow_id",
     "url": "URL",
     "flow_id": "Flow ID",
-    "skill_id": "Skill",
+    "branch_id": "Ветка",
     "auth_headers": "Auth headers (JSON)"
   },
   "base_resource_editor": {
@@ -750,7 +750,8 @@
     "download_aria": "Скачать JSON файлом"
   },
   "state_modal": {
-    "modal_title": "State"
+    "modal_title": "State",
+    "load_failed": "Не удалось загрузить state: {detail}"
   },
   "property_panel": {
     "flow_settings_title": "Лимиты flow",
@@ -840,8 +841,8 @@
     "footer_vars": "Переменные",
     "delete_flow_title": "Удалить flow?",
     "delete_flow_message": "Вы уверены, что хотите удалить flow \"{{id}}\"? Это действие необратимо.",
-    "delete_skill_title": "Удалить скилл?",
-    "delete_skill_message": "Вы уверены, что хотите удалить скилл \"{{id}}\"?",
+    "delete_branch_title": "Удалить ветку?",
+    "delete_branch_message": "Вы уверены, что хотите удалить ветку «{{id}}»?",
     "footer_triggers": "Триггеры",
     "footer_integrations": "Интеграции",
     "action_cancel": "Отмена"
@@ -861,7 +862,7 @@
     "col_actions": "Действия",
     "filter_user": "user_id",
     "filter_flow": "flow_id",
-    "filter_skill": "skill_id",
+    "filter_branch": "branch_id",
     "filter_date_from": "Создано от",
     "filter_date_to": "Создано до",
     "filter_apply": "Применить",
@@ -871,7 +872,7 @@
     "continue_aria": "Продолжить диалог",
     "filter_user_aria": "Пользователь (user_id)",
     "filter_flow_aria": "Flow (flow_id)",
-    "filter_skill_aria": "Навык (skill_id)",
+    "filter_branch_aria": "Ветка (branch_id)",
     "filter_empty": "Любой"
   },
   "editor_header": {
@@ -1028,10 +1029,10 @@
     "close": "Закрыть",
     "output_title": "Ответ"
   },
-  "skills_tabs": {
-    "base": "Base Flow",
-    "add": "Skill",
-    "delete": "Удалить skill"
+  "branches_tabs": {
+    "base": "Базовый flow",
+    "add": "Ветка",
+    "delete": "Удалить ветку"
   },
   "canvas": {
     "context_menu": {
@@ -1137,12 +1138,12 @@
     "flow_remove_error": "Не удалось удалить flow",
     "flow_reloaded": "Flow перезагружен",
     "flow_reload_error": "Не удалось перезагрузить flow",
-    "skill_created": "Скилл создан",
-    "skill_create_error": "Не удалось создать скилл",
-    "skill_updated": "Скилл обновлён",
-    "skill_update_error": "Не удалось обновить скилл",
-    "skill_removed": "Скилл удалён",
-    "skill_remove_error": "Не удалось удалить скилл",
+    "branch_created": "Ветка создана",
+    "branch_create_error": "Не удалось создать ветку",
+    "branch_updated": "Ветка обновлена",
+    "branch_update_error": "Не удалось обновить ветку",
+    "branch_removed": "Ветка удалена",
+    "branch_remove_error": "Не удалось удалить ветку",
     "session_removed": "Сессия удалена",
     "session_remove_error": "Не удалось удалить сессию",
     "variable_created": "Переменная создана",

@@ -18,7 +18,7 @@ def create_test_state(
     flow_id: str,
     first_message: str = None,
     message_count: int = 0,
-    skill_id: str = "default",
+    branch_id: str = "default",
 ) -> Dict[str, Any]:
     """
     Создает тестовый state для сессии.
@@ -38,7 +38,7 @@ def create_test_state(
         context_id=context_id,
         user_id=user_id,
         session_id=session_id,
-        skill_id=skill_id,
+        branch_id=branch_id,
     )
     
     # Добавляем сообщения
@@ -188,7 +188,7 @@ class TestSessionsAPI:
 
     @pytest.mark.asyncio
     async def test_list_sessions_with_skill_filter(self, client, app, unique_id):
-        """GET /api/v1/sessions с фильтром по skill_id."""
+        """GET /api/v1/sessions с фильтром по branch_id."""
         container = get_container()
         repo = container.state_repository
 
@@ -203,19 +203,19 @@ class TestSessionsAPI:
             session_id=session1_id,
             user_id=f"user1_{unique_id}",
             flow_id=flow_id,
-            skill_id=target_skill,
+            branch_id=target_skill,
         )
         state2 = create_test_state(
             session_id=session2_id,
             user_id=f"user2_{unique_id}",
             flow_id=flow_id,
-            skill_id=other_skill,
+            branch_id=other_skill,
         )
 
         await repo.set(session1_id, state1)
         await repo.set(session2_id, state2)
 
-        response = await client.get(f"/flows/api/v1/sessions/?skill_id={target_skill}")
+        response = await client.get(f"/flows/api/v1/sessions/?branch_id={target_skill}")
 
         assert response.status_code == 200
         data = response.json()
