@@ -50,6 +50,7 @@ export class LandingPage extends PlatformPage {
             <div class="landing-container">
                 <landing-header></landing-header>
                 <section id="hero"><landing-hero></landing-hero></section>
+                <section id="demo-agents"><landing-home-demo-agents></landing-home-demo-agents></section>
                 <section id="about"><landing-about></landing-about></section>
                 <section id="abilities"><landing-abilities></landing-abilities></section>
                 <section id="advantages"><landing-advantages></landing-advantages></section>

@@ -179,6 +179,12 @@
         "toast_required": "Please fill in the required fields",
         "toast_email_invalid": "Please enter a valid email"
     },
+    "home_demo_agents": {
+        "title": "Try digital employees!",
+        "subtitle": "Legal, health orientation, and psychology orientation demos — no sign-up.",
+        "view_all": "All demos",
+        "filter_empty": "The selected demo agents are temporarily unavailable in the catalog."
+    },
     "digital_workers": {
         "title": "Digital employees",
         "subtitle": "Try ready-made assistants without signing up. Responses are informational only.",

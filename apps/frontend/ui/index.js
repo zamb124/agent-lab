@@ -36,6 +36,7 @@ import './modals/balance-grant-modal.js';
 
 import './components/landing/landing-header.js';
 import './components/landing/landing-hero.js';
+import './components/landing/landing-home-demo-agents.js';
 import './components/landing/landing-about.js';
 import './components/landing/landing-abilities.js';
 import './components/landing/landing-advantages.js';
