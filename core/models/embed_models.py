@@ -127,7 +127,15 @@ class EmbedConfig(BaseModel):
         title="Порядок в каталоге лендинга",
         description="Меньше — выше в списке",
     )
-    
+    guest_max_user_messages: Optional[int] = Field(
+        default=None,
+        title="Лимит сообщений гостя (embed-session)",
+        description=(
+            "Максимум пользовательских сообщений на один диалог (contextId) для токена "
+            "embed-session; не задано — без лимита"
+        ),
+    )
+
     # Статистика
     usage_count: int = Field(
         default=0,

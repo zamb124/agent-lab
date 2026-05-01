@@ -42,6 +42,16 @@ def _validate_landing_catalog_fields(
         )
 
 
+def _validate_guest_max_user_messages(value: Optional[int]) -> None:
+    if value is None:
+        return
+    if value < 1 or value > 500:
+        raise HTTPException(
+            status_code=400,
+            detail="guest_max_user_messages должен быть от 1 до 500 или не задан",
+        )
+
+
 def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
     return EmbedConfigResponse(
         embed_id=config.embed_id,
@@ -64,6 +74,7 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         landing_visible=config.landing_visible,
         landing_card_image_url=config.landing_card_image_url,
         landing_sort_order=config.landing_sort_order,
+        guest_max_user_messages=config.guest_max_user_messages,
         usage_count=config.usage_count,
         last_used_at=config.last_used_at,
         created_at=config.created_at,
@@ -91,6 +102,10 @@ class CreateEmbedConfigRequest(BaseModel):
     landing_visible: bool = Field(default=False, description="Показ в публичном каталоге лендинга (только company system)")
     landing_card_image_url: Optional[str] = Field(default=None, description="Картинка карточки на лендинге")
     landing_sort_order: int = Field(default=0, description="Порядок в каталоге (меньше — выше)")
+    guest_max_user_messages: Optional[int] = Field(
+        default=None,
+        description="Лимит пользовательских сообщений на диалог (embed-session); не задан — без лимита",
+    )
 
 class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
@@ -113,6 +128,7 @@ class UpdateEmbedConfigRequest(BaseModel):
     landing_visible: Optional[bool] = None
     landing_card_image_url: Optional[str] = None
     landing_sort_order: Optional[int] = None
+    guest_max_user_messages: Optional[int] = None
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -136,6 +152,7 @@ class EmbedConfigResponse(BaseModel):
     landing_visible: bool
     landing_card_image_url: Optional[str]
     landing_sort_order: int
+    guest_max_user_messages: Optional[int]
     usage_count: int
     last_used_at: Optional[datetime]
     created_at: datetime
@@ -233,6 +250,8 @@ async def create_embed_config(
         company_id=company_id,
     )
 
+    _validate_guest_max_user_messages(request_data.guest_max_user_messages)
+
     # Создаем конфигурацию
     config = EmbedConfig(
         embed_id=embed_id,
@@ -255,6 +274,7 @@ async def create_embed_config(
         landing_visible=request_data.landing_visible,
         landing_card_image_url=card_url,
         landing_sort_order=request_data.landing_sort_order,
+        guest_max_user_messages=request_data.guest_max_user_messages,
         created_by=user.user_id,
     )
     
@@ -336,6 +356,8 @@ async def update_embed_config(
     
     # Обновляем только переданные поля
     update_data = request_data.model_dump(exclude_unset=True)
+    if "guest_max_user_messages" in update_data:
+        _validate_guest_max_user_messages(update_data.get("guest_max_user_messages"))
     if "interface_locale" in update_data and update_data["interface_locale"] is not None:
         update_data["interface_locale"] = _normalize_interface_locale(update_data["interface_locale"])
     if "landing_card_image_url" in update_data and update_data["landing_card_image_url"] is not None:

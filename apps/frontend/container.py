@@ -62,6 +62,20 @@ class FrontendContainer(BaseContainer):
         from core.payments import PaymentService
         return PaymentService(company_repository=self.company_repository)
 
+    @lazy
+    def flows_flow_repository(self):
+        """Репозиторий flows из сервисной БД flows (read-only сценарии без HTTP к peers)."""
+        from core.config import get_settings
+        from core.context import get_context
+        from core.db.storage import Storage
+        from apps.flows.src.db.flow_repository import FlowRepository
+
+        url = get_settings().database.flows_url
+        if not url:
+            return None
+        storage = Storage(db_url=url, get_context_func=get_context)
+        return FlowRepository(storage=storage)
+
 # === Глобальный контейнер ===
 
 _frontend_container: Optional[FrontendContainer] = None

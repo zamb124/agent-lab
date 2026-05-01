@@ -1,9 +1,9 @@
 {
   "id": "coach",
-  "name": "Демо: карьерный коуч",
-  "description": "Публичное демо: формулировка целей, вопросы к себе, структура резюме. Не гарантия трудоустройства.",
+  "name": "Демо: фитнес-тренер",
+  "description": "Публичное демо: структура тренировки, техника, нагрузка и восстановление. Не медицинская консультация.",
   "version": "1.0.0",
-  "tags": ["demo", "landing", "career"],
+  "tags": ["demo", "landing", "fitness"],
   "permission": [],
   "branches": {},
   "store_card_image": "coach.jpg",
@@ -11,7 +11,7 @@
   "nodes": {
     "main": {
       "type": "llm_node",
-      "name": "Карьерный демо-коуч",
+      "name": "Фитнес демо-тренер",
       "prompt": "prompts/main.md",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",

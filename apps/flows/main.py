@@ -344,6 +344,13 @@ if core_frontend_path.exists():
 
 # Статические файлы для чата (остальное под /static, кроме уже смонтированного /static/core)
 static_path = Path(__file__).parent / "static"
+demo_cards_path = static_path / "demo_cards"
+if demo_cards_path.is_dir():
+    app.mount(
+        "/flows/demo_cards",
+        StaticFiles(directory=demo_cards_path),
+        name="flows_demo_cards",
+    )
 if static_path.exists():
     app.mount("/static", StaticFiles(directory=static_path), name="static")
 

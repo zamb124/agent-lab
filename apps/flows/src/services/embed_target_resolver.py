@@ -18,6 +18,7 @@ class EmbedTarget:
     branch_id: str
     allowed_origins: list[str]
     active: bool
+    guest_max_user_messages: int | None
 
 
 async def resolve_embed_target(container: FlowContainer, embed_id: str) -> EmbedTarget | None:
@@ -34,6 +35,10 @@ async def resolve_embed_target(container: FlowContainer, embed_id: str) -> Embed
     if config is None:
         return None
 
+    guest_cap = config.guest_max_user_messages
+    if guest_cap is not None and guest_cap < 1:
+        guest_cap = None
+
     return EmbedTarget(
         embed_id=embed_id,
         company_id=company.company_id,
@@ -41,6 +46,7 @@ async def resolve_embed_target(container: FlowContainer, embed_id: str) -> Embed
         branch_id=config.branch_id,
         allowed_origins=list(config.allowed_origins or []),
         active=config.status == EmbedStatus.ACTIVE,
+        guest_max_user_messages=guest_cap,
     )
 
 

@@ -160,6 +160,9 @@ export class PlatformApp extends PlatformElement {
     getServiceEffects() { return []; }
     rendersUnauthenticated() { return false; }
 
+    /** Подкласс: false — не дергать GET /api/auth/me при connect (публичные страницы). */
+    shouldRequestUserLoadOnConnect() { return true; }
+
     renderRoute(routeKey, params) {
         return html`<slot></slot>`;
     }
@@ -168,7 +171,11 @@ export class PlatformApp extends PlatformElement {
         super.connectedCallback();
         if (this._userLoadDispatched) return;
         this._userLoadDispatched = true;
-        this.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null);
+        if (this.shouldRequestUserLoadOnConnect()) {
+            this.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null);
+        } else {
+            this.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null);
+        }
         completeBootstrap();
     }
 

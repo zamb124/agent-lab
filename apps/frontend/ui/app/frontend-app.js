@@ -12,6 +12,7 @@
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
 import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
@@ -203,6 +204,7 @@ export class FrontendApp extends PlatformApp {
 
     constructor() {
         super();
+        this._deferredAuthMeRequested = false;
         this._companiesSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._frontendMql = null;
@@ -288,18 +290,41 @@ export class FrontendApp extends PlatformApp {
 
     rendersUnauthenticated() { return true; }
 
+    shouldRequestUserLoadOnConnect() {
+        if (typeof window === 'undefined') return true;
+        const path = window.location.pathname.replace(/\/+$/, '') || '/';
+        if (path === '/') return false;
+        if (/^\/demo\/digital-workers(\/|$)/.test(path)) return false;
+        if (path.startsWith('/products/')) return false;
+        if (path === '/policy' || path === '/terms' || path === '/support') return false;
+        return true;
+    }
+
     updated(changed) {
         super.updated && super.updated(changed);
 
         const route = this._routerSelect ? this._routerSelect.value : null;
         const routeKey = route ? route.routeKey : null;
+        const auth = this._authSelect ? this._authSelect.value : null;
+
+        if (
+            auth &&
+            auth.status === 'unauthenticated' &&
+            auth.sessionEndCause === null &&
+            routeKey &&
+            !this._deferredAuthMeRequested &&
+            !LANDING_ROUTE_KEYS.has(routeKey)
+        ) {
+            this._deferredAuthMeRequested = true;
+            this.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null);
+        }
+
         const landingPublic = !!routeKey && LANDING_ROUTE_KEYS.has(routeKey);
         this.toggleAttribute('landing', landingPublic);
         if (typeof document !== 'undefined' && document.documentElement) {
             document.documentElement.classList.toggle('frontend-landing-public', landingPublic);
         }
 
-        const auth = this._authSelect ? this._authSelect.value : null;
         if (
             auth && auth.status === 'unauthenticated'
             && auth.sessionEndCause !== 'logout'

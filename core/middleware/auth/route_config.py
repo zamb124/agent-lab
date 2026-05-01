@@ -318,6 +318,8 @@ ROUTE_RULES: List[RouteRule] = [
     # Scheduler service API
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),
     
+    # UI агентов — публичные превью лендинга (статика под /flows/demo_cards на сервисе flows)
+    RouteRule("/flows/demo_cards/*", auth_required=False, context_type="anonymous"),
     # UI агентов - статика без авторизации (должна быть перед /flows/ui/*)
     RouteRule("/flows/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/ui/static/*", auth_required=False, context_type="anonymous"),

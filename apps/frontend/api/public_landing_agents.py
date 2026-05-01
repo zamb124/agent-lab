@@ -10,9 +10,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from apps.frontend.dependencies import ContainerDep
+from apps.frontend.services.landing_demo_seed import (
+    ensure_system_landing_demo_embeds,
+    public_landing_demo_card_url,
+)
+from core.identity.landing_public_demo import LANDING_PUBLIC_EMBED_SESSION_ISSUER
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
-from core.models.embed_models import EmbedStatus
+from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -55,19 +60,35 @@ class PublicLandingSessionResponse(BaseModel):
     branch_id: str
 
 
-@router.get("", response_model=PublicLandingAgentsResponse)
-async def list_public_landing_agents(container: ContainerDep) -> PublicLandingAgentsResponse:
-    repo = container.embed_config_repository
-    configs = await repo.list_for_company_identifier(
-        SYSTEM_COMPANY_SUBDOMAIN,
-        limit=2000,
-        offset=0,
-    )
+async def _effective_landing_card_image_url(
+    container: ContainerDep,
+    embed: EmbedConfig,
+) -> str:
+    demo_url = public_landing_demo_card_url(embed.embed_id)
+    if demo_url is not None:
+        return demo_url
+    direct = (embed.landing_card_image_url or "").strip()
+    if direct:
+        return direct
+    flow_repo = container.flows_flow_repository
+    if flow_repo is None:
+        return ""
+    pair = await flow_repo.get_latest_by_flow_id_unscoped(embed.flow_id)
+    if pair is None:
+        return ""
+    cfg, _company_identifier = pair
+    return (cfg.store_card_image_url or "").strip()
+
+
+async def _collect_landing_cards(
+    container: ContainerDep,
+    configs: List[EmbedConfig],
+) -> List[PublicLandingAgentCard]:
     cards: List[PublicLandingAgentCard] = []
     for c in configs:
         if c.status != EmbedStatus.ACTIVE or not c.landing_visible:
             continue
-        img = (c.landing_card_image_url or "").strip()
+        img = await _effective_landing_card_image_url(container, c)
         if not img:
             continue
         cards.append(
@@ -90,6 +111,27 @@ async def list_public_landing_agents(container: ContainerDep) -> PublicLandingAg
             )
         )
     cards.sort(key=lambda x: (x.landing_sort_order, x.name))
+    return cards
+
+
+@router.get("", response_model=PublicLandingAgentsResponse)
+async def list_public_landing_agents(container: ContainerDep) -> PublicLandingAgentsResponse:
+    await ensure_system_landing_demo_embeds(container)
+    repo = container.embed_config_repository
+    configs = await repo.list_for_company_identifier(
+        SYSTEM_COMPANY_SUBDOMAIN,
+        limit=2000,
+        offset=0,
+    )
+    cards = await _collect_landing_cards(container, configs)
+    if not cards:
+        await ensure_system_landing_demo_embeds(container)
+        configs = await repo.list_for_company_identifier(
+            SYSTEM_COMPANY_SUBDOMAIN,
+            limit=2000,
+            offset=0,
+        )
+        cards = await _collect_landing_cards(container, configs)
     return PublicLandingAgentsResponse(items=cards)
 
 
@@ -114,7 +156,7 @@ async def issue_public_landing_session(
         raise HTTPException(status_code=403, detail="Виджет отключён")
     if not config.landing_visible:
         raise HTTPException(status_code=403, detail="Виджет недоступен для публичного чата")
-    img = (config.landing_card_image_url or "").strip()
+    img = await _effective_landing_card_image_url(container, config)
     if not img:
         raise HTTPException(status_code=403, detail="Виджет не опубликован в каталоге")
 
@@ -130,7 +172,7 @@ async def issue_public_landing_session(
             "embed_flow_id": config.flow_id,
             "embed_branch_id": config.branch_id,
             "allowed_origin": "",
-            "issued_by": "frontend.public_landing_agents",
+            "issued_by": LANDING_PUBLIC_EMBED_SESSION_ISSUER,
         },
     )
     logger.info(

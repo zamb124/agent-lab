@@ -7,7 +7,8 @@
  * Поля соответствуют CreateEmbedConfigRequest/UpdateEmbedConfigRequest
  * (apps/frontend/api/embed_configs.py): name, flow_id, branch_id,
  * allowed_origins, theme, position, show_launcher, primary_color,
- * greeting_message, assistant_title, interface_locale, placeholder, branding.
+ * greeting_message, assistant_title, interface_locale, placeholder, branding,
+ * guest_max_user_messages.
  *
  * Skill заблокирован для external flows и flows без skills (бэк подставит default).
  */
@@ -78,6 +79,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         _landingVisible: { state: true },
         _landingCardImageUrl: { state: true },
         _landingSortOrder: { state: true },
+        _guestMaxUserMessages: { state: true },
     };
 
     constructor() {
@@ -99,6 +101,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._landingVisible = false;
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
+        this._guestMaxUserMessages = '';
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
         this._catalog = this.useOp('frontend/flows_catalog');
@@ -129,6 +132,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._landingVisible = false;
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
+        this._guestMaxUserMessages = '';
     }
 
     willUpdate(changed) {
@@ -169,6 +173,11 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             if (typeof c.landing_visible === 'boolean') this._landingVisible = c.landing_visible;
             if (typeof c.landing_card_image_url === 'string') this._landingCardImageUrl = c.landing_card_image_url;
             if (typeof c.landing_sort_order === 'number') this._landingSortOrder = c.landing_sort_order;
+            if (typeof c.guest_max_user_messages === 'number' && Number.isFinite(c.guest_max_user_messages)) {
+                this._guestMaxUserMessages = String(Math.trunc(c.guest_max_user_messages));
+            } else {
+                this._guestMaxUserMessages = '';
+            }
         }
     }
 
@@ -209,6 +218,12 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         if (this._isSystemCompany() && this._landingVisible && !this._landingCardImageUrl.trim()) {
             errors.landing_image = this.t('embed_create_modal.err_landing_image');
         }
+        if (this._guestMaxUserMessages.trim() !== '') {
+            const n = Number(this._guestMaxUserMessages.trim());
+            if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 1 || n > 500) {
+                errors.guest_max_user_messages = this.t('embed_create_modal.err_guest_max_user_messages');
+            }
+        }
         return errors;
     }
 
@@ -223,6 +238,15 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         const isEdit = !!this.embedConfig;
         const sys = this._isSystemCompany();
         const landingOn = sys && this._landingVisible;
+        const gtrim = this._guestMaxUserMessages.trim();
+        let guest_max_user_messages = null;
+        if (gtrim !== '') {
+            const gn = Number(gtrim);
+            if (!Number.isFinite(gn)) {
+                throw new Error('embed_create_modal: guest_max_user_messages must be a finite number');
+            }
+            guest_max_user_messages = Math.trunc(gn);
+        }
         const payload = {
             name: this._name.trim(),
             flow_id: this._flowId,
@@ -240,6 +264,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             landing_visible: landingOn,
             landing_card_image_url: landingOn ? this._landingCardImageUrl.trim() : null,
             landing_sort_order: landingOn ? this._landingSortOrder : 0,
+            guest_max_user_messages,
         };
         if (isEdit) {
             this._configs.update(this.embedConfig.embed_id, payload);
@@ -445,6 +470,22 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             @input=${(e) => { this._allowedOrigins = e.target.value; this.isDirty = true; }}
                         ></textarea>
                         <div class="hint">${this.t('embed_create_modal.allowed_origins_hint')}</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">${this.t('embed_create_modal.label_guest_max_user_messages')}</label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="500"
+                            step="1"
+                            class="form-input"
+                            .value=${this._guestMaxUserMessages}
+                            placeholder=${this.t('embed_create_modal.placeholder_guest_max_user_messages')}
+                            @input=${(e) => { this._guestMaxUserMessages = e.target.value; this.isDirty = true; }}
+                        />
+                        <div class="hint">${this.t('embed_create_modal.guest_max_user_messages_hint')}</div>
+                        ${this.renderFieldError('guest_max_user_messages')}
                     </div>
 
                     <div class="form-group">

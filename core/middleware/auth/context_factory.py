@@ -67,7 +67,21 @@ class ContextFactory:
                 companies={active_cid: ["guest"]} if active_cid else {},
                 active_company_id=active_cid,
             )
-        
+
+        if user is None and token_data is None and context_type == "api":
+            company_id = company.company_id if company else "system"
+            user = User(
+                user_id="anonymous",
+                provider=AuthProvider.YANDEX,
+                provider_user_id="anonymous",
+                email="",
+                name="Anonymous",
+                status=UserStatus.ACTIVE,
+                groups=["guest"],
+                companies={company_id: ["guest"]},
+                active_company_id=company_id,
+            )
+
         user_companies = await self._get_user_companies(user) if user else []
         
         metadata = {

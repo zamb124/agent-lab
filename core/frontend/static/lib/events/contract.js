@@ -131,6 +131,7 @@ export const CoreEvents = Object.freeze({
     AUTH_LOGGED_OUT:      'auth/session/logged_out',
     AUTH_VALIDATED:       'auth/session/validated',
     AUTH_UNAUTHORIZED:    'auth/session/unauthorized',
+    AUTH_ASSUMED_ANONYMOUS: 'auth/session/assumed_anonymous',
     AUTH_USER_LOADED:     'auth/user/loaded',
     AUTH_USER_FAILED:     'auth/user/failed',
     AUTH_COMPANY_SWITCH_REQUESTED: 'auth/company/switch_requested',

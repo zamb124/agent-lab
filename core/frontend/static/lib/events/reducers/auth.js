@@ -62,6 +62,13 @@ export function authReducer(state = initialAuthState, event) {
         case CoreEvents.AUTH_UNAUTHORIZED:
             return { ...initialAuthState, status: 'unauthenticated', sessionEndCause: 'lost_session' };
 
+        case CoreEvents.AUTH_ASSUMED_ANONYMOUS:
+            return {
+                ...initialAuthState,
+                status: 'unauthenticated',
+                sessionEndCause: null,
+            };
+
         case CoreEvents.AUTH_LOGGED_OUT:
             return { ...initialAuthState, status: 'unauthenticated', sessionEndCause: 'logout' };
 

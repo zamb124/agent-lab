@@ -49,6 +49,11 @@ export const embedConfigsResource = createResourceCollection({
         if (typeof raw.landing_sort_order !== 'number') {
             throw new Error('frontend/embed_configs: landing_sort_order required');
         }
+        if (raw.guest_max_user_messages != null) {
+            if (typeof raw.guest_max_user_messages !== 'number' || !Number.isFinite(raw.guest_max_user_messages)) {
+                throw new Error('frontend/embed_configs: guest_max_user_messages invalid');
+            }
+        }
         return {
             ...raw,
             landing_card_image_url:

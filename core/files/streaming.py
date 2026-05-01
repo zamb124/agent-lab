@@ -9,7 +9,7 @@ from typing import AsyncIterator
 
 from fastapi.responses import StreamingResponse
 
-from core.files.http_range import normalize_s3_byte_range
+from core.files.http_range import RangeNotSatisfiableError, normalize_s3_byte_range
 from core.files.s3_client import S3Client
 
 _CHUNK_SIZE = 64 * 1024  # 64 KB
@@ -31,13 +31,24 @@ async def stream_s3_file(
     target_bucket = bucket or s3_client.bucket_name
 
     client = await s3_client._get_client()
-    head = await client.head_object(Bucket=target_bucket, Key=s3_key)
+    try:
+        head = await client.head_object(Bucket=target_bucket, Key=s3_key)
+    except BaseException:
+        await s3_client.close()
+        raise
     total_size = int(head["ContentLength"])
-
-    span = normalize_s3_byte_range(range_header, total_size)
+    try:
+        span = normalize_s3_byte_range(range_header, total_size)
+    except RangeNotSatisfiableError:
+        await s3_client.close()
+        raise
 
     if span is None:
-        response = await client.get_object(Bucket=target_bucket, Key=s3_key)
+        try:
+            response = await client.get_object(Bucket=target_bucket, Key=s3_key)
+        except BaseException:
+            await s3_client.close()
+            raise
         body = response["Body"]
 
         async def _iterate_full() -> AsyncIterator[bytes]:
@@ -63,11 +74,15 @@ async def stream_s3_file(
 
     start, end = span
     byte_range = f"bytes={start}-{end}"
-    response = await client.get_object(
-        Bucket=target_bucket,
-        Key=s3_key,
-        Range=byte_range,
-    )
+    try:
+        response = await client.get_object(
+            Bucket=target_bucket,
+            Key=s3_key,
+            Range=byte_range,
+        )
+    except BaseException:
+        await s3_client.close()
+        raise
     body = response["Body"]
     part_len = end - start + 1
     content_range = f"bytes {start}-{end}/{total_size}"

@@ -33,6 +33,10 @@ from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_e
 from core.context import get_context
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
+from core.identity.embed_guest_turns import (
+    EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
+    EMBED_GUEST_USER_TURNS_TTL_SECONDS,
+)
 from core.logging import get_logger
 from apps.flows.src.models import FlowConfig
 from core.ui_events import publish_ui_event_to_user
@@ -92,6 +96,94 @@ _STREAM_METHODS = {"message/stream", "tasks/resubscribe"}
 
 def _is_embed_session_token(token_data: Optional[TokenData]) -> bool:
     return token_data is not None and token_data.token_type == TokenType.EMBED_SESSION
+
+
+_EMBED_GUEST_TURN_LUA = """
+local raw = redis.call("GET", KEYS[1])
+local cur = 0
+if raw then cur = tonumber(raw) end
+local maxn = tonumber(ARGV[2])
+if cur >= maxn then
+  return -1
+end
+local n = redis.call("INCR", KEYS[1])
+if n == 1 then
+  redis.call("EXPIRE", KEYS[1], tonumber(ARGV[1]))
+end
+return n
+"""
+
+
+def _a2a_message_context_id(params_dict: Dict[str, Any]) -> str:
+    msg = params_dict.get("message")
+    if not isinstance(msg, dict):
+        return ""
+    for key in ("contextId", "context_id"):
+        v = msg.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
+async def _embed_session_guest_turn_limit_error(
+    *,
+    container: FlowContainer,
+    token_data: TokenData,
+    embed_target: EmbedTarget | None,
+    method: Optional[str],
+    params_dict: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if method not in {"message/send", "message/stream"}:
+        return None
+    if embed_target is None or not embed_target.embed_id.strip():
+        return None
+    max_n = embed_target.guest_max_user_messages
+    if max_n is None or max_n < 1:
+        return None
+    ctx_id = _a2a_message_context_id(params_dict)
+    if not ctx_id:
+        return {
+            "code": -32000,
+            "message": "Лимит embed-session действует только при непустом contextId в сообщении.",
+        }
+    key = f"{EMBED_GUEST_USER_TURNS_REDIS_PREFIX}:{embed_target.embed_id.strip()}:{ctx_id}"
+    try:
+        count_raw = await container.redis_client.eval(
+            _EMBED_GUEST_TURN_LUA,
+            1,
+            key,
+            str(EMBED_GUEST_USER_TURNS_TTL_SECONDS),
+            str(max_n),
+        )
+    except Exception:
+        logger.exception(
+            "embed_guest_turn_limit_redis_failed",
+            embed_id=embed_target.embed_id,
+        )
+        return {
+            "code": -32000,
+            "message": "Лимит сообщений временно недоступен. Попробуйте позже.",
+        }
+    try:
+        n_turn = int(count_raw)
+    except (TypeError, ValueError):
+        logger.error(
+            "embed_guest_turn_limit_bad_redis_reply",
+            embed_id=embed_target.embed_id,
+            count_raw=count_raw,
+        )
+        return {
+            "code": -32000,
+            "message": "Лимит сообщений временно недоступен. Попробуйте позже.",
+        }
+    if n_turn < 0:
+        return {
+            "code": -32000,
+            "message": (
+                "Достигнут лимит сообщений для этого виджета. Получите новый токен или обратитесь к владельцу."
+            ),
+        }
+    return None
 
 
 def _validate_embed_session_request(
@@ -331,7 +423,8 @@ async def _json_rpc_handler_internal(
     
     rpc_id = body.get("id")
     method = body.get("method")
-    params_dict = body.get("params", {})
+    _raw_params = body.get("params")
+    params_dict: Dict[str, Any] = _raw_params if isinstance(_raw_params, dict) else {}
     
     token_data = getattr(request.state, "token_data", None)
     if _is_embed_session_token(token_data):
@@ -373,6 +466,17 @@ async def _json_rpc_handler_internal(
                 "id": rpc_id,
                 "error": {"code": -32602, "message": "Invalid params: metadata must be object"},
             }
+
+    if _is_embed_session_token(token_data) and isinstance(token_data, TokenData):
+        lim_err = await _embed_session_guest_turn_limit_error(
+            container=container,
+            token_data=token_data,
+            embed_target=embed_target,
+            method=method,
+            params_dict=params_dict,
+        )
+        if lim_err is not None:
+            return {"jsonrpc": "2.0", "id": rpc_id, "error": lim_err}
 
     # Версия: приоритет query param > metadata.version
     metadata = params_dict.get("metadata") or {}

@@ -46,6 +46,14 @@ describe('authReducer: events', () => {
         expect(next.sessionEndCause).toBe('lost_session');
     });
 
+    it('AUTH_ASSUMED_ANONYMOUS → unauthenticated без sessionEndCause', () => {
+        const seeded = authReducer(initialAuthState, ev(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'u' } }));
+        const next = authReducer(seeded, ev(CoreEvents.AUTH_ASSUMED_ANONYMOUS));
+        expect(next.status).toBe('unauthenticated');
+        expect(next.user).toBeNull();
+        expect(next.sessionEndCause).toBeNull();
+    });
+
     it('AUTH_LOGGED_OUT сбрасывает state с logout', () => {
         const seeded = authReducer(initialAuthState, ev(CoreEvents.AUTH_USER_LOADED, { user: { user_id: 'u' } }));
         const next = authReducer(seeded, ev(CoreEvents.AUTH_LOGGED_OUT));

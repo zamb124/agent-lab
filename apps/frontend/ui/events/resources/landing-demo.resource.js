@@ -40,9 +40,8 @@ export const landingDemoSessionOp = createAsyncOp({
         return httpRequest({
             method: 'POST',
             url: '/frontend/api/public/landing-agents/session',
-            headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ embed_id: embedId, expires_in_seconds: expires }),
+            body: { embed_id: embedId, expires_in_seconds: expires },
         });
     },
 });

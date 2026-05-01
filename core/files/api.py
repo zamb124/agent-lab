@@ -16,6 +16,8 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
+from botocore.exceptions import ClientError
+import httpx
 
 from core.files.audio_transcode import AudioTranscodeError
 from core.files.http_range import RangeNotSatisfiableError
@@ -159,6 +161,26 @@ def build_file_api_router(
                     status_code=416,
                     headers={"Content-Range": f"bytes */{exc.total_size}"},
                 )
+            except ClientError as exc:
+                err = exc.response.get("Error", {}) if isinstance(exc.response, dict) else {}
+                code = err.get("Code", "")
+                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") if isinstance(exc.response, dict) else None
+                not_found = code in ("404", "NoSuchKey", "NotFound") or status == 404
+                if not_found:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Файл не найден в хранилище.",
+                    ) from exc
+                logger.exception(
+                    "files.download_s3_failed",
+                    file_id=file_id,
+                    bucket=s3_bucket,
+                    **{"attributes.s3_error_code": str(code)},
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail="Не удалось получить файл из хранилища.",
+                ) from exc
 
         storage_url = getattr(file_record, "storage_url", None)
         if not isinstance(storage_url, str) or storage_url == "":
@@ -168,9 +190,29 @@ def build_file_api_router(
 
         from core.http import get_httpx_client
 
-        async with get_httpx_client(timeout=120.0) as client:
-            upstream_response = await client.get(storage_url)
-        upstream_response.raise_for_status()
+        try:
+            async with get_httpx_client(timeout=120.0) as client:
+                upstream_response = await client.get(storage_url)
+            upstream_response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            st = exc.response.status_code if exc.response is not None else None
+            if st == 404:
+                raise HTTPException(status_code=404, detail="Файл не найден по ссылке хранения.") from exc
+            logger.exception(
+                "files.download_http_upstream_failed",
+                file_id=file_id,
+                **{"http.status_code": st},
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Не удалось получить файл по внешней ссылке.",
+            ) from exc
+        except httpx.HTTPError as exc:
+            logger.exception("files.download_http_upstream_failed", file_id=file_id)
+            raise HTTPException(
+                status_code=502,
+                detail="Не удалось получить файл по внешней ссылке.",
+            ) from exc
         upstream_content_type = upstream_response.headers.get("content-type")
         response_content_type = (
             upstream_content_type
