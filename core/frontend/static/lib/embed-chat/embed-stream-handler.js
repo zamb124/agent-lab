@@ -73,6 +73,17 @@ function extractQuestionFromMessage(message) {
     return '';
 }
 
+function isEmbedGuestLimitMessage(text) {
+    const raw = typeof text === 'string' ? text.trim() : '';
+    if (!raw) {
+        return false;
+    }
+    return (
+        raw.includes('Достигнут лимит сообщений для этого виджета') ||
+        raw.includes('Guest message limit reached for this widget')
+    );
+}
+
 /**
  * @param {object} msg - текущее сообщение assistant (будет мутировано логически через патчи)
  * @param {object} event - сырой SSE JSON
@@ -202,7 +213,16 @@ function reduceArtifactUpdate(msg, result, out) {
                 err = extracted;
             }
         }
-        out.patch.content = err;
+        if (isEmbedGuestLimitMessage(err)) {
+            out.patch.content = '';
+            out.patch.inputRequired = {
+                interruptKind: 'oauth_required',
+                question: err,
+                authUrl: '/login',
+            };
+        } else {
+            out.patch.content = err;
+        }
         out.patch.streaming = false;
     }
 
@@ -287,9 +307,20 @@ function reduceStatusUpdate(msg, result, out) {
                 err = extracted;
             }
         }
-        out.patch.content = err;
+        if (isEmbedGuestLimitMessage(err)) {
+            out.patch.content = '';
+            out.patch.inputRequired = {
+                interruptKind: 'oauth_required',
+                question: err,
+                authUrl: '/login',
+            };
+        } else {
+            out.patch.content = err;
+        }
         out.patch.streaming = false;
-        out.patch.inputRequired = null;
+        if (!isEmbedGuestLimitMessage(err)) {
+            out.patch.inputRequired = null;
+        }
         out.taskId = taskId;
     }
 

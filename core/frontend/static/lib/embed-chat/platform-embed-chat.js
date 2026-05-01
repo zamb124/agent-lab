@@ -984,7 +984,23 @@ export class PlatformEmbedChat extends LitElement {
             );
         } catch (err) {
             const m = err instanceof Error ? err.message : String(err);
-            this._patchMessage(assistantMsg.id, { content: m, streaming: false });
+            const isGuestLimit =
+                typeof m === 'string' &&
+                (m.includes('Достигнут лимит сообщений для этого виджета') ||
+                    m.includes('Guest message limit reached for this widget'));
+            if (isGuestLimit) {
+                this._patchMessage(assistantMsg.id, {
+                    content: '',
+                    streaming: false,
+                    inputRequired: {
+                        interruptKind: 'oauth_required',
+                        question: m,
+                        authUrl: '/login',
+                    },
+                });
+            } else {
+                this._patchMessage(assistantMsg.id, { content: m, streaming: false });
+            }
             this._emitAssistantEvent('error', {
                 message: m,
                 flow_id: this.flowId || null,

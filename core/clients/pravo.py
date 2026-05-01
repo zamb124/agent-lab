@@ -16,11 +16,12 @@ from urllib.parse import quote, unquote, urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from core.http import get_httpx_client
 
 _PRAVO_IPS_NETLOC = "ips.pravo.gov.ru"
 _LEGISLATION_HASH_RE = re.compile(r"(?i)hash=([a-f0-9]{64})")
 _STANDALONE_HASH_RE = re.compile(r"^[a-fA-F0-9]{64}$")
-_DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=20.0)
+_DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (compatible; HumanitecPravoClient/1.0; +https://humanitec.ru); "
@@ -201,8 +202,18 @@ async def fetch_legislation_document(
         url = legislation_document_api_url(h)
 
     hdrs = {**_DEFAULT_HEADERS, **(headers or {})}
-    async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
-        response = await client.get(url, headers=hdrs)
+    try:
+        async with get_httpx_client(
+            timeout=_DEFAULT_TIMEOUT_SECONDS,
+            follow_redirects=True,
+            trust_env=False,
+        ) as client:
+            response = await client.get(url, headers=hdrs)
+    except httpx.RequestError as exc:
+        detail = str(exc).strip() or exc.__class__.__name__
+        raise PravoClientError(
+            f"Ошибка сетевого запроса IPS при загрузке документа: {detail} ({url})",
+        ) from exc
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
@@ -268,8 +279,18 @@ async def fetch_catalog_search_html(
     """Сырой HTML страницы расширенного поиска (для последующего parse_catalog_search_html)."""
     url = build_catalog_search_url(keyword=keyword, page=page)
     hdrs = {**_DEFAULT_HEADERS, **(headers or {})}
-    async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
-        response = await client.get(url, headers=hdrs)
+    try:
+        async with get_httpx_client(
+            timeout=_DEFAULT_TIMEOUT_SECONDS,
+            follow_redirects=True,
+            trust_env=False,
+        ) as client:
+            response = await client.get(url, headers=hdrs)
+    except httpx.RequestError as exc:
+        detail = str(exc).strip() or exc.__class__.__name__
+        raise PravoClientError(
+            f"Ошибка сетевого запроса IPS при поиске: {detail} ({url})",
+        ) from exc
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:

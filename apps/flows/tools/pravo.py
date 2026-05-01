@@ -119,9 +119,14 @@ async def pravo_catalog_search(keyword: str, page: int = 1) -> dict:
         html = await fetch_catalog_search_html(keyword=keyword, page=page)
         hits = parse_catalog_search_html(html, page_base_url=list_url)
     except PravoClientError as exc:
-        return {"success": False, "error": str(exc)}
+        msg = str(exc).strip() or exc.__class__.__name__
+        return {"success": False, "error": msg}
     except (ValueError, ServiceClientError) as exc:
-        return {"success": False, "error": str(exc)}
+        msg = str(exc).strip() or exc.__class__.__name__
+        return {"success": False, "error": msg}
+    except Exception as exc:
+        msg = str(exc).strip() or exc.__class__.__name__
+        return {"success": False, "error": msg}
 
     items: List[Dict[str, Any]] = [
         {"title": h.title, "url": h.url, "document_hash": h.document_hash} for h in hits
@@ -183,7 +188,11 @@ async def pravo_document_rag_search(
     try:
         doc = await fetch_legislation_document(document_hash=doc_hash)
     except PravoClientError as exc:
-        return {"success": False, "error": str(exc)}
+        msg = str(exc).strip() or exc.__class__.__name__
+        return {"success": False, "error": msg}
+    except Exception as exc:
+        msg = str(exc).strip() or exc.__class__.__name__
+        return {"success": False, "error": msg}
 
     merged_meta: Dict[str, Any] = {
         "collection_id": collection_id,
