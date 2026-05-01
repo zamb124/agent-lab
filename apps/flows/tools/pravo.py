@@ -14,13 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from apps.flows.src.tools import tool
 from core.clients.pravo import (
     PravoClientError,
-    build_catalog_search_url,
-    fetch_catalog_search_html,
-    fetch_legislation_document,
-    parse_catalog_search_html,
-    legislation_document_api_url,
-    extract_legislation_document_hash,
-    rag_document_id_for_pravo_legislation,
+    PravoClient,
 )
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
@@ -115,17 +109,15 @@ async def _run_rag_search(
 )
 async def pravo_catalog_search(keyword: str, page: int = 1) -> dict:
     try:
-        list_url = build_catalog_search_url(keyword=keyword, page=page)
-        html = await fetch_catalog_search_html(keyword=keyword, page=page)
-        hits = parse_catalog_search_html(html, page_base_url=list_url)
+        hits = await PravoClient().search_catalog(keyword=keyword, page=page)
     except PravoClientError as exc:
-        msg = str(exc).strip() or exc.__class__.__name__
+        msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
     except (ValueError, ServiceClientError) as exc:
-        msg = str(exc).strip() or exc.__class__.__name__
+        msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
     except Exception as exc:
-        msg = str(exc).strip() or exc.__class__.__name__
+        msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
 
     items: List[Dict[str, Any]] = [
@@ -154,10 +146,11 @@ async def pravo_document_rag_search(
     limit: int = 5,
     force_refresh: bool = False,
 ) -> dict:
+    pravo_client = PravoClient()
     try:
-        doc_hash = extract_legislation_document_hash(document_ref)
-        source_url = legislation_document_api_url(doc_hash)
-        rag_document_id = rag_document_id_for_pravo_legislation(doc_hash)
+        doc_hash = PravoClient.extract_legislation_document_hash(document_ref)
+        source_url = PravoClient.legislation_document_api_url(doc_hash)
+        rag_document_id = PravoClient.rag_document_id(doc_hash)
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
@@ -186,12 +179,12 @@ async def pravo_document_rag_search(
             }
 
     try:
-        doc = await fetch_legislation_document(document_hash=doc_hash)
+        doc = await pravo_client.fetch_legislation_document(document_hash=doc_hash)
     except PravoClientError as exc:
-        msg = str(exc).strip() or exc.__class__.__name__
+        msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
     except Exception as exc:
-        msg = str(exc).strip() or exc.__class__.__name__
+        msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
 
     merged_meta: Dict[str, Any] = {

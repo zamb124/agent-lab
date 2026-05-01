@@ -10,6 +10,9 @@ from apps.flows.tools.pravo import pravo_document_rag_search
 from core.clients.pravo import PravoLegislationDocument
 
 H64 = "007c57b8a5c11e0eb8e77ae8e75586909c5a0e5fb9ab0d295b8acc3344ac4ccf"
+
+
+@pytest.mark.asyncio
 async def test_pravo_document_rag_search_uses_index_when_results_present() -> None:
     search_payload = {
         "results": [{"content": "фрагмент", "score": 0.9, "document_id": "x"}],
@@ -55,7 +58,7 @@ async def test_pravo_document_rag_search_ingests_when_empty_then_searches() -> N
         inst.search = AsyncMock(side_effect=[{"results": []}, final_search])
         inst.ingest_text = AsyncMock(return_value={"document_id": "z", "status": "completed"})
         with patch(
-            "apps.flows.tools.pravo.fetch_legislation_document",
+            "core.clients.pravo.PravoClient.fetch_legislation_document",
             new_callable=AsyncMock,
             return_value=doc,
         ):
