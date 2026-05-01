@@ -1,7 +1,9 @@
 """
 Прокси первого сегмента пути для локальной разработки без общего ingress.
 
-Браузер ходит на тот же origin (например :8002) с путями /flows/..., /crm/...
+Ответ upstream пересылается потоком (httpx send(stream=True), Starlette StreamingResponse),
+чтобы SSE и крупные тела не буферизовались целиком в памяти на стороне прокси.
+
 В development/test при Host localhost или *.lvh.me запрос пересылается на URL из server.*_service_url.
 Если текущий процесс уже обслуживает этот сервис (первый сегмент пути совпадает с именем процесса
 или с публичным префиксом из _PREFIX_TO_SERVICE_URL_KEY, например office и /documents/...), прокси не используется.
@@ -23,7 +25,7 @@ import httpx
 import websockets
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 
 from core.config import get_settings
 from core.logging import get_log_context, get_logger
@@ -157,18 +159,20 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
 
         body = await request.body()
 
+        client = httpx.AsyncClient(
+            timeout=httpx.Timeout(120.0),
+            trust_env=False,
+        )
         try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(120.0),
-                trust_env=False,
-            ) as client:
-                upstream_response = await client.request(
-                    request.method,
-                    upstream,
-                    headers=dict(forward_headers),
-                    content=body if body else None,
-                )
+            httpx_request = client.build_request(
+                request.method,
+                upstream,
+                headers=dict(forward_headers),
+                content=body if body else None,
+            )
+            upstream_response = await client.send(httpx_request, stream=True)
         except httpx.RequestError as e:
+            await client.aclose()
             logger.warning(
                 "dev_proxy.upstream_failed",
                 upstream=upstream,
@@ -199,8 +203,19 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             http_status_code=upstream_response.status_code,
         )
 
-        return Response(
-            content=upstream_response.content,
+        resp = upstream_response
+        cli = client
+
+        async def body_iter():
+            try:
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+            finally:
+                await resp.aclose()
+                await cli.aclose()
+
+        return StreamingResponse(
+            body_iter(),
             status_code=upstream_response.status_code,
             headers=out_headers,
         )

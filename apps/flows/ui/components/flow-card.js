@@ -53,9 +53,20 @@ export class FlowCard extends PlatformElement {
                 align-items: flex-start;
                 gap: var(--space-3);
                 padding: var(--space-3) var(--space-4);
-                padding-right: 120px;
+                padding-right: calc(var(--space-2) + 24px);
                 cursor: pointer;
                 position: relative;
+                transition: padding-right var(--duration-fast) var(--easing-default);
+            }
+
+            .flow-card.expanded .flow-header {
+                padding-right: 118px;
+            }
+
+            @media (hover: hover) and (min-width: 768px) {
+                .flow-card:hover .flow-header {
+                    padding-right: 118px;
+                }
             }
 
             .flow-avatar {

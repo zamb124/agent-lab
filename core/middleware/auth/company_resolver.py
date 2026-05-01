@@ -130,21 +130,28 @@ class CompanyResolver:
 
         if subdomain:
             company_id = await subdomain_repo.get_company_id(subdomain)
-            if not company_id:
+            if company_id:
+                self._x_company_id_must_match_tenant(request, company_id)
+                await self._assert_subdomain_tenant(
+                    request, company_id, subdomain, token_data
+                )
+                company = await company_repo.get(company_id)
+                if company:
+                    logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
+                    return company
+                raise HTTPException(
+                    status_code=404, detail=f"Company not found for subdomain: {subdomain}"
+                )
+            if settings.server.env == "production":
                 raise HTTPException(
                     status_code=404,
                     detail=f"Company not found for subdomain: {subdomain}",
                 )
-            self._x_company_id_must_match_tenant(request, company_id)
-            await self._assert_subdomain_tenant(
-                request, company_id, subdomain, token_data
-            )
-            company = await company_repo.get(company_id)
-            if company:
-                logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
-                return company
-            raise HTTPException(
-                status_code=404, detail=f"Company not found for subdomain: {subdomain}"
+            logger.warning(
+                "company_resolver.subdomain_missing_registry_nonprod_fallback",
+                subdomain=subdomain,
+                host=host,
+                path=request.url.path,
             )
 
         if context_type == "frontend":

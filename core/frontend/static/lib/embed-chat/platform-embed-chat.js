@@ -12,6 +12,14 @@ import {
 } from './embed-chat-default-labels.js';
 import { reduceEmbedStreamEvent } from './embed-stream-handler.js';
 import { registerBuiltinEmbedBlocks } from './embed-builtin-blocks.js';
+import {
+    pairEmbedToolCallsAndResults,
+    embedToolRowDisplayName,
+    formatEmbedToolPairHintText,
+} from './embed-tool-helpers.js';
+import { toolCallIconName } from '@platform/lib/utils/tool-call-icon.js';
+import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-help-hint.js';
 import './embed-block-renderer.js';
 import './embed-chat-input.js';
 
@@ -144,10 +152,42 @@ export class PlatformEmbedChat extends LitElement {
             color: var(--embed-chat-muted);
             margin-bottom: 4px;
         }
-        .tools {
-            font-size: 11px;
-            color: var(--embed-chat-muted);
-            margin-top: 8px;
+        .embed-tool-stack {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .embed-tool-orb {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            margin-left: -10px;
+            border-radius: 50%;
+            background: var(--embed-chat-composer-bg);
+            border: 1px solid var(--embed-chat-border);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+        }
+        :host([embed-theme='light']) .embed-tool-orb {
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        }
+        .embed-tool-orb:first-child {
+            margin-left: 0;
+        }
+        .embed-tool-orb-inner {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        }
+        .embed-tool-orb platform-help-hint {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .interrupt {
             margin-top: 10px;
@@ -1165,6 +1205,42 @@ export class PlatformEmbedChat extends LitElement {
         `;
     }
 
+    _renderEmbedToolStack(m) {
+        const rows = pairEmbedToolCallsAndResults(m.toolCalls, m.toolResults);
+        if (rows.length === 0) {
+            return nothing;
+        }
+        const defaultName = this._lb('tool_default_name', 'tool');
+        const hintStrings = {
+            tool_hint_tool_name: this._lb('tool_hint_tool_name', 'Tool: {name}'),
+            tool_hint_args_label: this._lb('tool_hint_args_label', 'Arguments:'),
+            tool_hint_result_label: this._lb('tool_hint_result_label', 'Result:'),
+        };
+        const nameList = rows.map((row) => embedToolRowDisplayName(row.call, row.result, defaultName)).join(', ');
+        const aria = this._lb('tool_stack_aria', 'Tool calls: {names}').replace(/\{names\}/g, nameList);
+        return html`
+            <div class="embed-tool-stack" role="group" aria-label=${aria}>
+                ${rows.map(
+                    (row, index) => {
+                        const name = embedToolRowDisplayName(row.call, row.result, defaultName);
+                        const icon = toolCallIconName(name);
+                        const hint = formatEmbedToolPairHintText(row.call, row.result, hintStrings, defaultName);
+                        const z = index + 1;
+                        return html`
+                            <span class="embed-tool-orb" style="z-index: ${z}">
+                                <platform-help-hint .text=${hint} .label=${name} ?wide=${true}>
+                                    <span class="embed-tool-orb-inner" tabindex="0" role="img" aria-label=${name}>
+                                        <platform-icon name=${icon} size="16"></platform-icon>
+                                    </span>
+                                </platform-help-hint>
+                            </span>
+                        `;
+                    },
+                )}
+            </div>
+        `;
+    }
+
     _renderMessage(m) {
         if (m.role === 'user') {
             const files =
@@ -1200,17 +1276,14 @@ export class PlatformEmbedChat extends LitElement {
                 </div>
             `;
         }
-        const tools =
-            m.toolCalls && m.toolCalls.length
-                ? html`<div class="tools">${m.toolCalls.map((t) => t.name || t.function?.name || 'tool').join(', ')}</div>`
-                : nothing;
+        const toolStack = this._renderEmbedToolStack(m);
         const flowsRoot = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim()) || '';
         const blocks = (m.blocks || []).map((b) => {
             const nb = normalizeEmbedBlockForFlowsUrls(b, flowsRoot);
             return html`<embed-block-renderer .block=${nb}></embed-block-renderer>`;
         });
         const bodyHtml = rewriteFlowsFileUrlsInHtml(
-            embedAssistantMarkdownToHtml(m.content || ''),
+            embedAssistantMarkdownToHtml(m.content || '', { streaming: Boolean(m.streaming) }),
             flowsRoot,
         );
         const interrupt = m.inputRequired
@@ -1259,7 +1332,7 @@ export class PlatformEmbedChat extends LitElement {
                 ${interrupt}
                 ${operatorReplyHtml}
                 ${blocks}
-                ${tools}
+                ${toolStack}
             </div>
         `;
     }

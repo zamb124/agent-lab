@@ -30,6 +30,7 @@ import {
     isPlainObject,
     buildFlowPublishBody,
 } from '../../_helpers/flows-resolvers.js';
+import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
 
 export class FlowsEditorHeader extends PlatformElement {
     static properties = {
@@ -233,7 +234,7 @@ export class FlowsEditorHeader extends PlatformElement {
     }
 
     _openLara() {
-        this.dispatch('flows/lara/open_requested', { flowId: this.flowId, branchId: this.branchId });
+        dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
     }
 
     _openTriggers() {

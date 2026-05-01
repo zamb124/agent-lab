@@ -120,6 +120,65 @@ export class EmbedChatInput extends LitElement {
         input[type='file'] {
             display: none;
         }
+        .attachments-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 0 0 8px;
+            padding: 0;
+        }
+        .attach-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 100%;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: var(--embed-chat-surface, rgba(255, 255, 255, 0.1));
+            border: 1px solid var(--embed-chat-border, rgba(255, 255, 255, 0.14));
+            color: var(--embed-chat-text, rgba(255, 255, 255, 0.92));
+        }
+        .attach-chip-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 200px;
+        }
+        .attach-chip-remove {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            margin: 0;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            background: transparent;
+            color: var(--embed-chat-muted, rgba(255, 255, 255, 0.55));
+        }
+        .attach-chip-remove:hover {
+            background: var(--embed-chat-input-bg, rgba(0, 0, 0, 0.2));
+            color: var(--embed-chat-text, rgba(255, 255, 255, 0.92));
+        }
+        .attachments-clear-all {
+            align-self: flex-end;
+            margin: 0 0 6px;
+            padding: 2px 0;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--embed-chat-accent, #99a6f9);
+            font-family: inherit;
+        }
+        .attachments-clear-all:hover {
+            text-decoration: underline;
+        }
         svg {
             display: block;
         }
@@ -208,8 +267,37 @@ export class EmbedChatInput extends LitElement {
         }
     }
 
-    _onPickFiles(e) {
-        this._files = Array.from(e.target.files || []);
+    _syncFileInputFromFiles() {
+        const fi = this.shadowRoot?.querySelector('input[type=file]');
+        if (!fi) {
+            return;
+        }
+        if (this._files.length === 0) {
+            fi.value = '';
+            return;
+        }
+        const dt = new DataTransfer();
+        for (const f of this._files) {
+            dt.items.add(f);
+        }
+        fi.files = dt.files;
+    }
+
+    _removeFileAt(index) {
+        if (index < 0 || index >= this._files.length) {
+            return;
+        }
+        this._files = this._files.filter((_, j) => j !== index);
+        this._syncFileInputFromFiles();
+        this.requestUpdate();
+    }
+
+    _removeAllAttachments() {
+        this._files = [];
+        const fi = this.shadowRoot?.querySelector('input[type=file]');
+        if (fi) {
+            fi.value = '';
+        }
         this.requestUpdate();
     }
 
@@ -290,7 +378,41 @@ export class EmbedChatInput extends LitElement {
     render() {
         const canSend = this._canSend();
         const locVal = this.interfaceLocale || 'auto';
+        const chips =
+            this._files.length > 0
+                ? html`
+                      <div class="attachments-row" role="list" aria-label=${this._label('attach', 'Attachments')}>
+                          ${this._files.map(
+                              (f, i) => html`
+                                  <span class="attach-chip" role="listitem">
+                                      <span class="attach-chip-name" title=${f.name}>${f.name}</span>
+                                      <button
+                                          type="button"
+                                          class="attach-chip-remove"
+                                          @click=${() => this._removeFileAt(i)}
+                                          aria-label=${this._label('attachment_remove', 'Remove file')}
+                                      >
+                                          ×
+                                      </button>
+                                  </span>
+                              `,
+                          )}
+                      </div>
+                      ${this._files.length > 1
+                          ? html`
+                                <button
+                                    type="button"
+                                    class="attachments-clear-all"
+                                    @click=${() => this._removeAllAttachments()}
+                                >
+                                    ${this._label('attachment_clear_all', 'Remove all attachments')}
+                                </button>
+                            `
+                          : ''}
+                  `
+                : '';
         return html`
+            ${chips}
             <div class="composer">
                 <input type="file" multiple @change=${this._onPickFiles} />
                 <button

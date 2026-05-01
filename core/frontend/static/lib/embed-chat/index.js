@@ -8,7 +8,7 @@ export { PlatformEmbedChatDrawer } from './platform-embed-chat-drawer.js';
 export { PlatformLaraAssistant } from './platform-lara-assistant.js';
 export { dispatchEmbedChatWindowToggle } from './embed-chat-window-toggle.js';
 export { EMBED_CHAT_DEFAULT_LABELS, embedChatLabelsForLang } from './embed-chat-default-labels.js';
-export { embedAssistantMarkdownToHtml, escapeHtmlBeforeMarkdown } from './embed-chat-markdown.js';
+export { embedAssistantMarkdownToHtml, escapeHtmlBeforeMarkdown, escapeHtmlAngleAndAmp, fallbackMarkdownToHtml } from './embed-chat-markdown.js';
 export {
     extractFlowsDownloadFileId,
     normalizeEmbedBlockForFlowsUrls,

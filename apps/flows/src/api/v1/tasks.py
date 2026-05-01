@@ -173,7 +173,8 @@ async def get_state(
         flow_id: ID агента
     
     Returns:
-        State как словарь со всеми полями (включая системные)
+        Снимок ExecutionState или, если записи нет, минимальный объект для UI чата:
+        ``{"messages": [], "task_id": None}``.
     """
     
     if session_id:
@@ -188,8 +189,8 @@ async def get_state(
         )
     
     if state is None:
-        raise HTTPException(status_code=404, detail="State not found")
-    
+        return {"messages": [], "task_id": None}
+
     return state.model_dump()
 
 

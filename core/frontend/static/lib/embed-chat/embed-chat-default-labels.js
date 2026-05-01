@@ -32,6 +32,13 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         integration_disconnect: 'Отключить',
         operator_reply_heading: 'Оператор',
         download_file: 'Скачать',
+        tool_default_name: 'инструмент',
+        tool_stack_aria: 'Вызовы инструментов: {names}',
+        tool_hint_tool_name: 'Инструмент: {name}',
+        tool_hint_args_label: 'Аргументы:',
+        tool_hint_result_label: 'Результат:',
+        attachment_remove: 'Убрать файл',
+        attachment_clear_all: 'Удалить все вложения',
     },
     en: {
         title: 'Assistant',
@@ -60,6 +67,13 @@ export const EMBED_CHAT_DEFAULT_LABELS = {
         integration_disconnect: 'Disconnect',
         operator_reply_heading: 'Operator',
         download_file: 'Download',
+        tool_default_name: 'tool',
+        tool_stack_aria: 'Tool calls: {names}',
+        tool_hint_tool_name: 'Tool: {name}',
+        tool_hint_args_label: 'Arguments:',
+        tool_hint_result_label: 'Result:',
+        attachment_remove: 'Remove file',
+        attachment_clear_all: 'Remove all attachments',
     },
 };
 
