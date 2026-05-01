@@ -149,7 +149,7 @@ typing). Они приходят только по WebSocket (`platform:ui_event
 
 - `name`: `'<svc>/<entity>'` — lowercase snake_case, ровно два сегмента
   (`apps/_internal.js::assertResourceName`). `<svc>` — короткое имя сервиса
-  (`frontend`, `crm`, `flows`, `rag`, `sync`, `office`).
+  (`frontend`, `crm`, `flows`, `rag`, `sync`, `office`, `voice`).
 - Сервис **обязан** быть в списке зарегистрированных. Имя уникально на весь
   процесс — повторная регистрация = `throw` (см. ниже).
 - `sliceKey` выводится автоматически из `name` (`scopeEntity` lowerCamel).

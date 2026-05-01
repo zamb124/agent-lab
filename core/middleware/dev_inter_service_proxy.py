@@ -39,6 +39,7 @@ _SERVICE_PREFIXES: tuple[str, ...] = (
     "crm",
     "rag",
     "sync",
+    "voice",
     "documents",
     "frontend",
     "litserve",

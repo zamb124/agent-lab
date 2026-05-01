@@ -29,6 +29,7 @@ class TokenData(BaseModel):
     exp: datetime = Field(description="Время истечения")
     iat: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Время создания")
     session_id: Optional[str] = Field(default=None, description="ID OAuth сессии (опционально)")
+    email: str = Field(default="", description="Email пользователя")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
 
 class TokenService:
@@ -56,6 +57,7 @@ class TokenService:
         expires_in: Optional[int] = None,
         session_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        email: str = "",
     ) -> str:
         """
         Создает JWT токен.
@@ -68,6 +70,7 @@ class TokenService:
             expires_in: Время жизни в секундах (по умолчанию зависит от типа)
             session_id: ID OAuth сессии (опционально)
             metadata: Дополнительные данные (provider, user_name и т.д.)
+            email: Email пользователя
             
         Returns:
             JWT токен
@@ -91,6 +94,7 @@ class TokenService:
             iat=now,
             exp=expires_at,
             session_id=session_id,
+            email=email,
             metadata=metadata or {},
         )
         

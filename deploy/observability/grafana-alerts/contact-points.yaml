@@ -1,0 +1,16 @@
+apiVersion: 1
+
+# Placeholder: настройте реальные контактные данные в Grafana UI
+# или замените этот файл через CI-секреты перед деплоем.
+# Для отправки уведомлений необходимо настроить SMTP в Grafana
+# (GF_SMTP_*) или использовать webhook (Slack/PagerDuty/...).
+
+contactPoints:
+  - orgId: 1
+    name: default
+    receivers:
+      - uid: default-email
+        type: email
+        settings:
+          addresses: "ops@humanitec.ru"
+        disableResolveMessage: false

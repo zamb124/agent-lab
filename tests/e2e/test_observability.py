@@ -84,3 +84,47 @@ async def test_observability_pipeline_e2e():
                 pass
                 
         assert trace_found, f"Трейс {trace_id} не найден в Tempo за 30 секунд. OTLP -> Alloy -> Tempo пайплайн не сработал."
+
+        # 4. Проверяем что provisioned дашборды загрузились в Grafana
+        dash_list = await client.get(
+            "http://grafana-test:3000/api/search",
+            params={"folderIds": "0", "type": "dash-db"},
+        )
+        assert dash_list.status_code == 200
+        dashboards = dash_list.json()
+        titles = {d["title"] for d in dashboards}
+        expected = {
+            "Platform Overview",
+            "HTTP Requests",
+            "Errors & Exceptions",
+            "TaskIQ Workers",
+            "LLM Usage",
+            "Traces",
+            "Log Volume",
+            "WebSocket / Realtime",
+            "Database",
+            "Security",
+        }
+        missing = expected - titles
+        assert not missing, f"Provisioned dashboards missing in Grafana: {missing}"
+
+        # 5. Проверяем что alert rules загрузились
+        alerts_resp = await client.get(
+            "http://grafana-test:3000/api/alert-rules",
+            headers={"Accept": "application/json"},
+        )
+        if alerts_resp.status_code == 200:
+            alert_rules = alerts_resp.json()
+            uids = {r.get("uid") for r in alert_rules}
+            expected_alerts = {
+                "high-error-rate",
+                "service-down",
+                "high-5xx-rate",
+                "taskiq-failures",
+                "llm-errors",
+                "log-contract-violations",
+                "slow-http-p99",
+                "high-db-latency",
+            }
+            missing_alerts = expected_alerts - uids
+            assert not missing_alerts, f"Alert rules missing: {missing_alerts}"

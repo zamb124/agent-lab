@@ -346,6 +346,9 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
     volumes:
       - ./deploy/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+      - ./deploy/observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./deploy/observability/dashboards:/etc/grafana/provisioning/dashboards/platform:ro
+      - ./deploy/observability/grafana-alerts:/etc/grafana/provisioning/alerting:ro
     ports:
       - "3010:3000"
     depends_on:

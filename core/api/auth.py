@@ -485,6 +485,7 @@ async def switch_company(
         company_id=payload.company_id,
         roles=company_roles,
         session_id=getattr(token_data, "session_id", None),
+        email=user.email,
     )
 
     settings = get_settings()
@@ -623,7 +624,7 @@ async def grafana_auth_check(request: Request):
     if getattr(token_data, "company_id", None) != "system":
         return Response(status_code=403)
 
-    user_email = getattr(token_data, "user_id", "admin")
+    user_email = getattr(token_data, "email", None) or getattr(token_data, "user_id", "admin")
     return Response(
         status_code=200,
         headers={"X-Auth-User": str(user_email)},

@@ -20,6 +20,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from './_helpers/sync-limits.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
+import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 
 const TYPING_DEBOUNCE_MS = 1500;
 
@@ -545,10 +546,7 @@ export class SyncMessageComposer extends PlatformElement {
             if (this._mediaRecorder) this._mediaRecorder.stop();
             return;
         }
-        // Secure context check: navigator.mediaDevices доступно только на
-        // https или localhost. На http (qqq.lvh.me:8002) mediaDevices = undefined.
-        const md = navigator.mediaDevices;
-        if (!md || typeof md.getUserMedia !== 'function') {
+        if (!hasGetUserMediaApi()) {
             this.toast('composer.voice_insecure_context', { type: 'error' });
             return;
         }
@@ -558,7 +556,7 @@ export class SyncMessageComposer extends PlatformElement {
         }
         let stream;
         try {
-            stream = await md.getUserMedia({ audio: true });
+            stream = await getUserMediaCompat({ audio: true });
         } catch (err) {
             const code = err && typeof err.name === 'string' ? err.name : '';
             const i18nKey = code === 'NotAllowedError' || code === 'SecurityError'
@@ -567,10 +565,8 @@ export class SyncMessageComposer extends PlatformElement {
             this.toast(i18nKey, { type: 'error' });
             return;
         }
-        const mimeOptions = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
-        const supported = mimeOptions.find((mt) => MediaRecorder.isTypeSupported(mt));
-        const chosen = typeof supported === 'string' ? supported : 'audio/webm';
-        const recorder = supported ? new MediaRecorder(stream, { mimeType: chosen }) : new MediaRecorder(stream);
+        const chosen = pickVoiceMimeType() || 'audio/webm';
+        const recorder = chosen ? new MediaRecorder(stream, { mimeType: chosen }) : new MediaRecorder(stream);
         this._recordedChunks = [];
         this._mediaRecorder = recorder;
         recorder.ondataavailable = (ev) => { if (ev.data.size > 0) this._recordedChunks.push(ev.data); };

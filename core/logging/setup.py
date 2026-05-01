@@ -86,9 +86,9 @@ def _build_processors_chain(
         add_otel_trace_context,
         add_platform_context,
         sample_info_logs(sample_rate_info, sampled_loggers),
+        enforce_required_fields,
         truncate_strings(max_string_len),
         redact_keys(drop_keys),
-        enforce_required_fields,
         rename_event_to_message,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -198,10 +198,11 @@ def setup_logging(service_name: str, logging_config=None) -> None:
         root_logger.removeHandler(existing)
     root_logger.addHandler(handler)
 
-    # Loki push handler: dev-режим, хостовые сервисы → Loki напрямую.
+    # Loki push handler: включается явно через loki_enabled в конфиге.
     # В production/test сервисы в Docker — Alloy собирает stdout, дублировать не нужно.
     loki_url = getattr(logging_config, "loki_url", None)
-    if loki_url and environment == "local":
+    loki_enabled = getattr(logging_config, "loki_enabled", False)
+    if loki_url and loki_enabled:
         from core.logging.loki_handler import LokiHandler
 
         loki_renderer = structlog.processors.JSONRenderer(
@@ -260,15 +261,18 @@ def _silence_noisy_loggers(custom_levels: dict[str, str]) -> None:
     Уравнивает обработку чужих логгеров: handlers сбрасываются, propagate
     включается, чтобы запись попала в root и пошла через единый formatter.
     """
-    intercepted_prefixes = ("uvicorn", "taskiq", "httpx", "httpcore", "sqlalchemy")
+    intercepted = {"uvicorn", "taskiq", "httpx", "httpcore", "sqlalchemy"}
     manager = logging.Logger.manager
-    for name in list(manager.loggerDict.keys()):
-        if name.startswith(intercepted_prefixes):
-            child = logging.getLogger(name)
-            child.handlers.clear()
-            child.propagate = True
 
-    for name in intercepted_prefixes:
+    for name, logger in list(manager.loggerDict.items()):
+        if not any(name == p or name.startswith(f"{p}.") for p in intercepted):
+            continue
+        if not isinstance(logger, logging.Logger):
+            continue
+        logger.handlers.clear()
+        logger.propagate = True
+
+    for name in intercepted:
         child = logging.getLogger(name)
         child.handlers.clear()
         child.propagate = True

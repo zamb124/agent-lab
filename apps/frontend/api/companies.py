@@ -256,7 +256,7 @@ async def create_company(
     
     # Перевыпускаем токен с company_id
     token_service = get_token_service()
-    new_token = token_service.create_token(user.user_id, company.company_id)
+    new_token = token_service.create_token(user.user_id, company.company_id, email=user.email)
     logger.info("frontend.session_token_reissued", company_id=company.company_id)
     
     # Обновляем cookie
@@ -406,6 +406,7 @@ async def leave_company_as_system_member(
             user_id=user.user_id,
             company_id=SYSTEM_COMPANY_ID,
             roles=system_roles,
+            email=user.email,
         )
         settings = get_settings()
         response.set_cookie(

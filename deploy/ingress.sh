@@ -768,7 +768,7 @@ metadata:
   name: grafana-ingress
   namespace: default
   annotations:
-    nginx.ingress.kubernetes.io/auth-url: "http://frontend-svc:8002/frontend/api/auth/grafana-check"
+    nginx.ingress.kubernetes.io/auth-url: "http://frontend-svc.default.svc.cluster.local:8002/frontend/api/auth/grafana-check"
     nginx.ingress.kubernetes.io/auth-signin: "https://${DOMAIN}/"
     nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-User"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"

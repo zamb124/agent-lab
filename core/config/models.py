@@ -117,6 +117,14 @@ class LoggingConfig(BaseModel):
             "Если None — логи идут только в stdout (Docker Alloy подхватит)."
         ),
     )
+    loki_enabled: bool = Field(
+        default=False,
+        description=(
+            "Включить прямую отправку логов в Loki (используется в dev, "
+            "когда сервисы запускаются на хосте вне Docker). "
+            "В prod/test логи собирает Alloy из stdout контейнеров."
+        ),
+    )
 
 
 class ServerConfig(BaseModel):
@@ -144,6 +152,8 @@ class ServerConfig(BaseModel):
     scheduler_service_url: Optional[str] = None
     office_service_url: Optional[str] = None
     provider_litserve_service_url: Optional[str] = None
+    browser_service_url: Optional[str] = None
+    voice_service_url: Optional[str] = None
     platform_public_base_url: Optional[str] = Field(
         default="https://humanitec.ru",
         description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
@@ -166,7 +176,9 @@ class ServerConfig(BaseModel):
         "sync": 8005,
         "scheduler": 8006,
         "office": 8008,
+        "browser": 8009,
         "provider_litserve": 8014,
+        "voice": 8015,
     }
 
     def get_service_url(self, service: Optional[str] = None) -> str:
@@ -858,6 +870,7 @@ def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
         "llm": {"*": 0.0001},
         "embedding": {"*": 0.00005},
         "billing": {"rub": 1.0},
+        "voice": {"session_minute": 0.01, "*": 0.0},
         "livekit": {
             "room_minute": 0.01,
             "egress_composite_minute": 0.05,
@@ -921,6 +934,55 @@ class BillingConfig(BaseModel):
         default_factory=BillingSpanSettlementConfig,
         description="Параметры фоновой джобы преобразования spans в usage.",
     )
+
+
+class VoiceSTTSettings(BaseModel):
+    """Настройки STT-провайдера voice сервиса."""
+
+    provider: str = "cloud_ru"
+    mock_text: str = "Тестовая транскрипция"
+
+
+class VoiceTTSSettings(BaseModel):
+    """Настройки TTS-провайдера voice сервиса."""
+
+    provider: str = "kokoro"
+    kokoro_sample_rate: int = 24000
+    kokoro_accelerator: str = "cpu"
+    chunk_max_chars: int = 100
+    lookahead_tokens: int = 20
+
+
+class VoiceVADSettings(BaseModel):
+    """Настройки VAD-провайдера voice сервиса."""
+
+    model: str = "silero"
+    sample_rate: int = 16000
+    threshold: float = 0.5
+    min_speech_ms: int = 300
+    min_silence_ms: int = 500
+    echo_compensation: float = 0.2
+
+
+class VoiceBargeInSettings(BaseModel):
+    """Настройки механизма прерывания (barge-in)."""
+
+    enabled: bool = True
+    smart_turn_buffer_ms: int = 500
+    smart_turn_command_words: list[str] = Field(
+        default_factory=lambda: ["стоп", "хватит", "подожди", "стой"]
+    )
+    flush_timeout_ms: int = 200
+    cooldown_ms: int = 300
+
+
+class VoiceQueueSettings(BaseModel):
+    """Настройки размеров внутренних очередей голосовой сессии."""
+
+    audio_in_size: int = 1024
+    audio_out_size: int = 256
+    text_size: int = 256
+    synthesis_size: int = 64
 
 
 class YouTubeConfig(BaseModel):

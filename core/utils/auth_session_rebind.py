@@ -65,7 +65,7 @@ async def rebind_session_to_company(
     await container.user_repository.set(user)
 
     token_service = get_token_service()
-    raw = token_service.create_token(user.user_id, cid, roles=roles)
+    raw = token_service.create_token(user.user_id, cid, roles=roles, email=user.email)
     td = token_service.validate_token(raw)
     if td is None:
         raise RuntimeError("rebind_session_to_company: validate_token failed for new session")

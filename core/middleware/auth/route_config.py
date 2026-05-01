@@ -92,6 +92,7 @@ SKIP_PATHS = [
     "/frontend/health",
     "/flows/health",
     "/crm/health",
+    "/voice/health*",
     "/debug/*",
     "/api/v1/payments/webhook/*",
     "/frontend/api/v1/payments/webhook/*",
@@ -399,6 +400,11 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/documents", auth_required=False, context_type="anonymous"),
     RouteRule("/documents/", auth_required=False, context_type="anonymous"),
     RouteRule("/documents/*", auth_required=False, context_type="anonymous"),
+
+    # Voice service — акустический шлюз (STT/TTS/VAD)
+    RouteRule("/voice/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/voice/api/*", context_type="api", auth_required=True),
+    RouteRule("/voice/*", context_type="api", auth_required=True),
 ]
 
 # Страницы где разрешен доступ без субдомена

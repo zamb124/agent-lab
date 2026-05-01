@@ -39,7 +39,7 @@ from core.logging.attributes import (
     LOG_TRACE_ID,
     LOG_USER_ID,
 )
-from core.logging.context import bind_log_context, clear_log_context
+from core.logging.context import bind_log_context, clear_log_context, get_log_context, restore_log_context
 
 
 LogScope = Literal["system", "request"]
@@ -78,10 +78,11 @@ class LogContractViolation(RuntimeError):
 
 @dataclass(frozen=True)
 class _ScopeToken:
-    """Снимок токенов скоупа для аккуратного выхода."""
+    """Снимок токенов скоупа и контекста для аккуратного выхода."""
 
     scope_token: Token[LogScope]
     auth_token: Token[bool]
+    snapshot: dict[str, Any]
 
 
 def get_log_scope() -> LogScope:
@@ -135,6 +136,8 @@ def enter_request_scope(
                 "enter_request_scope(requires_user=True): company_id обязателен"
             )
 
+    snapshot = get_log_context()
+
     fields: dict[str, Any] = {
         LOG_REQUEST_ID: request_id,
         LOG_TRACE_ID: trace_id,
@@ -149,15 +152,17 @@ def enter_request_scope(
 
     scope_token = _LOG_SCOPE.set("request")
     auth_token = _LOG_SCOPE_REQUIRES_USER.set(bool(requires_user))
-    return _ScopeToken(scope_token=scope_token, auth_token=auth_token)
+    return _ScopeToken(scope_token=scope_token, auth_token=auth_token, snapshot=snapshot)
 
 
 def exit_request_scope(token: _ScopeToken | None) -> None:
-    """Снять request-скоуп и очистить лог-контекст."""
+    """Снять request-скоуп и восстановить лог-контекст из snapshot."""
     if token is not None:
         _LOG_SCOPE.reset(token.scope_token)
         _LOG_SCOPE_REQUIRES_USER.reset(token.auth_token)
-    clear_log_context()
+        restore_log_context(token.snapshot)
+    else:
+        clear_log_context()
 
 
 class RequestLogScope:
@@ -219,8 +224,10 @@ class SystemLogScope:
         self._extra = {k: v for k, v in extra.items() if v not in (None, "")}
         self._scope_token: Token[LogScope] | None = None
         self._auth_token: Token[bool] | None = None
+        self._snapshot: dict[str, Any] = {}
 
     def __enter__(self) -> "SystemLogScope":
+        self._snapshot = get_log_context()
         if self._extra:
             bind_log_context(**self._extra)
         self._scope_token = _LOG_SCOPE.set("system")
@@ -232,7 +239,7 @@ class SystemLogScope:
             _LOG_SCOPE_REQUIRES_USER.reset(self._auth_token)
         if self._scope_token is not None:
             _LOG_SCOPE.reset(self._scope_token)
-        clear_log_context()
+        restore_log_context(self._snapshot)
 
     async def __aenter__(self) -> "SystemLogScope":
         return self.__enter__()

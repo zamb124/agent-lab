@@ -10,6 +10,7 @@
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "provider_litserve_service_url": "http://127.0.0.1:8014",
+    "voice_service_url": "http://localhost:8015",
     "platform_public_base_url": "https://humanitec.ru",
     "document_server_dev_upstream_url": "http://localhost:8088"
   },
@@ -32,7 +33,8 @@
     "loggers_levels": {
       "taskiq": "WARNING",
       "taskiq.receiver": "WARNING"
-    }
+    },
+    "loki_enabled": true
   },
   "tracing": {
     "enabled": true,
@@ -59,9 +61,15 @@
     ],
     "usd_to_rub_rate": 85.0,
     "resource_base_prices": {
-      "llm": { "*": 0.0001 },
-      "embedding": { "*": 0.00005 },
-      "billing": { "rub": 1.0 },
+      "llm": {
+        "*": 0.0001
+      },
+      "embedding": {
+        "*": 5e-05
+      },
+      "billing": {
+        "rub": 1.0
+      },
       "livekit": {
         "room_minute": 0.01,
         "egress_composite_minute": 0.05,
@@ -527,14 +535,21 @@
         "default_endpoint_key": "chromium",
         "cdp_url": "",
         "cdp_endpoints": {
-           "chromium": "http://127.0.0.1:9222",
-           "lightpanda": "ws://127.0.0.1:9223"
+          "chromium": "http://127.0.0.1:9222",
+          "lightpanda": "ws://127.0.0.1:9223"
         },
         "artifacts_dir": "artifacts/browser_runtime",
         "default_page_ttl_sec": 3600,
         "warm_idle_sec": 300,
         "init_scripts_version": "v1",
         "control_backend": "playwright"
+      }
+    },
+    "voice": {
+      "service_name": "voice",
+      "server": {
+        "name": "voice",
+        "port": 8015
       }
     }
   },

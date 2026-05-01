@@ -193,6 +193,7 @@ class AuthService:
             company_id=user.active_company_id or "",
             roles=roles,
             session_id=session.session_id,
+            email=user.email,
         )
 
         result_cache = json.dumps({
@@ -250,6 +251,7 @@ class AuthService:
             company_id=company_id,
             roles=roles,
             session_id=session.session_id,
+            email=user.email,
         )
 
         return AuthResult(success=True, user=user, session=session, token=jwt_token)

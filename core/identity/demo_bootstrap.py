@@ -126,6 +126,7 @@ async def ensure_demo_company_and_user(container: object) -> None:
         user_id=user.user_id,
         company_id=company_id,
         roles=roles,
+        email=user.email,
     )
     init_context = Context(
         user=User(

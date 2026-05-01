@@ -92,6 +92,12 @@ SERVICES = {
         "port": "8014",
     },
     
+    "voice": {
+        "type": "uvicorn",
+        "app": "apps.app_runtime_targets:voice_app",
+        "port": "8015",
+    },
+    
     # TaskIQ workers
     "flows_worker": {
         "type": "taskiq-worker",

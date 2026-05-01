@@ -33,6 +33,9 @@ def __getattr__(name: str) -> Any:
     if name == "browser_app":
         from apps.browser.main import app
         return app
+    if name == "voice_app":
+        from apps.voice.main import app
+        return app
     if name == "flows_taskiq_worker_app":
         from apps.flows_worker.worker import worker_app
         return worker_app

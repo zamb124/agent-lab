@@ -41,7 +41,7 @@ from apps.crm.taskiq_analyze_errors import (
 )
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.dependencies import ContainerDep
-from core.files.media.transcriber import MediaTranscriber
+from core.clients import ServiceClient
 from core.context import get_context
 from core.i18n.service import t
 from core.websocket.publisher import notify_user, Notification, NotificationType
@@ -684,7 +684,7 @@ async def voice_input(
     file: UploadFile = File(...),
     language: str | None = Query(default=None),
 ):
-    """Голосовой ввод заметок с единым STT-контрактом."""
+    """Голосовой ввод заметок — транскрипция через voice service."""
     _ = container
     file_name = file.filename or "voice-input"
     mime_type = file.content_type or "application/octet-stream"
@@ -692,16 +692,15 @@ async def voice_input(
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Пустой аудиофайл.")
 
-    transcriber = MediaTranscriber()
-    transcription = await transcriber.transcribe_audio(
-        audio_bytes=audio_bytes,
-        file_name=file_name,
-        mime_type=mime_type,
-        language=language,
+    client = ServiceClient()
+    data = await client.post(
+        "voice",
+        "/voice/api/v1/transcribe",
+        files={"file": (file_name, audio_bytes, mime_type)},
     )
     return {
-        "text": transcription.text,
-        "stt": transcription.model_dump(),
+        "text": data["text"],
+        "stt": {"provider": data["provider"], "text": data["text"], "status": "done"},
     }
 
 

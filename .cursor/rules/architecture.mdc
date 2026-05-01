@@ -6,7 +6,7 @@ alwaysApply: true
 ## REST-зеркало команд (платформенный инвариант)
 
 Применяется ко **всем** сервисам: frontend, crm, rag, office, sync, flows,
-scheduler — текущим и будущим.
+scheduler, voice — текущим и будущим.
 
 ### Правило
 

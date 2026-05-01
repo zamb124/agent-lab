@@ -46,6 +46,13 @@ def get_log_context() -> dict[str, Any]:
     return dict(structlog.contextvars.get_contextvars())
 
 
+def restore_log_context(snapshot: dict[str, Any]) -> None:
+    """Восстановить лог-контекст из snapshot (используется при выходе из скоупа)."""
+    structlog.contextvars.clear_contextvars()
+    if snapshot:
+        structlog.contextvars.bind_contextvars(**snapshot)
+
+
 class LogContextScope:
     """
     Контекстный менеджер для временного биндинга полей.
@@ -58,17 +65,18 @@ class LogContextScope:
 
     def __init__(self, **fields: Any) -> None:
         self._fields = {key: value for key, value in fields.items() if value not in (None, "")}
-        self._token = None
+        self._cm = None
 
     def __enter__(self) -> "LogContextScope":
         if self._fields:
-            self._token = structlog.contextvars.bound_contextvars(**self._fields).__enter__()
+            self._cm = structlog.contextvars.bound_contextvars(**self._fields)
+            self._cm.__enter__()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        if self._token is not None:
-            self._token.__exit__(exc_type, exc, tb)
-            self._token = None
+        if self._cm is not None:
+            self._cm.__exit__(exc_type, exc, tb)
+            self._cm = None
 
     async def __aenter__(self) -> "LogContextScope":
         return self.__enter__()

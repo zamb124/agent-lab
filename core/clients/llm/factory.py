@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Union, TYPE_CHECKING, overload
 import httpx
@@ -455,6 +456,7 @@ class LLMClient:
         full_reasoning = ""
         tool_calls_buffer: Dict[int, Dict[str, Any]] = {}
         usage_data: Dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        stream_start_time = time.monotonic()
 
         async with get_httpx_client(timeout=self.timeout, strategy=ProxyStrategy.SMART) as client:
             try:
@@ -664,6 +666,9 @@ class LLMClient:
             reasoning=full_reasoning if full_reasoning else None,
             tool_calls=list(tool_calls_buffer.values()) if tool_calls_buffer else None,
             usage=usage_data,
+            provider=self.llm_provider,
+            model=self.model,
+            duration_ms=(time.monotonic() - stream_start_time) * 1000,
         )
 
     async def invoke(

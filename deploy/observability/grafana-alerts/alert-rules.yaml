@@ -1,0 +1,343 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: platform_alerts
+    folder: Platform
+    interval: 60s
+    rules:
+      - uid: high-error-rate
+        title: High Error Rate
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (svc) (rate({svc=~".+"} | json | level="ERROR" [5m])) / sum by (svc) (rate({svc=~".+"} [5m])) * 100'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "High error rate on {{ $labels.svc }}"
+          description: "Error rate is {{ $values.A }}% for service {{ $labels.svc }}"
+        labels:
+          severity: critical
+
+      - uid: service-down
+        title: Service Down
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (svc) (count_over_time({svc=~".+"} [2m]))'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "Service {{ $labels.svc }} appears down"
+          description: "No logs from {{ $labels.svc }} in the last 2 minutes"
+        labels:
+          severity: critical
+
+      - uid: high-5xx-rate
+        title: High 5xx Rate
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (svc) (rate({svc=~".+"} | json | message="http_request" | http_status_code >= 500 [5m])) / sum by (svc) (rate({svc=~".+"} | json | message="http_request" [5m])) * 100'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "High 5xx rate on {{ $labels.svc }}"
+          description: "5xx rate is {{ $values.A }}% for service {{ $labels.svc }}"
+        labels:
+          severity: warning
+
+      - uid: taskiq-failures
+        title: TaskIQ High Failure Rate
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (svc) (rate({svc=~".+"} | json | message="task_failed" [10m])) / sum by (svc) (rate({svc=~".+"} | json | message="task_started" [10m])) * 100'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "High TaskIQ failure rate on {{ $labels.svc }}"
+          description: "Task failure rate is {{ $values.A }}% for worker {{ $labels.svc }}"
+        labels:
+          severity: warning
+
+      - uid: llm-errors
+        title: LLM Errors
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (svc) (count_over_time({svc=~".+"} | json | message="llm_request" | level="ERROR" [5m]))'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [10]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "High LLM error count on {{ $labels.svc }}"
+          description: "{{ $values.A }} LLM errors in the last 5 minutes"
+        labels:
+          severity: warning
+
+      - uid: log-contract-violations
+        title: Log Contract Violations
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (svc) (count_over_time({svc=~".+"} | json | message="logging.contract_violation" [1m]))'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "Log contract violation detected"
+          description: "{{ $values.A }} contract violations in the last minute"
+        labels:
+          severity: critical
+
+      - uid: slow-http-p99
+        title: Slow HTTP P99
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'quantile_over_time(0.99, {svc=~".+"} | json | message="http_request" | unwrap http_duration_ms [5m]) by (svc)'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [5000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Slow HTTP P99 on {{ $labels.svc }}"
+          description: "P99 latency is {{ $values.A }}ms for service {{ $labels.svc }}"
+        labels:
+          severity: warning
+
+      - uid: high-db-latency
+        title: High DB Latency
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'quantile_over_time(0.95, {svc=~".+"} | json | db_duration_ms != "" | unwrap db_duration_ms [5m]) by (svc)'
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "High DB latency on {{ $labels.svc }}"
+          description: "P95 DB latency is {{ $values.A }}ms for service {{ $labels.svc }}"
+        labels:
+          severity: warning

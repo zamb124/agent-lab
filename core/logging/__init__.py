@@ -21,6 +21,7 @@ from core.logging.context import (
     bind_log_context,
     clear_log_context,
     get_log_context,
+    restore_log_context,
     unbind_log_context,
 )
 from core.logging.contract import (

@@ -302,6 +302,9 @@ services:
       GF_USERS_ALLOW_ORG_CREATE: "false"
     volumes:
       - ./deploy/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+      - ./deploy/observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./deploy/observability/dashboards:/etc/grafana/provisioning/dashboards/platform:ro
+      - ./deploy/observability/grafana-alerts:/etc/grafana/provisioning/alerting:ro
       - grafana_dev_data:/var/lib/grafana
     ports:
       - "3000:3000"

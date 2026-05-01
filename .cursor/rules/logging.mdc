@@ -187,7 +187,7 @@ StreamHandler(stdout) -> JSON renderer (prod) | console renderer (dev)
 - `message` — стабильный машинно-читаемый event-id (snake_case с точками,
   `auth.session.matched`, `payments.balance_updated`). Никаких эмодзи и
   интерполяции значений в строку: значения — отдельными ключами.
-- `service.name` — `flows|frontend|crm|rag|sync|office|browser|provider_litserve|*_worker|scheduler`.
+- `service.name` — `flows|frontend|crm|rag|sync|office|voice|browser|provider_litserve|*_worker|scheduler`.
 - `service.version` — из `settings.server.deployment_version`.
 - `deployment.environment` — `local|test|production`.
 

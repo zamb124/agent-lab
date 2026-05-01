@@ -9,10 +9,20 @@
 from __future__ import annotations
 
 import random
+import zlib
 from typing import Any, Callable
 
 import structlog
 from structlog.types import EventDict, WrappedLogger
+
+from core.context import get_context
+from core.logging.contract import REDACT_PLACEHOLDER
+from core.logging.scope import (
+    REQUIRED_AUTHENTICATED_REQUEST_KEYS,
+    REQUIRED_REQUEST_KEYS,
+    get_log_scope,
+    get_log_scope_requires_user,
+)
 
 
 def add_service_fields(service_name: str, version: str | None, environment: str) -> Callable[[WrappedLogger, str, EventDict], EventDict]:
@@ -63,8 +73,6 @@ def add_platform_context(_logger: WrappedLogger, _method: str, event_dict: Event
     if "trace_id" in event_dict and "user_id" in event_dict and "company_id" in event_dict:
         return event_dict
 
-    from core.context import get_context
-
     context = get_context()
     if context is None:
         return event_dict
@@ -110,7 +118,6 @@ def redact_keys(drop_keys: list[str]) -> Callable[[WrappedLogger, str, EventDict
         return _passthrough
 
     drop_set = frozenset(drop_keys)
-    from core.logging.contract import REDACT_PLACEHOLDER
 
     def processor(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
         for key in list(event_dict.keys()):
@@ -121,6 +128,13 @@ def redact_keys(drop_keys: list[str]) -> Callable[[WrappedLogger, str, EventDict
     return processor
 
 
+def _should_sample(trace_id: str, rate: float) -> bool:
+    if rate >= 1.0:
+        return True
+    h = zlib.crc32(trace_id.encode("utf-8")) & 0xFFFFFFFF
+    return h < rate * (2**32)
+
+
 def sample_info_logs(rate: float, sampled_loggers: list[str]) -> Callable[[WrappedLogger, str, EventDict], EventDict]:
     """
     Дропнуть часть INFO-записей у hot-path логгеров.
@@ -128,6 +142,10 @@ def sample_info_logs(rate: float, sampled_loggers: list[str]) -> Callable[[Wrapp
     Применяется только если method_name == "info" и имя логгера
     начинается с одного из sampled_loggers. WARNING/ERROR/DEBUG не
     дропаются никогда.
+
+    Sampling детерминированный: решение принимается на основе trace_id.
+    Весь трейс либо логируется полностью, либо дропается целиком —
+    это стандартная практика observability, избегает «дырявых» трейсов.
     """
 
     if rate >= 1.0 or not sampled_loggers:
@@ -144,6 +162,12 @@ def sample_info_logs(rate: float, sampled_loggers: list[str]) -> Callable[[Wrapp
         logger_name = event_dict.get("logger", "") or getattr(logger, "name", "")
         if not isinstance(logger_name, str) or not logger_name.startswith(sampled_prefixes):
             return event_dict
+        trace_id = event_dict.get("trace_id")
+        if isinstance(trace_id, str) and trace_id.strip():
+            if not _should_sample(trace_id, rate):
+                raise structlog.DropEvent
+            return event_dict
+        # trace_id отсутствует — fallback на random, чтобы не потерять запись совсем
         if random.random() >= rate:
             raise structlog.DropEvent
         return event_dict
@@ -201,14 +225,6 @@ def enforce_required_fields(_logger: WrappedLogger, _method: str, event_dict: Ev
     middleware/handler/scheduler/background, которые обязаны входить в
     request-скоуп через core.logging.scope.enter_request_scope(...).
     """
-    import structlog
-
-    from core.logging.scope import (
-        REQUIRED_AUTHENTICATED_REQUEST_KEYS,
-        REQUIRED_REQUEST_KEYS,
-        get_log_scope,
-        get_log_scope_requires_user,
-    )
 
     if "service.name" not in event_dict:
         _emit_contract_violation(

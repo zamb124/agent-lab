@@ -63,6 +63,7 @@ LiveKit требует отдельный поддомен с собственн
 **CRM vendor (three.js, 3d-force-graph):** HTML тянет `/crm/ui/vendor/...`; FastAPI монтирует файлы из `node_modules` относительно корня репозитория (`apps/crm/main.py`). В Docker-образах **`crm`** и **`full`** стадия **`js-vendor`** (`npm ci`) копирует `node_modules/three/build` и `node_modules/3d-force-graph/dist` в `/app/node_modules/...`, иначе запросы к vendor попадали бы в SPA и отдавали `index.html` вместо JS.
 | rag | 8004 | `python -m apps.rag.main` |
 | sync | 8005 | `python -m apps.sync.main` |
+| voice | 8015 | `python -m apps.voice.main` |
 
 Один Docker-образ `ghcr.io/zamb124/agent-lab:latest` — разные `command:` в compose.
 
@@ -134,7 +135,14 @@ microk8s kubectl describe certificate humanitec-ru-tls
 | **Tempo** | `agentlab_tempo` | 3200 | Хранилище трейсов (7 дней) |
 | **Alloy** | `agentlab_alloy` | 12345 | Сбор Docker логов + OTLP relay |
 
-**Zero-touch для сервисов:** Alloy читает Docker log files (stdout) автоматически. OTLP трейсы идут через ENV `OTEL_EXPORTER_OTLP_ENDPOINT` в compose.
+**Сбор логов — два пути:**
+
+| Среда | Путь | Как работает |
+|---|---|---|
+| `prod`/`test` | Docker stdout → Alloy → Loki | Alloy (`discovery.docker`) читает stdout контейнеров `agentlab_*`, извлекает label `service` из имени контейнера, `level` из JSON. |
+| `dev` (хост, `make app`) | LokiHandler → Loki напрямую | `core/logging/loki_handler.py` отправляет JSON-батчи в `http://localhost:3100/loki/api/v1/push`. Активируется при `logging.loki_url` + `logging.loki_enabled: true` в `conf.json`. |
+
+**Label `service`** в Loki = имя сервиса (для Docker: из имени контейнера; для хоста: из `service_name` аргумента `setup_logging`). Дашборды и алерты фильтруют по `{service=~"..."}`.
 
 **Авторизация Grafana:** nginx `auth_request` → `frontend /api/auth/grafana-check` → JWT cookie → только `company_id == "system"`. Grafana в режиме `auth.proxy`.
 
@@ -143,8 +151,48 @@ microk8s kubectl describe certificate humanitec-ru-tls
 **Поиск логов:** Grafana → Explore → Loki:
 ```
 {service="crm"} | json | level="ERROR"
-{svc="flows"} | json | trace_id = "abc123..."
+{service="flows"} | json | trace_id = "abc123..."
 ```
+
+### Дашборды
+
+Дашборды provisioned как код (JSON в `deploy/observability/dashboards/`). Обновления применяются автоматически при рестарте Grafana или через `updateIntervalSeconds: 30`.
+
+| Дашборд | UID | Источник | Описание |
+|---|---|---|---|
+| **Platform Overview** | `platform-overview` | Loki | Service health grid, total RPS, error rate %, P99 latency, log volume, active traces |
+| **HTTP Requests** | `http-requests` | Loki | RPS by service/route, status distribution, P50/P95/P99 latency, 4xx/5xx trends, top slow routes |
+| **Errors & Exceptions** | `errors-exceptions` | Loki | Error rate by service, exception types, top messages, contract violations, recent ERROR logs |
+| **TaskIQ Workers** | `taskiq-workers` | Loki | Tasks/min, failure rate, avg duration, retries, top failing tasks |
+| **LLM Usage** | `llm-usage` | Loki | Input/output tokens, requests by provider/model, P99 latency, error rate, cost estimate |
+| **Traces** | `traces-explorer` | Tempo | Trace search by trace_id, slow traces table, span duration histogram |
+| **Log Volume** | `log-volume` | Loki | Logs/min by service/level, volume trends, top loggers |
+| **WebSocket / Realtime** | `websocket` | Loki | WS connects/disconnects, ws_command/min по типам, recent WS logs |
+| **Database** | `database` | Loki | SQLAlchemy/DB ошибки, HTTP P95 как proxy DB-нагрузки, slow HTTP (>1000ms), recent error logs |
+| **Security** | `security` | Loki | HTTP 401/4xx rate, top 4xx routes, auth middleware warnings, recent auth events |
+
+### Alerting
+
+Alert rules provisioned через YAML в `deploy/observability/grafana-alerts/`. Unified alerting на базе LogQL (Loki).
+
+| Алерт | Условие | Severity |
+|---|---|---|
+| **High Error Rate** | ERROR rate > 5% за 5 мин | critical |
+| **Service Down** | Нет логов от сервиса > 2 мин | critical |
+| **High 5xx Rate** | 5xx rate > 1% за 5 мин | warning |
+| **TaskIQ High Failure Rate** | task_failed rate > 5% за 10 мин | warning |
+| **LLM Errors** | > 10 LLM errors за 5 мин | warning |
+| **Log Contract Violations** | > 0 contract violations за 1 мин | critical |
+| **Slow HTTP P99** | P99 latency > 5000 мс за 5 мин | warning |
+| **High DB Latency** | P95 DB latency > 1000 мс за 5 мин | warning |
+
+Contact points и notification policies — placeholder (`ops@humanitec.ru`). Для production настройте SMTP или webhook через Grafana UI или CI-секреты.
+
+### Как добавить новый дашборд
+
+1. Создать JSON в `deploy/observability/dashboards/`
+2. Указать уникальный `uid` и `title`
+3. Рестарт Grafana подхватит автоматически (или подождать 30 сек)
 
 ## Параллельный сервис
 

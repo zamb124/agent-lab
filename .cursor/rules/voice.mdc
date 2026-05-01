@@ -1,0 +1,157 @@
+---
+description: "Voice gateway: real-time STT/TTS/VAD для AI-агентов, batch-транскрипция, провайдеры, биллинг, тестирование"
+---
+# Voice Gateway
+
+Сервис `apps/voice` (порт **8015**) — акустический шлюз платформы.
+Единственная точка работы с голосом для всех сервисов (flows, crm, sync).
+Доменно нейтрален: не знает бизнес-логику клиентов, предоставляет звуковой интерфейс.
+
+## Назначение и сценарии
+
+| Сценарий | Транспорт | Эндпоинт |
+|---|---|---|
+| Real-time голос AI-агента | WebSocket | `/voice/api/ws/session/{session_id}` |
+| Batch-транскрипция аудиофайла | HTTP POST | `/voice/api/v1/transcribe` |
+| Статус провайдеров | HTTP GET | `/voice/health/providers` |
+
+**Real-time сессия:** браузер/клиент → WS → VAD → STT → очередь транскрипций → LLM (вызов клиентом) → TTS → очередь аудио → клиент. Поддерживает barge-in: прерывание воспроизведения при обнаружении речи пользователя.
+
+**Batch-транскрипция:** принимает `UploadFile` (аудиофайл любого формата, поддерживаемого провайдером), возвращает `{ text: str, provider: str }`. Используется CRM для обработки голосовых заметок.
+
+## Структура
+
+```
+apps/voice/
+├── api/
+│   ├── health.py        # GET /voice/health/providers
+│   ├── session.py       # WS /voice/api/ws/session/{session_id}
+│   └── transcribe.py    # POST /voice/api/v1/transcribe
+├── providers/
+│   ├── base.py          # BaseVADProvider, BaseSTTProvider, BaseTTSProvider
+│   ├── vad/
+│   │   ├── silero.py    # SileroVADProvider (prod)
+│   │   └── mock.py      # MockVADProvider (тесты)
+│   ├── stt/
+│   │   ├── cloud_ru.py  # CloudRuStreamSTTProvider (prod, streaming)
+│   │   └── mock.py      # MockSTTProvider (тесты)
+│   └── tts/
+│       ├── kokoro_local.py  # KokoroLocalTTSProvider (prod, self-hosted)
+│       └── mock.py          # MockTTSProvider (тесты)
+├── services/
+│   ├── voice_session.py    # Оркестрация pipeline одной сессии
+│   ├── voice_barge_in.py   # BargeInController
+│   └── voice_chunker.py    # Разбиение текста на чанки для TTS
+├── workers/
+│   ├── audio_receiver.py   # WebSocket → очередь PCM
+│   ├── stt_worker.py       # PCM → VAD → STT → транскрипции
+│   ├── tts_worker.py       # Текст → чанки → TTS → PCM
+│   └── audio_sender.py     # PCM → WebSocket клиенту
+├── billing/
+│   └── voice_usage.py      # VoiceUsageTracker (побайтовый учёт)
+├── config.py               # VoiceServiceSettings
+├── container.py            # VoiceContainer (DI, lazy providers)
+├── dependencies.py         # ContainerDep
+└── main.py                 # FastAPI app
+```
+
+## Провайдеры
+
+### VAD (Voice Activity Detection)
+
+- **`SileroVADProvider`** (`vad/silero.py`): нейросеть Silero, определяет наличие речи в PCM-чанке.
+- **`MockVADProvider`** (`vad/mock.py`): в тестах. `always_speech=True` — всегда детектирует речь; `always_speech=False` — детектирует по non-zero байтам.
+
+### STT (Speech-to-Text)
+
+- **`CloudRuStreamSTTProvider`** (`stt/cloud_ru.py`): стриминговый провайдер cloud.ru, принимает PCM через `push_audio(bytes)`, отдаёт результат через `flush_buffer() -> STTTranscriptionResult | None`. Это НЕ тот же клиент, что `core/clients/stt_client.py` (который для batch).
+- **`MockSTTProvider`** (`stt/mock.py`): в тестах, возвращает `settings.stt.mock_text` при `flush_buffer`.
+
+### TTS (Text-to-Speech)
+
+- **`KokoroLocalTTSProvider`** (`tts/kokoro_local.py`): self-hosted Kokoro TTS на CPU/GPU. Принимает текст, возвращает PCM-байты.
+- **`MockTTSProvider`** (`tts/mock.py`): в тестах, возвращает deterministic PCM-буфер.
+
+### Выбор провайдера в `VoiceContainer`
+
+Через конфиг (env-переменные переопределяют `conf.json`):
+
+| Переменная окружения | Значения | Дефолт |
+|---|---|---|
+| `STT__PROVIDER` | `cloud_ru`, `mock` | `cloud_ru` |
+| `TTS__PROVIDER` | `kokoro`, `mock` | `kokoro` |
+| `VAD__MODEL` | `silero`, `mock` | `silero` |
+
+В тестах: `STT__PROVIDER=mock`, `TTS__PROVIDER=mock`, `VAD__MODEL=mock`.
+
+## Real-time pipeline
+
+```
+WS клиент
+  |
+audio_receiver   ← PCM 16kHz, mono
+  |
+stt_worker       ← VAD детектирует паузу → flush_buffer → STTTranscriptionResult
+  |
+[клиент вызывает LLM, получает текст]
+  |
+tts_worker       ← VoiceChunker разбивает текст → TTS → PCM чанки
+  |
+audio_sender     → WS клиент
+```
+
+**Barge-in:** `BargeInController` детектирует речь пользователя во время воспроизведения TTS.
+При обнаружении: сбрасывает очередь аудио, останавливает TTS, возобновляет STT.
+
+## Batch-транскрипция
+
+`POST /voice/api/v1/transcribe` принимает `multipart/form-data` с полем `file`.
+Внутри использует `core/clients/stt_client.py` (`STTClientFactory`) — тот же клиент что Sync.
+Возвращает `TranscribeResponse(text: str, provider: str)`.
+
+CRM вызывает через `ServiceClient`:
+```python
+from core.clients import ServiceClient
+
+client = ServiceClient()
+resp = await client.post("voice", "/voice/api/v1/transcribe", files={"file": (filename, data, content_type)})
+text = resp.json()["text"]
+```
+
+## Биллинг
+
+Категория `voice`, ресурс `session_minute` (секунды сессии → минуты → рубли).
+`VoiceUsageTracker` записывает длительность сессии в `platform_tracing` spans.
+Прайс в `billing.resource_base_prices.voice.session_minute`.
+
+## Тестирование
+
+- **Фикстуры:** `voice_app` (sync), `voice_client` (async) в `tests/fixtures/clients.py`.
+- `voice_app` устанавливает `STT__PROVIDER=mock`, `TTS__PROVIDER=mock`, `VAD__MODEL=mock`.
+- Юнит-тесты провайдеров: `tests/voice/test_voice_providers.py`.
+- Юнит-тесты сессии и чанкера: `tests/voice/test_voice_session.py`.
+- Интеграционные тесты API: `tests/voice/test_voice_api.py`.
+- Pipeline тесты: `tests/voice/test_voice_pipeline.py`.
+
+```bash
+uv run pytest tests/voice/ -v
+```
+
+## Границы ответственности
+
+| Что | Кто отвечает |
+|---|---|
+| Real-time STT/TTS/VAD | `apps/voice` |
+| Batch-транскрипция файлов из CRM | `apps/voice` (POST /voice/api/v1/transcribe) |
+| Batch STT аудиосообщений в Sync | `core/files/media/MediaTranscriber` + `STTClientFactory` |
+| STT при LiveKit speech-to-chat egress | `apps/sync/realtime/speech_to_chat_workflow.py` (остаётся в sync) |
+| Запись LiveKit-звонка и egress | `apps/sync/realtime/call_handlers.py` + `core/calls/livekit_client.py` |
+| WebRTC-звонки | LiveKit SFU (`calls.mdc`) |
+| Воспроизведение аудиосообщений в UI | `<platform-audio-message-player>` (core-компонент) |
+| Запись голоса в браузере | `@platform/lib/utils/voice-recording.js` (утилиты) |
+
+## Запреты
+
+- Прямой вызов `MediaTranscriber` из HTTP-хендлеров любого сервиса кроме `sync` — запрещён. Используй `ServiceClient("voice", "/voice/api/v1/transcribe")`.
+- Создание собственных STT/TTS провайдеров в `apps/crm`, `apps/flows`, `apps/rag` — запрещено.
+- `apps/voice` не знает ничего о бизнес-логике клиентов (flows, crm, sync) — только сигналы и аудио.

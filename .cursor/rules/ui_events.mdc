@@ -157,6 +157,8 @@ apps/<svc>/ui/
 После миграции добавьте сервис в `FACTORY_CANON_SERVICES` для
 `scripts/check_ui_canon.sh` — это включит fatal-проверки (zero-import canon,
 запреты `services/`, `store/`, фолбеков, прямых dispatch UI-событий).
+Сервис `voice` добавлен в `FACTORY_CANON_SERVICES` и `_SERVICE_PREFIXES`
+dev-proxy; `apps/voice/ui/` создаётся по мере появления UI-части gateway.
 
 ## Жёсткие правила (для всех мигрированных сервисов)
 

@@ -55,6 +55,7 @@ import {
     summaryChipUnresolvedIconName,
 } from '../utils/related-entity-presenter.js';
 import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
+import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_UPDATE_OP = 'crm/entity_update';
@@ -189,23 +190,6 @@ function _resolveAttachmentIconName(filename, contentType) {
     return 'paperclip';
 }
 
-function _hasGetUserMediaApi() {
-    return typeof navigator !== 'undefined'
-        && typeof navigator.mediaDevices === 'object'
-        && navigator.mediaDevices !== null
-        && typeof navigator.mediaDevices.getUserMedia === 'function';
-}
-
-function _pickVoiceMimeType() {
-    if (typeof MediaRecorder === 'undefined') return '';
-    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-    for (const candidate of candidates) {
-        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidate)) {
-            return candidate;
-        }
-    }
-    return '';
-}
 
 function _formatDateInput(value) {
     if (typeof value !== 'string' || value.length === 0) return '';
@@ -3056,12 +3040,12 @@ export class CRMNoteCardView extends PlatformElement {
             this.toast('toast.note.voice_unavailable_https', { type: 'warning' });
             return;
         }
-        if (!_hasGetUserMediaApi() || typeof MediaRecorder === 'undefined') {
+        if (!hasGetUserMediaApi() || typeof MediaRecorder === 'undefined') {
             this.toast('toast.note.voice_unavailable_recorder', { type: 'warning' });
             return;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType = _pickVoiceMimeType();
+        const stream = await getUserMediaCompat({ audio: true });
+        const mimeType = pickVoiceMimeType();
         this._mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         this._audioChunks = [];
         const resolvedMime = this._mediaRecorder.mimeType || mimeType || 'audio/webm';

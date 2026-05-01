@@ -139,6 +139,8 @@ async def test_example(app, mock_llm_with_queue, unique_id):
 | `rag_client` | function | ASGI клиент для unit тестов RAG API |
 | `crm_client` | function | ASGI клиент для unit тестов CRM API |
 | `frontend_client` | function | ASGI клиент для unit тестов Frontend API |
+| `voice_app` | function | ASGI приложение voice с mock-провайдерами (env `STT__PROVIDER=mock`, `TTS__PROVIDER=mock`, `VAD__MODEL=mock`) |
+| `voice_client` | function | ASGI клиент для unit тестов voice API (`tests/fixtures/clients.py`) |
 | `flows_client_http` | function | HTTP клиент для E2E к flows (см. `tests/fixtures/clients.py`) |
 | `rag_client_http` | function | HTTP клиент для E2E тестов RAG |
 | `crm_client_http` | function | HTTP клиент для E2E тестов CRM |

@@ -280,6 +280,49 @@ async def office_client(office_app):
         yield client
 
 
+@pytest.fixture
+def voice_app(monkeypatch: pytest.MonkeyPatch):
+    """
+    FastAPI приложение voice с mock-провайдерами STT/TTS/VAD.
+
+    Используется как sync fixture — доступна и для sync (TestClient / WS),
+    и для async (voice_client) тестов.
+
+    Устанавливает provider = 'mock' для всех провайдеров через monkeypatch env,
+    затем сбрасывает синглтоны конфига и контейнера.
+    Провайдеры — реальные классы (MockSTTProvider / MockTTSProvider / MockVADProvider),
+    не unittest.mock. Внешние ML-модели и cloud.ru API не используются.
+
+    Имена env vars без префикса сервиса: VoiceServiceSettings наследует BaseSettings
+    с env_nested_delimiter="__" и без env_prefix, поэтому TTS__PROVIDER читается
+    как settings.tts.provider (не VOICE__TTS__PROVIDER → settings.voice.tts.provider).
+    """
+    monkeypatch.setenv("STT__PROVIDER", "mock")
+    monkeypatch.setenv("TTS__PROVIDER", "mock")
+    monkeypatch.setenv("VAD__MODEL", "mock")
+
+    from apps.voice.config import reset_voice_settings
+    from apps.voice.container import reset_voice_container
+
+    reset_voice_settings()
+    reset_voice_container()
+
+    from apps.voice.main import app
+
+    yield app
+
+    reset_voice_container()
+    reset_voice_settings()
+
+
+@pytest_asyncio.fixture
+async def voice_client(voice_app):
+    """HTTP-клиент для voice API (ASGI)."""
+    transport = ASGITransport(app=voice_app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
 @pytest_asyncio.fixture
 async def sync_client(sync_app, sync_worker):
     """
