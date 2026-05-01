@@ -2,6 +2,10 @@
 Нормализация JSON flow / node / tool под контракт без легаси type нод tool|function и tool_type.
 
 FlowRepository вызывает normalize_flow_config_dict перед FlowConfig.model_validate.
+
+Легаси в том же смысле, что ревизия ``agents_0005``: при чтении из БД ключ ``skills``
+переносится в ``branches``, в evaluation ``skill_ids`` → ``branch_ids`` (in-memory;
+персистентная правка строк — по-прежнему через ``alembic upgrade``).
 """
 
 from __future__ import annotations
@@ -95,13 +99,15 @@ def _normalize_evaluation_turn(turn: MutableMapping[str, Any]) -> None:
 def _normalize_evaluation(evaluation: Any) -> None:
     if not isinstance(evaluation, dict):
         return
-    for _case_id, case in evaluation.items():
+    for case_id, case in evaluation.items():
         if not isinstance(case, dict):
             continue
         if "skill_ids" in case:
-            raise ValueError(
-                f"evaluation['{_case_id}']: поле skill_ids удалено; используйте branch_ids"
-            )
+            if "branch_ids" in case:
+                raise ValueError(
+                    f"evaluation['{case_id}']: в одном кейсе одновременно skill_ids и branch_ids"
+                )
+            case["branch_ids"] = case.pop("skill_ids")
         turns = case.get("turns")
         if isinstance(turns, list):
             for turn in turns:
@@ -109,16 +115,25 @@ def _normalize_evaluation(evaluation: Any) -> None:
                     _normalize_evaluation_turn(turn)
 
 
+def _migrate_legacy_skills_to_branches(out: MutableMapping[str, Any]) -> None:
+    if "skills" not in out:
+        return
+    legacy = out.pop("skills")
+    if not isinstance(legacy, dict) or len(legacy) == 0:
+        return
+    existing = out.get("branches")
+    has_branches = isinstance(existing, dict) and len(existing) > 0
+    if has_branches:
+        raise ValueError("flow: одновременно branches и skills")
+    out["branches"] = legacy
+
+
 def normalize_flow_config_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
     out = copy.deepcopy(data)
     nodes = out.get("nodes")
     if isinstance(nodes, dict):
         out["nodes"] = {k: normalize_node_config(v) for k, v in nodes.items()}
-    if "skills" in out:
-        raise ValueError(
-            "Конфиг flow содержит удалённый ключ 'skills'. "
-            "Используйте 'branches'. Для строк в БД agents выполните ревизию Alembic agents_0005."
-        )
+    _migrate_legacy_skills_to_branches(out)
     ev = out.get("evaluation")
     if ev is not None:
         _normalize_evaluation(ev)
