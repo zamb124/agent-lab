@@ -1,13 +1,14 @@
 """Audio receiver — принимает бинарные фреймы из WebSocket и кладёт в очередь."""
-    
+
 from __future__ import annotations
-    
+
 import asyncio
-import logging
-    
+
+from starlette.websockets import WebSocketDisconnect
+
 from apps.voice.services.voice_session import VoiceSession
 from core.logging import get_logger
-    
+
 logger = get_logger(__name__)
 
 
@@ -27,5 +28,13 @@ async def run_audio_receiver(
             await session.audio_in_queue.put(data)
     except asyncio.CancelledError:
         raise
+    except WebSocketDisconnect as exc:
+        if exc.code != 1000:
+            logger.warning(
+                "voice.audio_receiver.ws_disconnect",
+                session_id=session.session_id,
+                code=exc.code,
+                reason=exc.reason,
+            )
     except Exception:
-        logger.exception("audio receiver error: session_id=%s", session.session_id)
+        logger.exception("voice.audio_receiver.error", session_id=session.session_id)
