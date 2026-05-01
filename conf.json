@@ -28,6 +28,7 @@
   },
   "logging": {
     "format": "json",
+    "loki_url": "http://localhost:3100/loki/api/v1/push",
     "loggers_levels": {
       "taskiq": "WARNING",
       "taskiq.receiver": "WARNING"
@@ -36,7 +37,7 @@
   "tracing": {
     "enabled": true,
     "postgres_enabled": true,
-    "tempo_enabled": false,
+    "tempo_enabled": true,
     "sampling_rate": 1.0,
     "retention_days": 30
   },
@@ -360,7 +361,7 @@
       "tracing": {
         "enabled": true,
         "postgres_enabled": true,
-        "tempo_enabled": false,
+        "tempo_enabled": true,
         "service_name": "flows",
         "retention_days": 30
       }

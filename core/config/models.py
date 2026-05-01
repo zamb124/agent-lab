@@ -109,6 +109,14 @@ class LoggingConfig(BaseModel):
         default=8192,
         description="Максимальная длина строкового значения; обрезанные помечаются _truncated",
     )
+    loki_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL Loki push API для отправки логов с хоста (dev-режим). "
+            "Пример: http://localhost:3100/loki/api/v1/push. "
+            "Если None — логи идут только в stdout (Docker Alloy подхватит)."
+        ),
+    )
 
 
 class ServerConfig(BaseModel):

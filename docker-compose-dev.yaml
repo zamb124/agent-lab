@@ -9,6 +9,7 @@ services:
       POSTGRES_DB: platform_shared
       POSTGRES_USER: platform_user
       POSTGRES_PASSWORD: admin
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "54321:5432"
     volumes:
@@ -244,12 +245,84 @@ services:
       - "--min-port=49152"
       - "--max-port=65535"
 
+  # ============================================
+  # Observability (Loki + Tempo + Alloy + Grafana)
+  # ============================================
+  loki:
+    image: grafana/loki:latest
+    container_name: agentlab_loki_dev
+    command: -config.file=/etc/loki/loki.yaml
+    volumes:
+      - ./deploy/observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_dev_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - dev-net
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: agentlab_tempo_dev
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_dev_data:/var/tempo
+    ports:
+      - "3200:3200"
+    networks:
+      - dev-net
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: agentlab_alloy_dev
+    command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345"]
+    volumes:
+      - ./deploy/observability/alloy.config:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "4317:4317"
+      - "12345:12345"
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks:
+      - dev-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agentlab_grafana_dev
+    environment:
+      GF_SERVER_ROOT_URL: "http://localhost:3000"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+    volumes:
+      - ./deploy/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+      - grafana_dev_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+      - dev-net
+
 volumes:
   postgres_dev_data:
     driver: local
   redis_dev_data:
     driver: local
   minio_dev_data:
+    driver: local
+  loki_dev_data:
+    driver: local
+  tempo_dev_data:
+    driver: local
+  grafana_dev_data:
     driver: local
 networks:
   dev-net:

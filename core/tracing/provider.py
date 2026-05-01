@@ -45,16 +45,22 @@ def setup_tracing(config: "TracingConfig") -> None:
 
     _tracer_provider = TracerProvider(resource=resource)
 
-    # Tempo exporter (OTLP)
-    if config.tempo_enabled:
+    # OTLP exporter: из ENV (docker-compose задаёт OTEL_EXPORTER_OTLP_ENDPOINT)
+    # или из config.tempo_enabled/tempo_endpoint. Сервисы не трогаем —
+    # достаточно одной ENV-переменной в compose для отправки трейсов в Alloy → Tempo.
+    import os
+
+    otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if otlp_endpoint or config.tempo_enabled:
+        endpoint = otlp_endpoint or config.tempo_endpoint
         try:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-            otlp_exporter = OTLPSpanExporter(endpoint=config.tempo_endpoint, insecure=True)
+            otlp_exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
             _tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
-            logger.info(f"Tracing: OTLP exporter configured for {config.tempo_endpoint}")
+            logger.info("tracing.otlp_configured", endpoint=endpoint)
         except Exception as e:
-            logger.warning(f"Tracing: Failed to configure OTLP exporter: {e}")
+            logger.warning("tracing.otlp_failed", error=str(e))
 
     trace.set_tracer_provider(_tracer_provider)
     _initialized = True

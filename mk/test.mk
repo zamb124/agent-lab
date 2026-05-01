@@ -9,8 +9,8 @@ RUN_UI_IN_TEST ?= 0
 _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
 
 test-up:
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test
-	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli)..."
+	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
+	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
 	@uv run python -m scripts.db_test_reset
@@ -20,7 +20,7 @@ test-reset:
 	@uv run python -m scripts.db_test_reset
 
 test-down:
-	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test
+	docker-compose -f docker-compose-test.yaml stop postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up

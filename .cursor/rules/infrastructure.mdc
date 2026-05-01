@@ -123,6 +123,29 @@ microk8s kubectl get certificate
 microk8s kubectl describe certificate humanitec-ru-tls
 ```
 
+## Observability
+
+Стек наблюдаемости — Docker Compose (как и все сервисы платформы). Конфиги в `deploy/observability/`.
+
+| Компонент | Контейнер | Порт | Роль |
+|---|---|---|---|
+| **Grafana** | `agentlab_grafana` | 3000 | UI, дашборды, Explore. `https://grafana.humanitec.ru` |
+| **Loki** | `agentlab_loki` | 3100 | Хранилище логов (14 дней) |
+| **Tempo** | `agentlab_tempo` | 3200 | Хранилище трейсов (7 дней) |
+| **Alloy** | `agentlab_alloy` | 12345 | Сбор Docker логов + OTLP relay |
+
+**Zero-touch для сервисов:** Alloy читает Docker log files (stdout) автоматически. OTLP трейсы идут через ENV `OTEL_EXPORTER_OTLP_ENDPOINT` в compose.
+
+**Авторизация Grafana:** nginx `auth_request` → `frontend /api/auth/grafana-check` → JWT cookie → только `company_id == "system"`. Grafana в режиме `auth.proxy`.
+
+**Корреляция:** trace_id в логах (Loki) → Derived Field → Tempo waterfall. Tempo → Trace-to-Logs → Loki.
+
+**Поиск логов:** Grafana → Explore → Loki:
+```
+{service="crm"} | json | level="ERROR"
+{svc="flows"} | json | trace_id = "abc123..."
+```
+
 ## Параллельный сервис
 
 На сервере также крутится отдельный проект `ytai.tech` (порт 8000, ingress `sync-ingress`) — не трогать.

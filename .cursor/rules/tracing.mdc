@@ -135,6 +135,16 @@ alwaysApply: false
 
 **Pytest:** `tests/conftest.py` создаёт БД `platform_tracing` при отсутствии (через подключение к `…/postgres`) и при необходимости догружает только дерево **`tracing`** без дропа shared.
 
+## Tempo (визуализация трейсов)
+
+OTel SDK → OTLP → Alloy → **Tempo** (retention 7 дней). Waterfall view в Grafana.
+
+**Dual-write (переходный период):** трейсы пишутся одновременно в PostgreSQL `platform_tracing` (через SpanRepository) и в Tempo (через OTLP exporter). PostgreSQL остаётся source of truth для `tracing-page.js` и биллинга. Tempo добавляет waterfall визуализацию и корреляцию с логами в Grafana.
+
+**OTLP endpoint:** задаётся через ENV `OTEL_EXPORTER_OTLP_ENDPOINT` в docker-compose → `core/tracing/provider.py` автодетектит. Сервисы не модифицируются.
+
+Подробнее: `infrastructure.mdc` → секция Observability.
+
 ## Ключевые файлы
 
 `core/tracing/tracer.py`, `core/tracing/repository.py`, `core/tracing/span_tree.py`, `core/tracing/context.py`, `core/tracing/attributes.py`, `core/app/factory.py` (lifespan), `apps/frontend/api/platform_tracing.py`, `apps/flows_worker/broker.py`, `apps/idle_worker/broker.py`, `core/container/base.py`, `tests/fixtures/test_database_env.py`, `tests/core/tracing/test_span_repository_service_api.py`, `tests/frontend/api/test_platform_tracing_api.py`.

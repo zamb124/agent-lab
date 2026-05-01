@@ -85,7 +85,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose-prod.yaml,conf.json,deploy/prepare-static.sh"
+          source: "docker-compose-prod.yaml,conf.json,deploy/prepare-static.sh,deploy/observability/"
           target: /opt/agent-lab/
 
       # docker-compose-prod монтирует ./migrations/postgres/init.sql — без файла на хосте
@@ -100,6 +100,7 @@ jobs:
           script: |
             mkdir -p /opt/agent-lab/migrations/postgres
             mkdir -p /opt/agent-lab/deploy/onlyoffice/themes
+            mkdir -p /opt/agent-lab/deploy/observability
             rm -rf /opt/agent-lab/migrations/postgres/init.sql
 
       # Без strip_components файл окажется в .../postgres/migrations/postgres/init.sql,
@@ -177,12 +178,13 @@ jobs:
           PROVIDER_LITSERVE__INFRA__MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__MODEL_ID }}
           PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 30m
-          envs: IMAGE_TAG,IMAGE,POSTGRES_PASSWORD,AUTH__JWT_SECRET,SELECTEL_ACCESS_KEY,SELECTEL_SECRET_KEY,AUTH_YANDEX_CLIENT_ID,AUTH_YANDEX_CLIENT_SECRET,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GITHUB_CLIENT_ID,AUTH_GITHUB_CLIENT_SECRET,AUTH_AMOCRM_CLIENT_ID,AUTH_AMOCRM_CLIENT_SECRET,AUTH_APPLE_PRIVATE_KEY,AUTH_DEMO_PASSWORD,GHCR_TOKEN,GITHUB_ACTOR,PUSH__ENABLED,PUSH__VAPID_PUBLIC_KEY,PUSH__VAPID_PRIVATE_KEY,PUSH__VAPID_EMAIL,PUSH__APNS_PRIVATE_KEY,PUSH__FCM_CREDENTIALS_JSON,PUSH__FCM_PROJECT_ID,LIVEKIT_API_KEY,LIVEKIT_API_SECRET,LIVEKIT_PUBLIC_URL,SERVER_HOST,TURN_SECRET,DEPLOYMENT_VERSION,LLM_BOTHUB_API_KEY,LLM_OPENROUTER_API_KEY,STT__CLOUD_RU__API_KEY,STT_CLOUD_RU_API_KEY,RAG_EMBEDDING_API_KEY,ONLYOFFICE_JWT_SECRET,OFFICE_DOCUMENT_SERVER_PUBLIC_URL,OFFICE_CALLBACK_PUBLIC_BASE_URL,YOOMONEY_ACCOUNT_NUMBER,YOOMONEY_NOTIFICATION_SECRET,YOOMONEY_CLIENT_ID,YOOMONEY_CLIENT_SECRET,PROVIDER_LITSERVE__INFRA__BACKEND,PROVIDER_LITSERVE__INFRA__MODEL_ID,PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID,HF_TOKEN
+          envs: IMAGE_TAG,IMAGE,POSTGRES_PASSWORD,AUTH__JWT_SECRET,SELECTEL_ACCESS_KEY,SELECTEL_SECRET_KEY,AUTH_YANDEX_CLIENT_ID,AUTH_YANDEX_CLIENT_SECRET,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GITHUB_CLIENT_ID,AUTH_GITHUB_CLIENT_SECRET,AUTH_AMOCRM_CLIENT_ID,AUTH_AMOCRM_CLIENT_SECRET,AUTH_APPLE_PRIVATE_KEY,AUTH_DEMO_PASSWORD,GHCR_TOKEN,GITHUB_ACTOR,PUSH__ENABLED,PUSH__VAPID_PUBLIC_KEY,PUSH__VAPID_PRIVATE_KEY,PUSH__VAPID_EMAIL,PUSH__APNS_PRIVATE_KEY,PUSH__FCM_CREDENTIALS_JSON,PUSH__FCM_PROJECT_ID,LIVEKIT_API_KEY,LIVEKIT_API_SECRET,LIVEKIT_PUBLIC_URL,SERVER_HOST,TURN_SECRET,DEPLOYMENT_VERSION,LLM_BOTHUB_API_KEY,LLM_OPENROUTER_API_KEY,STT__CLOUD_RU__API_KEY,STT_CLOUD_RU_API_KEY,RAG_EMBEDDING_API_KEY,ONLYOFFICE_JWT_SECRET,OFFICE_DOCUMENT_SERVER_PUBLIC_URL,OFFICE_CALLBACK_PUBLIC_BASE_URL,YOOMONEY_ACCOUNT_NUMBER,YOOMONEY_NOTIFICATION_SECRET,YOOMONEY_CLIENT_ID,YOOMONEY_CLIENT_SECRET,PROVIDER_LITSERVE__INFRA__BACKEND,PROVIDER_LITSERVE__INFRA__MODEL_ID,PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID,HF_TOKEN,GRAFANA_ADMIN_PASSWORD
           script: |
             set -e
 
@@ -266,7 +268,8 @@ jobs:
             docker compose -f docker-compose-prod.yaml up -d \
               agents frontend crm rag provider_litserve sync onlyoffice-documentserver office scheduler-api \
               flows_worker scheduler crm_worker rag_worker sync_worker idle_worker \
-              livekit livekit-egress coturn
+              livekit livekit-egress coturn \
+              loki tempo alloy grafana
 
             _egress_wait=0
             until [ "$(docker inspect -f '{{.State.Running}}' agentlab_livekit_egress 2>/dev/null || echo false)" = "true" ]; do

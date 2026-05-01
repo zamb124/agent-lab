@@ -137,7 +137,8 @@ def validate_slug(slug: str) -> tuple[bool, Optional[str]]:
     if not re.match(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$', slug):
         return False, "Только латинские буквы, цифры и дефис. Должен начинаться и заканчиваться буквой или цифрой"
     
-    # Зарезервированные slug'и (субдомен тенанта; onlyoffice — хост Document Server в проде)
+    # Зарезервированные slug'и (субдомен тенанта; onlyoffice — хост Document Server в проде;
+    # grafana/loki/tempo/alloy — observability-стек; livekit — WebRTC-сервер)
     reserved = [
         "www",
         "api",
@@ -149,6 +150,11 @@ def validate_slug(slug: str) -> tuple[bool, Optional[str]]:
         "production",
         "localhost",
         "onlyoffice",
+        "grafana",
+        "loki",
+        "tempo",
+        "alloy",
+        "livekit",
     ]
     if slug in reserved:
         return False, f"'{slug}' - зарезервированное имя"

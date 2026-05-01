@@ -411,10 +411,18 @@ class LoggingConfig(BaseModel):
     Для документирования предпочтителен
     `core.tasks.kicker.kiq_with_context(task, *args, **kwargs)`.
 
-## Что НЕ делает этот этап
+## Инфраструктура сбора логов
 
-- Не разворачивает Loki/Grafana/Alloy/OpenTelemetry Collector — это второй
-  этап.
-- Не меняет backend `platform_tracing` (он остаётся источником правды по
-  spans).
-- Не пишет логи в Postgres — `stdout`-only.
+Логи из stdout автоматически собираются **Grafana Alloy** → **Loki** (retention 14 дней).
+Поиск: `https://grafana.humanitec.ru` → Explore → Loki.
+
+Примеры запросов:
+```
+{service="crm"} | json | level="ERROR"
+{svc="flows"} | json | trace_id = "abc123def456..."
+{service="frontend"} | json | message="http_request" | http_status_code >= 500
+```
+
+Корреляция с трейсами: клик на `trace_id` в логе → Tempo waterfall.
+
+Подробнее: `infrastructure.mdc` → секция Observability.

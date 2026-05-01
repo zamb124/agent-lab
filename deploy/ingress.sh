@@ -728,6 +728,91 @@ else
   log "OnlyOffice DS: ingress.onlyoffice_port не задан — пропускаем субдомен ${ONLYOFFICE_SUBDOMAIN}"
 fi
 
+# ─── Grafana Observability: grafana.{domain} с auth через платформу ────────
+# nginx auth_request → frontend /api/auth/grafana-check → проверка JWT company=system
+GRAFANA_SUBDOMAIN="grafana.${DOMAIN}"
+GRAFANA_PORT=3000
+GRAFANA_TLS_SECRET="grafana-${DOMAIN//./-}-tls"
+
+log "Создаём Service и Endpoints для Grafana (${GRAFANA_SUBDOMAIN}:${GRAFANA_PORT})"
+${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-svc
+  namespace: default
+spec:
+  ports:
+  - port: ${GRAFANA_PORT}
+    targetPort: ${GRAFANA_PORT}
+    protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: grafana-svc
+  namespace: default
+subsets:
+- addresses:
+  - ip: ${HOST_IP}
+  ports:
+  - port: ${GRAFANA_PORT}
+EOF
+
+# frontend-svc нужен для auth_request — берём из основного ingress
+log "Создаём Ingress для ${GRAFANA_SUBDOMAIN} (auth_request → frontend /api/auth/grafana-check)"
+${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/auth-url: "http://frontend-svc:8002/frontend/api/auth/grafana-check"
+    nginx.ingress.kubernetes.io/auth-signin: "https://${DOMAIN}/"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-User"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: public
+  tls:
+  - hosts:
+    - ${GRAFANA_SUBDOMAIN}
+    secretName: ${GRAFANA_TLS_SECRET}
+  rules:
+  - host: ${GRAFANA_SUBDOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-svc
+            port:
+              number: ${GRAFANA_PORT}
+EOF
+
+if ${SSH} "microk8s kubectl get secret ${GRAFANA_TLS_SECRET} -n default >/dev/null 2>&1"; then
+  log "Секрет ${GRAFANA_TLS_SECRET} уже есть в кластере — сертификат не создаём"
+else
+  log "Создаём Certificate (Let's Encrypt HTTP-01) для ${GRAFANA_SUBDOMAIN}"
+  ${SSH} "microk8s kubectl apply -f -" <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ${GRAFANA_TLS_SECRET}
+  namespace: default
+spec:
+  secretName: ${GRAFANA_TLS_SECRET}
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+  - ${GRAFANA_SUBDOMAIN}
+EOF
+  log "Ожидаем сертификат Grafana (~60 сек)"
+  sleep 60
+fi
+
 # ─── Монтируем статику в ingress-контроллер ──────────────────────────────────
 # hostPath volume для /opt/agent-lab/static → /srv/static внутри pod
 # i18n уже внутри static/i18n, отдельный volume для i18n не нужен

@@ -84,6 +84,8 @@ x-common-env: &common-env
   PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_ID: ${YOOMONEY_CLIENT_ID:-}
   PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__CLIENT_SECRET: ${YOOMONEY_CLIENT_SECRET:-}
   PAYMENT_PROVIDERS__PROVIDERS__YOOMONEY_MAIN__ACCESS_TOKEN: ${YOOMONEY_ACCESS_TOKEN:-}
+  # Observability: OTLP трейсы → Alloy → Tempo (zero-touch для сервисов)
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy:4317"
 
 x-healthcheck: &healthcheck
   interval: 30s
@@ -173,7 +175,6 @@ services:
       - "8001:8001"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - agents_logs:/app/logs
     environment:
       <<: *common-env
       SERVER__HOST: 0.0.0.0
@@ -211,7 +212,6 @@ services:
       - "8002:8002"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - frontend_logs:/app/logs
     environment:
       <<: *common-env
       SERVER__HOST: 0.0.0.0
@@ -238,7 +238,6 @@ services:
       - "8003:8003"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - crm_logs:/app/logs
     environment:
       <<: *common-env
       SERVER__HOST: 0.0.0.0
@@ -263,7 +262,6 @@ services:
       - "8004:8004"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - rag_logs:/app/logs
     environment:
       <<: *common-env
       SERVER__HOST: 0.0.0.0
@@ -288,7 +286,6 @@ services:
       - "8014:8014"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - provider_litserve_logs:/app/logs
       - provider_litserve_data:/var/lib/provider_litserve
     environment:
       <<: *common-env
@@ -321,7 +318,6 @@ services:
       - "8006:8006"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - scheduler_api_logs:/app/logs
     environment:
       <<: *common-env
       SERVER__HOST: 0.0.0.0
@@ -346,7 +342,6 @@ services:
       - "8005:8005"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - sync_logs:/app/logs
     environment:
       <<: *common-env
       SERVER__HOST: 0.0.0.0
@@ -388,7 +383,6 @@ services:
       - "8008:8008"
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - office_logs:/app/logs
     environment:
       <<: *common-env
       SERVER__HOST: 0.0.0.0
@@ -415,7 +409,6 @@ services:
     command: ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - flows_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -452,7 +445,6 @@ services:
     command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - rag_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -470,7 +462,6 @@ services:
     command: ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - sync_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -488,7 +479,6 @@ services:
     command: ["taskiq", "worker", "apps.crm_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - crm_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -506,7 +496,6 @@ services:
     command: ["taskiq", "worker", "apps.idle_worker.worker:worker_app", "--workers", "2"]
     volumes:
       - ./conf.json:/app/conf.json:ro
-      - idle_worker_logs:/app/logs
     environment:
       <<: *common-env
     depends_on:
@@ -582,23 +571,82 @@ services:
       - "--no-multicast-peers"
     restart: unless-stopped
 
+  # ============================================
+  # Observability
+  # ============================================
+  loki:
+    image: grafana/loki:latest
+    container_name: agentlab_loki
+    command: -config.file=/etc/loki/loki.yaml
+    volumes:
+      - ./deploy/observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: agentlab_tempo
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: agentlab_alloy
+    command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345"]
+    volumes:
+      - ./deploy/observability/alloy.config:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agentlab_grafana
+    environment:
+      GF_SERVER_ROOT_URL: "https://grafana.${SERVER_HOST:-humanitec.ru}"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      # Auth proxy: nginx auth_request проверяет JWT платформы (company=system)
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: "X-Auth-User"
+      GF_AUTH_PROXY_HEADER_PROPERTY: "email"
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+    volumes:
+      - ./deploy/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      loki:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - agentlab-net
+
 volumes:
   postgres_data:
   redis_data:
-  agents_logs:
-  frontend_logs:
-  crm_logs:
-  rag_logs:
-  sync_logs:
-  provider_litserve_logs:
   provider_litserve_data:
-  office_logs:
-  scheduler_api_logs:
-  flows_worker_logs:
-  rag_worker_logs:
-  sync_worker_logs:
-  crm_worker_logs:
-  idle_worker_logs:
+  loki_data:
+  tempo_data:
+  grafana_data:
 
 networks:
   agentlab-net:

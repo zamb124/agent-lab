@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import logging.config
+import os
 import sys
 from typing import Any, Optional
 
@@ -164,6 +165,8 @@ def setup_logging(service_name: str, logging_config=None) -> None:
     if _INITIALIZED:
         if _INITIALIZED_FOR == (service_name, format_name):
             return
+        if os.getenv("TESTING") == "true" or "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules:
+            return
         raise LoggingMisconfigured(
             "setup_logging уже вызывался с другими параметрами: "
             f"было {_INITIALIZED_FOR}, повторно {(service_name, format_name)}. "
@@ -194,6 +197,26 @@ def setup_logging(service_name: str, logging_config=None) -> None:
     for existing in list(root_logger.handlers):
         root_logger.removeHandler(existing)
     root_logger.addHandler(handler)
+
+    # Loki push handler: dev-режим, хостовые сервисы → Loki напрямую.
+    # В production/test сервисы в Docker — Alloy собирает stdout, дублировать не нужно.
+    loki_url = getattr(logging_config, "loki_url", None)
+    if loki_url and environment == "local":
+        from core.logging.loki_handler import LokiHandler
+
+        loki_renderer = structlog.processors.JSONRenderer(
+            sort_keys=False,
+            serializer=lambda obj, **kw: __import__("json").dumps(obj, ensure_ascii=False, **kw),
+        )
+        loki_formatter = structlog.stdlib.ProcessorFormatter(
+            processor=loki_renderer,
+            foreign_pre_chain=foreign_pre_chain,
+        )
+        loki_handler = LokiHandler(loki_url=loki_url, service_name=service_name)
+        loki_handler.setFormatter(loki_formatter)
+        loki_handler.setLevel(level_name)
+        root_logger.addHandler(loki_handler)
+
     root_logger.setLevel(level_name)
 
     _silence_noisy_loggers(logging_config.loggers_levels)

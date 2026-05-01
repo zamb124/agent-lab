@@ -602,6 +602,34 @@ async def update_service_attrs(
     
     return {"success": True, "service": service, "attrs": user.attrs[service]}
 
+@router.get("/grafana-check")
+async def grafana_auth_check(request: Request):
+    """
+    Проверка доступа к Grafana: только пользователи company_id == 'system'.
+
+    Вызывается nginx auth_request (annotation на grafana-ingress) — не
+    пользователем напрямую. AuthMiddleware уже отработал к моменту вызова
+    и положил token_data в request.state.
+
+    При успехе возвращает 200 + заголовок X-Auth-User (email пользователя),
+    который nginx пробрасывает в Grafana как X-WEBAUTH-USER (auth.proxy).
+    """
+    from starlette.responses import Response
+
+    token_data = getattr(request.state, "token_data", None)
+    if not token_data:
+        return Response(status_code=401)
+
+    if getattr(token_data, "company_id", None) != "system":
+        return Response(status_code=403)
+
+    user_email = getattr(token_data, "user_id", "admin")
+    return Response(
+        status_code=200,
+        headers={"X-Auth-User": str(user_email)},
+    )
+
+
 @router.get("/status")
 async def auth_status(auth_service: AuthServiceDep):
     """Возвращает статус системы авторизации"""

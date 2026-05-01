@@ -9,6 +9,7 @@ services:
       POSTGRES_DB: platform_shared
       POSTGRES_USER: platform_user
       POSTGRES_PASSWORD: admin
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "54322:5432"
     volumes:
@@ -95,6 +96,7 @@ services:
       - PROVIDER_LITSERVE__INFRA__BACKEND=placeholder
       - PROVIDER_LITSERVE__INFRA__HOST=0.0.0.0
       - PROVIDER_LITSERVE__INFRA__GATEWAY_PORT=8014
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy-test:4317
     depends_on:
       redis-test:
         condition: service_healthy
@@ -123,7 +125,7 @@ services:
       - PORT=8005
       - LLM__OPENAI__API_KEY=${LLM__OPENAI__API_KEY:-sk-test-fake-key-for-testing}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -158,6 +160,14 @@ services:
         condition: service_healthy
       onlyoffice-documentserver:
         condition: service_healthy
+      loki-test:
+        condition: service_started
+      tempo-test:
+        condition: service_started
+      alloy-test:
+        condition: service_started
+      grafana-test:
+        condition: service_started
     environment:
       - DATABASE__SHARED_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_shared
       - DATABASE__FLOWS_URL=postgresql+asyncpg://platform_user:admin@postgres-test:5432/platform_agents
@@ -186,6 +196,7 @@ services:
       - OFFICE__DOCUMENT_SERVER_PUBLIC_URL=http://onlyoffice-documentserver
       - OFFICE__CALLBACK_PUBLIC_BASE_URL=http://testserver
       - PROVIDER_LITSERVE__API__BASE_URL=http://provider_litserve:8014/v1
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy-test:4317
     command: ["sh", "-c", "test -d /app/test-results || mkdir -p /app/test-results; test -d /app/htmlcov || mkdir -p /app/htmlcov; chmod -R 777 /app/test-results /app/htmlcov 2>/dev/null || true; python -m pytest tests/ -v -n ${PYTEST_WORKERS} --junitxml=/app/test-results/junit.xml --cov=apps --cov=core --cov-report=term-missing --cov-report=html"]
     restart: "no"
     volumes:
@@ -273,6 +284,73 @@ services:
       livekit-test:
         condition: service_healthy
     restart: "no"
+    networks:
+      - test-net
+
+  # ============================================
+  # Observability (Loki + Tempo + Alloy + Grafana)
+  # Порты смещены чтобы не конфликтовать с dev
+  # ============================================
+  loki-test:
+    image: grafana/loki:latest
+    container_name: agentlab_loki_test
+    command: -config.file=/etc/loki/loki.yaml
+    volumes:
+      - ./deploy/observability/loki.yaml:/etc/loki/loki.yaml:ro
+    ports:
+      - "3110:3100"
+    networks:
+      test-net:
+        aliases:
+          - loki
+
+  tempo-test:
+    image: grafana/tempo:latest
+    container_name: agentlab_tempo_test
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+    ports:
+      - "3210:3200"
+    networks:
+      test-net:
+        aliases:
+          - tempo
+
+  alloy-test:
+    image: grafana/alloy:latest
+    container_name: agentlab_alloy_test
+    command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345"]
+    volumes:
+      - ./deploy/observability/alloy.config:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "4327:4317"
+      - "12355:12345"
+    depends_on:
+      loki-test:
+        condition: service_started
+      tempo-test:
+        condition: service_started
+    networks:
+      - test-net
+
+  grafana-test:
+    image: grafana/grafana:latest
+    container_name: agentlab_grafana_test
+    environment:
+      GF_SERVER_ROOT_URL: "http://localhost:3010"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - ./deploy/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+    ports:
+      - "3010:3000"
+    depends_on:
+      loki-test:
+        condition: service_started
     networks:
       - test-net
 
