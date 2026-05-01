@@ -254,7 +254,7 @@ API `traces` (`task`, `session`, `trace_id`): дерево в `apps/flows/src/ap
 
 ## Evaluation (`flow.evaluation`)
 
-У шагов тест-кейса поля **`input.type`** и **`check.type`**: `text` | **`inline_code`** | `node` (и для check ещё `string`). При чтении из БД **`FlowRepository`** применяет **`normalize_flow_config_dict`** (`apps/flows/src/services/flow_contract_normalize.py`) перед `FlowConfig.model_validate`: текст проверки без `def`/`async def` и с одной цепочкой идентификаторов через `.` трактуется как путь к checker → **`check.type`** становится **`string`**; иначе **`inline_code`**.
+У шагов тест-кейса поля **`input.type`** и **`check.type`**: `text` | **`inline_code`** | `node` (и для check ещё `string`). При чтении из БД **`FlowRepository`** применяет **`normalize_flow_config_dict`** (`apps/flows/src/services/flow_contract_normalize.py`) перед `FlowConfig.model_validate`: текст проверки без `def`/`async def` и с одной цепочкой идентификаторов через `.` трактуется как путь к checker → **`check.type`** становится **`string`**; иначе **`inline_code`**. Там же при необходимости переносится легаси **`skills` → `branches`** и **`evaluation[*].skill_ids` → `branch_ids`** (как смысл ревизии **`agents_0005`**); персистентное обновление строк в **`flows` / `flows_versions`** по-прежнему через **`alembic upgrade`**.
 
 ## Inline Python (`apps/flows/src/eval`)
 
