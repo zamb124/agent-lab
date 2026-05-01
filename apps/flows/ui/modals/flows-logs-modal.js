@@ -37,6 +37,24 @@ export class FlowsLogsModal extends PlatformModal {
             :host {
                 --modal-width: min(1100px, calc(100vw - 24px));
             }
+            .logs-modal-stack {
+                display: flex;
+                flex-direction: column;
+                min-height: min(400px, calc(72vh - 160px));
+            }
+            .logs-main {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+            .logs-loading {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 240px;
+            }
             .logs-toolbar {
                 display: flex;
                 align-items: center;
@@ -251,43 +269,46 @@ export class FlowsLogsModal extends PlatformModal {
         const hasTrace = typeof this.traceId === 'string' && this.traceId.length > 0;
 
         return html`
-            <div class="logs-toolbar">
-                <div class="mode-tabs">
-                    <button
-                        type="button"
-                        class="mode-tab"
-                        ?data-active=${this._mode === 'session'}
-                        ?disabled=${!hasSession}
-                        @click=${() => this._setMode('session')}
-                    >${this.t('logs_modal.tab_session')}</button>
-                    <button
-                        type="button"
-                        class="mode-tab"
-                        ?data-active=${this._mode === 'trace'}
-                        ?disabled=${!hasTrace}
-                        @click=${() => this._setMode('trace')}
-                    >${this.t('logs_modal.tab_trace')}</button>
+            <div class="logs-modal-stack">
+                <div class="logs-toolbar">
+                    <div class="mode-tabs">
+                        <button
+                            type="button"
+                            class="mode-tab"
+                            ?data-active=${this._mode === 'session'}
+                            ?disabled=${!hasSession}
+                            @click=${() => this._setMode('session')}
+                        >${this.t('logs_modal.tab_session')}</button>
+                        <button
+                            type="button"
+                            class="mode-tab"
+                            ?data-active=${this._mode === 'trace'}
+                            ?disabled=${!hasTrace}
+                            @click=${() => this._setMode('trace')}
+                        >${this.t('logs_modal.tab_trace')}</button>
+                    </div>
+                    ${data ? html`<span class="count-badge">${this.t('logs_modal.count', { count })}</span>` : nothing}
                 </div>
-                ${data ? html`<span class="count-badge">${this.t('logs_modal.count', { count })}</span>` : nothing}
-            </div>
-
-            ${busy && entries.length === 0
-                ? html`<glass-spinner style="margin: var(--space-8) auto; display: block;"></glass-spinner>`
-                : entries.length === 0
-                    ? html`<div class="logs-empty">${this.t('logs_modal.empty')}</div>`
-                    : html`
-                        <div class="log-list">
-                            ${entries.map((entry) => html`
-                                <div class="log-entry">
-                                    <span class="log-ts">${this._formatTs(entry.timestamp)}</span>
-                                    <span class="log-level" style="color:${this._levelColor(entry.level)}">${entry.level || '—'}</span>
-                                    <span class="log-message">${entry.message || entry.raw?.message || ''}</span>
-                                    <span class="log-service">${entry.service || ''}</span>
+                <div class="logs-main">
+                    ${busy && entries.length === 0
+                        ? html`<div class="logs-loading"><glass-spinner></glass-spinner></div>`
+                        : entries.length === 0
+                            ? html`<div class="logs-empty">${this.t('logs_modal.empty')}</div>`
+                            : html`
+                                <div class="log-list">
+                                    ${entries.map((entry) => html`
+                                        <div class="log-entry">
+                                            <span class="log-ts">${this._formatTs(entry.timestamp)}</span>
+                                            <span class="log-level" style="color:${this._levelColor(entry.level)}">${entry.level || '—'}</span>
+                                            <span class="log-message">${entry.message || entry.raw?.message || ''}</span>
+                                            <span class="log-service">${entry.service || ''}</span>
+                                        </div>
+                                    `)}
                                 </div>
-                            `)}
-                        </div>
-                    `
-            }
+                            `
+                    }
+                </div>
+            </div>
         `;
     }
 }

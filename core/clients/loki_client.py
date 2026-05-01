@@ -6,7 +6,6 @@ LokiClient — HTTP-клиент для поиска логов в Grafana Loki.
 """
 
 import json
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -30,9 +29,7 @@ def _build_trace_query(trace_id: str) -> str:
 
 def _build_session_query(session_id: str) -> str:
     safe = session_id.replace('"', "").replace("\\", "")
-    esc = re.escape(safe)
-    # structlog JSONRenderer использует separators с пробелом после «:» (по умолчанию json.dumps).
-    return f'{{{_FLOWS_SELECTOR}}} |~ "\\"session_agent\\":\\s*\\"{esc}\\""'
+    return f'{{{_FLOWS_SELECTOR}}} | json | session_agent="{safe}"'
 
 
 def _parse_entry(ts_ns: str, line: str, stream: dict[str, str]) -> dict[str, Any]:
@@ -109,13 +106,25 @@ class LokiClient:
             "end": str(int(end.timestamp() * 1_000_000_000)),
         }
         url = f"{self._base_url}/loki/api/v1/query_range"
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.get(url, params=params)
+        resp: httpx.Response | None = None
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(url, params=params)
+        except httpx.RequestError as exc:
+            raise LokiClientError(f"Loki недоступен (сеть или таймаут): {exc}") from exc
+
         if resp.status_code != 200:
             raise LokiClientError(
                 f"Loki query_range вернул {resp.status_code}: {resp.text[:300]}"
             )
-        return _parse_loki_response(resp.json())
+        try:
+            body = resp.json()
+        except (json.JSONDecodeError, TypeError) as exc:
+            snippet = (resp.text or "")[:300]
+            raise LokiClientError(
+                f"Loki query_range ответ не JSON (HTTP {resp.status_code}): {snippet}"
+            ) from exc
+        return _parse_loki_response(body)
 
     async def query_by_trace_id(
         self,

@@ -70,7 +70,7 @@ async def get_logs_by_trace_id(
             trace_id=trace_id,
             error=str(exc),
         )
-        raise HTTPException(status_code=503, detail="Loki недоступен") from exc
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return {
         "trace_id": trace_id,
@@ -106,7 +106,7 @@ async def get_logs_by_session_id(
             session_id=session_id,
             error=str(exc),
         )
-        raise HTTPException(status_code=503, detail="Loki недоступен") from exc
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return {
         "session_id": session_id,

@@ -7,6 +7,22 @@ Loki-клиент мокается через DI контейнер.
 
 import pytest
 
+_LOKI_CACHE_KEY = "_cached_loki_client"
+
+
+def _swap_loki_client_cache(container, replacement):
+    had_key = _LOKI_CACHE_KEY in container.__dict__
+    previous = container.__dict__.get(_LOKI_CACHE_KEY)
+    container.__dict__[_LOKI_CACHE_KEY] = replacement
+    return had_key, previous
+
+
+def _restore_loki_client_cache(container, had_key, previous):
+    if had_key:
+        container.__dict__[_LOKI_CACHE_KEY] = previous
+    else:
+        container.__dict__.pop(_LOKI_CACHE_KEY, None)
+
 
 _SAMPLE_LOG_ENTRIES = [
     {
@@ -56,8 +72,7 @@ class TestLogsByTraceApi:
     ):
         from apps.flows.src.container import get_container
         container = get_container()
-        original_loki = container.__dict__.get("loki_client", None)
-        container.__dict__["loki_client"] = MockLokiClient(entries=loki_entries)
+        had_key, previous = _swap_loki_client_cache(container, MockLokiClient(entries=loki_entries))
         try:
             resp = await client.get(
                 "/flows/api/v1/observability/logs/by-trace/abc123",
@@ -70,17 +85,13 @@ class TestLogsByTraceApi:
             assert len(body["entries"]) == 1
             assert body["entries"][0]["message"] == "flow started"
         finally:
-            if original_loki is None:
-                container.__dict__.pop("loki_client", None)
-            else:
-                container.__dict__["loki_client"] = original_loki
+            _restore_loki_client_cache(container, had_key, previous)
 
     @pytest.mark.asyncio
     async def test_returns_503_when_loki_not_configured(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original_loki = container.__dict__.get("loki_client", None)
-        container.__dict__["loki_client"] = None
+        had_key, previous = _swap_loki_client_cache(container, None)
         try:
             resp = await client.get(
                 "/flows/api/v1/observability/logs/by-trace/abc123",
@@ -88,35 +99,28 @@ class TestLogsByTraceApi:
             )
             assert resp.status_code == 503
         finally:
-            if original_loki is None:
-                container.__dict__.pop("loki_client", None)
-            else:
-                container.__dict__["loki_client"] = original_loki
+            _restore_loki_client_cache(container, had_key, previous)
 
     @pytest.mark.asyncio
     async def test_returns_503_when_loki_unavailable(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original_loki = container.__dict__.get("loki_client", None)
-        container.__dict__["loki_client"] = MockLokiClient(raise_error=True)
+        had_key, previous = _swap_loki_client_cache(container, MockLokiClient(raise_error=True))
         try:
             resp = await client.get(
                 "/flows/api/v1/observability/logs/by-trace/abc123",
                 headers=auth_headers_system,
             )
             assert resp.status_code == 503
+            assert "Loki недоступен" in resp.json()["detail"]
         finally:
-            if original_loki is None:
-                container.__dict__.pop("loki_client", None)
-            else:
-                container.__dict__["loki_client"] = original_loki
+            _restore_loki_client_cache(container, had_key, previous)
 
     @pytest.mark.asyncio
     async def test_limit_exceeding_max_returns_422(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original_loki = container.__dict__.get("loki_client", None)
-        container.__dict__["loki_client"] = MockLokiClient()
+        had_key, previous = _swap_loki_client_cache(container, MockLokiClient())
         try:
             resp = await client.get(
                 "/flows/api/v1/observability/logs/by-trace/abc123?limit=9999",
@@ -124,10 +128,7 @@ class TestLogsByTraceApi:
             )
             assert resp.status_code == 422
         finally:
-            if original_loki is None:
-                container.__dict__.pop("loki_client", None)
-            else:
-                container.__dict__["loki_client"] = original_loki
+            _restore_loki_client_cache(container, had_key, previous)
 
 
 class TestLogsBySessionApi:
@@ -139,8 +140,7 @@ class TestLogsBySessionApi:
     ):
         from apps.flows.src.container import get_container
         container = get_container()
-        original_loki = container.__dict__.get("loki_client", None)
-        container.__dict__["loki_client"] = MockLokiClient(entries=loki_entries)
+        had_key, previous = _swap_loki_client_cache(container, MockLokiClient(entries=loki_entries))
         try:
             resp = await client.get(
                 "/flows/api/v1/observability/logs/by-session/my_flow%3Actx1",
@@ -151,17 +151,13 @@ class TestLogsBySessionApi:
             assert body["session_id"] == "my_flow:ctx1"
             assert body["count"] == 1
         finally:
-            if original_loki is None:
-                container.__dict__.pop("loki_client", None)
-            else:
-                container.__dict__["loki_client"] = original_loki
+            _restore_loki_client_cache(container, had_key, previous)
 
     @pytest.mark.asyncio
     async def test_returns_503_when_loki_not_configured(self, client, app, auth_headers_system):
         from apps.flows.src.container import get_container
         container = get_container()
-        original_loki = container.__dict__.get("loki_client", None)
-        container.__dict__["loki_client"] = None
+        had_key, previous = _swap_loki_client_cache(container, None)
         try:
             resp = await client.get(
                 "/flows/api/v1/observability/logs/by-session/my_flow%3Actx1",
@@ -169,7 +165,4 @@ class TestLogsBySessionApi:
             )
             assert resp.status_code == 503
         finally:
-            if original_loki is None:
-                container.__dict__.pop("loki_client", None)
-            else:
-                container.__dict__["loki_client"] = original_loki
+            _restore_loki_client_cache(container, had_key, previous)

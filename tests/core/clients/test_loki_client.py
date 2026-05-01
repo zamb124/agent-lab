@@ -27,11 +27,10 @@ class TestQueryBuilders:
         assert 'trace_id="abc123"' in q
         assert "flows" in q
 
-    def test_session_query_uses_session_agent_line_filter(self):
+    def test_session_query_uses_json_and_session_agent_field(self):
         q = _build_session_query("flow1:ctx1")
-        assert "|~" in q
-        assert "session_agent" in q
-        assert "flow1:ctx1" in q
+        assert "| json |" in q
+        assert 'session_agent="flow1:ctx1"' in q
         assert "flows" in q
 
     def test_trace_query_sanitizes_quotes(self):
@@ -43,6 +42,10 @@ class TestQueryBuilders:
         q = _build_session_query("flow\\ctx")
         assert "flowctx" in q
         assert "flow\\ctx" not in q
+
+    def test_session_query_strips_quotes_in_session_id(self):
+        q = _build_session_query('flow"inj:ctx')
+        assert 'session_agent="flowinj:ctx"' in q
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +148,24 @@ class TestLokiClientQueryByTraceId:
             mock_client.get.return_value = mock_resp
 
             client = LokiClient(base_url="http://loki:3100")
-            with pytest.raises(LokiClientError):
+            with pytest.raises(LokiClientError, match="query_range вернул 500"):
+                await client.query_by_trace_id("t1")
+
+    @pytest.mark.asyncio
+    async def test_request_error_raises(self):
+        import httpx
+
+        class FakeInner:
+            async def get(self, *args, **kwargs):
+                raise httpx.ConnectError("connection refused", request=MagicMock())
+
+        mock_cm = AsyncMock()
+        mock_cm.__aenter__.return_value = FakeInner()
+        mock_cm.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("core.clients.loki_client.httpx.AsyncClient", return_value=mock_cm):
+            client = LokiClient(base_url="http://loki:3100")
+            with pytest.raises(LokiClientError, match="сеть или таймаут"):
                 await client.query_by_trace_id("t1")
 
     @pytest.mark.asyncio
