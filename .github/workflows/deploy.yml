@@ -7,6 +7,10 @@ on:
         description: "Деплой provider_litserve на ноду LITSERVE_HOST (SSH: SERVER_USER/SERVER_SSH_KEY)"
         type: boolean
         default: true
+      install_litserve_gpu_stack:
+        description: "На LITSERVE_HOST: установить NVIDIA driver + nvidia-container-toolkit (может потребовать reboot; затем снова запустите Deploy)"
+        type: boolean
+        default: false
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/agent-lab
@@ -345,7 +349,7 @@ jobs:
           host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose-litserve.yaml,conf.json,deploy/bootstrap-litserve-node.sh,deploy/firewall-main-platform-for-litserve-node.sh"
+          source: "docker-compose-litserve.yaml,conf.json,deploy/bootstrap-litserve-node.sh,deploy/bootstrap-litserve-node-gpu.sh,deploy/verify-litserve-gpu-node.sh,deploy/firewall-main-platform-for-litserve-node.sh,deploy/LITSERVE_GPU_HOST.md"
           target: /opt/agent-lab/
 
       - name: Ensure postgres init.sql path on litserve host
@@ -379,6 +383,7 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           DEPLOYMENT_VERSION: ${{ github.sha }}
+          INSTALL_LITSERVE_GPU_STACK: ${{ github.event.inputs.install_litserve_gpu_stack }}
           PROVIDER_LITSERVE__INFRA__BACKEND: ${{ secrets.PROVIDER_LITSERVE__INFRA__BACKEND }}
           PROVIDER_LITSERVE__INFRA__MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__MODEL_ID }}
           PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID }}
@@ -387,10 +392,24 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 45m
-          envs: IMAGE,POSTGRES_PASSWORD,SERVER_HOST,AUTH__JWT_SECRET,HF_TOKEN,GHCR_TOKEN,GITHUB_ACTOR,DEPLOYMENT_VERSION,PROVIDER_LITSERVE__INFRA__BACKEND,PROVIDER_LITSERVE__INFRA__MODEL_ID,PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID
+          envs: IMAGE,POSTGRES_PASSWORD,SERVER_HOST,AUTH__JWT_SECRET,HF_TOKEN,GHCR_TOKEN,GITHUB_ACTOR,DEPLOYMENT_VERSION,INSTALL_LITSERVE_GPU_STACK,PROVIDER_LITSERVE__INFRA__BACKEND,PROVIDER_LITSERVE__INFRA__MODEL_ID,PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID
           script: |
             set -e
             cd /opt/agent-lab
+
+            GST="${INSTALL_LITSERVE_GPU_STACK:-false}"
+            if [ "${GST}" = "true" ]; then
+              chmod +x deploy/bootstrap-litserve-node-gpu.sh || true
+              gv=0
+              bash deploy/bootstrap-litserve-node-gpu.sh || gv=$?
+              if [ "${gv}" -eq 10 ]; then
+                echo install_litserve_gpu_stack: нужен reboot; после перезапуска ВМ повторите Deploy >&2
+                exit 10
+              fi
+              if [ "${gv}" -ne 0 ]; then
+                exit "${gv}"
+              fi
+            fi
 
             if ! command -v docker >/dev/null 2>&1; then
               export MAIN_PLATFORM_HOST="${SERVER_HOST}"
@@ -436,5 +455,8 @@ jobs:
               fi
               sleep 2
             done
+
+            chmod +x deploy/verify-litserve-gpu-node.sh || true
+            bash deploy/verify-litserve-gpu-node.sh
 
             docker image prune -f

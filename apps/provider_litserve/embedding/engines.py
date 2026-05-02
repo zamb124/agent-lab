@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from core.logging import get_logger
 import time
 from typing import Any
 
 import numpy as np
+import torch
+from core.logging import get_logger
 from fastapi import HTTPException
 from pydantic import ValidationError
 
@@ -19,6 +20,18 @@ from apps.provider_litserve.openai_server_contracts import (
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 
 logger = get_logger(__name__)
+
+
+def _require_cuda_when_selected(device: str) -> None:
+    if not device.startswith("cuda"):
+        return
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "provider_litserve: CUDA device для эмбеддера недоступен (torch.cuda.is_available() == False); "
+            "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и блок GPU в docker-compose-litserve.yaml."
+        )
+
+
 def parse_embedding_body(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise HTTPException(status_code=422, detail="Тело запроса: ожидается JSON-объект")
@@ -50,6 +63,7 @@ class LocalEmbeddingEngine:
             raise RuntimeError(
                 "Локальный эмбеддер: установите зависимости (uv sync --group reranker-model)"
             ) from e
+        _require_cuda_when_selected(self._device)
         logger.info("Loading SentenceTransformer model '%s' on '%s'", hf_model_id, self._device)
         started_at = time.monotonic()
         model = SentenceTransformer(hf_model_id, device=self._device)

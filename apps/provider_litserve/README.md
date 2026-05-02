@@ -52,7 +52,13 @@
 
 Запросы **POST /v1/embeddings** и **POST /v1/rerank** принимают `model` без учёта регистра: значение сопоставляется с зарегистрированными идентификаторами (реестр + дефолты из конфига, пока каталог в памяти не загружен из БД).
 
-Переопределение деплоя: **`services.provider_litserve`**. ENV: **`PROVIDER_LITSERVE__API__*`**, **`PROVIDER_LITSERVE__INFRA__*`** (например **`PROVIDER_LITSERVE__INFRA__MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__GATEWAY_PORT`**).
+Переопределение деплоя: **`services.provider_litserve`**. ENV: **`PROVIDER_LITSERVE__API__*`**, **`PROVIDER_LITSERVE__INFRA__*`** (в т.ч. **`PROVIDER_LITSERVE__INFRA__MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__GATEWAY_PORT`**, **`PROVIDER_LITSERVE__INFRA__ACCELERATOR`** со значением `auto`, `cuda` или `cpu`).
+
+## GPU на удалённой ноде
+
+Файл [**`docker-compose-litserve.yaml`**](../../docker-compose-litserve.yaml) запрашивает GPU у Docker через **`deploy.resources.reservations.devices`** (driver `nvidia`). На хосте нужны **проприетарный драйвер NVIDIA**, **NVIDIA Container Toolkit**, перезапуск Docker; пошаговый эталон — [**`deploy/LITSERVE_GPU_HOST.md`**](../../deploy/LITSERVE_GPU_HOST.md). Автоустановка из CI: параметр **`install_litserve_gpu_stack`** workflow Deploy (вызывает **`deploy/bootstrap-litserve-node-gpu.sh`**).
+
+При **`accelerator`** = **`auto`** воркеры выберут **`cuda:0`**, только если **`torch.cuda.is_available()`** в контейнере; без настроенного GPU PyTorch упадёт с явным `RuntimeError` при попытке грузить модель на CUDA (не скрытый fallback на CPU).
 Токен Hugging Face для скачивания приватных/ограниченных моделей: **`HF_TOKEN`** (env) или `services.provider_litserve.provider_litserve.infra.hf_token` в `conf.local.json`.
 
 Пока runtime-каталог не поднят с SQLite, идентификаторы в **GET /v1/models** строятся из той же схемы, что сид **infra**: **`llm_model_ids`** / **`llm_model_id`**, пары **embedding** / **rerank** (дефолтные `*_openai_model_id` + списки **`embedding_model_ids`**, **`rerank_model_ids`**). После загрузки воркеров — из строк реестра с `status=ready`.

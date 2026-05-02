@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import litserve as ls
+import torch
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
@@ -43,6 +44,7 @@ from apps.provider_litserve.runtime_models import (
     resolve_hf_model_id,
     runtime_api_model_ids,
 )
+from apps.provider_litserve.shared import resolve_torch_device
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from core.utils.tokens import get_token_service
@@ -154,8 +156,7 @@ class ChatCompletionsLitAPI(ls.LitAPI):
     def setup(self, device) -> None:
         settings = get_provider_litserve_settings()
         infra = settings.provider_litserve.infra
-        if device:
-            self._device = str(device)
+        self._device = str(device) if device else resolve_torch_device(infra)
         self._hf_token = infra.hf_token
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -171,6 +172,11 @@ class ChatCompletionsLitAPI(ls.LitAPI):
             return self._tokenizers[hf_model_id], self._models[hf_model_id]
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        if self._device.startswith("cuda") and not torch.cuda.is_available():
+            raise RuntimeError(
+                "provider_litserve: CUDA device для локального chat недоступен (torch.cuda.is_available() == False); "
+                "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и блок GPU в docker-compose-litserve.yaml."
+            )
         tokenizer = AutoTokenizer.from_pretrained(hf_model_id, token=self._hf_token)
         model = AutoModelForCausalLM.from_pretrained(hf_model_id, token=self._hf_token)
         model.to(self._device)
@@ -202,11 +208,6 @@ class ChatCompletionsLitAPI(ls.LitAPI):
         messages = body.get("messages")
         if not isinstance(messages, list) or not messages:
             raise HTTPException(status_code=422, detail={"reason": "messages_required"})
-
-        try:
-            import torch
-        except ImportError as exc:
-            raise RuntimeError("Локальный chat backend требует torch") from exc
 
         prompt = tokenizer.apply_chat_template(
             messages,

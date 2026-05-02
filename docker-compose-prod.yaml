@@ -286,6 +286,7 @@ services:
     networks:
       - agentlab-net
 
+  # GPU: только удалённая нода — см. docker-compose-litserve.yaml (deploy.resources.devices).
   provider_litserve:
     <<: *app
     profiles:

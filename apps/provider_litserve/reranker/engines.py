@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import torch
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from core.config.models import ProviderLitserveInfraConfig
+from core.logging import get_logger
 from apps.provider_litserve.openai_server_contracts import (
     RerankQueryPassagesRequest,
     placeholder_rerank_scores,
@@ -15,6 +17,18 @@ from apps.provider_litserve.openai_server_contracts import (
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 
 Backend = Literal["placeholder", "flagllm"]
+
+logger = get_logger(__name__)
+
+
+def _require_cuda_when_selected(device: str) -> None:
+    if not device.startswith("cuda"):
+        return
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "provider_litserve: CUDA device для реранкера недоступен (torch.cuda.is_available() == False); "
+            "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и блок GPU в docker-compose-litserve.yaml."
+        )
 
 
 def parse_rerank_body(raw: Any) -> dict[str, Any]:
@@ -61,8 +75,16 @@ class LocalRerankerEngine:
                 "backend=flagllm: установите группу зависимостей uv sync --group reranker-model"
             ) from e
         cuda = self._device.startswith("cuda")
+        _require_cuda_when_selected(self._device)
         bf16 = self._cfg.use_bf16 and cuda
         fp16 = (not bf16) and cuda and self._cfg.use_fp16
+        logger.info(
+            "Loading FlagLLMReranker '%s' on '%s' (fp16=%s, bf16=%s)",
+            hf_model_id,
+            self._device,
+            fp16,
+            bf16,
+        )
         model = FlagLLMReranker(
             hf_model_id,
             use_fp16=fp16,

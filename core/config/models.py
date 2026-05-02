@@ -544,7 +544,13 @@ class ProviderLitserveInfraConfig(BaseModel):
     backend: Literal["placeholder", "flagllm"] = "placeholder"
     host: str = "0.0.0.0"
     gateway_port: int = 8014
-    accelerator: Literal["auto", "cpu", "cuda", "mps"] = "auto"
+    accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
+        default="auto",
+        description=(
+            "Устройство воркеров LitServe: auto — CUDA при доступности torch.cuda иначе CPU (или MPS на Apple); "
+            "cuda — cuda:0; на GPU-ноде с Docker передайте через compose --gpus и драйвер на хосте."
+        ),
+    )
     workers_per_device: int = 1
     request_timeout_seconds: float = 300.0
     fast_queue: bool = False

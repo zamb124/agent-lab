@@ -12,3 +12,9 @@ gh secret set PROVIDER_LITSERVE_API_BASE_URL -b"https://humanitec.ru/litserve/v1
 Секреты `SERVER_HOST` и `POSTGRES_PASSWORD` уже используются основным деплоем; job `deploy-litserve` подставляет их же для строк подключения БД с ноды litserve к основному Postgres.
 
 Откат на локальный litserve на ноде A: **`deploy/ROLLBACK_LITSERVE.md`**.
+
+## GPU на ноде litserve
+
+- Ручная подготовка и дымовые тесты: **`deploy/LITSERVE_GPU_HOST.md`**.
+- Одноразовая установка драйвера + NVIDIA Container Toolkit из GitHub Actions: запустите workflow **Deploy** с **`install_litserve_gpu_stack`** = **`true`** (после возможного reboot на VPS повторите деплой). Скрипт: **`deploy/bootstrap-litserve-node-gpu.sh`**.
+- После `docker compose up` проверка CUDA в том же контейнере (на VPS из `/opt/agent-lab`): `bash deploy/verify-litserve-gpu-node.sh`.

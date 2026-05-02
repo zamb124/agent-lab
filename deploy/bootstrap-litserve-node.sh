@@ -40,3 +40,4 @@ systemctl enable docker
 systemctl start docker
 
 echo "bootstrap-litserve-node: OK (docker + ufw 8014 from ${MAIN_PLATFORM_HOST})"
+echo "Для GPU на этой машине см. deploy/LITSERVE_GPU_HOST.md и deploy/bootstrap-litserve-node-gpu.sh (или GitHub Deploy: install_litserve_gpu_stack)"

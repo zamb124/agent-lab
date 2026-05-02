@@ -7,6 +7,13 @@ services:
     image: ${IMAGE:-ghcr.io/zamb124/agent-lab:latest}
     container_name: agentlab_provider_litserve
     command: ["python", "-m", "apps.provider_litserve.main"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     ports:
       - "8014:8014"
     volumes:
@@ -33,6 +40,7 @@ services:
       PROVIDER_LITSERVE__INFRA__BACKEND: ${PROVIDER_LITSERVE__INFRA__BACKEND:-flagllm}
       PROVIDER_LITSERVE__INFRA__HOST: 0.0.0.0
       PROVIDER_LITSERVE__INFRA__GATEWAY_PORT: "8014"
+      PROVIDER_LITSERVE__INFRA__ACCELERATOR: ${PROVIDER_LITSERVE__INFRA__ACCELERATOR:-auto}
       PROVIDER_LITSERVE__INFRA__MODEL_ID: ${PROVIDER_LITSERVE__INFRA__MODEL_ID:-BAAI/bge-reranker-v2-gemma}
       PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID:-BAAI/bge-m3}
       PROVIDER_LITSERVE__INFRA__SQLITE_PATH: /var/lib/provider_litserve/registry.db
