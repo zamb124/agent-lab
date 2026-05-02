@@ -1,0 +1,52 @@
+# Отдельная нода: только provider_litserve (тот же образ `full`).
+# Shared Postgres + Redis — на основном сервере (порты 5432/6379 опубликованы в docker-compose-prod + ufw).
+# Переменные: см. deploy/litserve-remote.env.example и job deploy-litserve в .github/workflows/deploy.yml.
+
+services:
+  provider_litserve:
+    image: ${IMAGE:-ghcr.io/zamb124/agent-lab:latest}
+    container_name: agentlab_provider_litserve
+    command: ["python", "-m", "apps.provider_litserve.main"]
+    ports:
+      - "8014:8014"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - provider_litserve_data:/var/lib/provider_litserve
+      - provider_litserve_hf_cache:/root/.cache/huggingface
+    environment:
+      DATABASE__SHARED_URL: ${DATABASE__SHARED_URL}
+      DATABASE__FLOWS_URL: ${DATABASE__FLOWS_URL}
+      DATABASE__CRM_URL: ${DATABASE__CRM_URL}
+      DATABASE__SYNC_URL: ${DATABASE__SYNC_URL}
+      DATABASE__RAG_URL: ${DATABASE__RAG_URL}
+      DATABASE__OFFICE_URL: ${DATABASE__OFFICE_URL}
+      DATABASE__TRACING_URL: ${DATABASE__TRACING_URL}
+      DATABASE__REDIS_URL: ${DATABASE__REDIS_URL}
+      DATABASE__AUTO_MIGRATE: "false"
+      TASKS__BROKER_URL: ${TASKS__BROKER_URL}
+      SERVER__DEBUG: "false"
+      SERVER__DEPLOYMENT_VERSION: ${DEPLOYMENT_VERSION:-}
+      AUTH__JWT_SECRET: ${AUTH__JWT_SECRET}
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      PROVIDER_LITSERVE__INFRA__BACKEND: ${PROVIDER_LITSERVE__INFRA__BACKEND:-flagllm}
+      PROVIDER_LITSERVE__INFRA__HOST: 0.0.0.0
+      PROVIDER_LITSERVE__INFRA__GATEWAY_PORT: "8014"
+      PROVIDER_LITSERVE__INFRA__MODEL_ID: ${PROVIDER_LITSERVE__INFRA__MODEL_ID:-BAAI/bge-reranker-v2-gemma}
+      PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID:-BAAI/bge-m3}
+      PROVIDER_LITSERVE__INFRA__SQLITE_PATH: /var/lib/provider_litserve/registry.db
+      HF_TOKEN: ${HF_TOKEN:-}
+      LOGGING__FORMAT: json
+      LOGGING__LOKI_ENABLED: "false"
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
+    restart: unless-stopped
+
+volumes:
+  provider_litserve_data:
+  provider_litserve_hf_cache:

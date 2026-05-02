@@ -1,0 +1,14 @@
+{
+  "_comment": "Фрагмент для merge в существующий conf.local.json: у записи provider_litserve добавьте upstream_host.",
+  "ingress": {
+    "services": [
+      {
+        "name": "provider_litserve",
+        "port": 8014,
+        "path": "/litserve",
+        "websocket": false,
+        "upstream_host": "188.246.224.228"
+      }
+    ]
+  }
+}

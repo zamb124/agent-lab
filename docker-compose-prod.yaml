@@ -118,6 +118,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+    # Публикация на хост для удалённой ноды provider_litserve (см. infrastructure.mdc — только с ufw: allow from IP ноды litserve).
+    ports:
+      - "5432:5432"
     command: postgres -c max_connections=300
     healthcheck:
       # Первый старт с docker-entrypoint-initdb.d (несколько БД + vector) на слабом диске может идти минуты —
@@ -142,6 +145,9 @@ services:
     command: redis-server --save 60 1 --loglevel notice --appendonly yes
     volumes:
       - redis_data:/data
+    # Публикация на хост для удалённой ноды provider_litserve (см. infrastructure.mdc — только с ufw).
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -282,6 +288,8 @@ services:
 
   provider_litserve:
     <<: *app
+    profiles:
+      - litserve_local
     container_name: agentlab_provider_litserve
     command: ["python", "-m", "apps.provider_litserve.main"]
     ports:

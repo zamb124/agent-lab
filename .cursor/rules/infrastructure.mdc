@@ -5,14 +5,31 @@ alwaysApply: false
 
 # Инфраструктура
 
-## Сервер
+## Серверы
 
-| Параметр | Значение |
-|---|---|
-| IP | `84.38.184.105` |
-| SSH | `root@84.38.184.105` |
-| Рабочая директория | `/opt/agent-lab/` |
-| Домен | `humanitec.ru` |
+| Роль | IP | SSH | Рабочая директория |
+|---|---|---|---|
+| Нода A (платформа, Compose, MicroK8s ingress) | `84.38.184.105` | `root@84.38.184.105` | `/opt/agent-lab/` |
+| Нода B (`provider_litserve` только) | `188.246.224.228` | по ключу деплоя (`LITSERVE_SSH_*`) | `/opt/agent-lab/` |
+
+Домен apex и wildcard: `humanitec.ru`.
+
+### Удалённый `provider_litserve` (нода B)
+
+- Один образ GHCR (`target: full`), как у всей платформы.
+- На ноде A сервис `provider_litserve` в **`docker-compose-prod.yaml`** включён только с профилем **`litserve_local`**. Обычный деплой (`docker compose up -d` **без** `--profile litserve_local`) **не** поднимает локальный контейнер; перед обновлением стека старый контейнер удаляется (`docker rm -f agentlab_provider_litserve`).
+- На ноде B используется **`docker-compose-litserve.yaml`** (порт `8014`, тома `provider_litserve_data`, `provider_litserve_hf_cache`).
+- Процесс требует **`database.shared_url`** и **`database.redis_url`** к shared-базе и Redis на ноде A: в compose опубликованы **`5432`** (postgres) и **`6379`** (redis) на хост A. На A выполните **`deploy/firewall-main-platform-for-litserve-node.sh`** с `LITSERVE_NODE_IP=188.246.224.228` (только этот IP к PostgreSQL и Redis). На B — **`deploy/bootstrap-litserve-node.sh`** (`MAIN_PLATFORM_HOST=84.38.184.105`), затем `ufw` уже разрешает **8014** только с IP ноды A.
+- Маршрут **`https://humanitec.ru/litserve/*`**: в **`conf.local.json`** у элемента `ingress.services` с `"name": "provider_litserve"` задайте **`"upstream_host": "188.246.224.228"`**, затем **`bash deploy/ingress.sh`**. Пример фрагмента: **`deploy/conf.local.ingress-litserve-remote.example.json`**.
+- Клиенты платформы (RAG, CRM rerank и т.д.) используют **`PROVIDER_LITSERVE__API__BASE_URL`**. Для удалённого API через ingress: секрет GitHub **`PROVIDER_LITSERVE_API_BASE_URL`** = `https://humanitec.ru/litserve/v1` (workflow маппит в **`PROVIDER_LITSERVE__API__BASE_URL`** при деплое на A). Если секрет пустой — используется дефолт Compose `http://provider_litserve:8014/v1` (локальный контейнер при профиле `litserve_local`).
+- CI: `.github/workflows/deploy.yml` — job **`deploy-litserve`** (отключается флагом **`deploy_litserve: false`** при ручном запуске). Секреты: см. **`deploy/GITHUB_SECRETS_LITSERVE.md`**.
+- Откат на локальный litserve на A: **`deploy/ROLLBACK_LITSERVE.md`**.
+
+### Smoke после переключения на удалённый litserve
+
+- `curl -fsS https://humanitec.ru/litserve/health` и при необходимости `/litserve/v1/models` с заголовком авторизации системной компании.
+- Загрузка документа в RAG и семантический поиск; в логах **`rag_worker`** базовый URL запросов к embeddings — `https://humanitec.ru/litserve/v1` (или ваш публичный origin).
+- Сценарий CRM с rerank — без ошибок HTTP к `/rerank`.
 
 ## Стек
 
