@@ -60,7 +60,6 @@ def resolve_rag_provider_bundle(
     provider_config = dict(rag.providers[key].model_dump())
     embedding_runtime: Any | None = None
     if key == "pgvector":
-<<<<<<< HEAD
         api = rag.embedding.api
         embedding_runtime = {
             "provider": rag.embedding.provider,
@@ -69,20 +68,12 @@ def resolve_rag_provider_bundle(
             "base_url": api.base_url,
             "mrl_output_dimension": api.mrl_output_dimension,
         }
-=======
-        embedding_runtime = build_rag_embedding_runtime_dict(
-            rag.embedding,
-            settings.llm,
-            settings.provider_litserve,
-        )
->>>>>>> cda6aab8 (describe + search eval)
         if provider_name is None:
             override = _resolve_company_rag_embedding_override()
             if override is not None:
                 embedding_override = rag.embedding.model_copy(deep=True)
                 embedding_override.provider = override["provider"]
                 embedding_override.api.model = override["model"]
-<<<<<<< HEAD
                 api2 = embedding_override.api
                 embedding_runtime = {
                     "provider": embedding_override.provider,
@@ -91,13 +82,6 @@ def resolve_rag_provider_bundle(
                     "base_url": api2.base_url,
                     "mrl_output_dimension": api2.mrl_output_dimension,
                 }
-=======
-                embedding_runtime = build_rag_embedding_runtime_dict(
-                    embedding_override,
-                    settings.llm,
-                    settings.provider_litserve,
-                )
->>>>>>> cda6aab8 (describe + search eval)
     return ResolvedRagProvider(
         provider_key=key,
         provider_config=provider_config,
