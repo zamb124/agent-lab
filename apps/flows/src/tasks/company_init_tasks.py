@@ -7,6 +7,10 @@ from pathlib import Path
 
 from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import FlowsLoader
+from apps.flows.src.services.mcp_sync import (
+    ensure_default_mcp_servers_for_company,
+    sync_auto_mcp_servers_for_company,
+)
 from core.context import Context, set_context, clear_context
 from core.logging import get_logger
 from core.models.identity_models import User, Company
@@ -82,6 +86,15 @@ async def init_company_resources(
         
         loaded_tools = await load_tools_to_db(container.tool_repository)
         logger.info(f"Загружено {len(loaded_tools)} tools для {company_id}")
+
+        await ensure_default_mcp_servers_for_company(container=container)
+        synced = await sync_auto_mcp_servers_for_company(container=container)
+        logger.info(
+            "MCP синхронизация для %s: servers=%s tools=%s",
+            company_id,
+            synced["servers"],
+            synced["tools"],
+        )
         
         loader = FlowsLoader(
             bundles_dir=bundles_dir,

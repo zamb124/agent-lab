@@ -81,6 +81,28 @@ async def test_read_csv_as_text(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_read_html_as_markdown_with_trafilatura() -> None:
+    html = """
+    <html>
+      <body>
+        <main>
+          <h1>Главный заголовок</h1>
+          <p>Полезный текст для индексации.</p>
+          <a href="https://example.com/source">Источник</a>
+        </main>
+      </body>
+    </html>
+    """.strip().encode("utf-8")
+    reader = FileReader()
+    res = await reader.read(html, file_name="page.html")
+    assert res.detected_kind == FileReadKind.HTML
+    body = res.pages[0].text
+    assert "Главный заголовок" in body
+    assert "Полезный текст для индексации." in body
+    assert "Источник" in body
+
+
+@pytest.mark.asyncio
 async def test_read_eml_via_unstructured_office_path() -> None:
     raw = (
         b"From: a@b.c\r\nTo: d@e.f\r\nSubject: X\r\n"
@@ -99,6 +121,17 @@ def test_recognize_file_type_pdf_sniff_overrides_extension() -> None:
     pdf_head = b"%PDF-1.4\n%..."
     info = reader.recognize_file_type(file_name="wrong.txt", head=pdf_head)
     assert info.detected_kind == FileReadKind.PDF
+
+
+def test_recognize_file_type_html_by_extension_and_mime() -> None:
+    reader = FileReader()
+    assert reader.recognize_file_type(file_name="a.htm").detected_kind == FileReadKind.HTML
+    assert reader.recognize_file_type(file_name="dir/page.html").detected_kind == FileReadKind.HTML
+    from unittest.mock import patch
+
+    with patch("core.files.reader.service._guess_mime", return_value="text/html"):
+        by_mime = reader.recognize_file_type(file_name="extensionless", head=b"<html></html>")
+    assert by_mime.detected_kind == FileReadKind.HTML
 
 
 @pytest.mark.asyncio

@@ -151,6 +151,8 @@ def _is_zip_local_header_magic(raw: bytes) -> bool:
 def _kind_from_extension(ext: str) -> FileReadKind:
     if ext == ".pdf":
         return FileReadKind.PDF
+    if ext in (".html", ".htm"):
+        return FileReadKind.HTML
     if ext in _TEXT_EXTENSIONS:
         return FileReadKind.TEXT
     if ext in _SPREADSHEET_EXTENSIONS:
@@ -186,7 +188,9 @@ class FileReader:
                 kind = FileReadKind.VIDEO
             elif mime == "application/pdf":
                 kind = FileReadKind.PDF
-            elif mime in ("text/plain", "text/markdown", "text/html", "text/csv"):
+            elif mime == "text/html":
+                kind = FileReadKind.HTML
+            elif mime in ("text/plain", "text/markdown", "text/csv"):
                 kind = FileReadKind.TEXT
         return FileTypeInfo(detected_kind=kind, mime_type=mime, extension=ext)
 
@@ -245,6 +249,8 @@ class FileReader:
             result = await _read_audio_impl(raw, name, mime or "audio/mpeg")
         elif info.detected_kind == FileReadKind.VIDEO:
             result = await _read_video_impl(raw, name, mime or "video/mp4")
+        elif info.detected_kind == FileReadKind.HTML:
+            result = await asyncio.to_thread(_read_html_sync, raw, name, mime, opts)
         elif info.detected_kind == FileReadKind.TEXT:
             result = await asyncio.to_thread(_read_plain_text_sync, raw, name, mime, opts)
         elif info.detected_kind == FileReadKind.SPREADSHEET and info.extension == ".xls":
@@ -383,6 +389,40 @@ async def _read_image_impl(
         file_name=file_name,
         mime_type=mime,
         detected_kind=FileReadKind.IMAGE,
+        page_count=1,
+        pages=[page],
+        warnings=[],
+    )
+
+
+def _read_html_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    del opts
+    import trafilatura
+
+    html = raw.decode("utf-8", errors="replace")
+    try:
+        extracted = trafilatura.extract(
+            html,
+            output_format="markdown",
+            include_links=True,
+            include_tables=True,
+            include_images=False,
+            favor_recall=True,
+        )
+    except Exception as exc:
+        raise FileReadError(f"Ошибка trafilatura при разборе HTML: {file_name}") from exc
+    if extracted is None or extracted.strip() == "":
+        raise FileReadError(f"trafilatura не извлекла текст из HTML: {file_name}")
+    page = ReadPage(index=0, text=extracted, assets=[], label=None)
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "text/html",
+        detected_kind=FileReadKind.HTML,
         page_count=1,
         pages=[page],
         warnings=[],

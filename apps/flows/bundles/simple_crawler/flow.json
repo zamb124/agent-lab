@@ -1,723 +1,144 @@
 {
   "id": "simple_crawler",
-  "name": "Simple crawler (parallel, LLM + MCP browser)",
-  "description": "Простой краулер: LLM генерирует 3 поисковых запроса -> 3 параллельные LLM-ноды открывают DuckDuckGo через MCP browser и достают до 3 URL каждая -> до 9 параллельных LLM-нод читают страницы (пустые слоты пропускаются) -> финальная LLM отвечает на исходный запрос.",
+  "name": "Simple crawler (rag-first, browser snapshot)",
+  "description": "RAG-first: namespace и первичный поиск до браузера. Если в RAG уже есть релевантные чанки — сразу финальный ответ (LLM с инструментом `simple_crawler_rag_search` в session namespace) без DuckDuckGo и краула. Иначе — LLM-план запросов; веб-этап: `DuckDuckGoBrowserSearch.links_many` по запросам и `BrowserSnapshotDescribe.page_snapshot` по каждому URL (отдельная браузерная сессия на запрос и на URL, `asyncio.gather`), затем `RagClient.ingest_text` по собранным markdown-документам; затем тот же финальный LLM с вызовами поиска в том же namespace. Семантические эмбеддинги для pgvector ожидаются от локального LitServe: в конфигурации процессов `rag` и `rag_worker` задайте `rag.embedding.provider` = `provider_litserve`, `rag.embedding.api.model` и размерность как в `variables` бандла (`rag_embedding_model`, `rag_embedding_dimension`), URL LitServe — `provider_litserve.api.base_url` (канон локальной разработки: порт 8014).",
   "tags": [
     "crawler",
     "browser",
     "mcp",
-    "parallel",
-    "snapshot_first",
-    "example"
+    "s3",
+    "rag",
+    "function_first"
   ],
   "permission": [],
+<<<<<<< HEAD
   "branches": {},
   "entry": "plan_queries",
+=======
+  "entry": "bootstrap_session",
+>>>>>>> cda6aab8 (describe + search eval)
   "nodes": {
+    "bootstrap_session": {
+      "type": "code",
+      "code": "async def run(state):\n    session_id = getattr(state, \"session_id\", None)\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n    sid = session_id.strip()\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars.setdefault(\"rag_embedding_provider\", \"provider_litserve\")\n    merged_vars.setdefault(\"rag_embedding_model\", \"baai/bge-m3\")\n    merged_vars.setdefault(\"rag_embedding_dimension\", 1024)\n    state.variables = merged_vars\n    state[\"rag_namespace_id\"] = f\"simple_crawler:{sid}\"\n    state[\"search_links\"] = []\n    state[\"search_queries\"] = []\n    return state"
+    },
     "plan_queries": {
       "type": "llm_node",
-      "prompt": "По сообщению пользователя придумай ровно 3 коротких поисковых запроса для веб-поиска (разные углы темы). Ответь только одним JSON-объектом без markdown-ограждений и без текста до или после. Формат строго: {\"queries\":[\"...\",\"...\",\"...\"]}"
+      "prompt": "Сгенерируй ровно 3 поисковых запроса по вопросу пользователя. Верни строго JSON без markdown: {\"queries\":[\"...\",\"...\",\"...\"]}"
     },
-    "prepare_search_urls": {
+    "prepare_inputs": {
       "type": "code",
-      "code": "import json\nimport re\nimport urllib.parse\n\n\ndef _ddg_search_url(query: str) -> str:\n    q = urllib.parse.quote_plus(query.strip())\n    return f\"https://duckduckgo.com/?q={q}\"\n\n\ndef _parse_queries_from_llm(text: str) -> tuple[str, str, str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError('plan_queries: пустой ответ LLM')\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError('plan_queries: в ответе нет JSON-объекта')\n        blob = t[i:].strip()\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError('plan_queries: корень JSON должен быть объектом')\n    queries = obj.get(\"queries\")\n    if not isinstance(queries, list) or len(queries) != 3:\n        raise ValueError('plan_queries: поле queries должно быть списком из 3 строк')\n    q1, q2, q3 = [str(x).strip() for x in queries]\n    if not q1 or not q2 or not q3:\n        raise ValueError('plan_queries: каждый запрос — непустая строка')\n    return q1, q2, q3\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError('plan_queries: ожидается state.response со строкой от LLM')\n    q1, q2, q3 = _parse_queries_from_llm(text)\n\n    u1 = _ddg_search_url(q1)\n    u2 = _ddg_search_url(q2)\n    u3 = _ddg_search_url(q3)\n\n    state[\"search_query_1\"] = q1\n    state[\"search_query_2\"] = q2\n    state[\"search_query_3\"] = q3\n\n    state[\"search_url_1\"] = u1\n    state[\"search_url_2\"] = u2\n    state[\"search_url_3\"] = u3\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search_query_1\"] = q1\n    merged_vars[\"search_query_2\"] = q2\n    merged_vars[\"search_query_3\"] = q3\n    merged_vars[\"search_url_1\"] = u1\n    merged_vars[\"search_url_2\"] = u2\n    merged_vars[\"search_url_3\"] = u3\n    state.variables = merged_vars\n\n    sid = getattr(state, \"session_id\", None) or \"session\"\n    state[\"rag_namespace_id\"] = f\"crawl_{sid}_simple\"\n    return state\n"
+      "code": "import json\n\n\nasync def run(state):\n    response = getattr(state, \"response\", None)\n    if not isinstance(response, str) or response.strip() == \"\":\n        raise ValueError(\"plan_queries должен вернуть JSON-строку\")\n    payload = json.loads(response)\n    queries_raw = payload.get(\"queries\")\n    if not isinstance(queries_raw, list):\n        raise ValueError(\"plan_queries: queries должен быть списком\")\n\n    query_limit = int(state.get(\"search_queries_count\", 3))\n    queries: list[str] = []\n    for raw in queries_raw:\n        query = str(raw).strip()\n        if query != \"\":\n            queries.append(query)\n        if len(queries) >= query_limit:\n            break\n    if len(queries) == 0:\n        raise ValueError(\"plan_queries: не получены поисковые запросы\")\n\n    session_id = getattr(state, \"session_id\", None)\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n\n    state[\"search_queries\"] = queries\n    state[\"search_links\"] = []\n    return state"
     },
     "ensure_rag_namespace": {
       "type": "code",
-      "code": "from __future__ import annotations\n\nfrom typing import Any\n\nfrom core.clients.rag_client import RagClient\nfrom core.clients.service_client import ServiceClientError\n\n\nasync def run(state: Any):\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or not namespace_id.strip():\n        raise ValueError(\"ensure_rag_namespace: state.rag_namespace_id обязателен\")\n\n    client = RagClient()\n    try:\n        raw = await client.create_namespace(namespace_id, description=\"simple_crawler session namespace\")\n    except ServiceClientError as exc:\n        state[\"rag_namespace_created\"] = False\n        state[\"rag_namespace_error\"] = str(exc)\n        return state\n\n    state[\"rag_namespace_created\"] = True\n    state[\"rag_namespace\"] = raw\n    return state\n"
+      "code": "from core.clients.rag_client import RagClient\n\n\nasync def run(state):\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    client = RagClient()\n    state[\"rag_namespace\"] = await client.create_namespace(\n        namespace_id,\n        description=\"simple_crawler session namespace\",\n    )\n    return state"
     },
-    "search_1": {
-      "type": "llm_node",
-      "prompt": "Только DuckDuckGo (duckduckgo.com). Не открывай выдачу через browser_navigate на URL с параметром q= в адресе — только через главную: клик по полю поиска, затем browser_fill, затем отправка.\n\nОбязательный порядок MCP (все шаги только инструментами user-browser, без code):\n\n1) browser_create_session (anti_bot_tier=\"black\", interaction_profile=\"human\").\n2) browser_navigate: session_id из п.1, url=\"https://duckduckgo.com\", wait_policy=\"domcontentloaded\".\n3) browser_observe: session_id. Найди в snapshot.text поле ввода поиска по строке с [ref=eN] (только из этого observe).\n4) browser_click: session_id, ref — ref поля поиска из п.3, timeout_ms по умолчанию или 10000.\n5) browser_fill: session_id, ref — тот же ref поля поиска, text — ровно одна строка без правок и без кавычек: {search_query_1}, timeout_ms по умолчанию или 10000.\n6) browser_press: session_id, key=\"Enter\".\n7) browser_wait: session_id, load_state=\"domcontentloaded\", timeout_ms=30000 (или selector, если виден стабильный блок результатов).\n8) browser_observe: session_id — снимок страницы выдачи.\n9) При необходимости browser_close_session.\n\nИз snapshot п.8 выбери до 3 лучших HTTP URL статей/источников (не URL duckduckgo.com). Если нет — {\"top_urls\": []}. Иначе {\"top_urls\": [u1,...]} без других полей.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_click",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_click",
-          "description": "Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_fill",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_fill",
-          "description": "Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_press",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_press",
-          "description": "Нажать клавишу (например Enter, Tab).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_wait",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_wait",
-          "description": "Ожидание selector и/или load_state в рамках сессии.",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "description": "Закрыть сессию и освободить ресурсы.",
-          "type": "mcp"
-        }
-      ]
-    },
-    "parse_search_1": {
+    "check_rag_context": {
       "type": "code",
-      "code": "import json\nimport re\nfrom urllib.parse import urlparse\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in (\"http\", \"https\") and bool(p.netloc)\n\n\ndef _parse_top_urls(text: str) -> list[str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError(\"search_1: пустой ответ LLM\")\n\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError(\"search_1: в ответе нет JSON-объекта\")\n        blob = t[i:].strip()\n\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError(\"search_1: корень JSON должен быть объектом\")\n\n    top_urls = obj.get(\"top_urls\")\n    if not isinstance(top_urls, list):\n        raise ValueError(\"search_1: поле top_urls должно быть списком\")\n\n    picked: list[str] = []\n    for x in top_urls:\n        u = str(x).strip()\n        if not u:\n            continue\n        if not _is_http_url(u):\n            continue\n        picked.append(u)\n        if len(picked) >= 3:\n            break\n\n    return picked\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError(\"search_1: ожидается state.response со строкой от LLM\")\n\n    state[\"search1_urls\"] = _parse_top_urls(text)\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search1_urls\"] = state[\"search1_urls\"]\n    state.variables = merged_vars\n    return state\n"
+      "code": "from core.clients.rag_client import RagClient\n\n\ndef _build_context_text(results: list[dict]) -> str:\n    blocks: list[str] = []\n    for item in results:\n        if not isinstance(item, dict):\n            continue\n        content = str(item.get(\"content\", \"\")).strip()\n        if content == \"\":\n            continue\n        metadata = item.get(\"metadata\")\n        source_url = \"\"\n        if isinstance(metadata, dict):\n            source_url = str(metadata.get(\"source_url\", \"\")).strip()\n        if source_url == \"\":\n            blocks.append(content)\n        else:\n            blocks.append(f\"Источник: {source_url}\\n{content}\")\n    return \"\\n\\n---\\n\\n\".join(blocks)\n\n\nasync def run(state):\n    namespace_id = state.get(\"rag_namespace_id\")\n    question = state.get(\"content\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    if not isinstance(question, str) or question.strip() == \"\":\n        raise ValueError(\"content обязателен\")\n\n    client = RagClient()\n    raw = await client.search(namespace_id, question, limit=8)\n    results = raw.get(\"results\")\n    if not isinstance(results, list):\n        raise ValueError(\"RAG search: results должен быть списком\")\n\n    state[\"rag_context\"] = results\n    state[\"rag_context_text\"] = _build_context_text(results)\n    state[\"need_web_search\"] = len(results) == 0\n    return state"
     },
-    "search_2": {
-      "type": "llm_node",
-      "prompt": "Только DuckDuckGo (duckduckgo.com). Не открывай выдачу через browser_navigate на URL с параметром q= в адресе — только через главную: клик по полю поиска, затем browser_fill, затем отправка.\n\nОбязательный порядок MCP (все шаги только инструментами user-browser, без code):\n\n1) browser_create_session (anti_bot_tier=\"black\", interaction_profile=\"human\").\n2) browser_navigate: session_id из п.1, url=\"https://duckduckgo.com\", wait_policy=\"domcontentloaded\".\n3) browser_observe: session_id. Найди в snapshot.text поле поиска по строке с [ref=eN].\n4) browser_click: session_id, ref поля поиска из п.3.\n5) browser_fill: session_id, ref тот же, text ровно: {search_query_2}.\n6) browser_press: session_id, key=\"Enter\".\n7) browser_wait: session_id, load_state=\"domcontentloaded\", timeout_ms=30000.\n8) browser_observe: session_id — выдача.\n9) При необходимости browser_close_session.\n\nИз snapshot п.8 — до 3 лучших HTTP URL (не duckduckgo.com). Если нет — {\"top_urls\": []}. Иначе {\"top_urls\": [...]} без других полей.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_click",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_click",
-          "description": "Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_fill",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_fill",
-          "description": "Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_press",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_press",
-          "description": "Нажать клавишу (например Enter, Tab).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_wait",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_wait",
-          "description": "Ожидание selector и/или load_state в рамках сессии.",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "description": "Закрыть сессию и освободить ресурсы.",
-          "type": "mcp"
-        }
-      ]
-    },
-    "parse_search_2": {
+    "search_duckduckgo_batch": {
       "type": "code",
-      "code": "import json\nimport re\nfrom urllib.parse import urlparse\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in (\"http\", \"https\") and bool(p.netloc)\n\n\ndef _parse_top_urls(text: str) -> list[str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError(\"search_2: пустой ответ LLM\")\n\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError(\"search_2: в ответе нет JSON-объекта\")\n        blob = t[i:].strip()\n\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError(\"search_2: корень JSON должен быть объектом\")\n\n    top_urls = obj.get(\"top_urls\")\n    if not isinstance(top_urls, list):\n        raise ValueError(\"search_2: поле top_urls должно быть списком\")\n\n    picked: list[str] = []\n    for x in top_urls:\n        u = str(x).strip()\n        if not u:\n            continue\n        if not _is_http_url(u):\n            continue\n        picked.append(u)\n        if len(picked) >= 3:\n            break\n\n    return picked\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError(\"search_2: ожидается state.response со строкой от LLM\")\n\n    state[\"search2_urls\"] = _parse_top_urls(text)\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search2_urls\"] = state[\"search2_urls\"]\n    state.variables = merged_vars\n    return state\n"
+      "code": "async def run(state):\n    if state.get(\"need_web_search\") is not True:\n        return state\n\n    queries = state.get(\"search_queries\")\n    if not isinstance(queries, list) or len(queries) == 0:\n        raise ValueError(\"search_queries обязателен\")\n\n    per_query_limit = int(state.get(\"search_links_per_query\", 5))\n    search = DuckDuckGoBrowserSearch(per_query_limit=per_query_limit)\n    non_empty = []\n    for raw in queries:\n        q = str(raw).strip()\n        if q != \"\":\n            non_empty.append(q)\n    if len(non_empty) == 0:\n        raise ValueError(\"search_queries: нет непустых запросов\")\n\n    state[\"search_links\"] = await search.links_many(state, non_empty)\n    return state\n"
     },
-    "search_3": {
-      "type": "llm_node",
-      "prompt": "Только DuckDuckGo (duckduckgo.com). Не открывай выдачу через browser_navigate на URL с параметром q= в адресе — только через главную: клик по полю поиска, затем browser_fill, затем отправка.\n\nОбязательный порядок MCP (все шаги только инструментами user-browser, без code):\n\n1) browser_create_session (anti_bot_tier=\"black\", interaction_profile=\"human\").\n2) browser_navigate: session_id из п.1, url=\"https://duckduckgo.com\", wait_policy=\"domcontentloaded\".\n3) browser_observe: session_id. Найди в snapshot.text поле поиска по строке с [ref=eN].\n4) browser_click: session_id, ref поля поиска из п.3.\n5) browser_fill: session_id, ref тот же, text ровно: {search_query_3}.\n6) browser_press: session_id, key=\"Enter\".\n7) browser_wait: session_id, load_state=\"domcontentloaded\", timeout_ms=30000.\n8) browser_observe: session_id — выдача.\n9) При необходимости browser_close_session.\n\nИз snapshot п.8 — до 3 лучших HTTP URL (не duckduckgo.com). Если нет — {\"top_urls\": []}. Иначе {\"top_urls\": [...]} без других полей.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_click",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_click",
-          "description": "Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_fill",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_fill",
-          "description": "Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_press",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_press",
-          "description": "Нажать клавишу (например Enter, Tab).",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_wait",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_wait",
-          "description": "Ожидание selector и/или load_state в рамках сессии.",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "description": "Закрыть сессию и освободить ресурсы.",
-          "type": "mcp"
-        }
-      ]
-    },
-    "parse_search_3": {
+    "rag_ingest_markdown_batch": {
       "type": "code",
-      "code": "import json\nimport re\nfrom urllib.parse import urlparse\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in (\"http\", \"https\") and bool(p.netloc)\n\n\ndef _parse_top_urls(text: str) -> list[str]:\n    t = (text or \"\").strip()\n    if not t:\n        raise ValueError(\"search_3: пустой ответ LLM\")\n\n    m = re.search(r\"```(?:json)?\\\\s*(\\\\{[\\\\s\\\\S]*?\\\\})\\\\s*```\", t, re.IGNORECASE | re.DOTALL)\n    if m:\n        blob = m.group(1).strip()\n    else:\n        i = t.find(\"{\")\n        if i == -1:\n            raise ValueError(\"search_3: в ответе нет JSON-объекта\")\n        blob = t[i:].strip()\n\n    dec = json.JSONDecoder()\n    obj, _ = dec.raw_decode(blob)\n    if not isinstance(obj, dict):\n        raise ValueError(\"search_3: корень JSON должен быть объектом\")\n\n    top_urls = obj.get(\"top_urls\")\n    if not isinstance(top_urls, list):\n        raise ValueError(\"search_3: поле top_urls должно быть списком\")\n\n    picked: list[str] = []\n    for x in top_urls:\n        u = str(x).strip()\n        if not u:\n            continue\n        if not _is_http_url(u):\n            continue\n        picked.append(u)\n        if len(picked) >= 3:\n            break\n\n    return picked\n\n\nasync def run(state):\n    text = getattr(state, \"response\", None)\n    if not isinstance(text, str):\n        raise ValueError(\"search_3: ожидается state.response со строкой от LLM\")\n\n    state[\"search3_urls\"] = _parse_top_urls(text)\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars[\"search3_urls\"] = state[\"search3_urls\"]\n    state.variables = merged_vars\n    return state\n"
+      "code": "import asyncio\nfrom core.clients.rag_client import RagClient\n\n\nasync def _ingest_one(\n    client: RagClient,\n    namespace_id: str,\n    doc: dict,\n) -> dict:\n    return await client.ingest_text(\n        namespace_id,\n        text=str(doc.get(\"text\", \"\")),\n        document_name=str(doc.get(\"document_name\", \"snapshot\")),\n        metadata=doc.get(\"metadata\"),\n        document_id=str(doc.get(\"document_id\", \"\")),\n    )\n\n\nasync def run(state):\n    if state.get(\"need_web_search\") is not True:\n        return state\n\n    namespace_id = state.get(\"rag_namespace_id\")\n    markdown_docs = state.get(\"markdown_docs\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    if not isinstance(markdown_docs, list):\n        raise ValueError(\"markdown_docs обязателен\")\n\n    ns = namespace_id.strip()\n    client = RagClient()\n    valid_docs: list[dict] = [doc for doc in markdown_docs if isinstance(doc, dict)]\n    if len(valid_docs) == 0:\n        state[\"rag_ingested_docs\"] = []\n        return state\n\n    ingested: list[dict] = list(\n        await asyncio.gather(*[_ingest_one(client, ns, doc) for doc in valid_docs]),\n    )\n    state[\"rag_ingested_docs\"] = ingested\n    return state"
     },
-    "collect_9_urls": {
+    "crawler_answer": {
+      "type": "llm_node",
+      "prompt": "Ты — ассистент по материалам, проиндексированным в RAG для этой сессии simple_crawler.\n\nВопрос пользователя:\n{content}\n\nОбязательно:\n1) Перед финальным ответом вызови инструмент simple_crawler_rag_search один или несколько раз: в поле query переформулируй вопрос или разбей на уточняющие запросы. Поиск выполняется только в RAG-неймспейсе текущей сессии (идентификатор зашит в state, менять его нельзя и не нужно).\n2) Отвечай пользователю только по фактам из результатов инструмента. Если после вызовов данных недостаточно — ответь ровно: \"Недостаточно данных в RAG для точного ответа\".\n3) Если у чанков в metadata есть source_url, перечисли использованные URL в ответе.\n4) Не добавляй факты вне того, что вернул поиск.",
+      "tools": [
+        {
+          "tool_id": "simple_crawler_rag_search",
+          "description": "Семантический поиск по чанкам в RAG-неймспейсе текущей сессии simple_crawler (namespace из state.rag_namespace_id).",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Запрос на естественном языке для семантического поиска в namespace сессии."
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Максимум результатов (1–16).",
+                "default": 8
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "code": "async def execute(args, state):\n    query = args.get(\"query\")\n    if not isinstance(query, str) or query.strip() == \"\":\n        raise ValueError(\"query обязателен\")\n    raw_limit = args.get(\"limit\", 8)\n    limit = int(raw_limit)\n    if limit < 1 or limit > 16:\n        raise ValueError(\"limit должен быть от 1 до 16\")\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id отсутствует в state\")\n    client = RagClient()\n    return await client.search(namespace_id.strip(), query.strip(), limit=limit)\n"
+        }
+      ]
+    },
+    "fetch_pages_markdown": {
       "type": "code",
-      "incoming_policy": "all",
-      "code": "from urllib.parse import urlparse\n\nMAX_SLOTS = 9\n\n\ndef _is_http_url(u: str) -> bool:\n    try:\n        p = urlparse(u)\n    except Exception:\n        return False\n    return p.scheme in ('http', 'https') and bool(p.netloc)\n\n\nasync def run(state):\n    urls = []\n    for k in ('search1_urls', 'search2_urls', 'search3_urls'):\n        part = state.get(k)\n        if not isinstance(part, list):\n            continue\n        for x in part:\n            urls.append(str(x).strip())\n\n    seen = set()\n    picked = []\n    for u in urls:\n        if not u or not _is_http_url(u):\n            continue\n        if u in seen:\n            continue\n        seen.add(u)\n        picked.append(u)\n        if len(picked) >= MAX_SLOTS:\n            break\n\n    state['crawl_target_count'] = len(picked)\n    state['crawl_target_urls'] = list(picked)\n    for i in range(1, MAX_SLOTS + 1):\n        if i <= len(picked):\n            state[f'target_url_{i}'] = picked[i - 1]\n        else:\n            state[f'target_url_{i}'] = ''\n    return state\n"
-    },
-    "page_1": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_1 отсутствует или пустая строка — не вызывай browser tools и rag_add_text; ответь одним коротким предложением что источник для слота 1 недоступен. Иначе открой target_url_1 через MCP browser tools, получи snapshot, сформируй markdown (коротко) и положи в RAG через rag_add_text. document_id: 'simple_crawler:1'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_2": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_2 пустой — не вызывай инструменты; одно предложение про пропуск слота 2. Иначе открой URL через MCP browser, snapshot -> markdown в RAG. document_id: 'simple_crawler:2'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_3": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_3 пустой — не вызывай инструменты; кратко пропуск слота 3. Иначе MCP browser + RAG. document_id: 'simple_crawler:3'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_4": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_4 пустой — без инструментов, пропуск слота 4. Иначе MCP browser + RAG. document_id: 'simple_crawler:4'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_5": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_5 пустой — без инструментов, пропуск слота 5. Иначе MCP browser + RAG. document_id: 'simple_crawler:5'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_6": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_6 пустой — без инструментов, пропуск слота 6. Иначе MCP browser + RAG. document_id: 'simple_crawler:6'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_7": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_7 пустой — без инструментов, пропуск слота 7. Иначе MCP browser + RAG. document_id: 'simple_crawler:7'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_8": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_8 пустой — без инструментов, пропуск слота 8. Иначе MCP browser + RAG. document_id: 'simple_crawler:8'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "page_9": {
-      "type": "llm_node",
-      "prompt": "Если state.target_url_9 пустой — без инструментов, пропуск слота 9. Иначе MCP browser + RAG. document_id: 'simple_crawler:9'.",
-      "tools": [
-        {
-          "tool_id": "mcp:user-browser:browser_create_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_create_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_navigate",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_navigate",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_observe",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_observe",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "mcp:user-browser:browser_close_session",
-          "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
-          "mcp_tool_name": "browser_close_session",
-          "type": "mcp"
-        },
-        {
-          "tool_id": "rag_add_text"
-        }
-      ]
-    },
-    "final_answer": {
-      "type": "llm_node",
-      "incoming_policy": "all",
-      "prompt": "Используй RAG namespace_id=state.rag_namespace_id. Если state.crawl_target_count равен 0 — ответь по общим знаниям и явно скажи, что веб-источники не собраны. Иначе выполни rag_search по запросу пользователя, укажи что ответ опирается на найденные страницы и кратко перечисли URL из metadata где возможно.",
-      "tools": [
-        {
-          "tool_id": "rag_search"
-        }
-      ]
+      "code": "import asyncio\n\n\nasync def run(state):\n    if state.get(\"need_web_search\") is not True:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    links = state.get(\"search_links\")\n    if not isinstance(links, list) or len(links) == 0:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    page_limit = int(state.get(\"crawl_pages_limit\", 5))\n    urls = []\n    for raw_url in links[:page_limit]:\n        u = str(raw_url).strip()\n        if u != \"\":\n            urls.append(u)\n    if len(urls) == 0:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    describe = BrowserSnapshotDescribe()\n    snapshots = await asyncio.gather(\n        *[describe.page_snapshot(state, u) for u in urls],\n    )\n\n    crawled_pages = []\n    markdown_docs = []\n    for snap in snapshots:\n        u = str(snap[\"url\"]).strip()\n        file_id = str(snap[\"file_id\"]).strip()\n        s3_path = str(snap[\"s3_path\"]).strip()\n        text = str(snap[\"text\"]).strip()\n        crawled_pages.append({\"url\": u, \"file_id\": file_id, \"s3_path\": s3_path})\n        markdown_docs.append(\n            {\n                \"document_id\": f\"simple_crawler:{file_id}\",\n                \"document_name\": u,\n                \"text\": text,\n                \"metadata\": {\n                    \"source_url\": u,\n                    \"s3_path\": s3_path,\n                    \"file_id\": file_id,\n                },\n            },\n        )\n\n    state[\"crawled_pages\"] = crawled_pages\n    state[\"markdown_docs\"] = markdown_docs\n    return state\n"
     }
   },
   "edges": [
     {
-      "from": "plan_queries",
-      "to": "prepare_search_urls"
-    },
-    {
-      "from": "prepare_search_urls",
+      "from": "bootstrap_session",
       "to": "ensure_rag_namespace"
     },
     {
       "from": "ensure_rag_namespace",
-      "to": "search_1"
+      "to": "check_rag_context"
     },
     {
-      "from": "ensure_rag_namespace",
-      "to": "search_2"
+      "from": "check_rag_context",
+      "to": "plan_queries",
+      "condition": {
+        "type": "simple",
+        "variable": "need_web_search",
+        "operator": "==",
+        "value": true
+      }
     },
     {
-      "from": "ensure_rag_namespace",
-      "to": "search_3"
+      "from": "check_rag_context",
+      "to": "crawler_answer",
+      "condition": {
+        "type": "simple",
+        "variable": "need_web_search",
+        "operator": "==",
+        "value": false
+      }
     },
     {
-      "from": "search_1",
-      "to": "parse_search_1"
+      "from": "plan_queries",
+      "to": "prepare_inputs"
     },
     {
-      "from": "search_2",
-      "to": "parse_search_2"
+      "from": "prepare_inputs",
+      "to": "search_duckduckgo_batch"
     },
     {
-      "from": "search_3",
-      "to": "parse_search_3"
+      "from": "search_duckduckgo_batch",
+      "to": "fetch_pages_markdown"
     },
     {
-      "from": "parse_search_1",
-      "to": "collect_9_urls"
+      "from": "fetch_pages_markdown",
+      "to": "rag_ingest_markdown_batch"
     },
     {
-      "from": "parse_search_2",
-      "to": "collect_9_urls"
+      "from": "rag_ingest_markdown_batch",
+      "to": "crawler_answer"
     },
     {
-      "from": "parse_search_3",
-      "to": "collect_9_urls"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_1"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_2"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_3"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_4"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_5"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_6"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_7"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_8"
-    },
-    {
-      "from": "collect_9_urls",
-      "to": "page_9"
-    },
-    {
-      "from": "page_1",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_2",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_3",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_4",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_5",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_6",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_7",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_8",
-      "to": "final_answer"
-    },
-    {
-      "from": "page_9",
-      "to": "final_answer"
-    },
-    {
-      "from": "final_answer",
+      "from": "crawler_answer",
       "to": null
     }
   ],
-  "variables": {}
+  "variables": {
+    "crawl_pages_limit": 5,
+    "search_links_per_query": 5,
+    "search_queries_count": 3,
+    "rag_embedding_provider": "provider_litserve",
+    "rag_embedding_model": "baai/bge-m3",
+    "rag_embedding_dimension": 1024
+  }
 }

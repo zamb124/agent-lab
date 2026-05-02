@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class FileReadKind(StrEnum):
     TEXT = "text"
+    HTML = "html"
     PDF = "pdf"
     OFFICE = "office"
     SPREADSHEET = "spreadsheet"

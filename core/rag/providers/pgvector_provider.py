@@ -33,6 +33,13 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
     }
 )
 
+<<<<<<< HEAD
+=======
+# Локальный LitServe не проверяет Bearer; заголовок обязателен для HTTP-клиента эмбеддингов.
+_PROVIDER_LITSERVE_LOCAL_EMBEDDING_BEARER = "local-litserve"
+
+
+>>>>>>> cda6aab8 (describe + search eval)
 def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if raw is None:
         return ""
@@ -48,6 +55,8 @@ def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
     from core.config import get_settings
 
     settings = get_settings()
+    if settings.rag.embedding.provider == "provider_litserve":
+        return _PROVIDER_LITSERVE_LOCAL_EMBEDDING_BEARER
     if getattr(settings.llm, "provider", None) == "openrouter":
         or_conf = getattr(settings.llm, "openrouter", None)
         if or_conf is not None:
@@ -61,6 +70,7 @@ def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
     raise ValueError(
         "Нужен rag.providers.pgvector.embedding_api_key (OpenRouter sk-or-...) "
         "или llm.openrouter.api_key при llm.provider=openrouter. "
+        "При rag.embedding.provider=provider_litserve ключ из pgvector не обязателен. "
         "Плейсхолдеры YOUR_* из conf.json не считаются ключом. "
         "ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
     )

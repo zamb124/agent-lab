@@ -195,6 +195,7 @@ class ServerConfig(BaseModel):
     sync_service_url: Optional[str] = None
     scheduler_service_url: Optional[str] = None
     office_service_url: Optional[str] = None
+    browser_service_url: Optional[str] = None
     provider_litserve_service_url: Optional[str] = None
     browser_service_url: Optional[str] = None
     voice_service_url: Optional[str] = None
@@ -219,6 +220,7 @@ class ServerConfig(BaseModel):
         "rag": 8004,
         "sync": 8005,
         "scheduler": 8006,
+        "browser": 8009,
         "office": 8008,
         "browser": 8009,
         "provider_litserve": 8014,
@@ -396,7 +398,8 @@ class EmbeddingApiConfig(BaseModel):
 
     model: str = "baai/bge-m3"
     dimension: int = 1024
-    # Явный override корня ``…/v1``; пусто при ``provider=openrouter`` — из ``llm.<active>.base_url``.
+    # Явный override корня ``…/v1``: при ``provider=openrouter`` пусто — из ``llm``;
+    # при ``provider=provider_litserve`` пусто — из ``provider_litserve.api.base_url`` в настройках.
     base_url: Optional[str] = None
     mrl_output_dimension: Optional[int] = Field(
         default=None,

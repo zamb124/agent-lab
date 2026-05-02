@@ -292,6 +292,30 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
     return {"entities": data.get("items", [])}
 ''',
     },
+    {
+        "id": "mcp_tool_call",
+        "name": "Вызов MCP tool",
+        "description": "**Категория:** MCP. Вызов MCP инструмента через фасад `call_mcp_tool` (без ручного JSON-RPC).",
+        "category": "http",
+        "node_type": "tool",
+        "tags": ["mcp", "tools", "platform"],
+        "code": '''async def execute(server_id: str, tool_name: str, arguments: dict = None, state: dict = None):
+    """
+    Унифицированный вызов MCP tool из code/tool ноды.
+    """
+    res = await call_mcp_tool(
+        server_id=server_id,
+        tool_name=tool_name,
+        arguments=arguments or {},
+        state=state,
+    )
+    return {
+        "is_error": res.is_error,
+        "text": res.get_text(),
+        "content": res.content,
+    }
+''',
+    },
 ]
 
 # Шаблоны для function нод (run function)
@@ -336,6 +360,71 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     else:
         state["api_error"] = f"HTTP {response.status_code}"
     
+    return state
+''',
+    },
+    {
+        "id": "fn_mcp_tool_call",
+        "name": "MCP tool вызов",
+        "description": "Вызов MCP-инструмента через фасад `call_mcp_tool` и запись результата в state.",
+        "category": "http",
+        "node_type": "function",
+        "tags": ["mcp", "tools", "platform"],
+        "code": '''async def run(state):
+    """Вызов MCP tool из function/code ноды."""
+    server_id = state.get("mcp_server_id", "user-browser")
+    tool_name = state.get("mcp_tool_name", "browser_observe")
+    arguments = state.get("mcp_arguments", {})
+
+    res = await call_mcp_tool(
+        server_id=server_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        state=state,
+    )
+    state["mcp_is_error"] = res.is_error
+    state["mcp_text"] = res.get_text()
+    state["mcp_content"] = res.content
+    return state
+''',
+    },
+    {
+        "id": "fn_ddg_search_links",
+        "name": "Поиск ссылок (DuckDuckGo, браузер)",
+        "description": (
+            "`DuckDuckGoBrowserSearch` + `state['search_query']`; результат в `state['search_urls']`. "
+            "Нужен MCP `user-browser`."
+        ),
+        "category": "http",
+        "node_type": "function",
+        "tags": ["mcp", "browser", "search"],
+        "code": '''async def run(state):
+    """Поиск URL по запросу через DuckDuckGo в браузере."""
+    q = state.get("search_query")
+    if not isinstance(q, str) or q.strip() == "":
+        raise ValueError("search_query обязателен")
+    search = DuckDuckGoBrowserSearch()
+    state["search_urls"] = await search.links(state, q.strip())
+    return state
+''',
+    },
+    {
+        "id": "fn_browser_page_markdown",
+        "name": "Страница в markdown (браузер)",
+        "description": (
+            "`BrowserSnapshotDescribe` + `state['page_url']`; результат в `state['page_markdown']`. "
+            "Нужен MCP `user-browser` и FileReader."
+        ),
+        "category": "http",
+        "node_type": "function",
+        "tags": ["mcp", "browser", "files"],
+        "code": '''async def run(state):
+    """Снимок страницы в S3 и чтение markdown через FileReader."""
+    url = state.get("page_url")
+    if not isinstance(url, str) or url.strip() == "":
+        raise ValueError("page_url обязателен")
+    describe = BrowserSnapshotDescribe()
+    state["page_markdown"] = await describe.page_markdown(state, url.strip())
     return state
 ''',
     },

@@ -289,8 +289,14 @@
     "embedding": {
       "provider": "provider_litserve",
       "api": {
+<<<<<<< HEAD
         "model": "qwen/qwen3-embedding-8b",
         "dimension": 4096
+=======
+        "model": "baai/bge-m3",
+        "dimension": 1024,
+        "base_url": "http://127.0.0.1:8014/v1"
+>>>>>>> cda6aab8 (describe + search eval)
       }
     },
     "reranker": {

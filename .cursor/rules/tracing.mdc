@@ -31,7 +31,9 @@ alwaysApply: false
 
 **`operation_name`:** стабильная строка `service.area.action` (например `rag.embed.batch`, `sync.stt.transcribe_audio`, `sync.livekit.egress.start`, `crm.search.semantic`).
 
-**Категории (`platform.operation.category`):** `llm`, `embedding`, `stt`, `livekit`, `livekit_egress`, `flow_run`, `sync_command`, `rag_ingest`, `crm_search`, `storage`, `office_document`.
+**Категории (`platform.operation.category`):** `llm`, `embedding`, `stt`, `livekit`, `livekit_egress`, `flow_run`, `sync_command`, `rag_ingest`, `crm_search`, `storage`, `office_document`, `mcp`.
+
+**MCP tool:** каждый вызов `tools/call` трейсируется как значимая операция: **`flows.mcp.tool_call`** (`apps/flows/src/clients/mcp_client.py`, `event_type=mcp.tool_call`, атрибуты `platform.mcp.*`); JSON-RPC `tools/call` на стороне Browser Runtime — **`browser.mcp.tool_call`** (`apps/browser/api/mcp.py`). Прочие MCP JSON-RPC методы (initialize, tools/list) в flows-клиенте — **`flows.mcp.rpc_call`** / `mcp.rpc_call`.
 
 **Связь с биллингом (в `attributes`, без дублирования логики цен):**
 

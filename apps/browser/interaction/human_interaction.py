@@ -106,12 +106,20 @@ class HumanInteraction:
         profile: InteractionProfile,
         rnd: InteractionRng,
         timeout_ms: int,
+        typing_delay_ms: int | None = None,
     ) -> None:
         if not isinstance(text, str) or text == "":
             raise ValueError("text должен быть непустой строкой")
+        if typing_delay_ms is not None and typing_delay_ms < 0:
+            raise ValueError("typing_delay_ms должен быть >= 0")
         if profile.name == "off":
             # Быстрый путь: программное заполнение.
-            await locator.fill(text, timeout=timeout_ms)
+            if typing_delay_ms is None:
+                await locator.fill(text, timeout=timeout_ms)
+                return
+            await self._ensure_in_viewport(locator)
+            await locator.fill("", timeout=timeout_ms)
+            await locator.type(text, delay=typing_delay_ms, timeout=timeout_ms)
             return
 
         await self.pre_action_signals(page, profile=profile, rnd=rnd)
@@ -124,7 +132,7 @@ class HumanInteraction:
             await locator.fill("", timeout=timeout_ms)
         await self._pause_ms(page, rnd.randint_range(profile.pause_after_focus_ms_range))
 
-        delay = rnd.randint_range(profile.typing_delay_ms_range)
+        delay = typing_delay_ms if typing_delay_ms is not None else rnd.randint_range(profile.typing_delay_ms_range)
         # Playwright: locator.type(text, delay=ms)
         await locator.type(text, delay=delay, timeout=timeout_ms)
         await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))

@@ -31,7 +31,6 @@ class MCPServerConfig(BaseModel):
     """
     
     model_config = ConfigDict(extra="forbid")
-    
     server_id: str = Field(..., description="Уникальный идентификатор сервера")
     name: str = Field(..., description="Отображаемое имя сервера")
     url: str = Field(..., description="URL MCP сервера (JSON-RPC endpoint)")

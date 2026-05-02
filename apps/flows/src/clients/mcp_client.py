@@ -8,6 +8,7 @@ MCP (Model Context Protocol) использует JSON-RPC 2.0.
 """
 
 import json
+import hashlib
 import uuid
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -27,6 +28,7 @@ from core.variables import VarResolver
 logger = get_logger(__name__)
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
+_TRACE_TEXT_LIMIT = 2000
 
 
 class MCPClientError(Exception):
@@ -125,6 +127,26 @@ class MCPClient:
                 return o
         return None
 
+    @staticmethod
+    def _trace_text(value: Any, *, limit: int = _TRACE_TEXT_LIMIT) -> str:
+        """
+        Trace attributes должны быть компактными и безопасными по кодировке.
+        Возвращаем ASCII-строку: unicode будет экранирован как \\uXXXX.
+        """
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            raw = value.encode("unicode_escape", errors="backslashreplace").decode("ascii", errors="replace")
+        else:
+            raw = json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+        if len(raw) <= limit:
+            return raw
+        return raw[:limit] + "...[truncated]"
+
+    @staticmethod
+    def _sha256_hex(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+
     async def _read_response_text(self, response: httpx.Response) -> str:
         await response.aread()
         return response.text
@@ -161,29 +183,71 @@ class MCPClient:
         headers = self._resolve_headers(include_session=include_session)
         
         logger.debug(f"MCP RPC call: {method} to {self.config.url}")
-        
-        async with get_httpx_client(timeout=self.timeout, proxy=False) as client:
-            response = await client.post(
-                self.config.url,
-                json=payload,
-                headers=headers,
-            )
-            
-            response_headers = response.headers
-            text = await self._read_response_text(response)
-            
-            if response.status_code >= 400:
-                raise MCPClientError(
-                    f"MCP HTTP error: {response.status_code} {text}"
+
+        if method == "tools/call":
+            operation_name = "flows.mcp.tool_call"
+            event_type = "mcp.tool_call"
+        else:
+            operation_name = "flows.mcp.rpc_call"
+            event_type = "mcp.rpc_call"
+
+        async with traced_operation(
+            operation_name,
+            event_type=event_type,
+            operation_category="mcp",
+            extra_attributes={
+                "platform.mcp.server_id": self.config.server_id,
+                "platform.mcp.method": method,
+                "platform.mcp.request_id": request_id,
+                "platform.mcp.has_session": bool(self.session_id) if include_session else False,
+                "platform.mcp.request_preview": MCPClient._trace_text(payload),
+            },
+        ) as span:
+            # Удобные поля для tools/call: отдельно tool_name и ключи аргументов.
+            if method == "tools/call" and params:
+                raw_name = params.get("name")
+                raw_args = params.get("arguments")
+                if isinstance(raw_name, str) and raw_name.strip():
+                    span.set_attribute("platform.mcp.tool_name", raw_name.strip())
+                if isinstance(raw_args, dict):
+                    keys = [k for k in raw_args.keys() if isinstance(k, str)]
+                    keys.sort()
+                    span.set_attribute("platform.mcp.tool_args_keys", ",".join(keys[:50]))
+
+            async with get_httpx_client(timeout=self.timeout, proxy=False) as client:
+                response = await client.post(
+                    self.config.url,
+                    json=payload,
+                    headers=headers,
                 )
-            
-            result = self._jsonrpc_envelope_from_body(text)
-            if result is None:
-                snippet = text[:500] if text else ""
-                ct = response.headers.get("content-type", "")
-                raise MCPClientError(
-                    f"MCP: empty response for {method} (content-type={ct!r}, body={snippet!r})"
+
+                response_headers = response.headers
+                text = await self._read_response_text(response)
+
+                span.set_attribute("http.status_code", int(response.status_code))
+                span.set_attribute(
+                    "platform.mcp.response_content_type",
+                    str(response.headers.get("content-type", "")).strip(),
                 )
+                span.set_attribute("platform.mcp.response_bytes", len(text.encode("utf-8", errors="replace")))
+                span.set_attribute("platform.mcp.response_sha256", MCPClient._sha256_hex(text))
+                span.set_attribute("platform.mcp.response_preview", MCPClient._trace_text(text))
+                sid = response_headers.get("mcp-session-id") or response_headers.get("Mcp-Session-Id")
+                if isinstance(sid, str) and sid.strip():
+                    span.set_attribute("platform.mcp.response_session_id", sid.strip())
+
+                if response.status_code >= 400:
+                    raise MCPClientError(
+                        f"MCP HTTP error: {response.status_code} {text}"
+                    )
+
+                result = self._jsonrpc_envelope_from_body(text)
+                if result is None:
+                    snippet = text[:500] if text else ""
+                    ct = response.headers.get("content-type", "")
+                    raise MCPClientError(
+                        f"MCP: empty response for {method} (content-type={ct!r}, body={snippet!r})"
+                    )
         
         if "error" in result:
             error = result["error"]
@@ -270,22 +334,13 @@ class MCPClient:
         
         logger.debug(f"MCP tool call: {tool_name}")
 
-        async with traced_operation(
-            "flows.mcp.call_tool",
-            event_type="mcp.call_tool",
-            operation_category="mcp",
-            extra_attributes={
-                "platform.mcp.server_id": self.config.server_id,
-                "platform.mcp.tool_name": tool_name,
+        result, _ = await self._rpc_call(
+            "tools/call",
+            {
+                "name": tool_name,
+                "arguments": arguments or {},
             },
-        ):
-            result, _ = await self._rpc_call(
-                "tools/call",
-                {
-                    "name": tool_name,
-                    "arguments": arguments or {},
-                },
-            )
+        )
 
         return MCPCallResult(
             is_error=result.get("isError", False),
