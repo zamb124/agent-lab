@@ -318,6 +318,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate litserve SSH secrets
+        env:
+          LITSERVE_HOST: ${{ secrets.LITSERVE_HOST }}
+          LITSERVE_SSH_USER: ${{ secrets.LITSERVE_SSH_USER }}
+          LITSERVE_SSH_KEY: ${{ secrets.LITSERVE_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${LITSERVE_HOST:-}" ]; then
+            echo "Missing required secret: LITSERVE_HOST" >&2
+            exit 1
+          fi
+          if [ -z "${LITSERVE_SSH_USER:-}" ]; then
+            echo "Missing required secret: LITSERVE_SSH_USER" >&2
+            exit 1
+          fi
+          if [ -z "${LITSERVE_SSH_KEY:-}" ]; then
+            echo "Missing required secret: LITSERVE_SSH_KEY (private key content)" >&2
+            exit 1
+          fi
+
       - name: Copy compose and conf to litserve host
         uses: appleboy/scp-action@v0.1.7
         with:
