@@ -6,11 +6,15 @@
 import hashlib
 
 from core.logging import get_logger
+import json
+import logging
 import mimetypes
 import re
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+from urllib.parse import quote
 
 from core.files.audio_transcode import (
     resolve_ios_transcode_source,
@@ -51,7 +55,6 @@ class FileProcessor:
                 self._s3_client = S3ClientFactory.create_client_for_bucket(self.bucket_name)
             else:
                 self._s3_client = S3ClientFactory.create_default_client()
-
         return self._s3_client
 
     async def close(self):
@@ -71,6 +74,23 @@ class FileProcessor:
         if ext and not original_name.endswith(ext):
             return f"{original_name}{ext}"
         return original_name
+
+    @staticmethod
+    def _to_ascii_s3_metadata(metadata: Dict[str, Any]) -> Dict[str, str]:
+        """
+        S3 user-defined metadata должна быть ASCII-only строками.
+        При этом в FileRecord.metadata мы сохраняем исходные значения (включая Unicode).
+        """
+        out: Dict[str, str] = {}
+        for raw_key, raw_value in metadata.items():
+            key = raw_key.strip()
+            if isinstance(raw_value, (dict, list)):
+                value = json.dumps(raw_value, ensure_ascii=False, separators=(",", ":"))
+            else:
+                value = str(raw_value)
+
+            out[key] = value if value.isascii() else quote(value, safe="")
+        return out
 
     async def process_file_from_bytes(
         self,
@@ -127,10 +147,11 @@ class FileProcessor:
 
         s3_client = await self._get_s3_client()
 
+        s3_metadata = FileProcessor._to_ascii_s3_metadata(metadata or {})
         await s3_client.upload_bytes(
             data=data,
             key=s3_key,
-            metadata=metadata or {},
+            metadata=s3_metadata,
             content_type=content_type,
             public=public,
         )

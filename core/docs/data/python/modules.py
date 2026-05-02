@@ -321,6 +321,24 @@ MODULE_METHODS: Dict[str, List[Dict[str, Any]]] = {
             ),
         },
     ],
+    "mcp_client": [
+        {
+            "name": "get_mcp_client",
+            "type": "function",
+            "doc": (
+                "Фасад namespace: `await get_mcp_client(server_id, state=state, timeout=60.0)` "
+                "→ инициализированный MCPClient."
+            ),
+        },
+        {
+            "name": "call_mcp_tool",
+            "type": "function",
+            "doc": (
+                "Фасад namespace: `await call_mcp_tool(server_id, tool_name, arguments, state=state)` "
+                "→ MCPCallResult."
+            ),
+        },
+    ],
     "llm": [
         {
             "name": "chat",

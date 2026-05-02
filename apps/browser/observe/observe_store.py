@@ -74,6 +74,9 @@ class ControlObserveStore:
     def update_refs(self, session_id: str, refs: dict[str, dict[str, object]]) -> None:
         self._last_refs[session_id] = refs
 
+    def clear_refs(self, session_id: str) -> None:
+        self._last_refs.pop(session_id, None)
+
     def get_refs(self, session_id: str) -> dict[str, dict[str, object]]:
         refs = self._last_refs.get(session_id)
         if refs is None:

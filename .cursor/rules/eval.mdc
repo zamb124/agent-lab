@@ -88,6 +88,7 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 | Символы codegen / паритет `code/execute` | тот же файл, `register_sandbox_codegen_namespace` |
 | Whitelist `import` | [`core/inline_python_eval_policy.py`](core/inline_python_eval_policy.py) (`ALLOWED_IMPORT_ROOTS`); shims: [`shim_registry.py`](apps/flows/src/eval/shim_registry.py) |
 | Описания для редактора (globals) | [`core/docs/data/python/globals.py`](core/docs/data/python/globals.py) |
+| Контракты веб-поиска и описания страницы (`Search`, `Describe`; реализации в `web_snapshot`) | [`apps/flows/src/eval/web_snapshot.py`](apps/flows/src/eval/web_snapshot.py) |
 | Модули и методы в справке | [`core/docs/data/python/modules.py`](core/docs/data/python/modules.py) |
 | CI: модули и namespace покрыты докой | `make check-inline-docs` — [`tests/core/test_inline_docs_inventory.py`](tests/core/test_inline_docs_inventory.py) |
 

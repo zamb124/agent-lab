@@ -3,7 +3,7 @@ API endpoints для MCP серверов.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -16,7 +16,8 @@ from apps.flows.src.clients.mcp_client import (
     clear_mcp_client_cache,
 )
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models.mcp import MCPServerConfig, MCPToolInfo, MCPTransportType
+from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
+from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -221,74 +222,24 @@ async def sync_server_tools(
 ) -> MCPSyncResponse:
     """
     Синхронизирует tools с MCP сервера.
-    
-    Получает список tools через tools/list и сохраняет в ToolRepository.
+
+    Та же логика, что и при авто-синхронизации (`apps.flows.src.services.mcp_sync`).
     """
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
-    # Переменные нужны только если в headers есть @var: ссылки
-    variables: Dict[str, Any] = {}
-    has_var_refs = any("@var:" in str(v) for v in server.headers.values())
-    if has_var_refs:
-        variables = await container.variables_service.get_all_resolved_vars()
-    
-    client = MCPHttpClient(server, variables)
-    
+
     try:
-        tools = await client.list_tools()
+        _tool_ids, tools = await sync_mcp_server_tools(container=container, server_config=server)
     except MCPClientError as e:
-        raise HTTPException(status_code=502, detail=f"MCP server error: {e}")
+        raise HTTPException(status_code=502, detail=f"MCP server error: {e}") from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Connection error: {e}")
-    
-    # Сохраняем tools в репозиторий
-    from apps.flows.src.models import ToolReference
-    from apps.flows.src.models.enums import CodeMode
-    from apps.flows.src.models.tool_reference import CallParameter
-    
-    tool_ids = []
-    for tool in tools:
-        tool_id = f"mcp:{server_id}:{tool.name}"
-        tool_ids.append(tool_id)
-        
-        # Конвертируем JSON Schema в формат CallParameter
-        args_schema = {}
-        if tool.input_schema:
-            properties = tool.input_schema.get("properties", {})
-            required = tool.input_schema.get("required", [])
-            for param_name, param_info in properties.items():
-                args_schema[param_name] = CallParameter(
-                    type=param_info.get("type", "string"),
-                    description=param_info.get("description", ""),
-                    required=param_name in required,
-                )
-        
-        tool_ref = ToolReference(
-            tool_id=tool_id,
-            title=tool.name,
-            description=tool.description or f"MCP tool: {tool.name}",
-            code_mode=CodeMode.MCP_TOOL,
-            args_schema=args_schema,
-            tags=["mcp", f"mcp:{server_id}"],
-            mcp_server_id=server_id,
-            mcp_tool_name=tool.name,
-        )
-        await container.tool_repository.set(tool_ref)
-    
-    # Удаляем старые tools которых больше нет
-    for old_tool_id in server.cached_tools:
-        if old_tool_id not in tool_ids:
-            await container.tool_repository.delete(old_tool_id)
-    
-    # Обновляем server
-    server.cached_tools = tool_ids
-    server.last_sync_at = datetime.now(timezone.utc)
-    await container.mcp_server_repository.set(server)
-    
-    logger.info(f"MCP server {server_id}: synced {len(tools)} tools")
-    
+        raise HTTPException(status_code=502, detail=f"Connection error: {e}") from e
+
+    logger.info("MCP server %s: synced %s tools", server_id, len(tools))
+
     return MCPSyncResponse(
         success=True,
         tools_count=len(tools),

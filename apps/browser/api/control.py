@@ -274,6 +274,7 @@ class ControlNavigateBody(BaseModel):
     snapshot: bool = False
     capture_pdf: bool = False
     navigation_timeout_ms: int = Field(default=5_000, ge=1000)
+    new_tab: bool = True # костыль, откатить потом. 
 
 
 class ControlObserveBody(BaseModel):
@@ -324,6 +325,7 @@ class ControlFillBody(BaseModel):
     ref: str
     text: str
     timeout_ms: int = Field(default=5_000, ge=1000)
+    typing_delay_ms: Optional[int] = Field(default=None, ge=0)
 
 
 class ControlPressBody(BaseModel):
@@ -442,66 +444,76 @@ async def control_navigate(
     container: ContainerDep,
 ) -> dict[str, Any]:
     runtime = container.browser_runtime
-    try:
-        page = await runtime.lease_manager.get_page_for_session(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    req = BrowserFetchRequest(
-        url=body.url,
-        wait_policy=body.wait_policy,
-        screenshot=body.screenshot,
-        snapshot=body.snapshot,
-        capture_pdf=body.capture_pdf,
-        navigation_timeout_ms=body.navigation_timeout_ms,
-    )
-    try:
-        out = await runtime.control_adapter.navigate(page, req)
-    except BrowserCapabilityError as exc:
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        if body.new_tab:
+            try:
+                page = await runtime.lease_manager.swap_active_page_for_session(session_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            except RuntimeError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            runtime.observe_store.clear_refs(session_id)
+        else:
+            try:
+                page = await runtime.lease_manager.get_page_for_session(session_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            except RuntimeError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+        req = BrowserFetchRequest(
+            url=body.url,
+            wait_policy=body.wait_policy,
+            screenshot=body.screenshot,
+            snapshot=body.snapshot,
+            capture_pdf=body.capture_pdf,
+            navigation_timeout_ms=body.navigation_timeout_ms,
+        )
+        try:
+            out = await runtime.control_adapter.navigate(page, req)
+        except BrowserCapabilityError as exc:
+            event_path = _write_session_event(
+                runtime=runtime,
+                session_id=session_id,
+                op="control.navigate",
+                request=body,
+                response=None,
+                error={"kind": "capability_error", "detail": exc.to_dict()},
+                meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
+            )
+            _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+            raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+
+        # После навигации даём небольшой "поведенческий" шум в профилях human/fast,
+        # чтобы приближать сессию к пользовательской (crawl4ai-like simulate_user).
+        try:
+            inter, profile, rnd = _interaction_for_session(runtime, session_id)
+            await inter.post_navigate_signals(page, profile=profile, rnd=rnd)
+        except HTTPException:
+            raise
+        except Exception:
+            # Поведенческий слой не должен ломать навигацию: это best-effort сигнал,
+            # а не обязательная часть контракта navigate.
+            pass
+        payload = {
+            "final_url": out.final_url,
+            "status_code": out.status_code,
+            "response_headers": out.response_headers,
+            "screenshot_ref": out.screenshot_ref,
+            "pdf_ref": out.pdf_ref,
+            "snapshot_ref": out.snapshot_ref,
+            "anti_bot_signals": out.anti_bot_signals,
+        }
         event_path = _write_session_event(
             runtime=runtime,
             session_id=session_id,
             op="control.navigate",
             request=body,
-            response=None,
-            error={"kind": "capability_error", "detail": exc.to_dict()},
+            response=payload,
+            error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
         )
         _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-        raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
-
-    # После навигации даём небольшой "поведенческий" шум в профилях human/fast,
-    # чтобы приближать сессию к пользовательской (crawl4ai-like simulate_user).
-    try:
-        inter, profile, rnd = _interaction_for_session(runtime, session_id)
-        await inter.post_navigate_signals(page, profile=profile, rnd=rnd)
-    except HTTPException:
-        raise
-    except Exception:
-        # Поведенческий слой не должен ломать навигацию: это best-effort сигнал,
-        # а не обязательная часть контракта navigate.
-        pass
-    payload = {
-        "final_url": out.final_url,
-        "status_code": out.status_code,
-        "response_headers": out.response_headers,
-        "screenshot_ref": out.screenshot_ref,
-        "pdf_ref": out.pdf_ref,
-        "snapshot_ref": out.snapshot_ref,
-        "anti_bot_signals": out.anti_bot_signals,
-    }
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
-        op="control.navigate",
-        request=body,
-        response=payload,
-        error=None,
-        meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
-    )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-    return payload
+        return payload
 
 
 @router.post("/sessions/{session_id}/observe")
@@ -511,65 +523,66 @@ async def control_observe(
     container: ContainerDep,
 ) -> dict[str, Any]:
     runtime = container.browser_runtime
-    try:
-        page = await runtime.lease_manager.get_page_for_session(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    payload: dict[str, Any] = {"session_id": session_id, "url": page.url}
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        try:
+            page = await runtime.lease_manager.get_page_for_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        payload: dict[str, Any] = {"session_id": session_id, "url": page.url}
 
-    # Observe должен работать на "готовой" странице: domcontentloaded достаточно.
-    # `networkidle` на Lightpanda и на сайтах с трекерами может не наступать (или падать),
-    # а observe не должен зависеть от аналитики/рекламы.
-    await page.wait_for_load_state("domcontentloaded", timeout=10_000)
+        # Observe должен работать на "готовой" странице: domcontentloaded достаточно.
+        # `networkidle` на Lightpanda и на сайтах с трекерами может не наступать (или падать),
+        # а observe не должен зависеть от аналитики/рекламы.
+        await page.wait_for_load_state("domcontentloaded", timeout=10_000)
 
-    # Каноничный LLM-friendly snapshot: строим строго через JS в странице (page.evaluate),
-    # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
-    ax = await dom_accessibility_tree_dict_from_page(page)
-    snap_text, refs = build_interactive_snapshot_with_refs(ax)
-    payload["snapshot"] = {
-        "schema": "browser.control.snapshot.v1",
-        "mode": "interactive",
-        "text": snap_text,
-    }
-    runtime.observe_store.update_refs(session_id, refs)
-    if body.include_snapshot_refs:
+        # Каноничный LLM-friendly snapshot: строим строго через JS в странице (page.evaluate),
+        # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
+        ax = await dom_accessibility_tree_dict_from_page(page)
+        snap_text, refs = build_interactive_snapshot_with_refs(ax)
+        payload["snapshot"] = {
+            "schema": "browser.control.snapshot.v1",
+            "mode": "interactive",
+            "text": snap_text,
+        }
+        runtime.observe_store.update_refs(session_id, refs)
+        # if body.include_snapshot_refs:
         payload["snapshot"]["refs"] = refs
 
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
-        op="control.observe",
-        request=body,
-        response=payload,
-        error=None,
-        meta={"transport": "http", "path": f"/control/sessions/{session_id}/observe"},
-    )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-    html = await page.content()
-    html_path = runtime.session_artifacts.write_sidecar_text_for_event(
-        event_json_path=event_path,
-        ext=".html",
-        content=html,
-    )
-    runtime.session_artifacts.patch_event_meta(
-        event_json_path=event_path,
-        meta_patch={"html_ref": html_path},
-    )
-
-    page_err = _extract_page_error_from_html(html)
-    if page_err is not None:
-        page_err_path = runtime.session_artifacts.write_sidecar_text_for_event(
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.observe",
+            request=body,
+            response=payload,
+            error=None,
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/observe"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+        html = await page.content()
+        html_path = runtime.session_artifacts.write_sidecar_text_for_event(
             event_json_path=event_path,
-            ext=".page_error.json",
-            content=json.dumps(page_err, ensure_ascii=False, indent=2),
+            ext=".html",
+            content=html,
         )
         runtime.session_artifacts.patch_event_meta(
             event_json_path=event_path,
-            meta_patch={"page_error": page_err, "page_error_ref": page_err_path},
+            meta_patch={"html_ref": html_path},
         )
-    return payload
+
+        page_err = _extract_page_error_from_html(html)
+        if page_err is not None:
+            page_err_path = runtime.session_artifacts.write_sidecar_text_for_event(
+                event_json_path=event_path,
+                ext=".page_error.json",
+                content=json.dumps(page_err, ensure_ascii=False, indent=2),
+            )
+            runtime.session_artifacts.patch_event_meta(
+                event_json_path=event_path,
+                meta_patch={"page_error": page_err, "page_error_ref": page_err_path},
+            )
+        return payload
 
 
 @router.post("/sessions/{session_id}/action")
@@ -579,41 +592,42 @@ async def control_action(
     container: ContainerDep,
 ) -> dict[str, Any]:
     runtime = container.browser_runtime
-    try:
-        page = await runtime.lease_manager.get_page_for_session(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    try:
-        out = await runtime.control_adapter.run_action(
-            page,
-            body.code,
-            timeout_ms=body.timeout_ms,
-        )
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
-            op="control.action",
-            request=body,
-            response=out,
-            error=None,
-            meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
-        )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-        return out
-    except BrowserCapabilityError as exc:
-        event_path = _write_session_event(
-            runtime=runtime,
-            session_id=session_id,
-            op="control.action",
-            request=body,
-            response=None,
-            error={"kind": "capability_error", "detail": exc.to_dict()},
-            meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
-        )
-        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-        raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        try:
+            page = await runtime.lease_manager.get_page_for_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        try:
+            out = await runtime.control_adapter.run_action(
+                page,
+                body.code,
+                timeout_ms=body.timeout_ms,
+            )
+            event_path = _write_session_event(
+                runtime=runtime,
+                session_id=session_id,
+                op="control.action",
+                request=body,
+                response=out,
+                error=None,
+                meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
+            )
+            _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+            return out
+        except BrowserCapabilityError as exc:
+            event_path = _write_session_event(
+                runtime=runtime,
+                session_id=session_id,
+                op="control.action",
+                request=body,
+                response=None,
+                error={"kind": "capability_error", "detail": exc.to_dict()},
+                meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
+            )
+            _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+            raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
 
 
 def _locator_from_ref(page: Any, refs: dict[str, dict[str, object]], raw_ref: str) -> Any:
@@ -656,32 +670,33 @@ async def control_click(
     container: ContainerDep,
 ) -> dict[str, Any]:
     runtime = container.browser_runtime
-    try:
-        page = await runtime.lease_manager.get_page_for_session(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    try:
-        refs = runtime.observe_store.get_refs(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    loc = _locator_from_ref(page, refs, body.ref)
-    await loc.wait_for(state="visible", timeout=body.timeout_ms)
-    inter, profile, rnd = _interaction_for_session(runtime, session_id)
-    await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
-    out = {"ok": True}
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
-        op="control.click",
-        request=body,
-        response=out,
-        error=None,
-        meta={"transport": "http", "path": f"/control/sessions/{session_id}/click"},
-    )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-    return out
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        try:
+            page = await runtime.lease_manager.get_page_for_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        try:
+            refs = runtime.observe_store.get_refs(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        loc = _locator_from_ref(page, refs, body.ref)
+        await loc.wait_for(state="visible", timeout=body.timeout_ms)
+        inter, profile, rnd = _interaction_for_session(runtime, session_id)
+        await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
+        out = {"ok": True}
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.click",
+            request=body,
+            response=out,
+            error=None,
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/click"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+        return out
 
 
 @router.post("/sessions/{session_id}/fill")
@@ -691,32 +706,41 @@ async def control_fill(
     container: ContainerDep,
 ) -> dict[str, Any]:
     runtime = container.browser_runtime
-    try:
-        page = await runtime.lease_manager.get_page_for_session(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    try:
-        refs = runtime.observe_store.get_refs(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    loc = _locator_from_ref(page, refs, body.ref)
-    await loc.wait_for(state="visible", timeout=body.timeout_ms)
-    inter, profile, rnd = _interaction_for_session(runtime, session_id)
-    await inter.type_text(page, loc, body.text, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
-    out = {"ok": True}
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
-        op="control.fill",
-        request=body,
-        response=out,
-        error=None,
-        meta={"transport": "http", "path": f"/control/sessions/{session_id}/fill"},
-    )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-    return out
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        try:
+            page = await runtime.lease_manager.get_page_for_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        try:
+            refs = runtime.observe_store.get_refs(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        loc = _locator_from_ref(page, refs, body.ref)
+        await loc.wait_for(state="visible", timeout=body.timeout_ms)
+        inter, profile, rnd = _interaction_for_session(runtime, session_id)
+        await inter.type_text(
+            page,
+            loc,
+            body.text,
+            profile=profile,
+            rnd=rnd,
+            timeout_ms=body.timeout_ms,
+            typing_delay_ms=body.typing_delay_ms,
+        )
+        out = {"ok": True}
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.fill",
+            request=body,
+            response=out,
+            error=None,
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/fill"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+        return out
 
 
 @router.post("/sessions/{session_id}/press")
@@ -726,26 +750,27 @@ async def control_press(
     container: ContainerDep,
 ) -> dict[str, Any]:
     runtime = container.browser_runtime
-    try:
-        page = await runtime.lease_manager.get_page_for_session(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    inter, profile, rnd = _interaction_for_session(runtime, session_id)
-    await inter.press(page, body.key, profile=profile, rnd=rnd)
-    out = {"ok": True}
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
-        op="control.press",
-        request=body,
-        response=out,
-        error=None,
-        meta={"transport": "http", "path": f"/control/sessions/{session_id}/press"},
-    )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-    return out
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        try:
+            page = await runtime.lease_manager.get_page_for_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        inter, profile, rnd = _interaction_for_session(runtime, session_id)
+        await inter.press(page, body.key, profile=profile, rnd=rnd)
+        out = {"ok": True}
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.press",
+            request=body,
+            response=out,
+            error=None,
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/press"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+        return out
 
 
 @router.post("/sessions/{session_id}/wait")
@@ -755,30 +780,31 @@ async def control_wait(
     container: ContainerDep,
 ) -> dict[str, Any]:
     runtime = container.browser_runtime
-    try:
-        page = await runtime.lease_manager.get_page_for_session(session_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if body.load_state is not None:
-        await page.wait_for_load_state(body.load_state, timeout=body.timeout_ms)
-    if body.selector is not None:
-        await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
-    if body.load_state is None and body.selector is None:
-        raise HTTPException(status_code=422, detail="Нужно задать selector и/или load_state")
-    out = {"ok": True}
-    event_path = _write_session_event(
-        runtime=runtime,
-        session_id=session_id,
-        op="control.wait",
-        request=body,
-        response=out,
-        error=None,
-        meta={"transport": "http", "path": f"/control/sessions/{session_id}/wait"},
-    )
-    _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
-    return out
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        try:
+            page = await runtime.lease_manager.get_page_for_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if body.load_state is not None:
+            await page.wait_for_load_state(body.load_state, timeout=body.timeout_ms)
+        if body.selector is not None:
+            await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
+        if body.load_state is None and body.selector is None:
+            raise HTTPException(status_code=422, detail="Нужно задать selector и/или load_state")
+        out = {"ok": True}
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.wait",
+            request=body,
+            response=out,
+            error=None,
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/wait"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+        return out
 
 
 @router.delete("/sessions/{session_id}")

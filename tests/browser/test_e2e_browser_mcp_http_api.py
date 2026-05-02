@@ -86,6 +86,7 @@ async def test_mcp_http_api_initialize_list_and_call() -> None:
             names = {t["name"] for t in tools}
             assert "browser_create_session" in names
             assert "browser_observe" in names
+            assert "browser_save_html_to_s3" in names
             assert "browser_close_session" in names
 
             # tools/call: create session

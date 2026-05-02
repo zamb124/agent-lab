@@ -45,9 +45,19 @@ from .scheduling import (
     schedule_interval_task,
     schedule_one_time_task,
 )
+from .web_browser import (
+    browser_duckduckgo_links,
+    browser_duckduckgo_links_batch,
+    browser_page_markdown,
+    browser_page_snapshot,
+)
 
 __all__ = [
     "ask_user",
+    "browser_duckduckgo_links",
+    "browser_duckduckgo_links_batch",
+    "browser_page_markdown",
+    "browser_page_snapshot",
     "hitl_operator_task",
     "calculator",
     "crm_analyze_note_text",

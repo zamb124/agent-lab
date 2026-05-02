@@ -63,6 +63,35 @@ services:
     networks:
       - dev-net
 
+  # Chromium CDP для apps/browser (Playwright): хост http://127.0.0.1:9222 → BROWSER__CDP_URL.
+  # Ручная проверка: в Chromium открыть chrome://inspect/#devices → Configure → localhost:9222.
+  # Доп. флаги: снижают типичные сигналы автоматизации у процесса, поднятого до connect_over_cdp
+  chromium-cdp:
+    platform: "linux/amd64"
+    image: zenika/alpine-chrome:latest
+    ports:
+      - "9222:9222"
+    shm_size: 1g
+    command:
+      - chromium-browser
+      - --no-sandbox
+      - --disable-dev-shm-usage
+      - --disable-blink-features=AutomationControlled
+      - --exclude-switches=enable-automation
+      - --window-size=1920,1080
+      - --lang=en-US
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9222/json/version >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - dev-net
+
   # External Cat Agent опционален - требует сборки образа, что замедляет запуск:
   # external-cat-agent-dev:
   #   platform: "linux/amd64"

@@ -174,6 +174,7 @@ GLOBALS: List[Dict[str, Any]] = [
             "Именованные параметры: include_asset_bytes (PDF, тяжёлый ответ), source_file_id и source_checksum, "
             "vision_prompt / vision_model для картинок (пустую строку в vision_prompt нельзя).\n\n"
             "Результат FileReadResult: pages, page_count, detected_kind, mime_type, warnings, source_checksum, source_file_id.\n"
+            "detected_kind: text, html (.html/.htm и MIME text/html — извлечение через trafilatura в markdown), pdf, office, spreadsheet, image, audio, video, unknown.\n"
             "Тип по имени/заголовку: reader.recognize_file_type(file_name='x.png', head=raw[:8192]).\n"
             "Без кода: tool read_file."
         ),
@@ -393,6 +394,115 @@ GLOBALS: List[Dict[str, Any]] = [
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["http", "api", "platform"],
+    },
+    {
+        "name": "get_mcp_client",
+        "type": "function",
+        "doc": (
+            "Получить MCP-клиент по server_id из конфигурации компании:\n"
+            "client = await get_mcp_client('user-browser', state=state, timeout=60.0)\n"
+            "result = await client.call_tool('browser_observe', {'session_id': '...'})"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "tools", "platform"],
+    },
+    {
+        "name": "call_mcp_tool",
+        "type": "function",
+        "doc": (
+            "Вызвать MCP tool без ручной сборки JSON-RPC:\n"
+            "res = await call_mcp_tool('user-browser', 'browser_observe', {'session_id': '...'}, state=state)\n"
+            "text = res.get_text(); content = res.content; is_error = res.is_error"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "tools", "platform"],
+    },
+    {
+        "name": "Search",
+        "type": "class",
+        "doc": (
+            "Абстрактный контракт поиска URL по текстовому запросу.\n"
+            "Метод: `async def links(self, state, query: str) -> list[str]`.\n"
+            "Реализация по умолчанию для браузерного DuckDuckGo: `DuckDuckGoBrowserSearch`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "search"],
+    },
+    {
+        "name": "Describe",
+        "type": "class",
+        "doc": (
+            "Абстрактный контракт получения markdown страницы по HTTP(S) URL.\n"
+            "Метод: `async def page_markdown(self, state, url: str) -> str`.\n"
+            "Реализация через MCP browser и FileReader: `BrowserSnapshotDescribe`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "files"],
+    },
+    {
+        "name": "DuckDuckGoBrowserSearch",
+        "type": "class",
+        "doc": (
+            "`Search` через DuckDuckGo и MCP `user-browser` (как simple_crawler).\n"
+            "`search = DuckDuckGoBrowserSearch()` или с параметрами `server_id`, `per_query_limit`, `blocked_hosts`.\n"
+            "`urls = await search.links(state, 'запрос')`; несколько запросов: `await search.links_many(state, ['a','b'])`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "search"],
+    },
+    {
+        "name": "BrowserSnapshotDescribe",
+        "type": "class",
+        "doc": (
+            "`Describe`: сессия crawl, `browser_save_html_to_s3`, затем `FileReader.read` (как simple_crawler).\n"
+            "`desc = BrowserSnapshotDescribe()`; опционально `navigation_timeout_ms`, `ingest_source`, `file_reader`.\n"
+            "`text = await desc.page_markdown(state, 'https://example.com/path')`.\n"
+            "`snap = await desc.page_snapshot(state, url)` — dict с ключами `url`, `file_id`, `s3_path`, `text`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "files"],
+    },
+    {
+        "name": "browser_duckduckgo_links",
+        "type": "FunctionTool",
+        "doc": (
+            "Тул ReAct: поиск ссылок через DuckDuckGo (`await tool.run(args, state)` или в `llm.chat(..., tools=[browser_duckduckgo_links])`).\n"
+            "Аргументы: `query`, опционально `server_id`, `per_query_limit`.\n"
+            "Ответ: `success`, при успехе `urls` — список HTTP(S) URL."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "search", "web"],
+    },
+    {
+        "name": "browser_duckduckgo_links_batch",
+        "type": "FunctionTool",
+        "doc": (
+            "Тул ReAct: параллельный поиск по нескольким `queries`; ответ `urls` с дедупликацией.\n"
+            "Опции `server_id`, `per_query_limit` — как у `browser_duckduckgo_links`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "search", "web"],
+    },
+    {
+        "name": "browser_page_markdown",
+        "type": "FunctionTool",
+        "doc": (
+            "Тул ReAct: markdown страницы по URL (MCP crawl + S3 + FileReader).\n"
+            "Аргументы: `url`, опционально `server_id`, `navigation_timeout_ms`, `ingest_source`.\n"
+            "Ответ: `success`, при успехе `markdown`."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "web", "files"],
+    },
+    {
+        "name": "browser_page_snapshot",
+        "type": "FunctionTool",
+        "doc": (
+            "Тул ReAct: снимок страницы с идентификаторами файла.\n"
+            "При успехе: `success`, `url`, `file_id`, `s3_path`, `text` (markdown)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["mcp", "browser", "web", "files"],
     },
     {
         "name": "RagClient",

@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import json
 import uuid
+from html.parser import HTMLParser
 from typing import Any, Literal, Optional
+from urllib.parse import urljoin, urlparse
 
 from fastapi import APIRouter, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,6 +45,7 @@ from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import ContextSignature
 from apps.browser.interaction.interaction_profiles import InteractionProfileName
 from apps.browser.interaction.interaction_profiles import get_interaction_profile
+from core.tracing.operation_span import traced_operation
 
 router = APIRouter(prefix="/mcp", tags=["browser-mcp"])
 
@@ -133,6 +136,7 @@ class ToolNavigateArgs(BaseModel):
     snapshot: bool = False
     capture_pdf: bool = False
     navigation_timeout_ms: int = Field(default=5_000, ge=1000)
+    new_tab: bool = True
 
 
 class ToolObserveArgs(BaseModel):
@@ -157,6 +161,7 @@ class ToolFillArgs(BaseModel):
     ref: str
     text: str
     timeout_ms: int = Field(default=10_000, ge=1000)
+    typing_delay_ms: Optional[int] = Field(default=None, ge=0)
 
 
 class ToolPressArgs(BaseModel):
@@ -181,6 +186,63 @@ class ToolCloseSessionArgs(BaseModel):
     session_id: str
 
 
+class ToolSaveHtmlToS3Args(BaseModel): # убрать костыль
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    original_name: str = "snapshot.html"
+    links_limit: int = Field(default=10, ge=1, le=100)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class _AnchorHrefParser(HTMLParser):
+    def __init__(self, base_url: str, limit: int):
+        super().__init__(convert_charrefs=True)
+        self._base_url = base_url
+        self._limit = limit
+        self._seen: set[str] = set()
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a" or len(self.links) >= self._limit:
+            return
+        href: str | None = None
+        for key, value in attrs:
+            if key == "href":
+                href = value
+                break
+        if href is None:
+            return
+        candidate = href.strip()
+        if candidate == "":
+            return
+        absolute = urljoin(self._base_url, candidate)
+        parsed = urlparse(absolute)
+        if parsed.scheme not in ("http", "https"):
+            return
+        if parsed.netloc == "":
+            return
+        if absolute in self._seen:
+            return
+        self._seen.add(absolute)
+        self.links.append(absolute)
+
+
+def _ensure_html_name(original_name: str) -> str:
+    stripped = original_name.strip()
+    if stripped == "":
+        raise ValueError("original_name должен быть непустой строкой")
+    if "." not in stripped:
+        return f"{stripped}.html"
+    return stripped
+
+
+def _extract_clickable_links(*, html: str, base_url: str, limit: int) -> list[str]:
+    parser = _AnchorHrefParser(base_url=base_url, limit=limit)
+    parser.feed(html)
+    return parser.links
+
+
 def _schema_for_model(model: type[BaseModel]) -> dict[str, Any]:
     # Pydantic v2: model_json_schema() возвращает JSON Schema.
     return model.model_json_schema()
@@ -195,7 +257,12 @@ def _tools() -> list[McpToolInfo]:
         ),
         McpToolInfo(
             name="browser_navigate",
-            description="Навигация в рамках сессии (url + wait_policy + optional artifacts).",
+            description=(
+                "Навигация в рамках сессии (url + wait_policy + optional artifacts). "
+                "По умолчанию new_tab=true: новая вкладка (новая Playwright page) в том же контексте, "
+                "предыдущая закрывается; refs observe сбрасываются до следующего browser_observe. "
+                "new_tab=false — навигация в текущей вкладке."
+            ),
             inputSchema=_schema_for_model(ToolNavigateArgs),
         ),
         McpToolInfo(
@@ -233,6 +300,14 @@ def _tools() -> list[McpToolInfo]:
             description="Закрыть сессию и освободить ресурсы.",
             inputSchema=_schema_for_model(ToolCloseSessionArgs),
         ),
+        McpToolInfo(
+            name="browser_save_html_to_s3",
+            description=(
+                "Сохранить HTML текущей страницы в S3 через file_processor и вернуть "
+                "file_id/s3_path плюс первые кликабельные ссылки."
+            ),
+            inputSchema=_schema_for_model(ToolSaveHtmlToS3Args),
+        ),
     ]
 
 
@@ -242,6 +317,20 @@ def _json_text_content(obj: Any) -> list[dict[str, Any]]:
 
 def _error(code: int, message: str, data: dict[str, Any] | None = None) -> JsonRpcError:
     return JsonRpcError(code=code, message=message, data=data)
+
+
+def _mcp_tool_trace_attributes(*, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    keys = [k for k in arguments.keys() if isinstance(k, str)]
+    keys.sort()
+    sid = arguments.get("session_id")
+    out: dict[str, Any] = {
+        "platform.mcp.tool_name": tool_name.strip(),
+        "platform.mcp.source": "browser_runtime",
+        "platform.mcp.tool_args_keys": ",".join(keys[:50]),
+    }
+    if isinstance(sid, str) and sid.strip():
+        out["platform.mcp.session_id"] = sid.strip()
+    return out
 
 
 async def _tool_call(
@@ -323,6 +412,7 @@ async def _tool_call(
                 snapshot=args.snapshot,
                 capture_pdf=args.capture_pdf,
                 navigation_timeout_ms=args.navigation_timeout_ms,
+                new_tab=args.new_tab,
             ),
             container=container,
         )
@@ -350,7 +440,12 @@ async def _tool_call(
         args = ToolFillArgs.model_validate(arguments)
         await control_fill(
             session_id=args.session_id,
-            body=ControlFillBody(ref=args.ref, text=args.text, timeout_ms=args.timeout_ms),
+            body=ControlFillBody(
+                ref=args.ref,
+                text=args.text,
+                timeout_ms=args.timeout_ms,
+                typing_delay_ms=args.typing_delay_ms,
+            ),
             container=container,
         )
         return McpToolCallResult(content=_json_text_content({"ok": True}), isError=False)
@@ -384,6 +479,41 @@ async def _tool_call(
             container=container,
         )
         return McpToolCallResult(content=_json_text_content(out), isError=False)
+
+    if tool_name == "browser_save_html_to_s3":
+        args = ToolSaveHtmlToS3Args.model_validate(arguments)
+        async with runtime.lease_manager.session_navigate_exclusive(args.session_id):
+            try:
+                page = await runtime.lease_manager.get_page_for_session(args.session_id)
+            except KeyError as exc:
+                raise ValueError(str(exc)) from exc
+            except RuntimeError as exc:
+                raise ValueError(str(exc)) from exc
+            html = await page.content()
+            links = _extract_clickable_links(html=html, base_url=page.url, limit=args.links_limit)
+            record = await container.file_processor.process_file_from_bytes(
+                data=html.encode("utf-8"),
+                original_name=_ensure_html_name(args.original_name),
+                content_type="text/html",
+                metadata={
+                    "source": "browser_mcp",
+                    "session_id": args.session_id,
+                    **args.metadata,
+                },
+                public=False,
+            )
+            payload = {
+                "file_id": record.file_id,
+                "s3_bucket": record.s3_bucket,
+                "s3_key": record.s3_key,
+                "s3_path": f"s3://{record.s3_bucket}/{record.s3_key}",
+                "storage_url": record.storage_url,
+                "file_size": record.file_size,
+                "content_type": record.content_type,
+                "source_url": page.url,
+                "links": links,
+            }
+        return McpToolCallResult(content=_json_text_content(payload), isError=False)
 
     raise ValueError(f"Tool not found: {tool_name}")
 
@@ -434,7 +564,18 @@ async def mcp_jsonrpc(
             err = _error(-32602, "tools/call: params.arguments must be object")
             return JsonRpcResponse(id=req_id, error=err).model_dump(exclude_none=True)
         try:
-            call_res = await _tool_call(tool_name=name, arguments=arguments, container=container)
+            async with traced_operation(
+                "browser.mcp.tool_call",
+                event_type="mcp.tool_call",
+                operation_category="mcp",
+                extra_attributes=_mcp_tool_trace_attributes(tool_name=name, arguments=arguments),
+            ) as span:
+                call_res = await _tool_call(
+                    tool_name=name,
+                    arguments=arguments,
+                    container=container,
+                )
+                span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.isError))
         except Exception as exc:
             err = _error(-32000, str(exc), data={"tool": name})
             return JsonRpcResponse(id=req_id, error=err).model_dump(exclude_none=True)

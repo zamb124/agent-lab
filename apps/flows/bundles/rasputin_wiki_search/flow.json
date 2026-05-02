@@ -1,0 +1,33 @@
+{
+  "id": "rasputin_wiki_search",
+  "name": "Тест: поиск Wikipedia + markdown страницы (Распутин)",
+  "description": "Один ReAct-шаг: инструмент browser_duckduckgo_links находит HTTP(S) URL из выдачи DuckDuckGo; затем browser_page_markdown открывает выбранную страницу и возвращает готовый markdown (тот же путь, что BrowserSnapshotDescribe.page_markdown в simple_crawler). Сценарий по умолчанию — статья Википедии о Григории Распутине.",
+  "tags": [
+    "browser",
+    "mcp",
+    "search",
+    "wiki",
+    "test",
+    "example"
+  ],
+  "permission": [],
+  "entry": "wiki_rasputin_agent",
+  "nodes": {
+    "wiki_rasputin_agent": {
+      "type": "llm_node",
+      "prompt": "Ты — тестовый агент с двумя инструментами: поиск ссылок в вебе и чтение страницы в markdown.\n\nЗадача (выполни в этом порядке, без пропусков):\n1) Вызови browser_duckduckgo_links с запросом вроде «Григорий Распутин site:wikipedia.org» или «Grigori Rasputin Wikipedia ru» — чтобы в списке urls появилась ссылка на статью Википедии (домен wikipedia.org, путь /wiki/...).\n2) Из поля urls ответа выбери одну наиболее подходящую статью о Распутине (русская или английская Википедия — допустимо). Если success=false или подходящего URL нет — сообщи об этом пользователю и остановись.\n3) Вызови browser_page_markdown с параметром url равным выбранной ссылке. Если success=false — передай текст error пользователю и остановись.\n4) В финальном ответе пользователю: укажи выбранный URL; кратко (5–10 предложений) перескажи биографию и роль Распутина **только** по полю markdown из ответа инструмента; не добавляй факты, которых нет в этом markdown.\n\nВопрос пользователя (можно игнорировать детали, если он просит «просто про Распутина»):\n{content}",
+      "tools": [
+        "browser_duckduckgo_links",
+        "browser_page_markdown"
+      ],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "wiki_rasputin_agent",
+      "to": null
+    }
+  ],
+  "variables": {}
+}

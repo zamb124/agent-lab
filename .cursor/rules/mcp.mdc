@@ -29,13 +29,11 @@ from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 
 server = MCPServerConfig(
     server_id="context7",
-    company_id="company_123",
     name="Context7 Documentation",
     url="https://mcp.context7.com/mcp",
     transport_type=MCPTransportType.HTTP,
     headers={"Authorization": "@var:context7_api_key"},
     is_active=True,
-    auto_sync_tools=True,
 )
 ```
 
@@ -55,15 +53,18 @@ active_servers = await mcp_repo.list_active()
 
 ## Синхронизация тулов
 
+Единая реализация: `apps/flows/src/services/mcp_sync.py` — `sync_mcp_server_tools(container=..., server_config=...)`.
+
+- UI и интеграции: `POST /flows/api/v1/mcp/servers/{server_id}/sync` вызывает эту же функцию.
+- Инициализация компании (TaskIQ): `sync_auto_mcp_servers_for_company` — все активные серверы компании.
+
+Пишет `ToolReference` в `tool_repository`, обновляет `cached_tools` и `last_sync_at`, удаляет тулы, которых больше нет в ответе `tools/list`. Переменные для резолва `@var:` в headers загружаются только если в headers есть `@var:`.
+
 ```python
-from apps.flows.src.clients.mcp_client import sync_mcp_server_tools
+from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 
-tools = await sync_mcp_server_tools("context7")
-tools = await sync_mcp_server_tools("context7", company_id="company_123")
-# Возвращает List[ToolReference]: "mcp:context7:resolve-library-id", ...
+tool_ids, tools = await sync_mcp_server_tools(container=container, server_config=server)
 ```
-
-При старте приложения автоматически синхронизируются все активные MCP серверы компании.
 
 ## Использование в конфиге flow (inline JSON)
 

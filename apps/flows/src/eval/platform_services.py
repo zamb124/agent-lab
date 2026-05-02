@@ -10,7 +10,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from apps.flows.src.clients.mcp_client import MCPClient
     from apps.flows.src.eval.lara_facade import LaraFacade
+    from apps.flows.src.models.mcp import MCPCallResult
     from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
     from core.integrations.oauth_service import OAuthService
@@ -46,6 +48,46 @@ def get_code_runner(language: str = "python", resources: dict | None = None) -> 
     from apps.flows.src.container import get_container
 
     return get_container().get_code_runner(language=language, resources=resources)
+
+
+async def get_mcp_client(
+    server_id: str,
+    *,
+    state: "ExecutionState | None" = None,
+    timeout: float = 60.0,
+) -> "MCPClient":
+    """Вернуть MCP-клиент по `server_id` для inline-кода (без доступа к контейнеру)."""
+    from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
+    from apps.flows.src.container import get_container
+
+    if not isinstance(server_id, str) or server_id.strip() == "":
+        raise ValueError("server_id обязателен")
+    config = await get_container().mcp_server_repository.get(server_id.strip())
+    if config is None:
+        raise ValueError(f"MCP server not found: {server_id}")
+    variables: dict[str, Any] = {}
+    if state is not None:
+        variables = dict(getattr(state, "variables", {}) or {})
+    return await build_mcp_client(
+        config=config,
+        variables=variables,
+        timeout=timeout,
+    )
+
+
+async def call_mcp_tool(
+    server_id: str,
+    tool_name: str,
+    arguments: dict[str, Any] | None = None,
+    *,
+    state: "ExecutionState | None" = None,
+    timeout: float = 60.0,
+) -> "MCPCallResult":
+    """Вызвать MCP tool из inline-кода и вернуть `MCPCallResult`."""
+    if not isinstance(tool_name, str) or tool_name.strip() == "":
+        raise ValueError("tool_name обязателен")
+    client = await get_mcp_client(server_id, state=state, timeout=timeout)
+    return await client.call_tool(tool_name.strip(), arguments or {})
 
 
 async def get_file_bytes(file_id: str) -> bytes:

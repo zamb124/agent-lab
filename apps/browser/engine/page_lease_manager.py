@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, AsyncIterator, Callable, Optional
 
 from apps.browser.engine.context_factory import ContextFactory
 from apps.browser.engine.types import ContextSignature, SessionMode
@@ -129,6 +130,7 @@ class PageLeaseManager:
         self._console_events_by_session: dict[str, list[dict[str, object]]] = {}
         self._console_listeners_by_page: dict[int, tuple[object, object, object, object]] = {}
         self._page_event_logger = page_event_logger
+        self._navigate_locks: dict[str, asyncio.Lock] = {}
 
     @staticmethod
     def _console_location(msg: Any) -> dict[str, object]:
@@ -270,6 +272,68 @@ class PageLeaseManager:
         page.remove_listener("pageerror", on_page_error)
         page.remove_listener("requestfailed", on_request_failed)
         page.remove_listener("response", on_response)
+
+    @asynccontextmanager
+    async def session_navigate_exclusive(self, session_id: str) -> AsyncIterator[None]:
+        """
+        Сериализация navigate (и kill_session для того же session_id) на одной сессии.
+
+        Назначение:
+        - Исключить гонку двух navigate на одном session_id (общая страница до swap).
+        - Согласовать kill_session с in-flight navigate.
+        """
+        if not session_id:
+            raise ValueError("session_id обязателен")
+        lock = self._navigate_locks.setdefault(session_id, asyncio.Lock())
+        async with lock:
+            yield
+
+    async def swap_active_page_for_session(self, session_id: str) -> Any:
+        """
+        Закрыть текущую вкладку сессии, открыть новую в том же BrowserContext и вернуть page.
+
+        Инвариант:
+        - После успешного swap у session_id снова ровно одна активная страница в менеджере.
+        """
+        async with self._lock:
+            ctx_rec = self._session_contexts.get(session_id)
+            if ctx_rec is None:
+                raise KeyError(f"Нет контекста для session_id={session_id}")
+            pids = self._session_pages.get(session_id)
+            if pids is None or len(pids) != 1:
+                raise RuntimeError(
+                    "swap_active_page_for_session: ожидалась ровно одна страница для "
+                    f"session_id={session_id}, активно {0 if pids is None else len(pids)}",
+                )
+            old_pid = next(iter(pids))
+            old_rec = self._leases.pop(old_pid, None)
+            if old_rec is None:
+                raise RuntimeError("swap_active_page_for_session: lease record отсутствует")
+            old_page = old_rec.page
+            self._session_pages.pop(session_id, None)
+
+        self._detach_console_listeners(old_page)
+        await self._factory.close_page(old_page)
+
+        new_page = await self._factory.new_page(ctx_rec.context)
+        self._attach_console_listeners(session_id=session_id, page=new_page)
+        new_rec = LeaseRecord(
+            session_id=session_id,
+            endpoint_key=old_rec.endpoint_key,
+            context_signature=old_rec.context_signature,
+            page=new_page,
+            acquired_monotonic=time.monotonic(),
+            ttl_sec=old_rec.ttl_sec,
+            session_mode=old_rec.session_mode,
+        )
+        new_pid = id(new_page)
+        async with self._lock:
+            current_ctx = self._session_contexts.get(session_id)
+            if current_ctx is not ctx_rec:
+                raise RuntimeError("swap_active_page_for_session: контекст сессии изменился во время swap")
+            self._leases[new_pid] = new_rec
+            self._session_pages[session_id] = {new_pid}
+        return new_page
 
     def drain_console_events(self, session_id: str) -> list[dict[str, object]]:
         """
@@ -435,20 +499,22 @@ class PageLeaseManager:
             )
 
     async def kill_session(self, session_id: str, *, warm_idle_sec: int) -> None:
-        async with self._lock:
-            pids = list(self._session_pages.get(session_id, set()))
-            recs = [self._leases[pid] for pid in pids if pid in self._leases]
-        for rec in recs:
-            await self.release_page(
-                rec.page,
-                warm_idle_sec=warm_idle_sec,
-                session_mode_override="restore",
-            )
-        async with self._lock:
-            ctx_rec = self._session_contexts.pop(session_id, None)
-        if ctx_rec is not None:
-            await self._factory.close_context(ctx_rec.context)
-        self._console_events_by_session.pop(session_id, None)
+        async with self.session_navigate_exclusive(session_id):
+            async with self._lock:
+                pids = list(self._session_pages.get(session_id, set()))
+                recs = [self._leases[pid] for pid in pids if pid in self._leases]
+            for rec in recs:
+                await self.release_page(
+                    rec.page,
+                    warm_idle_sec=warm_idle_sec,
+                    session_mode_override="restore",
+                )
+            async with self._lock:
+                ctx_rec = self._session_contexts.pop(session_id, None)
+            if ctx_rec is not None:
+                await self._factory.close_context(ctx_rec.context)
+            self._console_events_by_session.pop(session_id, None)
+        self._navigate_locks.pop(session_id, None)
 
     async def close_all(self) -> None:
         """

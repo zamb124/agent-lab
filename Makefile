@@ -23,11 +23,11 @@ _REMOTE_BUILD_I18N = mkdir -p static/i18n && docker run --rm -v $(AGENT_LAB_REMO
 # Алиас для удобства
 dev: dev-up
 
-# Development Environment (порты: 54321, 63791, 19001-19011)
+# Development Environment (порты: 54321, 63791, 19001-19011, Chromium CDP 9222 — см. docker-compose-dev.yaml)
 dev-up:
 	@echo "🚀 Запуск Development окружения..."
 	docker-compose -f docker-compose-dev.yaml up -d
-	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011)"
+	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011, Chromium CDP: 9222)"
 
 dev-down:
 	@echo "🛑 Остановка Development окружения..."
@@ -284,8 +284,8 @@ help:
 	@echo "============================================================================"
 	@echo "Изолированные окружения (dev/test/prod):"
 	@echo "============================================================================"
-	@echo "Development (порты: 54321, 63791, 19001-19011):"
-	@echo "  make dev-up          - Запустить dev окружение (включая MinIO)"
+	@echo "Development (порты: 54321, 63791, 19001-19011, Chromium CDP 9222 — docker-compose-dev.yaml):"
+	@echo "  make dev-up          - Запустить dev окружение (включая MinIO и chromium-cdp)"
 	@echo "  make dev-down        - Остановить dev окружение"
 	@echo "  make dev-logs        - Логи dev окружения"
 	@echo "  make dev-clean       - Полная очистка (включая volumes)"

@@ -85,6 +85,9 @@ SERVICES = {
         "type": "uvicorn",
         "app": "apps.app_runtime_targets:browser_app",
         "port": "8009",
+        "env": {
+            "BROWSER__CDP_URL": "http://127.0.0.1:9222",
+        },
     },
     "provider_litserve": {
         "type": "module",
@@ -176,6 +179,19 @@ def build_command(service: str) -> list[str]:
             config["scheduler"],
         ]
     raise ValueError(f"Неизвестный тип сервиса: {service_type}")
+
+
+def build_env(service: str) -> dict[str, str]:
+    cfg = SERVICES.get(service) or {}
+    extra = cfg.get("env") or {}
+    if not isinstance(extra, dict):
+        raise ValueError(f"SERVICES[{service!r}].env must be dict[str,str]")
+    out = dict(os.environ)
+    for k, v in extra.items():
+        if v is None:
+            continue
+        out[str(k)] = str(v)
+    return out
 
 
 def _uvicorn_ports() -> list[str]:
@@ -339,11 +355,15 @@ def run_all(exclude: set[str] | None = None) -> None:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=build_env(name),
         )
         assert proc.stdout is not None
         prefix = f"[{name}] "
         threading.Thread(
-            target=_prefix_stream, args=(proc.stdout, prefix), daemon=True
+            target=_prefix_stream,
+            args=(proc.stdout, prefix),
+            name=f"run-all:{name}:stdout",
+            daemon=True,
         ).start()
         children.append((name, proc))
 
@@ -404,8 +424,13 @@ def main() -> None:
         sys.exit(1)
 
     cmd = build_command(service)
-    print(f"Запуск {service}: {' '.join(cmd)}")
-    result = subprocess.run(cmd, stdout=sys.stdout, stderr=sys.stderr)
+    print(f"Запуск {service}: {' '.join(cmd)}", flush=True)
+    result = subprocess.run(
+        cmd,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        env=build_env(service),
+    )
     sys.exit(result.returncode)
 
 

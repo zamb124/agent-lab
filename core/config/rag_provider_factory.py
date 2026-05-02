@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from core.config.base import BaseSettings, get_settings
 from core.context import get_context
+from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
 
 if TYPE_CHECKING:
     from core.rag.base_provider import BaseRAGProvider

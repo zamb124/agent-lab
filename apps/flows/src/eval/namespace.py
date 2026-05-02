@@ -31,7 +31,9 @@ from a2a.types import (
 import apps.flows.tools as flows_tools
 from apps.flows.src.eval.import_policy import safe_inline_import
 from apps.flows.src.eval.platform_services import (
+    call_mcp_tool,
     get_file_bytes,
+    get_mcp_client,
     get_google_oauth_token,
     get_lara_facade,
     get_oauth_service,
@@ -40,6 +42,12 @@ from apps.flows.src.eval.platform_services import (
 )
 from core.clients.google_docs_client import GoogleDocsClient
 from apps.flows.src.eval.sandbox_codegen_namespace import register_sandbox_codegen_namespace
+from apps.flows.src.eval.web_snapshot import (
+    BrowserSnapshotDescribe,
+    Describe,
+    DuckDuckGoBrowserSearch,
+    Search,
+)
 from apps.flows.src.eval.shim_registry import apply_inline_shims
 from apps.flows.src.eval.state_utils import (
     add_agent_message,
@@ -225,6 +233,12 @@ class PythonNamespaceBuilder:
         namespace["get_schedule_service"] = get_schedule_service
         namespace["get_oauth_service"] = get_oauth_service
         namespace["get_file_bytes"] = get_file_bytes
+        namespace["get_mcp_client"] = get_mcp_client
+        namespace["call_mcp_tool"] = call_mcp_tool
+        namespace["Search"] = Search
+        namespace["Describe"] = Describe
+        namespace["DuckDuckGoBrowserSearch"] = DuckDuckGoBrowserSearch
+        namespace["BrowserSnapshotDescribe"] = BrowserSnapshotDescribe
         namespace["get_google_oauth_token"] = get_google_oauth_token
         namespace["get_lara_facade"] = get_lara_facade
         namespace["GoogleDocsClient"] = GoogleDocsClient

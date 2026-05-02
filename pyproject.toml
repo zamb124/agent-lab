@@ -100,6 +100,7 @@ core = [
     "unstructured[xlsx]>=0.16.0",
     "yt-dlp>=2024.0.0",
     "structlog>=25.5.0",
+    "trafilatura>=2.0.0",
 ]
 
 agents = [

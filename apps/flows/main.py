@@ -40,6 +40,13 @@ from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import load_flows_to_db, load_tools_to_db
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware
 from core.logging import get_logger
+from apps.flows.src.services.mcp_sync import (
+                ensure_default_mcp_servers_for_company,
+                sync_auto_mcp_servers_for_company,
+            )
+from apps.flows.src.tasks.company_init_tasks import init_company_resources
+
+
 
 logger = get_logger(__name__)
 
@@ -142,6 +149,14 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         try:
             loaded_tools = await load_tools_to_db(container.tool_repository)
             logger.info(f"Загружено tools: {loaded_tools}")
+    
+            await ensure_default_mcp_servers_for_company(container=container)
+            synced = await sync_auto_mcp_servers_for_company(container=container)
+            logger.info(
+                "MCP синхронизация для system: servers=%s tools=%s",
+                synced["servers"],
+                synced["tools"],
+            )
             logger.info("Загрузка flows из bundles синхронно (TESTING=true)...")
             from apps.flows.src.services.flows_loader import load_flows_to_db
 
@@ -179,8 +194,14 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             try:
                 loaded_tools = await load_tools_to_db(container.tool_repository)
                 logger.info(f"Загружено tools: {loaded_tools}")
-                from apps.flows.src.tasks.company_init_tasks import init_company_resources
 
+                await ensure_default_mcp_servers_for_company(container=container)
+                synced = await sync_auto_mcp_servers_for_company(container=container)
+                logger.info(
+                    "MCP синхронизация для system: servers=%s tools=%s",
+                    synced["servers"],
+                    synced["tools"],
+                )
                 task = await init_company_resources.kiq(
                     company_id="system",
                     company_name="System",

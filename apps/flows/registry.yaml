@@ -86,6 +86,9 @@ flows:
     public: true
     landing_public_demo: true
     description: "Демо лендинга: репетитор (объяснение тем без списывания)"
+  - id: rasputin_wiki_search
+    public: true
+    description: "Тестовый ReAct-агент: browser_duckduckgo_links (поиск URL) + browser_page_markdown (готовый markdown страницы); сценарий — Википедия о Григории Распутине."
 
 
 # Тулы
