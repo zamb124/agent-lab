@@ -12,7 +12,7 @@ import hashlib
 from core.logging import get_logger
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from apps.crm.db.models import CRMTask
 from apps.crm.db.repositories.task_repository import TaskRepository
@@ -36,6 +36,9 @@ logger = get_logger(__name__)
 MAX_SOURCE_TEXT_INLINE_CHARS = 100_000
 MAX_SOURCE_FILES_PER_IMPORT = 80
 ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
+
+if TYPE_CHECKING:
+    from core.files.file_repository import FileRepository
 
 KnowledgeImportMode = Literal["notes_only", "graph"]
 NamespaceIntegrationJobKind = Literal["entities", "custom_fields"]
@@ -87,10 +90,12 @@ class TaskService:
         task_repo: TaskRepository,
         entity_service: EntityService,
         relationship_repo: RelationshipRepository,
+        file_repository: "FileRepository",
     ) -> None:
         self._task_repo = task_repo
         self._entity_service = entity_service
         self._relationship_repo = relationship_repo
+        self._file_repository = file_repository
 
     def _get_company_id(self) -> str:
         ctx = get_context()
@@ -348,6 +353,21 @@ class TaskService:
         mode: str,
         config: NoteProcessingConfig,
     ) -> CRMTask:
+        note = await self._entity_service.get_entity(note_id)
+        if note is None:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        missing_attachment_ids: list[str] = []
+        for attachment_id in note.attachment_ids:
+            file_record = await self._file_repository.get(attachment_id)
+            if file_record is None:
+                missing_attachment_ids.append(attachment_id)
+        if missing_attachment_ids:
+            missing_str = ", ".join(missing_attachment_ids)
+            raise ValueError(
+                "Запуск анализа невозможен: у заметки есть вложения без метаданных файла "
+                f"в shared storage ({missing_str})."
+            )
+
         await self._assert_no_active_task("note_analyze", {"note_id": note_id}, namespace)
         task_id = str(uuid.uuid4())
         row = CRMTask(

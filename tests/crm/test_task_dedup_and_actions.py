@@ -66,9 +66,70 @@ async def _insert_task(crm_container, task: CRMTask, company_id: str, namespace:
         clear_context()
 
 
+async def _set_note_attachment_ids(
+    crm_container,
+    *,
+    note_id: str,
+    attachment_ids: list[str],
+    company_id: str,
+    namespace: str,
+    user_id: str,
+) -> None:
+    ctx = Context(
+        user=User(user_id=user_id, name="Test"),
+        active_company=Company(company_id=company_id, name="System"),
+        channel="test",
+        active_namespace=namespace,
+    )
+    set_context(ctx)
+    try:
+        note = await crm_container.entity_repository.get(note_id)
+        assert note is not None
+        note.attachment_ids = attachment_ids
+        await crm_container.entity_repository.update(note)
+    finally:
+        clear_context()
+
+
 # ─── Дедупликация: note_analyze ──────────────────────────────────────────────
 
 class TestNoteAnalyzeDedup:
+    @pytest.mark.asyncio
+    async def test_analyze_rejects_note_with_missing_file_metadata(
+        self,
+        crm_client: AsyncClient,
+        crm_container,
+        auth_headers_system: dict,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        """Старт анализа блокируется pre-flight проверкой, если attachment_id не найден в shared storage."""
+        ns = f"g_{unique_id}"
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={"entity_type": "note", "name": f"Orphan attachment {unique_id}", "namespace": ns},
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+        missing_file_id = f"file_missing_{unique_id[:8]}"
+        await _set_note_attachment_ids(
+            crm_container,
+            note_id=note_id,
+            attachment_ids=[missing_file_id],
+            company_id="system",
+            namespace=ns,
+            user_id=system_user_id,
+        )
+
+        resp = await crm_client.post(
+            "/crm/api/v1/tasks/note-analyze",
+            json={"note_id": note_id},
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 400, resp.text
+        assert missing_file_id in resp.json()["detail"]
+
     @pytest.mark.asyncio
     async def test_running_task_blocks_new_analyze(
         self,
@@ -261,6 +322,46 @@ class TestKnowledgeImportDedup:
         detail = resp.json()["detail"]
         assert detail["code"] == "active_task_exists"
         assert detail["task_type"] == "knowledge_import"
+
+
+class TestEntityCardAttachments:
+    @pytest.mark.asyncio
+    async def test_card_returns_missing_attachment_instead_of_500(
+        self,
+        crm_client: AsyncClient,
+        crm_container,
+        auth_headers_system: dict,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        """Карточка note не падает, если attachment_id отсутствует и в shared storage, и в RAG."""
+        ns = f"g_{unique_id}"
+        note_resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={"entity_type": "note", "name": f"Card orphan {unique_id}", "namespace": ns},
+            headers=auth_headers_system,
+        )
+        assert note_resp.status_code in (200, 201), note_resp.text
+        note_id = note_resp.json()["entity_id"]
+        missing_file_id = f"file_missing_card_{unique_id[:8]}"
+        await _set_note_attachment_ids(
+            crm_container,
+            note_id=note_id,
+            attachment_ids=[missing_file_id],
+            company_id="system",
+            namespace=ns,
+            user_id=system_user_id,
+        )
+
+        card_resp = await crm_client.get(
+            f"/crm/api/v1/entities/{note_id}/card",
+            headers=auth_headers_system,
+        )
+        assert card_resp.status_code == 200, card_resp.text
+        attachments = card_resp.json()["attachments"]
+        assert len(attachments) == 1
+        assert attachments[0]["document_id"] == missing_file_id
+        assert attachments[0]["status"] == "missing"
 
     @pytest.mark.asyncio
     async def test_completed_import_allows_new(

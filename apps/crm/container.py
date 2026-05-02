@@ -219,6 +219,7 @@ class CRMContainer(BaseContainer):
             task_repo=self.task_repository,
             entity_service=self.entity_service,
             relationship_repo=self.relationship_repository,
+            file_repository=self.file_repository,
         )
 
     @lazy

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 import json
 
-from core.clients.service_client import ServiceClient
+from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
 from core.logging import get_logger
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
@@ -186,10 +186,28 @@ class AttachmentService:
                 })
                 continue
 
-            response = await self._service_client.get(
-                service="rag",
-                path=f"/rag/api/v1/documents/{doc_id}/status"
-            )
+            try:
+                response = await self._service_client.get(
+                    service="rag",
+                    path=f"/rag/api/v1/documents/{doc_id}/status"
+                )
+            except ServiceClientError as exc:
+                logger.warning(
+                    "Attachment status missing in file storage and rag status endpoint",
+                    entity_id=entity_id,
+                    document_id=doc_id,
+                    error=str(exc),
+                )
+                attachments.append({
+                    "document_id": doc_id,
+                    "filename": "missing",
+                    "status": "missing",
+                    "metadata": {"orphaned_attachment": True},
+                    "size_bytes": 0,
+                    "content_type": "",
+                    "download_url": "",
+                })
+                continue
             if not isinstance(response, dict):
                 raise ValueError(f"RAG document status must be dict, got {type(response)}")
             display_name = (
