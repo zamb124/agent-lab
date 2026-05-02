@@ -108,16 +108,16 @@
   "legal": {
     "company_name_ru": "ООО «Humanitec»",
     "company_name_en": "Humanitec LLC",
-    "legal_form_ru": "Общество с ограниченной ответственностью",
-    "legal_form_en": "Limited Liability Company",
-    "inn": "0000000000",
-    "ogrn": "0000000000000",
-    "legal_address_ru": "Россия, [укажите юридический адрес]",
-    "legal_address_en": "Russia, [specify legal address]",
+    "legal_form_ru": "Общество с ограниченной ответственностью Энжилабс",
+    "legal_form_en": "Limited Liability Company Angilabs",
+    "inn": "3123213213",
+    "ogrn": "3213213",
+    "legal_address_ru": "Россия, ",
+    "legal_address_en": "Russia, ",
     "contact_email": "legal@humanitec.ru",
     "support_email": "helpme@humanitec.ru",
     "dpo_email": "dpo@humanitec.ru",
-    "phone": "+7 (000) 000-00-00",
+    "phone": "+7 (953) 477-10-94",
     "min_age": 18,
     "retention_logs": "12 months",
     "retention_messages": "24 months",
@@ -128,7 +128,7 @@
     "billing_provider": "YooMoney"
   },
   "public_site": {
-    "telegram_community_url": "https://t.me/humanitec",
+    "telegram_community_url": "https://t.me/humanitecru",
     "yandex_metrika_id": null,
     "google_analytics_measurement_id": null
   },

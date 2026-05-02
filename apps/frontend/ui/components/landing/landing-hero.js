@@ -39,22 +39,7 @@ export class LandingHero extends PlatformElement {
             }
             
             .hero-subtitle {
-                position: absolute;
-                top: 52%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                z-index: 12;
-                max-width: min(720px, calc(100vw - 32px));
-                margin: 0;
-                padding: 0 16px;
-                box-sizing: border-box;
-                text-align: center;
-                font-family: 'Fira Sans', sans-serif;
-                font-size: clamp(14px, 2.2vw, 20px);
-                line-height: 1.45;
-                font-weight: 500;
-                color: rgba(232, 232, 232, 0.88);
-                pointer-events: none;
+                display: none;
             }
 
             .hero-title {
