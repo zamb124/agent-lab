@@ -320,7 +320,7 @@ jobs:
 
       - name: Validate litserve SSH secrets
         env:
-          LITSERVE_HOST: ${{ secrets.LITSERVE_HOST }}
+          LITSERVE_HOST: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
         run: |
@@ -342,7 +342,7 @@ jobs:
       - name: Copy compose and conf to litserve host
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.LITSERVE_HOST }}
+          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "docker-compose-litserve.yaml,conf.json,deploy/bootstrap-litserve-node.sh,deploy/firewall-main-platform-for-litserve-node.sh"
@@ -351,7 +351,7 @@ jobs:
       - name: Ensure postgres init.sql path on litserve host
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.LITSERVE_HOST }}
+          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
@@ -361,7 +361,7 @@ jobs:
       - name: Copy Postgres SQL for volume mount parity
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.LITSERVE_HOST }}
+          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "migrations/postgres/init.sql"
@@ -383,7 +383,7 @@ jobs:
           PROVIDER_LITSERVE__INFRA__MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__MODEL_ID }}
           PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID }}
         with:
-          host: ${{ secrets.LITSERVE_HOST }}
+          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 45m
