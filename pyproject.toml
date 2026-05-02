@@ -99,11 +99,8 @@ core = [
     "reportlab>=4.4.7",
     "unstructured[xlsx]>=0.16.0",
     "yt-dlp>=2024.0.0",
-<<<<<<< HEAD
     "structlog>=25.5.0",
-=======
     "trafilatura>=2.0.0",
->>>>>>> cda6aab8 (describe + search eval)
 ]
 
 agents = [

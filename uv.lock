@@ -116,11 +116,8 @@ core = [
     { name = "redis" },
     { name = "reportlab" },
     { name = "sqlalchemy" },
-<<<<<<< HEAD
     { name = "structlog" },
-=======
     { name = "trafilatura" },
->>>>>>> cda6aab8 (describe + search eval)
     { name = "unstructured", extra = ["xlsx"] },
     { name = "uvicorn" },
     { name = "yt-dlp" },
@@ -235,11 +232,8 @@ core = [
     { name = "redis", specifier = ">=7.0.0" },
     { name = "reportlab", specifier = ">=4.4.7" },
     { name = "sqlalchemy", extras = ["asyncpg"], specifier = ">=2.0.23" },
-<<<<<<< HEAD
     { name = "structlog", specifier = ">=25.5.0" },
-=======
     { name = "trafilatura", specifier = ">=2.0.0" },
->>>>>>> cda6aab8 (describe + search eval)
     { name = "unstructured", extras = ["xlsx"], specifier = ">=0.16.0" },
     { name = "uvicorn", specifier = ">=0.37.0" },
     { name = "yt-dlp", specifier = ">=2024.0.0" },
