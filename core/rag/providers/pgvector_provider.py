@@ -33,13 +33,10 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
     }
 )
 
-<<<<<<< HEAD
-=======
 # Локальный LitServe не проверяет Bearer; заголовок обязателен для HTTP-клиента эмбеддингов.
 _PROVIDER_LITSERVE_LOCAL_EMBEDDING_BEARER = "local-litserve"
 
 
->>>>>>> cda6aab8 (describe + search eval)
 def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if raw is None:
         return ""
