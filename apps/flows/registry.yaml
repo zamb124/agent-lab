@@ -62,7 +62,6 @@ flows:
     public: true
     description: "Интерактивный агент управления браузером через MCP Browser Runtime (multi-turn): хранит browser_session_id в state, выполняет произвольные команды пользователя (navigate/observe/click/fill) и закрывает сессию по явной команде."
 
-<<<<<<< HEAD
   - id: lawyer
     public: true
     landing_public_demo: true
@@ -87,11 +86,9 @@ flows:
     public: true
     landing_public_demo: true
     description: "Демо лендинга: репетитор (объяснение тем без списывания)"
-=======
   - id: rasputin_wiki_search
     public: true
     description: "Тестовый ReAct-агент: browser_duckduckgo_links (поиск URL) + browser_page_markdown (готовый markdown страницы); сценарий — Википедия о Григории Распутине."
->>>>>>> cda6aab8 (describe + search eval)
 
 
 # Тулы
