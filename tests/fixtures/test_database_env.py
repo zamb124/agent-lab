@@ -39,6 +39,9 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "RAG__DEFAULT_PROVIDER": "pgvector",
     "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
     "RAG__EMBEDDING__PROVIDER": "openrouter",
+    "RAG__EMBEDDING__MODEL": "qwen/qwen3-embedding-8b",
+    "RAG__EMBEDDING__DIMENSION": "4096",
+    "RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED": "false",
     "STT__PROVIDER": "mock",
     "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
 }

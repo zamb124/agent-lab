@@ -34,7 +34,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { getNodeTypeMeta } from '../../constants/node-icons.js';
-import { getToolRefVisualMeta, normalizeToolRef as normalizeVisualToolRef } from '../../_helpers/flows-tool-visual.js';
+import { getToolRefVisualMeta, getToolLabel, normalizeToolRef as normalizeVisualToolRef } from '../../_helpers/flows-tool-visual.js';
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
@@ -410,19 +410,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._emitPatch({ tools: next });
     }
 
-    _toolLabel(t) {
-        if (typeof t === 'string' && t.length > 0) {
-            return t;
-        }
-        if (!t || typeof t !== 'object') {
-            return '';
-        }
-        if (typeof t.name === 'string' && t.name.length > 0) return t.name;
-        if (typeof t.title === 'string' && t.title.length > 0) return t.title;
-        if (typeof t.tool_id === 'string' && t.tool_id.length > 0) return t.tool_id;
-        return '';
-    }
-
     _renderPromptSection() {
         const prompt = typeof this.nodeConfig?.prompt === 'string' ? this.nodeConfig.prompt : '';
         const variables = this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {};
@@ -596,7 +583,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                             return html`
                             <span class="chip" @click=${() => this._onEditTool(t)}>
                                 <platform-icon name=${vm.icon} size="14"></platform-icon>
-                                <span class="chip-label">${this._toolLabel(t)}</span>
+                                <span class="chip-label">${getToolLabel(t)}</span>
                                 <button type="button" @click=${(e) => { e.stopPropagation(); this._onRemoveTool(tid); }}>×</button>
                             </span>
                         `;

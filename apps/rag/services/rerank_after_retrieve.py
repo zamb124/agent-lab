@@ -16,13 +16,17 @@ def _rerank_options(
     profile_sd: IndexProfileSearchDefaults | None,
     settings: BaseSettings,
 ) -> tuple[bool, str | None, int | None]:
-    prof = profile_sd.reranker if profile_sd is not None else None
+    effective_sd = profile_sd
+    if effective_sd is None:
+        effective_sd = settings.rag.document_indexing.search_defaults
+
+    prof = effective_sd.reranker if effective_sd is not None else None
     if request_rerank is not None:
         enabled = request_rerank
     elif prof is not None:
         enabled = prof.enabled
     else:
-        enabled = False
+        enabled = True
 
     url: str | None = None
     if prof is not None and prof.url and (u := prof.url.strip()):

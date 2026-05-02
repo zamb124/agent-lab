@@ -2,7 +2,11 @@
     "routes": {
         "dashboard": "Панель",
         "platform_services": "Сервисы",
-        "digital_workers": "Цифровые сотрудники"
+        "digital_workers": "Цифровые сотрудники",
+        "blog": "Блог",
+        "blog-post": "Статья",
+        "about": "О компании",
+        "roadmap": "Roadmap"
     },
     "title": "Панель управления",
     "console_sidebar": {

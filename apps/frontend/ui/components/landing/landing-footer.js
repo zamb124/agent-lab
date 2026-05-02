@@ -3,6 +3,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+
 export class LandingFooter extends PlatformElement {
     static i18nNamespace = 'landing';
 
@@ -57,6 +58,26 @@ export class LandingFooter extends PlatformElement {
                 margin: 0;
                 text-transform: capitalize;
                 white-space: nowrap;
+            }
+
+            .footer-requisites {
+                margin-top: 28px;
+                max-width: 520px;
+            }
+
+            .footer-requisites h3 {
+                font-family: 'Fira Sans Condensed', sans-serif;
+                font-size: 18px;
+                margin: 0 0 12px;
+                color: var(--landing-secondary, #e8e8e8);
+            }
+
+            .footer-requisites p {
+                font-family: 'Fira Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.55;
+                color: rgba(232, 232, 232, 0.72);
+                margin: 0 0 8px;
             }
             
             .footer-right {
@@ -179,11 +200,17 @@ export class LandingFooter extends PlatformElement {
                     font-size: 30px;
                 }
             }
-        `
+        `,
     ];
+
+    constructor() {
+        super();
+        this._bundle = this.useOp('frontend/public_site_bundle');
+    }
 
     connectedCallback() {
         super.connectedCallback();
+        void this._bundle.run(null);
     }
 
     disconnectedCallback() {
@@ -198,24 +225,74 @@ export class LandingFooter extends PlatformElement {
         if (lang === 'en') {
             return `${pathname}?lang=en`;
         }
-        return pathname;
+        throw new Error('landing-footer: i18n.locale must be ru or en');
+    }
+
+    _companyName(legal) {
+        const locale = this.bus.getState().i18n.locale;
+        if (locale === 'ru') return legal.company_name_ru;
+        if (locale === 'en') return legal.company_name_en;
+        throw new Error('landing-footer: i18n.locale must be ru or en');
+    }
+
+    _legalAddress(legal) {
+        const locale = this.bus.getState().i18n.locale;
+        if (locale === 'ru') return legal.legal_address_ru;
+        if (locale === 'en') return legal.legal_address_en;
+        throw new Error('landing-footer: i18n.locale must be ru or en');
     }
 
     render() {
+        const bundleRes = this._bundle.lastResult;
+        let legal = null;
+        let telegramUrl = '';
+        if (bundleRes && typeof bundleRes === 'object') {
+            if (!bundleRes.legal || typeof bundleRes.legal !== 'object') {
+                throw new Error('landing-footer: legal missing');
+            }
+            legal = bundleRes.legal;
+            const marketing = bundleRes.marketing;
+            if (!marketing || typeof marketing !== 'object') {
+                throw new Error('landing-footer: marketing missing');
+            }
+            const rawUrl = marketing.telegram_community_url;
+            if (typeof rawUrl === 'string' && rawUrl !== '') {
+                telegramUrl = rawUrl;
+            }
+        }
+
         const t = (key, params) => this.t(key, params);
         const year = new Date().getFullYear();
+        const supportMail = 'helpme@humanitec.ru';
+
         return html`
             <footer class="footer-container">
                 <div class="footer-content">
                     <div class="footer-left">
-                        <a href="mailto:helpme@humanitec.ru" class="footer-email">
-                            helpme@humanitec.ru
+                        <a href="mailto:${supportMail}" class="footer-email">
+                            ${supportMail}
                         </a>
                         <h2 class="footer-logo">Humanitec</h2>
+                        ${legal
+                            ? html`
+                                  <div class="footer-requisites">
+                                      <h3>${t('footer.legal_heading')}</h3>
+                                      <p>${this._companyName(legal)}</p>
+                                      <p>${t('footer.inn_label')} ${legal.inn}</p>
+                                      <p>${t('footer.ogrn_label')} ${legal.ogrn}</p>
+                                      <p>${this._legalAddress(legal)}</p>
+                                  </div>
+                              `
+                            : null}
                     </div>
                     
                     <div class="footer-right">
                         <a href="/documentation" class="footer-link">${t('footer.docs')}</a>
+                        ${telegramUrl !== ''
+                            ? html`<a href=${telegramUrl} class="footer-link" target="_blank" rel="noopener noreferrer"
+                                  >${t('footer.telegram')}</a
+                              >`
+                            : null}
                     </div>
                 </div>
                 
@@ -237,4 +314,3 @@ export class LandingFooter extends PlatformElement {
 }
 
 customElements.define('landing-footer', LandingFooter);
-

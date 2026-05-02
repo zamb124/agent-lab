@@ -13,6 +13,7 @@ from core.context import get_context
 from core.rag.factory import get_rag_provider
 from core.billing.exceptions import BillingBalanceBlockedError
 from apps.rag.config import get_rag_settings
+from apps.rag.services.rerank_after_retrieve import apply_rerank_after_retrieve, RerankerClientError
 from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
 
@@ -86,8 +87,17 @@ async def search_in_namespace(
             filters=request.filters,
             **search_kwargs,
         )
-        
-        logger.info(f"Поиск '{request.query}' в namespace {namespace_id}: найдено {len(results)} результатов")
+
+        results = await apply_rerank_after_retrieve(
+            results=results,
+            query=request.query,
+            provider_name=provider_name,
+            request_rerank=request.rerank,
+            profile_sd=None,
+            settings=settings,
+        )
+
+        logger.info(f"Поиск '{request.query}' в {namespace_id}: найдено {len(results)} результатов")
 
         return SearchResponse(
             results=results,
@@ -97,6 +107,8 @@ async def search_in_namespace(
         )
     except BillingBalanceBlockedError:
         raise
+    except RerankerClientError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

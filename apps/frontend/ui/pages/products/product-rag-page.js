@@ -4,6 +4,8 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { applyPublicDocumentMeta } from '../../utils/public-document-meta.js';
+import { productLandingFaqStyles } from '../../styles/product-landing-faq.styles.js';
 import { landRagAbilityUrl } from '../../utils/land-product-images.js';
 
 export class ProductRagPage extends PlatformElement {
@@ -11,6 +13,7 @@ export class ProductRagPage extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        productLandingFaqStyles,
         css`
             :host {
                 display: block;
@@ -350,18 +353,34 @@ export class ProductRagPage extends PlatformElement {
         this.openModal('auth.login', { returnPath: buildServiceEntryUrl('rag') });
     };
 
+    connectedCallback() {
+        super.connectedCallback();
+        queueMicrotask(() => this._syncProductDocumentMeta());
+    }
+
+    _syncProductDocumentMeta() {
+        if (typeof window === 'undefined') return;
+        const origin = window.location.origin;
+        applyPublicDocumentMeta({
+            title: this.t('rag.meta_title'),
+            description: this.t('rag.meta_description'),
+            canonicalUrl: `${origin}/products/rag`,
+            ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,
+        });
+    }
+
     render() {
-        const t = (key) => (this.t(key) || key);
+        const t = (key) => this.t(`rag.${key}`);
         return html`
             <landing-header></landing-header>
             <div class="page-container">
                 <section class="hero">
-                    <span class="hero-badge">${t('rag.hero_badge')}</span>
-                    <h1 class="hero-title">${t('rag.hero_title')}</h1>
+                    <span class="hero-badge">${t('hero_badge')}</span>
+                    <h1 class="hero-title">${t('hero_title')}</h1>
                     <div class="hero-shot">
                         <img
                             src=${landRagAbilityUrl}
-                            alt=${t('rag.hero_visual_alt')}
+                            alt=${t('hero_visual_alt')}
                             width="1200"
                             height="675"
                             loading="eager"
@@ -369,40 +388,40 @@ export class ProductRagPage extends PlatformElement {
                         />
                     </div>
                     <p class="hero-description">
-                        ${t('rag.hero_description')}
+                        ${t('hero_description')}
                     </p>
                     <button class="cta-btn" @click=${this._handleProductCtaClick}>
-                        ${t('rag.cta_try')}
+                        ${t('cta_try')}
                     </button>
                 </section>
                 
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('rag.f1_title')}</h3>
+                            <h3 class="feature-title">${t('f1_title')}</h3>
                             <p class="feature-description">
-                                ${t('rag.f1_desc')}
+                                ${t('f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('rag.f2_title')}</h3>
+                            <h3 class="feature-title">${t('f2_title')}</h3>
                             <p class="feature-description">
-                                ${t('rag.f2_desc')}
+                                ${t('f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('rag.f3_title')}</h3>
+                            <h3 class="feature-title">${t('f3_title')}</h3>
                             <p class="feature-description">
-                                ${t('rag.f3_desc')}
+                                ${t('f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('rag.f4_title')}</h3>
+                            <h3 class="feature-title">${t('f4_title')}</h3>
                             <p class="feature-description">
-                                ${t('rag.f4_desc')}
+                                ${t('f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -410,53 +429,53 @@ export class ProductRagPage extends PlatformElement {
                 
                 <section class="benefits">
                     <div class="benefits-container">
-                        <h2 class="benefits-title">${t('rag.benefits_title')}</h2>
+                        <h2 class="benefits-title">${t('benefits_title')}</h2>
                         <div class="benefits-grid">
                             <div class="benefit-item">
                                 <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>${t('rag.b1_h')}</h3>
-                                    <p>${t('rag.b1_p')}</p>
+                                    <h3>${t('b1_h')}</h3>
+                                    <p>${t('b1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>${t('rag.b2_h')}</h3>
-                                    <p>${t('rag.b2_p')}</p>
+                                    <h3>${t('b2_h')}</h3>
+                                    <p>${t('b2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>${t('rag.b3_h')}</h3>
-                                    <p>${t('rag.b3_p')}</p>
+                                    <h3>${t('b3_h')}</h3>
+                                    <p>${t('b3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>${t('rag.b4_h')}</h3>
-                                    <p>${t('rag.b4_p')}</p>
+                                    <h3>${t('b4_h')}</h3>
+                                    <p>${t('b4_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>${t('rag.b5_h')}</h3>
-                                    <p>${t('rag.b5_p')}</p>
+                                    <h3>${t('b5_h')}</h3>
+                                    <p>${t('b5_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="benefit-item">
                                 <div class="benefit-marker" aria-hidden="true"></div>
                                 <div class="benefit-content">
-                                    <h3>${t('rag.b6_h')}</h3>
-                                    <p>${t('rag.b6_p')}</p>
+                                    <h3>${t('b6_h')}</h3>
+                                    <p>${t('b6_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -464,42 +483,56 @@ export class ProductRagPage extends PlatformElement {
                 </section>
                 
                 <section class="use-cases">
-                    <h2 class="use-cases-title">${t('rag.use_cases_title')}</h2>
+                    <h2 class="use-cases-title">${t('use_cases_title')}</h2>
                     <div class="use-cases-grid">
                         <div class="use-case-item">
                             <span class="use-case-num">1</span>
-                            <span class="use-case-text">${t('rag.uc1')}</span>
+                            <span class="use-case-text">${t('uc1')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-num">2</span>
-                            <span class="use-case-text">${t('rag.uc2')}</span>
+                            <span class="use-case-text">${t('uc2')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-num">3</span>
-                            <span class="use-case-text">${t('rag.uc3')}</span>
+                            <span class="use-case-text">${t('uc3')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-num">4</span>
-                            <span class="use-case-text">${t('rag.uc4')}</span>
+                            <span class="use-case-text">${t('uc4')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-num">5</span>
-                            <span class="use-case-text">${t('rag.uc5')}</span>
+                            <span class="use-case-text">${t('uc5')}</span>
                         </div>
                         <div class="use-case-item">
                             <span class="use-case-num">6</span>
-                            <span class="use-case-text">${t('rag.uc6')}</span>
+                            <span class="use-case-text">${t('uc6')}</span>
                         </div>
+                    </div>
+                </section>
+
+                <section class="faq-section">
+                    <h2 class="faq-title">${t('faq_title')}</h2>
+                    <div class="faq-list">
+                        ${[1, 2, 3].map(
+                            (i) => html`
+                                <details class="faq-item">
+                                    <summary>${t(`faq${i}_q`)}</summary>
+                                    <p class="faq-answer">${t(`faq${i}_a`)}</p>
+                                </details>
+                            `,
+                        )}
                     </div>
                 </section>
                 
                 <section class="cta-section">
-                    <h2 class="cta-title">${t('rag.cta_title')}</h2>
-                    <p class="cta-subtitle">${t('rag.cta_subtitle')}</p>
+                    <h2 class="cta-title">${t('cta_title')}</h2>
+                    <p class="cta-subtitle">${t('cta_subtitle')}</p>
                     <button class="cta-btn" @click=${this._handleProductCtaClick}>
-                        ${t('rag.cta_button')}
+                        ${t('cta_button')}
                     </button>
-                    <a href="/" class="back-link">${t('rag.back_home')}</a>
+                    <a href="/" class="back-link">${t('back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>

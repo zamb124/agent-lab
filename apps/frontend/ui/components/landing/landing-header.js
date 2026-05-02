@@ -14,6 +14,9 @@ const INTERNAL_HREF_TO_ROUTE = Object.freeze({
     '/products/documents': 'product-documents',
     '/support':            'support',
     '/dashboard':          'dashboard',
+    '/blog':               'blog',
+    '/about':              'about',
+    '/roadmap':            'roadmap',
 });
 
 export class LandingHeader extends PlatformElement {
@@ -645,7 +648,7 @@ export class LandingHeader extends PlatformElement {
                 </a>
                 
                 <nav class="nav">
-                    <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('about')}</a>
+                    <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('anchor_about')}</a>
                     <a href="#abilities" class="nav-link" @click=${this._handleNavClick}>${h('features')}</a>
                     <div class=${classMap({ 'nav-dropdown': true, 'open': this.productsDropdownOpen })}>
                         <button class="nav-dropdown-trigger" @click=${this._toggleProductsDropdown}>
@@ -702,6 +705,9 @@ export class LandingHeader extends PlatformElement {
                     </div>
                     <a href="/documentation" class="nav-link">${h('docs')}</a>
                     <a href="/support" class="nav-link" @click=${this._handleNavClick}>${h('support')}</a>
+                    <a href="/blog" class="nav-link" @click=${this._handleNavClick}>${h('blog')}</a>
+                    <a href="/about" class="nav-link" @click=${this._handleNavClick}>${h('company_page')}</a>
+                    <a href="/roadmap" class="nav-link" @click=${this._handleNavClick}>${h('roadmap')}</a>
                 </nav>
                 
                 <div class="header-actions">
@@ -738,7 +744,7 @@ export class LandingHeader extends PlatformElement {
                 class=${classMap({ 'mobile-menu': true, active: this.mobileMenuOpen })}
                 @click=${this._onMobileMenuShellClick}
             >
-                <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('about')}</a>
+                <a href="#about" class="nav-link" @click=${this._handleNavClick}>${h('anchor_about')}</a>
                 <a href="#abilities" class="nav-link" @click=${this._handleNavClick}>${h('features')}</a>
                 
                 <div class="mobile-products-group">
@@ -777,6 +783,9 @@ export class LandingHeader extends PlatformElement {
                 
                 <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>${h('docs')}</a>
                 <a href="/support" class="nav-link" @click=${this._handleNavClick}>${h('support')}</a>
+                <a href="/blog" class="nav-link" @click=${this._handleNavClick}>${h('blog')}</a>
+                <a href="/about" class="nav-link" @click=${this._handleNavClick}>${h('company_page')}</a>
+                <a href="/roadmap" class="nav-link" @click=${this._handleNavClick}>${h('roadmap')}</a>
                 ${this.isAuthenticated
                     ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._handleNavClick}>${h('dashboard')}</a>`
                     : html`<button class="login-btn" @click=${() => { this._closeMobileMenu(); this._handleLoginClick(); }}>${h('login')}</button>`

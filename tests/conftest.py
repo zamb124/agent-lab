@@ -72,6 +72,10 @@ os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://testserver")
 os.environ.setdefault("RAG__ENABLED", "true")
 os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
 os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__ENABLED", "true")
+os.environ.setdefault("RAG__EMBEDDING__PROVIDER", "openrouter")
+os.environ.setdefault("RAG__EMBEDDING__MODEL", "qwen/qwen3-embedding-8b")
+os.environ.setdefault("RAG__EMBEDDING__DIMENSION", "4096")
+os.environ.setdefault("RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED", "false")
 os.environ.setdefault("LLM__OPENROUTER__API_KEY", "sk-test-key")
 
 # Сбрасываем settings singleton чтобы он пересоздался с тестовыми env переменными
@@ -1377,24 +1381,27 @@ async def auth_headers(auth_token):
 async def rag_provider_pgvector():
     """
     Реальный pgvector провайдер для тестов.
-    
+
     Использует PostgreSQL с расширением pgvector для хранения embeddings.
     """
+    from core.config import get_settings
     from core.rag.providers.pgvector_provider import PgVectorProvider
-    
+
     config = {
         "db_url": os.environ.get("DATABASE__RAG_URL", "postgresql+asyncpg://platform_user:admin@localhost:54322/platform_rag"),
         "chunk_size": 1000,
         "chunk_overlap": 100
     }
-    
-    embedding_config = {
-        "provider": "openrouter",
-        "model": "text-embedding-3-small",
-        "dimension": 1024,
-        "base_url": "https://api.openai.com/v1",
+
+    api = get_settings().rag.embedding.api
+    embedding_config: dict = {
+        "model": api.model,
+        "dimension": api.dimension,
+        "base_url": api.base_url,
     }
-    
+    if api.mrl_output_dimension is not None:
+        embedding_config["mrl_output_dimension"] = api.mrl_output_dimension
+
     provider = PgVectorProvider(config, embedding_config)
     yield provider
     

@@ -4,6 +4,8 @@
 import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { FrontendLeadFormModal } from '../../modals/lead-form-modal.js';
+
 export class LandingPlans extends PlatformElement {
     static i18nNamespace = 'landing';
 
@@ -85,6 +87,14 @@ export class LandingPlans extends PlatformElement {
                 font-size: 36px;
                 font-weight: 500;
                 color: var(--landing-secondary);
+                margin: 0 0 16px 0;
+            }
+
+            .plan-price {
+                font-family: 'Fira Sans Condensed', sans-serif;
+                font-size: 22px;
+                font-weight: 600;
+                color: var(--landing-primary);
                 margin: 0 0 16px 0;
             }
             
@@ -179,8 +189,8 @@ export class LandingPlans extends PlatformElement {
                 }
                 
                 .plans-grid {
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 60px;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 40px;
                 }
                 
                 .plan-card {
@@ -204,6 +214,15 @@ export class LandingPlans extends PlatformElement {
                 }
             }
             
+            @media (min-width: 768px) and (max-width: 1199px) {
+                .plans-grid {
+                    grid-template-columns: 1fr;
+                    gap: 48px;
+                    max-width: 560px;
+                    margin: 0 auto;
+                }
+            }
+
             @media (min-width: 1440px) {
                 :host {
                     padding: 120px 80px;
@@ -215,7 +234,7 @@ export class LandingPlans extends PlatformElement {
                 }
                 
                 .plans-grid {
-                    gap: 80px;
+                    gap: 56px;
                 }
                 
                 .plan-card {
@@ -245,8 +264,20 @@ export class LandingPlans extends PlatformElement {
         `
     ];
 
-    _handleCTA(planType) {
-        this.openModal('auth.login', { plan: planType });
+    _handlePlanCta(planKind) {
+        if (planKind === 'enterprise') {
+            this.openModal(FrontendLeadFormModal);
+            return;
+        }
+        if (planKind === 'business') {
+            this.openModal('auth.login', { plan: 'business' });
+            return;
+        }
+        if (planKind === 'self') {
+            this.openModal('auth.login', { plan: 'constructor' });
+            return;
+        }
+        throw new Error(`landing-plans: unknown planKind ${planKind}`);
     }
 
     connectedCallback() {
@@ -258,7 +289,7 @@ export class LandingPlans extends PlatformElement {
     }
 
     render() {
-        const t = (key) => (this.t(key) || key);
+        const t = (key) => this.t(key);
         return html`
             <div class="plans-container">
                 <h2 class="plans-title">${t('plans.title')}</h2>
@@ -267,6 +298,7 @@ export class LandingPlans extends PlatformElement {
                     <div class="plan-card">
                         <div class="plan-badge">${t('plans.self_badge')}</div>
                         <h3 class="plan-name">${t('plans.self_name')}</h3>
+                        <p class="plan-price">${t('plans.self_price')}</p>
                         <p class="plan-description">
                             ${t('plans.self_description')}
                         </p>
@@ -275,41 +307,63 @@ export class LandingPlans extends PlatformElement {
                             <li>${t('plans.self_li2')}</li>
                             <li>${t('plans.self_li3')}</li>
                             <li>${t('plans.self_li4')}</li>
-                            <li>${t('plans.self_li5')}</li>
-                            <li>${t('plans.self_li6')}</li>
                         </ul>
                         <p class="plan-target">
                             ${t('plans.self_target')}
                         </p>
                         <button 
                             class=${classMap({ 'plan-cta': true, 'transparent': true })}
-                            @click=${() => this._handleCTA('constructor')}
+                            @click=${() => this._handlePlanCta('self')}
                         >
                             ${t('plans.self_cta')}
                         </button>
                     </div>
                     
                     <div class=${classMap({ 'plan-card': true, 'premium': true })}>
-                        <div class="plan-badge">${t('plans.team_badge')}</div>
-                        <h3 class="plan-name">${t('plans.team_name')}</h3>
+                        <div class="plan-badge">${t('plans.business_badge')}</div>
+                        <h3 class="plan-name">${t('plans.business_name')}</h3>
+                        <p class="plan-price">${t('plans.business_price')}</p>
                         <p class="plan-description">
-                            ${t('plans.team_description')}
+                            ${t('plans.business_description')}
                         </p>
                         <ul class="plan-features">
-                            <li>${t('plans.team_li1')}</li>
-                            <li>${t('plans.team_li2')}</li>
-                            <li>${t('plans.team_li3')}</li>
-                            <li>${t('plans.team_li4')}</li>
-                            <li>${t('plans.team_li5')}</li>
+                            <li>${t('plans.business_li1')}</li>
+                            <li>${t('plans.business_li2')}</li>
+                            <li>${t('plans.business_li3')}</li>
+                            <li>${t('plans.business_li4')}</li>
                         </ul>
                         <p class="plan-target">
-                            ${t('plans.team_target')}
+                            ${t('plans.business_target')}
                         </p>
                         <button 
                             class=${classMap({ 'plan-cta': true, 'primary': true })}
-                            @click=${() => this._handleCTA('expert')}
+                            @click=${() => this._handlePlanCta('business')}
                         >
-                            ${t('plans.team_cta')}
+                            ${t('plans.business_cta')}
+                        </button>
+                    </div>
+
+                    <div class="plan-card">
+                        <div class="plan-badge">${t('plans.enterprise_badge')}</div>
+                        <h3 class="plan-name">${t('plans.enterprise_name')}</h3>
+                        <p class="plan-price">${t('plans.enterprise_price')}</p>
+                        <p class="plan-description">
+                            ${t('plans.enterprise_description')}
+                        </p>
+                        <ul class="plan-features">
+                            <li>${t('plans.enterprise_li1')}</li>
+                            <li>${t('plans.enterprise_li2')}</li>
+                            <li>${t('plans.enterprise_li3')}</li>
+                            <li>${t('plans.enterprise_li4')}</li>
+                        </ul>
+                        <p class="plan-target">
+                            ${t('plans.enterprise_target')}
+                        </p>
+                        <button 
+                            class=${classMap({ 'plan-cta': true, 'transparent': true })}
+                            @click=${() => this._handlePlanCta('enterprise')}
+                        >
+                            ${t('plans.enterprise_cta')}
                         </button>
                     </div>
                 </div>

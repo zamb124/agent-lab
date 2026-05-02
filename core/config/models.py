@@ -398,6 +398,12 @@ class EmbeddingApiConfig(BaseModel):
     dimension: int = 1024
     # Явный override корня ``…/v1``; пусто при ``provider=openrouter`` — из ``llm.<active>.base_url``.
     base_url: Optional[str] = None
+    mrl_output_dimension: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="MRL-усечение: если задано, вектор обрезается до первых N измерений "
+                    "и L2-нормализуется перед сохранением. Экономит память в 4096/N раз.",
+    )
 
 
 class EmbeddingConfig(BaseModel):
@@ -415,7 +421,7 @@ class EmbeddingConfig(BaseModel):
         if not isinstance(data, dict):
             return data
         api: Dict[str, Any] = dict(data.get("api") or {})
-        for k in ("model", "dimension", "base_url"):
+        for k in ("model", "dimension", "base_url", "mrl_output_dimension"):
             if k in data:
                 api[k] = data.pop(k)
         data["api"] = api
@@ -582,11 +588,11 @@ class ProviderLitserveConfig(BaseModel):
 
 class RagTtlConfig(BaseModel):
     """
-    TTL по умолчанию и параметры фоновой очистки просроченных документов RAG.
+    TTL по умолчанию, параметры фоновой очистки и перевекторизации документов RAG.
 
     Клиент задаёт время жизни через ``ttl_seconds`` в metadata при загрузке;
     ``0`` — бессрочно. Если ключ отсутствует, применяется ``default_ttl_seconds``.
-    Джоба планируется процессом ``scheduler``, исполняется в очереди ``rag``.
+    Джобы планируются процессом ``scheduler``, исполняются в очереди ``rag``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -606,6 +612,20 @@ class RagTtlConfig(BaseModel):
         ge=1,
         le=5000,
         description="Максимум документов за один проход удаления.",
+    )
+    reembed_enabled: bool = Field(
+        default=True,
+        description="Фоновая перевекторизация чанков с embedding_model IS NULL.",
+    )
+    reembed_cron: str = Field(
+        default="*/5 * * * *",
+        description="Cron (UTC) для тика перевекторизации устаревших чанков.",
+    )
+    reembed_batch_size: int = Field(
+        default=50,
+        ge=1,
+        le=2000,
+        description="Максимум чанков за один тик перевекторизации.",
     )
 
 
@@ -906,6 +926,14 @@ class PushConfig(BaseModel):
     fcm_project_id: Optional[str] = None
 
 
+class PublicSiteConfig(BaseModel):
+    """Публичные настройки маркетингового слоя сайта (виджеты, аналитика, комьюнити)."""
+
+    telegram_community_url: Optional[str] = None
+    yandex_metrika_id: Optional[str] = None
+    google_analytics_measurement_id: Optional[str] = None
+
+
 class LegalConfig(BaseModel):
     """Конфигурация юридической информации компании"""
 
@@ -1032,7 +1060,7 @@ class VoiceSTTSettings(BaseModel):
     """Настройки STT-провайдера voice сервиса."""
 
     provider: str = "cloud_ru"
-    mock_text: str = "Тестовая транскрипция"
+    mock_transcript_text: str = "Тестовая транскрипция"
 
 
 class VoiceTTSSettings(BaseModel):

@@ -210,3 +210,51 @@ async def rag_cleanup_expired_documents_tick(
         "deleted_documents": deleted,
         "failed_documents": failed,
     }
+
+
+@broker.task(
+    task_name="rag_reembed_stale_documents_tick",
+    queue_name="rag",
+    retry_on_error=True,
+    max_retries=2,
+)
+async def rag_reembed_stale_documents_tick(
+    scheduler_task_id: str | None = None,
+    company_id: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Перевекторизует чанки RAG с ``embedding_model IS NULL``.
+
+    Один тик обрабатывает не более ``rag.ttl.reembed_batch_size`` чанков.
+    Отключение: ``rag.ttl.reembed_enabled: false``.
+    """
+    _ = company_id
+    settings = get_settings()
+    reembed_cfg = settings.rag.ttl
+    if not reembed_cfg.reembed_enabled:
+        return {
+            "skipped": True,
+            "scheduler_task_id": scheduler_task_id,
+            "reembedded": 0,
+        }
+
+    container = get_rag_container()
+    provider = container.rag_provider
+    target_model = provider._embedding_model_name()
+
+    reembedded = await provider.reembed_stale_documents(
+        batch_size=reembed_cfg.reembed_batch_size,
+        target_embedding_model=target_model,
+    )
+
+    logger.info(
+        "rag.reembed_stale.tick_done",
+        scheduler_task_id=scheduler_task_id,
+        reembedded=reembedded,
+    )
+
+    return {
+        "skipped": False,
+        "scheduler_task_id": scheduler_task_id,
+        "reembedded": reembedded,
+    }

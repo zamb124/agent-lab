@@ -3,13 +3,27 @@
  */
 
 import { asNumber } from './flows-resolvers.js';
-import { normalizedLlmToolsForCanvas } from './flows-tool-visual.js';
+import { normalizedLlmToolsForCanvas, CHIPS_PER_ROW, MAX_CHIPS_SHOWN } from './flows-tool-visual.js';
 
 export const FLOW_NODE_W = 200;
 export const FLOW_NODE_H = 72;
 
-/** Дополнительная высота карточки llm_node при отображении полосы tools на канвасе. */
-export const NODE_TOOLS_STRIP_H = 22;
+/** Высота одного ряда chip'ов (chip 28px + padding top 8px). */
+export const CHIP_ROW_H = 36;
+
+/**
+ * Вычисляет высоту полосы инструментов в зависимости от количества чипов.
+ *
+ * @param {unknown[] | number} toolsOrCount — массив tools или их количество
+ * @returns {number}
+ */
+export function getToolsStripH(toolsOrCount) {
+    const count = Array.isArray(toolsOrCount) ? toolsOrCount.length : (typeof toolsOrCount === 'number' ? toolsOrCount : 0);
+    if (count === 0) return 0;
+    const shown = Math.min(count, MAX_CHIPS_SHOWN);
+    const rows = Math.ceil(shown / CHIPS_PER_ROW);
+    return rows * CHIP_ROW_H;
+}
 
 /**
  * @param {unknown} node — нода из skillsData
@@ -17,8 +31,7 @@ export const NODE_TOOLS_STRIP_H = 22;
  */
 export function getNodeCanvasHeight(node) {
     const tools = normalizedLlmToolsForCanvas(node);
-    if (tools.length === 0) return FLOW_NODE_H;
-    return FLOW_NODE_H + NODE_TOOLS_STRIP_H;
+    return FLOW_NODE_H + getToolsStripH(tools);
 }
 
 export const FIT_VIEW_PADDING = 80;

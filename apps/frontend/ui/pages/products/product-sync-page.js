@@ -4,6 +4,8 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { applyPublicDocumentMeta } from '../../utils/public-document-meta.js';
+import { productLandingFaqStyles } from '../../styles/product-landing-faq.styles.js';
 import { landSyncAbilityUrl } from '../../utils/land-product-images.js';
 
 export class ProductSyncPage extends PlatformElement {
@@ -11,6 +13,7 @@ export class ProductSyncPage extends PlatformElement {
 
     static styles = [
         ...PlatformElement.styles,
+        productLandingFaqStyles,
         css`
             :host {
                 display: block;
@@ -360,18 +363,34 @@ export class ProductSyncPage extends PlatformElement {
         this.openModal('auth.login', { returnPath: buildServiceEntryUrl('sync') });
     };
 
+    connectedCallback() {
+        super.connectedCallback();
+        queueMicrotask(() => this._syncProductDocumentMeta());
+    }
+
+    _syncProductDocumentMeta() {
+        if (typeof window === 'undefined') return;
+        const origin = window.location.origin;
+        applyPublicDocumentMeta({
+            title: this.t('sync.meta_title'),
+            description: this.t('sync.meta_description'),
+            canonicalUrl: `${origin}/products/sync`,
+            ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,
+        });
+    }
+
     render() {
-        const t = (key) => (this.t(key) || key);
+        const t = (key) => this.t(`sync.${key}`);
         return html`
             <landing-header></landing-header>
             <div class="page-container">
                 <section class="hero">
-                    <span class="hero-badge">${t('sync.hero_badge')}</span>
-                    <h1 class="hero-title">${t('sync.hero_title')}</h1>
+                    <span class="hero-badge">${t('hero_badge')}</span>
+                    <h1 class="hero-title">${t('hero_title')}</h1>
                     <div class="hero-shot">
                         <img
                             src=${landSyncAbilityUrl}
-                            alt=${t('sync.hero_visual_alt')}
+                            alt=${t('hero_visual_alt')}
                             width="1200"
                             height="675"
                             loading="eager"
@@ -379,40 +398,40 @@ export class ProductSyncPage extends PlatformElement {
                         />
                     </div>
                     <p class="hero-description">
-                        ${t('sync.hero_description')}
+                        ${t('hero_description')}
                     </p>
                     <button class="cta-btn" @click=${this._handleProductCtaClick}>
-                        ${t('sync.cta_try')}
+                        ${t('cta_try')}
                     </button>
                 </section>
                 
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('sync.f1_title')}</h3>
+                            <h3 class="feature-title">${t('f1_title')}</h3>
                             <p class="feature-description">
-                                ${t('sync.f1_desc')}
+                                ${t('f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('sync.f2_title')}</h3>
+                            <h3 class="feature-title">${t('f2_title')}</h3>
                             <p class="feature-description">
-                                ${t('sync.f2_desc')}
+                                ${t('f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('sync.f3_title')}</h3>
+                            <h3 class="feature-title">${t('f3_title')}</h3>
                             <p class="feature-description">
-                                ${t('sync.f3_desc')}
+                                ${t('f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('sync.f4_title')}</h3>
+                            <h3 class="feature-title">${t('f4_title')}</h3>
                             <p class="feature-description">
-                                ${t('sync.f4_desc')}
+                                ${t('f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -420,37 +439,37 @@ export class ProductSyncPage extends PlatformElement {
                 
                 <section class="how-it-works">
                     <div class="how-it-works-container">
-                        <h2 class="how-it-works-title">${t('sync.how_title')}</h2>
+                        <h2 class="how-it-works-title">${t('how_title')}</h2>
                         <div class="steps-grid">
                             <div class="step-item">
                                 <div class="step-number">1</div>
                                 <div class="step-content">
-                                    <h3>${t('sync.s1_h')}</h3>
-                                    <p>${t('sync.s1_p')}</p>
+                                    <h3>${t('s1_h')}</h3>
+                                    <p>${t('s1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">2</div>
                                 <div class="step-content">
-                                    <h3>${t('sync.s2_h')}</h3>
-                                    <p>${t('sync.s2_p')}</p>
+                                    <h3>${t('s2_h')}</h3>
+                                    <p>${t('s2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">3</div>
                                 <div class="step-content">
-                                    <h3>${t('sync.s3_h')}</h3>
-                                    <p>${t('sync.s3_p')}</p>
+                                    <h3>${t('s3_h')}</h3>
+                                    <p>${t('s3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">4</div>
                                 <div class="step-content">
-                                    <h3>${t('sync.s4_h')}</h3>
-                                    <p>${t('sync.s4_p')}</p>
+                                    <h3>${t('s4_h')}</h3>
+                                    <p>${t('s4_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -458,65 +477,79 @@ export class ProductSyncPage extends PlatformElement {
                 </section>
                 
                 <section class="benefits">
-                    <h2 class="benefits-title">${t('sync.benefits_title')}</h2>
+                    <h2 class="benefits-title">${t('benefits_title')}</h2>
                     <div class="benefits-grid">
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('sync.b1_h')}</h3>
-                                <p>${t('sync.b1_p')}</p>
+                                <h3>${t('b1_h')}</h3>
+                                <p>${t('b1_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('sync.b2_h')}</h3>
-                                <p>${t('sync.b2_p')}</p>
+                                <h3>${t('b2_h')}</h3>
+                                <p>${t('b2_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('sync.b3_h')}</h3>
-                                <p>${t('sync.b3_p')}</p>
+                                <h3>${t('b3_h')}</h3>
+                                <p>${t('b3_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('sync.b4_h')}</h3>
-                                <p>${t('sync.b4_p')}</p>
+                                <h3>${t('b4_h')}</h3>
+                                <p>${t('b4_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('sync.b5_h')}</h3>
-                                <p>${t('sync.b5_p')}</p>
+                                <h3>${t('b5_h')}</h3>
+                                <p>${t('b5_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('sync.b6_h')}</h3>
-                                <p>${t('sync.b6_p')}</p>
+                                <h3>${t('b6_h')}</h3>
+                                <p>${t('b6_p')}</p>
                             </div>
                         </div>
                     </div>
                 </section>
+
+                <section class="faq-section">
+                    <h2 class="faq-title">${t('faq_title')}</h2>
+                    <div class="faq-list">
+                        ${[1, 2, 3].map(
+                            (i) => html`
+                                <details class="faq-item">
+                                    <summary>${t(`faq${i}_q`)}</summary>
+                                    <p class="faq-answer">${t(`faq${i}_a`)}</p>
+                                </details>
+                            `,
+                        )}
+                    </div>
+                </section>
                 
                 <section class="cta-section">
-                    <h2 class="cta-title">${t('sync.cta_title')}</h2>
-                    <p class="cta-subtitle">${t('sync.cta_subtitle')}</p>
+                    <h2 class="cta-title">${t('cta_title')}</h2>
+                    <p class="cta-subtitle">${t('cta_subtitle')}</p>
                     <button class="cta-btn" @click=${this._handleProductCtaClick}>
-                        ${t('sync.cta_button')}
+                        ${t('cta_button')}
                     </button>
-                    <a href="/" class="back-link">${t('sync.back_home')}</a>
+                    <a href="/" class="back-link">${t('back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>

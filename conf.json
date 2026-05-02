@@ -127,6 +127,11 @@
     "analytics_tools": "Internal monitoring and product analytics",
     "billing_provider": "YooMoney"
   },
+  "public_site": {
+    "telegram_community_url": "https://t.me/humanitec",
+    "yandex_metrika_id": null,
+    "google_analytics_measurement_id": null
+  },
   "auth": {
     "enabled": true,
     "jwt_secret_key": "dev-secret-key-change-in-production",
@@ -284,8 +289,8 @@
     "embedding": {
       "provider": "provider_litserve",
       "api": {
-        "model": "baai/bge-m3",
-        "dimension": 1024
+        "model": "qwen/qwen3-embedding-8b",
+        "dimension": 4096
       }
     },
     "reranker": {
@@ -418,7 +423,7 @@
           "base_url": "http://127.0.0.1:8014/v1"
         },
         "infra": {
-          "backend": "placeholder",
+          "backend": "flagllm",
           "host": "0.0.0.0",
           "gateway_port": 8014,
           "accelerator": "auto",
@@ -428,12 +433,12 @@
           "max_passages": 128,
           "max_query_chars": 16384,
           "max_passage_chars": 64000,
-          "max_length": 1024,
-          "model_batch_size": 8,
-          "model_id": "BAAI/bge-reranker-v2-gemma",
-          "embedding_model_id": "BAAI/bge-m3",
-          "embedding_openai_model_id": "baai/bge-m3",
-          "rerank_openai_model_id": "baai/bge-reranker-v2-gemma",
+          "max_length": 8192,
+          "model_batch_size": 4,
+          "model_id": "Qwen/Qwen3-Reranker-8B",
+          "embedding_model_id": "Qwen/Qwen3-Embedding-8B",
+          "embedding_openai_model_id": "qwen/qwen3-embedding-8b",
+          "rerank_openai_model_id": "qwen/qwen3-reranker-8b",
           "embedding_model_ids": [],
           "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
           "llm_model_ids": [

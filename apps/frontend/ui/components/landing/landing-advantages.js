@@ -236,7 +236,7 @@ export class LandingAdvantages extends PlatformElement {
     }
 
     render() {
-        const t = (key) => (this.t(key) || key);
+        const t = (key) => this.t(key);
         return html`
             <div class="blur-bg-primary"></div>
             <div class="blur-bg-white"></div>
@@ -273,6 +273,22 @@ export class LandingAdvantages extends PlatformElement {
                     
                     <div class="advantage-badge">
                         ${t('advantages.badge_onprem')}
+                    </div>
+
+                    <div class="advantage-badge">
+                        ${t('advantages.badge_pd152')}
+                    </div>
+
+                    <div class="advantage-badge">
+                        ${t('advantages.badge_rub_pay')}
+                    </div>
+
+                    <div class="advantage-badge">
+                        ${t('advantages.badge_no_vendor_lock')}
+                    </div>
+
+                    <div class="advantage-badge">
+                        ${t('advantages.badge_security')}
                     </div>
                 </div>
             </div>

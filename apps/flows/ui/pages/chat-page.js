@@ -331,11 +331,6 @@ export class ChatPage extends PlatformPage {
         }
     }
 
-    _openSessions() {
-        this._overflowOpen = false;
-        this.openModal('flows.sessions', { flowId: this.flowId });
-    }
-
     _openTriggers() {
         this._overflowOpen = false;
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
@@ -424,15 +419,6 @@ export class ChatPage extends PlatformPage {
             <button
                 type="button"
                 class="action-btn"
-                title=${this.t('platform_chat.btn_sessions')}
-                aria-label=${this.t('platform_chat.btn_sessions')}
-                @click=${this._openSessions}
-            >
-                <platform-icon name="clipboard" size="16"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="action-btn"
                 title=${this.t('platform_chat.btn_traces')}
                 aria-label=${this.t('platform_chat.btn_traces')}
                 @click=${this._openTracing}
@@ -503,10 +489,6 @@ export class ChatPage extends PlatformPage {
                                         </button>
                                     `
                                     : nothing}
-                                <button type="button" class="action-btn-menu" @click=${this._openSessions}>
-                                    <platform-icon name="clipboard" size="16"></platform-icon>
-                                    ${this.t('platform_chat.btn_sessions')}
-                                </button>
                                 <button type="button" class="action-btn-menu" @click=${this._openTracing}>
                                     <platform-icon name="chart" size="16"></platform-icon>
                                     ${this.t('platform_chat.btn_traces')}

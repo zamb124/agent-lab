@@ -1,17 +1,12 @@
 /**
  * Landing Page — главная страница.
  *
- * Подписана на `frontend/ui/plan_selected` для скролла к CTA-секции.
  * Auth-модалка живёт глобально в platform-modal-stack — открывается через
- * dispatch CoreEvents.UI_MODAL_OPEN { kind: 'auth.login' } из landing-header,
- * landing-hero, landing-plans.
+ * helper openModal из landing-header, landing-hero, landing-plans.
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import { FrontendLeadFormModal } from '../modals/lead-form-modal.js';
 import '@platform/lib/components/auth-modal.js';
-
-const PLAN_SELECTED_EVENT = 'frontend/ui/plan_selected';
 
 export class LandingPage extends PlatformPage {
     static styles = [
@@ -34,31 +29,24 @@ export class LandingPage extends PlatformPage {
         `,
     ];
 
-    connectedCallback() {
-        super.connectedCallback();
-        this.useEvent(PLAN_SELECTED_EVENT, (event) => {
-            const plan = event.payload && event.payload.plan;
-            if (plan !== 'expert') return;
-            this.openModal(FrontendLeadFormModal);
-            const section = this.shadowRoot?.getElementById('cta');
-            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    }
-
     render() {
         return html`
             <div class="landing-container">
                 <landing-header></landing-header>
                 <section id="hero"><landing-hero></landing-hero></section>
+                <section id="trust"><landing-trust></landing-trust></section>
                 <section id="demo-agents"><landing-home-demo-agents></landing-home-demo-agents></section>
                 <section id="about"><landing-about></landing-about></section>
                 <section id="abilities"><landing-abilities></landing-abilities></section>
                 <section id="advantages"><landing-advantages></landing-advantages></section>
+                <section id="roi"><landing-roi-calculator></landing-roi-calculator></section>
                 <section id="plans"><landing-plans></landing-plans></section>
+                <section id="cases"><landing-cases></landing-cases></section>
                 <section id="reviews"><landing-reviews></landing-reviews></section>
                 <section id="faq"><landing-faq></landing-faq></section>
                 <section id="cta"><landing-cta></landing-cta></section>
                 <landing-footer></landing-footer>
+                <landing-floating-cta></landing-floating-cta>
             </div>
         `;
     }

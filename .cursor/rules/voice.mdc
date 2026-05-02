@@ -65,7 +65,7 @@ apps/voice/
 ### STT (Speech-to-Text)
 
 - **`CloudRuStreamSTTProvider`** (`stt/cloud_ru.py`): стриминговый провайдер cloud.ru, принимает PCM через `push_audio(bytes)`, отдаёт результат через `flush_buffer() -> STTTranscriptionResult | None`. Это НЕ тот же клиент, что `core/clients/stt_client.py` (который для batch).
-- **`MockSTTProvider`** (`stt/mock.py`): в тестах, возвращает `settings.stt.mock_text` при `flush_buffer`.
+- **`MockSTTProvider`** (`stt/mock.py`): в тестах, возвращает `settings.stt.mock_transcript_text` при `flush_buffer`.
 
 ### TTS (Text-to-Speech)
 

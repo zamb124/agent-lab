@@ -43,7 +43,7 @@ class VoiceContainer(BaseContainer):
         if provider == "mock":
             from apps.voice.providers.stt.mock import MockSTTProvider
 
-            return MockSTTProvider(text=self.settings.stt.mock_text)
+            return MockSTTProvider(text=self.settings.stt.mock_transcript_text)
         from apps.voice.providers.stt.cloud_ru import CloudRuStreamSTTProvider
 
         return CloudRuStreamSTTProvider()

@@ -15,6 +15,7 @@ from apps.frontend.api.auth import router as auth_router
 from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
+from apps.frontend.api.public_site import router as public_site_router
 from apps.frontend.api.invites import router as invites_router
 from apps.frontend.api.team import router as team_router
 from apps.frontend.api.api_keys import router as api_keys_router
@@ -51,6 +52,9 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/products/sync",
     "/products/documents",
     "/demo/digital-workers",
+    "/blog",
+    "/about",
+    "/roadmap",
 )
 
 def _short_link_redirect_location(target: str) -> str:
@@ -73,6 +77,22 @@ def _get_platform_public_base_url() -> str:
     return base_url.rstrip("/")
 
 def _build_sitemap_xml(base_url: str) -> str:
+    from datetime import datetime, timezone
+
+    lastmod = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    og_image_loc = f"{base_url}/static/frontend/assets/images/main_img.png"
+    paths_with_preview_image: frozenset[str] = frozenset(
+        (
+            "/",
+            "/products/agents",
+            "/products/rag",
+            "/products/crm",
+            "/products/sync",
+            "/products/documents",
+            "/demo/digital-workers",
+        )
+    )
+
     def _priority_for_path(path: str) -> str:
         if path.startswith("/products/"):
             return "0.90"
@@ -82,23 +102,34 @@ def _build_sitemap_xml(base_url: str) -> str:
             return "0.70"
         if path == "/support":
             return "0.65"
+        if path in ("/blog", "/about", "/roadmap"):
+            return "0.55"
         return "0.50"
 
-    urls_xml = "\n".join(
-        "\n".join(
-            (
-                "  <url>",
-                f"    <loc>{base_url}{path}</loc>",
-                "    <changefreq>weekly</changefreq>",
-                f"    <priority>{_priority_for_path(path)}</priority>",
-                "  </url>",
+    def _url_block(path: str) -> str:
+        lines = [
+            "  <url>",
+            f"    <loc>{base_url}{path}</loc>",
+            f"    <lastmod>{lastmod}</lastmod>",
+            "    <changefreq>weekly</changefreq>",
+            f"    <priority>{_priority_for_path(path)}</priority>",
+        ]
+        if path in paths_with_preview_image:
+            lines.extend(
+                (
+                    "    <image:image>",
+                    f"      <image:loc>{og_image_loc}</image:loc>",
+                    "    </image:image>",
+                )
             )
-        )
-        for path in INDEXABLE_PUBLIC_PATHS
-    )
+        lines.append("  </url>")
+        return "\n".join(lines)
+
+    urls_xml = "\n".join(_url_block(path) for path in INDEXABLE_PUBLIC_PATHS)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+        'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n'
         f"{urls_xml}\n"
         "</urlset>\n"
     )
@@ -119,7 +150,10 @@ def _build_llms_txt(base_url: str) -> str:
         f"- Product Sync: {base_url}/products/sync\n"
         f"- Product Documents: {base_url}/products/documents\n"
         f"- Product Documentation: {base_url}/documentation/\n"
-        f"- Support: {base_url}/support\n\n"
+        f"- Support: {base_url}/support\n"
+        f"- Blog: {base_url}/blog\n"
+        f"- About: {base_url}/about\n"
+        f"- Roadmap: {base_url}/roadmap\n\n"
         "## Optional\n"
         f"- Service health endpoint (technical): {base_url}/health\n"
     )
@@ -156,6 +190,7 @@ app = create_service_app(
         companies_router,
         embed_configs_router,
         public_landing_agents_router,
+        public_site_router,
         invites_router,
         team_router,
         api_keys_router,

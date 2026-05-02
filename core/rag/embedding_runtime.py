@@ -22,6 +22,7 @@ class RagEmbeddingRuntime:
     model: str
     dimension: int
     base_url: str
+    mrl_output_dimension: int | None = None
 
 
 def resolve_rag_embedding_runtime(
@@ -53,6 +54,7 @@ def resolve_rag_embedding_runtime(
         model=api.model,
         dimension=api.dimension,
         base_url=bu,
+        mrl_output_dimension=api.mrl_output_dimension,
     )
 
 

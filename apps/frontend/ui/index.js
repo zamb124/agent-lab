@@ -45,5 +45,9 @@ import './components/landing/landing-reviews.js';
 import './components/landing/landing-faq.js';
 import './components/landing/landing-cta.js';
 import './components/landing/landing-footer.js';
+import './components/landing/landing-trust.js';
+import './components/landing/landing-roi-calculator.js';
+import './components/landing/landing-cases.js';
+import './components/landing/landing-floating-cta.js';
 
 import './app/frontend-app.js';

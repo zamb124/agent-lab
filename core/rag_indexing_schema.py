@@ -102,7 +102,7 @@ class SearchChannelsDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     semantic: bool = True
-    lexical: bool = False
+    lexical: bool = True
 
     @model_validator(mode="after")
     def at_least_one_channel(self) -> SearchChannelsDefaults:
@@ -114,7 +114,7 @@ class SearchChannelsDefaults(BaseModel):
 class RerankerSearchDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = False
+    enabled: bool = True
     url: str | None = None
     max_candidates: int | None = Field(default=None, gt=0)
 

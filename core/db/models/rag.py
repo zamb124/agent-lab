@@ -88,7 +88,11 @@ class VectorDocument(Base):
         TSVECTOR,
         Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
     )
-    embedding = mapped_column(Vector(1024), nullable=True)
+    embedding = mapped_column(Vector(4096), nullable=True)
+    embedding_model: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, default=None, index=True,
+        comment="Идентификатор модели эмбеддинга (напр. qwen/qwen3-embedding-8b). NULL у старых чанков до переиндексации."
+    )
     chunk_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
@@ -104,13 +108,6 @@ class VectorDocument(Base):
     __table_args__ = (
         Index("ix_vd_namespace_company", "namespace_id", "company_id"),
         Index("ix_vd_document_id", "document_id"),
-        Index(
-            "ix_vd_embedding_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
         Index(
             "ix_vd_content_tsv_gin",
             "content_tsv",

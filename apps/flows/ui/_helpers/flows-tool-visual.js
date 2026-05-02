@@ -5,10 +5,39 @@
 import { getNodeTypeMeta } from '../constants/node-icons.js';
 import { isPlainObject } from './flows-resolvers.js';
 
-/** Макс. число кружков tools на карточке ноды; остальное — «+N». */
-export const CANVAS_NODE_TOOLS_MAX_VISIBLE = 6;
+/**
+ * Число чипов в одном ряду карточки ноды (ширина карточки 200px,
+ * chip 28px + gap 6px даёт ~5 штук в ряд).
+ */
+export const CHIPS_PER_ROW = 5;
+
+/** Макс. число рядов чипов (чтобы карточка не росла бесконечно). */
+export const MAX_CHIP_ROWS = 3;
+
+/** Макс. чипов на карточке; остальное — «+N». */
+export const MAX_CHIPS_SHOWN = CHIPS_PER_ROW * MAX_CHIP_ROWS;
 
 const MCP_CODE_MODE = 'mcp_tool';
+
+/**
+ * Читаемое имя тула из ToolReference (name > title > tool_id).
+ *
+ * @param {unknown} ref — сырой tool ref
+ * @returns {string}
+ */
+export function getToolLabel(ref) {
+    if (typeof ref === 'string' && ref.length > 0) {
+        return ref;
+    }
+    if (!isPlainObject(ref)) {
+        return '';
+    }
+    if (typeof ref.name === 'string' && ref.name.length > 0) return ref.name;
+    if (typeof ref.title === 'string' && ref.title.length > 0) return ref.title;
+    const tid = ref.tool_id;
+    if (typeof tid === 'string' && tid.length > 0) return tid;
+    return '';
+}
 
 /**
  * @param {unknown} raw

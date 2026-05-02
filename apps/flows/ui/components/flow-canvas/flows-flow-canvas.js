@@ -56,7 +56,8 @@ import {
 import {
     normalizedLlmToolsForCanvas,
     getToolRefVisualMeta,
-    CANVAS_NODE_TOOLS_MAX_VISIBLE,
+    getToolLabel,
+    MAX_CHIPS_SHOWN,
 } from '../../_helpers/flows-tool-visual.js';
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 const NODE_RADIUS = 12;
@@ -191,14 +192,16 @@ export class FlowsFlowCanvas extends PlatformElement {
             .node-tools-row {
                 display: flex;
                 flex-direction: row;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 6px;
                 flex-shrink: 0;
+                padding: 2px 0 0 0;
             }
             .node-tool-chip {
                 width: 28px;
                 height: 28px;
-                border-radius: 50%;
+                border-radius: var(--radius-full);
                 border: 1px solid var(--glass-border-subtle);
                 display: flex;
                 align-items: center;
@@ -208,22 +211,56 @@ export class FlowsFlowCanvas extends PlatformElement {
                 cursor: pointer;
                 flex-shrink: 0;
                 box-sizing: border-box;
+                background: var(--glass-solid);
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            }
+            .node-tool-chip:hover {
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+                border-color: var(--glass-border);
             }
             .node-tool-chip[data-cat="core"] {
                 background: var(--accent-subtle);
                 color: var(--accent);
+                border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+                box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 18%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            }
+            .node-tool-chip[data-cat="core"]:hover {
+                box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 26%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
             }
             .node-tool-chip[data-cat="integrations"] {
                 background: var(--info-bg);
                 color: var(--info);
+                border-color: color-mix(in srgb, var(--info) 18%, transparent);
+                box-shadow: 0 1px 4px color-mix(in srgb, var(--info) 18%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            }
+            .node-tool-chip[data-cat="integrations"]:hover {
+                box-shadow: 0 2px 8px color-mix(in srgb, var(--info) 26%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
             }
             .node-tool-chip[data-cat="flow"] {
                 background: var(--accent-secondary-subtle);
                 color: var(--accent-secondary);
+                border-color: color-mix(in srgb, var(--accent-secondary) 18%, transparent);
+                box-shadow: 0 1px 4px color-mix(in srgb, var(--accent-secondary) 18%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            }
+            .node-tool-chip[data-cat="flow"]:hover {
+                box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-secondary) 26%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
             }
             .node-tool-chip[data-cat="hitl"] {
                 background: var(--warning-bg);
                 color: var(--warning);
+                border-color: color-mix(in srgb, var(--warning) 18%, transparent);
+                box-shadow: 0 1px 4px color-mix(in srgb, var(--warning) 18%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            }
+            .node-tool-chip[data-cat="hitl"]:hover {
+                box-shadow: 0 2px 8px color-mix(in srgb, var(--warning) 26%, transparent),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
             }
             .node-tools-more {
                 font-size: var(--text-xs);
@@ -1399,8 +1436,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         const y = asNumber(node.pos_y);
         const h = getNodeCanvasHeight(node);
         const canvasTools = normalizedLlmToolsForCanvas(node);
-        const maxVis = CANVAS_NODE_TOOLS_MAX_VISIBLE;
-        const visibleTools = canvasTools.slice(0, maxVis);
+        const maxShown = MAX_CHIPS_SHOWN;
+        const visibleTools = canvasTools.slice(0, maxShown);
         const moreTools = canvasTools.length - visibleTools.length;
         const meta = getNodeTypeMeta(node.type);
         const state = this._state();
@@ -1433,11 +1470,13 @@ export class FlowsFlowCanvas extends PlatformElement {
                         ${visibleTools.map((ref) => {
                             const tm = getToolRefVisualMeta(ref);
                             const tid = ref.tool_id;
+                            const label = getToolLabel(ref);
                             return html`
                                 <button
                                     type="button"
                                     class="node-tool-chip"
                                     data-cat=${tm.category}
+                                    title=${label}
                                     @pointerdown=${(e) => {
                                         e.stopPropagation();
                                         this._editor.selectNode({ nodeId: id, openToolId: tid });

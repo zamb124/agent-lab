@@ -2,7 +2,11 @@
     "routes": {
         "dashboard": "Dashboard",
         "platform_services": "Services",
-        "digital_workers": "Digital employees"
+        "digital_workers": "Digital employees",
+        "blog": "Blog",
+        "blog-post": "Article",
+        "about": "Company",
+        "roadmap": "Roadmap"
     },
     "title": "Dashboard",
     "console_sidebar": {

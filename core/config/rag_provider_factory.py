@@ -65,6 +65,7 @@ def resolve_rag_provider_bundle(
             "model": api.model,
             "dimension": api.dimension,
             "base_url": api.base_url,
+            "mrl_output_dimension": api.mrl_output_dimension,
         }
         if provider_name is None:
             override = _resolve_company_rag_embedding_override()
@@ -78,6 +79,7 @@ def resolve_rag_provider_bundle(
                     "model": api2.model,
                     "dimension": api2.dimension,
                     "base_url": api2.base_url,
+                    "mrl_output_dimension": api2.mrl_output_dimension,
                 }
     return ResolvedRagProvider(
         provider_key=key,

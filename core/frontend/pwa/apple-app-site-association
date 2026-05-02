@@ -5,6 +5,7 @@
         "appIDs": ["MLL2V8KTV4.ru.humanitec.app"],
         "paths": [
           "/",
+          "/l/*",
           "/join/*",
           "/frontend/*",
           "/sync/*",

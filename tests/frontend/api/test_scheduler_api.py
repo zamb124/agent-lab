@@ -9,11 +9,20 @@ import pytest
 from apps.scheduler.main import (
     CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
     CALENDAR_SYNC_TASK_NAME,
+    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+    RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
+    RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
     SPAN_BILLING_SETTLEMENT_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
     on_startup,
 )
-from core.config.models import BillingConfig, BillingSpanSettlementConfig, CalendarSyncConfig, PaymentProvidersConfig
+from core.config.models import (
+    BillingConfig,
+    BillingSpanSettlementConfig,
+    CalendarSyncConfig,
+    PaymentProvidersConfig,
+    RAGConfig,
+)
 from core.scheduler.models import PlatformScheduleType, ScheduledTaskStatus
 
 
@@ -193,6 +202,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
         )
         billing = BillingConfig()
         payment_providers = PaymentProvidersConfig()
+        rag = RAGConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -205,6 +215,12 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             if filters.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
                 return []
             if filters.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME:
+                return []
+            if filters.task_name == RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME:
+                return []
+            if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+                return []
+            if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
                 return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
@@ -220,14 +236,21 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
 
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
-    assert len(fake_service.created_requests) == 2
+    assert len(fake_service.created_requests) == 5
     names = {r.task_name for r in fake_service.created_requests}
-    assert names == {CALENDAR_SYNC_TASK_NAME, CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME}
+    assert names == {
+        CALENDAR_SYNC_TASK_NAME,
+        CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
+        RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
+        RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+        CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+    }
     by_name = {r.task_name: r for r in fake_service.created_requests}
     assert by_name[CALENDAR_SYNC_TASK_NAME].schedule_type == PlatformScheduleType.CRON
     assert by_name[CALENDAR_SYNC_TASK_NAME].cron == "*/1 * * * *"
     assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].schedule_type == PlatformScheduleType.CRON
     assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].cron == "*/1 * * * *"
+    assert by_name[RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME].schedule_type == PlatformScheduleType.CRON
 
 
 @pytest.mark.asyncio
@@ -241,6 +264,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
         )
         billing = BillingConfig()
         payment_providers = PaymentProvidersConfig()
+        rag = RAGConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
@@ -255,6 +279,12 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
                 return []
             if filters.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME:
                 return []
+            if filters.task_name == RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME:
+                return []
+            if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+                return []
+            if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+                return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
         async def resume(self, company_id, schedule_task_id):
@@ -265,9 +295,13 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
         async def create(self, company_id, user_id, request):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
             assert user_id is None
-            assert request.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME
-            self.meeting_reminder_create = request
-            return type("CreatedTask", (), {"id": "reminder-1", "schedule_id": "schedule-rem-1"})()
+            if request.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME:
+                self.meeting_reminder_create = request
+            return type(
+                "CreatedTask",
+                (),
+                {"id": f"created-{request.task_name}", "schedule_id": "schedule-rem-1"},
+            )()
 
     fake_service = _FakeSchedulerService()
     fake_container = type("Container", (), {"scheduler_service": fake_service})()
@@ -282,7 +316,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
 @pytest.mark.asyncio
 async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() -> None:
     class _FakeSettings:
-        calendar_sync = CalendarSyncConfig(enabled=False)
+        calendar_sync = CalendarSyncConfig(enabled=False, sync_meeting_reminder_enabled=False)
         billing = BillingConfig(
             span_settlement=BillingSpanSettlementConfig(
                 enabled=True,
@@ -290,6 +324,7 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
             )
         )
         payment_providers = PaymentProvidersConfig()
+        rag = RAGConfig()
 
     class _FakeSchedulerService:
         def __init__(self) -> None:

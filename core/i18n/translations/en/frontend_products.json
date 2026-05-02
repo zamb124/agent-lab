@@ -29,7 +29,16 @@
     "cta_title": "Ready to automate customer conversations?",
     "cta_subtitle": "Create your first agent for free and see the results",
     "cta_button": "Get started",
-    "back_home": "Back to home"
+    "back_home": "Back to home",
+    "meta_title": "AI Studio — AI agent builder | Humanitec",
+    "meta_description": "Build AI agents without code: visual builder, channels, integrations, and conversation analytics on Humanitec.",
+    "faq_title": "AI Studio FAQ",
+    "faq1_q": "Do we need engineers to launch an agent?",
+    "faq1_a": "No — flows are assembled from blocks on the canvas. APIs and Business-tier support cover advanced integrations.",
+    "faq2_q": "Where can agents talk to customers?",
+    "faq2_a": "Connect platform channels and on-site widgets so customers reach you where they already are.",
+    "faq3_q": "How do agents use company documents?",
+    "faq3_a": "Through Knowledge Base: upload policies and FAQs so answers cite your sources."
   },
   "rag": {
     "hero_badge": "Knowledge base with AI search",
@@ -68,7 +77,16 @@
     "cta_title": "Turn documents into a smart assistant",
     "cta_subtitle": "Upload your first files and try search",
     "cta_button": "Start for free",
-    "back_home": "Back to home"
+    "back_home": "Back to home",
+    "meta_title": "Knowledge Base — semantic document search | Humanitec",
+    "meta_description": "Upload PDF and Word, search by meaning, and ground AI Studio agents on Humanitec.",
+    "faq_title": "Knowledge Base FAQ",
+    "faq1_q": "Which formats are supported?",
+    "faq1_a": "PDF, Word, Excel, text, and Markdown are indexed for semantic search.",
+    "faq2_q": "How does Knowledge Base connect to agents?",
+    "faq2_a": "AI Studio agents can answer using your uploaded policies and manuals.",
+    "faq3_q": "Where are files stored?",
+    "faq3_a": "Inside your company perimeter on the platform, isolated between organizations."
   },
   "crm": {
     "hero_badge": "Smart notebook",
@@ -109,7 +127,16 @@
     "cta_title": "Start building your relationship graph",
     "cta_subtitle": "First 100 notes — free",
     "cta_button": "Create account",
-    "back_home": "Back to home"
+    "back_home": "Back to home",
+    "meta_title": "NetWorkle — relationship graph and smart notebook | Humanitec",
+    "meta_description": "Notes, contacts, and deals link automatically; semantic search across company knowledge.",
+    "faq_title": "NetWorkle FAQ",
+    "faq1_q": "Is this a classic CRM?",
+    "faq1_a": "NetWorkle is more flexible: free-form notes with automatic entities and graph relationships.",
+    "faq2_q": "How do I find information?",
+    "faq2_a": "Ask in natural language — semantic search runs across your notes.",
+    "faq3_q": "Can teams collaborate?",
+    "faq3_a": "Yes — visibility is scoped to your company on the platform."
   },
   "sync": {
     "hero_badge": "Team chat and video",
@@ -150,7 +177,16 @@
     "cta_title": "Bring your team to Sync",
     "cta_subtitle": "Sign in with your company account — chat opens from the dashboard.",
     "cta_button": "Sign in and open",
-    "back_home": "Back to home"
+    "back_home": "Back to home",
+    "meta_title": "Sync — team chat and video calls | Humanitec",
+    "meta_description": "Channels, threads, calls, and Git context alongside AI Studio and Knowledge Base.",
+    "faq_title": "Sync FAQ",
+    "faq1_q": "How is Sync different from a messenger?",
+    "faq1_a": "It is part of Humanitec: same users, company policies, and integrations.",
+    "faq2_q": "Are video calls supported?",
+    "faq2_a": "Yes — calls from chat with screen sharing and guest links.",
+    "faq3_q": "How do engineering discussions relate to code?",
+    "faq3_a": "Keep Git context next to channel discussions about tasks and PRs."
   },
   "documents": {
     "gallery_section_label": "Documents screenshots",
@@ -194,6 +230,15 @@
     "cta_title": "Start collaborative document editing",
     "cta_subtitle": "Sign in and open the app from the dashboard or this page — start collaborative document editing with your team.",
     "cta_button": "Open Documents",
-    "back_home": "Back to home"
+    "back_home": "Back to home",
+    "meta_title": "Documents — collaborative Office editing | Humanitec",
+    "meta_description": "Word, Excel, and PowerPoint on your document server with secure Humanitec BFF issuance.",
+    "faq_title": "Documents FAQ",
+    "faq1_q": "Where are files stored?",
+    "faq1_a": "Document bytes live in your S3-compatible storage; the editor loads via short-lived server JWT.",
+    "faq2_q": "Do users need a separate editor login?",
+    "faq2_a": "The default flow signs in through Humanitec without a separate Document Server account.",
+    "faq3_q": "How do we isolate file lists?",
+    "faq3_a": "Use platform namespaces to separate teams and projects."
   }
 }

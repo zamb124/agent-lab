@@ -38,6 +38,25 @@ export class LandingHero extends PlatformElement {
                 position: relative;
             }
             
+            .hero-subtitle {
+                position: absolute;
+                top: 52%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 12;
+                max-width: min(720px, calc(100vw - 32px));
+                margin: 0;
+                padding: 0 16px;
+                box-sizing: border-box;
+                text-align: center;
+                font-family: 'Fira Sans', sans-serif;
+                font-size: clamp(14px, 2.2vw, 20px);
+                line-height: 1.45;
+                font-weight: 500;
+                color: rgba(232, 232, 232, 0.88);
+                pointer-events: none;
+            }
+
             .hero-title {
                 position: absolute;
                 top: 50%;
@@ -125,7 +144,16 @@ export class LandingHero extends PlatformElement {
             }
             
             @media (max-width: 768px) {
+                .hero-subtitle {
+                    position: static;
+                    transform: none;
+                    margin: 16px auto 0;
+                    pointer-events: auto;
+                }
+
                 .hero-title {
+                    position: static;
+                    transform: none;
                     font-size: min(80px, calc((100vw - 32px) / 5.2));
                     line-height: 1.05;
                     max-width: calc(100% - 16px);
@@ -165,9 +193,37 @@ export class LandingHero extends PlatformElement {
                     justify-content: center;
                     padding: 40px 20px;
                 }
+
+                .hero-title {
+                    order: 1;
+                }
+
+                .hero-subtitle {
+                    order: 2;
+                }
+
+                .hero-image-wrapper {
+                    order: 3;
+                }
+
+                .hero-text-left {
+                    order: 4;
+                }
+
+                .hero-cta {
+                    order: 5;
+                }
+
+                .hero-text-right {
+                    order: 6;
+                }
             }
             
             @media (min-width: 769px) and (max-width: 1439px) {
+                .hero-subtitle {
+                    top: 62%;
+                }
+
                 .hero-title {
                     font-size: min(200px, calc((100vw - 64px) / 5.2));
                     line-height: 1.1;
@@ -199,6 +255,12 @@ export class LandingHero extends PlatformElement {
             }
             
             @media (min-width: 1440px) {
+                .hero-subtitle {
+                    top: 60%;
+                    font-size: clamp(16px, 1.6vw, 22px);
+                    max-width: 800px;
+                }
+
                 .hero-title {
                     font-size: clamp(200px, 15vw, 320px);
                     line-height: 1.1;
@@ -236,10 +298,11 @@ export class LandingHero extends PlatformElement {
     };
 
     render() {
-        const t = (key) => (this.t(key) || key);
+        const t = (key) => this.t(key);
         return html`
             <div class="hero-container">
                 <h1 class="hero-title">HUMANITEC</h1>
+                <p class="hero-subtitle">${t('hero.subtitle')}</p>
                 
                     <div class="hero-image-wrapper">
                         <img

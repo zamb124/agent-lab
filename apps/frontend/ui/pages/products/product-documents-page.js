@@ -4,6 +4,8 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buildServiceEntryUrl } from '@platform/lib/utils/last-visited-service.js';
+import { applyPublicDocumentMeta } from '../../utils/public-document-meta.js';
+import { productLandingFaqStyles } from '../../styles/product-landing-faq.styles.js';
 import {
     landDocumentsHeroUrl,
     landDocumentsShot2Url,
@@ -15,6 +17,7 @@ export class ProductDocumentsPage extends PlatformElement {
 
     static styles = [
         ...PlatformElement.styles,
+        productLandingFaqStyles,
         css`
             :host {
                 display: block;
@@ -382,18 +385,34 @@ export class ProductDocumentsPage extends PlatformElement {
         this.openModal('auth.login', { returnPath: buildServiceEntryUrl('documents') });
     };
 
+    connectedCallback() {
+        super.connectedCallback();
+        queueMicrotask(() => this._syncProductDocumentMeta());
+    }
+
+    _syncProductDocumentMeta() {
+        if (typeof window === 'undefined') return;
+        const origin = window.location.origin;
+        applyPublicDocumentMeta({
+            title: this.t('documents.meta_title'),
+            description: this.t('documents.meta_description'),
+            canonicalUrl: `${origin}/products/documents`,
+            ogImageUrl: `${origin}/static/frontend/assets/images/main_img.png`,
+        });
+    }
+
     render() {
-        const t = (key) => (this.t(key) || key);
+        const t = (key) => this.t(`documents.${key}`);
         return html`
             <landing-header></landing-header>
             <div class="page-container">
                 <section class="hero">
-                    <span class="hero-badge">${t('documents.hero_badge')}</span>
-                    <h1 class="hero-title">${t('documents.hero_title')}</h1>
+                    <span class="hero-badge">${t('hero_badge')}</span>
+                    <h1 class="hero-title">${t('hero_title')}</h1>
                     <div class="hero-shot">
                         <img
                             src=${landDocumentsHeroUrl}
-                            alt=${t('documents.hero_visual_alt')}
+                            alt=${t('hero_visual_alt')}
                             width="1200"
                             height="673"
                             loading="eager"
@@ -401,19 +420,19 @@ export class ProductDocumentsPage extends PlatformElement {
                         />
                     </div>
                     <p class="hero-description">
-                        ${t('documents.hero_description')}
+                        ${t('hero_description')}
                     </p>
                     <button class="cta-btn" @click=${this._handleProductCtaClick}>
-                        ${t('documents.cta_try')}
+                        ${t('cta_try')}
                     </button>
                 </section>
 
-                <section class="product-gallery" aria-label=${t('documents.gallery_section_label')}>
+                <section class="product-gallery" aria-label=${t('gallery_section_label')}>
                     <div class="product-gallery-grid">
                         <div class="hero-shot">
                             <img
                                 src=${landDocumentsShot2Url}
-                                alt=${t('documents.gallery_2_alt')}
+                                alt=${t('gallery_2_alt')}
                                 width="1200"
                                 height="673"
                                 loading="lazy"
@@ -423,7 +442,7 @@ export class ProductDocumentsPage extends PlatformElement {
                         <div class="hero-shot">
                             <img
                                 src=${landDocumentsShot3Url}
-                                alt=${t('documents.gallery_3_alt')}
+                                alt=${t('gallery_3_alt')}
                                 width="1200"
                                 height="673"
                                 loading="lazy"
@@ -436,30 +455,30 @@ export class ProductDocumentsPage extends PlatformElement {
                 <section class="features">
                     <div class="features-grid">
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('documents.f1_title')}</h3>
+                            <h3 class="feature-title">${t('f1_title')}</h3>
                             <p class="feature-description">
-                                ${t('documents.f1_desc')}
+                                ${t('f1_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('documents.f2_title')}</h3>
+                            <h3 class="feature-title">${t('f2_title')}</h3>
                             <p class="feature-description">
-                                ${t('documents.f2_desc')}
+                                ${t('f2_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('documents.f3_title')}</h3>
+                            <h3 class="feature-title">${t('f3_title')}</h3>
                             <p class="feature-description">
-                                ${t('documents.f3_desc')}
+                                ${t('f3_desc')}
                             </p>
                         </div>
                         
                         <div class="feature-card">
-                            <h3 class="feature-title">${t('documents.f4_title')}</h3>
+                            <h3 class="feature-title">${t('f4_title')}</h3>
                             <p class="feature-description">
-                                ${t('documents.f4_desc')}
+                                ${t('f4_desc')}
                             </p>
                         </div>
                     </div>
@@ -467,37 +486,37 @@ export class ProductDocumentsPage extends PlatformElement {
                 
                 <section class="how-it-works">
                     <div class="how-it-works-container">
-                        <h2 class="how-it-works-title">${t('documents.how_title')}</h2>
+                        <h2 class="how-it-works-title">${t('how_title')}</h2>
                         <div class="steps-grid">
                             <div class="step-item">
                                 <div class="step-number">1</div>
                                 <div class="step-content">
-                                    <h3>${t('documents.s1_h')}</h3>
-                                    <p>${t('documents.s1_p')}</p>
+                                    <h3>${t('s1_h')}</h3>
+                                    <p>${t('s1_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">2</div>
                                 <div class="step-content">
-                                    <h3>${t('documents.s2_h')}</h3>
-                                    <p>${t('documents.s2_p')}</p>
+                                    <h3>${t('s2_h')}</h3>
+                                    <p>${t('s2_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">3</div>
                                 <div class="step-content">
-                                    <h3>${t('documents.s3_h')}</h3>
-                                    <p>${t('documents.s3_p')}</p>
+                                    <h3>${t('s3_h')}</h3>
+                                    <p>${t('s3_p')}</p>
                                 </div>
                             </div>
                             
                             <div class="step-item">
                                 <div class="step-number">4</div>
                                 <div class="step-content">
-                                    <h3>${t('documents.s4_h')}</h3>
-                                    <p>${t('documents.s4_p')}</p>
+                                    <h3>${t('s4_h')}</h3>
+                                    <p>${t('s4_p')}</p>
                                 </div>
                             </div>
                         </div>
@@ -505,65 +524,79 @@ export class ProductDocumentsPage extends PlatformElement {
                 </section>
                 
                 <section class="benefits">
-                    <h2 class="benefits-title">${t('documents.benefits_title')}</h2>
+                    <h2 class="benefits-title">${t('benefits_title')}</h2>
                     <div class="benefits-grid">
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('documents.b1_h')}</h3>
-                                <p>${t('documents.b1_p')}</p>
+                                <h3>${t('b1_h')}</h3>
+                                <p>${t('b1_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('documents.b2_h')}</h3>
-                                <p>${t('documents.b2_p')}</p>
+                                <h3>${t('b2_h')}</h3>
+                                <p>${t('b2_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('documents.b3_h')}</h3>
-                                <p>${t('documents.b3_p')}</p>
+                                <h3>${t('b3_h')}</h3>
+                                <p>${t('b3_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('documents.b4_h')}</h3>
-                                <p>${t('documents.b4_p')}</p>
+                                <h3>${t('b4_h')}</h3>
+                                <p>${t('b4_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('documents.b5_h')}</h3>
-                                <p>${t('documents.b5_p')}</p>
+                                <h3>${t('b5_h')}</h3>
+                                <p>${t('b5_p')}</p>
                             </div>
                         </div>
                         
                         <div class="benefit-item">
                             <div class="benefit-marker" aria-hidden="true"></div>
                             <div class="benefit-content">
-                                <h3>${t('documents.b6_h')}</h3>
-                                <p>${t('documents.b6_p')}</p>
+                                <h3>${t('b6_h')}</h3>
+                                <p>${t('b6_p')}</p>
                             </div>
                         </div>
                     </div>
                 </section>
-                
+
+                <section class="faq-section">
+                    <h2 class="faq-title">${t('faq_title')}</h2>
+                    <div class="faq-list">
+                        ${[1, 2, 3].map(
+                            (i) => html`
+                                <details class="faq-item">
+                                    <summary>${t(`faq${i}_q`)}</summary>
+                                    <p class="faq-answer">${t(`faq${i}_a`)}</p>
+                                </details>
+                            `,
+                        )}
+                    </div>
+                </section>
+
                 <section class="cta-section">
-                    <h2 class="cta-title">${t('documents.cta_title')}</h2>
-                    <p class="cta-subtitle">${t('documents.cta_subtitle')}</p>
+                    <h2 class="cta-title">${t('cta_title')}</h2>
+                    <p class="cta-subtitle">${t('cta_subtitle')}</p>
                     <button class="cta-btn" @click=${this._handleProductCtaClick}>
-                        ${t('documents.cta_button')}
+                        ${t('cta_button')}
                     </button>
-                    <a href="/" class="back-link">${t('documents.back_home')}</a>
+                    <a href="/" class="back-link">${t('back_home')}</a>
                 </section>
                 
                 <landing-footer></landing-footer>

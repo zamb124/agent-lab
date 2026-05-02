@@ -6,5 +6,6 @@
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "python.envFile": "${workspaceFolder}/.env.pytest"
+    "python.envFile": "${workspaceFolder}/.env.pytest",
+    "makefile.configureOnOpen": false
 }

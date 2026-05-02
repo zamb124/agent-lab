@@ -65,6 +65,12 @@ import {
     dashboardDocumentsFilesCountOp,
     dashboardLitserveModelsCountOp,
 } from '../events/resources/dashboard-stats.resource.js';
+import {
+    publicSiteBundleOp,
+    publicBlogListOp,
+    publicBlogPostOp,
+} from '../events/resources/public-site.resource.js';
+import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/frontend-sidebar.js';
@@ -78,6 +84,10 @@ import '../pages/products/product-documents-page.js';
 import '../pages/legal-page.js';
 import '../pages/support-page.js';
 import '../pages/landing-digital-workers-page.js';
+import '../pages/blog-list-page.js';
+import '../pages/blog-post-page.js';
+import '../pages/about-page.js';
+import '../pages/roadmap-page.js';
 import '../pages/login-page.js';
 import '../pages/join-page.js';
 import '../pages/select-company-page.js';
@@ -103,6 +113,10 @@ const FRONTEND_ROUTES = [
     { key: 'terms',             path: 'terms' },
     { key: 'support',           path: 'support' },
     { key: 'digital-workers',   path: 'demo/digital-workers', parent: 'landing' },
+    { key: 'blog',              path: 'blog', parent: 'landing' },
+    { key: 'blog-post',         path: 'blog/:slug', parent: 'blog' },
+    { key: 'about',             path: 'about', parent: 'landing' },
+    { key: 'roadmap',           path: 'roadmap', parent: 'landing' },
     { key: 'login',             path: 'login' },
     { key: 'join',              path: 'join' },
     { key: 'select-company',    path: 'select-company' },
@@ -124,6 +138,7 @@ const PUBLIC_ROUTE_KEYS = new Set([
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms', 'support',
     'digital-workers',
+    'blog', 'blog-post', 'about', 'roadmap',
     'login', 'join', 'select-company',
 ]);
 
@@ -132,6 +147,17 @@ const LANDING_ROUTE_KEYS = new Set([
     'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
     'policy', 'terms', 'support',
     'digital-workers',
+    'blog', 'blog-post', 'about', 'roadmap',
+]);
+
+/** Публичные страницы с собственным sync meta (продукты, пост блога). */
+const DOCUMENT_META_SKIP = new Set([
+    'product-agents',
+    'product-rag',
+    'product-crm',
+    'product-sync',
+    'product-documents',
+    'blog-post',
 ]);
 
 /** Страницы, где уже есть `<page-header>` — общий мобильный хедер не вставляем. */
@@ -200,11 +226,17 @@ export class FrontendApp extends PlatformApp {
         dashboardSyncSpacesCountOp,
         dashboardDocumentsFilesCountOp,
         dashboardLitserveModelsCountOp,
+        publicSiteBundleOp,
+        publicBlogListOp,
+        publicBlogPostOp,
     ];
 
     constructor() {
         super();
         this._deferredAuthMeRequested = false;
+        this._lastPublicMetaSig = '';
+        this._publicAnalyticsStarted = false;
+        this._publicSiteBundle = this.useOp('frontend/public_site_bundle');
         this._companiesSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this._frontendMql = null;
@@ -297,6 +329,8 @@ export class FrontendApp extends PlatformApp {
         if (/^\/demo\/digital-workers(\/|$)/.test(path)) return false;
         if (path.startsWith('/products/')) return false;
         if (path === '/policy' || path === '/terms' || path === '/support') return false;
+        if (path === '/blog' || path.startsWith('/blog/')) return false;
+        if (path === '/about' || path === '/roadmap') return false;
         return true;
     }
 
@@ -348,6 +382,11 @@ export class FrontendApp extends PlatformApp {
                 loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null),
             });
         }
+
+        if (typeof window !== 'undefined' && routeKey && PUBLIC_ROUTE_KEYS.has(routeKey)) {
+            this._syncPublicHtmlMeta(routeKey);
+            this._maybeBootstrapPublicAnalytics();
+        }
     }
 
     disconnectedCallback() {
@@ -370,7 +409,120 @@ export class FrontendApp extends PlatformApp {
         return this._renderConsole(routeKey, params);
     }
 
-    _renderPublic(routeKey) {
+    _syncPublicHtmlMeta(routeKey) {
+        if (typeof window === 'undefined') return;
+        if (!routeKey) return;
+        if (DOCUMENT_META_SKIP.has(routeKey)) return;
+
+        const rawPath = window.location.pathname.replace(/\/+$/, '') || '/';
+        const sig = `${routeKey}|${rawPath}`;
+        if (this._lastPublicMetaSig === sig) return;
+        this._lastPublicMetaSig = sig;
+
+        const origin = window.location.origin;
+        const canonicalUrl = `${origin}${rawPath.startsWith('/') ? rawPath : `/${rawPath}`}`;
+        const ogImageUrl = `${origin}/static/frontend/assets/images/main_img.png`;
+
+        let title;
+        let description;
+        switch (routeKey) {
+            case 'landing':
+                title = this.t('meta.home_title', {}, 'landing');
+                description = this.t('meta.home_description', {}, 'landing');
+                break;
+            case 'blog':
+                title = this.t('meta.blog_title', {}, 'landing');
+                description = this.t('meta.blog_description', {}, 'landing');
+                break;
+            case 'about':
+                title = this.t('meta.about_title', {}, 'landing');
+                description = this.t('meta.about_description', {}, 'landing');
+                break;
+            case 'roadmap':
+                title = this.t('meta.roadmap_title', {}, 'landing');
+                description = this.t('meta.roadmap_description', {}, 'landing');
+                break;
+            case 'digital-workers':
+                title = this.t('meta.digital_workers_title', {}, 'landing');
+                description = this.t('meta.digital_workers_description', {}, 'landing');
+                break;
+            case 'support':
+                title = this.t('meta.support_title', {}, 'landing');
+                description = this.t('meta.support_description', {}, 'landing');
+                break;
+            case 'policy':
+                title = this.t('title', {}, 'privacy');
+                description = this.t('meta.policy_description', {}, 'landing');
+                break;
+            case 'terms':
+                title = this.t('title', {}, 'terms');
+                description = this.t('meta.terms_description', {}, 'landing');
+                break;
+            default:
+                return;
+        }
+
+        applyPublicDocumentMeta({ title, description, canonicalUrl, ogImageUrl });
+    }
+
+    _maybeBootstrapPublicAnalytics() {
+        if (typeof window === 'undefined') return;
+        if (this._publicAnalyticsStarted) return;
+        const route = this._routerSelect ? this._routerSelect.value : null;
+        const routeKey = route ? route.routeKey : null;
+        if (!routeKey || !LANDING_ROUTE_KEYS.has(routeKey)) return;
+        this._publicAnalyticsStarted = true;
+
+        void (async () => {
+            const res = await this._publicSiteBundle.run();
+            if (!res || typeof res !== 'object') return;
+            const marketing = res.marketing;
+            if (!marketing || typeof marketing !== 'object') return;
+            if (window.__humanitecAnalyticsInjected) return;
+
+            const ymId = marketing.yandex_metrika_id;
+            const gaId = marketing.google_analytics_measurement_id;
+
+            let injected = false;
+            if (typeof ymId === 'string' && ymId !== '') {
+                const s = document.createElement('script');
+                s.textContent = [
+                    '(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};',
+                    'm[i].l=1*new Date();',
+                    'for (var j = 0; j < document.scripts.length; j++) { if (document.scripts[j].src === r) { return; } }',
+                    'k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)}',
+                    '(window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");',
+                    `ym(${JSON.stringify(ymId)}, "init", { clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:true });`,
+                ].join('');
+                document.head.appendChild(s);
+                injected = true;
+            }
+
+            if (typeof gaId === 'string' && gaId !== '') {
+                const gtagSrc = document.createElement('script');
+                gtagSrc.async = true;
+                gtagSrc.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaId)}`;
+                document.head.appendChild(gtagSrc);
+                const inline = document.createElement('script');
+                inline.textContent = [
+                    'window.dataLayer = window.dataLayer || [];',
+                    'function gtag(){dataLayer.push(arguments);}',
+                    "gtag('js', new Date());",
+                    `gtag('config', ${JSON.stringify(gaId)});`,
+                ].join('');
+                document.head.appendChild(inline);
+                injected = true;
+            }
+
+            if (injected) {
+                window.__humanitecAnalyticsInjected = true;
+            }
+        })();
+    }
+
+    _renderPublic(routeKey, params) {
+        const p = params && typeof params === 'object' ? params : {};
+        const slug = typeof p.slug === 'string' ? p.slug : '';
         switch (routeKey) {
             case 'landing':            return html`<landing-page></landing-page>`;
             case 'product-agents':     return html`<product-agents-page></product-agents-page>`;
@@ -382,6 +534,10 @@ export class FrontendApp extends PlatformApp {
             case 'terms':              return html`<legal-page kind="terms"></legal-page>`;
             case 'support':            return html`<support-page></support-page>`;
             case 'digital-workers':    return html`<landing-digital-workers-page></landing-digital-workers-page>`;
+            case 'blog':               return html`<blog-list-page></blog-list-page>`;
+            case 'blog-post':          return html`<blog-post-page .slug=${slug}></blog-post-page>`;
+            case 'about':              return html`<about-page></about-page>`;
+            case 'roadmap':            return html`<roadmap-page></roadmap-page>`;
             case 'login':              return html`<login-page></login-page>`;
             case 'join':               return html`<join-page></join-page>`;
             case 'select-company':     return html`<select-company-page></select-company-page>`;

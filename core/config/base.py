@@ -26,6 +26,7 @@ from core.config.models import (
     RAGConfig,
     SGRConfig,
     LegalConfig,
+    PublicSiteConfig,
     TracingConfig,
     BillingConfig,
     TasksConfig,
@@ -68,6 +69,7 @@ class BaseSettings(PydanticBaseSettings):
     rag: RAGConfig = Field(default_factory=RAGConfig)
     sgr: SGRConfig = Field(default_factory=SGRConfig)
     legal: LegalConfig = Field(default_factory=LegalConfig)
+    public_site: PublicSiteConfig = Field(default_factory=PublicSiteConfig)
     tracing: TracingConfig = Field(default_factory=TracingConfig)
     billing: BillingConfig = Field(default_factory=BillingConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)

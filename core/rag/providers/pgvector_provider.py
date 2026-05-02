@@ -10,13 +10,14 @@ from typing import Any, Dict, List, Optional, Union
 
 import tiktoken
 from core.config.testing import is_testing
-from sqlalchemy import and_, delete, func, or_, select, text
+from sqlalchemy import and_, delete, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.db.models import VectorDocument
 from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.embedding_runtime import RagEmbeddingRuntime
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
+from core.rag.rrf import reciprocal_rank_fusion
 from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.rag.services.embedding_service import EmbeddingService
@@ -111,12 +112,14 @@ class PgVectorProvider(BaseRAGProvider):
                 "model": embedding_config.model,
                 "dimension": embedding_config.dimension,
                 "base_url": embedding_config.base_url,
+                "mrl_output_dimension": embedding_config.mrl_output_dimension,
             }
         else:
             emb_cfg = embedding_config
         model = emb_cfg.get("model")
         dimension = emb_cfg.get("dimension")
         embedding_base_url = emb_cfg.get("base_url")
+        mrl_output_dimension = emb_cfg.get("mrl_output_dimension")
 
         if not model:
             raise ValueError("embedding.model обязателен в конфигурации")
@@ -129,6 +132,7 @@ class PgVectorProvider(BaseRAGProvider):
             base_url=embedding_base_url or None,
             timeout=timeout,
             dimension=dimension,
+            mrl_output_dimension=mrl_output_dimension,
         )
 
         if (
@@ -138,7 +142,7 @@ class PgVectorProvider(BaseRAGProvider):
         ):
 
             async def fake_generate_embeddings(texts: List[str]) -> List[List[float]]:
-                dim = self._embedding_service.dimension or 1024
+                dim = self._embedding_service.get_embedding_dimension()
                 embeddings = []
                 for t in texts:
                     h = hash(t)
@@ -166,6 +170,10 @@ class PgVectorProvider(BaseRAGProvider):
 
     async def close(self):
         await self._engine.dispose()
+
+    def _embedding_model_name(self) -> str:
+        """Идентификатор текущей модели эмбеддинга для записи в embedding_model."""
+        return self._embedding_service.model
 
     # -- Chunking --
 
@@ -420,6 +428,7 @@ class PgVectorProvider(BaseRAGProvider):
         )
 
         rows = []
+        embedding_model = self._embedding_model_name()
         for i, (chunk, emb, chunk_meta) in enumerate(zip(chunks, embeddings, chunk_metas)):
             chunk_row_id = uuid.uuid5(
                 uuid.NAMESPACE_URL,
@@ -434,6 +443,7 @@ class PgVectorProvider(BaseRAGProvider):
                     document_name=document_name,
                     content=chunk,
                     embedding=emb,
+                    embedding_model=embedding_model,
                     chunk_index=i,
                     total_chunks=len(chunks),
                     metadata_={
@@ -661,6 +671,70 @@ class PgVectorProvider(BaseRAGProvider):
             logger.info(f"Удален документ {document_id}: {deleted} chunks")
         return deleted > 0
 
+    async def reembed_stale_documents(
+        self,
+        *,
+        batch_size: int,
+        target_embedding_model: str,
+    ) -> int:
+        """
+        Перевекторизует чанки с устаревшим или отсутствующим ``embedding_model``.
+
+        Выбирает до ``batch_size`` строк, где ``embedding_model IS NULL``
+        либо не совпадает с ``target_embedding_model``, генерирует новый
+        embedding через ``EmbeddingService`` и записывает ``embedding``
+        и ``embedding_model`` обратно в БД.
+
+        Возвращает количество реально обработанных чанков.
+        """
+        async with self._session_factory() as session:
+            stmt = (
+                select(VectorDocument.id, VectorDocument.content)
+                .where(
+                    or_(
+                        VectorDocument.embedding_model.is_(None),
+                        VectorDocument.embedding_model != target_embedding_model,
+                    )
+                )
+                .where(VectorDocument.content.isnot(None))
+                .where(VectorDocument.content != "")
+                .limit(batch_size)
+            )
+            result = await session.execute(stmt)
+            rows = list(result.all())
+
+        if not rows:
+            logger.info(
+                "reembed_stale_documents: свежих кандидатов нет, target=%s",
+                target_embedding_model,
+            )
+            return 0
+
+        texts = [row[1] for row in rows]
+        embeddings = await self._embedding_service.generate_embeddings(texts)
+
+        updated = 0
+        async with self._session_factory() as session:
+            for (doc_id, _text), emb in zip(rows, embeddings):
+                upd = (
+                    update(VectorDocument)
+                    .where(VectorDocument.id == doc_id)
+                    .values(
+                        embedding=emb,
+                        embedding_model=target_embedding_model,
+                    )
+                )
+                upd_result = await session.execute(upd)
+                updated += upd_result.rowcount or 0
+            await session.commit()
+
+        logger.info(
+            "reembed_stale_documents: обработано %d чанков, target=%s",
+            updated,
+            target_embedding_model,
+        )
+        return updated
+
     # -- Search --
 
     async def search(
@@ -671,7 +745,7 @@ class PgVectorProvider(BaseRAGProvider):
         filters: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> List[RAGSearchResult]:
-        query_embedding = await self._embedding_service.generate_embedding(query)
+        embedding_model = self._embedding_model_name()
         channels = kwargs.get("channels")
         use_hybrid_rrf = (
             isinstance(channels, dict)
@@ -679,7 +753,23 @@ class PgVectorProvider(BaseRAGProvider):
             and bool(channels.get("lexical"))
         )
 
+        if use_hybrid_rrf:
+            rrf_k = kwargs.get("rrf_k")
+            per_channel_top_k = kwargs.get("per_channel_top_k")
+            return await self._hybrid_search_rrf(
+                namespace_id=namespace_id,
+                query=query,
+                limit=limit,
+                filters=filters,
+                embedding_model=embedding_model,
+                rrf_k=rrf_k,
+                per_channel_top_k=per_channel_top_k,
+            )
+
+        query_embedding = await self._embedding_service.generate_embedding(query)
+
         async with self._session_factory() as session:
+            await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
             distance_expr = VectorDocument.embedding.cosine_distance(query_embedding)
             similarity_expr = (1 - distance_expr).label("similarity")
 
@@ -687,6 +777,7 @@ class PgVectorProvider(BaseRAGProvider):
                 select(VectorDocument, similarity_expr)
                 .where(VectorDocument.namespace_id == namespace_id)
                 .where(VectorDocument.embedding.isnot(None))
+                .where(VectorDocument.embedding_model == embedding_model)
                 .order_by(distance_expr)
                 .limit(limit)
             )
@@ -697,7 +788,100 @@ class PgVectorProvider(BaseRAGProvider):
             result = await session.execute(stmt)
             rows = result.all()
 
-        search_results = []
+        return self._build_search_results(rows, namespace_id)
+
+    async def _hybrid_search_rrf(
+        self,
+        *,
+        namespace_id: str,
+        query: str,
+        limit: int,
+        filters: Optional[Dict[str, Any]],
+        embedding_model: str,
+        rrf_k: Any = None,
+        per_channel_top_k: Any = None,
+    ) -> List[RAGSearchResult]:
+        """Двухканальный поиск: семантический (cosine) + лексический (tsquery), слияние RRF."""
+        query_embedding = await self._embedding_service.generate_embedding(query)
+
+        rrf_k_int = 60 if rrf_k is None else int(rrf_k)
+        per_channel = limit * 3 if per_channel_top_k is None else int(per_channel_top_k)
+
+        async with self._session_factory() as session:
+            await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
+
+            # Семантический канал
+            distance_expr = VectorDocument.embedding.cosine_distance(query_embedding)
+            similarity_expr = (1 - distance_expr).label("similarity")
+
+            semantic_stmt = (
+                select(VectorDocument.id, similarity_expr)
+                .where(VectorDocument.namespace_id == namespace_id)
+                .where(VectorDocument.embedding.isnot(None))
+                .where(VectorDocument.embedding_model == embedding_model)
+            )
+            if filters:
+                semantic_stmt = semantic_stmt.where(self._build_metadata_filter_expression(filters))
+            semantic_stmt = semantic_stmt.order_by(distance_expr).limit(per_channel)
+
+            # Лексический канал (tsquery по content_tsv)
+            tsquery_expr = func.plainto_tsquery("simple", query)
+            rank_expr = func.ts_rank(VectorDocument.content_tsv, tsquery_expr).label("lexical_rank")
+
+            lexical_stmt = (
+                select(VectorDocument.id, rank_expr)
+                .where(VectorDocument.namespace_id == namespace_id)
+                .where(VectorDocument.content_tsv.op("@@")(tsquery_expr))
+            )
+            if filters:
+                lexical_stmt = lexical_stmt.where(self._build_metadata_filter_expression(filters))
+            lexical_stmt = lexical_stmt.order_by(rank_expr.desc()).limit(per_channel)
+
+            semantic_rows = (await session.execute(semantic_stmt)).all()
+            lexical_rows = (await session.execute(lexical_stmt)).all()
+
+            # RRF-слияние
+            semantic_ids = [row[0] for row in semantic_rows]
+            lexical_ids = [row[0] for row in lexical_rows]
+
+            fused = reciprocal_rank_fusion([semantic_ids, lexical_ids], k=rrf_k_int)
+
+            fused_ordered = fused[:limit]
+            score_by_id = dict(fused_ordered)
+            top_ids = [doc_id for doc_id, _score in fused_ordered]
+
+            if not top_ids:
+                return []
+
+            docs_stmt = select(VectorDocument).where(VectorDocument.id.in_(top_ids))
+            docs_rows = list((await session.execute(docs_stmt)).scalars().all())
+
+        by_id = {doc.id: doc for doc in docs_rows}
+        ordered: List[RAGSearchResult] = []
+        for doc_id in top_ids:
+            doc = by_id.get(doc_id)
+            if doc is None:
+                continue
+            ordered.append(
+                RAGSearchResult(
+                    content=doc.content,
+                    score=float(score_by_id[doc_id]),
+                    document_id=doc.document_id,
+                    document_name=doc.document_name or "",
+                    metadata=doc.metadata_ or {},
+                    namespace=namespace_id,
+                    chunk_id=doc.id,
+                    provenance={"channel": "hybrid_rrf", "rrf_k": rrf_k_int},
+                )
+            )
+        return ordered
+
+    def _build_search_results(
+        self,
+        rows: list[Any],
+        namespace_id: str,
+    ) -> List[RAGSearchResult]:
+        search_results: List[RAGSearchResult] = []
         for row in rows:
             doc = row[0]
             score = float(row[1]) if row[1] is not None else 0.0
@@ -710,9 +894,7 @@ class PgVectorProvider(BaseRAGProvider):
                     metadata=doc.metadata_ or {},
                     namespace=namespace_id,
                     chunk_id=doc.id,
-                    provenance={"channel": "hybrid_rrf"} if use_hybrid_rrf else {},
+                    provenance={},
                 )
             )
-
-        logger.info(f"Поиск '{query[:50]}...' в {namespace_id}: {len(search_results)} результатов")
         return search_results

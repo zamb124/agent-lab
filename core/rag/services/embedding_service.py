@@ -69,6 +69,7 @@ class EmbeddingService:
         base_url: Optional[str] = None,
         timeout: int = 15,
         dimension: Optional[int] = None,
+        mrl_output_dimension: Optional[int] = None,
     ):
         if not api_key:
             raise ValueError("API key обязателен для EmbeddingService")
@@ -76,6 +77,14 @@ class EmbeddingService:
         self.api_key = api_key
         self.timeout = timeout
         self.dimension = dimension
+        self.mrl_output_dimension = mrl_output_dimension
+        
+        if mrl_output_dimension is not None and dimension is not None:
+            if mrl_output_dimension > dimension:
+                raise ValueError(
+                    f"mrl_output_dimension ({mrl_output_dimension}) "
+                    f"не может быть больше полной размерности ({dimension})"
+                )
         
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
         
@@ -281,27 +290,55 @@ class EmbeddingService:
                 f"Сгенерировано {len(all_embeddings)} embeddings "
                 f"(model={self._active_model}, tokens={token_count})"
             )
+
+            if self.mrl_output_dimension is not None and all_embeddings:
+                all_embeddings = self._truncate_vectors(all_embeddings)
+
             return all_embeddings
-    
+
+    def _truncate_vectors(
+        self,
+        vectors: List[List[float]],
+    ) -> List[List[float]]:
+        """
+        MRL: первые ``mrl_output_dimension`` компонент — L2 по префиксу,
+        остаток до полной размерности колонки — нули (совместимость с ``vector(N)`` в БД).
+        """
+        if self.mrl_output_dimension is None:
+            return vectors
+        n = self.mrl_output_dimension
+        full = self.dimension or self._active_dimension
+        if full is None or full <= 0:
+            raise ValueError(
+                "Для MRL задайте dimension в конфиге или выполните запрос к API для определения размерности модели"
+            )
+        if n > full:
+            raise ValueError("mrl_output_dimension не может превышать полную размерность вектора")
+        padded: List[List[float]] = []
+        for vec in vectors:
+            if len(vec) < n:
+                raise ValueError(
+                    f"Вектор длины {len(vec)} короче mrl_output_dimension ({n})"
+                )
+            tail = vec[:n]
+            norm = sum(v * v for v in tail) ** 0.5
+            if norm > 0.0:
+                tail = [v / norm for v in tail]
+            padded.append(tail + [0.0] * (full - n))
+        return padded
+
     def get_embedding_dimension(self) -> int:
-        """
-        Возвращает размерность embedding для текущей модели.
-        
-        Returns:
-            Размерность вектора
-        """
-        if self._active_dimension:
-            return self._active_dimension
-        
-        if self.dimension:
+        """Размерность вектора в pgvector (полная ``dimension`` конфига, с паддингом при MRL)."""
+        if self.dimension is not None:
             return self.dimension
-        
-        # Используем известные размерности
+        if self._active_dimension is not None:
+            return self._active_dimension
         for model in self.models:
             if model in MODEL_DIMENSIONS:
                 return MODEL_DIMENSIONS[model]
-        
-        return 1536  # Default fallback
+        raise ValueError(
+            "Не задана размерность embedding: укажите dimension в конфиге или используйте модель из MODEL_DIMENSIONS"
+        )
     
     def get_active_model(self) -> Optional[str]:
         """Возвращает текущую активную модель (или None если ещё не определена)"""
@@ -309,10 +346,13 @@ class EmbeddingService:
 
     def runtime_snapshot(self, *, embedding_tokens: int) -> dict[str, Any]:
         """Текущее состояние runtime для записи в indexing_runtime."""
-        return {
+        snap: dict[str, Any] = {
             "provider": "openrouter",
             "api_url": self.api_url,
             "model_used": self.model,
             "dimension": self.get_embedding_dimension(),
             "embedding_tokens": embedding_tokens,
         }
+        if self.mrl_output_dimension is not None:
+            snap["mrl_output_dimension"] = self.mrl_output_dimension
+        return snap

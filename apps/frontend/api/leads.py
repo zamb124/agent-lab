@@ -27,12 +27,25 @@ class LeadCreateBody(BaseModel):
     phone: Optional[str] = None
     company: Optional[str] = None
     comment: Optional[str] = None
+    job_title: Optional[str] = None
+    headcount_range: Optional[str] = None
+    interested_products: Optional[list[str]] = None
 
-    @field_validator("email", "phone", "company", "comment", mode="before")
+    @field_validator("email", "phone", "company", "comment", "job_title", "headcount_range", mode="before")
     @classmethod
     def empty_str_to_none(cls, v: Any) -> Any:
         if v == "":
             return None
+        return v
+
+    @field_validator("interested_products", mode="before")
+    @classmethod
+    def normalize_products(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, list):
+            out = [str(x).strip() for x in v if str(x).strip() != ""]
+            return out if out else None
         return v
 
     @field_validator("email")
@@ -65,6 +78,9 @@ async def create_lead(body: LeadCreateBody, container: ContainerDep):
         "phone": body.phone,
         "company": body.company,
         "comment": body.comment,
+        "job_title": body.job_title,
+        "headcount_range": body.headcount_range,
+        "interested_products": body.interested_products,
         "created_at": now,
     }
     storage = container.shared_storage

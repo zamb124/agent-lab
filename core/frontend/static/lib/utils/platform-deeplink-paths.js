@@ -4,6 +4,7 @@
  */
 export const DEEPLINK_PATH_PREFIXES = [
     '/',
+    '/l',
     '/join',
     '/frontend',
     '/sync',

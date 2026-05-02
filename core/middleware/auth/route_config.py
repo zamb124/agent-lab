@@ -118,6 +118,11 @@ ROUTE_RULES: List[RouteRule] = [
     
     # Страницы продуктов (публичный доступ)
     RouteRule("/products/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/demo/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/blog", auth_required=False, context_type="anonymous"),
+    RouteRule("/blog/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/about", auth_required=False, context_type="anonymous"),
+    RouteRule("/roadmap", auth_required=False, context_type="anonymous"),
     
     # Статические файлы
     RouteRule("/static/*", auth_required=False, context_type="anonymous"),
@@ -154,6 +159,14 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/frontend/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/landing-agents", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/landing-agents/session", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/public/site-bundle", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/public/site-bundle", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/public/blog", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/public/blog", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/public/blog/post", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/public/blog/post", auth_required=False, context_type="anonymous"),
+    RouteRule("/api/public/startup-card", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/public/startup-card", auth_required=False, context_type="anonymous"),
     RouteRule("/api/health", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/health", auth_required=False, context_type="anonymous"),
     RouteRule("/sitemap.xml", auth_required=False, context_type="anonymous"),

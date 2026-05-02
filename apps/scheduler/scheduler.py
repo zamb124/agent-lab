@@ -21,6 +21,7 @@ import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402
 import apps.crm_worker.tasks.scheduled_integration_sync_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.reembed_tasks  # noqa: F401, E402
 import apps.rag_worker.tasks.maintenance_tasks  # noqa: F401, E402
 
 from apps.crm.scheduled_integration_constants import (
@@ -52,12 +53,14 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "span_billing_settlement_tick",
 )
 
-_CRM_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
-    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
-)
-
 _RAG_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "rag_cleanup_expired_documents_tick",
+    "rag_reembed_stale_documents_tick",
+)
+
+_CRM_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
+    SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
+    "crm_reembed_stale_documents_tick",
 )
 
 require_tasks_registered_for_scheduler(
