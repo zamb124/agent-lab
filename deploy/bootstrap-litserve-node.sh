@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Первичная подготовка хоста только под provider_litserve (нода B).
 # Запуск на целевом сервере: bash deploy/bootstrap-litserve-node.sh
+# Job GitHub Actions deploy-litserve вызывает скрипт автоматически, если на хосте нет docker.
 # Переменные окружения:
 #   MAIN_PLATFORM_HOST — IPv4 основного сервера (84.38.184.105), для ufw allow from.
 

@@ -392,6 +392,12 @@ jobs:
             set -e
             cd /opt/agent-lab
 
+            if ! command -v docker >/dev/null 2>&1; then
+              export MAIN_PLATFORM_HOST="${SERVER_HOST}"
+              chmod +x deploy/bootstrap-litserve-node.sh
+              bash deploy/bootstrap-litserve-node.sh
+            fi
+
             H="${SERVER_HOST}"
             export DATABASE__SHARED_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_shared"
             export DATABASE__FLOWS_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_agents"
