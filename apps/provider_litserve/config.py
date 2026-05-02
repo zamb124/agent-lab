@@ -11,7 +11,7 @@ from typing import Optional
 
 from pydantic import model_validator
 from core.config import BaseSettings
-from core.config.loader import load_merged_config
+from core.config.loader import load_merged_config#
 
 
 class ProviderLitserveServiceSettings(BaseSettings):
