@@ -9,7 +9,7 @@
     "sync_service_url": "http://localhost:8005",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
-    "provider_litserve_service_url": "http://127.0.0.1:8014",
+    "provider_litserve_service_url": "https://humanitec.ru/litserve",
     "voice_service_url": "http://localhost:8015",
     "platform_public_base_url": "https://humanitec.ru",
     "document_server_dev_upstream_url": "http://localhost:8088"
@@ -342,7 +342,7 @@
       ],
       "provider_litserve": {
         "api": {
-          "base_url": "http://127.0.0.1:8014/v1"
+          "base_url": "https://humanitec.ru/litserve/v1"
         }
       },
       "auth": {
@@ -398,7 +398,7 @@
       },
       "provider_litserve": {
         "api": {
-          "base_url": "http://127.0.0.1:8014/v1"
+          "base_url": "https://humanitec.ru/litserve/v1"
         }
       }
     },
@@ -420,7 +420,7 @@
       "service_name": "provider_litserve",
       "provider_litserve": {
         "api": {
-          "base_url": "http://127.0.0.1:8014/v1"
+          "base_url": "https://humanitec.ru/litserve/v1"
         },
         "infra": {
           "backend": "flagllm",
@@ -462,7 +462,7 @@
       },
       "provider_litserve": {
         "api": {
-          "base_url": "http://127.0.0.1:8014/v1"
+          "base_url": "https://humanitec.ru/litserve/v1"
         }
       },
       "auth": {
@@ -481,7 +481,7 @@
       "service_name": "rag_worker",
       "provider_litserve": {
         "api": {
-          "base_url": "http://127.0.0.1:8014/v1"
+          "base_url": "https://humanitec.ru/litserve/v1"
         }
       }
     },
