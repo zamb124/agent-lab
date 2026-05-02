@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_litserve:
-        description: "Деплой provider_litserve на ноду LITSERVE_HOST (секреты LITSERVE_*)"
+        description: "Деплой provider_litserve на ноду LITSERVE_HOST (SSH: SERVER_USER/SERVER_SSH_KEY)"
         type: boolean
         default: true
 
@@ -321,8 +321,8 @@ jobs:
       - name: Validate litserve SSH secrets
         env:
           LITSERVE_HOST: ${{ secrets.LITSERVE_HOST }}
-          LITSERVE_SSH_USER: ${{ secrets.LITSERVE_SSH_USER }}
-          LITSERVE_SSH_KEY: ${{ secrets.LITSERVE_SSH_KEY }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
         run: |
           set -euo pipefail
 
@@ -330,12 +330,12 @@ jobs:
             echo "Missing required secret: LITSERVE_HOST" >&2
             exit 1
           fi
-          if [ -z "${LITSERVE_SSH_USER:-}" ]; then
-            echo "Missing required secret: LITSERVE_SSH_USER" >&2
+          if [ -z "${SERVER_USER:-}" ]; then
+            echo "Missing required secret: SERVER_USER" >&2
             exit 1
           fi
-          if [ -z "${LITSERVE_SSH_KEY:-}" ]; then
-            echo "Missing required secret: LITSERVE_SSH_KEY (private key content)" >&2
+          if [ -z "${SERVER_SSH_KEY:-}" ]; then
+            echo "Missing required secret: SERVER_SSH_KEY (private key content)" >&2
             exit 1
           fi
 
@@ -343,8 +343,8 @@ jobs:
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LITSERVE_HOST }}
-          username: ${{ secrets.LITSERVE_SSH_USER }}
-          key: ${{ secrets.LITSERVE_SSH_KEY }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           source: "docker-compose-litserve.yaml,conf.json,deploy/bootstrap-litserve-node.sh,deploy/firewall-main-platform-for-litserve-node.sh"
           target: /opt/agent-lab/
 
@@ -352,8 +352,8 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.LITSERVE_HOST }}
-          username: ${{ secrets.LITSERVE_SSH_USER }}
-          key: ${{ secrets.LITSERVE_SSH_KEY }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             mkdir -p /opt/agent-lab/migrations/postgres
             rm -rf /opt/agent-lab/migrations/postgres/init.sql
@@ -362,8 +362,8 @@ jobs:
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LITSERVE_HOST }}
-          username: ${{ secrets.LITSERVE_SSH_USER }}
-          key: ${{ secrets.LITSERVE_SSH_KEY }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           source: "migrations/postgres/init.sql"
           target: /opt/agent-lab/migrations/postgres/
           strip_components: 2
@@ -384,8 +384,8 @@ jobs:
           PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID }}
         with:
           host: ${{ secrets.LITSERVE_HOST }}
-          username: ${{ secrets.LITSERVE_SSH_USER }}
-          key: ${{ secrets.LITSERVE_SSH_KEY }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 45m
           envs: IMAGE,POSTGRES_PASSWORD,SERVER_HOST,AUTH__JWT_SECRET,HF_TOKEN,GHCR_TOKEN,GITHUB_ACTOR,DEPLOYMENT_VERSION,PROVIDER_LITSERVE__INFRA__BACKEND,PROVIDER_LITSERVE__INFRA__MODEL_ID,PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID
           script: |

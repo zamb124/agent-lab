@@ -1,11 +1,9 @@
 # GitHub Secrets для удалённого `provider_litserve`
 
-После генерации ключа деплоя (`~/.ssh/agentlab_deploy`):
+Для удалённой ноды litserve нужен только отдельный хост; SSH берётся из тех же секретов, что и основной деплой (`SERVER_USER` и `SERVER_SSH_KEY`).
 
 ```bash
 gh secret set LITSERVE_HOST -b"188.246.224.228" --repo OWNER/agent-lab
-gh secret set LITSERVE_SSH_USER -b"root" --repo OWNER/agent-lab
-gh secret set LITSERVE_SSH_KEY < ~/.ssh/agentlab_deploy --repo OWNER/agent-lab
 gh secret set PROVIDER_LITSERVE_API_BASE_URL -b"https://humanitec.ru/litserve/v1" --repo OWNER/agent-lab
 ```
 
