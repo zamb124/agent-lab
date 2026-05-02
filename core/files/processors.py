@@ -4,13 +4,10 @@
 """
 
 import hashlib
-<<<<<<< HEAD
 
 from core.logging import get_logger
-=======
 import json
 import logging
->>>>>>> cda6aab8 (describe + search eval)
 import mimetypes
 import re
 import uuid
