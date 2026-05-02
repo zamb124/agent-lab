@@ -20,13 +20,13 @@ from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 
 _PRAVO_CATALOG_SEARCH_DESCRIPTION = """
-Поиск нормативных актов на ips.pravo.gov.ru (расширенный поиск по ключевым словам).
+Поиск нормативных актов на ips.pravo.gov.ru через HTTP API POST /api/ips/legislation/search.json
+(аналог гибридного поиска в веб-интерфейсе).
 
-Возвращает список ссылок на документы API legislation/document (title, url, document_hash).
-Разметка страницы IPS может меняться; при пустом items страница могла отдать SPA-скелет без ссылок — повтори другой формулировкой или укажи hash вручную.
+Возвращает список записей (title, url на legislation/document, document_hash из поля docs).
 
 Параметры:
-- keyword (строка): поисковая фраза (лексемы IPS).
+- keyword (строка): фраза; слова разбиваются на лексемы и передаются в IPS через разделитель ``&``.
 - page (целое, по умолчанию 1): номер страницы выдачи.
 """.strip()
 
@@ -36,6 +36,10 @@ _PRAVO_DOCUMENT_RAG_SEARCH_DESCRIPTION = """
 Логика: выполняется поиск только по чанкам этого документа (стабильный document_id от hash IPS).
 Если документ ещё не загружен в RAG для пары namespace_id + collection_id — текст скачивается с IPS,
 индексируется (rag_add_text), затем повторяется поиск по запросу.
+
+Ответ при успехе дополнительно содержит ``documents``: список из одного объекта с полями источника IPS
+(hash, source_url, rag_document_id, title при наличии, indexed_into_rag_this_call, опционально text_character_count).
+Это не бинарные вложения платформы, а канонические ссылки на акт и метаданные для пользователя/агента.
 
 Параметры:
 - namespace_id (строка): имя RAG namespace компании.
@@ -83,6 +87,27 @@ def _doc_filters(collection_id: str, rag_document_id: str) -> Dict[str, Any]:
             {"document_id": rag_document_id},
         ],
     }
+
+
+def _ips_document_row(
+    *,
+    doc_hash: str,
+    source_url: str,
+    rag_document_id: str,
+    title: str | None,
+    indexed_into_rag_this_call: bool,
+    text_character_count: int | None = None,
+) -> Dict[str, Any]:
+    row: Dict[str, Any] = {
+        "document_hash": doc_hash,
+        "source_url": source_url,
+        "rag_document_id": rag_document_id,
+        "title": title,
+        "indexed_into_rag_this_call": indexed_into_rag_this_call,
+    }
+    if text_character_count is not None:
+        row["text_character_count"] = text_character_count
+    return row
 
 
 async def _run_rag_search(
@@ -175,6 +200,15 @@ async def pravo_document_rag_search(
                 "pravo_document_hash": doc_hash,
                 "source_url": source_url,
                 "rag_document_id": rag_document_id,
+                "documents": [
+                    _ips_document_row(
+                        doc_hash=doc_hash,
+                        source_url=source_url,
+                        rag_document_id=rag_document_id,
+                        title=None,
+                        indexed_into_rag_this_call=False,
+                    ),
+                ],
                 **raw_first,
             }
 
@@ -227,5 +261,15 @@ async def pravo_document_rag_search(
         "pravo_document_hash": doc_hash,
         "source_url": source_url,
         "rag_document_id": rag_document_id,
+        "documents": [
+            _ips_document_row(
+                doc_hash=doc_hash,
+                source_url=source_url,
+                rag_document_id=rag_document_id,
+                title=doc.title,
+                indexed_into_rag_this_call=ingested,
+                text_character_count=len(doc.text),
+            ),
+        ],
         **raw_second,
     }

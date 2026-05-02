@@ -297,7 +297,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "doc": (
             "В окружении кода ноды по имени доступны встроенные tools платформы: calculator, read_file, create_file, "
             "rag_create_namespace, rag_add_text, rag_search, pravo_catalog_search, pravo_document_rag_search, "
-            "а для ips-поиска и загрузки НПА также доступны PravoClient и PravoClientError, "
+            "а для каталога IPS (POST search.json) и загрузки НПА также доступны PravoClient и PravoClientError, "
             "reason, final_answer, finish, self_check, задачи планировщика (schedule_*), … "
             "Новый системный tool подключается разработчиками платформы в реестр пакета tools."
         ),

@@ -35,6 +35,9 @@ async def test_pravo_document_rag_search_uses_index_when_results_present() -> No
     assert out["success"] is True
     assert out["document_ingested"] is False
     assert out["pravo_document_hash"] == H64
+    assert len(out["documents"]) == 1
+    assert out["documents"][0]["document_hash"] == H64
+    assert out["documents"][0]["indexed_into_rag_this_call"] is False
     inst.search.assert_awaited_once()
     inst.ingest_text.assert_not_called()
 
@@ -73,5 +76,9 @@ async def test_pravo_document_rag_search_ingests_when_empty_then_searches() -> N
     assert out["success"] is True
     assert out["document_ingested"] is True
     assert out["results"]
+    assert len(out["documents"]) == 1
+    assert out["documents"][0]["indexed_into_rag_this_call"] is True
+    assert out["documents"][0]["title"] == "Тестовый документ"
+    assert out["documents"][0]["text_character_count"] == len(doc.text)
     assert inst.search.await_count == 2
     inst.ingest_text.assert_awaited_once()

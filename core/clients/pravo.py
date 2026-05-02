@@ -1,8 +1,9 @@
 """
 HTTP-клиент для Официального интернет-портала правовой информации (ips.pravo.gov.ru).
 
-Загрузка нормативных текстов по API legislation/document и разбор HTML-страниц
-расширенного поиска (BeautifulSoup). Без использования сервиса browser.
+Загрузка нормативных текстов по API legislation/document; каталог — POST
+/api/ips/legislation/search.json (гибридный поиск, как в веб-интерфейсе IPS).
+Разбор HTML legislation при необходимости (BeautifulSoup). Без сервиса browser.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote, unquote, urljoin, urlparse
+from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -22,6 +23,11 @@ from core.http.client import ProxyStrategy
 
 _PRAVO_IPS_NETLOC = "ips.pravo.gov.ru"
 _PRAVO_IPS_SCHEME = "http"
+_IPS_ORIGIN = f"{_PRAVO_IPS_SCHEME}://{_PRAVO_IPS_NETLOC}"
+_IPS_SEARCH_JSON_PATH = "/api/ips/legislation/search.json"
+_IPS_DEFAULT_BPAS = "c000000000"
+_IPS_SEARCH_ALLOWED_LIMITS: frozenset[int] = frozenset({10, 20, 50, 100, 200})
+_IPS_SEARCH_BASIC_AUTHORIZATION = "Basic aXBzOm5ld3Bhc3N3b3JkMjAyMA=="
 _LEGISLATION_HASH_RE = re.compile(r"(?i)hash=([a-f0-9]{64})")
 _STANDALONE_HASH_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 _DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -131,11 +137,44 @@ class PravoClient:
             title=title,
         )
 
-    async def search_catalog(self, *, keyword: str, page: int = 1) -> list[PravoCatalogHit]:
-        """Ищет документы в каталоге IPS по ключевым словам."""
-        url = self._build_catalog_search_url(keyword=keyword, page=page)
-        response = await self._get(url)
-        return self._parse_catalog_search_html(response.text, page_base_url=url)
+    async def search_catalog(
+        self,
+        *,
+        keyword: str,
+        page: int = 1,
+        limit: int = 20,
+        bpas: str = _IPS_DEFAULT_BPAS,
+    ) -> list[PravoCatalogHit]:
+        """Ищет документы в каталоге IPS через POST search.json (гибридный поиск)."""
+        if page < 1:
+            raise ValueError("page должен быть >= 1")
+        query_lexemes = self._format_hybrid_search_query(keyword)
+        page_size = self._coerce_ips_search_limit(limit)
+        url = f"{_IPS_ORIGIN}{_IPS_SEARCH_JSON_PATH}"
+        headers = {
+            **self._headers,
+            "Authorization": _IPS_SEARCH_BASIC_AUTHORIZATION,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "Origin": _IPS_ORIGIN,
+        }
+        form = {
+            "query": query_lexemes,
+            "in_all_redactions": "true",
+            "case_sensitive": "false",
+            "bpas": bpas,
+            "page": str(page),
+            "sort": "relevance",
+            "limit": str(page_size),
+        }
+        response = await self._post_form(url, headers=headers, data=form)
+        try:
+            body = response.json()
+        except json.JSONDecodeError as exc:
+            raise PravoClientError("Ответ поиска IPS не является корректным JSON") from exc
+        if not isinstance(body, dict):
+            raise PravoClientError("Ответ поиска IPS: ожидался JSON-объект")
+        return self._hits_from_search_json(body)
 
     async def _get(self, url: str) -> httpx.Response:
         try:
@@ -155,18 +194,73 @@ class PravoClient:
             raise PravoClientError(f"HTTP {response.status_code} при запросе IPS: {url}") from exc
         return response
 
+    async def _post_form(self, url: str, *, headers: dict[str, str], data: dict[str, str]) -> httpx.Response:
+        try:
+            async with get_httpx_client(
+                timeout=self._timeout,
+                strategy=ProxyStrategy.DIRECT_ONLY,
+                follow_redirects=True,
+            ) as client:
+                response = await client.post(url, headers=headers, data=data)
+        except httpx.RequestError as exc:
+            detail = str(exc).strip() or type(exc).__name__
+            raise PravoClientError(f"Ошибка сетевого запроса IPS: {detail} ({url})") from exc
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise PravoClientError(f"HTTP {response.status_code} при запросе IPS: {url}") from exc
+        return response
+
     @staticmethod
-    def _build_catalog_search_url(*, keyword: str, page: int = 1) -> str:
-        if page < 1:
-            raise ValueError("page должен быть >= 1")
-        kw = keyword.strip()
-        if not kw:
+    def _format_hybrid_search_query(keyword: str) -> str:
+        """Строка query для IPS: лексемы через ``&`` (как в форме hybridSearch)."""
+        parts = [p for p in keyword.strip().split() if p]
+        if not parts:
             raise ValueError("keyword не должен быть пустым")
-        enc = quote(kw, safe="")
-        return (
-            f"{_PRAVO_IPS_SCHEME}://{_PRAVO_IPS_NETLOC}/?"
-            f"advanced_search%5Bactual%5D=1&page={page}&search%5Boneof_lexemes%5D={enc}"
-        )
+        return "&".join(parts)
+
+    @staticmethod
+    def _coerce_ips_search_limit(limit: int) -> int:
+        if limit in _IPS_SEARCH_ALLOWED_LIMITS:
+            return limit
+        return 20
+
+    @classmethod
+    def _hits_from_search_json(cls, body: dict[str, Any]) -> list[PravoCatalogHit]:
+        if body.get("status") == 400:
+            err = body.get("error", "неизвестная ошибка IPS")
+            raise PravoClientError(f"Поиск IPS: {err}")
+        docs = body.get("docs")
+        if docs is None and "error" in body:
+            raise PravoClientError(f"Поиск IPS: {body.get('error')}")
+        if not isinstance(docs, list):
+            raise PravoClientError("Ответ поиска IPS: поле docs отсутствует или не список")
+
+        out: list[PravoCatalogHit] = []
+        for doc in docs:
+            if not isinstance(doc, dict):
+                continue
+            raw_hash = doc.get("hash")
+            if not isinstance(raw_hash, str) or not _STANDALONE_HASH_RE.match(raw_hash):
+                continue
+            dh = raw_hash.lower()
+            name = doc.get("name")
+            adoption = doc.get("adoption")
+            if isinstance(name, str) and name.strip():
+                title = name.strip()
+            elif isinstance(adoption, str) and adoption.strip():
+                title = adoption.strip()
+            else:
+                title = f"document {dh[:8]}..."
+            out.append(
+                PravoCatalogHit(
+                    title=title,
+                    url=cls.legislation_document_api_url(dh),
+                    document_hash=dh,
+                ),
+            )
+        return out
 
     @staticmethod
     def _html_to_plain_text(html: str) -> str:
@@ -233,37 +327,3 @@ class PravoClient:
         if not plain:
             raise PravoClientError("Пустое тело ответа IPS")
         return plain, None
-
-    @classmethod
-    def _parse_catalog_search_html(cls, html: str, *, page_base_url: str | None = None) -> list[PravoCatalogHit]:
-        soup = BeautifulSoup(html, "html.parser")
-        base = page_base_url or f"{_PRAVO_IPS_SCHEME}://{_PRAVO_IPS_NETLOC}/"
-        seen: set[str] = set()
-        out: list[PravoCatalogHit] = []
-
-        for a in soup.find_all("a", href=True):
-            href_raw = a.get("href")
-            if not isinstance(href_raw, str) or "legislation/document" not in href_raw:
-                continue
-            abs_url = urljoin(base, href_raw)
-            try:
-                dh = cls.extract_legislation_document_hash(abs_url)
-            except ValueError:
-                m = _LEGISLATION_HASH_RE.search(unquote(abs_url))
-                if not m:
-                    continue
-                dh = m.group(1).lower()
-            if dh in seen:
-                continue
-            seen.add(dh)
-            title = a.get_text(" ", strip=True)
-            if not title:
-                title = f"document {dh[:8]}..."
-            out.append(
-                PravoCatalogHit(
-                    title=title,
-                    url=cls.legislation_document_api_url(dh),
-                    document_hash=dh,
-                ),
-            )
-        return out
