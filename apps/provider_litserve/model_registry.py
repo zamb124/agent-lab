@@ -129,28 +129,33 @@ def init_registry(cfg: ProviderLitserveInfraConfig) -> None:
         )
 
 
+def _default_seed_models(cfg: ProviderLitserveInfraConfig) -> list[tuple[ModelKind, str, str]]:
+    seed_models: list[tuple[ModelKind, str, str]] = []
+
+    llm_ids = [item.strip() for item in cfg.llm_model_ids if item.strip()]
+    if not llm_ids:
+        llm_ids = [cfg.llm_model_id.strip()]
+    seed_models.extend(("llm", model_id, model_id) for model_id in llm_ids if model_id)
+
+    embedding_pairs = build_embedding_api_pairs(cfg)
+    seed_models.extend(
+        ("embedding", hf_model_id, api_model_id) for api_model_id, hf_model_id in embedding_pairs.items()
+    )
+
+    rerank_pairs = build_rerank_api_pairs(cfg)
+    seed_models.extend(
+        ("rerank", hf_model_id, api_model_id) for api_model_id, hf_model_id in rerank_pairs.items()
+    )
+    return seed_models
+
+
 def bootstrap_defaults_if_empty(cfg: ProviderLitserveInfraConfig) -> None:
     with _connect(cfg) as conn:
         total = conn.execute("SELECT COUNT(*) AS total FROM models").fetchone()["total"]
         if int(total) > 0:
             return
         created_at = _now_iso()
-        seed_models: list[tuple[ModelKind, str, str]] = []
-
-        llm_ids = [item.strip() for item in cfg.llm_model_ids if item.strip()]
-        if not llm_ids:
-            llm_ids = [cfg.llm_model_id.strip()]
-        seed_models.extend(("llm", model_id, model_id) for model_id in llm_ids if model_id)
-
-        embedding_pairs = build_embedding_api_pairs(cfg)
-        seed_models.extend(
-            ("embedding", hf_model_id, api_model_id) for api_model_id, hf_model_id in embedding_pairs.items()
-        )
-
-        rerank_pairs = build_rerank_api_pairs(cfg)
-        seed_models.extend(
-            ("rerank", hf_model_id, api_model_id) for api_model_id, hf_model_id in rerank_pairs.items()
-        )
+        seed_models = _default_seed_models(cfg)
 
         for kind, hf_model_id, api_model_id in seed_models:
             conn.execute(
@@ -159,6 +164,41 @@ def bootstrap_defaults_if_empty(cfg: ProviderLitserveInfraConfig) -> None:
                 VALUES (?, ?, ?, ?, 'ready', NULL, ?, ?)
                 """,
                 (str(uuid4()), kind, hf_model_id, api_model_id, created_at, created_at),
+            )
+
+
+def sync_defaults_from_config(cfg: ProviderLitserveInfraConfig) -> None:
+    """Идемпотентно синхронизирует дефолтные модели из конфига в реестр."""
+    now = _now_iso()
+    seed_models = _default_seed_models(cfg)
+    with _connect(cfg) as conn:
+        for kind, hf_model_id, api_model_id in seed_models:
+            row = conn.execute(
+                """
+                SELECT model_id, kind, hf_model_id
+                FROM models
+                WHERE api_model_id = ?
+                """,
+                (api_model_id,),
+            ).fetchone()
+            if row is None:
+                conn.execute(
+                    """
+                    INSERT INTO models(model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 'ready', NULL, ?, ?)
+                    """,
+                    (str(uuid4()), kind, hf_model_id, api_model_id, now, now),
+                )
+                continue
+            if row["kind"] == kind and row["hf_model_id"] == hf_model_id:
+                continue
+            conn.execute(
+                """
+                UPDATE models
+                SET kind = ?, hf_model_id = ?, status = 'ready', error = NULL, updated_at = ?
+                WHERE model_id = ?
+                """,
+                (kind, hf_model_id, now, row["model_id"]),
             )
 
 

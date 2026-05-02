@@ -6,8 +6,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from apps.crm.container import get_crm_container
 from apps.crm_worker.broker import broker
 from core.config import get_settings
+from core.context import clear_context, set_context
+from core.context.system_task_context import build_system_auth_context
 from core.logging import get_logger
 from core.rag.providers.pgvector_provider import PgVectorProvider
 
@@ -65,20 +68,34 @@ async def crm_reembed_stale_documents_tick(
 
     provider = _build_crm_pgvector_provider()
     target_model = provider._embedding_model_name()
-
-    reembedded = await provider.reembed_stale_documents(
-        batch_size=reembed_cfg.reembed_batch_size,
-        target_embedding_model=target_model,
+    batch_size = reembed_cfg.reembed_batch_size
+    system_context = await build_system_auth_context(
+        container=get_crm_container(),
+        trace_id=f"scheduler:crm_reembed_stale_documents:{scheduler_task_id or 'manual'}",
+        session_id=f"crm_reembed_stale_documents:{scheduler_task_id or 'manual'}",
+        channel="crm_worker",
     )
+    set_context(system_context)
+    try:
+        reembedded = await provider.reembed_stale_documents(
+            batch_size=batch_size,
+            target_embedding_model=target_model,
+        )
+    finally:
+        clear_context()
 
     logger.info(
         "crm.reembed_stale.tick_done",
         scheduler_task_id=scheduler_task_id,
+        target_embedding_model=target_model,
+        batch_size=batch_size,
         reembedded=reembedded,
     )
 
     return {
         "skipped": False,
         "scheduler_task_id": scheduler_task_id,
+        "target_embedding_model": target_model,
+        "batch_size": batch_size,
         "reembedded": reembedded,
     }

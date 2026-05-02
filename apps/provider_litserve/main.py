@@ -25,13 +25,13 @@ from apps.provider_litserve.config import (
 from apps.provider_litserve.container import get_provider_litserve_container
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
 from apps.provider_litserve.model_registry import (
-    bootstrap_defaults_if_empty,
     create_or_replace_model,
     get_model,
     init_registry,
     list_models,
     mark_model_deleted,
     mark_model_status,
+    sync_defaults_from_config,
 )
 from apps.provider_litserve.openai_server_contracts import (
     build_provider_litserve_v1_models_response,
@@ -360,7 +360,7 @@ async def _bootstrap_runtime_registry() -> None:
     settings = get_provider_litserve_settings()
     cfg = settings.provider_litserve.infra
     init_registry(cfg)
-    bootstrap_defaults_if_empty(cfg)
+    sync_defaults_from_config(cfg)
     reload_runtime_catalog_from_sqlite(cfg)
 
 
