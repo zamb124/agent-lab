@@ -14,7 +14,7 @@ spec:
       labels:
         app: redis
     spec:
-      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list . .Values.redis.nodeName) | nindent 6 }}
       containers:
         - name: redis
           image: {{ .Values.redis.image }}

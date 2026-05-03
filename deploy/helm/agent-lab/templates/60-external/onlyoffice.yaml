@@ -44,7 +44,7 @@ spec:
       labels:
         app: onlyoffice
     spec:
-      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list . .Values.onlyoffice.nodeName) | nindent 6 }}
       containers:
         - name: documentserver
           image: {{ .Values.onlyoffice.image }}

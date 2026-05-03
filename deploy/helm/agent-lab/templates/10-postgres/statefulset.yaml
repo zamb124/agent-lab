@@ -14,7 +14,7 @@ spec:
       labels:
         app: postgres
     spec:
-      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list . .Values.postgres.nodeName) | nindent 6 }}
       containers:
         - name: postgres
           image: {{ .Values.postgres.image }}

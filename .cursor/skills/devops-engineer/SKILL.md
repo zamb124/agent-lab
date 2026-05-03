@@ -27,7 +27,7 @@ description: DevOps инженер платформы Humanitec. Знает SSH-
 | Роль | IP | SSH | hostname / canal | Что бежит |
 |---|---|---|---|---|
 | **master** | `84.38.184.105` | `ssh root@84.38.184.105` | `master`, microk8s `1.35/stable` (containerd 2.x) | control-plane MicroK8s, все StatefulSets (postgres, redis, loki, tempo, grafana), все app deployments и workers, livekit, livekit-egress, onlyoffice, coturn (DaemonSet, hostNetwork), traefik (ingressClassName=public), alloy DaemonSet, portainer (community-аддон, NodePort 30777/30779) |
-| **gpu-worker** | `188.246.224.228` | `ssh root@188.246.224.228` | `gpu-worker`, microk8s `1.35/stable` (containerd 2.x) | `provider-litserve` (`nodeSelector: accelerator=nvidia-gpu` + `nvidia.com/gpu: 1`); при `litserve.scheduleOnGpuNode=false` LitServe уезжает на master (CPU). Всегда: alloy DaemonSet, NVIDIA k8s-device-plugin DaemonSet. |
+| **gpu-worker** | `188.246.224.228` | `ssh root@188.246.224.228` | `gpu-worker`, microk8s `1.35/stable` (containerd 2.x) | `provider-litserve` (`nodeName: gpu-worker` → `nodeSelector: kubernetes.io/hostname=gpu-worker` + toleration `dedicated=gpu:NoSchedule` + `nvidia.com/gpu: 1`); при `litserve.nodeName=master` LitServe уезжает на master (CPU, без GPU resource). Всегда: alloy DaemonSet, NVIDIA k8s-device-plugin DaemonSet. |
 
 NVIDIA-стек (host): driver через `ubuntu-drivers autoinstall` (kernel-modules update), `nvidia-container-toolkit` (репо `https://nvidia.github.io/libnvidia-container/stable/deb`), `nvidia-ctk runtime configure` пишет drop-in в `/etc/containerd/conf.d/99-nvidia.toml`. MicroK8s template (`/var/snap/microk8s/current/args/containerd-template.toml`) расширяется одной строкой `imports = ["/etc/containerd/conf.d/*.toml"]` (всё через `bootstrap-gpu-worker.sh`). После `snap refresh microk8s` повторный запуск bootstrap'а возвращает `imports` (идемпотентно).
 
@@ -71,24 +71,26 @@ portainer (community-аддон microk8s, `bootstrap-master.sh`).
 
 ## Карта компонентов (где что бежит)
 
-| Компонент | Тип | Нода | PVC | Назначение |
-|---|---|---|---|---|
-| postgres | StatefulSet | master | 50Gi | 7 сервисных БД (pgvector/pg17) |
-| redis | StatefulSet | master | 10Gi | TaskIQ broker, sessions, кэш, pub/sub UI events |
-| loki | StatefulSet | master | 100Gi | Логи 14 дней |
-| tempo | StatefulSet | master | 50Gi | Trace OTel 7 дней |
-| grafana | Deployment | master | 10Gi | UI + provisioned dashboards/alerts |
-| alloy | DaemonSet | все ноды | — | Сбор pod-логов (kubelet API) + OTLP relay в Tempo |
-| flows / frontend / crm / rag / sync / scheduler-api / office / voice / browser | Deployment | master | — | App services; browser Pod включает sidecar Chromium CDP (9222), порты 8001–8009 / 8015 |
-| flows-worker (×2) / scheduler / rag-worker / sync-worker / crm-worker / idle-worker | Deployment | master | — | TaskIQ workers |
-| livekit + livekit-egress | Deployment | master (hostNetwork) | — | WebRTC сигналинг + egress |
-| coturn | DaemonSet | master (hostNetwork) | — | TURN-сервер для WebRTC |
-| onlyoffice | Deployment | master | — | OnlyOffice DocumentServer (CE) |
-| provider-litserve | Deployment | **gpu-worker** (или **master** если `litserve.scheduleOnGpuNode=false`) | 50Gi (model cache) | Эмбеддинги и rerank (GPU или CPU) |
-| nvidia-device-plugin | DaemonSet | gpu-worker | — | NVIDIA k8s-device-plugin v0.19.1, host-driver legacy режим (envvar) — публикует `nvidia.com/gpu` в Allocatable |
-| portainer | Deployment (community-аддон) | master | — | UI кластера на NodePort `30777` (HTTP) / `30779` (HTTPS) |
-| 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
-| Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | Alembic upgrade head с DDL-блокировкой на `alembic_version` |
+Нода задаётся через `nodeName` в `values.yaml` (или `--set ... --set ...` при деплое через CI). Дефолты ниже — из `values.yaml`.
+
+| Компонент | Тип | Дефолтная нода | nodeName path в values | PVC | Назначение |
+|---|---|---|---|---|---|
+| postgres | StatefulSet | master | `postgres.nodeName` | 50Gi | 7 сервисных БД (pgvector/pg17) |
+| redis | StatefulSet | master | `redis.nodeName` | 10Gi | TaskIQ broker, sessions, кэш, pub/sub UI events |
+| loki | StatefulSet | master | `observability.loki.nodeName` | 100Gi | Логи 14 дней |
+| tempo | StatefulSet | master | `observability.tempo.nodeName` | 50Gi | Trace OTel 7 дней |
+| grafana | Deployment | master | `observability.grafana.nodeName` | 10Gi | UI + provisioned dashboards/alerts |
+| alloy | DaemonSet | все ноды | — (DaemonSet) | — | Сбор pod-логов (kubelet API) + OTLP relay в Tempo |
+| flows / frontend / crm / rag / sync / scheduler-api / office / voice / browser | Deployment | master | `applications.<name>.nodeName` | — | App services; browser Pod включает sidecar Chromium CDP (9222), порты 8001–8009 / 8015 |
+| flows-worker (×2) / scheduler / rag-worker / sync-worker / crm-worker / idle-worker | Deployment | master | `workers.<name>.nodeName` | — | TaskIQ workers |
+| livekit + livekit-egress | Deployment | master (hostNetwork) | `livekit.nodeName` / `livekitEgress.nodeName` | — | WebRTC сигналинг + egress; при смене ноды → `rebind-public-node.sh` |
+| coturn | DaemonSet | master (hostNetwork) | `coturn.nodeName` | — | TURN-сервер для WebRTC; при смене → `rebind-public-node.sh` |
+| onlyoffice | Deployment | master | `onlyoffice.nodeName` | — | OnlyOffice DocumentServer (CE) |
+| provider-litserve | Deployment | **gpu-worker** | `litserve.nodeName` | 50Gi (model cache) | Эмбеддинги и rerank; при `nodeName` в `gpuNodeNames` → GPU resource + toleration |
+| nvidia-device-plugin | DaemonSet | gpu-worker | — (DaemonSet, label `accelerator=nvidia-gpu`) | — | NVIDIA k8s-device-plugin v0.19.1 — публикует `nvidia.com/gpu` в Allocatable |
+| portainer | Deployment (community-аддон) | master | — (вне Helm-чарта) | — | UI кластера на NodePort `30777` (HTTP) / `30779` (HTTPS) |
+| 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
+| Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | — | Alembic upgrade head с DDL-блокировкой на `alembic_version` |
 
 ## Базовые команды
 
@@ -154,9 +156,12 @@ helm rollback agent-lab <REV> -n platform
 |---|---|---|
 | `bootstrap-master.sh` | hostname, snap microk8s, core+community аддоны (dns, hostpath-storage, ingress, cert-manager, portainer) | master root |
 | `bootstrap-gpu-worker.sh` | NVIDIA driver, nvidia-container-toolkit, snap microk8s, containerd drop-in для NVIDIA runtime | gpu-worker root |
-| `join-cluster.sh` | add-node + SSH join `--worker` + label `accelerator=nvidia-gpu` | master root |
+| `join-cluster.sh` | add-node + SSH join `--worker` + label `accelerator=nvidia-gpu` + taint `dedicated=gpu:NoSchedule` | master root |
 | `setup-wildcard-tls.sh` | git clone flant/cert-manager-webhook-regru, helm install, ClusterIssuer letsencrypt-prod-dns01, Certificate platform-tls | локально / master |
 | `cluster-health.sh` | Полная health-проверка | локально / master / **CI** |
+| `build_helm_node_sets.sh` | Строит `--set <svc>.nodeName=<node>` из ENV (APPS_NODE/WORKERS_NODE/DATA_NODE/PUBLIC_NODE/LITSERVE_NODE/SERVICE_OVERRIDES). Вызывается из CI шага Helm upgrade. | CI / локально |
+| `migrate-pvc.sh` | Переносит StatefulSet с данными на другую ноду: backup → helm upgrade → delete PVC → helm upgrade → restore. `bash migrate-pvc.sh <component> <new_node>` | локально / master |
+| `rebind-public-node.sh` | Обновляет DNS A-записи `humanitec.ru` через Reg.ru API и переносит hostNetwork-сервисы (livekit/coturn) на новую ноду. `bash rebind-public-node.sh <node> <ip>` | локально / master |
 | `helm_clear_pending_release.sh` | Снять блокировку Helm `another operation is in progress` (удалить только pending-* release Secret) | локально / master; **`make k8s-helm-clear-pending`** |
 | `helm_precheck_install_secret_conflict.sh` | Перед первым install проверить orphan Secret `platform-secrets` от предыдущей попытки | CI |
 | `decommission-compose.sh` | Полный снос legacy docker compose стека на хосте; dry-run по default, реально — `CONFIRM=1` | локально, **`make k8s-decommission-compose [SSH_TARGET=root@<host>] [CONFIRM=1]`** |

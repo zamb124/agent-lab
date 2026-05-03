@@ -47,7 +47,7 @@ spec:
       labels:
         app: tempo
     spec:
-      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list . .Values.observability.tempo.nodeName) | nindent 6 }}
       containers:
         - name: tempo
           image: {{ .Values.observability.tempo.image }}

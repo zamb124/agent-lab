@@ -17,7 +17,7 @@ spec:
       labels:
         app: livekit-egress
     spec:
-      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list . .Values.livekitEgress.nodeName) | nindent 6 }}
       containers:
         - name: egress
           image: {{ .Values.livekitEgress.image }}

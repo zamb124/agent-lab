@@ -44,17 +44,24 @@ MicroK8s cluster
 [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — ручной запуск (**Actions → Deploy → Run workflow**):
 
 1. **`build`** — `docker build --target full` → push в GHCR (`ghcr.io/<owner>/agent-lab:<sha>` + `:latest` на default branch).
-2. **`deploy`** — после **`KUBECONFIG_B64`** создаётся или обновляется Kubernetes Secret **`ghcr-agent-lab-pull`** из обязательных **`GHCR_PULL_USERNAME`** и **`GHCR_PULL_TOKEN`** (repository secrets; без них job падает), затем **`helm upgrade --install`** с выбором **`litserve_node`**: **`gpu`** (по умолчанию, нода с `accelerator=nvidia-gpu`) или **`cpu`** (под на ноде **`masterNodeName`**, см. `values-prod.yaml`), затем `bash deploy/scripts/cluster-health.sh`.
+2. **`deploy`** — после **`KUBECONFIG_B64`** создаётся или обновляется Kubernetes Secret **`ghcr-agent-lab-pull`** из обязательных **`GHCR_PULL_USERNAME`** и **`GHCR_PULL_TOKEN`** (repository secrets; без них job падает), затем **`helm upgrade --install`** с опциональными overrides нод (см. inputs), затем `bash deploy/scripts/cluster-health.sh`.
 
 Полный список секретов: [`deploy/github-actions-secrets-checklist.md`](github-actions-secrets-checklist.md).
 
-Параметры workflow:
+Параметры workflow (`workflow_dispatch`):
 
 | Input | Значение |
 |---|---|
 | `image_tag` | Пусто = тег из build (короткий SHA); иначе явный тег образа. |
-| `litserve_node` | `gpu` или `cpu` → `--set litserve.scheduleOnGpuNode=true/false`. |
-| `replace_orphan_platform_secret` | `true` один раз: удалить существующий `platform-secrets` без Helm перед первым install (иначе precheck остановит job). |
+| `apps_node` | Нода для всех 9 apps. `unchanged` = дефолт из `values.yaml` (master). |
+| `workers_node` | Нода для всех 6 workers. `unchanged` = дефолт (master). |
+| `data_node` | Нода для StatefulSets (postgres/redis/loki/tempo/grafana). `unchanged` = master. **ВНИМАНИЕ:** переезд требует `migrate-pvc.sh`. |
+| `public_node` | Нода для hostNetwork-сервисов (livekit/coturn/onlyoffice). `unchanged` = master. **ВНИМАНИЕ:** переезд требует `rebind-public-node.sh`. |
+| `litserve_node` | Нода для provider-litserve. `unchanged` = дефолт (gpu-worker). |
+| `service_overrides` | CSV точечных override: `flows=gpu-worker,redis=master,rag=auto`. Применяются поверх category. |
+| `replace_orphan_platform_secret` | `true` один раз: удалить существующий `platform-secrets` без Helm перед первым install. |
+
+Логика подстановки нод: [`deploy/scripts/build_helm_node_sets.sh`](scripts/build_helm_node_sets.sh) собирает `--set <path>.nodeName=<value>` из ENV и передаёт в `helm upgrade`.
 
 **Локальный `make k8s-deploy`** с **`values-prod.yaml`** не создаёт docker-registry Secret: перед установкой выполните ту же команду, что в workflow (**`kubectl create secret docker-registry ghcr-agent-lab-pull ...`**), или задайте свой список **`image.pullSecrets`** и имя секрета в кластере.
 

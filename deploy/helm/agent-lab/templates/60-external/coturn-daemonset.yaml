@@ -19,7 +19,7 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       nodeSelector:
-        kubernetes.io/hostname: {{ .Values.masterNodeName | quote }}
+        kubernetes.io/hostname: {{ .Values.coturn.nodeName | quote }}
       containers:
         - name: coturn
           image: {{ .Values.coturn.image }}

@@ -8,19 +8,58 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Тег образа для деплоя (по умолчанию — короткий SHA коммита)"
+        description: "Тег образа (по умолчанию — короткий SHA коммита)"
         required: false
         default: ""
-      litserve_node:
-        description: "Нода для provider-litserve. Default gpu (gpu-worker в кластере, accelerator=nvidia-gpu). Cpu — fallback при недоступности GPU-ноды."
-        required: true
-        default: gpu
+      apps_node:
+        description: "Нода для всех apps (flows/frontend/crm/rag/sync/office/voice/browser/scheduler-api). unchanged = из values.yaml"
         type: choice
+        default: unchanged
         options:
-          - gpu
-          - cpu
+          - unchanged
+          - auto
+          - master
+          - gpu-worker
+      workers_node:
+        description: "Нода для всех workers (flows-/scheduler/rag-/sync-/crm-/idle-worker). unchanged = из values.yaml"
+        type: choice
+        default: unchanged
+        options:
+          - unchanged
+          - auto
+          - master
+          - gpu-worker
+      data_node:
+        description: "Нода для StatefulSets с PVC (postgres/redis/loki/tempo/grafana). ВНИМАНИЕ: переезд требует migrate-pvc.sh"
+        type: choice
+        default: unchanged
+        options:
+          - unchanged
+          - master
+          - gpu-worker
+      public_node:
+        description: "Нода для hostNetwork-сервисов (livekit/livekit-egress/coturn/onlyoffice). ВНИМАНИЕ: при смене нужен rebind-public-node.sh"
+        type: choice
+        default: unchanged
+        options:
+          - unchanged
+          - master
+          - gpu-worker
+      litserve_node:
+        description: "Нода для provider-litserve. unchanged = из values.yaml (по умолчанию gpu-worker)"
+        type: choice
+        default: unchanged
+        options:
+          - unchanged
+          - auto
+          - master
+          - gpu-worker
+      service_overrides:
+        description: "CSV точечных override: flows=gpu-worker,redis=master,rag=auto (имена — как в values.yaml)"
+        type: string
+        default: ""
       replace_orphan_platform_secret:
-        description: "Первый helm install: удалить существующий platform-secrets без меток Helm (один раз, если секрет создавали вручную; дальше выключите)"
+        description: "Первый helm install: удалить существующий platform-secrets без меток Helm (один раз)"
         required: false
         default: false
         type: boolean
@@ -206,7 +245,12 @@ jobs:
 
       - name: Helm upgrade --install
         env:
+          APPS_NODE: ${{ inputs.apps_node }}
+          WORKERS_NODE: ${{ inputs.workers_node }}
+          DATA_NODE: ${{ inputs.data_node }}
+          PUBLIC_NODE: ${{ inputs.public_node }}
           LITSERVE_NODE: ${{ inputs.litserve_node }}
+          SERVICE_OVERRIDES: ${{ inputs.service_overrides }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -257,28 +301,22 @@ jobs:
             exit 1
           fi
 
-          case "$LITSERVE_NODE" in
-            gpu) LITSERVE_SCHEDULE_GPU=true ;;
-            cpu) LITSERVE_SCHEDULE_GPU=false ;;
-            *)
-              echo "FATAL: litserve_node must be gpu or cpu, got: $LITSERVE_NODE" >&2
-              exit 1
-              ;;
-          esac
-          echo "LitServe: litserve_node=$LITSERVE_NODE -> scheduleOnGpuNode=$LITSERVE_SCHEDULE_GPU"
+          NODE_SETS=$(bash deploy/scripts/build_helm_node_sets.sh)
+          echo "Node scheduling overrides: ${NODE_SETS:-(none, using defaults)}"
 
           HELM_WILL_CREATE_PLATFORM_SECRET=1 \
             HELM_RELEASE="$K8S_RELEASE" \
             HELM_NAMESPACE="$K8S_NAMESPACE" \
             bash deploy/scripts/helm_precheck_install_secret_conflict.sh
 
+          # shellcheck disable=SC2086
           helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
             --namespace "$K8S_NAMESPACE" \
             --create-namespace \
             --values "$HELM_CHART/values.yaml" \
             --values "$HELM_CHART/values-prod.yaml" \
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
-            --set litserve.scheduleOnGpuNode="$LITSERVE_SCHEDULE_GPU" \
+            $NODE_SETS \
             --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
             --wait --timeout 30m
 

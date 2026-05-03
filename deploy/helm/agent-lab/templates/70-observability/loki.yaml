@@ -41,7 +41,7 @@ spec:
       labels:
         app: loki
     spec:
-      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list . .Values.observability.loki.nodeName) | nindent 6 }}
       containers:
         - name: loki
           image: {{ .Values.observability.loki.image }}

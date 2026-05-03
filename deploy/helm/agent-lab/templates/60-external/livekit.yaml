@@ -59,7 +59,7 @@ spec:
       labels:
         app: livekit
     spec:
-      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list . .Values.livekit.nodeName) | nindent 6 }}
       enableServiceLinks: false
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet

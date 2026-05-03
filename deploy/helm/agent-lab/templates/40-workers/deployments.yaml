@@ -22,7 +22,7 @@ spec:
         app.kubernetes.io/component: worker
     spec:
 {{- include "agentlab.podImagePullSecrets" $ | nindent 6 }}
-{{- include "agentlab.masterNodeSelector" $ | nindent 6 }}
+{{- include "agentlab.nodeSchedule" (list $ $worker.nodeName) | nindent 6 }}
       initContainers:
         {{- include "agentlab.dbReadyAndMigrateInitContainers" $ | nindent 8 }}
       containers:

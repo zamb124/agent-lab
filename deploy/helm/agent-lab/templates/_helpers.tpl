@@ -304,11 +304,32 @@ imagePullSecrets:
 {{- end -}}
 
 {{/*
-Стандартный nodeSelector для master ноды (postgres/redis/loki/tempo).
+Универсальный шедулинг пода на конкретную ноду по hostname.
+Использование: {{- include "agentlab.nodeSchedule" (list $ "master") | nindent 6 }}
+  - nodeName="" или "auto" → nodeSelector не ставится, шедулер выбирает сам (любая нода без taint).
+  - nodeName в .Values.gpuNodeNames → добавляется toleration dedicated=gpu:NoSchedule
+    и nvidia.com/gpu resource (если .Values.gpuResourceEnabled=true передаётся третьим элементом).
 */}}
-{{- define "agentlab.masterNodeSelector" -}}
+{{- define "agentlab.nodeSchedule" -}}
+{{- $ctx      := index . 0 -}}
+{{- $nodeName := index . 1 -}}
+{{- $gpuRes   := false -}}
+{{- if gt (len .) 2 -}}{{- $gpuRes = index . 2 -}}{{- end -}}
+{{- if and $nodeName (ne $nodeName "auto") -}}
 nodeSelector:
-  kubernetes.io/hostname: {{ .Values.masterNodeName | quote }}
+  kubernetes.io/hostname: {{ $nodeName | quote }}
+{{- $isGpu := false -}}
+{{- range $ctx.Values.gpuNodeNames -}}
+  {{- if eq . $nodeName -}}{{- $isGpu = true -}}{{- end -}}
+{{- end -}}
+{{- if $isGpu }}
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: gpu
+    effect: NoSchedule
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{/*

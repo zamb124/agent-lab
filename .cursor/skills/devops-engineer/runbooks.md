@@ -165,17 +165,58 @@ make k8s-health
 ssh root@<NEW_IP>
 git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 
-# Если это GPU нода — bootstrap-gpu-worker; иначе — обычный bootstrap (можно скопировать bootstrap-master.sh, но только snap install + минимальные аддоны):
-# Для CPU worker нужно создать deploy/scripts/bootstrap-cpu-worker.sh (по аналогии).
-bash deploy/scripts/bootstrap-gpu-worker.sh   # или новый bootstrap-cpu-worker.sh
+# GPU-нода:
+bash deploy/scripts/bootstrap-gpu-worker.sh
+# CPU-нода: скопировать bootstrap-gpu-worker.sh и убрать NVIDIA-часть (snap install, join-cluster вызовет join --worker).
 
 # 2. На master:
 GPU_HOST_IP=<NEW_IP> GPU_NODE_NAME=<имя> bash deploy/scripts/join-cluster.sh
+# join-cluster.sh автоматически: add-node, SSH join --worker, label accelerator=nvidia-gpu (GPU),
+# taint dedicated=gpu:NoSchedule (GPU).
 
-# 3. Если нода для специфической нагрузки — добавить лейбл:
-kubectl label node <имя> role=worker
+# 3. Обновить values.yaml: добавить имя новой CPU-ноды в nodeNames-комментарий.
+#    Для GPU-ноды добавить имя в gpuNodeNames[].
+# 4. Переназначить любой сервис на новую ноду через deploy.yml inputs или:
+kubectl label node <имя> accelerator=nvidia-gpu   # GPU
+# Затем CI deploy с service_overrides="rag=<имя>,flows-worker=<имя>" (или нужный enum input)
+```
 
-# 4. Если нужно прибить какой-то Deployment к этой ноде — правка values.yaml + nodeSelector в шаблоне.
+## 8a. Перенос сервиса на другую ноду
+
+### Apps / Workers / onlyoffice / litserve (stateless или с emptyDir — мгновенный)
+
+```bash
+# Через CI: GitHub Actions → Deploy → Run workflow
+#   apps_node=<node>  или  service_overrides="<svc>=<node>"
+# Или вручную:
+helm upgrade --install agent-lab ./deploy/helm/agent-lab \
+  --namespace platform --reuse-values \
+  --set "applications.rag.nodeName=gpu-worker" \
+  --wait --timeout 15m
+kubectl get pods -n platform -o wide   # проверить ноду
+```
+
+### StatefulSets с PVC (postgres / redis / loki / tempo / grafana)
+
+ВНИМАНИЕ: остановка компонента на время переноса (~5–15 мин).
+
+```bash
+# Переносит с backup → helm upgrade → пересоздание PVC → restore:
+bash deploy/scripts/migrate-pvc.sh postgres gpu-worker
+# Прогресс сохраняется: повторный запуск безопасен (backup за 5 мин — skip).
+# Финальная проверка:
+bash deploy/scripts/cluster-health.sh
+```
+
+### hostNetwork-сервисы (livekit / coturn / onlyoffice)
+
+ВНИМАНИЕ: смена ноды меняет внешний IP — нужно обновить DNS.
+
+```bash
+# Обновляет DNS через Reg.ru API, затем helm upgrade:
+REGRU_USERNAME=... REGRU_PASSWORD=... \
+bash deploy/scripts/rebind-public-node.sh master 84.38.184.105
+# Ждёт DNS_TTL=300s, после чего helm upgrade и cluster-health.sh.
 ```
 
 ## 9. Добавление CronJob (например, ежедневный backup в S3)
