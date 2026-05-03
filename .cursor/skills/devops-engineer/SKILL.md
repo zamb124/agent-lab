@@ -95,6 +95,7 @@ make k8s-logs SVC=frontend           # tail логов конкретного De
 make k8s-deploy IMAGE_TAG=<sha>      # helm upgrade --install (--wait, см. HELM_WAIT_TIMEOUT в Makefile, по умолчанию 30m)
 make k8s-rollback                    # helm rollback на предыдущую ревизию
 make k8s-helm-clear-pending          # удалить Helm pending-* Secret (без отката Pod); см. deploy/scripts/helm_clear_pending_release.sh
+make k8s-post-migrate-rollout        # после миграций: rollout restart приложений и воркеров; см. deploy/scripts/k8s_post_migrate_rollout.sh
 make k8s-secrets-sync                # пересоздать platform-secrets из ENV
 make k8s-backup [S3=s3://...]        # pg_dumpall в backups/ (или Selectel S3)
 make k8s-restore FILE=backups/...gz  # restore из дампа
@@ -150,6 +151,7 @@ helm rollback agent-lab <REV> -n platform
 | `setup-wildcard-tls.sh` | webhook regru + ClusterIssuer DNS-01 + Certificate | локально / master |
 | `cluster-health.sh` | Полная health-проверка | локально / master / **CI** |
 | `helm_clear_pending_release.sh` | Снять блокировку Helm `another operation is in progress` (удалить только pending-* release Secret) | локально / master при наличии **kubectl**; **`make k8s-helm-clear-pending`** |
+| `k8s_post_migrate_rollout.sh` | После миграций: rollout restart приложений и TaskIQ-воркеров | локально / master при наличии **kubectl**; **`make k8s-post-migrate-rollout`** |
 | `backup-postgres.sh` / `restore-postgres.sh` | pg_dumpall через kubectl exec | локально / master |
 | `migrate-data-from-compose.sh` | Одноразовая миграция из старого compose | локально |
 

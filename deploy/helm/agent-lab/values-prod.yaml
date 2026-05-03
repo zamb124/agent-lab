@@ -17,7 +17,8 @@ ingress:
 
 litserve:
   enabled: true
-  scheduleOnGpuNode: true
+  # Пока GPU-нода не в кластере (microk8s join + label accelerator=nvidia-gpu), LitServe остаётся Pending.
+  scheduleOnGpuNode: false
 
 observability:
   loki:

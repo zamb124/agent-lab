@@ -22,23 +22,6 @@ spec:
         app.kubernetes.io/component: application
     spec:
 {{- include "agentlab.podImagePullSecrets" $ | nindent 6 }}
-      {{- if eq $name "frontend" }}
-      initContainers:
-        - name: extract-static
-          image: {{ include "agentlab.image" $ }}
-          imagePullPolicy: {{ $.Values.image.pullPolicy }}
-          command:
-            - sh
-            - -c
-            - |
-              set -e
-              mkdir -p /shared-static
-              cp -r /app/static/. /shared-static/
-              echo "static prepared"
-          volumeMounts:
-            - name: shared-static
-              mountPath: /shared-static
-      {{- end }}
       containers:
         {{- if eq $name "browser" }}
         - name: chromium-cdp
@@ -46,6 +29,9 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - chromium-browser
+            - --headless=new
+            - --ozone-platform=headless
+            - --disable-gpu
             - --no-sandbox
             - --disable-dev-shm-usage
             - --disable-blink-features=AutomationControlled
@@ -108,10 +94,6 @@ spec:
               containerPort: {{ $app.port }}
           volumeMounts:
             {{- include "agentlab.confVolumeMount" $ | nindent 12 }}
-            {{- if eq $name "frontend" }}
-            - name: shared-static
-              mountPath: /app/static-shared
-            {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -149,10 +131,6 @@ spec:
             {{- toYaml $app.resources | nindent 12 }}
       volumes:
         {{- include "agentlab.confVolume" $ | nindent 8 }}
-        {{- if eq $name "frontend" }}
-        - name: shared-static
-          emptyDir: {}
-        {{- end }}
         {{- if eq $name "browser" }}
         - name: chromium-dshm
           emptyDir:

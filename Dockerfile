@@ -36,6 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --group crm \
         --group rag \
         --group sync \
+        --group browser \
         --no-annotate --no-header --no-emit-project \
         -o /tmp/requirements.txt && \
     uv pip install --system -r /tmp/requirements.txt

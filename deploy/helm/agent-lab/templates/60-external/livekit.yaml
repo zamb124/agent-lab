@@ -60,6 +60,7 @@ spec:
         app: livekit
     spec:
       {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+      enableServiceLinks: false
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:

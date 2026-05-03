@@ -110,6 +110,7 @@ kubectl delete secret platform-secrets -n platform
 | [`render_helm_app_conf.py`](scripts/render_helm_app_conf.py) | локально / CI | `conf.json` + `files/app-conf.k8s-overlay.json` → `files/app-conf.json` для Helm ConfigMap |
 | [`helm_precheck_install_secret_conflict.sh`](scripts/helm_precheck_install_secret_conflict.sh) | CI / `make k8s-deploy` с секретами | Перед первым install: коллизия с `platform-secrets` без Helm → ошибка или удаление при `HELM_DELETE_ORPHAN_PLATFORM_SECRET=1` (в CI — галочка `replace_orphan_platform_secret`) |
 | [`helm_clear_pending_release.sh`](scripts/helm_clear_pending_release.sh) | локально / CI / master при наличии `kubectl` | Удалить Helm Secret с `status=pending-*` (разблокировать **`another operation is in progress`** без **`helm rollback`**) |
+| [`k8s_post_migrate_rollout.sh`](scripts/k8s_post_migrate_rollout.sh) | локально / CI / master при наличии `kubectl` | После миграций: **`kubectl rollout restart`** для приложений и TaskIQ-воркеров + ожидание **`rollout status`**; опционально ожидание Job **`migrations`** (см. `SKIP_MIGRATION_JOB_WAIT`) |
 
 Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
 
