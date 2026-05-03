@@ -140,27 +140,35 @@ def _call_matches_crm_analyze_schema(call: dict[str, Any]) -> bool:
     if not isinstance(schema, dict):
         return False
     req = schema.get("required")
-    if not isinstance(req, list):
-        return False
-    return (
+    if isinstance(req, list) and (
         "note" in req
         and "entities" in req
         and "attachment_summaries" in req
         and "metadata" in req
-    )
+    ):
+        return True
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        return (
+            "note" in props
+            and "entities" in props
+            and "attachment_summaries" in props
+            and "metadata" in props
+        )
+    return False
 
 
 def _find_analyze_call(calls: list[dict[str, Any]]) -> dict[str, Any]:
     """Ищет в журнале вызов analyze: текст prompts/analyze.md или structured output CRM analyze."""
 
     def _matches_analyze_prompt(text: str) -> bool:
-        if "ТИПЫ ENTITIES" not in text:
-            return False
+        if "# CRM Text Analyzer" in text or "CRM Text Analyzer" in text:
+            return True
+        if "ТИПЫ ENTITIES" in text and "ТИПЫ RELATIONSHIPS" in text:
+            return True
         if "РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
             return True
         if "РАЗРЕШЕННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
-            return True
-        if "# CRM Text Analyzer" in text or "CRM Text Analyzer" in text:
             return True
         return False
 

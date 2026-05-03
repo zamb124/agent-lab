@@ -53,7 +53,7 @@ MicroK8s cluster
 | `litserve_node` | `gpu` или `cpu` → `--set litserve.scheduleOnGpuNode=true/false`. |
 | `replace_orphan_platform_secret` | `true` один раз: удалить существующий `platform-secrets` без Helm перед первым install (иначе precheck остановит job). |
 
-Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт.
+Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт. В CI **`helm --wait --timeout 30m`** (первый install может упираться в pull образов и StatefulSets). Ошибка **`context deadline exceeded`**: проверить **`kubectl get pods -n platform`**, **`kubectl get events -n platform`**; при необходимости увеличить timeout в [deploy.yml](../.github/workflows/deploy.yml) или **`make k8s-deploy HELM_WAIT_TIMEOUT=45m`**.
 
 ## Конфигурация платформы для Helm (ConfigMap)
 

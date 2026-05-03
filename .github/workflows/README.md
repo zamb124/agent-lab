@@ -23,7 +23,7 @@ GitHub Actions (Run workflow)
               --values values.yaml --values values-prod.yaml \
               --set image.tag=<sha> \
               --set litserve.scheduleOnGpuNode=<true|false из input litserve_node> \
-              --wait --timeout 15m
+              --wait --timeout 30m
           bash deploy/scripts/cluster-health.sh (CHECK_PUBLIC=1)
 
 MicroK8s cluster

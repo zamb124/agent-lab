@@ -92,7 +92,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 make k8s-health                      # ПОЛНАЯ проверка (запускать ВСЕГДА перед изменениями)
 make k8s-status                      # снимок: nodes, pods, svc, ingress, pvc
 make k8s-logs SVC=frontend           # tail логов конкретного Deployment
-make k8s-deploy IMAGE_TAG=<sha>      # helm upgrade --install (атомарно, ждёт rollout)
+make k8s-deploy IMAGE_TAG=<sha>      # helm upgrade --install (--wait, см. HELM_WAIT_TIMEOUT в Makefile, по умолчанию 30m)
 make k8s-rollback                    # helm rollback на предыдущую ревизию
 make k8s-secrets-sync                # пересоздать platform-secrets из ENV
 make k8s-backup [S3=s3://...]        # pg_dumpall в backups/ (или Selectel S3)

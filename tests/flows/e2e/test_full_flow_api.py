@@ -261,8 +261,44 @@ async def run(state):
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_interrupt_and_resume_function_node(self, client, unique_id):
+    async def test_interrupt_and_resume_function_node(self, client, unique_id, auth_headers_system):
         """Interrupt в функции -> resume -> управление к ней же."""
+        create = await client.post(
+            "/flows/api/v1/flows/",
+            json={
+                "flow_id": "e2e_interrupt_function_flow",
+                "name": "E2E Interrupt Function Agent",
+                "entry": "ask_name",
+                "nodes": {
+                    "ask_name": {
+                        "type": "code",
+                        "code": """
+async def run(state):
+    if 'user_name' not in state:
+        state['interrupt'] = {'question': 'Как вас зовут?'}
+        return state
+    return state
+""",
+                    },
+                    "greet": {
+                        "type": "code",
+                        "code": """
+async def run(state):
+    name = state.get('user_name', 'Guest')
+    state['response'] = f'Привет, {name}!'
+    return state
+""",
+                    },
+                },
+                "edges": [
+                    {"from": "ask_name", "to": "greet"},
+                    {"from": "greet", "to": None},
+                ],
+            },
+            headers=auth_headers_system,
+        )
+        assert create.status_code == 200, create.text
+
         # Первый запрос - получаем interrupt
         response = await client.post(
             "/flows/api/v1/tasks/submit",

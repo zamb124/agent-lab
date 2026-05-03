@@ -741,6 +741,9 @@ def mock_llm_with_queue():
     return _factory
 
 
+_MOCK_LLM_CAPTURE_FILE_LOCK = "/tmp/platform_mock_llm_capture.lock"
+
+
 @pytest_asyncio.fixture
 async def mock_llm_capture(container, unique_id):
     """
@@ -753,12 +756,18 @@ async def mock_llm_capture(container, unique_id):
     Запись содержит `model`, `messages` (role + plain text + parts),
     `tools`, `response_format`. Никаких моков продакшна и monkeypatch.
 
+    FileLock на время теста: при pytest-xdist несколько gw могут одновременно
+    ставить `active_scope` и перезаписывать глобальный ключ; worker тогда пишет
+    журнал не в тот scope.
+
     Usage:
         async def test_smth(mock_llm_capture, mock_llm_redis):
             await mock_llm_redis([{"type": "text", "content": "..."}])
             ...  # запускаем сценарий
             calls = await mock_llm_capture()  # все вызовы LLM в порядке прихода
     """
+    from filelock import FileLock
+
     from core.clients.llm.mock import (
         read_mock_llm_capture,
         start_mock_llm_capture,
@@ -766,15 +775,17 @@ async def mock_llm_capture(container, unique_id):
     )
 
     scope = f"test_{unique_id}"
-    await start_mock_llm_capture(container.redis_client, scope)
+    lock = FileLock(_MOCK_LLM_CAPTURE_FILE_LOCK, timeout=420)
+    with lock:
+        await start_mock_llm_capture(container.redis_client, scope)
 
-    async def _read():
-        return await read_mock_llm_capture(container.redis_client, scope)
+        async def _read():
+            return await read_mock_llm_capture(container.redis_client, scope)
 
-    try:
-        yield _read
-    finally:
-        await stop_mock_llm_capture(container.redis_client, scope)
+        try:
+            yield _read
+        finally:
+            await stop_mock_llm_capture(container.redis_client, scope)
 
 
 @pytest_asyncio.fixture

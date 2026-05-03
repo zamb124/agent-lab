@@ -230,7 +230,7 @@ jobs:
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
             --set litserve.scheduleOnGpuNode="$LITSERVE_SCHEDULE_GPU" \
             --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
-            --wait --timeout 15m
+            --wait --timeout 30m
 
       - name: Verify rollout (cluster-health.sh)
         env:

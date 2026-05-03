@@ -178,13 +178,14 @@ helm history agent-lab -n platform   # последняя ревизия pending
 ```
 
 **Причины:**
+- Истёк лимит **`helm --wait`** (**`context deadline exceeded`** в логе Helm) — первый install с большим числом образов и StatefulSets часто дольше 15m; в репозитории по умолчанию **30m** (CI и `HELM_WAIT_TIMEOUT` в Makefile).
 - Под не входит в Ready (failed startupProbe) → `helm upgrade --wait` ждёт rolloutReady.
 - PVC не Bound (см. секцию 4).
 - Ресурсный квоты: `kubectl describe nodes | grep Allocated` — нет ли OOM на ноде.
 - Helm в pending state из-за фейла предыдущего: `helm rollback agent-lab -n platform` или `helm uninstall && reinstall`.
 
 **Решение:**
-- Подкрутить `--timeout 30m` (по умолчанию 15м в Makefile).
+- Подкрутить `--timeout 45m` при очень медленном первом pull образов (по умолчанию **30m** в Makefile и CI).
 - Если pending: `helm history` → `helm rollback`.
 
 ## 10. KUBECONFIG_B64 не валиден

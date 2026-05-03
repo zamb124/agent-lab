@@ -19,6 +19,8 @@ HELM_CHART ?= ./deploy/helm/agent-lab
 HELM_VALUES ?= $(HELM_CHART)/values.yaml
 HELM_VALUES_PROD ?= $(HELM_CHART)/values-prod.yaml
 IMAGE_TAG ?= latest
+# Первый helm install (много образов, StatefulSets, hook миграций) часто >15m.
+HELM_WAIT_TIMEOUT ?= 30m
 
 # ============================================================================
 # Локальная разработка (без Docker для приложения)
@@ -172,7 +174,7 @@ k8s-deploy: render-helm-app-conf
 	  --values $(HELM_VALUES_PROD) \
 	  --set image.tag=$(IMAGE_TAG) \
 	  "$${JSON_ARGS[@]}" \
-	  --wait --timeout 15m \
+	  --wait --timeout $(HELM_WAIT_TIMEOUT) \
 	'
 
 # Снимок состояния кластера: ноды, поды, сервисы, ingress, PVC.
@@ -236,7 +238,7 @@ k8s-secrets-sync:
 	  --namespace $(K8S_NAMESPACE) \
 	  --reuse-values \
 	  --set-json "platformSecrets=$$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
-	  --wait --timeout 15m \
+	  --wait --timeout $(HELM_WAIT_TIMEOUT) \
 	'
 
 # ============================================================================
@@ -286,8 +288,8 @@ help:
 	@echo "  make render-helm-app-conf - conf.json + overlay -> files/app-conf.json"
 	@echo "  make k8s-lint            - helm lint чарта"
 	@echo "  make k8s-template        - Рендер всех манифестов в stdout (без apply)"
-	@echo "  make k8s-deploy          - helm upgrade --install (атомарно, ждёт rollout)"
-	@echo "  make k8s-deploy IMAGE_TAG=<sha> - С конкретным тегом образа"
+	@echo "  make k8s-deploy          - helm upgrade --install (--wait, timeout=$(HELM_WAIT_TIMEOUT))"
+	@echo "  make k8s-deploy IMAGE_TAG=<sha> HELM_WAIT_TIMEOUT=45m - долгий первый install"
 	@echo "  make k8s-status          - Снимок: nodes, pods, svc, ingress, pvc"
 	@echo "  make k8s-logs SVC=frontend - Логи Deployment frontend"
 	@echo "  make k8s-rollback        - helm rollback на предыдущую ревизию"
