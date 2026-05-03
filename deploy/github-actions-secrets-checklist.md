@@ -37,6 +37,8 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 | `ONLYOFFICE_JWT_SECRET` |
 | `GRAFANA_ADMIN_PASSWORD` |
 
+**Значения:** для OnlyOffice и Grafana задайте достаточно длинные случайные строки (например `openssl rand -hex 32`), один раз сохраните в GitHub Secrets; дальше они попадают в Kubernetes Secret `platform-secrets` как `onlyoffice-jwt-secret` и `grafana-admin-password`.
+
 ## 3. Опциональные (workflow допускает пустые)
 
 | Имя в GitHub |

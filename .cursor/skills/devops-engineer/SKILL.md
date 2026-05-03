@@ -33,6 +33,19 @@ description: DevOps инженер платформы Humanitec. Знает SSH-
 
 Доступ kubectl с локальной машины: kubeconfig из `microk8s config` master ноды положен в `~/.kube/config` (или передан в CI через GitHub Secret `KUBECONFIG_B64`).
 
+### GitHub Secret `KUBECONFIG_B64` (агент / локальная среда)
+
+Если с машины, где запускается агент (или пользователь), есть **SSH к master** и **`gh` авторизован** в нужном репозитории — можно **самому выполнить** установку секрета без копирования kubeconfig в чат:
+
+```bash
+gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[:/]([^/]+)\/([^/.]+)(\.git)?$/\1\/\2/')" \
+  --body "$(ssh root@84.38.184.105 'microk8s config | base64 -w0')"
+```
+
+- Значение уходит в GitHub API напрямую; **не выводить** полный base64 в ответ пользователю в чат (утечка в логи).
+- macOS на сервере редко; если на клиенте без `-w0`, тело можно собрать через `base64 | tr -d '\n'` после SSH при необходимости.
+- Репозиторий не является источником секрета; это не нарушает правило «не коммитить kubeconfig».
+
 ## Helm-чарт `deploy/helm/agent-lab/`
 
 Единый источник всех K8s манифестов. После `helm upgrade` ~65 ресурсов:
@@ -201,7 +214,7 @@ make k8s-backup S3=s3://shvedzilla/backups/
 - НЕ создаю ad-hoc YAML вне Helm-чарта.
 - НЕ открываю порты на хосте через `ufw` — связь через ClusterIP.
 - НЕ запускаю `docker compose` на проде (compose только для dev/test).
-- НЕ пушу kubeconfig или платформенные секреты в репозиторий.
+- НЕ коммичу kubeconfig или платформенные секреты **в git**; запись в **GitHub Actions Secrets** через `gh secret set` или UI при наличии доступа — нормальная операция (не в репозиторий).
 - НЕ использую `kubectl edit` — только PR + `make k8s-deploy`.
 - НЕ вызываю `kubectl apply -f` отдельных манифестов мимо чарта.
 - НЕ делаю «разовый» bash-скрипт в чате — оформляю в `deploy/scripts/<имя>.sh` с _common.sh.

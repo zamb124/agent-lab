@@ -182,12 +182,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          MISSING=""
           for required in POSTGRES_PASSWORD AUTH_JWT_SECRET SELECTEL_ACCESS_KEY SELECTEL_SECRET_KEY LIVEKIT_API_KEY LIVEKIT_API_SECRET TURN_SECRET ONLYOFFICE_JWT_SECRET GRAFANA_ADMIN_PASSWORD; do
             if [ -z "${!required:-}" ]; then
-              echo "FATAL: required secret $required is empty" >&2
-              exit 1
+              MISSING="${MISSING}${MISSING:+ }${required}"
             fi
           done
+          if [ -n "$MISSING" ]; then
+            echo "::error title=Missing GitHub Secrets::Обязательные секреты пустые или не заданы: ${MISSING}"
+            echo "Репозиторий → Settings → Secrets and variables → Actions. Имена см. deploy/github-actions-secrets-checklist.md (раздел 2)."
+            exit 1
+          fi
 
           kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
