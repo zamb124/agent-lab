@@ -43,10 +43,10 @@ redis:
       cpu: "1"
       memory: 2Gi
 
-# Конфигурация платформы в подах: ConfigMap из files/app-conf.json.
-# Канон структуры — только корневой conf.json; K8s-дельты — files/app-conf.k8s-overlay.json.
+# Конфигурация платформы в подах: ConfigMap из files/app-conf.json (= conf.json + узкий overlay без дублей server URLs).
+# Межсервисные URL в кластере: ENV SERVER__*_SERVICE_URL в templates/_helpers.tpl (не править server в overlay ради K8s DNS).
 # Итог files/app-conf.json не редактировать вручную: make render-helm-app-conf (вызывается из k8s-lint/k8s-template/k8s-deploy и CI перед helm lint).
-# Сгенерированный app-conf.json коммитят в репозиторий, чтобы в PR был виден полный дифф для ConfigMap.
+# app-conf.json в .gitignore; перед helm без make/k8s-* выполнить make render-helm-app-conf.
 appConfigConfigMap: app-conf
 
 # Глобальные переменные окружения для всех подов приложения и воркеров.

@@ -1,7 +1,4 @@
 {
-  "server": {
-    "browser_service_url": "http://browser:8009"
-  },
   "services": {
     "browser": {
       "browser": {

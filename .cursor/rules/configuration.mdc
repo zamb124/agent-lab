@@ -17,7 +17,7 @@ alwaysApply: false
 
 ## Kubernetes: ConfigMap `app-conf`
 
-В кластере поды читают смонтированный **`deploy/helm/agent-lab/files/app-conf.json`**. Структура и базовые значения совпадают с корневым **`conf.json`**. Отличия только для Kubernetes живут в **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`** (вложенность как в каноне; **`null`** в overlay удаляет ключ из результата слияния). Итоговый **`files/app-conf.json`** создаёт **`deploy/scripts/render_helm_app_conf.py`**; файл не правится вручную. Локально и в CI генерация запускается перед **`helm lint`** и деплоем (`make render-helm-app-conf` или как зависимость **`make k8s-lint`** / **`k8s-template`** / **`k8s-deploy`**). Сгенерированный **`app-conf.json`** коммитят в репозиторий, чтобы в PR был виден полный дифф ConfigMap.
+В кластере поды читают смонтированный **`deploy/helm/agent-lab/files/app-conf.json`**. Файл собирается из **`conf.json`** + узкого **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`**: overlay не трогает **`server.*_service_url`** (их в кластере задаёт Helm ENV **`SERVER__*_SERVICE_URL`** в **`templates/_helpers.tpl`**); в overlay остаются только дельты вида вложенной секции **`services.<app>.browser`** (рантайм browser), например **`null`** для удаления **`cdp_endpoints.lightpanda`**. Артефакт **`files/app-conf.json`** пишет **`deploy/scripts/render_helm_app_conf.py`**, в **`.gitignore`**, не коммитится; перед **`helm`** без **`make k8s-*`** нужно **`make render-helm-app-conf`**. В CI генерация — перед **`helm lint`** / деплоем (`make k8s-lint` и зависимости делают то же локально).
 
 ## ENV
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Собирает deploy/helm/agent-lab/files/app-conf.json из корневого conf.json и overlay.
 
+Артефакт в .gitignore; Helm читает его через .Files.Get — перед helm lint/template/upgrade
+без make k8s-* выполните этот скрипт или make render-helm-app-conf.
+
 Канон структуры: только корневой conf.json. Overlay задаёт дельты для Kubernetes;
 значение null в overlay удаляет ключ из результата (как JSON Merge Patch).
 

@@ -59,6 +59,15 @@ URL баз — через ClusterIP postgres / redis в namespace релиза.
 - name: SERVER__BROWSER_SERVICE_URL
   value: http://{{ $browser.serviceName }}:{{ $browser.port }}
 {{- end }}
+{{- $voice := index .Values.applications "voice" }}
+{{- if and $voice $voice.enabled }}
+- name: SERVER__VOICE_SERVICE_URL
+  value: http://{{ $voice.serviceName }}:{{ $voice.port }}
+{{- end }}
+{{- if .Values.litserve.enabled }}
+- name: SERVER__PROVIDER_LITSERVE_SERVICE_URL
+  value: http://{{ .Values.litserve.serviceName }}:{{ .Values.litserve.port }}
+{{- end }}
 - name: SERVER__PLATFORM_PUBLIC_BASE_URL
   value: https://{{ .Values.domain }}
 - name: AUTH__JWT_SECRET

@@ -197,7 +197,6 @@ class ServerConfig(BaseModel):
     office_service_url: Optional[str] = None
     browser_service_url: Optional[str] = None
     provider_litserve_service_url: Optional[str] = None
-    browser_service_url: Optional[str] = None
     voice_service_url: Optional[str] = None
     platform_public_base_url: Optional[str] = Field(
         default="https://humanitec.ru",
@@ -220,7 +219,6 @@ class ServerConfig(BaseModel):
         "rag": 8004,
         "sync": 8005,
         "scheduler": 8006,
-        "browser": 8009,
         "office": 8008,
         "browser": 8009,
         "provider_litserve": 8014,

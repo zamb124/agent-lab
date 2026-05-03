@@ -63,7 +63,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 - `values-prod.yaml` — production overrides.
 - `templates/_helpers.tpl::agentlab.appEnv` — общий блок env для всех app/worker подов (URL баз, OAuth, LLM, S3, push, OnlyOffice, OTLP — всё через `valueFrom.secretKeyRef` на `platform-secrets`).
 - `templates/{10-postgres,11-redis,30-apps,40-workers,50-gpu,60-external,70-observability,80-ingress}/`.
-- `files/` — ConfigMap источники: `postgres-init.sql`, `loki.yaml`, `tempo.yaml`, `alloy.config`, дашборды Grafana, alert rules; **`app-conf.json`** собирается из корневого **`conf.json`** + **`app-conf.k8s-overlay.json`** скриптом **`deploy/scripts/render_helm_app_conf.py`** (не править **`app-conf.json`** руками).
+- `files/` — ConfigMap источники: `postgres-init.sql`, `loki.yaml`, `tempo.yaml`, `alloy.config`, дашборды Grafana, alert rules; **`app-conf.json`** генерируется (**`.gitignore`**) из **`conf.json`** + **`app-conf.k8s-overlay.json`**; межсервисные URL в кластере — **`agentlab.appEnv`** (`SERVER__*_SERVICE_URL`).
 
 ## Карта компонентов (где что бежит)
 
@@ -157,9 +157,10 @@ helm rollback agent-lab <REV> -n platform
 
 ### Изменить платформенный JSON для кластера
 
-1. Правки структуры и локальных дефолтов — только в корневом **`conf.json`**.
-2. Только K8s (in-cluster DNS, состав `cdp_endpoints` и т.п.) — **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`**.
-3. **`make render-helm-app-conf`** (или **`make k8s-lint`**) и закоммитить обновлённый **`deploy/helm/agent-lab/files/app-conf.json`** вместе с PR.
+1. Общая структура и значения по умолчанию — только в корневом **`conf.json`**.
+2. То, что в K8s задаётся через Helm ENV (**`SERVER__*_SERVICE_URL`** и т.д. в **`templates/_helpers.tpl`**) — править **`values.yaml`** (имена сервисов и порты), не дублировать те же URL в **`app-conf.k8s-overlay.json`**.
+3. Только то, для чего нет Helm ENV (например состав **`cdp_endpoints`**) — **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`**.
+4. **`make render-helm-app-conf`** (или **`make k8s-lint`**) после изменения канона или overlay; **`app-conf.json`** не коммитится (`.gitignore`).
 
 ### Добавить новый сервис
 

@@ -56,10 +56,9 @@ MicroK8s cluster
 
 ## Конфигурация платформы для Helm (ConfigMap)
 
-- **Канон** структуры и значений по умолчанию — только корневой **`conf.json`** в репозитории.
-- **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`** — только дельты для Kubernetes (тот же JSON-путь, что в каноне). Значение **`null`** в overlay **удаляет** ключ из итога (как в JSON Merge Patch).
-- **`deploy/helm/agent-lab/files/app-conf.json`** — **генерируется**, не редактировать вручную: **`make render-helm-app-conf`** или автоматически как зависимость **`make k8s-lint`**, **`make k8s-template`**, **`make k8s-deploy`**. В GitHub Actions тот же скрипт выполняется перед **`helm lint`**.
-- **Git:** сгенерированный **`app-conf.json`** коммитят в репозиторий, чтобы в PR был виден полный дифф того, что попадёт в ConfigMap.
+- **Канон** структуры и значений по умолчанию — только корневой **`conf.json`**.
+- **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`** — только узкие дельты без Helm ENV. Это **не** блок **`server`** (URL между сервисами там не трогаем — их даёт Helm ENV). Пример: вложенная секция **`services.browser.browser`** (рантайм browser в конфиге приложения), например **`cdp_endpoints.lightpanda: null`**, чтобы в кластере не тащить локальный endpoint из канона.
+- **`deploy/helm/agent-lab/files/app-conf.json`** — **генерируется**, в репозитории **не хранится** (`.gitignore`). Перед **`helm template`** / **`helm lint`** / **`helm upgrade`** без целей **`make k8s-*`** нужно один раз выполнить **`make render-helm-app-conf`** или полагаться на CI (**`.github/workflows/deploy.yml`** рендерит файл перед **`helm lint`**).
 
 Скрипт: **`deploy/scripts/render_helm_app_conf.py`**.
 
@@ -203,7 +202,8 @@ deploy/helm/agent-lab/
 ├── values-prod.yaml            # production overrides
 ├── files/                      # ConfigMap источники
 │   ├── postgres-init.sql       # CREATE DATABASE для всех 7 сервисов + pgvector
-│   ├── app-conf.json           # копия корневого conf.json
+│   ├── app-conf.json           # артефакт: conf.json + overlay (генерация, в git не коммитится)
+│   ├── app-conf.k8s-overlay.json
 │   ├── loki.yaml
 │   ├── tempo.yaml
 │   ├── alloy.config            # K8s discovery (вместо docker.sock)

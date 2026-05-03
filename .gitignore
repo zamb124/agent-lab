@@ -1,4 +1,7 @@
 /conf.local.json
+
+# Helm ConfigMap: собирается из корневого conf.json + deploy/helm/agent-lab/files/app-conf.k8s-overlay.json
+deploy/helm/agent-lab/files/app-conf.json
 artifacts/*
 .env
 .venv
