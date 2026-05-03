@@ -35,7 +35,6 @@ spec:
           operator: Exists
           effect: NoSchedule
       priorityClassName: system-node-critical
-      hostPID: true
       containers:
         - name: nvidia-device-plugin
           image: "{{ .Values.nvidiaDevicePlugin.image }}:{{ .Values.nvidiaDevicePlugin.tag }}"
@@ -43,29 +42,23 @@ spec:
           env:
             - name: FAIL_ON_INIT_ERROR
               value: "false"
-            - name: PASS_DEVICE_SPECS
-              value: "true"
+            # Legacy режим без CDI: device-plugin регистрирует GPU в kubelet, kubelet
+            # передаёт NVIDIA_VISIBLE_DEVICES в pod env, nvidia-container-runtime (host)
+            # инжектит host-libs (libcuda.so/libnvidia-ml.so) в контейнер при старте.
+            # CDI-режим (PASS_DEVICE_SPECS + cdi-annotations) требует libs внутри pod
+            # (через bind-mount /driver-root) — для host-driver setup без gpu-operator
+            # это не работает (libcuda.so не найден).
             - name: DEVICE_LIST_STRATEGY
-              value: "envvar,cdi-annotations"
-            - name: DEVICE_ID_STRATEGY
-              value: "uuid"
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: "all"
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: "all"
+              value: "envvar"
           securityContext:
-            privileged: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: device-plugin
               mountPath: /var/lib/kubelet/device-plugins
-            - name: cdi-root
-              mountPath: /var/run/cdi
-              readOnly: true
       volumes:
         - name: device-plugin
           hostPath:
             path: /var/lib/kubelet/device-plugins
-        - name: cdi-root
-          hostPath:
-            path: /var/run/cdi
 {{- end }}
