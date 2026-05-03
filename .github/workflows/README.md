@@ -42,7 +42,7 @@ MicroK8s cluster
 
 | Secret | Источник | Где используется |
 |---|---|---|
-| `KUBECONFIG_B64` | `microk8s config \| base64 -w0` (Linux) или `base64 \| tr -d '\n'` (macOS). При **environment `production`** — также в Environment secrets, если не завели в repo | `deploy` job |
+| `KUBECONFIG_B64` | См. **`deploy/README.md`** (Environment `production` перекрывает Repository; пустой Environment-secret ломает деплой). Опционально **`KUBECONFIG_B64_REPOSITORY`** в repo как fallback. |
 
 ### Платформенные секреты (передаются в `platform-secrets`)
 

@@ -78,7 +78,8 @@ MicroK8s cluster
 
 | Секрет | Что туда положить |
 |---|---|
-| `KUBECONFIG_B64` | На master: **`microk8s config \| base64 -w0`** (Linux) или **`microk8s config \| base64 \| tr -d '\n'`** (macOS). Весь вывод одной строкой в секрет. Workflow использует **environment `production`**: секрет должен быть задан в **Repository secrets** или в **Environment secrets** для `production` (Settings → Environments → production), иначе в job значение будет пустым. |
+| `KUBECONFIG_B64` | На master: **`microk8s config \| base64 -w0`** (Linux) или **`microk8s config \| base64 \| tr -d '\n'`** (macOS). Весь вывод одной строкой в секрет. Workflow использует **environment `production`**: секрет с тем же именем в **Environment secrets** полностью **перекрывает** Repository secret — если в Environment завели **пустой** `KUBECONFIG_B64`, в job будет пусто даже при заполненном репозиторном секрете (удалите дубликат из Environment или заполните его). |
+| `KUBECONFIG_B64_REPOSITORY` | **Не обязателен.** Запасной секрет **только в Repository**: тот же base64, что и для `KUBECONFIG_B64`. Используется, если `KUBECONFIG_B64` в job пуст из‑за затенения Environment-секретом (см. выше). После починки Environment можно удалить. |
 
 ### Платформа (передаются в Secret `platform-secrets`)
 

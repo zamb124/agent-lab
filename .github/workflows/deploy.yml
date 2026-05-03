@@ -80,6 +80,9 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: build
+    # GitHub Environment: секрет с тем же именем, что в Repository, здесь ПЕРЕЗАПИСЫВАЕТ репозиторный.
+    # Пустой KUBECONFIG_B64 в Environment «production» даёт пустое значение в job — удалите дубликат из Environment
+    # или заполните его. Опциональный Repository secret KUBECONFIG_B64_REPOSITORY обходит затенение (см. шаг Configure kubeconfig).
     environment: production
 
     steps:
@@ -96,21 +99,32 @@ jobs:
           version: v3.16.2
 
       - name: Configure kubeconfig
-        # Один GitHub Secret KUBECONFIG_B64 — пробрасываем в ENV, чтобы проверить «не пусто» до base64 -d.
+        # KUBECONFIG_B64: обычно Repository или Environment secret (Environment перекрывает Repository при совпадении имени).
+        # KUBECONFIG_B64_REPOSITORY: только Repository — если в Environment случайно пустой KUBECONFIG_B64, подставьте тот же base64 сюда как запасной канал (не обязателен).
         env:
           KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+          KUBECONFIG_B64_REPOSITORY: ${{ secrets.KUBECONFIG_B64_REPOSITORY }}
         run: |
           set -euo pipefail
-          if [ -z "${KUBECONFIG_B64}" ]; then
-            echo "::error title=Missing kubeconfig::Secret KUBECONFIG_B64 пустой или недоступен."
-            echo "Задайте его:"
-            echo "  Repositories → Settings → Secrets and variables → Actions → New repository secret (имя: KUBECONFIG_B64)"
-            echo "  Если у job указано environment «production», добавьте тот же secret в Environment: Settings → Environments → production → Environment secrets."
-            echo "Значение: на master выполните: microk8s config | base64 -w0   (Linux) или microk8s config | base64 | tr -d '\\n'   (macOS)."
+          KB64="${KUBECONFIG_B64}"
+          if [ -z "${KB64}" ] && [ -n "${KUBECONFIG_B64_REPOSITORY:-}" ]; then
+            KB64="${KUBECONFIG_B64_REPOSITORY}"
+            echo "::notice title=Kubeconfig fallback::KUBECONFIG_B64 был пуст (часто из‑за пустого Environment secret). Использован репозиторный KUBECONFIG_B64_REPOSITORY. Удалите пустой KUBECONFIG_B64 из Environment «production» или заполните его."
+          fi
+          if [ -z "${KB64}" ]; then
+            echo "::error title=Missing kubeconfig::Нет ни KUBECONFIG_B64, ни запасного KUBECONFIG_B64_REPOSITORY."
+            echo ""
+            echo "Частая причина: job использует environment «production», а там создан секрет KUBECONFIG_B64 без значения — он перекрывает секрет из Actions → Repository secrets."
+            echo "Исправление (любой один вариант):"
+            echo "  A) Settings → Environments → production → удалить пустой секрет KUBECONFIG_B64 (останется репозиторный)."
+            echo "  B) Вставить тот же base64 в Environment secret KUBECONFIG_B64."
+            echo "  C) Repository → Actions secrets → добавить KUBECONFIG_B64_REPOSITORY = microk8s config | base64 -w0 (запасной канал)."
+            echo ""
+            echo "Значение kubeconfig: на master — microk8s config | base64 -w0 (Linux) или microk8s config | base64 | tr -d '\\n' (macOS)."
             exit 1
           fi
           mkdir -p ~/.kube
-          if ! printf '%s' "${KUBECONFIG_B64}" | base64 -d > ~/.kube/config; then
+          if ! printf '%s' "${KB64}" | base64 -d > ~/.kube/config; then
             echo "::error::KUBECONFIG_B64 не декодируется как base64. Перезапишите секрет без лишних пробелов и переносов."
             exit 1
           fi
