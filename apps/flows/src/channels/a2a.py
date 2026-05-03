@@ -65,6 +65,11 @@ def _branch_id_from_message_metadata(metadata: Optional[Dict]) -> str:
         s = str(b).strip()
         if s:
             return s
+    sk = metadata.get("skill")
+    if sk is not None:
+        s = str(sk).strip()
+        if s:
+            return s
     return "default"
 
 
