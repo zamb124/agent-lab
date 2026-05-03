@@ -51,11 +51,11 @@ spec:
             - --exclude-switches=enable-automation
             - --window-size=1920,1080
             - --lang=en-US
-            - --remote-debugging-address=0.0.0.0
+            # Chromium 124+ блокирует --remote-debugging-address=0.0.0.0 (security): слушает
+            # только 127.0.0.1. Browser-app коннектится через 127.0.0.1 (shared netns в pod).
             - --remote-debugging-port=9222
-          ports:
-            - name: cdp
-              containerPort: 9222
+          # Порт не публикуем (httpGet pod IP не работает — Chromium только на 127.0.0.1).
+          # browser-app в этом же pod ходит через BROWSER__CDP_ENDPOINTS__CHROMIUM=http://127.0.0.1:9222.
           volumeMounts:
             - name: chromium-dshm
               mountPath: /dev/shm
@@ -67,24 +67,30 @@ spec:
               cpu: "2"
               memory: 2Gi
           livenessProbe:
-            httpGet:
-              path: /json/version
-              port: cdp
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -q -O- http://127.0.0.1:9222/json/version >/dev/null
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 5
           readinessProbe:
-            httpGet:
-              path: /json/version
-              port: cdp
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -q -O- http://127.0.0.1:9222/json/version >/dev/null
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
           startupProbe:
-            httpGet:
-              path: /json/version
-              port: cdp
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -q -O- http://127.0.0.1:9222/json/version >/dev/null
             failureThreshold: 30
             periodSeconds: 5
         {{- end }}
