@@ -7,7 +7,18 @@
 from datetime import datetime, timezone
 from typing import Optional, Any
 
-from sqlalchemy import String, Text, DateTime, Integer, Boolean, Index, UniqueConstraint, text
+from sqlalchemy import (
+    String,
+    Text,
+    DateTime,
+    Integer,
+    Boolean,
+    Float,
+    CheckConstraint,
+    Index,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -403,6 +414,51 @@ class ApiKeyRecord(Base):
     __table_args__ = (
         Index("ix_api_keys_company_id", "company_id"),
         Index("ix_api_keys_key_hash", "key_hash", unique=True),
+    )
+
+
+class CompanyVoiceProvider(Base):
+    """Per-company override провайдеров речи (STT/TTS/VAD).
+
+    Перекрывает deployment-default из `settings.voice.<kind>` для конкретной
+    компании. Per-call переопределение делается через
+    `core.clients.speech_override.SpeechOverride`.
+
+    Резолв (Zero-Guess, см. `core.clients.voice_resolver`):
+
+    1. Поля из `SpeechOverride` (per-call/per-process).
+    2. Поля из этой записи (per-company).
+    3. `settings.voice.<kind>` (deployment-default).
+    """
+
+    __tablename__ = "company_voice_providers"
+
+    company_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    kind: Mapped[str] = mapped_column(String, primary_key=True)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    model: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    voice: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    language: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sample_rate: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    response_format: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    secrets: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('stt','tts','vad')",
+            name="company_voice_providers_kind_check",
+        ),
+        CheckConstraint(
+            "provider IN ('litserve','cloud_ru','yandex','sber','silero_local','mock')",
+            name="company_voice_providers_provider_check",
+        ),
     )
 
 

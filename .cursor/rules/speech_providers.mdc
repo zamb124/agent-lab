@@ -1,0 +1,298 @@
+---
+description: "Единый канон провайдеров речи (STT/TTS/VAD): voice_resolver, SpeechOverride, company_voice_providers, единая точка выбора модели для voice/flows/eval/sync/CRM"
+---
+# Speech Providers — единый канон
+
+Платформенный инвариант: любой код, которому нужен STT/TTS/VAD-клиент,
+получает его **только** через `core.clients.voice_resolver`. Прямые импорты
+конкретных реализаций (`LitserveSTTClient`, `CloudRuTTSClient`,
+`SileroVADProvider`, …) вне `core/clients/**` запрещены — `scripts/check_voice_resolver_usage.py`
+падает в `make check-voice-canon`.
+
+## Зачем
+
+- Единый, одинаковый, прозрачный путь выбора провайдера и модели для
+  `voice` (real-time), `flows` (auto-STT входящих, tools `transcribe_audio`/
+  `synthesize_speech`), `sync` (batch transcribe LiveKit-egress и
+  audio-сообщений), `crm` (заметки), inline `eval` тулов.
+- Один объект перекрытия (`SpeechOverride`) и одна таблица per-company
+  (`company_voice_providers`) — никакой ручной композиции в каждом сервисе.
+- Замена провайдера/модели в один клик в админке компании или одной
+  переменной окружения на деплое — без правок кода.
+
+## Три уровня резолва (Zero-Guess)
+
+```
+SpeechOverride (per-call)
+  → company_voice_providers (per-company, БД)
+    → settings.voice (deployment-default, ENV/conf.json)
+```
+
+Если на текущем уровне нет значения для конкретного поля — спускается на
+следующий. На самом нижнем — Pydantic-дефолт `SpeechProvidersConfig`. Если
+обязательное поле провайдера (например `api_key` для Yandex/Sber) пусто — это
+**ошибка конфигурации**, клиент бросает `ValueError` на инициализации, а не
+тихо падает на первом запросе.
+
+## Контракт
+
+### `core/clients/speech_override.py:SpeechOverride`
+
+Pydantic-модель (`extra="forbid"`), все поля опциональны:
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `provider` | `Literal["litserve","cloud_ru","yandex","sber","silero_local","mock"] \| None` | Принудительный провайдер на этот вызов |
+| `model` | `str \| None` | OpenAI-совместимый id модели (`gigaam-v3-rnnt-ru`, `kokoro-82m-ru`, …) |
+| `voice` | `str \| None` | Голос для TTS (например `alloy`, `ermil`) |
+| `language` | `str \| None` | BCP-47 (`ru`, `en`, `kk`) |
+| `sample_rate` | `int \| None` | Дискретизация для TTS/VAD |
+| `threshold` | `float \| None` | Порог VAD (0.0..1.0) |
+| `response_format` | `Literal["wav","mp3","ogg","pcm","lpcm"] \| None` | Формат ответа TTS |
+| `timeout_s` | `float \| None` | Таймаут запроса |
+
+`SpeechOverride` живёт строго **в request-scope**: создаётся в HTTP-хендлере
+(или WS-control-frame) и передаётся в `voice_resolver.get_*_client(...)`.
+Логика приложения **не должна** хранить override как глобальный/per-process
+state — для долговременных правил используется `company_voice_providers`.
+
+### `core/db/models/platform.py:CompanyVoiceProvider`
+
+Таблица `company_voice_providers` (миграция
+`migrations/shared/versions/20260503_0009_company_voice_providers.py`):
+
+| Колонка | Тип | Назначение |
+|---|---|---|
+| `company_id` | `String` | FK на `companies.company_id` |
+| `kind` | `Enum("stt","tts","vad")` | Тип провайдера |
+| `provider` | `String` | `litserve`/`cloud_ru`/`yandex`/`sber`/`silero_local`/`mock` |
+| `model` | `String?` | id модели |
+| `voice`, `language`, `sample_rate`, `threshold`, `response_format` | `String?` / `Int?` / `Float?` | как в `SpeechOverride` |
+| `secrets` | `JSONB?` | per-company строковые поля доступа провайдера; merge в клиент через `voice_resolver` + `model_copy` поверх соответствующего `*_BackendConfig` |
+
+Уникальный ключ `(company_id, kind)` — на компанию ровно одна запись для
+каждого `kind`. Репозиторий
+`core/db/repositories/company_voice_provider_repository.py` и DI
+`@lazy company_voice_provider_repository` в `core/container/base.py`.
+
+Дополнительная ревизия: `migrations/shared/versions/20260504_0010_company_voice_providers_secrets.py`
+(колонка `secrets`).
+
+**Ключи `secrets`** (совпадают с allowlist в `apps/frontend/api/company_voice_providers.py`
+и правилами `apps/frontend/api/voice_providers_catalog_helpers.py:allowed_secret_keys`):
+
+| provider | ключи JSON |
+|---|---|
+| `cloud_ru` | `api_key` |
+| `yandex` | `api_key`, `folder_id` |
+| `sber` | `client_id`, `client_secret`, `scope` |
+
+При ответе `GET .../voice-providers` сырое значение секретов не отдаётся: только
+`secrets_meta` (флаги `*_set`, не-секретные поля строкой). `PUT` принимает
+опциональный merge-patch `secrets` (опускание ключа при `PUT` означает «не менять»
+сохранённое значение этого ключа; тело синхронизировано с `merge_secrets`
+в репозитории).
+
+Каталог моделей для UI (без чтения ключей из `conf`): `GET /frontend/api/voice-providers/catalog`
+(`apps/frontend/api/voice_providers_catalog.py`) — авторизованный пользователь;
+идентификаторы Litserve из `provider_litserve`, статические списки Cloud.ru/Yandex/Sber см.
+`voice_providers_catalog_helpers.py`.
+
+### `core/clients/voice_resolver.py`
+
+Публичные функции:
+
+```python
+async def get_stt_client(*, company_id: str, override: SpeechOverride | None = None) -> BaseSTTClient: ...
+async def get_tts_client(*, company_id: str, override: SpeechOverride | None = None) -> BaseTTSClient: ...
+async def get_vad_client(*, company_id: str, override: SpeechOverride | None = None) -> BaseVADClient: ...
+
+def invalidate_company_overrides_cache(company_id: str) -> None: ...
+```
+
+Свойства реализации:
+
+- TTL-кэш записей `company_voice_providers` (in-process, инвалидация
+  локальная — UI после `PUT/DELETE` дёргает `invalidate_company_overrides_cache(company_id)`).
+- `company_id` обязателен (Zero-Guess); если пользователь системный (бот
+  без company_id) — передаётся специальная `system` company, для которой
+  override обычно отсутствует и берётся deployment-default.
+- Все функции — `async`. Создание клиента (открытие httpx connection pool,
+  загрузка модели Silero in-process) — внутри функции; повторные вызовы
+  для одного `(company_id, kind, resolved_provider, resolved_model)` могут
+  кэшировать клиент, но это деталь реализации, а не часть контракта.
+
+### Базовые клиенты в `core/clients/`
+
+- `core/clients/stt_client.py:BaseSTTClient` — `transcribe_audio(audio: bytes, mime: str, *, language: str | None) -> STTResult`.
+- `core/clients/tts_client.py:BaseTTSClient` — `synthesize(text: str, *, voice: str | None, language: str | None, response_format: str | None, sample_rate: int | None) -> TTSResult`.
+- `core/clients/vad_client.py:BaseVADClient` — `detect_segments(pcm: bytes, *, sample_rate: int, threshold: float) -> list[VADSegment]`.
+
+Реализации (только внутри `core/clients/**`): `LitserveSTTClient`,
+`CloudRuSTTClient`, `YandexSTTClient`, `SberSTTClient`, `MockSTTClient`,
+`LitserveTTSClient`, `CloudRuTTSClient`, `YandexTTSClient`, `SberTTSClient`,
+`MockTTSClient`, `LitserveVADClient`, `LocalSileroVADClient`, `MockVADClient`.
+
+## Где можно/нельзя
+
+| Зона | `voice_resolver.get_*_client` | Прямой `LitserveSTTClient(...)` etc. |
+|---|---|---|
+| `core/clients/**` | разрешён (это и есть его реализация) | **разрешён** (фабрика реализаций) |
+| `apps/voice/**` | **обязателен** | запрещён |
+| `apps/flows/**` | **обязателен** | запрещён |
+| `apps/sync/**` (включая `MediaTranscriber`) | **обязателен** | запрещён |
+| `apps/crm/**`, `apps/rag/**`, `apps/office/**` | **обязателен** | запрещён |
+| `core/files/media/**` | **обязателен** | запрещён |
+
+CI: `scripts/check_voice_resolver_usage.py` запрещает прямые импорты в
+любом файле вне `core/clients/**`.
+
+## Как добавить нового провайдера
+
+1. В `core/config/models.py` — добавить `<X>STTBackendConfig` /
+   `<X>TTSBackendConfig` / `<X>VADBackendConfig`, включить в
+   `STTProvidersConfig` / `TTSProvidersConfig` / `VADProvidersConfig` под
+   ключом `<x>`. Расширить `Literal[...]` поля `provider`.
+2. В `core/clients/{stt,tts,vad}_client.py` — реализовать
+   `<X>STTClient(BaseSTTClient)` (и т.д.) с явным конструктором, без
+   `||`/`??` фолбеков. Конфиг — только из соответствующего
+   `<X>STTBackendConfig`.
+3. В `core/clients/voice_resolver.py` — добавить ветку выбора в `_build_*_client`.
+4. В `conf.json` → `platform.billing.resource_base_prices.{stt,tts,vad}` —
+   добавить ключ `<x>` (или подтвердить, что подходит `*` fallback).
+5. В Helm: `_helpers.tpl` — secretKeyRef-ы под имена
+   `VOICE__{STT,TTS,VAD}__<X>__<FIELD>`. В `01-platform-secrets.yaml` —
+   stringData, в `values.yaml` `platformSecrets.{kind}<X><Field>`. В
+   `helm_platform_secrets_json.sh` — `--arg` + ключ JSON. В
+   `.github/workflows/deploy.yml` — проброс из GitHub Secrets. В
+   `deploy/github-actions-secrets-checklist.md` — описать.
+6. UI: страница `company-voice-providers` без `mock` в селектах провайдера,
+   выпадающие списки моделей из `GET /frontend/api/voice-providers/catalog`,
+   поля `secrets` для `cloud_ru` / `yandex` / `sber` — см. `company_voice_providers.py`
+   и `company-voice-providers-page.js`.
+7. Тесты: `tests/clients/test_<x>_speech.py` (httpx_mock без
+   monkeypatch), фикстуры heavy-моделей — session-scoped в
+   `conftest.py`, `pytest.mark.timeout(15)`.
+
+## Как использовать из сервиса (примеры)
+
+### `apps/voice/api/transcribe.py` (batch)
+
+```python
+from core.clients.voice_resolver import get_stt_client
+from core.files.audio_probe import probe_audio_duration_seconds_from_upload
+from apps.voice.services.voice_usage import record_stt_usage
+
+stt = await get_stt_client(company_id=ctx.company.company_id)
+result = await stt.transcribe_audio(
+    audio_bytes=audio_bytes,
+    file_name=file_name,
+    mime_type=mime_type,
+    language=None,
+)
+try:
+    audio_seconds = await probe_audio_duration_seconds_from_upload(
+        data=audio_bytes, file_name=file_name
+    )
+except ValueError:
+    pass  # без измеренной длительности usage не пишем (предупреждение в лог сервиса)
+else:
+    await record_stt_usage(
+        user=ctx.user, company=ctx.company,
+        provider=result.provider, audio_seconds=audio_seconds,
+    )
+```
+
+### `apps/flows/src/files/audio_input.py` (auto-STT входящих в чат/A2A/embed)
+
+```python
+from core.clients.voice_resolver import get_stt_client
+
+stt = await get_stt_client(company_id=company_id)
+text = (
+    await stt.transcribe_audio(
+        audio_bytes=audio_bytes,
+        file_name=file_name,
+        mime_type=mime,
+        language=language,
+    )
+).text
+```
+
+### `apps/flows/src/eval/platform_services.py` (tools для llm_node/code)
+
+```python
+async def transcribe_audio(file_id: str, *, language: str | None = None,
+                           provider: str | None = None,
+                           model: str | None = None) -> str:
+    override = SpeechOverride(provider=provider, model=model, language=language)
+    stt = await get_stt_client(company_id=ctx.company.company_id, override=override)
+    ...
+```
+
+### `apps/sync/.../speech_to_chat_workflow.py`
+
+```python
+stt = await get_stt_client(company_id=company_id)
+result = await stt.transcribe_audio(...)
+```
+
+## Управление per-company override (UI/API)
+
+REST: `apps/frontend/api/company_voice_providers.py`:
+
+| Метод | Путь | Доступ |
+|---|---|---|
+| `GET` | `/frontend/api/voice-providers/catalog` | любой авторизованный пользователь |
+| `GET` | `/frontend/api/companies/{company_id}/voice-providers` | любой member компании |
+| `PUT` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | `owner` / `admin` |
+| `DELETE` | `/frontend/api/companies/{company_id}/voice-providers/{kind}` | `owner` / `admin` |
+
+После любого `PUT`/`DELETE` сервер обязан вызвать
+`invalidate_company_overrides_cache(company_id)` — иначе in-process кэш
+других подов (и текущего) останется со старым значением до истечения TTL.
+
+UI-страница: `apps/frontend/ui/pages/company-voice-providers/company-voice-providers-page.js`
+(маршрут `company-voice-providers`, пункт сайдбара
+`console_sidebar.voice_providers`, фабрики
+`frontend/company_voice_providers_*`), каталог через `frontend/voice_providers_catalog_load`. i18n: секция `company_voice_providers_page`
+в `core/i18n/translations/{ru,en}/frontend.json`.
+
+## Тестирование
+
+- Реальная инфраструктура (Postgres, Redis, MinIO) через стандартные
+  fixtures `tests/conftest.py`. Никаких mocks/monkeypatching кроме
+  `MockLLM` и `httpx_mock` для внешних HTTP-провайдеров.
+- Тяжёлые модели (Silero, GigaAM) — session-scoped fixture в
+  `tests/provider_litserve/conftest.py`; для clients тестов внешних
+  провайдеров — `httpx_mock`.
+- `pytest.mark.timeout(15)` на каждый файл тестов клиентов.
+- `unique_id` — для `company_id` / `user_id` / `file_id` в каждом тесте.
+
+## Запреты
+
+- `LitserveSTTClient(...)` / `CloudRuSTTClient(...)` / `LitserveTTSClient(...)` /
+  `CloudRuTTSClient(...)` / `YandexSTTClient(...)` / `SberSTTClient(...)` /
+  `LitserveVADClient(...)` / `LocalSileroVADClient(...)` /
+  `SileroVADProvider(...)` / `KokoroLocalTTSProvider(...)` в любом файле
+  вне `core/clients/**` — fail в CI.
+- `voice_resolver.get_*_client()` без `company_id` — fail на старте
+  (`ValueError`).
+- Глобальный/per-process `SpeechOverride` (хранение в singleton, env-var,
+  модульной переменной) — запрещён.
+- Произвольная композиция backend-конфигов в коде сервиса
+  (`CloudRuSTTConfig(api_key="hardcoded")`) — запрещена. Только через
+  `settings.voice.<kind>.<provider>` или per-company запись в БД.
+- Введение «своего» вместо `voice_resolver`: прямой вызов
+  `STTClientFactory.create_for_voice` / `TTSClientFactory.create_for_voice` /
+  `VADClientFactory.create_for_voice` вне `core/clients/voice_resolver.py` и
+  модулей реализации клиентов в `core/clients/**` — запрещено (CI).
+
+## См. также
+
+- `voice.mdc` — `apps/voice` (real-time pipeline, batch transcribe, billing).
+- `architecture.mdc` — REST-зеркало команд, DI ContainerDep.
+- `eval.mdc` — tools `transcribe_audio` / `synthesize_speech` в namespace
+  inline-кода.
+- `infrastructure.mdc` — `provider-litserve`, GPU node, observability.
+- `billing.mdc` — категории `stt:`, `tts:`, `vad:` и `record_usage`.

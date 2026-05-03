@@ -39,7 +39,11 @@ from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from core.context import set_current_channel
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, settings
 from apps.flows.src.evaluation.service import EvaluationService
-from apps.flows.src.files import extract_incoming_a2a_files, format_a2a_files_content
+from apps.flows.src.files import (
+    extract_incoming_a2a_files,
+    format_a2a_files_content,
+    transcribe_incoming_audio_files,
+)
 from core.logging import get_logger
 from apps.flows.src.services.push_notifications import dict_to_config
 from apps.flows.src.streaming import Emitter
@@ -345,12 +349,37 @@ class A2AChannel(BaseChannel):
 
         return files_data, format_a2a_files_content(files_data)
 
+    async def _transcribe_incoming_audio(
+        self, files_data: List[Dict[str, Any]]
+    ) -> str:
+        """
+        Авто-STT для входящих audio-вложений (`audio/*` по mime/расширению).
+
+        Единая точка для A2A SDK/CLI, embed-chat и нашего чата: все они идут
+        через `_persist_incoming_a2a_files`, поэтому транскрипция делается
+        один раз тут. Провайдер STT и модель резолвит `voice_resolver`
+        (override → company → deployment-default).
+        """
+        if not self.context or not self.context.active_company:
+            raise ValueError(
+                "Авто-STT входящих audio-вложений требует active_company в контексте запроса"
+            )
+        return await transcribe_incoming_audio_files(
+            container=get_container(),
+            files_data=files_data,
+            company_id=self.context.active_company.company_id,
+        )
+
     async def _prepare_a2a_params(self, params: MessageSendParams):
         """Подготовка параметров специфичных для A2A."""
         message = params.message
         content = get_message_text(message)
 
         files_data, files_content_suffix = await self._persist_incoming_a2a_files(message)
+        if files_data:
+            audio_transcript_suffix = await self._transcribe_incoming_audio(files_data)
+            if audio_transcript_suffix:
+                content += audio_transcript_suffix
         if files_content_suffix:
             content += files_content_suffix
 

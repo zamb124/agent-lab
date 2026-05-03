@@ -10,6 +10,17 @@ import tempfile
 from pathlib import Path
 
 
+async def probe_audio_duration_seconds_from_upload(*, data: bytes, file_name: str) -> float:
+    """Длительность контейнерного аудио в секундах (ffprobe); Zero-Guess при ошибке — исключение."""
+    raw_name = file_name.strip()
+    if raw_name == "":
+        raise ValueError("file_name для ffprobe не может быть пустым.")
+    suffix = Path(raw_name).suffix
+    effective_suffix = suffix if suffix != "" else ".bin"
+    ms = await probe_audio_duration_ms_from_bytes(data, effective_suffix)
+    return ms / 1000.0
+
+
 def _parse_duration_from_json(raw: str) -> float:
     """Извлекает duration из JSON-вывода ffprobe (format и stream уровни).
 

@@ -86,7 +86,7 @@ portainer (community-аддон microk8s, `bootstrap-master.sh`).
 | livekit + livekit-egress | Deployment | master (hostNetwork) | `livekit.nodeName` / `livekitEgress.nodeName` | — | WebRTC сигналинг + egress; при смене ноды → `rebind-public-node.sh` |
 | coturn | DaemonSet | master (hostNetwork) | `coturn.nodeName` | — | TURN-сервер для WebRTC; при смене → `rebind-public-node.sh` |
 | onlyoffice | Deployment | master | `onlyoffice.nodeName` | — | OnlyOffice DocumentServer (CE) |
-| provider-litserve | Deployment | **gpu-worker** | `litserve.nodeName` | 50Gi (model cache) | Эмбеддинги и rerank; при `nodeName` в `gpuNodeNames` → GPU resource + toleration |
+| provider-litserve | Deployment | **gpu-worker** | `litserve.nodeName` | 100Gi (`litserve.modelCacheSize`) | Эмбеддинги, rerank **и audio** (STT GigaAM, TTS Kokoro, VAD Silero) — OpenAI-совместимый HTTP `/v1/audio/transcriptions`/`speech`/`vad`; при `nodeName` в `gpuNodeNames` → GPU resource + toleration |
 | nvidia-device-plugin | DaemonSet | gpu-worker | — (DaemonSet, label `accelerator=nvidia-gpu`) | — | NVIDIA k8s-device-plugin v0.19.1 — публикует `nvidia.com/gpu` в Allocatable |
 | portainer | Deployment (community-аддон) | master | — (вне Helm-чарта) | — | UI кластера на NodePort `30777` (HTTP) / `30779` (HTTPS) |
 | 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
@@ -123,6 +123,9 @@ kubectl logs -n platform deployment/<svc> -f --tail=200 [-c <container>]
 kubectl exec -n platform postgres-0 -- psql -U platform_user -l
 kubectl exec -n platform redis-0 -- redis-cli info
 kubectl exec -n platform deployment/provider-litserve -- nvidia-smi
+# Audio эндпоинты provider-litserve (in-cluster, без выхода через ingress)
+kubectl exec -n platform deployment/provider-litserve -- \
+  wget -qO- http://127.0.0.1:8014/v1/models | head -c 400
 kubectl get certificate -n platform
 kubectl describe certificate platform-tls -n platform
 kubectl get events -n platform --sort-by='.lastTimestamp' | tail -30
@@ -204,6 +207,45 @@ helm rollback agent-lab <REV> -n platform
 2. Если standalone — отдельный `PersistentVolumeClaim` в подходящем templates каталоге.
 3. `storageClassName: {{ .Values.storageClassName }}` (microk8s-hostpath).
 4. PR + deploy. `kubectl get pvc -n platform` → Bound.
+
+### Voice / speech (STT/TTS/VAD): диагностика
+
+См. также `.cursor/rules/voice.mdc` и `.cursor/rules/speech_providers.mdc`.
+
+1. Канон выбора провайдера в кластере: ENV `VOICE__STT__/VOICE__TTS__/VOICE__VAD__*`
+   (Pydantic `settings.voice.{stt,tts,vad}.*`) — это **только** deployment-default.
+   Per-company override живёт в БД таблице `company_voice_providers`, per-call —
+   в `SpeechOverride` (request scope). Прямая правка ENV/секрета **не отменяет**
+   per-company запись; смотри сначала её.
+2. `provider-litserve` (порт 8014) обслуживает `/v1/audio/transcriptions`,
+   `/v1/audio/speech`, `/v1/audio/vad` для backend `litserve`. Проверка из
+   master:
+   ```bash
+   POD=$(kubectl get pod -n platform -l app=provider-litserve -o jsonpath='{.items[0].metadata.name}')
+   kubectl exec -n platform "$POD" -- wget -qO- http://127.0.0.1:8014/v1/models | head -c 400
+   kubectl logs -n platform "$POD" --tail=200
+   ```
+3. Симптом «нет звука у пользователя» / «ошибка распознавания»:
+   - `kubectl logs -n platform deployment/voice --tail=500 | rg 'voice_resolver|stt|tts|vad'`;
+   - найти `request_id` в логах → дотащить до Loki / Grafana по сквозному `request_id`.
+   - проверить, нет ли в БД per-company override на «битого» провайдера:
+     ```bash
+     kubectl exec -n platform postgres-0 -- \
+       psql -U platform_user -d agent_shared -c \
+         "SELECT company_id, kind, provider, model, updated_at FROM company_voice_providers WHERE company_id='<id>';"
+     ```
+4. Yandex/Sber секреты не подъехали: `kubectl get secret platform-secrets -n platform -o jsonpath='{.data.stt-yandex-api-key}' | base64 -d | head -c 5`
+   (если пусто — проверь GitHub Secret `VOICE__STT__YANDEX__API_KEY`,
+   `helm_platform_secrets_json.sh`, после `make k8s-secrets-sync` пересоздай
+   под voice/flows: `kubectl rollout restart deploy/voice deploy/flows -n platform`).
+5. `cluster-health.sh` секция «Provider Litserve (audio)» проверяет наличие
+   эндпоинтов и доступность пода — должна быть `[OK]` после деплоя.
+6. GPU-ноду рестартили — проверь `kubectl exec deployment/provider-litserve -- nvidia-smi`
+   (драйвер) и cold-start модели (логи `gigaam-v3-rnnt-ru` / `kokoro-82m-ru` /
+   `silero-vad-v5` загружаются один раз на старт пода).
+7. Для co-location со `voice` под `provider-litserve` ходит на `gpu-worker`
+   (`values.yaml: voice.nodeName=gpu-worker`); если voice уехал на master —
+   увидишь рост latency real-time-сессий.
 
 ### Расследование инцидента
 

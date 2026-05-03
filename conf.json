@@ -82,6 +82,28 @@
         "egress_composite": 0.05,
         "egress_segmented": 0.02,
         "*": 0.0
+      },
+      "stt": {
+        "litserve": 0.0,
+        "cloud_ru": 0.012,
+        "yandex": 0.018,
+        "sber": 0.018,
+        "mock": 0.0,
+        "*": 0.012
+      },
+      "tts": {
+        "litserve": 0.0,
+        "cloud_ru": 0.0001,
+        "yandex": 0.00045,
+        "sber": 0.00045,
+        "mock": 0.0,
+        "*": 0.0001
+      },
+      "vad": {
+        "litserve": 0.0,
+        "silero_local": 0.0,
+        "mock": 0.0,
+        "*": 0.0
       }
     },
     "span_settlement": {
@@ -242,23 +264,30 @@
     "proxies": [],
     "connect_timeout": 10.0
   },
-  "stt": {
-    "provider": "cloud_ru",
-    "cloud_ru": {
-      "enabled": true,
-      "api_key": "",
-      "base_url": "https://foundation-models.api.cloud.ru/v1/audio/transcriptions",
-      "model": "openai/whisper-large-v3",
-      "response_format": "text",
-      "temperature": 0.5,
-      "language": "ru",
-      "timeout": 120.0,
-      "max_upload_bytes": 25165824,
-      "chunk_duration_seconds": 300,
-      "chunk_bitrate_kbps": 32,
-      "chunk_sample_rate_hz": 16000,
-      "chunk_channels": 1
+  "voice": {
+    "stt": {
+      "provider": "cloud_ru",
+      "default_language": "ru",
+      "mock_transcript_text": "Тестовая транскрипция",
+      "cloud_ru": {
+        "enabled": true,
+        "api_key": "",
+        "base_url": "https://foundation-models.api.cloud.ru/v1/audio/transcriptions",
+        "model": "openai/whisper-large-v3",
+        "response_format": "text",
+        "temperature": 0.5,
+        "language": "ru",
+        "timeout": 120.0
+      }
     }
+  },
+  "media_transcriber": {
+    "chunk_max_upload_bytes": 25165824,
+    "chunk_duration_seconds": 300,
+    "chunk_bitrate_kbps": 32,
+    "chunk_sample_rate_hz": 16000,
+    "chunk_channels": 1,
+    "batch_download_timeout_s": 120.0
   },
   "nano_banana": {
     "enabled": true,

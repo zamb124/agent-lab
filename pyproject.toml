@@ -137,6 +137,9 @@ rag = [
     "sentence-transformers>=5.4.0",
     "tiktoken>=0.9.0",
     "transformers<5",
+    "kokoro>=0.9.4",
+    "silero-vad>=5.1.2",
+    "soundfile>=0.13.0",
 ]
 
 sync = [

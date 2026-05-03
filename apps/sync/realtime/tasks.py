@@ -708,9 +708,9 @@ async def transcribe_audio_message_core(
     if redis_url is None or redis_url.strip() == "":
         raise ValueError("database.redis_url обязателен для sync_transcribe_audio_message_task.")
 
-    timeout_seconds = settings.stt.cloud_ru.timeout
+    timeout_seconds = settings.media_transcriber.batch_download_timeout_s
     if timeout_seconds <= 0:
-        raise ValueError("stt.cloud_ru.timeout должен быть больше 0.")
+        raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
 
     sync_base_url = settings.server.get_service_url("sync")
     if not isinstance(sync_base_url, str) or sync_base_url == "":
@@ -747,7 +747,6 @@ async def transcribe_audio_message_core(
                     trace_attributes.ATTR_CHANNEL_ID: channel_id,
                 },
             ) as stt_span:
-                stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, settings.stt.provider)
                 async with get_httpx_client(timeout=timeout_seconds) as client:
                     response = await client.get(file_download_url, headers=auth_headers)
                 response.raise_for_status()
@@ -756,13 +755,15 @@ async def transcribe_audio_message_core(
                 audio_len = len(response.content)
                 stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, audio_len)
 
-                transcript_text = await transcribe_audio_with_chunking(
+                transcript_text, used_provider = await transcribe_audio_with_chunking(
                     job_id=message_id,
+                    company_id=company_id,
                     audio_bytes=response.content,
                     file_name=audio_info.filename,
                     mime_type=audio_info.mime_type,
-                    language=settings.stt.cloud_ru.language,
+                    language=settings.voice.stt.default_language,
                 )
+                stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, used_provider)
                 if transcript_text.strip() == "":
                     raise ValueError("STT вернул пустую транскрипцию аудиосообщения.")
 
@@ -880,9 +881,9 @@ async def transcribe_video_message_core(
         raise ValueError("file/video.filename обязателен.")
 
     settings = get_settings()
-    timeout_seconds = settings.stt.cloud_ru.timeout
+    timeout_seconds = settings.media_transcriber.batch_download_timeout_s
     if timeout_seconds <= 0:
-        raise ValueError("stt.cloud_ru.timeout должен быть больше 0.")
+        raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
 
     sync_base_url = settings.server.get_service_url("sync")
     if not isinstance(sync_base_url, str) or sync_base_url == "":
@@ -906,7 +907,6 @@ async def transcribe_video_message_core(
                 trace_attributes.ATTR_CHANNEL_ID: channel_id,
             },
         ) as video_stt_span:
-            video_stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, settings.stt.provider)
             async with get_httpx_client(timeout=timeout_seconds) as client:
                 response = await client.get(file_download_url, headers=auth_headers)
             response.raise_for_status()
@@ -918,13 +918,16 @@ async def transcribe_video_message_core(
                 video_bytes=response.content,
                 base_name=video_info.filename,
             )
-            transcript_text = await transcribe_audio_with_chunking(
+
+            transcript_text, used_provider = await transcribe_audio_with_chunking(
                 job_id=message_id,
+                company_id=company_id,
                 audio_bytes=audio_bytes,
                 file_name=audio_name,
                 mime_type="audio/mpeg",
-                language=settings.stt.cloud_ru.language,
+                language=settings.voice.stt.default_language,
             )
+            video_stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, used_provider)
             if transcript_text.strip() == "":
                 raise ValueError("STT вернул пустую транскрипцию видеосообщения.")
 

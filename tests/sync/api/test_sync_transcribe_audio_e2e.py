@@ -4,7 +4,7 @@
 где проверен авто-путь по флагу канала. Здесь — явный POST .../transcribe
 и WS-команда `sync/messages/transcribe_audio_requested`.
 
-Без моков: реальный sync_service, sync_worker, mock STT (`STT__PROVIDER=mock`)
+Без моков: реальный sync_service, sync_worker, mock STT (`VOICE__STT__PROVIDER=mock`)
 через env. Push-фреймы валидируются у user2 через WebSocket.
 """
 

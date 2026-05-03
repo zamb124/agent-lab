@@ -58,8 +58,11 @@ os.environ["SERVER__CRM_SERVICE_URL"] = "http://localhost:9003"
 os.environ["SERVER__FRONTEND_SERVICE_URL"] = "http://localhost:9004"
 os.environ["SERVER__SYNC_SERVICE_URL"] = "http://localhost:9005"
 os.environ.setdefault("SERVER__VOICE_SERVICE_URL", "http://localhost:9015")
-os.environ.setdefault("STT__PROVIDER", "mock")
-os.environ.setdefault("STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
+os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
+os.environ.setdefault(
+    "VOICE__STT__MOCK_TRANSCRIPT_TEXT",
+    "Тестовая транскрипция sync worker",
+)
 # S3: дефолтный alias test-bucket и endpoint тестового MinIO (docker-compose-test: 19002).
 # В conf.json у test-bucket указан 19001 (dev); без override тесты создавали бакет на 19002, а приложение — на 19001.
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")

@@ -108,7 +108,7 @@ async def test_mock_tts_provider_synthesizes_bytes(voice_app) -> None:
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_mock_stt_provider_transcribes(voice_app) -> None:
-    """Mock STT провайдер в контейнере возвращает текст из STT__MOCK_TRANSCRIPT_TEXT (тестовый env)."""
+    """Mock STT провайдер в контейнере возвращает текст из VOICE__STT__MOCK_TRANSCRIPT_TEXT (тестовый env)."""
     from apps.voice.container import get_voice_container
 
     container = get_voice_container()
@@ -119,7 +119,7 @@ async def test_mock_stt_provider_transcribes(voice_app) -> None:
 
     assert result is not None
     assert result.text == os.environ.get(
-        "STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция"
+        "VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция"
     )
 
 

@@ -183,9 +183,8 @@ class LokiHandler(logging.Handler):
             resp.read()
             conn.close()
         except (OSError, http.client.HTTPException) as exc:
-            print(
-                f"[LokiHandler] push failed ({len(body)} bytes): {exc}",
-                file=sys.stderr,
+            sys.stderr.write(
+                f"[LokiHandler] push failed ({len(body)} bytes): {exc}\n"
             )
 
     def close(self) -> None:

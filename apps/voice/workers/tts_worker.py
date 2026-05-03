@@ -16,13 +16,17 @@ async def run_tts_worker(
     tts_provider,
     chunker: VoiceChunker | None = None,
 ) -> None:
-    """Пайплайн: Текст → чанкинг → синтез → audio_out_queue."""
+    """Пайплайн: synthesis_queue (готовые куски от LLM bridge) → синтез → audio_out_queue.
+
+    Чанкер используется только если в очередь попал крупный батч —
+    он добивает текст до коротких частей на уровне предложений.
+    """
     if chunker is None:
         chunker = VoiceChunker()
 
     while session.active:
         try:
-            text_batch = await session.text_in_queue.get()
+            text_batch = await session.synthesis_queue.get()
         except asyncio.CancelledError:
             raise
 

@@ -275,7 +275,11 @@ class WorkerConfig(BaseModel):
 
 
 class CloudRuSTTConfig(BaseModel):
-    """Конфигурация cloud.ru STT (Whisper API)."""
+    """Конфигурация cloud.ru STT (Whisper API).
+
+    Лимиты ffmpeg-чанков для batch-транскрипции задаются в
+    `MediaTranscriberConfig`, не здесь.
+    """
 
     enabled: bool = False
     api_key: Optional[str] = None
@@ -285,19 +289,205 @@ class CloudRuSTTConfig(BaseModel):
     temperature: float = 0.5
     language: str = "ru"
     timeout: float = 120.0
-    max_upload_bytes: int = 24 * 1024 * 1024
-    chunk_duration_seconds: int = 300
-    chunk_bitrate_kbps: int = 32
-    chunk_sample_rate_hz: int = 16000
-    chunk_channels: int = 1
 
 
-class STTConfig(BaseModel):
-    """Конфигурация STT провайдеров."""
+# ---------------------------------------------------------------------------
+# Унифицированные настройки провайдеров речи (STT/TTS/VAD).
+#
+# Один источник правды для voice/flows/eval/sync/CRM. Доступен в любом
+# сервисе через `get_settings().voice`. Конкретный клиент достаётся
+# через `core.clients.voice_resolver` с tier-резолвом
+# (override -> company -> deployment-default).
+# ---------------------------------------------------------------------------
 
-    provider: str = "cloud_ru"
+
+class LitserveSpeechBackendConfig(BaseModel):
+    """HTTP-настройки backend `provider-litserve` для STT/TTS/VAD."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    base_url: str = Field(
+        default="http://provider-litserve:8014",
+        description=(
+            "Базовый URL provider-litserve (без trailing slash). "
+            "Используется для /v1/audio/transcriptions, /v1/audio/speech, /v1/audio/vad."
+        ),
+    )
+    timeout_s: float = Field(default=60.0, gt=0.0)
+
+
+class CloudRuTTSBackendConfig(BaseModel):
+    """Cloud.ru TTS backend (OpenAI-совместимый /v1/audio/speech)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    api_key: Optional[str] = None
+    base_url: str = "https://foundation-models.api.cloud.ru/v1/audio/speech"
+    model: str = "openai/tts-1"
+    voice: str = "alloy"
+    response_format: Literal["wav", "mp3", "ogg", "pcm"] = "mp3"
+    sample_rate: int = Field(default=24000, gt=0)
+    timeout_s: float = Field(default=120.0, gt=0.0)
+
+
+class YandexSTTBackendConfig(BaseModel):
+    """Yandex SpeechKit STT (REST). Stub до получения ключей."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    api_key: Optional[str] = None
+    folder_id: Optional[str] = None
+    base_url: str = "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize"
+    model: str = "general"
+    timeout_s: float = Field(default=120.0, gt=0.0)
+
+
+class YandexTTSBackendConfig(BaseModel):
+    """Yandex SpeechKit TTS (REST). Stub до получения ключей."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    api_key: Optional[str] = None
+    folder_id: Optional[str] = None
+    base_url: str = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
+    voice: str = "ermil"
+    response_format: Literal["wav", "mp3", "ogg", "pcm", "lpcm"] = "lpcm"
+    sample_rate: int = Field(default=48000, gt=0)
+    timeout_s: float = Field(default=60.0, gt=0.0)
+
+
+class SberSTTBackendConfig(BaseModel):
+    """Sber SmartSpeech STT (REST). Stub до получения ключей."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    auth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    base_url: str = "https://smartspeech.sber.ru/rest/v1/speech:recognize"
+    scope: str = "SALUTE_SPEECH_PERS"
+    model: str = "general"
+    timeout_s: float = Field(default=120.0, gt=0.0)
+
+
+class SberTTSBackendConfig(BaseModel):
+    """Sber SmartSpeech TTS (REST). Stub до получения ключей."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    auth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    base_url: str = "https://smartspeech.sber.ru/rest/v1/text:synthesize"
+    scope: str = "SALUTE_SPEECH_PERS"
+    voice: str = "May_24000"
+    response_format: Literal["wav", "mp3", "ogg", "pcm"] = "wav"
+    sample_rate: int = Field(default=24000, gt=0)
+    timeout_s: float = Field(default=60.0, gt=0.0)
+
+
+class LocalSileroVADBackendConfig(BaseModel):
+    """Локальный Silero VAD (in-process, без HTTP к provider-litserve)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    hf_model_id: str = "snakers4/silero-vad"
+    sample_rate: int = Field(default=16000, gt=0)
+    threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    min_speech_ms: int = Field(default=300, ge=0)
+    min_silence_ms: int = Field(default=500, ge=0)
+
+
+class STTProvidersConfig(BaseModel):
+    """Унифицированный конфиг STT для voice/flows/eval/sync.
+
+    Поле `provider` — deployment-default (per-process). Per-company
+    перекрывается записью в `company_voice_providers`, per-call — через
+    `SpeechOverride`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
+    default_model: Optional[str] = Field(
+        default=None,
+        description=(
+            "OpenAI-совместимый id модели по умолчанию для выбранного "
+            "провайдера (например `gigaam-v3` для litserve)."
+        ),
+    )
+    default_language: str = "ru"
     mock_transcript_text: str = "Тестовая транскрипция"
+    litserve: LitserveSpeechBackendConfig = Field(
+        default_factory=LitserveSpeechBackendConfig
+    )
     cloud_ru: CloudRuSTTConfig = Field(default_factory=CloudRuSTTConfig)
+    yandex: YandexSTTBackendConfig = Field(default_factory=YandexSTTBackendConfig)
+    sber: SberSTTBackendConfig = Field(default_factory=SberSTTBackendConfig)
+
+
+class TTSProvidersConfig(BaseModel):
+    """Унифицированный конфиг TTS для voice/flows/eval."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
+    default_model: Optional[str] = Field(
+        default=None,
+        description="OpenAI-совместимый id модели по умолчанию (например `kokoro-82m`).",
+    )
+    default_voice: Optional[str] = None
+    default_response_format: Literal["wav", "mp3", "ogg", "pcm"] = "wav"
+    default_sample_rate: int = Field(default=24000, gt=0)
+    chunk_max_chars: int = Field(default=100, ge=1)
+    lookahead_tokens: int = Field(default=20, ge=0)
+    litserve: LitserveSpeechBackendConfig = Field(
+        default_factory=LitserveSpeechBackendConfig
+    )
+    cloud_ru: CloudRuTTSBackendConfig = Field(default_factory=CloudRuTTSBackendConfig)
+    yandex: YandexTTSBackendConfig = Field(default_factory=YandexTTSBackendConfig)
+    sber: SberTTSBackendConfig = Field(default_factory=SberTTSBackendConfig)
+
+
+class VADProvidersConfig(BaseModel):
+    """Унифицированный конфиг VAD для voice/flows/eval."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["litserve", "silero_local", "mock"] = "silero_local"
+    default_model: Optional[str] = None
+    default_sample_rate: int = Field(default=16000, gt=0)
+    default_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    echo_compensation: float = Field(default=0.2, ge=0.0, le=1.0)
+    litserve: LitserveSpeechBackendConfig = Field(
+        default_factory=LitserveSpeechBackendConfig
+    )
+    silero_local: LocalSileroVADBackendConfig = Field(
+        default_factory=LocalSileroVADBackendConfig
+    )
+
+
+class SpeechProvidersConfig(BaseModel):
+    """Единый конфиг провайдеров речи (STT/TTS/VAD).
+
+    Доступен в любом сервисе через `get_settings().voice` — это
+    deployment-default. Конкретный клиент достаётся через
+    `core.clients.voice_resolver.get_stt_client / get_tts_client /
+    get_vad_client(*, company_id, override)`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stt: STTProvidersConfig = Field(default_factory=STTProvidersConfig)
+    tts: TTSProvidersConfig = Field(default_factory=TTSProvidersConfig)
+    vad: VADProvidersConfig = Field(default_factory=VADProvidersConfig)
 
 
 class TelegramConfig(BaseModel):
@@ -532,6 +722,85 @@ class ProviderLitserveApiConfig(BaseModel):
     base_url: Optional[str] = None
 
 
+class ProviderLitserveSTTModelEntry(BaseModel):
+    """Описание одной STT-модели провайдера (api id ↔ HF id + параметры весов)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_model_id: str = Field(
+        description="OpenAI-совместимый id модели (используется в payload поля model).",
+    )
+    hf_model_id: str = Field(
+        description="HuggingFace repo id для скачивания весов.",
+    )
+    revision: str | None = Field(
+        default=None,
+        description="HF-ветка/тэг (например, e2e_rnnt для GigaAM v3).",
+    )
+    backend: Literal["gigaam", "huggingface_ctc", "whisper"] = Field(
+        default="gigaam",
+        description=(
+            "Выбор runtime-адаптера для модели: gigaam (AutoModel + trust_remote_code + "
+            ".transcribe()), huggingface_ctc (AutoProcessor + AutoModelForCTC), "
+            "whisper (AutoModelForSpeechSeq2Seq pipeline)."
+        ),
+    )
+
+
+class ProviderLitserveTTSModelEntry(BaseModel):
+    """Описание одной TTS-модели (api id ↔ HF id + параметры синтеза по умолчанию)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_model_id: str
+    hf_model_id: str
+    revision: str | None = None
+    backend: Literal["kokoro"] = Field(
+        default="kokoro",
+        description="Runtime-адаптер для TTS-модели (kokoro: KPipeline). Расширяется по мере добавления моделей.",
+    )
+    lang: str | None = Field(
+        default=None,
+        description="Язык pipeline (например, ru для русского Kokoro).",
+    )
+    voice: str | None = Field(
+        default=None,
+        description="Имя голоса по умолчанию для модели.",
+    )
+    sample_rate: int | None = Field(
+        default=None,
+        ge=8000,
+        le=48000,
+        description="Sample rate выходного PCM модели.",
+    )
+
+
+class ProviderLitserveVADModelEntry(BaseModel):
+    """Описание одной VAD-модели (api id ↔ HF id + параметры детекции)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_model_id: str
+    hf_model_id: str
+    revision: str | None = None
+    backend: Literal["silero"] = Field(
+        default="silero",
+        description="Runtime-адаптер VAD (silero). Расширяется по мере добавления моделей.",
+    )
+    sample_rate: int | None = Field(
+        default=None,
+        ge=8000,
+        le=48000,
+        description="Ожидаемый sample rate входного PCM.",
+    )
+    threshold: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Порог уверенности для определения речи.",
+    )
+
+
 class ProviderLitserveInfraConfig(BaseModel):
     """
     Деплой локального OpenAI-совместимого LitServe: один HTTP-порт, воркеры эмбеддингов и реранка.
@@ -574,6 +843,67 @@ class ProviderLitserveInfraConfig(BaseModel):
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)
     llm_model_ids: list[str] = Field(default_factory=list)
+
+    stt_models: list["ProviderLitserveSTTModelEntry"] = Field(
+        default_factory=lambda: [
+            ProviderLitserveSTTModelEntry(
+                api_model_id="gigaam-v3-rnnt",
+                hf_model_id="ai-sage/GigaAM-v3",
+                revision="e2e_rnnt",
+            ),
+        ],
+        description=(
+            "Полный список STT-моделей провайдера. Каждый элемент описывает одну модель "
+            "(api id для /v1/audio/transcriptions, hf id для весов, опциональная revision). "
+            "Дефолт указывается в stt_default_api_model_id. Расширяется из UI /litserve/models."
+        ),
+    )
+    stt_default_api_model_id: str = Field(
+        default="gigaam-v3-rnnt",
+        description="api id STT-модели по умолчанию (должен присутствовать в stt_models).",
+    )
+
+    tts_models: list["ProviderLitserveTTSModelEntry"] = Field(
+        default_factory=lambda: [
+            ProviderLitserveTTSModelEntry(
+                api_model_id="kokoro-82m",
+                hf_model_id="hexgrad/Kokoro-82M",
+                lang="ru",
+                voice="af",
+                sample_rate=24000,
+            ),
+        ],
+        description=(
+            "Полный список TTS-моделей провайдера. Каждый элемент описывает одну модель "
+            "(api id для /v1/audio/speech, hf id, lang, voice, sample_rate). "
+            "Дефолт указывается в tts_default_api_model_id. Расширяется из UI /litserve/models."
+        ),
+    )
+    tts_default_api_model_id: str = Field(
+        default="kokoro-82m",
+        description="api id TTS-модели по умолчанию (должен присутствовать в tts_models).",
+    )
+
+    vad_models: list["ProviderLitserveVADModelEntry"] = Field(
+        default_factory=lambda: [
+            ProviderLitserveVADModelEntry(
+                api_model_id="silero-vad",
+                hf_model_id="snakers4/silero-vad",
+                sample_rate=16000,
+                threshold=0.5,
+            ),
+        ],
+        description=(
+            "Полный список VAD-моделей провайдера. Каждый элемент описывает одну модель "
+            "(api id для /v1/audio/vad, hf id, sample_rate, threshold). "
+            "Дефолт указывается в vad_default_api_model_id. Расширяется из UI /litserve/models."
+        ),
+    )
+    vad_default_api_model_id: str = Field(
+        default="silero-vad",
+        description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
+    )
+
     hf_token: str | None = None
     sqlite_path: str = "./data/provider_litserve/registry.db"
 
@@ -1063,34 +1393,6 @@ class BillingConfig(BaseModel):
     )
 
 
-class VoiceSTTSettings(BaseModel):
-    """Настройки STT-провайдера voice сервиса."""
-
-    provider: str = "cloud_ru"
-    mock_transcript_text: str = "Тестовая транскрипция"
-
-
-class VoiceTTSSettings(BaseModel):
-    """Настройки TTS-провайдера voice сервиса."""
-
-    provider: str = "kokoro"
-    kokoro_sample_rate: int = 24000
-    kokoro_accelerator: str = "cpu"
-    chunk_max_chars: int = 100
-    lookahead_tokens: int = 20
-
-
-class VoiceVADSettings(BaseModel):
-    """Настройки VAD-провайдера voice сервиса."""
-
-    model: str = "silero"
-    sample_rate: int = 16000
-    threshold: float = 0.5
-    min_speech_ms: int = 300
-    min_silence_ms: int = 500
-    echo_compensation: float = 0.2
-
-
 class VoiceBargeInSettings(BaseModel):
     """Настройки механизма прерывания (barge-in)."""
 
@@ -1145,6 +1447,26 @@ class MediaTranscriberConfig(BaseModel):
     )
     default_language: Optional[str] = Field(
         default=None,
-        description="Язык по умолчанию для STT (None — из STT конфигурации).",
+        description=(
+            "Язык по умолчанию для STT (None — из `settings.voice.stt.default_language`)."
+        ),
     )
+    batch_download_timeout_s: float = Field(
+        default=120.0,
+        gt=0.0,
+        description="Таймаут HTTP при скачивании файла для Sync batch STT (сек).",
+    )
+    chunk_max_upload_bytes: int = Field(
+        default=24 * 1024 * 1024,
+        ge=1024,
+        description="Максимальный размер одного MP3-чанка для POST к STT.",
+    )
+    chunk_duration_seconds: int = Field(
+        default=300,
+        ge=1,
+        description="Целевая длительность сегмента ffmpeg segment (сек).",
+    )
+    chunk_bitrate_kbps: int = Field(default=32, ge=1)
+    chunk_sample_rate_hz: int = Field(default=16000, ge=1)
+    chunk_channels: int = Field(default=1, ge=1)
     youtube: YouTubeConfig = Field(default_factory=YouTubeConfig)

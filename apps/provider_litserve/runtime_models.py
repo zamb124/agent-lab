@@ -10,46 +10,53 @@ from core.config.models import ProviderLitserveInfraConfig
 from apps.provider_litserve.model_registry import (
     build_embedding_api_pairs,
     build_rerank_api_pairs,
+    build_stt_api_pairs,
+    build_tts_api_pairs,
+    build_vad_api_pairs,
     list_ready_active_models,
 )
 
-ModelKind = Literal["llm", "embedding", "rerank"]
+ModelKind = Literal["llm", "embedding", "rerank", "stt", "tts", "vad"]
+
+_KINDS: tuple[ModelKind, ...] = ("llm", "embedding", "rerank", "stt", "tts", "vad")
 
 _catalog_lock = RLock()
-_catalog: dict[ModelKind, dict[str, str]] = {
-    "llm": {},
-    "embedding": {},
-    "rerank": {},
-}
+_catalog: dict[ModelKind, dict[str, str]] = {kind: {} for kind in _KINDS}
 _catalog_initialized = False
+
+
+def reset_runtime_catalog_for_tests() -> None:
+    """Очищает runtime-каталог и сбрасывает флаг инициализации.
+
+    Только для тестовой инфраструктуры (autouse-фикстура в
+    ``tests/provider_litserve/conftest.py``). В рантайме провайдера не
+    вызывается. Альтернатива моков/manкипатчей: позволяет тестам гарантировать
+    чистый старт без подмены приватных переменных модуля.
+    """
+    global _catalog_initialized
+    with _catalog_lock:
+        for kind in _KINDS:
+            _catalog[kind] = {}
+        _catalog_initialized = False
 
 
 def replace_runtime_catalog(models: list[dict[str, str]]) -> dict[str, int]:
     global _catalog_initialized
-    updated: dict[ModelKind, dict[str, str]] = {
-        "llm": {},
-        "embedding": {},
-        "rerank": {},
-    }
+    updated: dict[ModelKind, dict[str, str]] = {kind: {} for kind in _KINDS}
     for item in models:
         kind = str(item.get("kind", "")).strip()
         hf_model_id = str(item.get("hf_model_id", "")).strip()
         api_model_id = str(item.get("api_model_id", "")).strip()
-        if kind not in {"llm", "embedding", "rerank"}:
+        if kind not in _KINDS:
             continue
         if not hf_model_id or not api_model_id:
             continue
-        updated[kind][api_model_id] = hf_model_id
+        updated[kind][api_model_id] = hf_model_id  # type: ignore[index]
     with _catalog_lock:
-        _catalog["llm"] = updated["llm"]
-        _catalog["embedding"] = updated["embedding"]
-        _catalog["rerank"] = updated["rerank"]
+        for kind in _KINDS:
+            _catalog[kind] = updated[kind]
         _catalog_initialized = True
-    return {
-        "llm": len(updated["llm"]),
-        "embedding": len(updated["embedding"]),
-        "rerank": len(updated["rerank"]),
-    }
+    return {kind: len(updated[kind]) for kind in _KINDS}
 
 
 def reload_runtime_catalog_from_sqlite(cfg: ProviderLitserveInfraConfig) -> dict[str, int]:
@@ -90,6 +97,12 @@ def _default_api_to_hf(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> dic
         return build_embedding_api_pairs(cfg)
     if kind == "rerank":
         return build_rerank_api_pairs(cfg)
+    if kind == "stt":
+        return build_stt_api_pairs(cfg)
+    if kind == "tts":
+        return build_tts_api_pairs(cfg)
+    if kind == "vad":
+        return build_vad_api_pairs(cfg)
     return {}
 
 
@@ -135,7 +148,7 @@ def serialize_runtime_catalog() -> dict[str, Any]:
         return {
             "models": [
                 {"kind": kind, "api_model_id": api_model_id, "hf_model_id": hf_model_id}
-                for kind in ("llm", "embedding", "rerank")
+                for kind in _KINDS
                 for api_model_id, hf_model_id in _catalog[kind].items()
             ]
         }

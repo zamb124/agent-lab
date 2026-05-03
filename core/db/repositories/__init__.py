@@ -10,6 +10,10 @@ from core.db.repositories.variable_repository import VariableRepository, Variabl
 from core.db.repositories.usage_repository import UsageRepository
 from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
+from core.db.repositories.company_voice_provider_repository import (
+    CompanyVoiceProviderRepository,
+    VoiceKind,
+)
 
 __all__ = [
     "UserRepository",
@@ -23,4 +27,6 @@ __all__ = [
     "UsageRepository",
     "EmbedConfigRepository",
     "EmbedMappingRepository",
+    "CompanyVoiceProviderRepository",
+    "VoiceKind",
 ]

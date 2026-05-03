@@ -13,6 +13,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, PlainTextResponse, Response
 from apps.frontend.api.auth import router as auth_router
 from apps.frontend.api.companies import router as companies_router
+from apps.frontend.api.company_voice_providers import (
+    router as company_voice_providers_router,
+)
+from apps.frontend.api.voice_providers_catalog import (
+    router as voice_providers_catalog_router,
+)
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.public_site import router as public_site_router
@@ -188,6 +194,8 @@ app = create_service_app(
     pages_routers=[
         auth_router,
         companies_router,
+        company_voice_providers_router,
+        voice_providers_catalog_router,
         embed_configs_router,
         public_landing_agents_router,
         public_site_router,

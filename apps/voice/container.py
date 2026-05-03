@@ -1,11 +1,36 @@
-"""DI контейнер voice сервиса."""
+"""DI контейнер voice сервиса.
+
+Не держит singleton'ов клиентов речи — клиенты создаются per-session
+через `core.clients.voice_resolver` (tier-резолв
+override -> per-company -> deployment-default).
+
+Контейнер хранит только настройки и фабрики session-specific
+streaming-провайдеров (адаптеров над batch-клиентами).
+"""
 
 from __future__ import annotations
 
 from typing import Optional
 
+from apps.voice.providers.base import (
+    BaseSTTProvider,
+    BaseTTSProvider,
+    BaseVADProvider,
+)
+from apps.voice.providers.streaming_adapters import (
+    StreamingSTTProvider,
+    StreamingTTSProvider,
+    StreamingVADProvider,
+)
+from core.clients.speech_override import SpeechOverride
+from core.clients.voice_resolver import (
+    get_stt_client,
+    get_tts_client,
+    get_vad_client,
+)
 from core.container.base import BaseContainer, lazy
 from core.logging import get_logger
+
 
 logger = get_logger(__name__)
 
@@ -13,8 +38,9 @@ logger = get_logger(__name__)
 class VoiceContainer(BaseContainer):
     """DI-контейнер voice сервиса.
 
-    Провайдер STT/TTS/VAD выбирается по значению `voice.stt.provider` / `voice.tts.provider` /
-    `voice.vad.model` из конфига: для production — реальные, для тестов — mock.
+    `create_*_provider(*, company_id, override)` — единственный способ
+    получить streaming-провайдеры для одной voice сессии. Внутри они
+    дёргают `voice_resolver` и оборачивают batch-клиента в адаптер.
     """
 
     @lazy
@@ -23,44 +49,42 @@ class VoiceContainer(BaseContainer):
 
         return get_voice_settings()
 
-    @lazy
-    def vad_provider(self):
-        model = self.settings.vad.model
-        if model == "mock":
-            from apps.voice.providers.vad.mock import MockVADProvider
-
-            return MockVADProvider()
-        from apps.voice.providers.vad.silero import SileroVADProvider
-
-        return SileroVADProvider(
-            sample_rate=self.settings.vad.sample_rate,
-            threshold=self.settings.vad.threshold,
+    async def create_vad_provider(
+        self,
+        *,
+        company_id: str,
+        override: Optional[SpeechOverride] = None,
+    ) -> BaseVADProvider:
+        vad_client = await get_vad_client(company_id=company_id, override=override)
+        cfg = self.settings.voice.vad
+        return StreamingVADProvider(
+            vad_client=vad_client,
+            sample_rate=cfg.default_sample_rate,
+            threshold=cfg.default_threshold,
         )
 
-    @lazy
-    def stt_provider(self):
-        provider = self.settings.stt.provider
-        if provider == "mock":
-            from apps.voice.providers.stt.mock import MockSTTProvider
-
-            return MockSTTProvider(text=self.settings.stt.mock_transcript_text)
-        from apps.voice.providers.stt.cloud_ru import CloudRuStreamSTTProvider
-
-        return CloudRuStreamSTTProvider()
-
-    @lazy
-    def tts_provider(self):
-        provider = self.settings.tts.provider
-        if provider == "mock":
-            from apps.voice.providers.tts.mock import MockTTSProvider
-
-            return MockTTSProvider()
-        from apps.voice.providers.tts.kokoro_local import KokoroLocalTTSProvider
-
-        return KokoroLocalTTSProvider(
-            sample_rate=self.settings.tts.kokoro_sample_rate,
-            accelerator=self.settings.tts.kokoro_accelerator,
+    async def create_stt_provider(
+        self,
+        *,
+        company_id: str,
+        override: Optional[SpeechOverride] = None,
+    ) -> BaseSTTProvider:
+        stt_client = await get_stt_client(company_id=company_id, override=override)
+        cfg = self.settings.voice.stt
+        return StreamingSTTProvider(
+            stt_client=stt_client,
+            sample_rate=16000,
+            language=cfg.default_language,
         )
+
+    async def create_tts_provider(
+        self,
+        *,
+        company_id: str,
+        override: Optional[SpeechOverride] = None,
+    ) -> BaseTTSProvider:
+        tts_client = await get_tts_client(company_id=company_id, override=override)
+        return StreamingTTSProvider(tts_client=tts_client)
 
 
 _voice_container: Optional[VoiceContainer] = None

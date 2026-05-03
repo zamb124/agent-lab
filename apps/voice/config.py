@@ -1,4 +1,10 @@
-"""Конфигурация voice сервиса."""
+"""Конфигурация voice сервиса.
+
+`VoiceServiceSettings` наследует `BaseSettings` — отсюда же приходит
+`settings.voice: SpeechProvidersConfig` (deployment-default для STT/TTS/VAD).
+В этом классе остаются только voice-специфичные блоки `barge_in` и
+`queue` для real-time WS-сессии.
+"""
 
 from __future__ import annotations
 
@@ -8,19 +14,13 @@ from core.config import BaseSettings
 from core.config.models import (
     VoiceBargeInSettings,
     VoiceQueueSettings,
-    VoiceSTTSettings,
-    VoiceTTSSettings,
-    VoiceVADSettings,
 )
 from pydantic import Field
 
 
 class VoiceServiceSettings(BaseSettings):
-    """Настройки voice сервиса."""
+    """Настройки voice сервиса (real-time WS-сессии)."""
 
-    stt: VoiceSTTSettings = Field(default_factory=VoiceSTTSettings)
-    tts: VoiceTTSSettings = Field(default_factory=VoiceTTSSettings)
-    vad: VoiceVADSettings = Field(default_factory=VoiceVADSettings)
     barge_in: VoiceBargeInSettings = Field(default_factory=VoiceBargeInSettings)
     queue: VoiceQueueSettings = Field(default_factory=VoiceQueueSettings)
 

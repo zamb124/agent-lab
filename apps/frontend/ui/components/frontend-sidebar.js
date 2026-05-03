@@ -129,6 +129,7 @@ export class FrontendSidebar extends PlatformElement {
                     ${this._renderNavItem('dashboard', 'chart', t('console_sidebar.dashboard', 'Dashboard'), currentView)}
                     ${this._renderNavItem('team', 'user', t('console_sidebar.team', 'Team'), currentView)}
                     ${this._renderNavItem('api-keys', 'key', t('console_sidebar.api_keys', 'API keys'), currentView)}
+                    ${this._renderNavItem('company-voice-providers', 'microphone', t('console_sidebar.voice_providers', 'Voice providers'), currentView)}
                     ${this._renderNavItem('embed-configs', 'chat', t('console_sidebar.embed', 'Embed widgets'), currentView)}
                     ${this._renderNavItem('billing', 'database', t('console_sidebar.billing', 'Billing'), currentView)}
                     ${this._renderNavItem('settings', 'settings', t('console_sidebar.settings', 'Settings'), currentView)}

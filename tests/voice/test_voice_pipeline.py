@@ -147,7 +147,7 @@ async def test_tts_worker_synthesizes_text(unique_id: str) -> None:
 
     worker_task = asyncio.create_task(run_tts_worker(session, tts, chunker))
 
-    await session.text_in_queue.put("Привет мир. Как дела?")
+    await session.synthesis_queue.put("Привет мир. Как дела?")
 
     # Даём время на обработку
     await asyncio.sleep(0.2)
@@ -170,7 +170,7 @@ async def test_tts_worker_marks_tts_active(unique_id: str) -> None:
 
     worker_task = asyncio.create_task(run_tts_worker(session, tts, chunker))
 
-    await session.text_in_queue.put("Тест синтеза.")
+    await session.synthesis_queue.put("Тест синтеза.")
 
     # Ждём пока воркер обработает текст
     await asyncio.sleep(0.2)
@@ -201,7 +201,7 @@ async def test_full_pipeline_stt_to_tts(unique_id: str) -> None:
 
     async def on_transcription(sess: VoiceSession, text: str) -> None:
         response = f"Ответ на: {text}"
-        await sess.text_in_queue.put(response)
+        await sess.synthesis_queue.put(response)
         # Небольшая пауза чтобы TTS успел обработать
         await asyncio.sleep(0.1)
         done.set()

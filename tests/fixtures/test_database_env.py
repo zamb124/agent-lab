@@ -42,8 +42,8 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "RAG__EMBEDDING__MODEL": "qwen/qwen3-embedding-8b",
     "RAG__EMBEDDING__DIMENSION": "4096",
     "RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED": "false",
-    "STT__PROVIDER": "mock",
-    "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
+    "VOICE__STT__PROVIDER": "mock",
+    "VOICE__STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
 }
 
 TEST_DATABASE_ENV: dict[str, str] = {

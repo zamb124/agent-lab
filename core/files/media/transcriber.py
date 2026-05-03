@@ -1,24 +1,19 @@
 """MediaTranscriber — единая точка входа для транскрипции аудио и видео."""
 
-from core.logging import get_logger
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from core.clients.stt_client import BaseSTTClient, STTClientFactory
+from core.clients.speech_override import SpeechOverride
+from core.clients.stt_client import BaseSTTClient
+from core.clients.voice_resolver import get_stt_client
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
+from core.logging import get_logger
+
 
 logger = get_logger(__name__)
-def _detect_provider_name(client: BaseSTTClient) -> str:
-    """Определяет имя провайдера по классу STT-клиента."""
-    from core.clients.stt_client import CloudRuSTTClient, MockSTTClient
 
-    if isinstance(client, CloudRuSTTClient):
-        return "cloud_ru"
-    if isinstance(client, MockSTTClient):
-        return "mock"
-    return type(client).__name__
 
 class TranscriptionResult(BaseModel):
     """Результат транскрипции медиафайла."""
@@ -27,6 +22,7 @@ class TranscriptionResult(BaseModel):
     language: Optional[str] = Field(default=None, description="Язык распознавания.")
     provider: Optional[str] = Field(default=None, description="Идентификатор STT провайдера.")
 
+
 class MediaTranscriber:
     """Единый сервис транскрипции медиафайлов.
 
@@ -34,15 +30,30 @@ class MediaTranscriber:
     - аудиофайлы (mp3, wav, ogg, m4a, flac, aac, wma, webm audio-only)
     - видеофайлы (mp4, mkv, avi, mov, webm video) — извлекает аудиодорожку
     - YouTube URL — скачивает аудио через yt-dlp (см. core.files.media.youtube)
+
+    ``company_id`` обязателен — tier-резолв STT через ``voice_resolver``.
     """
 
-    def __init__(self, *, stt_client: BaseSTTClient | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        company_id: str,
+        speech_override: SpeechOverride | None = None,
+        stt_client: BaseSTTClient | None = None,
+    ) -> None:
+        if company_id == "":
+            raise ValueError("MediaTranscriber: company_id не может быть пустым.")
+        self._company_id = company_id
+        self._speech_override = speech_override
         self._stt_client = stt_client
 
-    def _get_stt_client(self) -> BaseSTTClient:
-        if self._stt_client is None:
-            self._stt_client = STTClientFactory.create_client()
-        return self._stt_client
+    async def _get_stt_client(self) -> BaseSTTClient:
+        if self._stt_client is not None:
+            return self._stt_client
+        return await get_stt_client(
+            company_id=self._company_id,
+            override=self._speech_override,
+        )
 
     async def transcribe_audio(
         self,
@@ -58,7 +69,7 @@ class MediaTranscriber:
             audio_bytes: байты аудиофайла
             file_name: имя файла
             mime_type: MIME-тип
-            language: язык (None — дефолтный из конфигурации STT)
+            language: язык (None — из tier-резолва / media_transcriber.default_language)
         """
         if not audio_bytes:
             raise ValueError("audio_bytes не может быть пустым.")
@@ -67,16 +78,17 @@ class MediaTranscriber:
         if mime_type == "":
             raise ValueError("mime_type не может быть пустым.")
 
-        stt_client = self._get_stt_client()
-        text = await transcribe_audio_with_chunking(
+        stt_client = await self._get_stt_client()
+        text, provider = await transcribe_audio_with_chunking(
             job_id=f"media-audio-{file_name}",
+            company_id=self._company_id,
             audio_bytes=audio_bytes,
             file_name=file_name,
             mime_type=mime_type,
             language=language,
+            speech_override=self._speech_override,
             stt_client=stt_client,
         )
-        provider = _detect_provider_name(stt_client)
         return TranscriptionResult(
             text=text,
             language=language,
@@ -95,7 +107,7 @@ class MediaTranscriber:
         Args:
             video_bytes: байты видеофайла
             file_name: имя файла
-            language: язык (None — дефолтный из конфигурации STT)
+            language: язык (None — из tier-резолва)
         """
         if not video_bytes:
             raise ValueError("video_bytes не может быть пустым.")
@@ -123,7 +135,7 @@ class MediaTranscriber:
 
         Args:
             url: URL видео/аудио (YouTube, прямая ссылка)
-            language: язык (None — дефолтный из конфигурации STT)
+            language: язык (None — из tier-резолва)
         """
         if not url or url.strip() == "":
             raise ValueError("url не может быть пустым.")

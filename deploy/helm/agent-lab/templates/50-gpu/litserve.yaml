@@ -76,6 +76,12 @@ spec:
               value: {{ .Values.litserve.embeddingModelId | quote }}
             - name: PROVIDER_LITSERVE__INFRA__SQLITE_PATH
               value: /var/lib/provider_litserve/registry.db
+            - name: PROVIDER_LITSERVE__INFRA__DEFAULT_STT_API_MODEL_ID
+              value: {{ .Values.litserve.defaultSttApiModelId | quote }}
+            - name: PROVIDER_LITSERVE__INFRA__DEFAULT_TTS_API_MODEL_ID
+              value: {{ .Values.litserve.defaultTtsApiModelId | quote }}
+            - name: PROVIDER_LITSERVE__INFRA__DEFAULT_VAD_API_MODEL_ID
+              value: {{ .Values.litserve.defaultVadApiModelId | quote }}
             - name: HF_HOME
               value: /root/.cache/huggingface
             - name: HF_TOKEN

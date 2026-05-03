@@ -6,7 +6,7 @@
 - Без моков репозиториев, `op_*` (`apps/sync/realtime/operations.py`), Redis Pub/Sub и WebSocket.
 - TaskIQ: очередь `sync` — для heavy-задач (`messages.transcribe_*`, `sync_finalize_recording_task`); для них нужен **реальный** `sync_worker` ([`tests/fixtures/workers.py`](../fixtures/workers.py)). Все остальные mutating-команды исполняются in-process в `op_*`.
 - Redis: `DATABASE__REDIS_URL` / `TASKS__BROKER_URL` как в корневом [`tests/conftest.py`](../conftest.py).
-- STT: без патча `STTClientFactory`. В корневом `tests/conftest.py`, [`tests/fixtures/services.py`](../fixtures/services.py) и env процесса **`sync_worker`** заданы `STT__PROVIDER=mock` и `STT__MOCK_TRANSCRIPT_TEXT` (см. [`tests/fixtures/workers.py`](../fixtures/workers.py)).
+- STT: без патча фабрик клиентов. В корневом `tests/conftest.py`, [`tests/fixtures/services.py`](../fixtures/services.py) и env процесса **`sync_worker`** заданы `VOICE__STT__PROVIDER=mock` и `VOICE__STT__MOCK_TRANSCRIPT_TEXT` (см. [`tests/fixtures/workers.py`](../fixtures/workers.py)).
 
 Запрещено:
 

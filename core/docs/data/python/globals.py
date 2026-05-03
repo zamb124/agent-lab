@@ -571,6 +571,35 @@ GLOBALS: List[Dict[str, Any]] = [
         "tags": ["files", "platform"],
     },
     {
+        "name": "transcribe_audio",
+        "type": "function",
+        "doc": (
+            "Распознать речь из persisted-аудио (`file_id` из `state.files`)\n"
+            "и вернуть строку с текстом. Провайдер/модель/язык — через единый\n"
+            "voice_resolver (override → company → deployment-default):\n"
+            "text = await transcribe_audio(file_id, language='ru-RU')\n"
+            "# или явный провайдер для этого вызова:\n"
+            "text = await transcribe_audio(file_id, provider='cloud_ru', model='whisper-large-v3')\n"
+            "# Списание STT: длительность через ffprobe; без неё usage не пишется.\n"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["voice", "stt", "files", "platform"],
+    },
+    {
+        "name": "synthesize_speech",
+        "type": "function",
+        "doc": (
+            "Синтез речи. Сохраняет результат в FileRepository + S3 и\n"
+            "возвращает file_id сохранённого аудио (этот id агент кладёт в\n"
+            "ответ или передаёт каналу). Провайдер/голос/язык — через единый\n"
+            "voice_resolver (override → company → deployment-default):\n"
+            "file_id = await synthesize_speech('Привет!', voice='alloy', language='ru-RU')\n"
+            "file_id = await synthesize_speech('Hello', provider='litserve', model='kokoro-82m')"
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["voice", "tts", "files", "platform"],
+    },
+    {
         "name": "get_google_oauth_token",
         "type": "function",
         "doc": (

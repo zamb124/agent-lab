@@ -246,9 +246,9 @@ class FileReader:
         elif info.detected_kind == FileReadKind.IMAGE:
             result = await _read_image_impl(raw, name, mime or "application/octet-stream", opts)
         elif info.detected_kind == FileReadKind.AUDIO:
-            result = await _read_audio_impl(raw, name, mime or "audio/mpeg")
+            result = await _read_audio_impl(raw, name, mime or "audio/mpeg", opts)
         elif info.detected_kind == FileReadKind.VIDEO:
-            result = await _read_video_impl(raw, name, mime or "video/mp4")
+            result = await _read_video_impl(raw, name, mime or "video/mp4", opts)
         elif info.detected_kind == FileReadKind.HTML:
             result = await asyncio.to_thread(_read_html_sync, raw, name, mime, opts)
         elif info.detected_kind == FileReadKind.TEXT:
@@ -307,6 +307,7 @@ class FileReader:
         source_checksum: Optional[str] = None,
         vision_model: str = "google/gemini-2.5-flash-preview",
         vision_prompt: Optional[str] = None,
+        transcription_company_id: Optional[str] = None,
     ) -> FileReadResult:
         opts = ReadOptions(
             include_asset_bytes=include_asset_bytes,
@@ -314,6 +315,7 @@ class FileReader:
             source_checksum=source_checksum,
             vision_model=vision_model,
             vision_prompt=vision_prompt,
+            transcription_company_id=transcription_company_id,
         )
         if _is_file_ref_source(source):
             finfo = normalize_file_ref(source)
@@ -654,14 +656,29 @@ def _read_unstructured_sync(
     )
 
 
+def _resolve_transcription_company_id(opts: ReadOptions) -> str:
+    if opts.transcription_company_id is not None and opts.transcription_company_id.strip() != "":
+        return opts.transcription_company_id.strip()
+    ctx = get_context()
+    company_id = ctx.active_company.company_id
+    if company_id == "":
+        raise ValueError(
+            "Транскрипция audio/video требует ReadOptions.transcription_company_id "
+            "или активной компании в контексте платформы."
+        )
+    return company_id
+
+
 async def _read_audio_impl(
     raw: bytes,
     file_name: str,
     mime: str,
+    opts: ReadOptions,
 ) -> FileReadResult:
     from core.files.media.transcriber import MediaTranscriber
 
-    transcriber = MediaTranscriber()
+    company_id = _resolve_transcription_company_id(opts)
+    transcriber = MediaTranscriber(company_id=company_id)
     transcription = await transcriber.transcribe_audio(
         audio_bytes=raw,
         file_name=file_name,
@@ -682,10 +699,12 @@ async def _read_video_impl(
     raw: bytes,
     file_name: str,
     mime: str,
+    opts: ReadOptions,
 ) -> FileReadResult:
     from core.files.media.transcriber import MediaTranscriber
 
-    transcriber = MediaTranscriber()
+    company_id = _resolve_transcription_company_id(opts)
+    transcriber = MediaTranscriber(company_id=company_id)
     transcription = await transcriber.transcribe_video(
         video_bytes=raw,
         file_name=file_name,

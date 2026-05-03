@@ -39,6 +39,8 @@ from apps.flows.src.eval.platform_services import (
     get_oauth_service,
     get_operator_handoff_service,
     get_schedule_service,
+    synthesize_speech,
+    transcribe_audio,
 )
 from core.clients.google_docs_client import GoogleDocsClient
 from apps.flows.src.eval.sandbox_codegen_namespace import register_sandbox_codegen_namespace
@@ -235,6 +237,8 @@ class PythonNamespaceBuilder:
         namespace["get_file_bytes"] = get_file_bytes
         namespace["get_mcp_client"] = get_mcp_client
         namespace["call_mcp_tool"] = call_mcp_tool
+        namespace["transcribe_audio"] = transcribe_audio
+        namespace["synthesize_speech"] = synthesize_speech
         namespace["Search"] = Search
         namespace["Describe"] = Describe
         namespace["DuckDuckGoBrowserSearch"] = DuckDuckGoBrowserSearch

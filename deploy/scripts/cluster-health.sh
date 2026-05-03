@@ -191,5 +191,21 @@ else
   log_info "Пропуск public-проверок (CHECK_PUBLIC=0 или нет curl)"
 fi
 
+# 14. Provider Litserve audio (in-cluster: STT/TTS/VAD)
+log_section "14) Provider Litserve (audio: STT/TTS/VAD)"
+LITSERVE_POD=$($K get pod -n "$PLATFORM_NS" -l app=provider-litserve \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -z "$LITSERVE_POD" ]; then
+  log_warn "под provider-litserve не найден — секция пропущена"
+else
+  for endpoint in "/v1/models" "/v1/audio/transcriptions" "/v1/audio/speech" "/v1/audio/vad"; do
+    check_step \
+      "litserve GET $endpoint returns HTTP status line (in-cluster)" \
+      "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \
+        sh -c \"wget -q -S -O /dev/null http://127.0.0.1:8014$endpoint 2>&1 \
+          | grep -qE 'HTTP/[0-9.]+ [0-9]{3}'\""
+  done
+fi
+
 # Итог
 print_summary

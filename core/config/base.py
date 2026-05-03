@@ -34,7 +34,7 @@ from core.config.models import (
     S3Config,
     LLMConfig,
     PushConfig,
-    STTConfig,
+    SpeechProvidersConfig,
     MediaTranscriberConfig,
 )
 
@@ -60,7 +60,7 @@ class BaseSettings(PydanticBaseSettings):
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     s3: S3Config = Field(default_factory=S3Config)
-    stt: STTConfig = Field(default_factory=STTConfig)
+    voice: SpeechProvidersConfig = Field(default_factory=SpeechProvidersConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)

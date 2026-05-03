@@ -44,6 +44,9 @@ from apps.provider_litserve.runtime_models import (
     resolve_hf_model_id,
     runtime_api_model_ids,
 )
+from apps.provider_litserve.stt.api import STTLitAPI
+from apps.provider_litserve.tts.api import TTSLitAPI
+from apps.provider_litserve.vad.api import VADLitAPI
 from apps.provider_litserve.shared import resolve_torch_device
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
@@ -59,7 +62,9 @@ CORE_STATIC_PATH = PROJECT_ROOT / "core" / "frontend" / "static"
 
 
 class ProviderLitserveModelCreateRequest(BaseModel):
-    kind: Literal["llm", "embedding", "rerank"] = Field(description="llm | embedding | rerank")
+    kind: Literal["llm", "embedding", "rerank", "stt", "tts", "vad"] = Field(
+        description="llm | embedding | rerank | stt | tts | vad"
+    )
     hf_model_id: str
     api_model_id: str
 
@@ -302,6 +307,9 @@ def _register_v1_models_route(server: ls.LitServer) -> None:
         chat_model_ids = runtime_api_model_ids("llm", cfg)
         embedding_model_ids = runtime_api_model_ids("embedding", cfg)
         rerank_model_ids = runtime_api_model_ids("rerank", cfg)
+        stt_model_ids = runtime_api_model_ids("stt", cfg)
+        tts_model_ids = runtime_api_model_ids("tts", cfg)
+        vad_model_ids = runtime_api_model_ids("vad", cfg)
         return build_provider_litserve_v1_models_response(
             embedding_openai_model_id=cfg.embedding_openai_model_id,
             embedding_model_ids=embedding_model_ids,
@@ -313,6 +321,9 @@ def _register_v1_models_route(server: ls.LitServer) -> None:
             rerank_hf_model_id=cfg.model_id,
             rerank_context_length=8192,
             chat_model_ids=chat_model_ids,
+            stt_model_ids=stt_model_ids,
+            tts_model_ids=tts_model_ids,
+            vad_model_ids=vad_model_ids,
             created=created,
         )
 
@@ -346,7 +357,14 @@ def _register_litserver_v1(app: FastAPI) -> None:
     settings = get_provider_litserve_settings()
     cfg = settings.provider_litserve.infra
     lit_server = ls.LitServer(
-        [EmbeddingLitAPI(cfg), RerankerLitAPI(cfg), ChatCompletionsLitAPI()],
+        [
+            EmbeddingLitAPI(cfg),
+            RerankerLitAPI(cfg),
+            ChatCompletionsLitAPI(),
+            STTLitAPI(cfg),
+            TTSLitAPI(cfg),
+            VADLitAPI(cfg),
+        ],
         accelerator=cfg.accelerator,
         workers_per_device=cfg.workers_per_device,
         timeout=cfg.request_timeout_seconds,

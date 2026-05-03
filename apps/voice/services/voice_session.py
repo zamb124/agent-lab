@@ -93,11 +93,27 @@ class VoiceSession:
             self.text_in_queue,
             self.synthesis_queue,
         ):
-            while not q.empty():
-                try:
-                    q.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
+            self._drain_queue(q)
+
+    def clear_synthesis_and_audio_out(self) -> int:
+        """Сбросить очереди синтеза и исходящего аудио (для barge-in).
+
+        Возвращает суммарное количество удалённых элементов.
+        """
+        return self._drain_queue(self.synthesis_queue) + self._drain_queue(
+            self.audio_out_queue
+        )
+
+    @staticmethod
+    def _drain_queue(q: "asyncio.Queue") -> int:
+        removed = 0
+        while not q.empty():
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            removed += 1
+        return removed
 
     @property
     def active(self) -> bool:

@@ -17,6 +17,12 @@ import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
+import {
+    companyVoiceProvidersCatalogLoadOp,
+    companyVoiceProvidersLoadOp,
+    companyVoiceProvidersUpsertOp,
+    companyVoiceProvidersRemoveOp,
+} from '../events/resources/company-voice-providers.resource.js';
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
 import { embedConfigsResource, embedCodeLoadOp } from '../events/resources/embed.resource.js';
 import { landingAgentsLoadOp, landingDemoSessionOp } from '../events/resources/landing-demo.resource.js';
@@ -94,6 +100,7 @@ import '../pages/select-company-page.js';
 import '../pages/dashboard-page.js';
 import '../pages/team/team-page.js';
 import '../pages/api-keys/api-keys-page.js';
+import '../pages/company-voice-providers/company-voice-providers-page.js';
 import '../pages/embed-configs-page.js';
 import '../pages/billing/billing-page.js';
 import '../pages/scheduler-tasks-page.js';
@@ -124,6 +131,7 @@ const FRONTEND_ROUTES = [
     { key: 'platform_services', path: 'services', parent: 'dashboard' },
     { key: 'team',              path: 'team' },
     { key: 'api-keys',          path: 'api-keys' },
+    { key: 'company-voice-providers', path: 'company-voice-providers' },
     { key: 'embed-configs',     path: 'embed-configs' },
     { key: 'billing',           path: 'billing' },
     { key: 'scheduler-tasks',   path: 'scheduler-tasks' },
@@ -164,6 +172,7 @@ const DOCUMENT_META_SKIP = new Set([
 const FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER = new Set([
     'team',
     'api-keys',
+    'company-voice-providers',
     'embed-configs',
     'billing',
     'scheduler-tasks',
@@ -178,6 +187,10 @@ export class FrontendApp extends PlatformApp {
 
     static factories = [
         apiKeysResource,
+        companyVoiceProvidersCatalogLoadOp,
+        companyVoiceProvidersLoadOp,
+        companyVoiceProvidersUpsertOp,
+        companyVoiceProvidersRemoveOp,
         teamMembersResource,
         inviteGenerateOp,
         embedConfigsResource,
@@ -552,6 +565,7 @@ export class FrontendApp extends PlatformApp {
             case 'platform_services': content = html`<platform-services-page></platform-services-page>`; break;
             case 'team':              content = html`<frontend-team-page></frontend-team-page>`; break;
             case 'api-keys':          content = html`<frontend-api-keys-page></frontend-api-keys-page>`; break;
+            case 'company-voice-providers': content = html`<frontend-company-voice-providers-page></frontend-company-voice-providers-page>`; break;
             case 'embed-configs':     content = html`<frontend-embed-configs-page></frontend-embed-configs-page>`; break;
             case 'billing':           content = html`<frontend-billing-page></frontend-billing-page>`; break;
             case 'scheduler-tasks':   content = html`<frontend-scheduler-tasks-page></frontend-scheduler-tasks-page>`; break;

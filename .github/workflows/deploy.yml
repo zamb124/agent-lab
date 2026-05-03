@@ -279,6 +279,15 @@ jobs:
           LLM_BOTHUB_API_KEY: ${{ secrets.LLM_BOTHUB_API_KEY }}
           LLM_OPENROUTER_API_KEY: ${{ secrets.LLM_OPENROUTER_API_KEY }}
           STT_CLOUD_RU_API_KEY: ${{ secrets.STT__CLOUD_RU__API_KEY }}
+          STT_YANDEX_API_KEY: ${{ secrets.VOICE__STT__YANDEX__API_KEY }}
+          STT_YANDEX_FOLDER_ID: ${{ secrets.VOICE__STT__YANDEX__FOLDER_ID }}
+          STT_SBER_CLIENT_ID: ${{ secrets.VOICE__STT__SBER__CLIENT_ID }}
+          STT_SBER_CLIENT_SECRET: ${{ secrets.VOICE__STT__SBER__CLIENT_SECRET }}
+          TTS_CLOUD_RU_API_KEY: ${{ secrets.VOICE__TTS__CLOUD_RU__API_KEY }}
+          TTS_YANDEX_API_KEY: ${{ secrets.VOICE__TTS__YANDEX__API_KEY }}
+          TTS_YANDEX_FOLDER_ID: ${{ secrets.VOICE__TTS__YANDEX__FOLDER_ID }}
+          TTS_SBER_CLIENT_ID: ${{ secrets.VOICE__TTS__SBER__CLIENT_ID }}
+          TTS_SBER_CLIENT_SECRET: ${{ secrets.VOICE__TTS__SBER__CLIENT_SECRET }}
           RAG_EMBEDDING_API_KEY: ${{ secrets.RAG_EMBEDDING_API_KEY }}
           YOOMONEY_ACCOUNT_NUMBER: ${{ secrets.YOOMONEY_ACCOUNT_NUMBER }}
           YOOMONEY_NOTIFICATION_SECRET: ${{ secrets.YOOMONEY_NOTIFICATION_SECRET }}

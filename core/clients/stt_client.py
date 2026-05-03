@@ -1,16 +1,42 @@
-"""
-STT клиент с поддержкой провайдеров.
+"""STT-клиенты для всех провайдеров платформы.
+
+Все клиенты реализуют batch-контракт `BaseSTTClient.transcribe_audio(...)`.
+Stream-обёртки для real-time распознавания (накопление PCM в буфере с
+flush по VAD) живут в `apps/voice/providers/stt/*` и используют эти
+batch-клиенты под капотом.
+
+Создание клиентов:
+
+* для voice/flows/eval/sync/CRM batch — **только** через
+  `core.clients.voice_resolver.get_stt_client(*, company_id, override)`.
+  Прямой импорт классов из этого модуля в `apps/**` и в `core/**` вне
+  `core/clients/**` запрещён CI (`scripts/check_voice_resolver_usage.py`).
 """
 
 from abc import ABC, abstractmethod
 import json
 import os
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from core.config import get_settings
 from core.files.models import AudioTranscriptionStatus
 from core.http import get_httpx_client
+from core.logging import get_logger
+
+
+if TYPE_CHECKING:
+    from core.clients.speech_override import SpeechOverride
+    from core.config.models import (
+        CloudRuSTTConfig,
+        LitserveSpeechBackendConfig,
+        SberSTTBackendConfig,
+        STTProvidersConfig,
+        YandexSTTBackendConfig,
+    )
+
+
+logger = get_logger(__name__)
 
 
 def _extract_transcript_from_json_payload(payload: object) -> str | None:
@@ -287,31 +313,228 @@ class MockSTTClient(BaseSTTClient):
         )
 
 
+class LitserveSTTClient(BaseSTTClient):
+    """STT клиент `provider-litserve` (OpenAI-совместимый /v1/audio/transcriptions)."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        default_language: str,
+        timeout: float,
+    ) -> None:
+        if base_url == "":
+            raise ValueError("STT litserve base_url не может быть пустым.")
+        if model == "":
+            raise ValueError("STT litserve model не может быть пустым.")
+        if default_language == "":
+            raise ValueError("STT litserve language не может быть пустым.")
+        if timeout <= 0:
+            raise ValueError("STT litserve timeout должен быть больше 0.")
+
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._default_language = default_language
+        self._timeout = timeout
+
+    async def transcribe_audio(
+        self,
+        *,
+        audio_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        language: str | None = None,
+    ) -> STTTranscriptionResult:
+        if not audio_bytes:
+            raise ValueError("audio_bytes не может быть пустым.")
+        if file_name == "":
+            raise ValueError("file_name не может быть пустым.")
+        if mime_type == "":
+            raise ValueError("mime_type не может быть пустым.")
+
+        selected_language = language or self._default_language
+        if selected_language == "":
+            raise ValueError("language не может быть пустым.")
+
+        url = f"{self._base_url}/v1/audio/transcriptions"
+        data = {"model": self._model, "language": selected_language}
+        files = {"file": (file_name, audio_bytes, mime_type)}
+
+        async with get_httpx_client(timeout=self._timeout) as client:
+            response = await client.post(url, data=data, files=files)
+        response.raise_for_status()
+
+        body_json = response.json()
+        transcript = _extract_transcript_from_json_payload(body_json)
+        if transcript is None:
+            raise ValueError(
+                "STT litserve вернул пустую транскрипцию. "
+                f"payload={_short_json(body_json)}"
+            )
+        return STTTranscriptionResult(
+            provider="litserve",
+            status=AudioTranscriptionStatus.DONE,
+            text=transcript,
+            language=selected_language,
+        )
+
+
+class YandexSTTClient(BaseSTTClient):
+    """Yandex SpeechKit STT клиент (REST). Stub: не реализован.
+
+    Полная реализация добавится отдельной фазой при наличии ключей
+    Yandex Cloud. Сейчас фабрика возвращает этот клиент при выборе
+    провайдера `yandex`, но любой вызов `transcribe_audio` упадёт.
+    """
+
+    def __init__(self, *, api_key: str | None, folder_id: str | None) -> None:
+        self._api_key = api_key
+        self._folder_id = folder_id
+
+    async def transcribe_audio(
+        self,
+        *,
+        audio_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        language: str | None = None,
+    ) -> STTTranscriptionResult:
+        raise NotImplementedError(
+            "STT yandex: HTTP-клиент Yandex SpeechKit ещё не реализован "
+            "(нужны ключи `voice.stt.yandex.api_key` и `folder_id`). "
+            "Используйте provider=`litserve` или `cloud_ru`."
+        )
+
+
+class SberSTTClient(BaseSTTClient):
+    """Sber SmartSpeech STT клиент (REST). Stub: не реализован."""
+
+    def __init__(
+        self, *, client_id: str | None, client_secret: str | None, scope: str
+    ) -> None:
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._scope = scope
+
+    async def transcribe_audio(
+        self,
+        *,
+        audio_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        language: str | None = None,
+    ) -> STTTranscriptionResult:
+        raise NotImplementedError(
+            "STT sber: HTTP-клиент Sber SmartSpeech ещё не реализован "
+            "(нужны ключи `voice.stt.sber.client_id` и `client_secret`). "
+            "Используйте provider=`litserve` или `cloud_ru`."
+        )
+
+
 class STTClientFactory:
-    """Фабрика STT клиентов по конфигу."""
+    """Фабрика STT клиентов для `voice_resolver`.
+
+    `create_for_voice(...)` принимает уже резолвнутые параметры из
+    tier-резолва (`SpeechOverride` → `company_voice_providers` →
+    `settings.voice.stt`).
+    """
 
     @staticmethod
-    def create_client() -> BaseSTTClient:
-        settings = get_settings()
-        provider = settings.stt.provider
+    def create_for_voice(
+        *,
+        cfg: "STTProvidersConfig",
+        provider_name: str,
+        model: str | None,
+        default_language: str | None,
+        timeout_s: float | None,
+        secrets: dict[str, str] | None = None,
+    ) -> BaseSTTClient:
+        """Создать клиент по уже резолвнутым параметрам.
 
-        if provider == "cloud_ru":
-            config = settings.stt.cloud_ru
-            if not config.enabled:
-                raise ValueError("STT провайдер cloud_ru выключен в конфигурации.")
-            if not config.api_key:
-                raise ValueError("STT cloud_ru api_key не настроен.")
-            return CloudRuSTTClient(
-                api_key=config.api_key,
-                base_url=config.base_url,
-                model=config.model,
-                response_format=config.response_format,
-                temperature=config.temperature,
-                default_language=config.language,
-                timeout=config.timeout,
+        `provider_name` / `model` / `default_language` / `timeout_s` —
+        результат tier-резолва из `voice_resolver`. Метод не делает
+        собственных fallback'ов — пустые обязательные поля → `raise`.
+
+        ``secrets`` — merge из `company_voice_providers.secrets`
+        для выбранного провайдера (строковые ключи из allowlist API).
+        """
+        if provider_name == "":
+            raise ValueError("STT provider не задан после tier-резолва.")
+        language = default_language or cfg.default_language
+        if language == "":
+            raise ValueError("STT default_language пуст.")
+
+        sec = secrets or {}
+
+        if provider_name == "litserve":
+            backend = cfg.litserve
+            if not backend.enabled:
+                raise ValueError(
+                    "STT провайдер `litserve` выключен в `voice.stt.litserve.enabled`."
+                )
+            chosen_model = model or cfg.default_model
+            if not chosen_model:
+                raise ValueError(
+                    "STT litserve: model не задан ни в override, ни в "
+                    "`voice.stt.default_model`."
+                )
+            return LitserveSTTClient(
+                base_url=backend.base_url,
+                model=chosen_model,
+                default_language=language,
+                timeout=timeout_s if timeout_s is not None else backend.timeout_s,
             )
-        if provider == "mock":
-            transcript_text = settings.stt.mock_transcript_text
-            return MockSTTClient(transcript_text=transcript_text)
+        if provider_name == "cloud_ru":
+            backend = cfg.cloud_ru
+            merged = backend
+            if sec:
+                patch_cr: dict[str, str | None] = {}
+                if "api_key" in sec:
+                    patch_cr["api_key"] = sec["api_key"]
+                merged = merged.model_copy(update=patch_cr)
+            resolved_model = model if model is not None and model != "" else merged.model
+            merged = merged.model_copy(update={"model": resolved_model})
+            return STTClientFactory._build_cloud_ru(merged)
+        if provider_name == "yandex":
+            backend = cfg.yandex
+            patch_ya: dict[str, str | None] = {}
+            for key in ("api_key", "folder_id"):
+                if key in sec:
+                    patch_ya[key] = sec[key]
+            bk = backend.model_copy(update=patch_ya) if patch_ya else backend
+            return YandexSTTClient(
+                api_key=bk.api_key, folder_id=bk.folder_id
+            )
+        if provider_name == "sber":
+            backend = cfg.sber
+            patch_sb: dict[str, str | None] = {}
+            for key in ("client_id", "client_secret", "scope"):
+                if key in sec:
+                    patch_sb[key] = sec[key]
+            bk = backend.model_copy(update=patch_sb) if patch_sb else backend
+            return SberSTTClient(
+                client_id=bk.client_id,
+                client_secret=bk.client_secret,
+                scope=bk.scope,
+            )
+        if provider_name == "mock":
+            return MockSTTClient(transcript_text=cfg.mock_transcript_text)
 
-        raise ValueError(f"Неизвестный STT провайдер: {provider}")
+        raise ValueError(f"Неизвестный STT провайдер: {provider_name!r}")
+
+    @staticmethod
+    def _build_cloud_ru(config: "CloudRuSTTConfig") -> "CloudRuSTTClient":
+        if not config.enabled:
+            raise ValueError("STT провайдер cloud_ru выключен в конфигурации.")
+        if not config.api_key:
+            raise ValueError("STT cloud_ru api_key не настроен.")
+        return CloudRuSTTClient(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            model=config.model,
+            response_format=config.response_format,
+            temperature=config.temperature,
+            default_language=config.language,
+            timeout=config.timeout,
+        )

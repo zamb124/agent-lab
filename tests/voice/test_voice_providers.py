@@ -1,135 +1,118 @@
-"""Тесты провайдеров STT, TTS, VAD."""
+"""Тесты универсальных streaming-адаптеров для STT/TTS/VAD.
+
+Используем mock batch-клиенты из core.clients.{stt,tts,vad}_client
+(не unittest.mock) для проверки контракта адаптеров.
+"""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 
-from apps.voice.providers.stt.cloud_ru import CloudRuStreamSTTProvider
-from apps.voice.providers.tts.kokoro_local import KokoroLocalTTSProvider
-from apps.voice.providers.vad.silero import SileroVADProvider
+from apps.voice.providers.streaming_adapters import (
+    StreamingSTTProvider,
+    StreamingTTSProvider,
+    StreamingVADProvider,
+)
+from core.clients.stt_client import MockSTTClient
+from core.clients.tts_client import MockTTSClient
+from core.clients.vad_client import MockVADClient
 
 
-# === SileroVADProvider ===
-
-
-async def test_silero_vad_detect_speech_raises_when_not_initialized(unique_id: str) -> None:
-    provider = SileroVADProvider()
-    with pytest.raises(RuntimeError, match="не инициализирован"):
-        await provider.detect_speech(b"\x00" * 320, 16000)
-
-
-async def test_silero_vad_detect_speech_raises_on_wrong_sample_rate(unique_id: str) -> None:
-    provider = SileroVADProvider(sample_rate=16000)
-    provider._model = (MagicMock(), MagicMock())
-    with pytest.raises(ValueError, match="sample_rate"):
-        await provider.detect_speech(b"\x00" * 320, 8000)
-
-
-async def test_silero_vad_close_resets_state(unique_id: str) -> None:
-    provider = SileroVADProvider()
-    provider._model = (MagicMock(), MagicMock())
-    provider._executor = MagicMock()
-    provider._executor.shutdown = MagicMock()
-    await provider.close()
-    assert provider._model is None
-    assert provider._executor is None
-
-
-async def test_silero_vad_init_loads_model(unique_id: str) -> None:
-    provider = SileroVADProvider()
-    mock_model = MagicMock()
-    mock_utils = [MagicMock()]
-    with patch("apps.voice.providers.vad.silero.SileroVADProvider.init") as mock_init:
-        mock_init.return_value = None
-        provider._model = (mock_model, mock_utils[0])
-        assert provider._model is not None
-
-
-# === KokoroLocalTTSProvider ===
-
-
-async def test_kokoro_tts_synthesize_raises_when_not_initialized(unique_id: str) -> None:
-    provider = KokoroLocalTTSProvider()
-    with pytest.raises(RuntimeError, match="не инициализирован"):
-        await provider.synthesize("Привет")
-
-
-async def test_kokoro_tts_close_resets_state(unique_id: str) -> None:
-    provider = KokoroLocalTTSProvider()
-    provider._model = MagicMock()
-    provider._initialized = True
-    await provider.close()
-    assert provider._model is None
-    assert provider._initialized is False
-
-
-async def test_kokoro_tts_synthesize_calls_sync_method(unique_id: str) -> None:
-    provider = KokoroLocalTTSProvider()
-    provider._initialized = True
-
-    with patch.object(provider, "_synthesize_sync", return_value=b"audio_bytes") as mock_sync:
-        result = await provider.synthesize("Тест")
-    mock_sync.assert_called_once_with("Тест")
-    assert result == b"audio_bytes"
-
-
-def test_kokoro_tts_synthesize_sync_raises_on_empty_audio(unique_id: str) -> None:
-    provider = KokoroLocalTTSProvider()
-
-    mock_pipeline = MagicMock()
-    mock_pipeline.return_value = iter([("meta", "chunk", None)])
-    provider._model = mock_pipeline
-
-    with pytest.raises(ValueError, match="не вернул аудио"):
-        provider._synthesize_sync("Тест")
-
-
-def test_kokoro_tts_synthesize_sync_returns_audio_bytes(unique_id: str) -> None:
-    provider = KokoroLocalTTSProvider()
-
-    import numpy as np
-
-    fake_audio = np.zeros(100, dtype=np.float32)
-    mock_pipeline = MagicMock()
-    mock_pipeline.return_value = iter([("meta", "chunk", fake_audio)])
-    provider._model = mock_pipeline
-
-    result = provider._synthesize_sync("Тест")
-    assert isinstance(result, bytes)
-    assert len(result) == fake_audio.tobytes().__len__()
-
-
-# === CloudRuStreamSTTProvider ===
+# === StreamingSTTProvider ===
 
 
 @pytest.mark.asyncio
-async def test_cloud_ru_stt_push_audio_accumulates(unique_id: str) -> None:
-    provider = CloudRuStreamSTTProvider()
+async def test_streaming_stt_push_audio_accumulates(unique_id: str) -> None:
+    provider = StreamingSTTProvider(stt_client=MockSTTClient(transcript_text="ок"))
     await provider.push_audio(b"frame1")
     await provider.push_audio(b"frame2")
     assert provider.has_buffered_audio() is True
 
 
-def test_cloud_ru_stt_has_buffered_audio_false_when_empty(unique_id: str) -> None:
-    provider = CloudRuStreamSTTProvider()
+@pytest.mark.asyncio
+async def test_streaming_stt_flush_empty_returns_none(unique_id: str) -> None:
+    provider = StreamingSTTProvider(stt_client=MockSTTClient(transcript_text="ок"))
+    result = await provider.flush_buffer()
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_streaming_stt_flush_returns_transcription(unique_id: str) -> None:
+    provider = StreamingSTTProvider(stt_client=MockSTTClient(transcript_text=f"text-{unique_id}"))
+    await provider.push_audio(b"\x00" * 320)
+    result = await provider.flush_buffer()
+    assert result is not None
+    assert result.text == f"text-{unique_id}"
     assert provider.has_buffered_audio() is False
 
 
 @pytest.mark.asyncio
-async def test_cloud_ru_stt_flush_empty_returns_none(unique_id: str) -> None:
-    provider = CloudRuStreamSTTProvider()
-    # flush без аудио должен вернуть None (не пустую строку)
-    result = None
-    # Нельзя вызвать flush напрямую без cloud.ru API, но можно проверить буфер
-    assert not provider.has_buffered_audio()
-
-
-@pytest.mark.asyncio
-async def test_cloud_ru_stt_reset_clears_buffer(unique_id: str) -> None:
-    provider = CloudRuStreamSTTProvider()
+async def test_streaming_stt_reset_clears_buffer(unique_id: str) -> None:
+    provider = StreamingSTTProvider(stt_client=MockSTTClient(transcript_text="ок"))
     await provider.push_audio(b"data")
     assert provider.has_buffered_audio()
     provider.reset()
     assert not provider.has_buffered_audio()
+
+
+# === StreamingTTSProvider ===
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_synthesize_raises_when_not_initialized(unique_id: str) -> None:
+    provider = StreamingTTSProvider(tts_client=MockTTSClient())
+    with pytest.raises(RuntimeError, match="не инициализирован"):
+        await provider.synthesize("Привет")
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_synthesize_returns_bytes(unique_id: str) -> None:
+    provider = StreamingTTSProvider(tts_client=MockTTSClient())
+    await provider.init()
+    audio = await provider.synthesize(f"text-{unique_id}")
+    assert isinstance(audio, bytes)
+    assert len(audio) > 0
+
+
+@pytest.mark.asyncio
+async def test_streaming_tts_synthesize_rejects_empty_text(unique_id: str) -> None:
+    provider = StreamingTTSProvider(tts_client=MockTTSClient())
+    await provider.init()
+    with pytest.raises(ValueError, match="пустой text"):
+        await provider.synthesize("")
+
+
+# === StreamingVADProvider ===
+
+
+@pytest.mark.asyncio
+async def test_streaming_vad_returns_false_for_short_buffer(unique_id: str) -> None:
+    provider = StreamingVADProvider(
+        vad_client=MockVADClient(),
+        sample_rate=16000,
+        window_ms=200,
+    )
+    is_speech = await provider.detect_speech(b"\x00\x00" * 32, 16000)
+    assert is_speech is False
+
+
+@pytest.mark.asyncio
+async def test_streaming_vad_detects_speech_after_window(unique_id: str) -> None:
+    provider = StreamingVADProvider(
+        vad_client=MockVADClient(),
+        sample_rate=16000,
+        window_ms=100,
+    )
+    pcm_window = b"\x01\x00" * 1600
+    is_speech = await provider.detect_speech(pcm_window, 16000)
+    assert is_speech is True
+
+
+@pytest.mark.asyncio
+async def test_streaming_vad_raises_on_wrong_sample_rate(unique_id: str) -> None:
+    provider = StreamingVADProvider(
+        vad_client=MockVADClient(),
+        sample_rate=16000,
+    )
+    with pytest.raises(ValueError, match="sample_rate"):
+        await provider.detect_speech(b"\x00\x00" * 320, 8000)

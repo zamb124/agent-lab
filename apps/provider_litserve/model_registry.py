@@ -6,12 +6,12 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from core.config.models import ProviderLitserveInfraConfig
 
-ModelKind = Literal["llm", "embedding", "rerank"]
+ModelKind = Literal["llm", "embedding", "rerank", "stt", "tts", "vad"]
 ModelStatus = Literal["pending", "downloading", "ready", "failed", "deleted"]
 
 
@@ -80,6 +80,102 @@ def build_rerank_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
     return out
 
 
+def _build_audio_api_pairs_from_entries(
+    *,
+    entries: list[Any],
+    default_api_model_id: str,
+    kind_label: str,
+) -> dict[str, str]:
+    """Маппинг api-id -> hf-id для STT/TTS/VAD из списка Pydantic entries.
+
+    Каждый ``entry`` — объект с полями ``api_model_id`` и ``hf_model_id``
+    (`ProviderLitserveSTT/TTS/VADModelEntry`). Бросает ``ValueError`` при
+    дубликатах api-id и при отсутствии ``default_api_model_id`` в списке
+    (Zero-Guess).
+    """
+    out: dict[str, str] = {}
+    seen_api_lower: set[str] = set()
+    for entry in entries:
+        api_id = str(getattr(entry, "api_model_id", "")).strip()
+        hf_id = str(getattr(entry, "hf_model_id", "")).strip()
+        if not api_id:
+            raise ValueError(
+                f"provider_litserve {kind_label}_models: пустой api_model_id в записи"
+            )
+        if not hf_id:
+            raise ValueError(
+                f"provider_litserve {kind_label}_models: пустой hf_model_id для api_model_id={api_id!r}"
+            )
+        api_lower = api_id.lower()
+        if api_lower in seen_api_lower:
+            raise ValueError(
+                f"provider_litserve {kind_label}_models: дубликат api_model_id={api_id!r}"
+            )
+        seen_api_lower.add(api_lower)
+        out[api_id] = hf_id
+
+    default_normalized = default_api_model_id.strip()
+    if not default_normalized:
+        raise ValueError(
+            f"provider_litserve {kind_label}_default_api_model_id не должен быть пустым"
+        )
+    if default_normalized.lower() not in seen_api_lower:
+        raise ValueError(
+            f"provider_litserve {kind_label}_default_api_model_id={default_normalized!r} "
+            f"отсутствует в {kind_label}_models"
+        )
+    return out
+
+
+def build_stt_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
+    return _build_audio_api_pairs_from_entries(
+        entries=list(cfg.stt_models),
+        default_api_model_id=cfg.stt_default_api_model_id,
+        kind_label="stt",
+    )
+
+
+def build_tts_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
+    return _build_audio_api_pairs_from_entries(
+        entries=list(cfg.tts_models),
+        default_api_model_id=cfg.tts_default_api_model_id,
+        kind_label="tts",
+    )
+
+
+def build_vad_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
+    return _build_audio_api_pairs_from_entries(
+        entries=list(cfg.vad_models),
+        default_api_model_id=cfg.vad_default_api_model_id,
+        kind_label="vad",
+    )
+
+
+def find_stt_entry(cfg: ProviderLitserveInfraConfig, api_model_id: str) -> Any:
+    """Найти ``ProviderLitserveSTTModelEntry`` по api id (case-insensitive). ``None`` если нет."""
+    needle = api_model_id.strip().lower()
+    for entry in cfg.stt_models:
+        if str(getattr(entry, "api_model_id", "")).strip().lower() == needle:
+            return entry
+    return None
+
+
+def find_tts_entry(cfg: ProviderLitserveInfraConfig, api_model_id: str) -> Any:
+    needle = api_model_id.strip().lower()
+    for entry in cfg.tts_models:
+        if str(getattr(entry, "api_model_id", "")).strip().lower() == needle:
+            return entry
+    return None
+
+
+def find_vad_entry(cfg: ProviderLitserveInfraConfig, api_model_id: str) -> Any:
+    needle = api_model_id.strip().lower()
+    for entry in cfg.vad_models:
+        if str(getattr(entry, "api_model_id", "")).strip().lower() == needle:
+            return entry
+    return None
+
+
 def _db_path(cfg: ProviderLitserveInfraConfig) -> Path:
     db_path = Path(cfg.sqlite_path).expanduser()
     if not db_path.is_absolute():
@@ -97,22 +193,51 @@ def _connect(cfg: ProviderLitserveInfraConfig) -> sqlite3.Connection:
     return conn
 
 
+_MODELS_TABLE_SQL = """
+CREATE TABLE models (
+    model_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('llm', 'embedding', 'rerank', 'stt', 'tts', 'vad')),
+    hf_model_id TEXT NOT NULL,
+    api_model_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'downloading', 'ready', 'failed', 'deleted')),
+    error TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+
+def _migrate_models_table_if_needed(conn: sqlite3.Connection) -> None:
+    """Idempotent: если CHECK у таблицы не покрывает новые kind'ы, пересоздать."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='models'"
+    ).fetchone()
+    if row is None:
+        return
+    current_sql = str(row["sql"] or "")
+    if all(f"'{kind}'" in current_sql for kind in ("stt", "tts", "vad")):
+        return
+    conn.execute("ALTER TABLE models RENAME TO models_old_pre_audio")
+    conn.execute(_MODELS_TABLE_SQL)
+    conn.execute(
+        """
+        INSERT INTO models(model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at)
+        SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
+        FROM models_old_pre_audio
+        """
+    )
+    conn.execute("DROP TABLE models_old_pre_audio")
+
+
 def init_registry(cfg: ProviderLitserveInfraConfig) -> None:
     with _connect(cfg) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS models (
-                model_id TEXT PRIMARY KEY,
-                kind TEXT NOT NULL CHECK(kind IN ('llm', 'embedding', 'rerank')),
-                hf_model_id TEXT NOT NULL,
-                api_model_id TEXT NOT NULL UNIQUE,
-                status TEXT NOT NULL CHECK(status IN ('pending', 'downloading', 'ready', 'failed', 'deleted')),
-                error TEXT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
+        existing = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='models'"
+        ).fetchone()
+        if existing is None:
+            conn.execute(_MODELS_TABLE_SQL)
+        else:
+            _migrate_models_table_if_needed(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS model_operations (
@@ -146,6 +271,22 @@ def _default_seed_models(cfg: ProviderLitserveInfraConfig) -> list[tuple[ModelKi
     seed_models.extend(
         ("rerank", hf_model_id, api_model_id) for api_model_id, hf_model_id in rerank_pairs.items()
     )
+
+    stt_pairs = build_stt_api_pairs(cfg)
+    seed_models.extend(
+        ("stt", hf_model_id, api_model_id) for api_model_id, hf_model_id in stt_pairs.items()
+    )
+
+    tts_pairs = build_tts_api_pairs(cfg)
+    seed_models.extend(
+        ("tts", hf_model_id, api_model_id) for api_model_id, hf_model_id in tts_pairs.items()
+    )
+
+    vad_pairs = build_vad_api_pairs(cfg)
+    seed_models.extend(
+        ("vad", hf_model_id, api_model_id) for api_model_id, hf_model_id in vad_pairs.items()
+    )
+
     return seed_models
 
 

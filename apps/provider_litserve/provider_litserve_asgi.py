@@ -30,6 +30,7 @@ from apps.provider_litserve.provider_litserve_http_schemas import (
     validate_v1_models_response,
 )
 from apps.provider_litserve.reranker.api import RerankerLitAPI
+from apps.provider_litserve.runtime_models import runtime_api_model_ids
 from core.config.models import ProviderLitserveInfraConfig
 
 
@@ -80,6 +81,9 @@ def create_provider_litserve_asgi_app(
             rerank_hf_model_id=cfg.model_id,
             rerank_context_length=8192,
             chat_model_ids=[],
+            stt_model_ids=runtime_api_model_ids("stt", cfg),
+            tts_model_ids=runtime_api_model_ids("tts", cfg),
+            vad_model_ids=runtime_api_model_ids("vad", cfg),
             created=created,
         )
         return validate_v1_models_response(raw)

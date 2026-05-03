@@ -296,13 +296,14 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
     Провайдеры — реальные классы (MockSTTProvider / MockTTSProvider / MockVADProvider),
     не unittest.mock. Внешние ML-модели и cloud.ru API не используются.
 
-    Имена env vars без префикса сервиса: VoiceServiceSettings наследует BaseSettings
-    с env_nested_delimiter="__" и без env_prefix, поэтому TTS__PROVIDER читается
-    как settings.tts.provider (не VOICE__TTS__PROVIDER → settings.voice.tts.provider).
+    Имена переменных окружения следуют вложенности `BaseSettings` с
+    `env_nested_delimiter="__"`: например `VOICE__STT__PROVIDER`,
+    `VOICE__TTS__PROVIDER`, `VOICE__VAD__PROVIDER` задают deployment-default
+    в `settings.voice.{stt,tts,vad}.provider`.
     """
-    monkeypatch.setenv("STT__PROVIDER", "mock")
-    monkeypatch.setenv("TTS__PROVIDER", "mock")
-    monkeypatch.setenv("VAD__MODEL", "mock")
+    monkeypatch.setenv("VOICE__STT__PROVIDER", "mock")
+    monkeypatch.setenv("VOICE__TTS__PROVIDER", "mock")
+    monkeypatch.setenv("VOICE__VAD__PROVIDER", "mock")
 
     from apps.voice.config import reset_voice_settings
     from apps.voice.container import reset_voice_container

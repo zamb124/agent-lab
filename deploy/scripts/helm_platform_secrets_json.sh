@@ -37,6 +37,15 @@ jq -n \
   --arg llmBothubApiKey "${LLM_BOTHUB_API_KEY:-}" \
   --arg llmOpenrouterApiKey "${LLM_OPENROUTER_API_KEY:-}" \
   --arg sttCloudRuApiKey "${STT_CLOUD_RU_API_KEY:-}" \
+  --arg sttYandexApiKey "${STT_YANDEX_API_KEY:-}" \
+  --arg sttYandexFolderId "${STT_YANDEX_FOLDER_ID:-}" \
+  --arg sttSberClientId "${STT_SBER_CLIENT_ID:-}" \
+  --arg sttSberClientSecret "${STT_SBER_CLIENT_SECRET:-}" \
+  --arg ttsCloudRuApiKey "${TTS_CLOUD_RU_API_KEY:-}" \
+  --arg ttsYandexApiKey "${TTS_YANDEX_API_KEY:-}" \
+  --arg ttsYandexFolderId "${TTS_YANDEX_FOLDER_ID:-}" \
+  --arg ttsSberClientId "${TTS_SBER_CLIENT_ID:-}" \
+  --arg ttsSberClientSecret "${TTS_SBER_CLIENT_SECRET:-}" \
   --arg ragEmbeddingApiKey "${RAG_EMBEDDING_API_KEY:-}" \
   --arg yoomoneyAccountNumber "${YOOMONEY_ACCOUNT_NUMBER:-}" \
   --arg yoomoneyNotificationSecret "${YOOMONEY_NOTIFICATION_SECRET:-}" \
@@ -73,6 +82,15 @@ jq -n \
     llmBothubApiKey: $llmBothubApiKey,
     llmOpenrouterApiKey: $llmOpenrouterApiKey,
     sttCloudRuApiKey: $sttCloudRuApiKey,
+    sttYandexApiKey: $sttYandexApiKey,
+    sttYandexFolderId: $sttYandexFolderId,
+    sttSberClientId: $sttSberClientId,
+    sttSberClientSecret: $sttSberClientSecret,
+    ttsCloudRuApiKey: $ttsCloudRuApiKey,
+    ttsYandexApiKey: $ttsYandexApiKey,
+    ttsYandexFolderId: $ttsYandexFolderId,
+    ttsSberClientId: $ttsSberClientId,
+    ttsSberClientSecret: $ttsSberClientSecret,
     ragEmbeddingApiKey: $ragEmbeddingApiKey,
     yoomoneyAccountNumber: $yoomoneyAccountNumber,
     yoomoneyNotificationSecret: $yoomoneyNotificationSecret,

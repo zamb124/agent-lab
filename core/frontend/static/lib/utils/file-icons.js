@@ -137,6 +137,7 @@ export const UI_ICON_MAP = Object.freeze({
     'message-circle': 'chat', phone: 'phone-call',
     video: 'video-call', smile: 'smile', emoji: 'smile', emoticon: 'smile',
     mic: 'mic', microphone: 'microphone', 'mic-off': 'mic-off',
+    'volume-2': 'microphone', volume: 'microphone',
     'check-double': 'done-all', 'done-all': 'done-all', checkall: 'done-all',
     'alert-circle': 'alert-triangle', 'alert-triangle': 'alert-triangle',
     file: 'doc-detail', document: 'doc-detail',

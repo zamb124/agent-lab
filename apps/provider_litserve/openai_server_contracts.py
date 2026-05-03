@@ -63,6 +63,9 @@ def build_provider_litserve_v1_models_response(
     rerank_hf_model_id: str,
     rerank_context_length: int,
     chat_model_ids: list[str],
+    stt_model_ids: list[str],
+    tts_model_ids: list[str],
+    vad_model_ids: list[str],
     created: int,
 ) -> dict[str, Any]:
     """
@@ -83,6 +86,9 @@ def build_provider_litserve_v1_models_response(
     embedding_ids = _uniq([embedding_openai_model_id, *embedding_model_ids])
     rerank_ids = _uniq([rerank_openai_model_id, *rerank_model_ids])
     chat_ids = _uniq(chat_model_ids)
+    stt_ids = _uniq(stt_model_ids)
+    tts_ids = _uniq(tts_model_ids)
+    vad_ids = _uniq(vad_model_ids)
 
     data: list[dict[str, Any]] = []
 
@@ -126,6 +132,52 @@ def build_provider_litserve_v1_models_response(
                 description="OpenAI-compatible chat via POST /v1/chat/completions.",
                 created=created,
                 context_length=131072,
+                output_modalities=["text"],
+            )
+        )
+
+    for stt_id in stt_ids:
+        data.append(
+            _openrouter_like_model_object(
+                model_id=stt_id,
+                name=stt_id,
+                description=(
+                    "Local STT (speech recognition). "
+                    "Use POST /v1/audio/transcriptions."
+                ),
+                created=created,
+                context_length=0,
+                input_modalities=["audio"],
+                output_modalities=["text"],
+            )
+        )
+
+    for tts_id in tts_ids:
+        data.append(
+            _openrouter_like_model_object(
+                model_id=tts_id,
+                name=tts_id,
+                description=(
+                    "Local TTS (speech synthesis). Use POST /v1/audio/speech."
+                ),
+                created=created,
+                context_length=0,
+                input_modalities=["text"],
+                output_modalities=["audio"],
+            )
+        )
+
+    for vad_id in vad_ids:
+        data.append(
+            _openrouter_like_model_object(
+                model_id=vad_id,
+                name=vad_id,
+                description=(
+                    "Local VAD (voice activity detection). Use POST /v1/audio/vad."
+                ),
+                created=created,
+                context_length=0,
+                input_modalities=["audio"],
                 output_modalities=["text"],
             )
         )

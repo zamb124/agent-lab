@@ -213,11 +213,65 @@
       name: {{ .Values.platformSecretName }}
       key: llm-openrouter-api-key
       optional: true
-- name: STT__CLOUD_RU__API_KEY
+- name: VOICE__STT__CLOUD_RU__API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: stt-cloud-ru-api-key
+      optional: true
+- name: VOICE__STT__YANDEX__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: stt-yandex-api-key
+      optional: true
+- name: VOICE__STT__YANDEX__FOLDER_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: stt-yandex-folder-id
+      optional: true
+- name: VOICE__STT__SBER__CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: stt-sber-client-id
+      optional: true
+- name: VOICE__STT__SBER__CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: stt-sber-client-secret
+      optional: true
+- name: VOICE__TTS__CLOUD_RU__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: tts-cloud-ru-api-key
+      optional: true
+- name: VOICE__TTS__YANDEX__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: tts-yandex-api-key
+      optional: true
+- name: VOICE__TTS__YANDEX__FOLDER_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: tts-yandex-folder-id
+      optional: true
+- name: VOICE__TTS__SBER__CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: tts-sber-client-id
+      optional: true
+- name: VOICE__TTS__SBER__CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: tts-sber-client-secret
       optional: true
 - name: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY
   valueFrom:

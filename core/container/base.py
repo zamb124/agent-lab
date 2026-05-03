@@ -205,6 +205,14 @@ class BaseContainer:
         """UsageRepository для работы с использованием"""
         from core.db.repositories.usage_repository import UsageRepository
         return UsageRepository(storage=self.shared_storage)
+
+    @lazy
+    def company_voice_provider_repository(self):
+        """Per-company override провайдеров речи (STT/TTS/VAD), shared БД."""
+        from core.db.repositories.company_voice_provider_repository import (
+            CompanyVoiceProviderRepository,
+        )
+        return CompanyVoiceProviderRepository(db_url=self.shared_db_url)
     
     @lazy
     def file_repository(self):

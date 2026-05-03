@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from urllib.parse import quote
 
+from core.context import get_context
 from core.files.audio_transcode import (
     resolve_ios_transcode_source,
     transcode_audio_bytes_to_m4a_aac,
@@ -426,7 +427,13 @@ class AudioProcessor:
         if auto_recognize:
             from core.files.media.transcriber import MediaTranscriber
 
-            transcriber = MediaTranscriber()
+            ctx = get_context()
+            company_id = ctx.active_company.company_id
+            if company_id == "":
+                raise ValueError(
+                    "process_audio_from_bytes: активная компания в контексте обязательна для auto_recognize."
+                )
+            transcriber = MediaTranscriber(company_id=company_id)
             transcription_result = await transcriber.transcribe_audio(
                 audio_bytes=data,
                 file_name=original_name,

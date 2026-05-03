@@ -66,8 +66,15 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 | `PUSH__FCM_CREDENTIALS_JSON` / `PUSH__FCM_PROJECT_ID` |
 | `LLM_BOTHUB_API_KEY` / `LLM_OPENROUTER_API_KEY` |
 | `STT__CLOUD_RU__API_KEY` |
+| `VOICE__STT__YANDEX__API_KEY` / `VOICE__STT__YANDEX__FOLDER_ID` |
+| `VOICE__STT__SBER__CLIENT_ID` / `VOICE__STT__SBER__CLIENT_SECRET` |
+| `VOICE__TTS__CLOUD_RU__API_KEY` |
+| `VOICE__TTS__YANDEX__API_KEY` / `VOICE__TTS__YANDEX__FOLDER_ID` |
+| `VOICE__TTS__SBER__CLIENT_ID` / `VOICE__TTS__SBER__CLIENT_SECRET` |
 | `RAG_EMBEDDING_API_KEY` |
 | `YOOMONEY_ACCOUNT_NUMBER` / `YOOMONEY_NOTIFICATION_SECRET` / `YOOMONEY_CLIENT_ID` / `YOOMONEY_CLIENT_SECRET` / `YOOMONEY_ACCESS_TOKEN` |
+
+**Voice/Speech:** `STT__CLOUD_RU__API_KEY` попадает в Kubernetes Secret `platform-secrets` как `stt-cloud-ru-api-key`; в Pod env проброшен как **`VOICE__STT__CLOUD_RU__API_KEY`** (`settings.voice.stt.cloud_ru.api_key`). Остальные ключи `VOICE__STT__*` / `VOICE__TTS__*` маппятся через `helm_platform_secrets_json.sh` в `platformSecrets.{stt,tts}{Yandex,Sber,CloudRu}{ApiKey,FolderId,ClientId,ClientSecret}`, оттуда в `platform-secrets` (ключи `stt-yandex-api-key` и т.п.).
 
 В **`helm_platform_secrets_json.sh`** ключ embedding в платформенный Secret попадает только из **`RAG_EMBEDDING_API_KEY`**; подстановки из **`LLM_OPENROUTER_API_KEY`** нет.
 

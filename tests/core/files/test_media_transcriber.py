@@ -196,7 +196,7 @@ class TestIsYouTubeUrl:
 class TestMediaTranscriberAudio:
     async def test_transcribe_wav_with_mock_stt(self) -> None:
         wav = minimal_wav_silence(duration_sec=1.0)
-        transcriber = MediaTranscriber()
+        transcriber = MediaTranscriber(company_id="system")
         result = await transcriber.transcribe_audio(
             audio_bytes=wav,
             file_name="voice.wav",
@@ -206,7 +206,7 @@ class TestMediaTranscriberAudio:
         assert len(result.text) > 0
 
     async def test_raises_on_empty_audio(self) -> None:
-        transcriber = MediaTranscriber()
+        transcriber = MediaTranscriber(company_id="system")
         with pytest.raises(ValueError, match="audio_bytes"):
             await transcriber.transcribe_audio(
                 audio_bytes=b"",
@@ -215,7 +215,7 @@ class TestMediaTranscriberAudio:
             )
 
     async def test_raises_on_empty_filename(self) -> None:
-        transcriber = MediaTranscriber()
+        transcriber = MediaTranscriber(company_id="system")
         with pytest.raises(ValueError, match="file_name"):
             await transcriber.transcribe_audio(
                 audio_bytes=b"\x00\x01",
@@ -228,7 +228,7 @@ class TestMediaTranscriberAudio:
 class TestMediaTranscriberVideo:
     async def test_transcribe_mp4_with_mock_stt(self) -> None:
         video_bytes = _generate_test_mp4(duration_sec=1.0)
-        transcriber = MediaTranscriber()
+        transcriber = MediaTranscriber(company_id="system")
         result = await transcriber.transcribe_video(
             video_bytes=video_bytes,
             file_name="call.mp4",
@@ -237,7 +237,7 @@ class TestMediaTranscriberVideo:
         assert len(result.text) > 0
 
     async def test_raises_on_empty_video(self) -> None:
-        transcriber = MediaTranscriber()
+        transcriber = MediaTranscriber(company_id="system")
         with pytest.raises(ValueError, match="video_bytes"):
             await transcriber.transcribe_video(
                 video_bytes=b"",
@@ -279,7 +279,7 @@ class TestFileReaderAudioVideo:
     async def test_read_wav_returns_transcription(self) -> None:
         wav = minimal_wav_silence(duration_sec=1.0)
         reader = FileReader()
-        result = await reader.read(wav, file_name="voice.wav")
+        result = await reader.read(wav, file_name="voice.wav", transcription_company_id="system")
         assert result.detected_kind == FileReadKind.AUDIO
         assert result.page_count == 1
         assert len(result.pages) == 1
@@ -288,7 +288,11 @@ class TestFileReaderAudioVideo:
     async def test_read_mp4_returns_transcription(self) -> None:
         video_bytes = _generate_test_mp4(duration_sec=1.0)
         reader = FileReader()
-        result = await reader.read(video_bytes, file_name="meeting.mp4")
+        result = await reader.read(
+            video_bytes,
+            file_name="meeting.mp4",
+            transcription_company_id="system",
+        )
         assert result.detected_kind == FileReadKind.VIDEO
         assert result.page_count == 1
         assert len(result.pages) == 1

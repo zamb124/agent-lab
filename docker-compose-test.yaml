@@ -190,8 +190,8 @@ services:
       - CALLS__LIVEKIT_URL=ws://livekit-test:7880
       - CALLS__LIVEKIT_API_KEY=devkey
       - CALLS__LIVEKIT_API_SECRET=secret
-      - STT__PROVIDER=mock
-      - STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
+      - VOICE__STT__PROVIDER=mock
+      - VOICE__STT__MOCK_TRANSCRIPT_TEXT=Тестовая транскрипция docker worker
       - OFFICE__JWT_SECRET=test-onlyoffice-jwt-secret
       - OFFICE__DOCUMENT_SERVER_PUBLIC_URL=http://onlyoffice-documentserver
       - OFFICE__CALLBACK_PUBLIC_BASE_URL=http://testserver

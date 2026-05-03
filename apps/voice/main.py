@@ -14,12 +14,17 @@ logger = get_logger(__name__)
 
 
 async def on_startup(app: FastAPI, container, settings: VoiceServiceSettings) -> None:
-    """Инициализация voice-сервиса при старте."""
-    logger.info("voice service startup")
+    """Инициализация voice-сервиса при старте.
 
-    # Инициализация VAD (лениво)
-    _ = container.vad_provider
-    logger.info("VAD provider загружен")
+    Streaming-провайдеры создаются per-session через voice_resolver.
+    Здесь — только инициализация контейнера и логирование.
+    """
+    logger.info(
+        "voice service startup: stt=%s tts=%s vad=%s",
+        settings.voice.stt.provider,
+        settings.voice.tts.provider,
+        settings.voice.vad.provider,
+    )
 
 
 app = create_service_app(

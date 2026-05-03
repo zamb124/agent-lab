@@ -69,6 +69,13 @@ class ReadOptions(BaseModel):
         default=None,
         description="Текст инструкции для vision-модели при разборе изображений; иначе встроенный промпт извлечения текста.",
     )
+    transcription_company_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "company_id для tier-резолва STT при чтении audio/video; "
+            "если None — из активного платформенного контекста."
+        ),
+    )
 
 
 def merge_file_ref_read_options(

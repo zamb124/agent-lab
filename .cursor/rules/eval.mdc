@@ -78,7 +78,31 @@ async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
 2. Зарегистрировать в `namespace.py`
 3. Вызывать из тула по имени фасада
 
-Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`, `get_code_runner`.
+Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`, `get_code_runner`, `transcribe_audio`, `synthesize_speech`.
+
+### Голос: `transcribe_audio` / `synthesize_speech` (tools)
+
+Пара фасадов поверх `core.clients.voice_resolver` (см. `speech_providers.mdc`).
+В namespace регистрируются именно как **tools** (вызываются из `llm_node` или
+inline `code`), а не как ноды графа. Канон выбора провайдера/модели —
+строго через `voice_resolver` (override-аргумент функции → запись в
+`company_voice_providers` для `ctx.company.company_id` → `settings.voice`):
+
+| Фасад | Назначение | Биллинг |
+|---|---|---|
+| `transcribe_audio(file_id, *, language=None, provider=None, model=None) -> str` | Скачать файл из S3 (`file_processor`), вызвать STT, вернуть распознанный текст | `record_stt_usage(provider=..., audio_seconds)` из длительности контейнера через ffprobe (`probe_audio_duration_seconds_from_upload`); при недоступности длительности запись usage пропускается с предупреждением в лог |
+| `synthesize_speech(text, *, voice=None, language=None, provider=None, model=None, response_format=None, file_name=None) -> str` | Синтезировать речь, сохранить в S3 как `file`, вернуть `file_id` | `record_tts_usage(provider=..., char_count=len(text))` |
+
+Импорт `core.clients.voice_resolver` или специфических клиентов прямо в
+теле тула — запрещён (`speech_providers.mdc`); вместо этого вызывай фасад
+по имени, оно уже в namespace.
+
+Параллельно работает **авто-STT входящих audio-вложений** в `flows`
+(`apps/flows/src/files/audio_input.py`) для каналов A2A SDK/CLI, embed-chat
+и нашего чата: аудио-файлы транскрибируются один раз перед передачей
+сообщения в flow и подмешиваются в `content` блоком
+`[AUDIO_TRANSCRIPT name=<file>]…[/AUDIO_TRANSCRIPT]`. Тулу его уже не
+надо повторно транскрибировать — он получает текст в сообщении.
 
 ## Состав namespace (SSOT, без дублирования в правилах)
 

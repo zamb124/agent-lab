@@ -103,6 +103,185 @@ async def get_file_bytes(file_id: str) -> bytes:
     return await s3.download_bytes(record.s3_key)
 
 
+async def transcribe_audio(
+    file_id: str,
+    *,
+    language: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> str:
+    """
+    STT: распознаёт persisted-аудио по `file_id` и возвращает текст.
+
+    Провайдер/модель/язык резолвит платформенный `voice_resolver`:
+    `override` (этот вызов) → запись `company_voice_providers` для активной
+    компании → дефолт `settings.voice.stt`. Никаких прямых импортов
+    конкретного клиента в коде агента/тула — всё через фасад.
+
+    Args:
+        file_id: идентификатор persisted-аудио в `FileRepository`.
+        language: BCP-47 (например `ru-RU`); опционально — переопределяет
+            `voice.stt.<provider>.language`.
+        provider: явный провайдер для этого вызова (`litserve`, `cloud_ru`,
+            `yandex`, `sber`, `mock`); опционально.
+        model: явная модель для этого вызова (значение зависит от провайдера);
+            опционально.
+
+    Returns:
+        Распознанный текст.
+    """
+    from apps.flows.src.container import get_container
+    from core.clients.speech_override import SpeechOverride
+    from core.clients.voice_resolver import get_stt_client
+    from core.context import get_context
+    from core.files.audio_probe import probe_audio_duration_seconds_from_upload
+    from core.logging import get_logger
+
+    _log = get_logger(__name__)
+
+    if not isinstance(file_id, str) or file_id.strip() == "":
+        raise ValueError("transcribe_audio: file_id обязателен.")
+
+    ctx = get_context()
+    if ctx is None or ctx.active_company is None:
+        raise ValueError("transcribe_audio: нужен Context с active_company.")
+    company_id = ctx.active_company.company_id
+
+    container = get_container()
+    record = await container.file_processor.get_file_record(file_id.strip())
+    if record is None:
+        raise ValueError(f"transcribe_audio: файл {file_id!r} не найден.")
+
+    s3 = await container.file_processor._get_s3_client()
+    audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
+
+    override = SpeechOverride(
+        provider=provider,
+        model=model,
+        language=language,
+    )
+    stt = await get_stt_client(company_id=company_id, override=override)
+    result = await stt.transcribe_audio(
+        audio_bytes=audio_bytes,
+        file_name=record.original_name,
+        mime_type=record.content_type,
+        language=language,
+    )
+
+    if ctx.user is not None:
+        from apps.voice.services.voice_usage import record_stt_usage
+
+        try:
+            audio_seconds = await probe_audio_duration_seconds_from_upload(
+                data=audio_bytes, file_name=record.original_name
+            )
+        except ValueError as exc:
+            _log.warning(
+                "eval.transcribe_audio.stt_usage_skipped",
+                reason=str(exc),
+                company_id=company_id,
+                user_id=ctx.user.user_id,
+                provider=result.provider,
+                file_id=file_id.strip(),
+            )
+        else:
+            await record_stt_usage(
+                user=ctx.user,
+                company=ctx.active_company,
+                provider=result.provider,
+                audio_seconds=audio_seconds,
+                metadata={"endpoint": "eval.transcribe_audio", "file_id": file_id},
+            )
+
+    return result.text or ""
+
+
+async def synthesize_speech(
+    text: str,
+    *,
+    voice: str | None = None,
+    language: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    response_format: str | None = None,
+    file_name: str | None = None,
+) -> str:
+    """
+    TTS: синтезирует речь и сохраняет результат в `FileRepository` + S3.
+
+    Возвращает `file_id` сохранённого аудио — этот id агент кладёт в ответ
+    или передаёт каналу. Провайдер/модель/голос резолвит `voice_resolver`
+    (override → company → deployment-default).
+
+    Args:
+        text: текст для озвучивания (обязателен, непустой).
+        voice: явный голос для этого вызова (значение зависит от провайдера).
+        language: BCP-47 для языка озвучивания.
+        provider: явный провайдер (`litserve`, `cloud_ru`, `yandex`, `sber`,
+            `mock`).
+        model: явная модель (значение зависит от провайдера).
+        response_format: контейнер ответа (`wav`, `mp3`, `ogg`, `pcm`, `lpcm`).
+        file_name: явное имя сохраняемого файла; по умолчанию формируется как
+            `tts_<random>.<ext>` по `response_format`.
+
+    Returns:
+        `file_id` сохранённого аудио в `FileRepository`.
+    """
+    import uuid
+
+    from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
+    from apps.flows.src.container import get_container
+    from core.clients.speech_override import SpeechOverride
+    from core.clients.voice_resolver import get_tts_client
+    from core.context import get_context
+
+    if not isinstance(text, str) or text.strip() == "":
+        raise ValueError("synthesize_speech: text обязателен.")
+
+    ctx = get_context()
+    if ctx is None or ctx.active_company is None:
+        raise ValueError("synthesize_speech: нужен Context с active_company.")
+    company_id = ctx.active_company.company_id
+    user_id = ctx.user.user_id if ctx.user else None
+
+    override = SpeechOverride(
+        provider=provider,
+        model=model,
+        voice=voice,
+        language=language,
+        response_format=response_format,  # type: ignore[arg-type]
+    )
+    tts = await get_tts_client(company_id=company_id, override=override)
+    result = await tts.synthesize(text=text)
+
+    ext = result.response_format if result.response_format else "wav"
+    name = file_name if file_name and file_name.strip() else f"tts_{uuid.uuid4().hex[:12]}.{ext}"
+
+    container = get_container()
+    record = await container.file_processor.persist_uploaded_file(
+        data=result.audio_bytes,
+        original_name=name,
+        content_type=result.mime_type,
+        uploaded_by=user_id,
+        company_id=company_id,
+        public=False,
+        download_url_prefix=f"{FLOWS_PUBLIC_API_PREFIX}/files/download",
+    )
+
+    if ctx.user is not None:
+        from apps.voice.services.voice_usage import record_tts_usage
+
+        await record_tts_usage(
+            user=ctx.user,
+            company=ctx.active_company,
+            provider=result.provider,
+            char_count=len(text),
+            metadata={"endpoint": "eval.synthesize_speech", "file_id": record.file_id},
+        )
+
+    return record.file_id
+
+
 async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
     """
     Per-user OAuth для Google API.

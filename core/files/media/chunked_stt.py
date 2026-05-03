@@ -8,7 +8,9 @@ from typing import Any
 
 import httpx
 
-from core.clients.stt_client import BaseSTTClient, STTClientFactory
+from core.clients.speech_override import SpeechOverride
+from core.clients.stt_client import BaseSTTClient
+from core.clients.voice_resolver import get_stt_client
 from core.config import get_settings
 from core.files.models import AudioTranscriptionStatus
 
@@ -232,7 +234,7 @@ def split_audio_for_stt_chunks(
                 raise ValueError(
                     "STT chunk превышает допустимый размер upload. "
                     f"chunk_index={chunk_index} size={len(chunk_bytes)} max={max_upload_bytes}. "
-                    "Уменьшите stt.cloud_ru.chunk_duration_seconds или chunk_bitrate_kbps."
+                    "Уменьшите media_transcriber.chunk_duration_seconds или chunk_bitrate_kbps."
                 )
             chunk_file_name = f"{file_stem}-part-{chunk_index:04d}.mp3"
             chunks.append((chunk_file_name, chunk_bytes, "audio/mpeg"))
@@ -243,12 +245,14 @@ def split_audio_for_stt_chunks(
 async def transcribe_audio_with_chunking(
     *,
     job_id: str,
+    company_id: str,
     audio_bytes: bytes,
     file_name: str,
     mime_type: str,
     language: str | None = None,
+    speech_override: SpeechOverride | None = None,
     stt_client: BaseSTTClient | None = None,
-) -> str:
+) -> tuple[str, str]:
     """Транскрибирует аудио через STT с автоматическим чанкованием при необходимости.
 
     Сначала пробует одним запросом. Если файл слишком большой (413) или формат
@@ -256,25 +260,34 @@ async def transcribe_audio_with_chunking(
 
     Args:
         job_id: идентификатор задачи для логирования
+        company_id: идентификатор компании для tier-резолва STT
         audio_bytes: байты аудиофайла
         file_name: имя файла
         mime_type: MIME-тип
-        language: язык (если None — дефолтный из конфига STT)
-        stt_client: клиент STT (если None — создаётся через STTClientFactory)
+        language: язык (если None — см. tier-резолв и media_transcriber.default_language)
+        speech_override: необязательный per-call override провайдера/модели
+        stt_client: инъекция клиента для тестов (если None — ``get_stt_client``)
 
     Returns:
-        Полный текст транскрипции.
+        Кортеж (полный текст, идентификатор провайдера из последнего ответа STT).
     """
+    if company_id == "":
+        raise ValueError("company_id обязателен для transcribe_audio_with_chunking.")
+
     settings = get_settings()
-    cloud_config = settings.stt.cloud_ru
-    max_upload_bytes = cloud_config.max_upload_bytes
-    chunk_duration_seconds = cloud_config.chunk_duration_seconds
-    chunk_bitrate_kbps = cloud_config.chunk_bitrate_kbps
-    chunk_sample_rate_hz = cloud_config.chunk_sample_rate_hz
-    chunk_channels = cloud_config.chunk_channels
+    mt = settings.media_transcriber
+    max_upload_bytes = mt.chunk_max_upload_bytes
+    chunk_duration_seconds = mt.chunk_duration_seconds
+    chunk_bitrate_kbps = mt.chunk_bitrate_kbps
+    chunk_sample_rate_hz = mt.chunk_sample_rate_hz
+    chunk_channels = mt.chunk_channels
 
     if stt_client is None:
-        stt_client = STTClientFactory.create_client()
+        stt_client = await get_stt_client(
+            company_id=company_id, override=speech_override
+        )
+
+    last_provider = ""
 
     should_chunk_first = len(audio_bytes) > max_upload_bytes
 
@@ -285,12 +298,14 @@ async def transcribe_audio_with_chunking(
         *,
         context: str,
     ) -> str:
+        nonlocal last_provider
         transcript_result = await stt_client.transcribe_audio(
             audio_bytes=payload_bytes,
             file_name=payload_name,
             mime_type=payload_mime,
             language=language,
         )
+        last_provider = transcript_result.provider
         return validate_stt_result_text(
             transcript_result=transcript_result,
             job_id=job_id,
@@ -309,12 +324,13 @@ async def transcribe_audio_with_chunking(
             )
             if len(norm_bytes) <= max_upload_bytes:
                 try:
-                    return await _single_shot(
+                    text = await _single_shot(
                         norm_bytes,
                         norm_name,
                         "audio/mpeg",
                         context="single_request_mp3_normalized",
                     )
+                    return text, last_provider
                 except httpx.HTTPStatusError as exc:
                     if exc.response.status_code != 413:
                         raise
@@ -337,12 +353,13 @@ async def transcribe_audio_with_chunking(
                     )
         else:
             try:
-                return await _single_shot(
+                text = await _single_shot(
                     audio_bytes,
                     file_name,
                     mime_type,
                     context="single_request",
                 )
+                return text, last_provider
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code != 413:
                     raise
@@ -382,6 +399,7 @@ async def transcribe_audio_with_chunking(
             mime_type=chunk_mime_type,
             language=language,
         )
+        last_provider = transcript_result.provider
         chunk_text = validate_stt_result_text(
             transcript_result=transcript_result,
             job_id=job_id,
@@ -391,4 +409,6 @@ async def transcribe_audio_with_chunking(
             chunk_texts.append(chunk_text)
     if len(chunk_texts) == 0:
         raise ValueError(f"STT вернул пустые транскрипции для всех чанков job_id={job_id}.")
-    return "\n".join(chunk_texts)
+    if last_provider == "":
+        raise ValueError("STT не вернул идентификатор провайдера (last_provider пуст).")
+    return "\n".join(chunk_texts), last_provider

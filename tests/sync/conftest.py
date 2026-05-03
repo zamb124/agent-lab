@@ -20,8 +20,11 @@ os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID", "minioadmin")
 os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY", "minioadmin")
-os.environ.setdefault("STT__PROVIDER", "mock")
-os.environ.setdefault("STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
+os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
+os.environ.setdefault(
+    "VOICE__STT__MOCK_TRANSCRIPT_TEXT",
+    "Тестовая транскрипция sync worker",
+)
 os.environ.setdefault("CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS", "2")
 os.environ.setdefault("CALLS__SPEECH_TO_CHAT__POLL_INITIAL_DELAY_SECONDS", "0.5")
 os.environ.setdefault("CALLS__SPEECH_TO_CHAT__POLL_INTERVAL_SECONDS", "1")

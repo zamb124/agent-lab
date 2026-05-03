@@ -560,8 +560,8 @@ def sync_worker():
             "S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY": "minioadmin",
             "S3__BUCKETS__TEST-BUCKET__REGION_NAME": "us-east-1",
             "S3__BUCKETS__TEST-BUCKET__PROVIDER": "minio",
-            "STT__PROVIDER": "mock",
-            "STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
+            "VOICE__STT__PROVIDER": "mock",
+            "VOICE__STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
             "CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS": os.environ.get(
                 "CALLS__SPEECH_TO_CHAT__SEGMENT_SECONDS", "2"
             ),

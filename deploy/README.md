@@ -152,7 +152,7 @@ kubectl delete secret platform-secrets -n platform
 | `GRAFANA_ADMIN_PASSWORD` | пароль admin@grafana |
 | `LLM_BOTHUB_API_KEY` | (опционально) LLM провайдер |
 | `LLM_OPENROUTER_API_KEY` | (опционально) OpenRouter |
-| `STT_CLOUD_RU_API_KEY` | (опционально) STT cloud.ru |
+| `STT_CLOUD_RU_API_KEY` | (опционально) GitHub → `STT__CLOUD_RU__API_KEY` → Secret `stt-cloud-ru-api-key` → Pod env `VOICE__STT__CLOUD_RU__API_KEY` |
 | `RAG_EMBEDDING_API_KEY` | (опционально) RAG embeddings (если отличается от LLM) |
 | `PUSH_VAPID_PUBLIC_KEY` / `PUSH_VAPID_PRIVATE_KEY` | (опционально) Web Push VAPID |
 | `PUSH_APNS_PRIVATE_KEY` | (опционально) APNs .p8 |

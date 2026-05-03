@@ -70,7 +70,15 @@ class BargeInController:
         session,
         clear_tts_queue: bool = True,
     ) -> None:
-        """Остановить TTS и очистить очередь."""
+        """Остановить TTS и очистить очереди синтеза + исходящего аудио."""
         self._last_barge_in_ts = time.monotonic()
         session.mark_tts_active(False)
-        logger.info("barge-in executed: session_id=%s", session.session_id)
+        if clear_tts_queue:
+            removed = session.clear_synthesis_and_audio_out()
+        else:
+            removed = 0
+        logger.info(
+            "barge-in executed: session_id=%s removed_queue_items=%d",
+            session.session_id,
+            removed,
+        )
