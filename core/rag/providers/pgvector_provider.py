@@ -623,13 +623,31 @@ class PgVectorProvider(BaseRAGProvider):
                 raise ValueError(
                     f"RAG filters: $in требует непустой список значений для ключа {key!r}",
                 )
-            return self._metadata_expr_for_scalar(key, op_value[0]).in_(list(op_value))
+            vals = list(op_value)
+            if len(vals) == 1:
+                v0 = vals[0]
+                return self._metadata_expr_for_scalar(key, v0) == v0
+            return or_(
+                *[
+                    self._metadata_expr_for_scalar(key, v) == v
+                    for v in vals
+                ]
+            )
         if operator == "$nin":
             if not isinstance(op_value, (list, tuple)) or len(op_value) == 0:
                 raise ValueError(
                     f"RAG filters: $nin требует непустой список значений для ключа {key!r}",
                 )
-            return self._metadata_expr_for_scalar(key, op_value[0]).notin_(list(op_value))
+            vals = list(op_value)
+            if len(vals) == 1:
+                v0 = vals[0]
+                return self._metadata_expr_for_scalar(key, v0) != v0
+            return and_(
+                *[
+                    self._metadata_expr_for_scalar(key, v) != v
+                    for v in vals
+                ]
+            )
 
         if isinstance(op_value, int) and not isinstance(op_value, bool):
             col_int = VectorDocument.metadata_[key].as_integer()

@@ -615,6 +615,7 @@ async def run(state):
         assert "version" in diff_paths
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(15, func_only=True)
     async def test_full_workflow_validate_execute_create(
         self, client, app, container, cleanup_flow, unique_id
     ):

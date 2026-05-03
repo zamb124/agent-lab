@@ -181,6 +181,7 @@ class TestFlowRepositoryTwoTables:
         await repo.delete(flow_id)
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(15, func_only=True)
     async def test_list_all_performance_with_many_versions(self, app, unique_id):
         """
         СТРОГИЙ ТЕСТ: list_all() работает быстро даже при большом количестве версий у других агентов.

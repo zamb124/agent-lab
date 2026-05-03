@@ -310,7 +310,7 @@ certManager:
   email: ops@humanitec.ru
 
 # Secret platform-secrets: манифест в templates/01-platform-secrets.yaml при platformSecrets.create=true.
-# Значения задаются только через helm (--set-string), например из deploy/scripts/helm_platform_secrets_lib.sh.
+# Значения задаются через helm --set-json platformSecrets=... (deploy/scripts/helm_platform_secrets_json.sh + jq).
 platformSecrets:
   create: false
   postgresPassword: ""

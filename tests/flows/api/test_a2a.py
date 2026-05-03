@@ -1565,6 +1565,8 @@ class TestA2ARealisticStreaming:
     - События приходят в правильном порядке
     """
 
+    pytestmark = pytest.mark.timeout(15, func_only=True)
+
     @pytest.fixture
     async def flow_id(self, client):
         # Используем фиксированный агент для стабильности тестов

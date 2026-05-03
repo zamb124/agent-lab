@@ -103,11 +103,46 @@ def _all_messages_text(call: dict[str, Any]) -> str:
     """Склейка текстов всех сообщений вызова — для подстрочного поиска маркеров."""
 
     messages = call.get("messages") or []
-    return "\n\n".join(m.get("text") or "" for m in messages)
+    chunks: list[str] = []
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        t = m.get("text")
+        if isinstance(t, str) and t:
+            chunks.append(t)
+            continue
+        for p in m.get("parts") or []:
+            if not isinstance(p, dict):
+                continue
+            if p.get("type") == "text" and isinstance(p.get("text"), str):
+                chunks.append(p["text"])
+    return "\n\n".join(chunks)
+
+
+def _call_matches_crm_analyze_schema(call: dict[str, Any]) -> bool:
+    """Вызов CRM analyze (structured output) несёт json_schema с полями note/entities/metadata/attachment_summaries."""
+    rf = call.get("response_format")
+    if not isinstance(rf, dict):
+        return False
+    js = rf.get("json_schema")
+    if not isinstance(js, dict):
+        return False
+    schema = js.get("schema")
+    if not isinstance(schema, dict):
+        return False
+    req = schema.get("required")
+    if not isinstance(req, list):
+        return False
+    return (
+        "note" in req
+        and "entities" in req
+        and "attachment_summaries" in req
+        and "metadata" in req
+    )
 
 
 def _find_analyze_call(calls: list[dict[str, Any]]) -> dict[str, Any]:
-    """Ищет в журнале вызов analyze по фрагментам prompts/analyze.md."""
+    """Ищет в журнале вызов analyze: текст prompts/analyze.md или structured output CRM analyze."""
 
     def _matches_analyze_prompt(text: str) -> bool:
         if "ТИПЫ ENTITIES" not in text:
@@ -121,6 +156,8 @@ def _find_analyze_call(calls: list[dict[str, Any]]) -> dict[str, Any]:
         return False
 
     for call in calls:
+        if _call_matches_crm_analyze_schema(call):
+            return call
         text = _all_messages_text(call)
         if _matches_analyze_prompt(text):
             return call

@@ -109,9 +109,11 @@ MicroK8s cluster
 | `PUSH_FCM_CREDENTIALS_JSON` / `PUSH_FCM_PROJECT_ID` | (опционально) FCM service account |
 | `YOOMONEY_*` | (опционально) платежи YooMoney |
 
-Эти переменные задаются в GitHub Actions как env и передаются в Helm (`platformSecrets.*`, см. `deploy/scripts/helm_platform_secrets_lib.sh`).
+Эти переменные задаются в GitHub Actions как env и передаются в Helm одним `--set-json platformSecrets=...` через `deploy/scripts/helm_platform_secrets_json.sh` (jq экранирует многострочные секреты).
 
 ## Ручной деплой (без CI)
+
+Нужны **kubectl**, **helm**, **jq** (`brew install jq` / `apt install jq`) — jq собирает JSON секретов для `helm --set-json`.
 
 ```bash
 # 1. KUBECONFIG настроен (kubectl get nodes показывает обе ноды)

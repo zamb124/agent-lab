@@ -152,15 +152,13 @@ k8s-template:
 		--set image.tag=$(IMAGE_TAG)
 
 # Применить чарт в текущий kubeconfig-кластер. Атомарно, ждёт rollout.
-# Требует bash (массив аргументов из deploy/scripts/helm_platform_secrets_lib.sh).
+# Секреты: jq + deploy/scripts/helm_platform_secrets_json.sh → helm --set-json (устойчиво к многострочным значениям).
 k8s-deploy:
 	@bash -ec '\
 	set -euo pipefail; \
-	. deploy/scripts/helm_platform_secrets_lib.sh; \
-	EXTRA=(); \
+	JSON_ARGS=(); \
 	if [ -n "$${POSTGRES_PASSWORD:-}" ]; then \
-	  helm_platform_secrets_fill_flags; \
-	  EXTRA=("$${HELM_PLATFORM_SECRETS_FLAGS[@]}"); \
+	  JSON_ARGS=(--set-json "platformSecrets=$$(bash deploy/scripts/helm_platform_secrets_json.sh)"); \
 	fi; \
 	helm upgrade --install $(K8S_RELEASE) $(HELM_CHART) \
 	  --namespace $(K8S_NAMESPACE) \
@@ -168,7 +166,7 @@ k8s-deploy:
 	  --values $(HELM_VALUES) \
 	  --values $(HELM_VALUES_PROD) \
 	  --set image.tag=$(IMAGE_TAG) \
-	  "$${EXTRA[@]}" \
+	  "$${JSON_ARGS[@]}" \
 	  --wait --timeout 15m \
 	'
 
@@ -229,12 +227,10 @@ k8s-secrets-sync:
 	fi
 	@bash -ec '\
 	set -euo pipefail; \
-	. deploy/scripts/helm_platform_secrets_lib.sh; \
-	helm_platform_secrets_fill_flags; \
 	helm upgrade $(K8S_RELEASE) $(HELM_CHART) \
 	  --namespace $(K8S_NAMESPACE) \
 	  --reuse-values \
-	  "$${HELM_PLATFORM_SECRETS_FLAGS[@]}" \
+	  --set-json "platformSecrets=$$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
 	  --wait --timeout 15m \
 	'
 

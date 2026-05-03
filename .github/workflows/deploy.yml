@@ -208,9 +208,6 @@ jobs:
           esac
           echo "LitServe: litserve_node=$LITSERVE_NODE -> scheduleOnGpuNode=$LITSERVE_SCHEDULE_GPU"
 
-          source deploy/scripts/helm_platform_secrets_lib.sh
-          helm_platform_secrets_fill_flags
-
           helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
             --namespace "$K8S_NAMESPACE" \
             --create-namespace \
@@ -218,7 +215,7 @@ jobs:
             --values "$HELM_CHART/values-prod.yaml" \
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
             --set litserve.scheduleOnGpuNode="$LITSERVE_SCHEDULE_GPU" \
-            "${HELM_PLATFORM_SECRETS_FLAGS[@]}" \
+            --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
             --wait --timeout 15m
 
       - name: Verify rollout (cluster-health.sh)
