@@ -40,10 +40,17 @@ MicroK8s cluster
 
 ## CI/CD
 
-[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — `workflow_dispatch` или push в `main`:
+[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — ручной запуск (**Actions → Deploy → Run workflow**):
 
-1. **`build`** — `docker build --target full` → push в GHCR (`ghcr.io/<owner>/agent-lab:<sha>` + `:latest`).
-2. **`deploy`** — `helm upgrade --install` через `KUBECONFIG_B64`, затем `bash deploy/scripts/cluster-health.sh` для подтверждения.
+1. **`build`** — `docker build --target full` → push в GHCR (`ghcr.io/<owner>/agent-lab:<sha>` + `:latest` на default branch).
+2. **`deploy`** — `helm upgrade --install` через `KUBECONFIG_B64`, с выбором **`litserve_node`**: **`gpu`** (по умолчанию, нода с `accelerator=nvidia-gpu`) или **`cpu`** (под на master, медленнее), затем `bash deploy/scripts/cluster-health.sh`.
+
+Параметры workflow:
+
+| Input | Значение |
+|---|---|
+| `image_tag` | Пусто = тег из build (короткий SHA); иначе явный тег образа. |
+| `litserve_node` | `gpu` или `cpu` → `--set litserve.scheduleOnGpuNode=true/false`. |
 
 Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт.
 
@@ -71,7 +78,7 @@ MicroK8s cluster
 
 | Секрет | Что туда положить |
 |---|---|
-| `KUBECONFIG_B64` | `cat ~/.kube/config \| base64` от мастер-ноды (с правами на namespace `platform` и cert-manager). На master MicroK8s: `microk8s config \| base64` |
+| `KUBECONFIG_B64` | На master: **`microk8s config \| base64 -w0`** (Linux) или **`microk8s config \| base64 \| tr -d '\n'`** (macOS). Весь вывод одной строкой в секрет. Workflow использует **environment `production`**: секрет должен быть задан в **Repository secrets** или в **Environment secrets** для `production` (Settings → Environments → production), иначе в job значение будет пустым. |
 
 ### Платформа (передаются в Secret `platform-secrets`)
 

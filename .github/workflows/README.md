@@ -2,18 +2,18 @@
 
 | Workflow | Триггер | Описание |
 |---|---|---|
-| [`deploy.yml`](deploy.yml) | `workflow_dispatch`, `push: main` | Build → push GHCR → `helm upgrade --install` в MicroK8s кластер |
+| [`deploy.yml`](deploy.yml) | `workflow_dispatch` | Build → push GHCR → `helm upgrade --install` в MicroK8s; input **`litserve_node`**: `gpu` \| `cpu` |
 | [`mobile-android-build.yml`](mobile-android-build.yml) | manual / по тегу | Сборка Android-приложения |
 | [`mobile-pwa-lighthouse.yml`](mobile-pwa-lighthouse.yml) | по расписанию / manual | Lighthouse аудит PWA (`PWA_LIGHTHOUSE_URL`) |
 
 ## Deploy: схема
 
 ```
-GitHub Actions (main / manual)
+GitHub Actions (Run workflow)
     │
     ├─ build job
     │     docker build --target full
-    │     push → ghcr.io/<owner>/agent-lab:<sha> (+ :latest на main)
+    │     push → ghcr.io/<owner>/agent-lab:<sha> (+ :latest на default branch)
     │
     └─ deploy job (needs: build)
           KUBECONFIG_B64 → ~/.kube/config
@@ -21,14 +21,17 @@ GitHub Actions (main / manual)
           helm upgrade --install agent-lab ./deploy/helm/agent-lab \
               --namespace platform --create-namespace \
               --values values.yaml --values values-prod.yaml \
-              --set image.tag=<sha> --wait --timeout 15m
-          kubectl get pods -n platform → fail если есть не-Running
+              --set image.tag=<sha> \
+              --set litserve.scheduleOnGpuNode=<true|false из input litserve_node> \
+              --wait --timeout 15m
+          bash deploy/scripts/cluster-health.sh (CHECK_PUBLIC=1)
 
 MicroK8s cluster
 ├── master (84.38.184.105)         hostname=master
 │   └── Postgres, Redis, all apps + workers, observability, ingress
+│       (и provider-litserve при litserve_node=cpu)
 └── gpu-worker (188.246.224.228)   accelerator=nvidia-gpu
-    └── provider-litserve (nodeSelector + nvidia.com/gpu: 1)
+    └── provider-litserve при litserve_node=gpu (nodeSelector + nvidia.com/gpu: 1)
 ```
 
 ## Конфигурация и секреты
@@ -39,7 +42,7 @@ MicroK8s cluster
 
 | Secret | Источник | Где используется |
 |---|---|---|
-| `KUBECONFIG_B64` | `microk8s config \| base64` с master-ноды | `deploy` job, шаг "Configure kubeconfig" |
+| `KUBECONFIG_B64` | `microk8s config \| base64 -w0` (Linux) или `base64 \| tr -d '\n'` (macOS). При **environment `production`** — также в Environment secrets, если не завели в repo | `deploy` job |
 
 ### Платформенные секреты (передаются в `platform-secrets`)
 

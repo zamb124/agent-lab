@@ -7,6 +7,14 @@ on:
         description: "Тег образа для деплоя (по умолчанию — короткий SHA коммита)"
         required: false
         default: ""
+      litserve_node:
+        description: "Нода для provider-litserve (GPU-воркер или CPU на master)"
+        required: true
+        default: gpu
+        type: choice
+        options:
+          - gpu
+          - cpu
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/agent-lab
@@ -88,10 +96,33 @@ jobs:
           version: v3.16.2
 
       - name: Configure kubeconfig
+        # Один GitHub Secret KUBECONFIG_B64 — пробрасываем в ENV, чтобы проверить «не пусто» до base64 -d.
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
         run: |
+          set -euo pipefail
+          if [ -z "${KUBECONFIG_B64}" ]; then
+            echo "::error title=Missing kubeconfig::Secret KUBECONFIG_B64 пустой или недоступен."
+            echo "Задайте его:"
+            echo "  Repositories → Settings → Secrets and variables → Actions → New repository secret (имя: KUBECONFIG_B64)"
+            echo "  Если у job указано environment «production», добавьте тот же secret в Environment: Settings → Environments → production → Environment secrets."
+            echo "Значение: на master выполните: microk8s config | base64 -w0   (Linux) или microk8s config | base64 | tr -d '\\n'   (macOS)."
+            exit 1
+          fi
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
+          if ! printf '%s' "${KUBECONFIG_B64}" | base64 -d > ~/.kube/config; then
+            echo "::error::KUBECONFIG_B64 не декодируется как base64. Перезапишите секрет без лишних пробелов и переносов."
+            exit 1
+          fi
+          if ! grep -q . ~/.kube/config; then
+            echo "::error::После base64 -d файл ~/.kube/config пустой. Проверьте содержимое секрета."
+            exit 1
+          fi
           chmod 600 ~/.kube/config
+          if ! kubectl config get-contexts -o name 2>/dev/null | grep -q .; then
+            echo "::error::В kubeconfig нет контекстов. Снимите конфиг с master: microk8s config"
+            exit 1
+          fi
           kubectl config current-context
           kubectl get nodes -o wide
 
@@ -198,13 +229,26 @@ jobs:
         run: helm lint "$HELM_CHART"
 
       - name: Helm upgrade --install
+        env:
+          LITSERVE_NODE: ${{ inputs.litserve_node }}
         run: |
+          set -euo pipefail
+          case "$LITSERVE_NODE" in
+            gpu) LITSERVE_SCHEDULE_GPU=true ;;
+            cpu) LITSERVE_SCHEDULE_GPU=false ;;
+            *)
+              echo "FATAL: litserve_node must be gpu or cpu, got: $LITSERVE_NODE" >&2
+              exit 1
+              ;;
+          esac
+          echo "LitServe: litserve_node=$LITSERVE_NODE -> scheduleOnGpuNode=$LITSERVE_SCHEDULE_GPU"
           helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
             --namespace "$K8S_NAMESPACE" \
             --create-namespace \
             --values "$HELM_CHART/values.yaml" \
             --values "$HELM_CHART/values-prod.yaml" \
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
+            --set litserve.scheduleOnGpuNode="$LITSERVE_SCHEDULE_GPU" \
             --wait --timeout 15m
 
       - name: Verify rollout (cluster-health.sh)

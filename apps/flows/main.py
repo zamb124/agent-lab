@@ -149,14 +149,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         try:
             loaded_tools = await load_tools_to_db(container.tool_repository)
             logger.info(f"Загружено tools: {loaded_tools}")
-    
-            await ensure_default_mcp_servers_for_company(container=container)
-            synced = await sync_auto_mcp_servers_for_company(container=container)
-            logger.info(
-                "MCP синхронизация для system: servers=%s tools=%s",
-                synced["servers"],
-                synced["tools"],
-            )
+
             logger.info("Загрузка flows из bundles синхронно (TESTING=true)...")
             from apps.flows.src.services.flows_loader import load_flows_to_db
 
@@ -166,6 +159,21 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                 container.tool_repository,
             )
             logger.info(f"Загружено flows: {loaded_flow_ids}")
+
+            try:
+                await ensure_default_mcp_servers_for_company(container=container)
+                synced = await sync_auto_mcp_servers_for_company(container=container)
+                logger.info(
+                    "MCP синхронизация для system: servers=%s tools=%s",
+                    synced["servers"],
+                    synced["tools"],
+                )
+            except Exception as mcp_err:
+                logger.warning(
+                    "MCP синхронизация при старте тестов пропущена: %s",
+                    mcp_err,
+                    exc_info=True,
+                )
             from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
 
             await ensure_example_hitl_queue(container.operator_repository, "system")

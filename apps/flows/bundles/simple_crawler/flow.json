@@ -11,12 +11,8 @@
     "function_first"
   ],
   "permission": [],
-<<<<<<< HEAD
   "branches": {},
-  "entry": "plan_queries",
-=======
   "entry": "bootstrap_session",
->>>>>>> cda6aab8 (describe + search eval)
   "nodes": {
     "bootstrap_session": {
       "type": "code",
