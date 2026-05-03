@@ -184,3 +184,22 @@ GPU_NODE_LABEL_VALUE="${GPU_NODE_LABEL_VALUE:-nvidia-gpu}"
 MASTER_HOST_IP="${MASTER_HOST_IP:-84.38.184.105}"
 GPU_HOST_IP="${GPU_HOST_IP:-188.246.224.228}"
 SSH_USER="${SSH_USER:-root}"
+
+# disable_host_firewall - идемпотентно отключает UFW (host-level firewall).
+# Канон 2026 для нод Kubernetes: трафик контролируется CNI NetworkPolicies
+# и инфраструктурой outside (cloud-provider firewall / ingress); host UFW мешает
+# контрольным плоскостям (kubelet 10250, apiserver 16443, dqlite 19001, calico vxlan)
+# и его правила-исключения дублируют логику CNI. Если требуется host firewall —
+# использовать nftables-конфиг провайдера, а не ufw поверх Calico.
+disable_host_firewall() {
+  if ! command -v ufw >/dev/null 2>&1; then
+    log_skip "ufw не установлен"
+    return 0
+  fi
+  if ufw status 2>/dev/null | head -1 | grep -q 'inactive'; then
+    log_skip "ufw уже отключён"
+    return 0
+  fi
+  log_do "ufw disable (host firewall → CNI NetworkPolicies)"
+  ufw --force disable
+}

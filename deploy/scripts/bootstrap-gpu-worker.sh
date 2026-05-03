@@ -40,6 +40,11 @@ CONTAINERD_DROPIN_DIR="${CONTAINERD_DROPIN_DIR:-/etc/containerd/conf.d}"
 
 log_section "Bootstrap GPU worker (hostname=$GPU_HOSTNAME)"
 
+# 0. UFW off — без этого master apiserver не достучится до kubelet 10250 на gpu-worker
+# (DROP policy), kubectl logs/exec/port-forward отвалится. Канон 2026 — security через
+# CNI NetworkPolicies, не host UFW.
+disable_host_firewall
+
 # 1. hostname
 idempotent \
   "hostname = $GPU_HOSTNAME" \

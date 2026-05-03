@@ -29,6 +29,10 @@ ADDONS=(dns hostpath-storage ingress cert-manager)
 
 log_section "Bootstrap master ноды (hostname=$MASTER_HOSTNAME)"
 
+# 0. UFW off — kubelet 10250 / apiserver 16443 / dqlite 19001 / VXLAN Calico должны
+# свободно ходить между нодами; security — через CNI NetworkPolicies, не host UFW.
+disable_host_firewall
+
 # 1. hostname
 idempotent \
   "hostname = $MASTER_HOSTNAME" \
