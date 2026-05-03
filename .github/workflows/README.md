@@ -2,7 +2,7 @@
 
 | Workflow | Триггер | Описание |
 |---|---|---|
-| [`deploy.yml`](deploy.yml) | `workflow_dispatch` | Build → push GHCR → `helm upgrade --install` в MicroK8s; input **`litserve_node`**: `gpu` \| `cpu` |
+| [`deploy.yml`](deploy.yml) | `workflow_dispatch` | Build → push GHCR → `helm upgrade --install` в MicroK8s; inputs: **`litserve_node`** (`gpu` \| `cpu`), **`replace_orphan_platform_secret`** (удалить сиротский `platform-secrets` перед первым install) |
 | [`mobile-android-build.yml`](mobile-android-build.yml) | manual / по тегу | Сборка Android-приложения |
 | [`mobile-pwa-lighthouse.yml`](mobile-pwa-lighthouse.yml) | по расписанию / manual | Lighthouse аудит PWA (`PWA_LIGHTHOUSE_URL`) |
 

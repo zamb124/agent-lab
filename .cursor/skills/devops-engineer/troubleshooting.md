@@ -166,7 +166,7 @@ kubectl exec -n platform deployment/alloy -c alloy -- env | grep OTEL
 
 **Причина:** в namespace **`platform`** уже есть **`platform-secrets`**, созданный не через Helm (kubectl, сторонний скрипт), а деплой включает **`platformSecrets.create: true`**.
 
-**Решение:** при необходимости сохранить ключи, затем `kubectl delete secret platform-secrets -n platform` и повторить деплой. Префлайт: **`deploy/scripts/helm_precheck_install_secret_conflict.sh`** (CI и **`make k8s-deploy`** с **`POSTGRES_PASSWORD`**). Подробнее — **`deploy/README.md`** (раздел про первый install).
+**Решение:** при необходимости сохранить ключи, затем `kubectl delete secret platform-secrets -n platform` и повторить деплой. В GitHub Actions включите вход **`replace_orphan_platform_secret`** в workflow Deploy (удаление секрета перед install). Префлайт: **`deploy/scripts/helm_precheck_install_secret_conflict.sh`**. Подробнее — **`deploy/README.md`** (раздел про первый install).
 
 ### 9.2 `helm upgrade` завис / timeout
 
