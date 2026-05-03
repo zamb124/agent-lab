@@ -246,6 +246,7 @@ async def test_universal_agent_with_rag_ingest_and_search(
                 "tool": "rag_add_text",
                 "args": {
                     "namespace_id": ns,
+                    "collection_id": "universal_agent_test",
                     "text": chunk,
                     "document_name": "ua_marker.txt",
                 },
@@ -253,7 +254,12 @@ async def test_universal_agent_with_rag_ingest_and_search(
             {
                 "type": "tool_call",
                 "tool": "rag_search",
-                "args": {"namespace_id": ns, "query": "zeta-9 marker Humanitec", "limit": 5},
+                "args": {
+                    "namespace_id": ns,
+                    "collection_id": "universal_agent_test",
+                    "query": "zeta-9 marker Humanitec",
+                    "limit": 5,
+                },
             },
             "Найден фрагмент в базе знаний.",
         ]

@@ -42,7 +42,7 @@ MicroK8s cluster
 
 | Secret | Источник | Где используется |
 |---|---|---|
-| `KUBECONFIG_B64` | См. **`deploy/README.md`** (Environment `production` перекрывает Repository; пустой Environment-secret ломает деплой). Опционально **`KUBECONFIG_B64_REPOSITORY`** в repo как fallback. |
+| `KUBECONFIG_B64` | Repository Actions secret; см. **`deploy/README.md`**. |
 
 ### Платформенные секреты (передаются в `platform-secrets`)
 

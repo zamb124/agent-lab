@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-OBSERVABILITY_DIR = Path(__file__).parents[2] / "deploy" / "observability"
-DASHBOARDS_DIR = OBSERVABILITY_DIR / "dashboards"
-ALERTS_DIR = OBSERVABILITY_DIR / "grafana-alerts"
+# Источник правды для дашбордов / Loki / Alloy / Grafana provisioning — Helm chart files.
+_OBSERVABILITY_FILES = Path(__file__).parents[2] / "deploy" / "helm" / "agent-lab" / "files"
+DASHBOARDS_DIR = _OBSERVABILITY_FILES / "dashboards"
+ALERTS_DIR = _OBSERVABILITY_FILES / "grafana-alerts"
+OBSERVABILITY_DIR = _OBSERVABILITY_FILES
 
 LOKI_DATASOURCE_UID = "loki"
 TEMPO_DATASOURCE_UID = "tempo"
@@ -194,8 +196,8 @@ class TestAlloyConfig:
         assert 'svc   = "\\"service.name\\""' not in content, (
             "alloy.config contains escaped quotes for service.name"
         )
-        assert "discovery.docker" in content
-        assert 'targets    = discovery.relabel.docker_labels.output' in content
+        assert "discovery.kubernetes" in content
+        assert "discovery.relabel.pods.output" in content
 
     def test_alloy_has_loki_write_and_otlp(self):
         path = OBSERVABILITY_DIR / "alloy.config"

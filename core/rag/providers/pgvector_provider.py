@@ -618,6 +618,19 @@ class PgVectorProvider(BaseRAGProvider):
         if operator == "$ne":
             return self._metadata_expr_for_scalar(key, op_value) != op_value
 
+        if operator == "$in":
+            if not isinstance(op_value, (list, tuple)) or len(op_value) == 0:
+                raise ValueError(
+                    f"RAG filters: $in требует непустой список значений для ключа {key!r}",
+                )
+            return self._metadata_expr_for_scalar(key, op_value[0]).in_(list(op_value))
+        if operator == "$nin":
+            if not isinstance(op_value, (list, tuple)) or len(op_value) == 0:
+                raise ValueError(
+                    f"RAG filters: $nin требует непустой список значений для ключа {key!r}",
+                )
+            return self._metadata_expr_for_scalar(key, op_value[0]).notin_(list(op_value))
+
         if isinstance(op_value, int) and not isinstance(op_value, bool):
             col_int = VectorDocument.metadata_[key].as_integer()
             if operator == "$gt":
@@ -639,10 +652,6 @@ class PgVectorProvider(BaseRAGProvider):
             if operator == "$lte":
                 return VectorDocument.metadata_[key].as_float() <= fv
 
-        if operator == "$in":
-            return self._metadata_expr_for_scalar(key, op_value[0]).in_(op_value)
-        if operator == "$nin":
-            return self._metadata_expr_for_scalar(key, op_value[0]).notin_(op_value)
         raise ValueError(f"RAG filters: неподдерживаемый оператор {operator}")
 
     def _build_metadata_filter_expression(self, filters: Dict[str, Any]):
