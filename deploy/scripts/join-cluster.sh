@@ -66,16 +66,21 @@ else
 
   ADD_NODE_OUT="$(microk8s add-node --token-ttl 7200 2>&1)"
 
-  # microk8s add-node выводит несколько вариантов команды (worker, ipv4 only).
-  # Берём первую содержащую "microk8s join" с IP мастера или 25000.
-  JOIN_CMD="$(printf '%s\n' "$ADD_NODE_OUT" | grep -E 'microk8s join [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:25000/' | head -n1 | sed 's/^[[:space:]]*//')"
+  # microk8s add-node выводит несколько вариантов команды. Базовая (без --worker)
+  # подключает ноду как полноценный control-plane (HA), что добавляет её IP в Service
+  # `kubernetes` endpoints. Для GPU-воркера (без kube-apiserver) это означает что часть
+  # внутри-кластерного трафика к 10.152.183.1:443 будет уходить на ноду без apiserver
+  # и таймаутить (calico, kubelet -> apiserver, hostpath-provisioner). Поэтому ВСЕГДА
+  # используем `--worker`: gpu-worker остаётся data-plane, control-plane только на master.
+  JOIN_BASE="$(printf '%s\n' "$ADD_NODE_OUT" | grep -E 'microk8s join [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:25000/' | head -n1 | sed 's/^[[:space:]]*//')"
 
-  if [ -z "$JOIN_CMD" ]; then
+  if [ -z "$JOIN_BASE" ]; then
     log_error "Не удалось распарсить вывод 'microk8s add-node':"
     printf '%s\n' "$ADD_NODE_OUT" | sed 's/^/    /'
     exit 1
   fi
 
+  JOIN_CMD="$JOIN_BASE --worker"
   log_info "Команда для worker: $JOIN_CMD"
 
   # 3. SSH на worker → join
