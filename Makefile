@@ -2,7 +2,7 @@
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore
+.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore
 
 # ============================================================================
 # Конфигурация
@@ -203,6 +203,10 @@ k8s-logs:
 k8s-rollback:
 	helm rollback $(K8S_RELEASE) -n $(K8S_NAMESPACE)
 
+# Снять блокировку Helm pending-* без rollback приложений (удалить только зависшие release Secret).
+k8s-helm-clear-pending:
+	HELM_NAMESPACE=$(K8S_NAMESPACE) HELM_RELEASE=$(K8S_RELEASE) bash deploy/scripts/helm_clear_pending_release.sh
+
 # Полное удаление чарта (PVC сохраняются — их удалять вручную).
 k8s-uninstall:
 	helm uninstall $(K8S_RELEASE) -n $(K8S_NAMESPACE)
@@ -293,6 +297,7 @@ help:
 	@echo "  make k8s-status          - Снимок: nodes, pods, svc, ingress, pvc"
 	@echo "  make k8s-logs SVC=frontend - Логи Deployment frontend"
 	@echo "  make k8s-rollback        - helm rollback на предыдущую ревизию"
+	@echo "  make k8s-helm-clear-pending - снять pending-upgrade/install/rollback у Helm (не откат Pod)"
 	@echo "  make k8s-secrets-sync    - Обновить Secret platform-secrets через helm (--reuse-values)"
 	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
 	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"

@@ -57,7 +57,7 @@ MicroK8s cluster
 
 **Локальный `make k8s-deploy`** с **`values-prod.yaml`** не создаёт docker-registry Secret: перед установкой выполните ту же команду, что в workflow (**`kubectl create secret docker-registry ghcr-agent-lab-pull ...`**), или задайте свой список **`image.pullSecrets`** и имя секрета в кластере.
 
-Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт. В CI **`helm --wait --timeout 30m`** (первый install может упираться в pull образов и StatefulSets). Ошибка **`context deadline exceeded`**: проверить **`kubectl get pods -n platform`**, **`kubectl get events -n platform`**; при необходимости увеличить timeout в [deploy.yml](../.github/workflows/deploy.yml) или **`make k8s-deploy HELM_WAIT_TIMEOUT=45m`**.
+Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт. В CI **`helm --wait --timeout 30m`** (первый install может упираться в pull образов и StatefulSets). Ошибка **`context deadline exceeded`**: проверить **`kubectl get pods -n platform`**, **`kubectl get events -n platform`**; при необходимости увеличить timeout в [deploy.yml](../.github/workflows/deploy.yml) или **`make k8s-deploy HELM_WAIT_TIMEOUT=45m`**. Ошибка **`another operation ... is in progress`**: **`make k8s-helm-clear-pending`** (снимает только зависшие Helm pending Secret, без отката Pod) — см. [`deploy/scripts/helm_clear_pending_release.sh`](scripts/helm_clear_pending_release.sh) и **`troubleshooting.md`** в skill DevOps.
 
 ## Конфигурация платформы для Helm (ConfigMap)
 
@@ -96,6 +96,7 @@ kubectl delete secret platform-secrets -n platform
 | [`migrate-data-from-compose.sh`](scripts/migrate-data-from-compose.sh) | локально | Одноразово: SSH на старый docker-compose хост → `pg_dumpall` → restore в новый кластер |
 | [`render_helm_app_conf.py`](scripts/render_helm_app_conf.py) | локально / CI | `conf.json` + `files/app-conf.k8s-overlay.json` → `files/app-conf.json` для Helm ConfigMap |
 | [`helm_precheck_install_secret_conflict.sh`](scripts/helm_precheck_install_secret_conflict.sh) | CI / `make k8s-deploy` с секретами | Перед первым install: коллизия с `platform-secrets` без Helm → ошибка или удаление при `HELM_DELETE_ORPHAN_PLATFORM_SECRET=1` (в CI — галочка `replace_orphan_platform_secret`) |
+| [`helm_clear_pending_release.sh`](scripts/helm_clear_pending_release.sh) | локально / CI / master при наличии `kubectl` | Удалить Helm Secret с `status=pending-*` (разблокировать **`another operation is in progress`** без **`helm rollback`**) |
 
 Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
 

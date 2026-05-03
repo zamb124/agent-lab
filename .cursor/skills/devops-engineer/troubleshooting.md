@@ -182,11 +182,31 @@ helm history agent-lab -n platform   # последняя ревизия pending
 - Под не входит в Ready (failed startupProbe) → `helm upgrade --wait` ждёт rolloutReady.
 - PVC не Bound (см. секцию 4).
 - Ресурсный квоты: `kubectl describe nodes | grep Allocated` — нет ли OOM на ноде.
-- Helm в pending state из-за фейла предыдущего: `helm rollback agent-lab -n platform` или `helm uninstall && reinstall`.
+- Helm в pending state из-за фейла предыдущего: см. **§9.3** или `helm rollback agent-lab -n platform` / при крайней необходимости `helm uninstall && reinstall`.
 
 **Решение:**
 - Подкрутить `--timeout 45m` при очень медленном первом pull образов (по умолчанию **30m** в Makefile и CI).
-- Если pending: `helm history` → `helm rollback`.
+- Если нужно только снять блокировку **без отката приложений** — **§9.3**.
+- Если нужен именно откат манифестов предыдущей ревизии: `helm history` → `helm rollback`.
+
+### 9.3 `another operation (install/upgrade/rollback) is in progress`
+
+**Симптомы:** `helm upgrade` / CI Deploy падает с **`UPGRADE FAILED: another operation ... is in progress`**.
+
+**Причина:** предыдущий install/upgrade/rollback оборвался (timeout, Ctrl+C, второй параллельный деплой). В namespace остаётся Helm Secret ревизии с label **`status=pending-upgrade`**, **`pending-install`** или **`pending-rollback`** (`sh.helm.release.v1.<release>.v<N>`).
+
+**Решение без `helm rollback` (Pod в кластере не откатываются):**
+```bash
+make k8s-helm-clear-pending
+# эквивалент:
+# HELM_NAMESPACE=platform HELM_RELEASE=agent-lab bash deploy/scripts/helm_clear_pending_release.sh
+```
+Затем повторить **`make k8s-deploy`** или workflow **Deploy**. Убедитесь, что нет второго одновременного запуска Helm против того же релиза.
+
+**Диагностика:**
+```bash
+kubectl get secrets -n platform -l owner=helm,name=agent-lab -o custom-columns=NAME:.metadata.name,STATUS:.metadata.labels.status
+```
 
 ## 10. KUBECONFIG_B64 не валиден
 
