@@ -37,7 +37,7 @@ deploy/helm/agent-lab/
     10-postgres/        # StatefulSet + Service + ConfigMap init
     11-redis/           # StatefulSet + Service
     20-migrations-job.yaml  # helm hook post-install/post-upgrade
-    30-apps/            # 8 application Deployments + Services через range
+    30-apps/            # 9 application Deployments + Services через range
     40-workers/         # 6 worker Deployments через range
     50-gpu/litserve.yaml  # nodeSelector: accelerator=nvidia-gpu
     60-external/        # livekit, livekit-egress, coturn DaemonSet, onlyoffice
@@ -50,7 +50,7 @@ deploy/helm/agent-lab/
 - образ `image.repository=ghcr.io/zamb124/agent-lab`, `image.tag=latest` (перекрывается в CI: `--set image.tag=$SHA`);
 - `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo через `nodeSelector`;
 - `gpuNodeSelectorKey/Value: accelerator=nvidia-gpu` — куда прибивается LitServe;
-- `applications.<name>` (8 сервисов: flows/frontend/crm/rag/sync/office/scheduler-api/voice) — порт, реплики, command;
+- `applications.<name>` (9 сервисов: flows/frontend/crm/rag/sync/office/scheduler-api/voice/browser) — порт, реплики, command;
 - `workers.<name>` (6 воркеров) — реплики и command для TaskIQ;
 - `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice` — внешние компоненты;
 - `observability.{loki,tempo,grafana,alloy}` — стек;
@@ -71,6 +71,7 @@ deploy/helm/agent-lab/
 | scheduler-api | 8006 | 1 | `python -m apps.scheduler.main` |
 | office | 8008 | 1 | `python -m apps.office.main` |
 | voice | 8015 | 1 | `python -m apps.voice.main` |
+| browser | 8009 | 1 | `python -m apps.browser.main` + sidecar `zenika/alpine-chrome` (CDP 9222 в том же Pod) |
 | provider-litserve (GPU) | 8014 | 1 | `python -m apps.provider_litserve.main` (nodeSelector) |
 | flows-worker | — | 2 | `taskiq worker apps.flows_worker.worker:worker_app --workers 4` |
 | scheduler | — | 1 | `taskiq scheduler apps.scheduler.scheduler:scheduler` |
@@ -82,6 +83,8 @@ deploy/helm/agent-lab/
 Один образ `ghcr.io/zamb124/agent-lab:latest`, разные `command:` через `values.yaml`.
 
 **Frontend и static:** `templates/30-apps/deployments.yaml` для frontend добавляет `initContainer` `extract-static`, который копирует `/app/static/` в `emptyDir` `shared-static`. Отдельный static-server pod больше не нужен — frontend сам обслуживает статику из своего же образа.
+
+**Browser Runtime:** Deployment `browser` в том же чарте; контейнер `chromium-cdp` даёт CDP (`http://127.0.0.1:9222` внутри Pod), приложение подключается через Playwright `connect_over_cdp`. Публичный Ingress для browser не открывается; flows/workers ходят на ClusterIP `http://browser:8009` через `SERVER__BROWSER_SERVICE_URL`.
 
 **CRM vendor (three.js, 3d-force-graph):** в Docker-образ запекается `node_modules/three/build` и `node_modules/3d-force-graph/dist` (стадия `js-vendor`), CRM Deployment отдаёт `/crm/ui/vendor/...` напрямую из `/app/node_modules/...`.
 

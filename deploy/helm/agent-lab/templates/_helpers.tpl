@@ -54,6 +54,11 @@ URL баз — через ClusterIP postgres / redis в namespace релиза.
   value: http://{{ .Values.applications.office.serviceName }}:{{ .Values.applications.office.port }}
 - name: SERVER__SCHEDULER_SERVICE_URL
   value: http://{{ index .Values.applications "scheduler-api" "serviceName" }}:{{ index .Values.applications "scheduler-api" "port" }}
+{{- $browser := index .Values.applications "browser" }}
+{{- if and $browser $browser.enabled }}
+- name: SERVER__BROWSER_SERVICE_URL
+  value: http://{{ $browser.serviceName }}:{{ $browser.port }}
+{{- end }}
 - name: SERVER__PLATFORM_PUBLIC_BASE_URL
   value: https://{{ .Values.domain }}
 - name: AUTH__JWT_SECRET

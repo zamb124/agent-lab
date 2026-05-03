@@ -43,9 +43,10 @@ redis:
       cpu: "1"
       memory: 2Gi
 
-# Конфигурация платформы (conf.json).
-# Файл deploy/helm/agent-lab/files/app-conf.json (если положить) монтируется как ConfigMap.
-# По умолчанию используется корневой conf.json репозитория, копируемый CI в files/.
+# Конфигурация платформы в подах: ConfigMap из files/app-conf.json.
+# Канон структуры — только корневой conf.json; K8s-дельты — files/app-conf.k8s-overlay.json.
+# Итог files/app-conf.json не редактировать вручную: make render-helm-app-conf (вызывается из k8s-lint/k8s-template/k8s-deploy и CI перед helm lint).
+# Сгенерированный app-conf.json коммитят в репозиторий, чтобы в PR был виден полный дифф для ConfigMap.
 appConfigConfigMap: app-conf
 
 # Глобальные переменные окружения для всех подов приложения и воркеров.
@@ -162,6 +163,19 @@ applications:
       limits:
         cpu: "1"
         memory: 1Gi
+  browser:
+    enabled: true
+    port: 8009
+    replicas: 1
+    serviceName: browser
+    command: ["python", "-m", "apps.browser.main"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
 
 workers:
   flows-worker:

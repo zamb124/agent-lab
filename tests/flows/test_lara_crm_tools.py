@@ -173,9 +173,9 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
                         },
                         "entities": [
                             {
-                                "entity_type": "task",
-                                "name": f"Задача {unique_id}",
-                                "description": "Проверка извлечения сущности",
+                                "entity_type": "contact",
+                                "name": f"Контакт {unique_id}",
+                                "description": "Проверка извлечения сущности для Lara analyze",
                                 "attributes": {},
                                 "confidence": 0.85,
                             }
@@ -238,6 +238,15 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
             break
         await asyncio.sleep(0.4)
     assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+
+    task_data = last.get("data")
+    if not isinstance(task_data, dict):
+        raise AssertionError(f"task response missing data dict: {last!r}")
+    entities_done = task_data.get("result_entities_count")
+    assert isinstance(entities_done, int) and entities_done >= 1, (
+        f"ожидались извлечённые сущности в задаче analyze, получено result_entities_count={entities_done!r}, "
+        f"task={last!r}"
+    )
 
     entity_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
     draft = entity_resp.json().get("attributes", {}).get("ai_analysis_draft") or {}
@@ -340,6 +349,15 @@ async def test_crm_create_note_and_analyze_tool_chains(
             break
         await asyncio.sleep(0.4)
     assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+
+    task_data_combo = last.get("data")
+    if not isinstance(task_data_combo, dict):
+        raise AssertionError(f"task response missing data dict: {last!r}")
+    entities_done_combo = task_data_combo.get("result_entities_count")
+    assert isinstance(entities_done_combo, int) and entities_done_combo >= 1, (
+        f"ожидались извлечённые сущности в задаче analyze, получено result_entities_count={entities_done_combo!r}, "
+        f"task={last!r}"
+    )
 
     entity_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
     draft = entity_resp.json().get("attributes", {}).get("ai_analysis_draft") or {}

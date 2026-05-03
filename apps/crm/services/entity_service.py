@@ -2809,13 +2809,14 @@ class EntityService:
             entities_data = []
         entity_list: List[AIExtractedEntity] = []
         note_family_type_ids = await self._collect_note_family_type_ids(namespace)
+        note_family_lc = {str(t).lower() for t in note_family_type_ids}
         for i, raw_ent in enumerate(entities_data):
             if not isinstance(raw_ent, dict):
                 raise ValueError(f"entities[{i}] должен быть объектом")
             parsed = AIExtractedEntity.model_validate(
                 self._normalize_entity_payload(raw_ent)
             )
-            if parsed.entity_type.lower() in note_family_type_ids:
+            if parsed.entity_type.lower() in note_family_lc:
                 logger.warning(
                     "analyze: LLM вернул сущность note-семейства (type=%r, name=%r) "
                     "в массиве entities — пропущена (заметка уже представлена в поле note)",

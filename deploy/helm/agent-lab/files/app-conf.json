@@ -8,7 +8,7 @@
     "rag_service_url": "http://localhost:8004",
     "sync_service_url": "http://localhost:8005",
     "office_service_url": "http://localhost:8008",
-    "browser_service_url": "http://localhost:8009",
+    "browser_service_url": "http://browser:8009",
     "provider_litserve_service_url": "https://humanitec.ru/litserve",
     "voice_service_url": "http://localhost:8015",
     "platform_public_base_url": "https://humanitec.ru",
@@ -552,8 +552,7 @@
         "default_endpoint_key": "chromium",
         "cdp_url": "",
         "cdp_endpoints": {
-          "chromium": "http://127.0.0.1:9222",
-          "lightpanda": "ws://127.0.0.1:9223"
+          "chromium": "http://127.0.0.1:9222"
         },
         "artifacts_dir": "artifacts/browser_runtime",
         "default_page_ttl_sec": 3600,

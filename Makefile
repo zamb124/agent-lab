@@ -2,7 +2,7 @@
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore
+.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore
 
 # ============================================================================
 # Конфигурация
@@ -139,12 +139,16 @@ base:
 # Kubernetes / Helm: деплой и операции
 # ============================================================================
 
+# Собрать deploy/helm/agent-lab/files/app-conf.json из корневого conf.json и overlay (канон + K8s-дельты).
+render-helm-app-conf:
+	uv run python deploy/scripts/render_helm_app_conf.py
+
 # Локальная валидация чарта (без обращения к кластеру).
-k8s-lint:
+k8s-lint: render-helm-app-conf
 	helm lint $(HELM_CHART)
 
 # Рендер чарта без apply (для проверки итоговых манифестов).
-k8s-template:
+k8s-template: render-helm-app-conf
 	helm template $(K8S_RELEASE) $(HELM_CHART) \
 		--namespace $(K8S_NAMESPACE) \
 		--values $(HELM_VALUES) \
@@ -153,7 +157,7 @@ k8s-template:
 
 # Применить чарт в текущий kubeconfig-кластер. Атомарно, ждёт rollout.
 # Секреты: jq + deploy/scripts/helm_platform_secrets_json.sh → helm --set-json (устойчиво к многострочным значениям).
-k8s-deploy:
+k8s-deploy: render-helm-app-conf
 	@bash -ec '\
 	set -euo pipefail; \
 	JSON_ARGS=(); \
@@ -278,6 +282,7 @@ help:
 	@echo "============================================================================"
 	@echo "Kubernetes / Helm деплой (см. deploy/README.md и deploy/cluster-setup.md):"
 	@echo "============================================================================"
+	@echo "  make render-helm-app-conf - conf.json + overlay -> files/app-conf.json"
 	@echo "  make k8s-lint            - helm lint чарта"
 	@echo "  make k8s-template        - Рендер всех манифестов в stdout (без apply)"
 	@echo "  make k8s-deploy          - helm upgrade --install (атомарно, ждёт rollout)"

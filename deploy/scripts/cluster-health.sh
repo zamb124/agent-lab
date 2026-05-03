@@ -33,7 +33,7 @@ CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
 
 # Список ожидаемых деплойментов (соответствует values.yaml — applications + workers + external)
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync office scheduler-api voice
+  flows frontend crm rag sync office scheduler-api voice browser
   flows-worker scheduler rag-worker sync-worker crm-worker idle-worker
   livekit livekit-egress onlyoffice grafana provider-litserve
 )

@@ -15,7 +15,7 @@ MicroK8s cluster
 ├── master (84.38.184.105)         hostname=master
 │   ├── postgres StatefulSet (PVC 50Gi)
 │   ├── redis StatefulSet (PVC 10Gi)
-│   ├── 8 application Deployments (flows, frontend, crm, rag, sync, scheduler-api, office, voice)
+│   ├── 9 application Deployments (flows, frontend, crm, rag, sync, scheduler-api, office, voice, browser)
 │   ├── 6 worker Deployments (flows-worker x2, scheduler, rag-worker, sync-worker, crm-worker, idle-worker)
 │   ├── livekit + livekit-egress + coturn DaemonSet (hostNetwork)
 │   ├── onlyoffice Deployment
@@ -54,6 +54,15 @@ MicroK8s cluster
 
 Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт.
 
+## Конфигурация платформы для Helm (ConfigMap)
+
+- **Канон** структуры и значений по умолчанию — только корневой **`conf.json`** в репозитории.
+- **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`** — только дельты для Kubernetes (тот же JSON-путь, что в каноне). Значение **`null`** в overlay **удаляет** ключ из итога (как в JSON Merge Patch).
+- **`deploy/helm/agent-lab/files/app-conf.json`** — **генерируется**, не редактировать вручную: **`make render-helm-app-conf`** или автоматически как зависимость **`make k8s-lint`**, **`make k8s-template`**, **`make k8s-deploy`**. В GitHub Actions тот же скрипт выполняется перед **`helm lint`**.
+- **Git:** сгенерированный **`app-conf.json`** коммитят в репозиторий, чтобы в PR был виден полный дифф того, что попадёт в ConfigMap.
+
+Скрипт: **`deploy/scripts/render_helm_app_conf.py`**.
+
 ## Идемпотентные скрипты (`deploy/scripts/`)
 
 Все операции над кластером — через скрипты с общей библиотекой [`_common.sh`](scripts/_common.sh).
@@ -69,6 +78,7 @@ MicroK8s cluster
 | [`backup-postgres.sh`](scripts/backup-postgres.sh) | локально / master | `pg_dumpall` через `kubectl exec`, опционально `--s3` в Selectel |
 | [`restore-postgres.sh`](scripts/restore-postgres.sh) | локально / master | Restore из дампа в pod `postgres-0` |
 | [`migrate-data-from-compose.sh`](scripts/migrate-data-from-compose.sh) | локально | Одноразово: SSH на старый docker-compose хост → `pg_dumpall` → restore в новый кластер |
+| [`render_helm_app_conf.py`](scripts/render_helm_app_conf.py) | локально / CI | `conf.json` + `files/app-conf.k8s-overlay.json` → `files/app-conf.json` для Helm ConfigMap |
 
 Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
 
@@ -210,7 +220,7 @@ deploy/helm/agent-lab/
     ├── 11-redis/               # StatefulSet + Service
     ├── 20-migrations-job.yaml  # helm hook post-install/post-upgrade
     ├── 30-apps/
-    │   ├── deployments.yaml    # range по values.applications (8 сервисов)
+    │   ├── deployments.yaml    # range по values.applications (9 сервисов)
     │   └── services.yaml       # range — ClusterIP для каждого
     ├── 40-workers/
     │   └── deployments.yaml    # range по values.workers (6 воркеров)
