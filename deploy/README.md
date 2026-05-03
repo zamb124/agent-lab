@@ -21,10 +21,11 @@ MicroK8s cluster
 │   ├── onlyoffice Deployment
 │   ├── observability: loki StatefulSet, tempo StatefulSet, grafana Deployment
 │   ├── alloy DaemonSet (на каждой ноде)
-│   ├── ingress-nginx + cert-manager
+│   ├── traefik (ingressClassName=public) + cert-manager + portainer (community-аддон, NodePort 30777/30779)
 │   └── 4 Ingress: platform, livekit, onlyoffice, grafana
 └── gpu-worker (188.246.224.228)   accelerator=nvidia-gpu
     ├── provider-litserve Deployment (по умолчанию: nodeSelector GPU + `nvidia.com/gpu: 1`)
+    ├── nvidia-device-plugin DaemonSet (публикует nvidia.com/gpu в Allocatable)
     └── alloy DaemonSet
 ```
 
@@ -99,18 +100,18 @@ kubectl delete secret platform-secrets -n platform
 
 | Скрипт | Где запускать | Назначение |
 |---|---|---|
-| [`bootstrap-master.sh`](scripts/bootstrap-master.sh) | master нода под root | MicroK8s + аддоны (dns/ingress/cert-manager/hostpath-storage) |
-| [`bootstrap-gpu-worker.sh`](scripts/bootstrap-gpu-worker.sh) | gpu-worker под root | NVIDIA driver + container-toolkit + MicroK8s |
-| [`join-cluster.sh`](scripts/join-cluster.sh) | master | `add-node` + SSH `microk8s join` + label + `enable gpu` на worker |
-| [`setup-wildcard-tls.sh`](scripts/setup-wildcard-tls.sh) | локально / master | `cert-manager-webhook-regru` + ClusterIssuer DNS-01 + Certificate `platform-tls` |
-| [`cluster-health.sh`](scripts/cluster-health.sh) | локально / master / CI | Полная проверка: ноды, GPU (если LitServe на GPU), поды, PVC, Ingress, Certificate, Postgres, Redis, Loki/Tempo, public health |
+| [`bootstrap-master.sh`](scripts/bootstrap-master.sh) | master нода под root | MicroK8s, core-аддоны (dns, hostpath-storage, ingress=traefik, cert-manager) и community-аддон portainer |
+| [`bootstrap-gpu-worker.sh`](scripts/bootstrap-gpu-worker.sh) | gpu-worker под root | NVIDIA driver + nvidia-container-toolkit + MicroK8s + containerd drop-in для NVIDIA runtime |
+| [`join-cluster.sh`](scripts/join-cluster.sh) | master root | `add-node` → SSH `microk8s join --worker` + label `accelerator=nvidia-gpu` |
+| [`setup-wildcard-tls.sh`](scripts/setup-wildcard-tls.sh) | локально / master / CI | `cert-manager-webhook-regru` + ClusterIssuer `letsencrypt-prod-dns01` + Certificate `platform-tls` |
+| [`cluster-health.sh`](scripts/cluster-health.sh) | локально / master / CI | Полная проверка: ноды, GPU, поды, PVC, Ingress, Certificate, Postgres, Redis, Loki/Tempo, public health |
 | [`backup-postgres.sh`](scripts/backup-postgres.sh) | локально / master | `pg_dumpall` через `kubectl exec`, опционально `--s3` в Selectel |
 | [`restore-postgres.sh`](scripts/restore-postgres.sh) | локально / master | Restore из дампа в pod `postgres-0` |
-| [`migrate-data-from-compose.sh`](scripts/migrate-data-from-compose.sh) | локально | Одноразово: SSH на старый docker-compose хост → `pg_dumpall` → restore в новый кластер |
 | [`render_helm_app_conf.py`](scripts/render_helm_app_conf.py) | локально / CI | `conf.json` + `files/app-conf.k8s-overlay.json` → `files/app-conf.json` для Helm ConfigMap |
 | [`helm_precheck_install_secret_conflict.sh`](scripts/helm_precheck_install_secret_conflict.sh) | CI / `make k8s-deploy` с секретами | Перед первым install: коллизия с `platform-secrets` без Helm → ошибка или удаление при `HELM_DELETE_ORPHAN_PLATFORM_SECRET=1` (в CI — галочка `replace_orphan_platform_secret`) |
 | [`helm_clear_pending_release.sh`](scripts/helm_clear_pending_release.sh) | локально / CI / master при наличии `kubectl` | Удалить Helm Secret с `status=pending-*` (разблокировать **`another operation is in progress`** без **`helm rollback`**) |
-| [`k8s_post_migrate_rollout.sh`](scripts/k8s_post_migrate_rollout.sh) | локально / CI / master при наличии `kubectl` | После миграций: **`kubectl rollout restart`** для приложений и TaskIQ-воркеров + ожидание **`rollout status`**; опционально ожидание Job **`migrations`** (см. `SKIP_MIGRATION_JOB_WAIT`) |
+| [`decommission-compose.sh`](scripts/decommission-compose.sh) | локально (SSH на хост) | Полный снос legacy docker compose стека; dry-run по default, `CONFIRM=1` — реально |
+| [`cluster-reset.sh`](scripts/cluster-reset.sh) | локально (SSH на обе ноды) | Полный reset MicroK8s (helm uninstall, namespace delete, snap purge); `CONFIRM=1` — реально |
 
 Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
 
@@ -206,26 +207,6 @@ make k8s-uninstall
 # удалить PVC вручную, если нужно: kubectl delete pvc -n platform --all
 ```
 
-## Миграция данных с предыдущей Docker Compose инсталляции
-
-Одноразовая операция (не в CI):
-
-```bash
-# На старом сервере (где был docker-compose-prod):
-docker exec agentlab_postgres pg_dumpall -U platform_user > /tmp/full_dump.sql
-scp /tmp/full_dump.sql user@master:/tmp/
-
-# На master ноде после helm install (postgres-0 уже Running):
-microk8s kubectl cp /tmp/full_dump.sql platform/postgres-0:/tmp/full_dump.sql
-microk8s kubectl exec -n platform postgres-0 -- \
-  psql -U platform_user -f /tmp/full_dump.sql
-
-# Проверка списка БД:
-microk8s kubectl exec -n platform postgres-0 -- psql -U platform_user -l
-```
-
-Redis: AOF переносится при необходимости (TaskIQ очереди эфемерны, sessions в БД — переносить не обязательно).
-
 ## Структура чарта
 
 ```
@@ -246,42 +227,36 @@ deploy/helm/agent-lab/
 │   ├── dashboards/             # 10 дашбордов
 │   └── grafana-alerts/         # 3 файла (rules, contact-points, policies)
 └── templates/
-    ├── _helpers.tpl            # agentlab.appEnv, agentlab.image, agentlab.confVolume(Mount)
-    ├── 01-platform-secrets.yaml  # Secret platform-secrets при platformSecrets.create=true
+    ├── _helpers.tpl                  # agentlab.appEnv, agentlab.image, agentlab.dbReadyAndMigrateInitContainers
+    ├── 01-platform-secrets.yaml      # Secret platform-secrets при platformSecrets.create=true
     ├── 02-configmap-app-conf.yaml
-    ├── 10-postgres/            # StatefulSet + Service + ConfigMap init
-    ├── 11-redis/               # StatefulSet + Service
-    ├── 20-migrations-job.yaml  # helm hook post-install/post-upgrade
+    ├── 10-postgres/                  # StatefulSet + Service + ConfigMap init
+    ├── 11-redis/                     # StatefulSet + Service
     ├── 30-apps/
-    │   ├── deployments.yaml    # range по values.applications (9 сервисов)
-    │   └── services.yaml       # range — ClusterIP для каждого
+    │   ├── deployments.yaml          # range по values.applications (init-containers wait-postgres + db-migrate)
+    │   └── services.yaml
     ├── 40-workers/
-    │   └── deployments.yaml    # range по values.workers (6 воркеров)
-    ├── 50-gpu/litserve.yaml    # nodeSelector: accelerator=nvidia-gpu, nvidia.com/gpu: 1
-    ├── 60-external/            # livekit, livekit-egress, coturn DaemonSet, onlyoffice
-    ├── 70-observability/       # loki, tempo, grafana, alloy DaemonSet + ServiceAccount/RBAC
-    ├── 80-ingress/             # cluster-issuer + 4 Ingress (platform, livekit, onlyoffice, grafana)
+    │   └── deployments.yaml          # range по values.workers (init-containers wait-postgres + db-migrate)
+    ├── 50-gpu/
+    │   ├── litserve.yaml             # nodeSelector: accelerator=nvidia-gpu, nvidia.com/gpu: 1
+    │   └── nvidia-device-plugin.yaml # NVIDIA k8s-device-plugin DaemonSet
+    ├── 60-external/                  # livekit, livekit-egress, coturn DaemonSet, onlyoffice
+    ├── 70-observability/             # loki, tempo, grafana, alloy DaemonSet + ServiceAccount/RBAC
+    ├── 80-ingress/                   # 4 Ingress: platform, livekit, onlyoffice, grafana (secretName: platform-tls)
     └── NOTES.txt
 ```
 
-После `helm upgrade` чарт создаёт ~65 K8s ресурсов (`make k8s-template | grep '^kind:' | sort | uniq -c`):
+После `helm upgrade` чарт создаёт K8s ресурсы (`make k8s-template | grep '^kind:' | sort | uniq -c`):
 
 ```
-  1 ClusterIssuer
-  1 ClusterRole
-  1 ClusterRoleBinding
- 11 ConfigMap
-  2 DaemonSet
- 19 Deployment
-  4 Ingress
-  1 Job
-  1 Namespace
-  2 PersistentVolumeClaim
- 17 Service
-  1 ServiceAccount
-  4 StatefulSet
+ 20 Deployment   18 Service       11 ConfigMap
+  4 StatefulSet   4 Ingress        3 DaemonSet
+  2 PersistentVolumeClaim          1 ServiceAccount
+  1 ClusterRole   1 ClusterRoleBinding
 ```
+
+Миграции БД идут как init-containers `wait-postgres` + `db-migrate` (Alembic upgrade head с DDL-блокировкой) в каждом app/worker pod — отдельного Job в чарте нет.
 
 ## Wildcard TLS
 
-Для `*.humanitec.ru` чарт ссылается на Secret `platform-tls`. Если используется HTTP-01, доступен только apex `humanitec.ru` — wildcard приходится получать через DNS-01 (cert-manager + webhook регистратора, например [`cert-manager-webhook-regru`](https://github.com/regru/cert-manager-webhook-regru)). Установка webhook'а — одноразовая, описана в [`cluster-setup.md`](cluster-setup.md).
+Wildcard для `humanitec.ru` + `*.humanitec.ru` выпускается через DNS-01 (cert-manager + [`flant/cert-manager-webhook-regru`](https://github.com/flant/cert-manager-webhook-regru)) и хранится в одном общем Secret `platform-tls`. На него ссылаются все 4 ingress'а. Webhook + ClusterIssuer `letsencrypt-prod-dns01` + Certificate ставит `deploy/scripts/setup-wildcard-tls.sh` (вызывается из CI перед `helm upgrade`). Подробности — [`cluster-setup.md`](cluster-setup.md).

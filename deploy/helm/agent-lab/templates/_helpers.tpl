@@ -7,8 +7,7 @@
 
 {{/*
 Платформенные ENV для всех app/worker подов: URL баз, секреты, OAuth, LLM, S3, push, OnlyOffice, OTLP.
-Все секреты берутся из Secret platformSecretName (Helm-манифест при platformSecrets.create=true).
-URL баз — через ClusterIP postgres / redis в namespace релиза.
+Секреты — из Secret platformSecretName. URL баз — через ClusterIP postgres / redis.
 */}}
 {{- define "agentlab.appEnv" -}}
 - name: POSTGRES_PASSWORD
@@ -275,7 +274,7 @@ URL баз — через ClusterIP postgres / redis в namespace релиза.
 
 {{/*
 imagePullSecrets для подов с образом платформы (приватный GHCR и т.п.).
-Пустой список — секция не рендерится; для production задайте в values окружения.
+Пустой список — секция не рендерится.
 */}}
 {{- define "agentlab.podImagePullSecrets" }}
 {{- with .Values.image.pullSecrets }}
@@ -314,16 +313,13 @@ nodeSelector:
 
 {{/*
 Init-containers для всех app/worker подов:
-  1. wait-postgres — пингует Service postgres:5432 через pg_isready (до 3 минут)
-  2. db-migrate    — `python -m scripts.db_migrate upgrade` (все сервисные БД из migrations/services.json)
+  1. wait-postgres — pg_isready на Service postgres:5432 (до 180s).
+  2. db-migrate    — `python -m scripts.db_migrate upgrade` для всех сервисных БД.
 
-Канон: каждый Pod при старте безопасно прогоняет Alembic upgrade head. Alembic держит
-DDL-блокировку на alembic_version → параллельный старт нескольких pods не вызывает гонок:
-один мигрирует, остальные видят head и no-op'ятся.
+Alembic держит DDL-блокировку на alembic_version → параллельный старт нескольких pods
+не вызывает гонок: один мигрирует, остальные видят head и no-op'ятся.
 
-Этот подход заменяет отдельный pre-install hook Job (который при первом install не мог
-дождаться Postgres — Service postgres ещё не существует в pre-install фазе).
-Использовать в каждом Deployment / StatefulSet с доступом к Postgres:
+Использование в Deployment / StatefulSet с доступом к Postgres:
   spec:
     template:
       spec:

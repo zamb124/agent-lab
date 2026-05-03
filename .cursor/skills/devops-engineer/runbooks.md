@@ -11,12 +11,12 @@
 
 # 2. На master:
 ssh root@84.38.184.105
-git clone https://github.com/<owner>/agent-lab.git /opt/agent-lab && cd /opt/agent-lab
+git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 bash deploy/scripts/bootstrap-master.sh
 
 # 3. На gpu-worker:
 ssh root@188.246.224.228
-git clone https://github.com/<owner>/agent-lab.git /opt/agent-lab && cd /opt/agent-lab
+git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 bash deploy/scripts/bootstrap-gpu-worker.sh
 # Если exit 10 — reboot и повторить
 
@@ -112,8 +112,6 @@ make k8s-deploy IMAGE_TAG=<последний-stable-tag>
 make k8s-health
 ```
 
-`migrate-data-from-compose.sh` — то же самое, но дамп берётся через SSH из старого docker-compose стенда.
-
 ## 6. Перевыпуск/продление TLS-сертификата
 
 cert-manager перевыпускает Let's Encrypt автоматически за 30 дней до истечения. Если что-то сломалось:
@@ -143,7 +141,7 @@ kubectl -n platform scale deployment provider-litserve --replicas=0
 
 # 2. SSH на gpu-worker:
 ssh root@188.246.224.228
-cd /opt/agent-lab
+cd /root/agent-lab-deploy
 git pull   # получить актуальный bootstrap скрипт
 
 # 3. Обновить driver (idempotent — проверит, нужно ли)
@@ -165,7 +163,7 @@ make k8s-health
 ```bash
 # 1. На новой ноде (Ubuntu 22.04+):
 ssh root@<NEW_IP>
-git clone https://github.com/<owner>/agent-lab.git /opt/agent-lab && cd /opt/agent-lab
+git clone https://github.com/<owner>/agent-lab.git /root/agent-lab-deploy && cd /root/agent-lab-deploy
 
 # Если это GPU нода — bootstrap-gpu-worker; иначе — обычный bootstrap (можно скопировать bootstrap-master.sh, но только snap install + минимальные аддоны):
 # Для CPU worker нужно создать deploy/scripts/bootstrap-cpu-worker.sh (по аналогии).

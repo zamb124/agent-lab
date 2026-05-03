@@ -1,30 +1,8 @@
 #!/usr/bin/env bash
-# Идемпотентный полный снос legacy docker compose стека на хосте, где он жил
-# параллельно с MicroK8s (порт-конфликты hostNetwork: livekit/coturn, образы 10GB+).
-#
-# Запускать с локальной машины: SSH к хосту по SSH_TARGET (root@84.38.184.105 / root@188.246.224.228).
-# Повторный запуск ничего не ломает (compose уже снят → SKIP всех шагов).
-#
-# ENV:
-#   SSH_TARGET             = root@84.38.184.105   (целевой хост)
-#   COMPOSE_FILE           = /opt/agent-lab/docker-compose-prod.yaml
-#   COMPOSE_PROJECT        = agentlab-prod         (для очистки volumes/network по префиксу)
-#   COMPOSE_DIR            = /opt/agent-lab        (что rm -rf после down)
-#   IMAGE_NAME             = ghcr.io/zamb124/agent-lab  (образ к удалению)
-#   EXTRA_DIRS             = /opt/sync             (дополнительные старые compose-каталоги)
-#   CONFIRM                = 0|1   (без 1 — dry-run, печать что будет снесено)
-#
-# Поведение:
-#   CONFIRM=0 (dry-run, default):
-#     - перечисляет контейнеры, volumes, networks, образы, каталоги, но ничего не трогает.
-#   CONFIRM=1:
-#     - docker compose down --volumes --remove-orphans --rmi all
-#     - docker rm -f всех agentlab_* / agentlab-prod_* контейнеров
-#     - docker volume rm всех agentlab-prod_* volumes
-#     - docker network rm всех agentlab-prod_* networks
-#     - docker rmi -f всех тегов IMAGE_NAME
-#     - docker system prune -af --volumes (финальная зачистка)
-#     - rm -rf $COMPOSE_DIR $EXTRA_DIRS
+# Полный снос legacy docker compose стека на хосте по SSH.
+# CONFIRM=0 (dry-run, default) | 1 (реальный снос).
+# Шаги (CONFIRM=1): docker compose down --volumes --rmi all, docker rm -f, volume rm,
+# network rm, rmi -f, system prune -af --volumes, rm -rf COMPOSE_DIR / EXTRA_DIRS.
 # Makefile: make k8s-decommission-compose [SSH_TARGET=root@<host>] [CONFIRM=1]
 
 set -uo pipefail

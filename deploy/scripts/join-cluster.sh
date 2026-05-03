@@ -1,28 +1,12 @@
 #!/usr/bin/env bash
-# Объединение GPU worker ноды в MicroK8s кластер.
-# Запускать НА MASTER ноде (84.38.184.105) под root.
-#
-# Что делает:
-#   1. Идемпотентно: SSH-ключ master → gpu-worker (для microk8s add-node + join).
-#   2. Если gpu-worker уже в кластере → skip всех шагов join.
-#   3. microk8s add-node — выпускает разовый токен.
-#   4. SSH на gpu-worker → microk8s join <token> --worker (без datastore HA).
-#   5. Дожидается gpu-worker Ready.
-#   6. kubectl label node gpu-worker accelerator=nvidia-gpu (с --overwrite).
-#
-# Что НЕ делает: `microk8s enable gpu` / NVIDIA gpu-operator. Этот аддон ставит
-# nvidia-container-toolkit-daemonset, который переписывает containerd config и
-# выставляет disabled_plugins=["io.containerd.grpc.v1.cri"], валя kubelet
-# (Unimplemented runtime.v1.RuntimeService). Вместо operator — простой
-# NVIDIA k8s-device-plugin DaemonSet в Helm-чарте agent-lab
-# (templates/50-gpu/nvidia-device-plugin.yaml). Host-driver + nvidia-container-toolkit
-# уже настроен через bootstrap-gpu-worker.sh (drop-in /etc/containerd/conf.d/99-nvidia.toml).
+# Объединение GPU worker ноды в MicroK8s кластер. Запускать на master под root.
+# Шаги: SSH-ключ master → gpu-worker, microk8s add-node, microk8s join --worker (data-plane,
+# не control-plane), wait for Ready, label accelerator=nvidia-gpu.
+# nvidia-device-plugin DaemonSet ставит Helm-чарт agent-lab.
 #
 # ENV:
-#   GPU_WORKER_HOST   = root@188.246.224.228 (по умолчанию SSH_USER@GPU_HOST_IP из _common.sh)
-#   GPU_NODE_NAME     = gpu-worker
-#   GPU_NODE_LABEL_*  = accelerator=nvidia-gpu
-#   JOIN_TIMEOUT      = 180
+#   GPU_WORKER_HOST = root@188.246.224.228 (по умолчанию SSH_USER@GPU_HOST_IP из _common.sh)
+#   GPU_NODE_NAME / GPU_NODE_LABEL_* / JOIN_TIMEOUT
 
 set -uo pipefail
 
@@ -38,8 +22,7 @@ JOIN_TIMEOUT="${JOIN_TIMEOUT:-180}"
 
 log_section "Join $GPU_NODE_NAME → cluster ($GPU_WORKER_HOST)"
 
-# 0. Идемпотентно: убедиться что master может SSH-ом дойти до gpu-worker.
-# Если ключа нет — генерим, public кладём в authorized_keys gpu-worker.
+# 0. SSH master → gpu-worker. Если ключа нет — генерим и просим положить pubkey на gpu.
 if [ ! -f /root/.ssh/id_ed25519 ]; then
   log_do "ssh-keygen ed25519 для root на master"
   install -d -m 700 /root/.ssh
@@ -66,12 +49,8 @@ else
 
   ADD_NODE_OUT="$(microk8s add-node --token-ttl 7200 2>&1)"
 
-  # microk8s add-node выводит несколько вариантов команды. Базовая (без --worker)
-  # подключает ноду как полноценный control-plane (HA), что добавляет её IP в Service
-  # `kubernetes` endpoints. Для GPU-воркера (без kube-apiserver) это означает что часть
-  # внутри-кластерного трафика к 10.152.183.1:443 будет уходить на ноду без apiserver
-  # и таймаутить (calico, kubelet -> apiserver, hostpath-provisioner). Поэтому ВСЕГДА
-  # используем `--worker`: gpu-worker остаётся data-plane, control-plane только на master.
+  # Используем флаг --worker: gpu-worker остаётся data-plane, control-plane только на master
+  # (иначе IP gpu попадает в Service kubernetes endpoints и часть трафика таймаутит).
   JOIN_BASE="$(printf '%s\n' "$ADD_NODE_OUT" | grep -E 'microk8s join [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:25000/' | head -n1 | sed 's/^[[:space:]]*//')"
 
   if [ -z "$JOIN_BASE" ]; then
@@ -98,8 +77,7 @@ wait_for \
   "$JOIN_TIMEOUT" 5 \
   || exit 1
 
-# 5. Лейбл (overwrite — идемпотентно). Helm чарт через nodeSelector accelerator=nvidia-gpu
-# планирует provider-litserve и NVIDIA k8s-device-plugin DaemonSet на эту ноду.
+# 5. Лейбл accelerator=nvidia-gpu для nodeSelector provider-litserve и device-plugin DaemonSet.
 log_do "label node $GPU_NODE_NAME $GPU_NODE_LABEL_KEY=$GPU_NODE_LABEL_VALUE"
 microk8s kubectl label node "$GPU_NODE_NAME" "${GPU_NODE_LABEL_KEY}=${GPU_NODE_LABEL_VALUE}" --overwrite
 

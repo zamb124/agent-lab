@@ -5,18 +5,14 @@ kind: Ingress
 metadata:
   name: platform
   namespace: {{ .Values.namespace }}
-  # Без cert-manager.io/cluster-issuer annotation: Certificate platform-tls (humanitec.ru +
-  # *.humanitec.ru) выпускается deploy/scripts/setup-wildcard-tls.sh ДО helm install через
-  # ClusterIssuer letsencrypt-prod-dns01 (DNS-01 webhook reg.ru). Ingress только использует
-  # готовый wildcard-Secret platform-tls. Annotations nginx.ingress.kubernetes.io/* убраны
-  # (microk8s 1.30+ ingress addon = traefik, который их не понимает).
+  # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts:
         - {{ .Values.ingress.apexHost | quote }}
         - {{ .Values.ingress.wildcardHost | quote }}
-      secretName: {{ .Values.ingress.tlsSecretName }}
+      secretName: platform-tls
   rules:
     {{- range $host := list .Values.ingress.apexHost .Values.ingress.wildcardHost }}
     - host: {{ $host | quote }}

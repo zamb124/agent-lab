@@ -1,28 +1,9 @@
 #!/usr/bin/env bash
-# Идемпотентный полный reset MicroK8s кластера: Helm-релиз, namespace, PVC, snap microk8s.
-# После запуска nodes "чистые": ноль ресурсов, ноль данных, готовы к bootstrap-master.sh + bootstrap-gpu-worker.sh.
-#
-# Запускать с локальной машины. SSH к нодам по MASTER_HOST_IP / GPU_HOST_IP (из _common.sh).
-#
-# ENV:
-#   MASTER_HOST_IP  = 84.38.184.105
-#   GPU_HOST_IP     = 188.246.224.228      (если пусто или нет SSH — gpu reset пропускается)
-#   K8S_NAMESPACE   = platform
-#   K8S_RELEASE     = agent-lab
-#   CONFIRM         = 0|1                  (без 1 — dry-run)
-#
-# Шаги (CONFIRM=1):
-#   1. На master: helm uninstall agent-lab -n platform (если есть) — даёт hooks отработать.
-#   2. На master: kubectl delete namespace platform (--wait=false) — снесёт все Service/Deployment/PVC/Secret/CM.
-#   3. На master: kubectl delete pv (только bound в platform, остальное не трогаем).
-#   4. На master: snap remove microk8s --purge
-#   5. На master: rm -rf /var/snap/microk8s (на всякий случай — purge должен это сделать).
-#   6. На gpu-worker (если есть): microk8s leave 2>/dev/null; snap remove microk8s --purge; rm -rf /var/snap/microk8s.
-#   7. На gpu-worker: rm -f /etc/containerd/conf.d/99-nvidia.toml (drop-in от прошлого bootstrap).
-# Makefile: make k8s-cluster-reset CONFIRM=1
-#
-# Что НЕ снос: NVIDIA driver на gpu-worker (он живёт между переустановками microk8s),
-# /opt/agent-lab — это decommission-compose.sh.
+# Полный reset MicroK8s кластера: helm uninstall, kubectl delete namespace,
+# snap remove microk8s --purge, удаление /var/snap/microk8s и nvidia containerd drop-in.
+# Запускать с локальной машины. SSH к нодам через MASTER_HOST_IP / GPU_HOST_IP.
+# CONFIRM=0 (dry-run) | 1 (реальный reset). Makefile: make k8s-cluster-reset CONFIRM=1.
+# NVIDIA driver на gpu-worker не трогает.
 
 set -uo pipefail
 
@@ -74,7 +55,7 @@ log_section "Reset master"
 ssh -o BatchMode=yes "$MASTER" "bash -s" <<EOF
 set -uo pipefail
 
-# 1. helm uninstall (даём hooks отработать — это безопасно даже если помещик испорчен).
+# 1. helm uninstall (hooks отрабатывают чисто).
 if microk8s helm3 list -n "$NS" 2>/dev/null | grep -q "^$REL "; then
   echo "[DO]    helm uninstall $REL -n $NS"
   microk8s helm3 uninstall "$REL" -n "$NS" --wait --timeout 5m 2>&1 | tail -10 || true
@@ -82,11 +63,10 @@ else
   echo "[SKIP]  helm release $REL отсутствует"
 fi
 
-# 2. namespace (снесёт все Service/Deployment/PVC/Secret/CM/Job/StatefulSet/DaemonSet).
+# 2. namespace со всеми ресурсами и PVC.
 if microk8s kubectl get ns "$NS" >/dev/null 2>&1; then
   echo "[DO]    kubectl delete ns $NS --wait=false"
   microk8s kubectl delete namespace "$NS" --wait=false --ignore-not-found=true || true
-  # Ждём до 90s чтобы дисков очистка прошла.
   for i in \$(seq 1 30); do
     if ! microk8s kubectl get ns "$NS" >/dev/null 2>&1; then break; fi
     sleep 3
@@ -101,7 +81,7 @@ else
   echo "[SKIP]  namespace $NS отсутствует"
 fi
 
-# 3. snap remove microk8s --purge (сносит kubelet/containerd/dqlite/PVC-hostpath).
+# 3. snap remove microk8s --purge — сносит kubelet/containerd/dqlite/hostpath PVC.
 if snap list microk8s 2>/dev/null | grep -q microk8s; then
   echo "[DO]    snap remove microk8s --purge"
   snap remove microk8s --purge 2>&1 | tail -5
@@ -109,7 +89,7 @@ else
   echo "[SKIP]  snap microk8s не установлен"
 fi
 
-# 4. На всякий случай — каталог /var/snap/microk8s.
+# 4. /var/snap/microk8s.
 if [ -d /var/snap/microk8s ]; then
   echo "[DO]    rm -rf /var/snap/microk8s"
   rm -rf /var/snap/microk8s
@@ -125,7 +105,7 @@ if ssh -o BatchMode=yes -o ConnectTimeout=5 "$GPU" "true" 2>/dev/null; then
   ssh -o BatchMode=yes "$GPU" "bash -s" <<EOF
 set -uo pipefail
 
-# leave перед remove (если microk8s знает что он worker).
+# leave перед remove (если worker).
 if snap list microk8s 2>/dev/null | grep -q microk8s; then
   echo "[DO]    microk8s leave (если worker)"
   microk8s leave 2>&1 | tail -3 || true
@@ -142,7 +122,7 @@ else
   echo "[SKIP]  /var/snap/microk8s отсутствует"
 fi
 
-# nvidia drop-in: bootstrap-gpu-worker.sh при следующем запуске положит снова.
+# nvidia drop-in: bootstrap-gpu-worker.sh положит снова.
 if [ -f /etc/containerd/conf.d/99-nvidia.toml ]; then
   echo "[DO]    rm -f /etc/containerd/conf.d/99-nvidia.toml"
   rm -f /etc/containerd/conf.d/99-nvidia.toml

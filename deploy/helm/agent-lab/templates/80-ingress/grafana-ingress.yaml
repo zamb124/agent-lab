@@ -5,13 +5,13 @@ kind: Ingress
 metadata:
   name: grafana
   namespace: {{ .Values.namespace }}
-  # Wildcard Secret platform-tls покрывает grafana.humanitec.ru.
+  # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts:
         - {{ .Values.ingress.grafanaHost }}
-      secretName: {{ .Values.ingress.grafanaTlsSecretName }}
+      secretName: platform-tls
   rules:
     - host: {{ .Values.ingress.grafanaHost | quote }}
       http:

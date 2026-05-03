@@ -5,13 +5,13 @@ kind: Ingress
 metadata:
   name: livekit
   namespace: {{ .Values.namespace }}
-  # Wildcard Secret platform-tls покрывает livekit.humanitec.ru — отдельный cluster-issuer не нужен.
+  # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
     - hosts:
         - {{ .Values.ingress.livekitHost }}
-      secretName: {{ .Values.ingress.livekitTlsSecretName }}
+      secretName: platform-tls
   rules:
     - host: {{ .Values.ingress.livekitHost | quote }}
       http:

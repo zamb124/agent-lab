@@ -1,12 +1,7 @@
 {{- if .Values.nvidiaDevicePlugin.enabled }}
-# NVIDIA k8s-device-plugin DaemonSet — публикует nvidia.com/gpu в Allocatable
+# NVIDIA k8s-device-plugin DaemonSet публикует nvidia.com/gpu в Allocatable
 # на нодах с лейблом {{ .Values.gpuNodeSelectorKey }}={{ .Values.gpuNodeSelectorValue }}.
-#
-# Альтернатива тяжёлому NVIDIA gpu-operator. Operator-toolkit-daemonset переписывает
-# containerd config и выставляет disabled_plugins=["io.containerd.grpc.v1.cri"],
-# что отключает CRI plugin и валит kubelet (Unimplemented runtime.v1.RuntimeService).
-# Host-driver + nvidia-container-toolkit + drop-in /etc/containerd/conf.d/99-nvidia.toml
-# ставит deploy/scripts/bootstrap-gpu-worker.sh — здесь только device-plugin.
+# Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-gpu-worker.sh.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -42,12 +37,7 @@ spec:
           env:
             - name: FAIL_ON_INIT_ERROR
               value: "false"
-            # Legacy режим без CDI: device-plugin регистрирует GPU в kubelet, kubelet
-            # передаёт NVIDIA_VISIBLE_DEVICES в pod env, nvidia-container-runtime (host)
-            # инжектит host-libs (libcuda.so/libnvidia-ml.so) в контейнер при старте.
-            # CDI-режим (PASS_DEVICE_SPECS + cdi-annotations) требует libs внутри pod
-            # (через bind-mount /driver-root) — для host-driver setup без gpu-operator
-            # это не работает (libcuda.so не найден).
+            # envvar (legacy): nvidia-container-runtime инжектит host-libs через NVIDIA_VISIBLE_DEVICES.
             - name: DEVICE_LIST_STRATEGY
               value: "envvar"
           securityContext:

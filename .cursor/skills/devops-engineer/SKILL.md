@@ -26,8 +26,8 @@ description: DevOps инженер платформы Humanitec. Знает SSH-
 
 | Роль | IP | SSH | hostname / canal | Что бежит |
 |---|---|---|---|---|
-| **master** | `84.38.184.105` | `ssh root@84.38.184.105` | `master`, microk8s `1.35/stable` (containerd 2.x) | control-plane MicroK8s, ВСЕ StatefulSets (postgres, redis, loki, tempo, grafana), все 8 app deployments, 6 workers, livekit, livekit-egress, onlyoffice, coturn (DaemonSet, hostNetwork), ingress-nginx, alloy DaemonSet |
-| **gpu-worker** | `188.246.224.228` | `ssh root@188.246.224.228` | `gpu-worker`, microk8s `1.35/stable` (containerd 2.x) | По умолчанию `provider-litserve` (`nodeSelector: accelerator=nvidia-gpu` + `nvidia.com/gpu: 1`); при `litserve.scheduleOnGpuNode=false` LitServe уезжает на master (CPU). Всегда: alloy DaemonSet, NVIDIA k8s-device-plugin DaemonSet (без NVIDIA gpu-operator — он переписывает containerd config и ломает CRI). |
+| **master** | `84.38.184.105` | `ssh root@84.38.184.105` | `master`, microk8s `1.35/stable` (containerd 2.x) | control-plane MicroK8s, все StatefulSets (postgres, redis, loki, tempo, grafana), все app deployments и workers, livekit, livekit-egress, onlyoffice, coturn (DaemonSet, hostNetwork), traefik (ingressClassName=public), alloy DaemonSet, portainer (community-аддон, NodePort 30777/30779) |
+| **gpu-worker** | `188.246.224.228` | `ssh root@188.246.224.228` | `gpu-worker`, microk8s `1.35/stable` (containerd 2.x) | `provider-litserve` (`nodeSelector: accelerator=nvidia-gpu` + `nvidia.com/gpu: 1`); при `litserve.scheduleOnGpuNode=false` LitServe уезжает на master (CPU). Всегда: alloy DaemonSet, NVIDIA k8s-device-plugin DaemonSet. |
 
 NVIDIA-стек (host): driver через `ubuntu-drivers autoinstall` (kernel-modules update), `nvidia-container-toolkit` (репо `https://nvidia.github.io/libnvidia-container/stable/deb`), `nvidia-ctk runtime configure` пишет drop-in в `/etc/containerd/conf.d/99-nvidia.toml`. MicroK8s template (`/var/snap/microk8s/current/args/containerd-template.toml`) расширяется одной строкой `imports = ["/etc/containerd/conf.d/*.toml"]` (всё через `bootstrap-gpu-worker.sh`). После `snap refresh microk8s` повторный запуск bootstrap'а возвращает `imports` (идемпотентно).
 
@@ -50,15 +50,17 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 
 ## Helm-чарт `deploy/helm/agent-lab/`
 
-Единый источник всех K8s манифестов. После `helm upgrade` ~65 ресурсов:
+Единый источник всех K8s манифестов. После `helm upgrade` рендерятся:
 
 ```
-1 ClusterIssuer  1 ClusterRole  1 ClusterRoleBinding
-11 ConfigMap     2 DaemonSet     20 Deployment
-4 Ingress         1 Job           1 Namespace
-2 PVC             17 Service      1 ServiceAccount
-4 StatefulSet
+20 Deployment    18 Service      11 ConfigMap
+ 4 StatefulSet    4 Ingress       3 DaemonSet
+ 2 PVC            1 ServiceAccount + 1 ClusterRole + 1 ClusterRoleBinding
 ```
+
+Вне чарта (создаются скриптами): ClusterIssuer `letsencrypt-prod-dns01`, Certificate
+`platform-tls`, helm release `regru-webhook` в `cert-manager` (`setup-wildcard-tls.sh`),
+portainer (community-аддон microk8s, `bootstrap-master.sh`).
 
 Структура:
 - `values.yaml` — параметры по умолчанию (имя ноды, образ, реплики, ingress hosts).
@@ -83,8 +85,10 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 | coturn | DaemonSet | master (hostNetwork) | — | TURN-сервер для WebRTC |
 | onlyoffice | Deployment | master | — | OnlyOffice DocumentServer (CE) |
 | provider-litserve | Deployment | **gpu-worker** (или **master** если `litserve.scheduleOnGpuNode=false`) | 50Gi (model cache) | Эмбеддинги и rerank (GPU или CPU) |
-| migrations | Job (helm hook post-install/upgrade) | master | — | `python -m scripts.db_migrate upgrade` |
-| 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | TLS через cert-manager |
+| nvidia-device-plugin | DaemonSet | gpu-worker | — | NVIDIA k8s-device-plugin v0.19.1, host-driver legacy режим (envvar) — публикует `nvidia.com/gpu` в Allocatable |
+| portainer | Deployment (community-аддон) | master | — | UI кластера на NodePort `30777` (HTTP) / `30779` (HTTPS) |
+| 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
+| Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | Alembic upgrade head с DDL-блокировкой на `alembic_version` |
 
 ## Базовые команды
 
@@ -97,7 +101,6 @@ make k8s-logs SVC=frontend           # tail логов конкретного De
 make k8s-deploy IMAGE_TAG=<sha>      # helm upgrade --install (--wait, см. HELM_WAIT_TIMEOUT в Makefile, по умолчанию 30m)
 make k8s-rollback                    # helm rollback на предыдущую ревизию
 make k8s-helm-clear-pending          # удалить Helm pending-* Secret (без отката Pod); см. deploy/scripts/helm_clear_pending_release.sh
-make k8s-post-migrate-rollout        # после миграций: rollout restart приложений и воркеров; см. deploy/scripts/k8s_post_migrate_rollout.sh
 make k8s-secrets-sync                # пересоздать platform-secrets из ENV
 make k8s-backup [S3=s3://...]        # pg_dumpall в backups/ (или Selectel S3)
 make k8s-restore FILE=backups/...gz  # restore из дампа
@@ -134,7 +137,7 @@ helm rollback agent-lab <REV> -n platform
 | Нода `NotReady`, kubectl не отвечает | `ssh root@<ip>` → `microk8s status` / `journalctl -u snap.microk8s.daemon-kubelite -n 200` / `df -h` (диск full?) |
 | После reboot ноды (например после обновления NVIDIA driver) | `ssh root@188.246.224.228` → `nvidia-smi` (driver жив?) → `microk8s status --wait-ready` |
 | Сертификат не выдаётся, нужен лог cert-manager-webhook-regru | через kubectl логи; SSH только для редактирования Secret regru-credentials через скрипт |
-| Восстановление кластера с нуля | `ssh root@84.38.184.105` → `cd /opt/agent-lab && bash deploy/scripts/bootstrap-master.sh` (идемпотентно) |
+| Восстановление кластера с нуля | `ssh root@84.38.184.105` → `cd /root/agent-lab-deploy/scripts && bash bootstrap-master.sh` (идемпотентно) |
 | Снятие резервной копии хост-системы / Postgres хостпатча | через `make k8s-backup` (внутри kubectl exec); SSH только если Postgres не отвечает |
 
 **Никогда** не выполняю на хосте: `docker compose`, ручной `kubectl apply -f`, ручной `ufw allow`, прямые правки `/var/snap/microk8s/.../manifests/`, `kubectl edit deployment/...`. Все изменения — через PR в Helm-чарт + `make k8s-deploy`.
@@ -149,17 +152,16 @@ helm rollback agent-lab <REV> -n platform
 
 | Скрипт | Назначение | Где запускать |
 |---|---|---|
-| `bootstrap-master.sh` | MicroK8s + аддоны на master | master root |
-| `bootstrap-gpu-worker.sh` | NVIDIA driver + container-toolkit + MicroK8s | gpu-worker root |
-| `join-cluster.sh` | add-node + SSH join + label + enable gpu | master |
-| `setup-wildcard-tls.sh` | webhook regru + ClusterIssuer DNS-01 + Certificate | локально / master |
+| `bootstrap-master.sh` | hostname, snap microk8s, core+community аддоны (dns, hostpath-storage, ingress, cert-manager, portainer) | master root |
+| `bootstrap-gpu-worker.sh` | NVIDIA driver, nvidia-container-toolkit, snap microk8s, containerd drop-in для NVIDIA runtime | gpu-worker root |
+| `join-cluster.sh` | add-node + SSH join `--worker` + label `accelerator=nvidia-gpu` | master root |
+| `setup-wildcard-tls.sh` | git clone flant/cert-manager-webhook-regru, helm install, ClusterIssuer letsencrypt-prod-dns01, Certificate platform-tls | локально / master |
 | `cluster-health.sh` | Полная health-проверка | локально / master / **CI** |
-| `helm_clear_pending_release.sh` | Снять блокировку Helm `another operation is in progress` (удалить только pending-* release Secret) | локально / master при наличии **kubectl**; **`make k8s-helm-clear-pending`** |
-| `k8s_post_migrate_rollout.sh` | После миграций: rollout restart приложений и TaskIQ-воркеров | локально / master при наличии **kubectl**; **`make k8s-post-migrate-rollout`** |
-| `decommission-compose.sh` | Идемпотентный полный снос legacy docker compose стека на хосте (containers, volumes, network, images, /opt/agent-lab). Dry-run по default; реально — `CONFIRM=1`. | локально, **`make k8s-decommission-compose [SSH_TARGET=root@<host>] [CONFIRM=1]`** |
-| `cluster-reset.sh` | Идемпотентный полный reset кластера: helm uninstall + namespace delete + `snap remove microk8s --purge` на обеих нодах. Dry-run по default; реально — `CONFIRM=1`. После — bootstrap-master/gpu + join-cluster + make k8s-deploy. | локально, **`make k8s-cluster-reset [CONFIRM=1]`** |
+| `helm_clear_pending_release.sh` | Снять блокировку Helm `another operation is in progress` (удалить только pending-* release Secret) | локально / master; **`make k8s-helm-clear-pending`** |
+| `helm_precheck_install_secret_conflict.sh` | Перед первым install проверить orphan Secret `platform-secrets` от предыдущей попытки | CI |
+| `decommission-compose.sh` | Полный снос legacy docker compose стека на хосте; dry-run по default, реально — `CONFIRM=1` | локально, **`make k8s-decommission-compose [SSH_TARGET=root@<host>] [CONFIRM=1]`** |
+| `cluster-reset.sh` | Полный reset кластера на обеих нодах (helm uninstall, namespace delete, snap purge); dry-run по default, реально — `CONFIRM=1` | локально, **`make k8s-cluster-reset [CONFIRM=1]`** |
 | `backup-postgres.sh` / `restore-postgres.sh` | pg_dumpall через kubectl exec | локально / master |
-| `migrate-data-from-compose.sh` | Одноразовая миграция из старого compose (после `decommission-compose.sh` уже неактуально) | локально |
 
 При добавлении новой инфра-операции — **новый скрипт по тому же шаблону**, не разовая команда в чате/PR.
 
@@ -204,6 +206,7 @@ helm rollback agent-lab <REV> -n platform
 2. Если `service down` алёрт — `kubectl logs -n platform deployment/<svc> --tail=500`.
 3. По trace_id из лога — Tempo waterfall (Grafana → Explore → Tempo → search by trace_id).
 4. `kubectl describe pod -n platform <pod>` → Events (Failed/OOMKilled/ContainerCannotRun).
+   - При `Init` фазе — `kubectl logs <pod> -c db-migrate` (Alembic upgrade head).
 5. `kubectl get events -n platform --sort-by='.lastTimestamp' | tail -50`.
 6. Если Helm-релиз сломан — `helm history agent-lab -n platform` → `helm rollback agent-lab <REV>`.
 7. Подробные сценарии — [`troubleshooting.md`](mdc:.cursor/skills/devops-engineer/troubleshooting.md).

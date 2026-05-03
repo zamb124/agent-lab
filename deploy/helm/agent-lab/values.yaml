@@ -1,5 +1,4 @@
-# Дефолтные значения чарта Humanitec Platform.
-# Production-overrides — values-prod.yaml.
+# Дефолтные значения чарта Humanitec Platform. Production-overrides — values-prod.yaml.
 
 namespace: platform
 
@@ -44,10 +43,8 @@ redis:
       cpu: "1"
       memory: 2Gi
 
-# Конфигурация платформы в подах: ConfigMap из files/app-conf.json (= conf.json + узкий overlay без дублей server URLs).
-# Межсервисные URL в кластере: ENV SERVER__*_SERVICE_URL в templates/_helpers.tpl (не править server в overlay ради K8s DNS).
-# Итог files/app-conf.json не редактировать вручную: make render-helm-app-conf (вызывается из k8s-lint/k8s-template/k8s-deploy и CI перед helm lint).
-# app-conf.json в .gitignore; перед helm без make/k8s-* выполнить make render-helm-app-conf.
+# ConfigMap app-conf собирается make render-helm-app-conf из conf.json + overlay.
+# Межсервисные URL в кластере выставляются ENV SERVER__*_SERVICE_URL в templates/_helpers.tpl.
 appConfigConfigMap: app-conf
 
 # Глобальные переменные окружения для всех подов приложения и воркеров.
@@ -248,8 +245,8 @@ workers:
 
 litserve:
   enabled: true
-  # true: GPU-нода (nodeSelector accelerator + nvidia.com/gpu + CUDA).
-  # false: под на master (kubernetes.io/hostname = masterNodeName), CPU (медленнее, без отдельной GPU-ноды).
+  # true: GPU-нода (nodeSelector accelerator + nvidia.com/gpu).
+  # false: master, CPU.
   scheduleOnGpuNode: true
   port: 8014
   serviceName: provider-litserve
@@ -264,12 +261,8 @@ litserve:
       cpu: "4"
       memory: 16Gi
 
-# NVIDIA k8s-device-plugin: лёгкий DaemonSet, ставит nvidia.com/gpu в Allocatable для GPU-ноды.
-# Используется вместо тяжёлого NVIDIA gpu-operator (operator переписывает containerd config и
-# ставит disabled_plugins=["io.containerd.grpc.v1.cri"], что валит kubelet с
-# Unimplemented runtime.v1.RuntimeService).
-# Host-driver и nvidia-container-toolkit ставит deploy/scripts/bootstrap-gpu-worker.sh
-# (drop-in /etc/containerd/conf.d/99-nvidia.toml через nvidia-ctk).
+# NVIDIA k8s-device-plugin DaemonSet публикует nvidia.com/gpu в Allocatable.
+# Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-gpu-worker.sh.
 nvidiaDevicePlugin:
   enabled: true
   image: nvcr.io/nvidia/k8s-device-plugin
@@ -316,34 +309,17 @@ observability:
 
 ingress:
   enabled: true
-  # MicroK8s 1.30+ ingress addon = traefik (раньше был nginx). IngressClass="public" по умолчанию.
+  # MicroK8s ingress addon = traefik, IngressClass "public".
   className: public
-  # ClusterIssuer letsencrypt-prod-dns01 (DNS-01 через cert-manager-webhook-regru) — ставится
-  # deploy/scripts/setup-wildcard-tls.sh ПЕРЕД helm install. DNS-01 нужен для wildcard
-  # *.humanitec.ru (HTTP-01 wildcard не поддерживает).
-  clusterIssuer: letsencrypt-prod-dns01
   apexHost: humanitec.ru
   wildcardHost: "*.humanitec.ru"
   livekitHost: livekit.humanitec.ru
   onlyofficeHost: onlyoffice.humanitec.ru
   grafanaHost: grafana.humanitec.ru
-  # Один общий wildcard Secret platform-tls (humanitec.ru + *.humanitec.ru) для ВСЕХ ingress'ов.
-  # Set'ся одним Certificate platform-tls (выпускается setup-wildcard-tls.sh), все subdomains
-  # покрывает. Меньше rate-limit hits Let's Encrypt vs четыре отдельных Certificate.
-  tlsSecretName: platform-tls
-  livekitTlsSecretName: platform-tls
-  onlyofficeTlsSecretName: platform-tls
-  grafanaTlsSecretName: platform-tls
   proxyBodySize: 100m
-  proxyReadTimeout: "300"
-  proxyConnectTimeout: "60"
-
-certManager:
-  enabled: true
-  email: ops@humanitec.ru
 
 # Secret platform-secrets: манифест в templates/01-platform-secrets.yaml при platformSecrets.create=true.
-# Значения задаются через helm --set-json platformSecrets=... (deploy/scripts/helm_platform_secrets_json.sh + jq).
+# Значения задаются через helm --set-json (deploy/scripts/helm_platform_secrets_json.sh).
 platformSecrets:
   create: false
   postgresPassword: ""

@@ -1,17 +1,8 @@
 #!/usr/bin/env bash
-# Идемпотентный bootstrap master ноды MicroK8s.
-# Запускать ПОД ROOT на хосте 84.38.184.105.
-# Повторный запуск проверяет каждый шаг и пропускает уже сделанное.
-#
-# Что делает:
-#   1. hostname → master
-#   2. snap install microk8s --classic --channel=${MICROK8S_CHANNEL}
-#   3. usermod ubuntu в группу microk8s (если есть пользователь ubuntu)
-#   4. microk8s enable: dns, hostpath-storage, ingress, cert-manager
-#   5. wait-ready
-#   6. печатает kubeconfig в base64 для GitHub Secret KUBECONFIG_B64
-#
-# Не делает: join, GPU аддон (это для bootstrap-gpu-worker.sh + join-cluster.sh).
+# Идемпотентный bootstrap master ноды MicroK8s. Запускать под root на 84.38.184.105.
+# Шаги: hostname=master, snap microk8s, аддоны (dns, hostpath-storage, ingress,
+# cert-manager, community/portainer), kubeconfig в base64 для GitHub Secret KUBECONFIG_B64.
+# Не делает join GPU-ноды — см. join-cluster.sh.
 
 set -uo pipefail
 
@@ -22,19 +13,14 @@ source "$SCRIPT_DIR/_common.sh"
 require_root || exit 1
 
 MASTER_HOSTNAME="${MASTER_HOSTNAME:-master}"
-# Канал K8s одинаков на всех нодах кластера (инвариант).
-# Latest stable: см. `snap info microk8s` колонка `latest/stable`.
+# Канал K8s единый на всех нодах кластера.
 MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.35/stable}"
-# Core-аддоны (всегда нужны).
 ADDONS_CORE=(dns hostpath-storage ingress cert-manager)
-# Community-аддоны (включаются после `microk8s enable community`).
-# - portainer: web UI управления кластером, NodePort http://<master>:30777, https 30779.
+# portainer: NodePort http://<master>:30777, https 30779.
 ADDONS_COMMUNITY=(portainer)
 
 log_section "Bootstrap master ноды (hostname=$MASTER_HOSTNAME)"
 
-# 0. UFW off — kubelet 10250 / apiserver 16443 / dqlite 19001 / VXLAN Calico должны
-# свободно ходить между нодами; security — через CNI NetworkPolicies, не host UFW.
 disable_host_firewall
 
 # 1. hostname
@@ -43,7 +29,7 @@ idempotent \
   "[ \"$(hostname)\" = '$MASTER_HOSTNAME' ]" \
   "hostnamectl set-hostname '$MASTER_HOSTNAME'"
 
-# 2. snap MicroK8s — установка / refresh на канал кластера (общий для master и gpu-worker).
+# 2. snap MicroK8s — установка / refresh на канал кластера.
 if snap list microk8s 2>/dev/null | grep -q microk8s; then
   CURRENT_CHANNEL="$(snap list microk8s 2>/dev/null | awk 'NR==2{print $4}')"
   if [ "$CURRENT_CHANNEL" != "$MICROK8S_CHANNEL" ]; then
@@ -74,7 +60,7 @@ if ! microk8s status --wait-ready --timeout 300 >/dev/null 2>&1; then
 fi
 log_ok "microk8s ready"
 
-# 5. Core-аддоны (microk8s enable идемпотентен — повторный enable выводит "is already enabled").
+# 5. Core-аддоны.
 for addon in "${ADDONS_CORE[@]}"; do
   if microk8s status --addon "$addon" 2>/dev/null | grep -q enabled; then
     log_skip "core addon: $addon"
@@ -87,7 +73,7 @@ for addon in "${ADDONS_CORE[@]}"; do
   fi
 done
 
-# 5b. Community repository + community-аддоны (portainer и т.п.).
+# 5b. Community repository + community-аддоны.
 if microk8s status --addon community 2>/dev/null | grep -q enabled; then
   log_skip "community repository"
 else

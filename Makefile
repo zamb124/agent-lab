@@ -2,7 +2,7 @@
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-post-migrate-rollout
+.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
 
 # ============================================================================
 # Конфигурация
@@ -223,10 +223,6 @@ k8s-decommission-compose:
 k8s-cluster-reset:
 	@K8S_NAMESPACE=$(K8S_NAMESPACE) K8S_RELEASE=$(K8S_RELEASE) bash deploy/scripts/cluster-reset.sh
 
-# После успешных миграций (или если Job migrations уже удалён hook): rollout restart приложений и воркеров.
-k8s-post-migrate-rollout:
-	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/k8s_post_migrate_rollout.sh
-
 # Полная проверка здоровья кластера (deploy/scripts/cluster-health.sh).
 # CHECK_PUBLIC=0 отключает curl-проверки публичных URL (например, в CI без доступа).
 k8s-health:
@@ -317,7 +313,6 @@ help:
 	@echo "  make k8s-secrets-sync    - Обновить Secret platform-secrets через helm (--reuse-values)"
 	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
 	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"
-	@echo "  make k8s-post-migrate-rollout - После миграций: rollout restart приложений и воркеров"
 	@echo "  make k8s-backup [S3=s3://...] - pg_dumpall в backups/ (опционально в Selectel S3)"
 	@echo "  make k8s-restore FILE=<path>  - Восстановление дампа в pod postgres-0"
 	@echo ""

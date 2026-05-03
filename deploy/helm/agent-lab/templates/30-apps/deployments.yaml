@@ -29,10 +29,7 @@ spec:
         - name: chromium-cdp
           image: zenika/alpine-chrome:latest
           imagePullPolicy: IfNotPresent
-          # runAsUser: 0 + --no-zygote: zenika/alpine-chrome запускает chromium от non-root
-          # 'chrome' user, который не может записать /proc/<pid>/oom_score_adj — zygote
-          # crashит с "Permission denied (13)" и порт 9222 не открывается. root + --no-zygote
-          # обходит multi-process zygote подход (для headless K8s pod это безопасно).
+          # runAsUser=0 + --no-zygote: chromium пишет /proc/<pid>/oom_score_adj.
           securityContext:
             runAsUser: 0
             runAsGroup: 0
@@ -51,11 +48,8 @@ spec:
             - --exclude-switches=enable-automation
             - --window-size=1920,1080
             - --lang=en-US
-            # Chromium 124+ блокирует --remote-debugging-address=0.0.0.0 (security): слушает
-            # только 127.0.0.1. Browser-app коннектится через 127.0.0.1 (shared netns в pod).
+            # Chromium 124+ слушает только 127.0.0.1; browser-app ходит через shared netns pod'а.
             - --remote-debugging-port=9222
-          # Порт не публикуем (httpGet pod IP не работает — Chromium только на 127.0.0.1).
-          # browser-app в этом же pod ходит через BROWSER__CDP_ENDPOINTS__CHROMIUM=http://127.0.0.1:9222.
           volumeMounts:
             - name: chromium-dshm
               mountPath: /dev/shm

@@ -160,8 +160,7 @@ print_summary() {
   return 0
 }
 
-# kubectl_or_microk8s - выбирает kubectl или microk8s kubectl. Используется в скриптах,
-# которые работают и локально (есть kubectl с настроенным kubeconfig) и на master (microk8s).
+# kubectl: локально — `kubectl`, на master — `microk8s kubectl`.
 KUBECTL="${KUBECTL:-}"
 if [ -z "$KUBECTL" ]; then
   if command -v kubectl >/dev/null 2>&1; then
@@ -171,7 +170,7 @@ if [ -z "$KUBECTL" ]; then
   fi
 fi
 
-# Helm: локально — `helm`, на master без локального helm — `microk8s helm3`.
+# Helm: локально — `helm`, на master — `microk8s helm3`.
 HELM="${HELM:-}"
 if [ -z "$HELM" ]; then
   if command -v helm >/dev/null 2>&1; then
@@ -190,17 +189,12 @@ GPU_NODE_NAME="${GPU_NODE_NAME:-gpu-worker}"
 GPU_NODE_LABEL_KEY="${GPU_NODE_LABEL_KEY:-accelerator}"
 GPU_NODE_LABEL_VALUE="${GPU_NODE_LABEL_VALUE:-nvidia-gpu}"
 
-# IP-адреса (для join, миграции из compose). Можно переопределить ENV.
+# IP-адреса нод (для join и SSH). Можно переопределить ENV.
 MASTER_HOST_IP="${MASTER_HOST_IP:-84.38.184.105}"
 GPU_HOST_IP="${GPU_HOST_IP:-188.246.224.228}"
 SSH_USER="${SSH_USER:-root}"
 
-# disable_host_firewall - идемпотентно отключает UFW (host-level firewall).
-# Канон 2026 для нод Kubernetes: трафик контролируется CNI NetworkPolicies
-# и инфраструктурой outside (cloud-provider firewall / ingress); host UFW мешает
-# контрольным плоскостям (kubelet 10250, apiserver 16443, dqlite 19001, calico vxlan)
-# и его правила-исключения дублируют логику CNI. Если требуется host firewall —
-# использовать nftables-конфиг провайдера, а не ufw поверх Calico.
+# disable_host_firewall — идемпотентно отключает UFW; сетевые политики держим в CNI.
 disable_host_firewall() {
   if ! command -v ufw >/dev/null 2>&1; then
     log_skip "ufw не установлен"

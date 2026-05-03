@@ -16,10 +16,7 @@ ingress:
   onlyofficeHost: onlyoffice.humanitec.ru
   grafanaHost: grafana.humanitec.ru
 
-# litserve.scheduleOnGpuNode = true (по умолчанию из values.yaml) — нода gpu-worker
-# подключена через deploy/scripts/join-cluster.sh, label accelerator=nvidia-gpu.
-# NVIDIA k8s-device-plugin DaemonSet (templates/50-gpu/nvidia-device-plugin.yaml) публикует
-# nvidia.com/gpu в Allocatable. workflow_dispatch.litserve_node=gpu (default).
+# litserve планируется на gpu-worker (label accelerator=nvidia-gpu).
 
 observability:
   loki:

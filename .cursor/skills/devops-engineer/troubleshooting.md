@@ -15,8 +15,8 @@ kubectl logs -n platform $POD --tail=200
 
 **Типовые причины:**
 - ENV не задан → проверить `kubectl get secret platform-secrets -n platform -o yaml | grep <key>`. Решение: `make k8s-secrets-sync`.
-- Postgres недоступен → `kubectl exec -n platform postgres-0 -- pg_isready`. Если нет — см. секцию 4.
-- Схема БД не применена (`relation ... does not exist`) → Helm Job **`migrations`** (`post-install`/`post-upgrade`). Пустой **`kubectl get jobs`** не доказывает, что Job не запускался: при успехе hook ресурс удаляется политикой **`helm.sh/hook-delete-policy`** (`hook-succeeded` / следующий апгрейд). Проверяй **`helm history`** (`failed`, **`context deadline exceeded`**, **`pending-upgrade`**): при **`helm --wait`** деплойменты без таблиц не становятся Ready и упираются в таймаут; параллельно Job миграций мог **упасть** (конфиг БД в **`app-conf`**, секреты, ошибка alembic) — тогда схемы не будет. Зависший релиз: **`make k8s-helm-clear-pending`**, повторный деплой; логи миграций смотреть сразу после апгрейда (**`kubectl logs job/migrations`** пока объект есть). После успешных миграций: **`make k8s-post-migrate-rollout`**.
+- Postgres недоступен → init-контейнер **`wait-postgres`** в `Init:CrashLoopBackOff`. `kubectl logs <pod> -c wait-postgres`. Дальше — секция 4.
+- Миграции упали → init-контейнер **`db-migrate`** в `Init:Error`. `kubectl logs <pod> -c db-migrate` показывает stack trace `python -m scripts.db_migrate upgrade`. Alembic держит DDL-блокировку на `alembic_version` — параллельный старт нескольких pods безопасен. После фикса: pod сам прогонит `upgrade head` при следующем старте.
 - OOMKilled → `kubectl describe pod` → Events показывают OOMKilled. Решение: поднять `resources.limits.memory` в `values.yaml`.
 - Образ не подгрузился (`ImagePullBackOff`) — см. секцию 2.
 
@@ -49,13 +49,14 @@ kubectl logs -n cert-manager deployment/cert-manager-webhook-regru --tail=200
 ```
 
 **Причины:**
-- HTTP-01 challenge не проходит (для wildcard используется DNS-01) → нет публичного доступа `/.well-known/acme-challenge/...` на apex.
-- DNS-01 webhook не отвечает → проверить `kubectl get pods -n cert-manager`, логи webhook-regru.
-- regru-credentials Secret устарел → `kubectl delete secret regru-credentials -n cert-manager` и `bash deploy/scripts/setup-wildcard-tls.sh`.
-- Rate limit Let's Encrypt (5 за неделю на одну doсtain) → подождать или использовать staging issuer.
+- DNS-01 webhook (`cert-manager-webhook-regru`) не отвечает → `kubectl get pods -n cert-manager`, `kubectl logs -n cert-manager deployment/regru-webhook`.
+- IP master-ноды не в whitelist Reg.ru API (Настройки → API в личном кабинете) → webhook возвращает `ACCESS_DENIED_FROM_IP`.
+- Reg.ru-credentials Secret устарел → `kubectl delete secret regru-credentials -n cert-manager` и `bash deploy/scripts/setup-wildcard-tls.sh`.
+- Rate limit Let's Encrypt (5 за неделю на один домен) → подождать или использовать staging issuer.
+- **Сертификат создан Ingress-shim'ом** с аннотации `cert-manager.io/cluster-issuer: letsencrypt-prod` (HTTP-01) → `Owner: Ingress`, `issuerRef: letsencrypt-prod`, такого ClusterIssuer в кластере нет → бесконечный `Issuing`. Признак: `kubectl describe certificate platform-tls -n platform | grep -E 'Issuer Ref|Owner'` показывает не `letsencrypt-prod-dns01`. `kubectl apply` поверх НЕ переопределяет ownerReferences/issuerRef. Решение: `setup-wildcard-tls.sh` сам убирает аннотацию и удаляет orphan-Certificate (step 5b) — повторный запуск починит.
 
 **Решение:**
-- `bash deploy/scripts/setup-wildcard-tls.sh` (идемпотентно — пересоздаст Issuer и Certificate).
+- `bash deploy/scripts/setup-wildcard-tls.sh` (идемпотентно — снимает старые аннотации, удаляет orphan-Certificates, пересоздаёт Issuer и Certificate).
 - Принудительный перевыпуск: `kubectl delete certificate platform-tls -n platform` → скрипт пересоздаст.
 
 ## 4. Postgres под `Pending` / не Running
@@ -88,22 +89,25 @@ kubectl get pods -n platform -o wide | grep provider-litserve
 kubectl describe node gpu-worker | grep -A3 Allocatable
 kubectl describe pod -n platform <litserve-pod>
 kubectl logs -n platform deployment/provider-litserve --tail=200
+kubectl get pods -n kube-system -l app.kubernetes.io/name=nvidia-device-plugin
+kubectl logs -n kube-system daemonset/nvidia-device-plugin-daemonset --tail=200
 
 # На gpu-worker:
 ssh root@188.246.224.228
 nvidia-smi
-microk8s status --addon gpu
+microk8s ctr --address /var/snap/microk8s/common/run/containerd.sock plugins ls | grep cri
 ```
 
 **Причины:**
-- GPU аддон выключен → `ssh root@188.246.224.228 microk8s enable gpu`.
-- NVIDIA Device Plugin не запустился → `kubectl get pods -n gpu-operator-resources` (или `kubectl get pods -A | grep nvidia`).
+- `nvidia-device-plugin-daemonset` (kube-system) не запустился — без него `nvidia.com/gpu` нет в Allocatable.
 - Driver сломался после обновления ядра → `nvidia-smi` падает → переустановить driver (см. runbook 7).
 - Лейбл `accelerator=nvidia-gpu` не проставлен → `kubectl label node gpu-worker accelerator=nvidia-gpu --overwrite`.
+- Containerd drop-in `99-nvidia.toml` отсутствует или содержит `disabled_plugins` (`cri`) → CRI plugin не загружается, kubelet падает с `Unimplemented runtime.v1.RuntimeService`.
 
 **Решение:**
-- `bash deploy/scripts/join-cluster.sh` (идемпотентно — переставит лейбл, попробует enable gpu).
-- При полном провале driver: `runbook 7` (обновление NVIDIA driver).
+- `bash deploy/scripts/join-cluster.sh` (переставит label).
+- `bash deploy/scripts/bootstrap-gpu-worker.sh` (восстановит containerd drop-in и imports в template).
+- При полном провале driver: runbook 7.
 
 ## 6. Ingress отдаёт 502 / 503 / 504
 
@@ -114,14 +118,14 @@ kubectl describe ingress platform -n platform
 kubectl get endpoints -n platform <service-name>
 kubectl get pods -n platform -l app=<service> -o wide
 kubectl logs -n platform deployment/<service> --tail=100
-# Логи ingress-nginx:
-kubectl logs -n ingress deployment/nginx-ingress-microk8s-controller --tail=200
+# Логи traefik (microk8s ingress addon):
+kubectl logs -n ingress daemonset/nginx-ingress-microk8s-controller --tail=200
 ```
 
 **Причины:**
 - Под не Ready → readiness probe не проходит. `kubectl describe pod`.
 - Service не имеет endpoints → labels не совпадают между Deployment и Service. `kubectl get endpoints -n platform`.
-- Ingress controller не видит правило → `kubectl describe ingress`.
+- Ingress controller не видит правило → `kubectl describe ingress` (`ingressClassName: public`).
 - TLS expired → см. секцию 3.
 
 **Решение:**
@@ -309,8 +313,8 @@ kubectl get ingress platform -n platform -o yaml | grep -A2 sync
 ```
 
 **Причины:**
-- Ingress proxy-read-timeout слишком маленький → в нашем чарте 300s, должно хватить.
-- WebSocket Upgrade не пробрасывается nginx → ingress-nginx делает это по умолчанию для WS.
+- Backend pod не Ready (readiness probe не проходит) → `kubectl describe pod`.
+- WebSocket Upgrade проходит автоматически (traefik по умолчанию).
 - AUTH_JWT_SECRET рассогласован между фронтом и sync → один Secret, одно значение.
 
 ## Полезные общие команды
