@@ -58,6 +58,10 @@ spec:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
+        - key: dedicated
+          operator: Equal
+          value: gpu
+          effect: NoSchedule
       {{- else }}
       {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
       {{- end }}

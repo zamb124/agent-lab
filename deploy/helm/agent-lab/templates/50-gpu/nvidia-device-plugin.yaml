@@ -29,6 +29,10 @@ spec:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
+        - key: dedicated
+          operator: Equal
+          value: gpu
+          effect: NoSchedule
       priorityClassName: system-node-critical
       containers:
         - name: nvidia-device-plugin

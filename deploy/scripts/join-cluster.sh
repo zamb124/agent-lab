@@ -81,6 +81,10 @@ wait_for \
 log_do "label node $GPU_NODE_NAME $GPU_NODE_LABEL_KEY=$GPU_NODE_LABEL_VALUE"
 microk8s kubectl label node "$GPU_NODE_NAME" "${GPU_NODE_LABEL_KEY}=${GPU_NODE_LABEL_VALUE}" --overwrite
 
+# 6. Taint dedicated=gpu:NoSchedule: не-GPU поды не попадают на gpu-worker без явного toleration.
+log_do "taint node $GPU_NODE_NAME dedicated=gpu:NoSchedule"
+microk8s kubectl taint node "$GPU_NODE_NAME" dedicated=gpu:NoSchedule --overwrite
+
 # Финал
 print_summary
 
