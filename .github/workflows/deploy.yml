@@ -403,7 +403,7 @@ jobs:
               gv=0
               bash deploy/bootstrap-litserve-node-gpu.sh || gv=$?
               if [ "${gv}" -eq 10 ]; then
-                echo install_litserve_gpu_stack: нужен reboot; после перезапуска ВМ повторите Deploy >&2
+                echo "install_litserve_gpu_stack: нужен reboot; после перезапуска ВМ повторите Deploy" >&2
                 exit 10
               fi
               if [ "${gv}" -ne 0 ]; then
