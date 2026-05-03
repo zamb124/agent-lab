@@ -47,7 +47,8 @@ APEX_HOST="${APEX_HOST:-humanitec.ru}"
 WILDCARD_HOST="${WILDCARD_HOST:-*.humanitec.ru}"
 PLATFORM_TLS_SECRET="${PLATFORM_TLS_SECRET:-platform-tls}"
 WEBHOOK_REPO_URL="${WEBHOOK_REPO_URL:-https://github.com/flant/cert-manager-webhook-regru.git}"
-WEBHOOK_CHART_DIR="${WEBHOOK_CHART_DIR:-/var/lib/cert-manager-webhook-regru}"
+# Дефолт под пользователей без root-доступа (CI runner). Хост может переопределить через ENV.
+WEBHOOK_CHART_DIR="${WEBHOOK_CHART_DIR:-${TMPDIR:-/tmp}/cert-manager-webhook-regru}"
 WEBHOOK_RELEASE="${WEBHOOK_RELEASE:-regru-webhook}"
 WEBHOOK_GROUP_NAME="${WEBHOOK_GROUP_NAME:-acme.regru.ru}"
 WEBHOOK_SOLVER_NAME="${WEBHOOK_SOLVER_NAME:-regru-dns}"
@@ -68,6 +69,23 @@ if ! $K get namespace cert-manager >/dev/null 2>&1; then
   exit 1
 fi
 log_ok "cert-manager установлен"
+
+# 1b. Fast-path: если Certificate уже Ready и ClusterIssuer Ready — выходим без действий.
+# При плановом продлении (~30 дней до expire) cert-manager сам инициирует новый Order через
+# существующий webhook+ClusterIssuer — этот скрипт здесь не участвует. Долгое (5-15 мин)
+# ожидание DNS-01 challenge происходит ровно один раз — при первом выпуске.
+if $K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null \
+    | grep -q '^True$' \
+   && $K get clusterissuer letsencrypt-prod-dns01 \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null \
+    | grep -q '^True$'; then
+  EXPIRES=$($K get certificate "$PLATFORM_TLS_SECRET" -n "$PLATFORM_NS" \
+    -o jsonpath='{.status.notAfter}' 2>/dev/null)
+  log_skip "Certificate $PLATFORM_TLS_SECRET уже Ready (notAfter=$EXPIRES) — все шаги пропущены"
+  print_summary
+  exit 0
+fi
 
 # 2. Клонируем/обновляем chart flant/cert-manager-webhook-regru.
 # Канал публикации flant — git+helm (нет GitHub Pages). Идемпотентно: clone если нет, иначе fetch+reset.
