@@ -186,6 +186,24 @@ jobs:
           HELM_RELEASE: ${{ env.K8S_RELEASE }}
         run: bash deploy/scripts/helm_clear_pending_release.sh
 
+      - name: Setup wildcard TLS (cert-manager-webhook-regru + Certificate platform-tls)
+        # Идемпотентный выпуск wildcard-сертификата humanitec.ru + *.humanitec.ru через
+        # DNS-01 ACME challenge (cert-manager-webhook-regru, API reg.ru). Выполняется ДО
+        # helm install — Secret platform-tls создаётся cert-manager'ом, ingress'ы платформы
+        # его подхватывают на старте (без HTTP-01, чтобы поддерживать wildcard).
+        # Если webhook + ClusterIssuer + Certificate уже на месте и Ready — skip всех шагов.
+        env:
+          REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
+          REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}
+          PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then
+            echo "::warning::REGRU_USERNAME/REGRU_PASSWORD не заданы — пропускаю wildcard TLS (helm install продолжит без TLS, ingress'ы будут отдавать HTTP)."
+            exit 0
+          fi
+          bash deploy/scripts/setup-wildcard-tls.sh
+
       - name: Helm upgrade --install
         env:
           LITSERVE_NODE: ${{ inputs.litserve_node }}

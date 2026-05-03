@@ -316,17 +316,24 @@ observability:
 
 ingress:
   enabled: true
-  className: nginx
-  clusterIssuer: letsencrypt-prod
+  # MicroK8s 1.30+ ingress addon = traefik (раньше был nginx). IngressClass="public" по умолчанию.
+  className: public
+  # ClusterIssuer letsencrypt-prod-dns01 (DNS-01 через cert-manager-webhook-regru) — ставится
+  # deploy/scripts/setup-wildcard-tls.sh ПЕРЕД helm install. DNS-01 нужен для wildcard
+  # *.humanitec.ru (HTTP-01 wildcard не поддерживает).
+  clusterIssuer: letsencrypt-prod-dns01
   apexHost: humanitec.ru
   wildcardHost: "*.humanitec.ru"
   livekitHost: livekit.humanitec.ru
   onlyofficeHost: onlyoffice.humanitec.ru
   grafanaHost: grafana.humanitec.ru
+  # Один общий wildcard Secret platform-tls (humanitec.ru + *.humanitec.ru) для ВСЕХ ingress'ов.
+  # Set'ся одним Certificate platform-tls (выпускается setup-wildcard-tls.sh), все subdomains
+  # покрывает. Меньше rate-limit hits Let's Encrypt vs четыре отдельных Certificate.
   tlsSecretName: platform-tls
-  livekitTlsSecretName: livekit-tls
-  onlyofficeTlsSecretName: onlyoffice-tls
-  grafanaTlsSecretName: grafana-tls
+  livekitTlsSecretName: platform-tls
+  onlyofficeTlsSecretName: platform-tls
+  grafanaTlsSecretName: platform-tls
   proxyBodySize: 100m
   proxyReadTimeout: "300"
   proxyConnectTimeout: "60"

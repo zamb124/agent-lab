@@ -5,12 +5,11 @@ kind: Ingress
 metadata:
   name: platform
   namespace: {{ .Values.namespace }}
-  annotations:
-    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | quote }}
-    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.proxyBodySize | quote }}
-    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyReadTimeout | quote }}
-    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxyReadTimeout | quote }}
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: {{ .Values.ingress.proxyConnectTimeout | quote }}
+  # Без cert-manager.io/cluster-issuer annotation: Certificate platform-tls (humanitec.ru +
+  # *.humanitec.ru) выпускается deploy/scripts/setup-wildcard-tls.sh ДО helm install через
+  # ClusterIssuer letsencrypt-prod-dns01 (DNS-01 webhook reg.ru). Ingress только использует
+  # готовый wildcard-Secret platform-tls. Annotations nginx.ingress.kubernetes.io/* убраны
+  # (microk8s 1.30+ ingress addon = traefik, который их не понимает).
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:

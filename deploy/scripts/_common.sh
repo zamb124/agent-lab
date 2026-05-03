@@ -171,6 +171,16 @@ if [ -z "$KUBECTL" ]; then
   fi
 fi
 
+# Helm: локально — `helm`, на master без локального helm — `microk8s helm3`.
+HELM="${HELM:-}"
+if [ -z "$HELM" ]; then
+  if command -v helm >/dev/null 2>&1; then
+    HELM="helm"
+  elif command -v microk8s >/dev/null 2>&1; then
+    HELM="microk8s helm3"
+  fi
+fi
+
 # Дефолтный namespace платформы.
 PLATFORM_NS="${PLATFORM_NS:-platform}"
 

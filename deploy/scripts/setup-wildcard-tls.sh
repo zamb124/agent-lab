@@ -1,24 +1,29 @@
 #!/usr/bin/env bash
-# Идемпотентная настройка wildcard TLS для *.humanitec.ru через cert-manager-webhook-regru (DNS-01).
+# Идемпотентная настройка wildcard TLS для *.humanitec.ru через flant/cert-manager-webhook-regru (DNS-01).
 # Запускать локально или с master ноды (требуется kubectl с настроенным kubeconfig + helm).
 #
+# ВАЖНО: REG.RU API требует whitelist IP. Перед первым запуском в личном кабинете reg.ru
+# (Настройки → API) добавьте IP master-ноды в белый список — иначе webhook получит
+# ACCESS_DENIED_FROM_IP и Certificate не выпустится.
+#
 # ENV:
-#   REGRU_USERNAME      — логин reg.ru (обязательно)
-#   REGRU_PASSWORD      — пароль reg.ru (обязательно)
+#   REGRU_USERNAME      — логин reg.ru (email из личного кабинета, обязательно)
+#   REGRU_PASSWORD      — alt-пароль для API из личного кабинета reg.ru (обязательно)
 #   LE_EMAIL            — контакт для Let's Encrypt (по умолчанию ops@humanitec.ru)
 #   APEX_HOST           — humanitec.ru
 #   WILDCARD_HOST       — *.humanitec.ru
 #   PLATFORM_TLS_SECRET — platform-tls (имя Secret для wildcard-сертификата)
 #   PLATFORM_NS         — platform
+#   WEBHOOK_REPO_URL    — git URL flant/cert-manager-webhook-regru (для git clone)
+#   WEBHOOK_CHART_DIR   — рабочий каталог для git clone (по умолчанию /var/lib/cert-manager-webhook-regru)
 #
 # Что делает (всё идемпотентно):
 #   1. Проверяет наличие cert-manager в кластере.
-#   2. helm install cert-manager-webhook-regru в namespace cert-manager (если нет).
-#   3. Применяет Secret regru-credentials.
-#   4. Применяет ClusterIssuer letsencrypt-prod-dns01.
-#   5. Проверяет namespace platform (должен существовать после деплоя agent-lab).
-#   6. Применяет Certificate platform-tls в namespace platform → выдаст Secret platform-tls.
-#   7. Ждёт Ready=True (до 5 мин).
+#   2. git clone/pull flant/cert-manager-webhook-regru в WEBHOOK_CHART_DIR.
+#   3. helm upgrade --install regru-webhook ./helm с set'ами issuer.user/password.
+#   4. Применяет ClusterIssuer letsencrypt-prod-dns01 (solver dns01.webhook → groupName: acme.regru.ru).
+#   5. Применяет Certificate platform-tls в namespace platform → выдаст Secret platform-tls (humanitec.ru + *.humanitec.ru).
+#   6. Ждёт Ready=True (до 10 мин).
 
 set -uo pipefail
 
@@ -26,8 +31,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "$SCRIPT_DIR/_common.sh"
 
-require_command kubectl || { require_command microk8s || exit 1; }
-require_command helm || { log_error "Установите helm: https://helm.sh/docs/intro/install/"; exit 1; }
+require_command kubectl 2>/dev/null || require_command microk8s || exit 1
+if [ -z "${HELM:-}" ]; then
+  log_error "Не найден helm (или microk8s). Установите: https://helm.sh/docs/intro/install/"
+  exit 1
+fi
 
 if [ -z "${REGRU_USERNAME:-}" ] || [ -z "${REGRU_PASSWORD:-}" ]; then
   log_error "Нужны переменные REGRU_USERNAME и REGRU_PASSWORD"
@@ -38,11 +46,19 @@ LE_EMAIL="${LE_EMAIL:-ops@humanitec.ru}"
 APEX_HOST="${APEX_HOST:-humanitec.ru}"
 WILDCARD_HOST="${WILDCARD_HOST:-*.humanitec.ru}"
 PLATFORM_TLS_SECRET="${PLATFORM_TLS_SECRET:-platform-tls}"
-WEBHOOK_REPO="${WEBHOOK_REPO:-https://regru.github.io/cert-manager-webhook-regru}"
+WEBHOOK_REPO_URL="${WEBHOOK_REPO_URL:-https://github.com/flant/cert-manager-webhook-regru.git}"
+WEBHOOK_CHART_DIR="${WEBHOOK_CHART_DIR:-/var/lib/cert-manager-webhook-regru}"
+WEBHOOK_RELEASE="${WEBHOOK_RELEASE:-regru-webhook}"
+WEBHOOK_GROUP_NAME="${WEBHOOK_GROUP_NAME:-acme.regru.ru}"
+WEBHOOK_SOLVER_NAME="${WEBHOOK_SOLVER_NAME:-regru-dns}"
+# Image flant/cluster-issuer-regru: latest tagged published is 1.2.0 (ghcr.io/flant).
+# values.yaml chart'а не имеет дефолта (issuer.image=changeme) — задаём явно.
+WEBHOOK_IMAGE="${WEBHOOK_IMAGE:-ghcr.io/flant/cluster-issuer-regru:1.2.0}"
+CERT_MANAGER_NS="${CERT_MANAGER_NS:-cert-manager}"
 
-# Использовать $KUBECTL из _common.sh (kubectl или 'microk8s kubectl')
+# Использовать $KUBECTL и $HELM из _common.sh (auto-detect kubectl/microk8s, helm/microk8s helm3).
 K="$KUBECTL"
-H="${HELM:-helm}"
+H="$HELM"
 
 log_section "Wildcard TLS для $APEX_HOST + $WILDCARD_HOST"
 
@@ -53,27 +69,33 @@ if ! $K get namespace cert-manager >/dev/null 2>&1; then
 fi
 log_ok "cert-manager установлен"
 
-# 2. Helm webhook regru
-if $H list -n cert-manager 2>/dev/null | grep -q '^cert-manager-webhook-regru'; then
-  log_skip "helm release cert-manager-webhook-regru уже установлен"
+# 2. Клонируем/обновляем chart flant/cert-manager-webhook-regru.
+# Канал публикации flant — git+helm (нет GitHub Pages). Идемпотентно: clone если нет, иначе fetch+reset.
+require_command git || { log_error "git не установлен"; exit 1; }
+if [ -d "$WEBHOOK_CHART_DIR/.git" ]; then
+  log_skip "git clone $WEBHOOK_REPO_URL → $WEBHOOK_CHART_DIR"
+  log_do "git fetch + reset --hard origin/master"
+  git -C "$WEBHOOK_CHART_DIR" fetch --depth=1 origin master >/dev/null
+  git -C "$WEBHOOK_CHART_DIR" reset --hard origin/master >/dev/null
 else
-  log_do "helm install cert-manager-webhook-regru"
-  $H repo add regru "$WEBHOOK_REPO" 2>/dev/null || true
-  $H repo update regru || true
-  $H install cert-manager-webhook-regru regru/cert-manager-webhook-regru \
-    --namespace cert-manager \
-    --wait --timeout 5m
+  log_do "git clone $WEBHOOK_REPO_URL → $WEBHOOK_CHART_DIR"
+  rm -rf "$WEBHOOK_CHART_DIR"
+  git clone --depth=1 "$WEBHOOK_REPO_URL" "$WEBHOOK_CHART_DIR" >/dev/null
 fi
 
-# 3. Secret с креденшалами reg.ru
-log_do "Secret regru-credentials в cert-manager"
-$K create secret generic regru-credentials \
-  --namespace cert-manager \
-  --from-literal=username="$REGRU_USERNAME" \
-  --from-literal=password="$REGRU_PASSWORD" \
-  --dry-run=client -o yaml | $K apply -f -
+# 3. Helm install/upgrade webhook (chart лежит в подкаталоге ./helm).
+log_do "helm upgrade --install $WEBHOOK_RELEASE (chart $WEBHOOK_CHART_DIR/helm)"
+$H upgrade --install "$WEBHOOK_RELEASE" "$WEBHOOK_CHART_DIR/helm" \
+  --namespace "$CERT_MANAGER_NS" \
+  --set "issuer.image=$WEBHOOK_IMAGE" \
+  --set "issuer.user=$REGRU_USERNAME" \
+  --set "issuer.password=$REGRU_PASSWORD" \
+  --set "groupName.name=$WEBHOOK_GROUP_NAME" \
+  --set "certManager.namespace=$CERT_MANAGER_NS" \
+  --set "certManager.serviceAccountName=cert-manager" \
+  --wait --timeout 5m
 
-# 4. ClusterIssuer
+# 4. ClusterIssuer (DNS-01 через webhook). Secret regru-password создаётся helm chart'ом автоматически.
 log_do "ClusterIssuer letsencrypt-prod-dns01"
 cat <<EOF | $K apply -f -
 apiVersion: cert-manager.io/v1
@@ -89,21 +111,20 @@ spec:
     solvers:
       - dns01:
           webhook:
-            groupName: acme.regru.ru
-            solverName: regru
+            groupName: ${WEBHOOK_GROUP_NAME}
+            solverName: ${WEBHOOK_SOLVER_NAME}
             config:
-              usernameSecretRef:
-                name: regru-credentials
-                key: username
-              passwordSecretRef:
-                name: regru-credentials
-                key: password
+              regruPasswordSecretRef:
+                name: regru-password
+                key: REGRU_PASSWORD
 EOF
 
-# 5. Namespace platform (должен быть создан релизом agent-lab: helm --create-namespace).
-if ! $K get namespace "$PLATFORM_NS" >/dev/null 2>&1; then
-  log_error "namespace $PLATFORM_NS отсутствует. Сначала установите платформу (helm upgrade --install agent-lab ... --create-namespace)."
-  exit 1
+# 5. Namespace platform — создаём, если нет (скрипт идёт перед helm install в CI).
+if $K get namespace "$PLATFORM_NS" >/dev/null 2>&1; then
+  log_skip "namespace $PLATFORM_NS"
+else
+  log_do "kubectl create namespace $PLATFORM_NS"
+  $K create namespace "$PLATFORM_NS"
 fi
 
 # 6. Certificate
