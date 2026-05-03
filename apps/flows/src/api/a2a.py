@@ -60,9 +60,6 @@ def _metadata_effective_branch(metadata: Dict[str, Any] | None) -> str | None:
     b = metadata.get("branch")
     if b is not None and str(b).strip():
         return str(b).strip()
-    sk = metadata.get("skill")
-    if sk is not None and str(sk).strip():
-        return str(sk).strip()
     return None
 
 

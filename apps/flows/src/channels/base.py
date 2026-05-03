@@ -322,10 +322,6 @@ class BaseChannel(ABC):
                 b = metadata.get("branch")
                 if b is not None and str(b).strip():
                     branch_id = str(b).strip()
-                else:
-                    sk = metadata.get("skill")
-                    if sk is not None and str(sk).strip():
-                        branch_id = str(sk).strip()
             is_resume = False
         else:
             branch_id = state.branch_id

@@ -23,6 +23,7 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
+          {{- if $.Values.applications.flows.enabled }}
           - path: /flows
             pathType: Prefix
             backend:
@@ -30,6 +31,8 @@ spec:
                 name: {{ $.Values.applications.flows.serviceName }}
                 port:
                   number: {{ $.Values.applications.flows.port }}
+          {{- end }}
+          {{- if $.Values.applications.crm.enabled }}
           - path: /crm
             pathType: Prefix
             backend:
@@ -37,6 +40,8 @@ spec:
                 name: {{ $.Values.applications.crm.serviceName }}
                 port:
                   number: {{ $.Values.applications.crm.port }}
+          {{- end }}
+          {{- if $.Values.applications.rag.enabled }}
           - path: /rag
             pathType: Prefix
             backend:
@@ -44,6 +49,8 @@ spec:
                 name: {{ $.Values.applications.rag.serviceName }}
                 port:
                   number: {{ $.Values.applications.rag.port }}
+          {{- end }}
+          {{- if $.Values.applications.sync.enabled }}
           - path: /sync
             pathType: Prefix
             backend:
@@ -51,6 +58,8 @@ spec:
                 name: {{ $.Values.applications.sync.serviceName }}
                 port:
                   number: {{ $.Values.applications.sync.port }}
+          {{- end }}
+          {{- if $.Values.applications.office.enabled }}
           - path: /documents
             pathType: Prefix
             backend:
@@ -58,13 +67,18 @@ spec:
                 name: {{ $.Values.applications.office.serviceName }}
                 port:
                   number: {{ $.Values.applications.office.port }}
+          {{- end }}
+          {{- $sched := index $.Values.applications "scheduler-api" }}
+          {{- if $sched.enabled }}
           - path: /scheduler
             pathType: Prefix
             backend:
               service:
-                name: {{ index $.Values.applications "scheduler-api" "serviceName" }}
+                name: {{ $sched.serviceName }}
                 port:
-                  number: {{ index $.Values.applications "scheduler-api" "port" }}
+                  number: {{ $sched.port }}
+          {{- end }}
+          {{- if $.Values.applications.voice.enabled }}
           - path: /voice
             pathType: Prefix
             backend:
@@ -72,6 +86,8 @@ spec:
                 name: {{ $.Values.applications.voice.serviceName }}
                 port:
                   number: {{ $.Values.applications.voice.port }}
+          {{- end }}
+          {{- if $.Values.litserve.enabled }}
           - path: /litserve
             pathType: Prefix
             backend:
@@ -79,6 +95,8 @@ spec:
                 name: {{ $.Values.litserve.serviceName }}
                 port:
                   number: {{ $.Values.litserve.port }}
+          {{- end }}
+          {{- if $.Values.applications.frontend.enabled }}
           - path: /
             pathType: Prefix
             backend:
@@ -86,5 +104,6 @@ spec:
                 name: {{ $.Values.applications.frontend.serviceName }}
                 port:
                   number: {{ $.Values.applications.frontend.port }}
+          {{- end }}
     {{- end }}
 {{- end }}

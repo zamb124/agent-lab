@@ -36,6 +36,8 @@ logger = get_logger(__name__)
 REQUEST_ID_HEADER = "X-Request-Id"
 TRACE_ID_HEADER = "X-Trace-Id"
 
+# Первый сегмент пути для прокси на другой локальный сервис. Исключение: browser (8009) —
+# только межсервисные вызовы по URL из settings, без префикса в shell (см. infrastructure.mdc).
 _SERVICE_PREFIXES: tuple[str, ...] = (
     "flows",
     "crm",

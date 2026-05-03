@@ -114,7 +114,7 @@ class A2AClient:
             base_url: Базовый URL агента
             content: Текст сообщения
             session_id: ID сессии (опционально)
-            branch_id: ID навыка агента
+            branch_id: ID ветки агента (в metadata уходит как `branch`)
             metadata: Дополнительные данные
             auth_headers: Заголовки авторизации
 
@@ -145,10 +145,10 @@ class A2AClient:
             },
         }
 
-        # Добавляем metadata с skill и переданными данными
+        # Ветка skill/branch в A2A передаётся как metadata.branch (сервер: BaseChannel._prepare_task_params).
         final_metadata = metadata.copy() if metadata else {}
         if branch_id and branch_id != "default":
-            final_metadata["skill"] = branch_id
+            final_metadata["branch"] = branch_id
         
         if final_metadata:
             payload["params"]["metadata"] = final_metadata

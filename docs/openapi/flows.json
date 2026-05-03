@@ -780,7 +780,7 @@
           "name"
         ],
         "title": "BranchRequest",
-        "description": "Skill в запросе"
+        "description": "Ветка (branch) в запросе"
       },
       "BranchResponse": {
         "properties": {
@@ -884,7 +884,7 @@
           "name"
         ],
         "title": "BranchResponse",
-        "description": "Skill в ответе"
+        "description": "Ветка (branch) в ответе"
       },
       "BulkDeleteNodesRequest": {
         "properties": {
@@ -5428,7 +5428,7 @@
           "branch_id": {
             "type": "string",
             "title": "Branch Id",
-            "description": "ID skill из flow.skills; default — entry базового flow",
+            "description": "ID ветки из FlowConfig.branches; default — entry базового flow",
             "default": "default"
           }
         },
@@ -5689,7 +5689,7 @@
           "branch_id": {
             "type": "string",
             "title": "Branch Id",
-            "description": "Skill для резолва @var: (как при выполнении flow с этим skill)",
+            "description": "Ветка (branch_id) для резолва @var: (как при выполнении flow с этой веткой)",
             "default": "default"
           }
         },

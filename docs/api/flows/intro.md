@@ -357,7 +357,7 @@ curl -N -X POST https://humanitec.ru/flows/a2a/my-agent \
   }'
 ```
 
-### Работа с конкретным skill
+### Работа с конкретной веткой (branch / skill в конфиге flow)
 
 ```bash
 curl -X POST https://humanitec.ru/flows/a2a/my-agent \
@@ -377,7 +377,7 @@ curl -X POST https://humanitec.ru/flows/a2a/my-agent \
         }
       },
       "metadata": {
-        "skill": "math-helper"
+        "branch": "math-helper"
       }
     }
   }'

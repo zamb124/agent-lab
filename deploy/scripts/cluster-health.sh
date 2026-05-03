@@ -31,7 +31,9 @@ ONLYOFFICE_HOST="${ONLYOFFICE_HOST:-onlyoffice.humanitec.ru}"
 LIVEKIT_HOST="${LIVEKIT_HOST:-livekit.humanitec.ru}"
 CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
 
-# Список ожидаемых деплойментов (соответствует values.yaml — applications + workers + external)
+# Список ожидаемых деплойментов (дефолтный состав под Helm values.yaml + values-prod.yaml).
+# При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
+# «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
   flows frontend crm rag sync office scheduler-api voice browser
   flows-worker scheduler rag-worker sync-worker crm-worker idle-worker

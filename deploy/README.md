@@ -67,6 +67,19 @@ MicroK8s cluster
 
 Скрипт: **`deploy/scripts/render_helm_app_conf.py`**.
 
+### Состав приложений: Helm и `cluster-health.sh`
+
+Канон процессов локально — **[`scripts/run.py`](../scripts/run.py)** и **[`apps/app_runtime_targets.py`](../apps/app_runtime_targets.py)**. В Kubernetes тот же набор задаётся **`deploy/helm/agent-lab/values.yaml`** (`applications`, `workers`, `litserve`, внешние блоки).
+
+| Зона | Источник | Проверка после деплоя |
+|------|----------|------------------------|
+| HTTP-приложения | `applications.*` → Deployments/Services из **`templates/30-apps/`** | Имена в **`EXPECTED_DEPLOYMENTS`** в [`deploy/scripts/cluster-health.sh`](scripts/cluster-health.sh) должны совпадать с включёнными сервисами |
+| Воркеры TaskIQ | `workers.*` → **`templates/40-workers/`** | Те же имена (ключ YAML = имя Deployment, например `flows-worker`) в **`EXPECTED_DEPLOYMENTS`** |
+| LitServe | `litserve.*` → **`templates/50-gpu/litserve.yaml`** | `provider-litserve` в **`EXPECTED_DEPLOYMENTS`**; при **`litserve.enabled: false`** уберите его из списка и из Ingress (правила **`/litserve`** рендерятся только если LitServe включён) |
+| Прочие деплойменты | livekit, onlyoffice, grafana и т.д. в **`templates/60-external/`**, **`70-observability/`** | Уже перечислены в **`EXPECTED_DEPLOYMENTS`** / **`EXPECTED_STATEFULSETS`** / **`EXPECTED_DAEMONSETS`** |
+
+**Правило:** если через values отключаете компонент (**`enabled: false`**), синхронно правьте **`deploy/scripts/cluster-health.sh`** (уберите соответствующее имя из ожидаемых списков). Шаблон **`templates/80-ingress/platform-ingress.yaml`** не добавляет правило для выключенного приложения или для **`litserve.enabled: false`** / **`applications.voice.enabled: false`**, чтобы не оставался backend без Service.
+
 ### Первый `helm install`: «invalid ownership metadata» у Secret `platform-secrets`
 
 Если релиза **`agent-lab`** ещё нет, а в **`platform`** уже есть **`platform-secrets`** (ручной `kubectl`, не Helm), первый деплой с **`platformSecrets.create: true`** падает: Helm не может заявить ресурс без меток **`app.kubernetes.io/managed-by: Helm`** и аннотаций **`meta.helm.sh/release-*`**.

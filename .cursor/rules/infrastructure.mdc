@@ -84,7 +84,7 @@ deploy/helm/agent-lab/
 
 **Frontend и static:** `templates/30-apps/deployments.yaml` для frontend добавляет `initContainer` `extract-static`, который копирует `/app/static/` в `emptyDir` `shared-static`. Отдельный static-server pod больше не нужен — frontend сам обслуживает статику из своего же образа.
 
-**Browser Runtime:** Deployment `browser` в том же чарте; контейнер `chromium-cdp` даёт CDP (`http://127.0.0.1:9222` внутри Pod), приложение подключается через Playwright `connect_over_cdp`. Публичный Ingress для browser не открывается; flows/workers ходят на ClusterIP `http://browser:8009` через `SERVER__BROWSER_SERVICE_URL`.
+**Browser Runtime:** Deployment `browser` в том же чарте; контейнер `chromium-cdp` даёт CDP (`http://127.0.0.1:9222` внутри Pod), приложение подключается через Playwright `connect_over_cdp`. Публичный Ingress для browser не открывается; flows/workers ходят на ClusterIP `http://browser:8009` через `SERVER__BROWSER_SERVICE_URL`. Локально **`DevInterServiceProxy`** не регистрирует префикс `browser`: доступ к Browser Runtime с общего origin shell не проксируется — только межсервисные вызовы по `SERVER__BROWSER_SERVICE_URL` / порту 8009.
 
 **CRM vendor (three.js, 3d-force-graph):** в Docker-образ запекается `node_modules/three/build` и `node_modules/3d-force-graph/dist` (стадия `js-vendor`), CRM Deployment отдаёт `/crm/ui/vendor/...` напрямую из `/app/node_modules/...`.
 
@@ -102,7 +102,9 @@ Alembic миграции запускаются как **Helm hook Job** `migrat
 
 | Хост | TLS Secret | Маршруты |
 |---|---|---|
-| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `/flows /crm /rag /sync /documents /scheduler /voice /litserve /` |
+| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | Префиксы `/flows`, `/crm`, `/rag`, `/sync`, `/documents`, `/scheduler`, `/voice`, `/litserve`, `/` — только если соответствующий сервис включён в **`values.yaml`** (`applications.*.enabled` или `litserve.enabled`); см. **`templates/80-ingress/platform-ingress.yaml`** |
+
+**Проверка состава кластера:** списки ожидаемых Deployments/StatefulSets/DaemonSets в **`deploy/scripts/cluster-health.sh`** должны соответствовать фактически включённым компонентам из Helm values; при отключении сервиса правьте **`EXPECTED_*`** в этом скрипте. Подробнее — **`deploy/README.md`** («Состав приложений: Helm и cluster-health»).
 | `livekit.humanitec.ru` | `livekit-tls` | `/` → livekit:7880 |
 | `onlyoffice.humanitec.ru` | `onlyoffice-tls` | `/` → onlyoffice:80 |
 | `grafana.humanitec.ru` | `grafana-tls` | `/` → grafana:3000 |
