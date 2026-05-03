@@ -27,6 +27,10 @@ bash deploy/scripts/bootstrap-master.sh
 Скрипт ставит MicroK8s, включает аддоны `dns hostpath-storage ingress cert-manager`,
 печатает `KUBECONFIG_B64` для GitHub Secret.
 
+Трек snap по умолчанию: `MICROK8S_CHANNEL=1.33/stable` (см. актуальные каналы: `snap info microk8s`).
+На **уже установленной** ноде со старым каналом (например `1.30/stable`): на master и worker одинаково —
+`snap refresh microk8s --channel=1.33/stable`, затем `microk8s status --wait-ready` на каждой ноде.
+
 **Idempotent.** Повторный запуск: всё `[SKIP]`.
 
 ## 2. GPU worker нода (188.246.224.228)

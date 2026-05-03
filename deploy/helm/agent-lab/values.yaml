@@ -233,6 +233,9 @@ workers:
 
 litserve:
   enabled: true
+  # true: GPU-нода (nodeSelector accelerator + nvidia.com/gpu + CUDA).
+  # false: под на master (kubernetes.io/hostname = masterNodeName), CPU (медленнее, без отдельной GPU-ноды).
+  scheduleOnGpuNode: true
   port: 8014
   serviceName: provider-litserve
   modelCacheSize: 50Gi

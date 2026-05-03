@@ -52,11 +52,16 @@ else
   log_error "не Ready: $NODES_READY"
 fi
 
-# 2. GPU доступна на gpu-worker
+# 2. GPU на gpu-worker (только если LitServe с nodeSelector accelerator → GPU-нода)
 log_section "2) GPU"
-check_step \
-  "node $GPU_NODE_NAME имеет nvidia.com/gpu в Allocatable" \
-  "$K get node $GPU_NODE_NAME -o jsonpath='{.status.allocatable.nvidia\\.com/gpu}' | grep -qE '^[1-9]'"
+LITSERVE_GPU_SEL=$($K get deploy provider-litserve -n "$PLATFORM_NS" -o jsonpath='{.spec.template.spec.nodeSelector.accelerator}' 2>/dev/null || true)
+if [ "$LITSERVE_GPU_SEL" = "nvidia-gpu" ]; then
+  check_step \
+    "node $GPU_NODE_NAME имеет nvidia.com/gpu в Allocatable" \
+    "$K get node $GPU_NODE_NAME -o jsonpath='{.status.allocatable.nvidia\\.com/gpu}' | grep -qE '^[1-9]'"
+else
+  log_info "LitServe без selector accelerator=nvidia-gpu — проверка allocatable GPU пропущена (режим CPU на master)"
+fi
 
 # 3. Поды Running/Completed
 log_section "3) Поды в namespace $PLATFORM_NS"

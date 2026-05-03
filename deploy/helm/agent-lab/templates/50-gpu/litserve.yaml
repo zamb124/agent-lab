@@ -50,12 +50,16 @@ spec:
         app: {{ .Values.litserve.serviceName }}
         app.kubernetes.io/component: gpu-inference
     spec:
+      {{- if .Values.litserve.scheduleOnGpuNode }}
       nodeSelector:
         {{ .Values.gpuNodeSelectorKey }}: {{ .Values.gpuNodeSelectorValue | quote }}
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
+      {{- else }}
+      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+      {{- end }}
       containers:
         - name: litserve
           image: {{ include "agentlab.image" . }}
@@ -65,7 +69,7 @@ spec:
             - name: PROVIDER_LITSERVE__INFRA__BACKEND
               value: flagllm
             - name: PROVIDER_LITSERVE__INFRA__ACCELERATOR
-              value: cuda
+              value: {{ if .Values.litserve.scheduleOnGpuNode }}cuda{{ else }}cpu{{ end }}
             - name: PROVIDER_LITSERVE__INFRA__HOST
               value: 0.0.0.0
             - name: PROVIDER_LITSERVE__INFRA__GATEWAY_PORT
@@ -119,11 +123,15 @@ spec:
             requests:
               cpu: {{ .Values.litserve.resources.requests.cpu | quote }}
               memory: {{ .Values.litserve.resources.requests.memory | quote }}
+              {{- if .Values.litserve.scheduleOnGpuNode }}
               nvidia.com/gpu: "1"
+              {{- end }}
             limits:
               cpu: {{ .Values.litserve.resources.limits.cpu | quote }}
               memory: {{ .Values.litserve.resources.limits.memory | quote }}
+              {{- if .Values.litserve.scheduleOnGpuNode }}
               nvidia.com/gpu: "1"
+              {{- end }}
       volumes:
         {{- include "agentlab.confVolume" . | nindent 8 }}
         - name: model-cache

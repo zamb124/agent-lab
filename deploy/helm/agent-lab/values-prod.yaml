@@ -13,6 +13,7 @@ ingress:
 
 litserve:
   enabled: true
+  scheduleOnGpuNode: true
 
 observability:
   loki:

@@ -5,7 +5,7 @@
 #
 # Что делает:
 #   1. hostname → master
-#   2. snap install microk8s --classic --channel=1.30/stable
+#   2. snap install microk8s --classic --channel=${MICROK8S_CHANNEL}
 #   3. usermod ubuntu в группу microk8s (если есть пользователь ubuntu)
 #   4. microk8s enable: dns, hostpath-storage, ingress, cert-manager
 #   5. wait-ready
@@ -22,7 +22,8 @@ source "$SCRIPT_DIR/_common.sh"
 require_root || exit 1
 
 MASTER_HOSTNAME="${MASTER_HOSTNAME:-master}"
-MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.30/stable}"
+# Трек Kubernetes: см. `snap info microk8s`. Для новых нод — актуальный stable-трек (не ниже 1.33).
+MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.33/stable}"
 ADDONS=(dns hostpath-storage ingress cert-manager)
 
 log_section "Bootstrap master ноды (hostname=$MASTER_HOSTNAME)"

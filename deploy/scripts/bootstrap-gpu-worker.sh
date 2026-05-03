@@ -24,7 +24,8 @@ source "$SCRIPT_DIR/_common.sh"
 require_root || exit 1
 
 GPU_HOSTNAME="${GPU_HOSTNAME:-gpu-worker}"
-MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.30/stable}"
+# Должен совпадать с master (одна minor-версия на весь кластер). См. `snap info microk8s`.
+MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.33/stable}"
 
 log_section "Bootstrap GPU worker (hostname=$GPU_HOSTNAME)"
 

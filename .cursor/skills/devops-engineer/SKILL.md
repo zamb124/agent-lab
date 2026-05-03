@@ -27,7 +27,7 @@ description: DevOps инженер платформы Humanitec. Знает SSH-
 | Роль | IP | SSH | Что бежит |
 |---|---|---|---|
 | **master** | `84.38.184.105` | `ssh root@84.38.184.105` | control-plane MicroK8s, ВСЕ StatefulSets (postgres, redis, loki, tempo, grafana), все 8 app deployments, 6 workers, livekit, livekit-egress, onlyoffice, coturn (DaemonSet, hostNetwork), ingress-nginx, alloy DaemonSet |
-| **gpu-worker** | `188.246.224.228` | `ssh root@188.246.224.228` | ТОЛЬКО `provider-litserve` Deployment (через `nodeSelector: accelerator=nvidia-gpu` + `nvidia.com/gpu: 1`), alloy DaemonSet |
+| **gpu-worker** | `188.246.224.228` | `ssh root@188.246.224.228` | По умолчанию `provider-litserve` (`nodeSelector: accelerator=nvidia-gpu` + `nvidia.com/gpu: 1`); при `litserve.scheduleOnGpuNode=false` LitServe уезжает на master (CPU). Всегда: alloy DaemonSet |
 
 Между нодами связь через CNI кластера (Calico/Flannel). Postgres/Redis доступны изнутри кластера по `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379`. **Никаких** `ufw allow` или host-проброса портов БД.
 
@@ -67,7 +67,7 @@ description: DevOps инженер платформы Humanitec. Знает SSH-
 | livekit + livekit-egress | Deployment | master (hostNetwork) | — | WebRTC сигналинг + egress |
 | coturn | DaemonSet | master (hostNetwork) | — | TURN-сервер для WebRTC |
 | onlyoffice | Deployment | master | — | OnlyOffice DocumentServer (CE) |
-| provider-litserve | Deployment | **gpu-worker** | 50Gi (model cache) | Эмбеддинги и rerank на GPU |
+| provider-litserve | Deployment | **gpu-worker** (или **master** если `litserve.scheduleOnGpuNode=false`) | 50Gi (model cache) | Эмбеддинги и rerank (GPU или CPU) |
 | migrations | Job (helm hook post-install/upgrade) | master | — | `python -m scripts.db_migrate upgrade` |
 | 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | TLS через cert-manager |
 

@@ -24,9 +24,19 @@ MicroK8s cluster
 │   ├── ingress-nginx + cert-manager
 │   └── 4 Ingress: platform, livekit, onlyoffice, grafana
 └── gpu-worker (188.246.224.228)   accelerator=nvidia-gpu
-    ├── provider-litserve Deployment (nodeSelector + nvidia.com/gpu: 1)
+    ├── provider-litserve Deployment (по умолчанию: nodeSelector GPU + `nvidia.com/gpu: 1`)
     └── alloy DaemonSet
 ```
+
+### LitServe: GPU-нода или CPU на master
+
+В [`values.yaml`](helm/agent-lab/values.yaml) — `litserve.scheduleOnGpuNode` (по умолчанию `true`).
+
+- **`true`** — под только на ноде с лейблом `accelerator=nvidia-gpu`, CUDA, лимит GPU 1.
+- **`false`** — под на master (`kubernetes.io/hostname` = `masterNodeName`), `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cpu` (медленнее, без выделенной GPU).
+
+Переключение: правка values / `--set litserve.scheduleOnGpuNode=false`, затем `make k8s-deploy`.
+Скрипт [`cluster-health.sh`](scripts/cluster-health.sh) проверяет `nvidia.com/gpu` на worker только если у Deployment всё ещё есть `nodeSelector.accelerator=nvidia-gpu`.
 
 ## CI/CD
 
@@ -48,7 +58,7 @@ MicroK8s cluster
 | [`bootstrap-gpu-worker.sh`](scripts/bootstrap-gpu-worker.sh) | gpu-worker под root | NVIDIA driver + container-toolkit + MicroK8s |
 | [`join-cluster.sh`](scripts/join-cluster.sh) | master | `add-node` + SSH `microk8s join` + label + `enable gpu` на worker |
 | [`setup-wildcard-tls.sh`](scripts/setup-wildcard-tls.sh) | локально / master | `cert-manager-webhook-regru` + ClusterIssuer DNS-01 + Certificate `platform-tls` |
-| [`cluster-health.sh`](scripts/cluster-health.sh) | локально / master / CI | Полная проверка: ноды, GPU, поды, PVC, Ingress, Certificate, Postgres, Redis, Loki/Tempo, public health |
+| [`cluster-health.sh`](scripts/cluster-health.sh) | локально / master / CI | Полная проверка: ноды, GPU (если LitServe на GPU), поды, PVC, Ingress, Certificate, Postgres, Redis, Loki/Tempo, public health |
 | [`backup-postgres.sh`](scripts/backup-postgres.sh) | локально / master | `pg_dumpall` через `kubectl exec`, опционально `--s3` в Selectel |
 | [`restore-postgres.sh`](scripts/restore-postgres.sh) | локально / master | Restore из дампа в pod `postgres-0` |
 | [`migrate-data-from-compose.sh`](scripts/migrate-data-from-compose.sh) | локально | Одноразово: SSH на старый docker-compose хост → `pg_dumpall` → restore в новый кластер |
