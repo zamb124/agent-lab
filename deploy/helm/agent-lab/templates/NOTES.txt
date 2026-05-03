@@ -8,8 +8,8 @@
   kubectl logs -n {{ .Values.namespace }} deployment/{{ .Values.applications.frontend.serviceName }} -f --tail=200
 
 Применённый образ: {{ include "agentlab.image" . }}
-Master нода:       {{ .Values.masterNodeName }}
-GPU нода:          по селектору {{ .Values.gpuNodeSelectorKey }}={{ .Values.gpuNodeSelectorValue }}
+GPU ноды:          {{ .Values.gpuNodeNames | join ", " }}
+LitServe нода:     {{ .Values.litserve.nodeName }}
 
 Платформа:    https://{{ .Values.ingress.apexHost }}
 LiveKit:      https://{{ .Values.ingress.livekitHost }}

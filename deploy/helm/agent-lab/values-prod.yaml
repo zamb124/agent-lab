@@ -2,8 +2,6 @@
 # Применяется поверх values.yaml: helm upgrade ... --values values.yaml --values values-prod.yaml
 
 domain: humanitec.ru
-# Имя master-ноды в kube (microk8s hostname после bootstrap-master.sh = "master").
-masterNodeName: master
 
 image:
   pullSecrets:
@@ -15,8 +13,6 @@ ingress:
   livekitHost: livekit.humanitec.ru
   onlyofficeHost: onlyoffice.humanitec.ru
   grafanaHost: grafana.humanitec.ru
-
-# litserve планируется на gpu-worker (label accelerator=nvidia-gpu).
 
 observability:
   loki:

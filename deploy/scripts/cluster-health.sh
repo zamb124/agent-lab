@@ -57,15 +57,16 @@ else
   log_error "не Ready: $NODES_READY"
 fi
 
-# 2. GPU на gpu-worker (только если LitServe с nodeSelector accelerator → GPU-нода)
+# 2. GPU на gpu-worker (если LitServe размещён на ноде из gpuNodeNames через nodeName)
 log_section "2) GPU"
-LITSERVE_GPU_SEL=$($K get deploy provider-litserve -n "$PLATFORM_NS" -o jsonpath='{.spec.template.spec.nodeSelector.accelerator}' 2>/dev/null || true)
-if [ "$LITSERVE_GPU_SEL" = "nvidia-gpu" ]; then
+LITSERVE_HOST=$($K get deploy provider-litserve -n "$PLATFORM_NS" \
+  -o jsonpath='{.spec.template.spec.nodeSelector.kubernetes\.io/hostname}' 2>/dev/null || true)
+if [ "$LITSERVE_HOST" = "$GPU_NODE_NAME" ]; then
   check_step \
     "node $GPU_NODE_NAME имеет nvidia.com/gpu в Allocatable" \
     "$K get node $GPU_NODE_NAME -o jsonpath='{.status.allocatable.nvidia\\.com/gpu}' | grep -qE '^[1-9]'"
 else
-  log_info "LitServe без selector accelerator=nvidia-gpu — проверка allocatable GPU пропущена (режим CPU на master)"
+  log_info "LitServe на ноде '${LITSERVE_HOST:-auto}' (не $GPU_NODE_NAME) — проверка GPU пропущена"
 fi
 
 # 3. Поды Running/Completed
