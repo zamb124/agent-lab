@@ -1,0 +1,134 @@
+{{- if .Values.litserve.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: litserve-model-cache
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.litserve.modelCacheSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.litserve.serviceName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.litserve.serviceName }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.litserve.serviceName }}
+  ports:
+    - name: http
+      port: {{ .Values.litserve.port }}
+      targetPort: {{ .Values.litserve.port }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.litserve.serviceName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.litserve.serviceName }}
+    app.kubernetes.io/component: gpu-inference
+    app.kubernetes.io/part-of: agent-lab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Values.litserve.serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.litserve.serviceName }}
+        app.kubernetes.io/component: gpu-inference
+    spec:
+      nodeSelector:
+        {{ .Values.gpuNodeSelectorKey }}: {{ .Values.gpuNodeSelectorValue | quote }}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: litserve
+          image: {{ include "agentlab.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "apps.provider_litserve.main"]
+          env:
+            - name: PROVIDER_LITSERVE__INFRA__BACKEND
+              value: flagllm
+            - name: PROVIDER_LITSERVE__INFRA__ACCELERATOR
+              value: cuda
+            - name: PROVIDER_LITSERVE__INFRA__HOST
+              value: 0.0.0.0
+            - name: PROVIDER_LITSERVE__INFRA__GATEWAY_PORT
+              value: {{ .Values.litserve.port | quote }}
+            - name: PROVIDER_LITSERVE__INFRA__MODEL_ID
+              value: {{ .Values.litserve.modelId | quote }}
+            - name: PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID
+              value: {{ .Values.litserve.embeddingModelId | quote }}
+            - name: PROVIDER_LITSERVE__INFRA__SQLITE_PATH
+              value: /var/lib/provider_litserve/registry.db
+            - name: HF_HOME
+              value: /root/.cache/huggingface
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: hf-token
+                  optional: true
+            {{- include "agentlab.appEnv" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.litserve.port }}
+          volumeMounts:
+            {{- include "agentlab.confVolumeMount" . | nindent 12 }}
+            - name: model-cache
+              mountPath: /root/.cache/huggingface
+            - name: registry-data
+              mountPath: /var/lib/provider_litserve
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.litserve.port }}
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.litserve.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.litserve.port }}
+            failureThreshold: 60
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{ .Values.litserve.resources.requests.cpu | quote }}
+              memory: {{ .Values.litserve.resources.requests.memory | quote }}
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: {{ .Values.litserve.resources.limits.cpu | quote }}
+              memory: {{ .Values.litserve.resources.limits.memory | quote }}
+              nvidia.com/gpu: "1"
+      volumes:
+        {{- include "agentlab.confVolume" . | nindent 8 }}
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: litserve-model-cache
+        - name: registry-data
+          emptyDir: {}
+{{- end }}

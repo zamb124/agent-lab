@@ -28,7 +28,7 @@ def _require_cuda_when_selected(device: str) -> None:
     if not torch.cuda.is_available():
         raise RuntimeError(
             "provider_litserve: CUDA device для эмбеддера недоступен (torch.cuda.is_available() == False); "
-            "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и блок GPU в docker-compose-litserve.yaml."
+            "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и resources.limits.nvidia.com/gpu в Helm-чарте (deploy/helm/agent-lab/templates/50-gpu/litserve.yaml)."
         )
 
 

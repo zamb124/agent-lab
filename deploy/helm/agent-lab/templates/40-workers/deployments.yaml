@@ -1,0 +1,38 @@
+{{- range $name, $worker := .Values.workers }}
+{{- if $worker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: agent-lab
+spec:
+  replicas: {{ $worker.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+        - name: worker
+          image: {{ include "agentlab.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: {{ $worker.command | toJson }}
+          env:
+            {{- include "agentlab.appEnv" $ | nindent 12 }}
+          volumeMounts:
+            {{- include "agentlab.confVolumeMount" $ | nindent 12 }}
+          resources:
+            {{- toYaml $worker.resources | nindent 12 }}
+      volumes:
+        {{- include "agentlab.confVolume" $ | nindent 8 }}
+{{- end }}
+{{- end }}

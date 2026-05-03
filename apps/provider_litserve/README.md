@@ -54,12 +54,18 @@
 
 Переопределение деплоя: **`services.provider_litserve`**. ENV: **`PROVIDER_LITSERVE__API__*`**, **`PROVIDER_LITSERVE__INFRA__*`** (в т.ч. **`PROVIDER_LITSERVE__INFRA__MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__GATEWAY_PORT`**, **`PROVIDER_LITSERVE__INFRA__ACCELERATOR`** со значением `auto`, `cuda` или `cpu`).
 
-## GPU на удалённой ноде
+## GPU на отдельной ноде кластера
 
-Файл [**`docker-compose-litserve.yaml`**](../../docker-compose-litserve.yaml) запрашивает GPU у Docker через **`deploy.resources.reservations.devices`** (driver `nvidia`). На хосте нужны **проприетарный драйвер NVIDIA**, **NVIDIA Container Toolkit**, перезапуск Docker; пошаговый эталон — [**`deploy/LITSERVE_GPU_HOST.md`**](../../deploy/LITSERVE_GPU_HOST.md). Автоустановка из CI: параметр **`install_litserve_gpu_stack`** workflow Deploy (вызывает **`deploy/bootstrap-litserve-node-gpu.sh`**).
+`provider_litserve` запускается единственным подом на GPU-ноде MicroK8s через `nodeSelector: accelerator=nvidia-gpu` и `resources.limits."nvidia.com/gpu": 1`. Manifest — [**`deploy/helm/agent-lab/templates/50-gpu/litserve.yaml`**](../../deploy/helm/agent-lab/templates/50-gpu/litserve.yaml). Образ тот же, что у всей платформы (`ghcr.io/zamb124/agent-lab:latest`), команда `python -m apps.provider_litserve.main`.
+
+Доступ к Postgres/Redis — через ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` (никаких `ufw allow` или публичных пробросов). Доступ от других сервисов кластера — через ClusterIP `provider-litserve.platform.svc.cluster.local:8014` (env **`PROVIDER_LITSERVE__API__BASE_URL=http://provider-litserve:8014/v1`** задано в `templates/_helpers.tpl::agentlab.appEnv`). Внешний URL: `https://humanitec.ru/litserve/*` через основной Ingress.
+
+На GPU-ноде должны быть установлены **проприетарный драйвер NVIDIA** и **`nvidia-container-toolkit`**. MicroK8s ставится одним аддоном `microk8s enable gpu` (NVIDIA Device Plugin). Лейбл ноды: `kubectl label node <gpu-node> accelerator=nvidia-gpu`. Шаги — в [**`deploy/cluster-setup.md`**](../../deploy/cluster-setup.md).
 
 При **`accelerator`** = **`auto`** воркеры выберут **`cuda:0`**, только если **`torch.cuda.is_available()`** в контейнере; без настроенного GPU PyTorch упадёт с явным `RuntimeError` при попытке грузить модель на CUDA (не скрытый fallback на CPU).
-Токен Hugging Face для скачивания приватных/ограниченных моделей: **`HF_TOKEN`** (env) или `services.provider_litserve.provider_litserve.infra.hf_token` в `conf.local.json`.
+Токен Hugging Face для скачивания приватных/ограниченных моделей: ключ **`hf-token`** в Kubernetes Secret **`platform-secrets`** (env **`HF_TOKEN`** в Pod), либо `services.provider_litserve.provider_litserve.infra.hf_token` в локальном `conf.local.json` для разработки.
+
+Кэш моделей переживает рестарт пода — PVC `litserve-model-cache` (50Gi) на GPU-ноде, монтируется в `/root/.cache/huggingface`.
 
 Пока runtime-каталог не поднят с SQLite, идентификаторы в **GET /v1/models** строятся из той же схемы, что сид **infra**: **`llm_model_ids`** / **`llm_model_id`**, пары **embedding** / **rerank** (дефолтные `*_openai_model_id` + списки **`embedding_model_ids`**, **`rerank_model_ids`**). После загрузки воркеров — из строк реестра с `status=ready`.
 

@@ -18,9 +18,10 @@ logger = get_logger(__name__)
 
 _DEFAULT_QUERY_LOOKBACK = timedelta(days=7)
 
-# Селектор сервисов, где в Loki label service совпадает с именем контейнера после agentlab_:
-# в docker-compose-prod HTTP flows — контейнер agentlab_agents → service=agents; воркеры — *flows*.
-_FLOWS_SELECTOR = 'service=~"(agents|.*flows.*)"'
+# Селектор сервисов: Loki label service выставляется Alloy из лейбла app=<name> Pod'а:
+# Deployment flows → service=flows; воркеры flows_worker → service=flows-worker. Также сохраняется
+# совместимость со старыми именами (agents, *flows*).
+_FLOWS_SELECTOR = 'service=~"(agents|flows|.*flows.*)"'
 
 # По trace_id — те же процессы; agents обязателен: иначе логи flows-сервиса на проде не попадают в выборку.
 _PLATFORM_TRACE_SELECTOR = (

@@ -131,8 +131,8 @@ alwaysApply: false
 
 ## Dev / test / prod: создание БД
 
-1. **Новый том Postgres:** `migrations/postgres/init.sql` монтируется в `docker-entrypoint-initdb.d` (**`docker-compose-dev.yaml`**, **`docker-compose-test.yaml`**, **`docker-compose-prod.yaml`**) — в скрипте есть **`CREATE DATABASE platform_tracing`** и **`GRANT`** для `platform_user`.
-2. **Уже существующий кластер** (старый volume, init не перезапускался): идемпотентно **`migrations/postgres/bootstrap_idempotent.sql`** (локально удобно **`make dev-bootstrap-postgres`**, см. **`migrations.mdc`**).
+1. **Новый том Postgres:** `migrations/postgres/init.sql` монтируется в `docker-entrypoint-initdb.d` (**`docker-compose-dev.yaml`**, **`docker-compose-test.yaml`**, в проде — через ConfigMap `postgres-init-scripts` Helm-чарта `deploy/helm/agent-lab/templates/10-postgres/configmap-init.yaml`) — в скрипте есть **`CREATE DATABASE platform_tracing`** и **`GRANT`** для `platform_user`.
+2. **Уже существующий кластер** (старый volume, init не перезапускался): создать БД вручную в `psql` или через **`core.db.postgres_service_databases.ensure_postgres_service_databases_async`** (см. **`migrations.mdc`**).
 3. **Переменные окружения:** в compose для стеков с полным набором БД задан **`DATABASE__TRACING_URL`** (тот же хост/порт/пользователь, путь `/platform_tracing`), иначе контейнеры не поднимутся при `postgres_enabled` + записи spans.
 
 После появления БД — **миграции сервиса `tracing`** до `head`.

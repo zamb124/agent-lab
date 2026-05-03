@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: {{ .Values.namespace }}
+data:
+  01-init-databases.sql: |-
+{{ .Files.Get "files/postgres-init.sql" | indent 4 }}

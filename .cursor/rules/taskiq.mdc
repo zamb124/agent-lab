@@ -318,22 +318,24 @@ make taskiq           # Обычный режим
 make taskiq-reload    # С hot reload
 ```
 
-### Docker
+### Kubernetes (production через Helm)
 
 ```bash
-docker compose -f docker-compose-prod.yaml up -d flows_worker
-docker compose -f docker-compose-prod.yaml logs -f flows_worker
-docker compose -f docker-compose-prod.yaml restart flows_worker
+kubectl get deployment -n platform flows-worker
+kubectl logs -n platform deployment/flows-worker -f --tail=200
+kubectl rollout restart deployment/flows-worker -n platform
 ```
 
-### Конфигурация Docker
+Реплики и аргументы воркеров — в `deploy/helm/agent-lab/values.yaml` (`workers.<name>.replicas`, `workers.<name>.command`).
+
+### Конфигурация Docker (dev/test)
 
 ```yaml
-# docker-compose.yml
+# docker-compose-dev.yaml / docker-compose-test.yaml
 redis:
   image: redis:7-alpine
   ports:
-    - "8099:6379"
+    - "63791:6379"   # dev (test: 63792)
   healthcheck:
     test: ["CMD", "redis-cli", "ping"]
 

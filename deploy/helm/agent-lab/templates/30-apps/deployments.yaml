@@ -1,0 +1,91 @@
+{{- range $name, $app := .Values.applications }}
+{{- if $app.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $app.serviceName }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ $app.serviceName }}
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: agent-lab
+spec:
+  replicas: {{ $app.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $app.serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $app.serviceName }}
+        app.kubernetes.io/component: application
+    spec:
+      {{- if eq $name "frontend" }}
+      initContainers:
+        - name: extract-static
+          image: {{ include "agentlab.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              mkdir -p /shared-static
+              cp -r /app/static/. /shared-static/ 2>/dev/null || true
+              echo "static prepared"
+          volumeMounts:
+            - name: shared-static
+              mountPath: /shared-static
+      {{- end }}
+      containers:
+        - name: {{ $app.serviceName }}
+          image: {{ include "agentlab.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: {{ $app.command | toJson }}
+          env:
+            - name: SERVER__HOST
+              value: 0.0.0.0
+            - name: SERVER__PORT
+              value: {{ $app.port | quote }}
+            {{- include "agentlab.appEnv" $ | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ $app.port }}
+          volumeMounts:
+            {{- include "agentlab.confVolumeMount" $ | nindent 12 }}
+            {{- if eq $name "frontend" }}
+            - name: shared-static
+              mountPath: /app/static-shared
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ $app.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ $app.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ $app.port }}
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml $app.resources | nindent 12 }}
+      volumes:
+        {{- include "agentlab.confVolume" $ | nindent 8 }}
+        {{- if eq $name "frontend" }}
+        - name: shared-static
+          emptyDir: {}
+        {{- end }}
+{{- end }}
+{{- end }}

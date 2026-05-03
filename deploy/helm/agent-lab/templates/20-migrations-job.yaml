@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrations
+  namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      name: migrations
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-postgres
+          image: {{ .Values.postgres.image }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: postgres-password
+          command:
+            - sh
+            - -c
+            - |
+              for i in $(seq 1 90); do
+                if PGPASSWORD="$POSTGRES_PASSWORD" pg_isready -h postgres -U platform_user -d postgres; then
+                  echo "postgres ready"
+                  exit 0
+                fi
+                echo "wait postgres ($i/90)"
+                sleep 2
+              done
+              echo "postgres unavailable" >&2
+              exit 1
+      containers:
+        - name: migrate
+          image: {{ include "agentlab.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "scripts.db_migrate", "upgrade"]
+          env:
+            {{- include "agentlab.appEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "agentlab.confVolumeMount" . | nindent 12 }}
+      volumes:
+        {{- include "agentlab.confVolume" . | nindent 8 }}

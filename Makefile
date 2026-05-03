@@ -1,76 +1,79 @@
-.PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker deploy-rag base stats
-.PHONY: dev-up dev-down dev-logs dev-minio-restart dev-bootstrap-postgres test-runner test-runner-down test-runner-unit test-integration prod-up prod-down prod-logs
-.PHONY: test-frontend test-rag run-rag check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging build-i18n
+.PHONY: help dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres
+.PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging build-i18n
+.PHONY: clean-i18n-unused base
+.PHONY: k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore
 
-# Docker Registry
+# ============================================================================
+# Конфигурация
+# ============================================================================
+
+# Базовый образ платформы (используется только при ручных pull/push в Docker Hub)
 DOCKER_REGISTRY ?= zambas/repo
-# Платформа для сервера (amd64 для большинства VPS)
 DOCKER_PLATFORM ?= linux/amd64
 
-# SSH для деплоя и make stats. Имена AGENT_LAB_* — чтобы глобальный export SSH_HOST в шелле
-# не перебивал дефолт (у Make переменные из окружения сильнее, чем SSH_HOST ?= в файле).
-AGENT_LAB_SSH_USER ?= root
-AGENT_LAB_SSH_HOST ?= 84.38.184.105
-AGENT_LAB_REMOTE_DIR ?= /opt/agent-lab
-
-# Сборка объединённых JSON переводов на удалённом сервере (stdlib-only скрипт, python:3.13-slim)
-_REMOTE_BUILD_I18N = mkdir -p static/i18n && docker run --rm -v $(AGENT_LAB_REMOTE_DIR):/work -w /work python:3.13-slim python scripts/build_i18n.py --output static/i18n
+# Helm release
+K8S_NAMESPACE ?= platform
+K8S_RELEASE ?= agent-lab
+HELM_CHART ?= ./deploy/helm/agent-lab
+HELM_VALUES ?= $(HELM_CHART)/values.yaml
+HELM_VALUES_PROD ?= $(HELM_CHART)/values-prod.yaml
+IMAGE_TAG ?= latest
 
 # ============================================================================
-# Изолированные окружения (dev/test/prod)
+# Локальная разработка (без Docker для приложения)
 # ============================================================================
 
-# Алиас для удобства
 dev: dev-up
 
-# Development Environment (порты: 54321, 63791, 19001-19011, Chromium CDP 9222 — см. docker-compose-dev.yaml)
+# Development инфраструктура: postgres :54321, redis :63791, MinIO :19001/19011, Chromium CDP :9222
 dev-up:
-	@echo "🚀 Запуск Development окружения..."
+	@echo "Запуск Development окружения (БД/Redis/MinIO в Docker)..."
 	docker-compose -f docker-compose-dev.yaml up -d
 	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011, Chromium CDP: 9222)"
 
 dev-down:
-	@echo "🛑 Остановка Development окружения..."
+	@echo "Остановка Development окружения..."
 	docker-compose -f docker-compose-dev.yaml down
-	@echo "✅ Dev окружение остановлено"
 
 dev-logs:
 	docker-compose -f docker-compose-dev.yaml logs -f
 
 dev-clean:
-	@echo "🧹 Полная очистка Development окружения (включая volumes)..."
+	@echo "Полная очистка Development окружения (включая volumes)..."
 	docker-compose -f docker-compose-dev.yaml down -v
-	@echo "✅ Dev окружение очищено"
 
 # Перезапуск только MinIO: при RequestTimeTooSkewed (подпись с хоста vs время в контейнере MinIO)
 dev-minio-restart:
 	docker-compose -f docker-compose-dev.yaml restart minio
 	@echo "MinIO dev перезапущен. Проверка UTC: date -u и docker exec agentlab_minio_dev date -u"
 
-# Недостающие БД на старом томе Postgres: init.sql не перезапускается
+# Недостающие БД на старом томе Postgres: применить миграции по сервисам.
 dev-bootstrap-postgres:
-	docker exec -i agentlab_postgres_dev env PGPASSWORD=admin psql -U platform_user -d postgres < migrations/postgres/bootstrap_idempotent.sql
-	@echo "Postgres dev: применён migrations/postgres/bootstrap_idempotent.sql"
+	uv run python -m scripts.db_migrate upgrade
+	@echo "Postgres dev: миграции применены через scripts.db_migrate"
 
-# Цели test / test-unit / test-down — в mk/test.mk (после include). Старый one-shot runner:
+# ============================================================================
+# Тесты — детали в mk/test.mk
+# ============================================================================
+
+# Старый one-shot runner (мигрирует на mk/test.mk полностью).
 test-runner:
 	@echo "Запуск контейнера tests_runner (docker-compose-test)..."
 	docker-compose -f docker-compose-test.yaml up --build --abort-on-container-exit tests_runner
-	@echo "Готово."
 
 test-runner-down:
 	docker-compose -f docker-compose-test.yaml down -v
-	@echo "Compose-test остановлен, volumes удалены."
 
 test-runner-unit:
 	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m unit -v
 
 test-integration:
-	@echo "🧪 Запуск integration тестов..."
+	@echo "Запуск integration тестов..."
 	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m integration -v
 
 test-e2e:
-	@echo "🧪 Запуск e2e тестов..."
+	@echo "Запуск e2e тестов..."
 	docker-compose -f docker-compose-test.yaml run --rm tests_runner pytest tests/ -m e2e -v
 
 test-logs:
@@ -78,286 +81,247 @@ test-logs:
 
 # Frontend тесты (создание компаний и инициализация агентов)
 test-frontend:
-	@echo "🧪 Запуск всех frontend тестов..."
+	@echo "Запуск всех frontend тестов..."
 	uv run pytest tests/frontend/api/ -v
-
-# Канон UI (apps: без LitElement, без /static/core/lib в импортах JS, без ServiceRegistry)
-check-ui-canon:
-	@./scripts/check_ui_canon.sh
-
-# Канон единого логирования (запреты logging.getLogger / print / эмодзи в логах /
-# файловых хендлеров / прямого setup_logging в воркерах / голого asyncio.create_task).
-check-logging:
-	@./scripts/check_logging_canon.sh
-
-# Lint UI-фабрик (createAsyncOp / createResourceCollection / createCursorList / createFacets / createForm)
-# Уникальность name, namespace по сервису, парность toast-i18n-ключей, idField для update/remove/get.
-check-ui-factories:
-	@uv run python scripts/check_ui_factories.py
-
-# Платформенный инвариант: каждая factory operation имеет REST-эндпоинт в apps/<svc>/api/**.
-# Push-события (publish_ui_event_*) REST-зеркала не имеют. См. architecture.mdc.
-check-command-rest-mirror:
-	@uv run python scripts/check_command_rest_mirror.py
-
-# Канон самого core/frontend/static/lib/** — что фундамент event-архитектуры
-# не нарушает свои же правила (regex-парсинг, секунды).
-check-core-frontend-canon:
-	@uv run python scripts/check_core_frontend_canon.py
-
-# Полный канон event-driven UI: ядро (core lib) + страницы/модалки apps + lint фабрик + REST-зеркало + i18n cross-check.
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-i18n check-i18n-keys
-	@echo "check-events-canon: OK"
-
-# JSON переводы ru/en: парсинг и парность имён файлов в корне locales
-check-i18n:
-	@./scripts/check_i18n.sh
-
-# Cross-check код ↔ JSON: missing (используется в коде, нет в бандле)
-# и unused (есть в бандле, не дёргается из JS). Пройти полностью: --strict в CI.
-# Опции: --mode missing|unused|all, --app <name>, --strict, --show-skipped.
-check-i18n-keys:
-	@uv run python scripts/check_i18n_keys.py
-
-# Справочник inline Python: whitelist модулей и покрытие sandbox-namespace документацией
-check-inline-docs:
-	@uv run pytest tests/core/test_inline_docs_inventory.py -q
-
-# Удаление common-unused ключей из JSON (см. scripts/clean_i18n_unused.py, scripts/i18n_unused_scan_exclusions.py).
-clean-i18n-unused:
-	@uv run python scripts/clean_i18n_unused.py --apply
-
-# Сборка объединённых JSON переводов для статической отдачи (dev)
-build-i18n:
-	uv run python -m scripts.build_i18n
 
 # RAG тесты (с pgvector и MinIO)
 test-rag:
-	@echo "🧪 Запуск RAG тестов (pgvector + MinIO)..."
+	@echo "Запуск RAG тестов (pgvector + MinIO)..."
 	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test
-	@echo "🚀 Запуск тестов..."
 	uv run pytest tests/rag/ -v --tb=short
-	@echo "✅ RAG тесты завершены"
-
-# Production Environment (стандартные порты: 5432, 6379)
-prod-up:
-	@echo "🚀 Запуск Production окружения..."
-	docker-compose -f docker-compose-prod.yaml up -d
-	@echo "✅ Prod окружение запущено"
-
-prod-down:
-	@echo "🛑 Остановка Production окружения..."
-	docker-compose -f docker-compose-prod.yaml down
-	@echo "✅ Prod окружение остановлено"
-
-prod-logs:
-	docker-compose -f docker-compose-prod.yaml logs -f
-
-prod-build:
-	@echo "🏗️  Сборка Production образов..."
-	docker-compose -f docker-compose-prod.yaml build --pull
-	@echo "✅ Образы собраны"
-
-prod-restart:
-	@echo "🔄 Перезапуск Production окружения..."
-	docker-compose -f docker-compose-prod.yaml restart
-	@echo "✅ Сервисы перезапущены"
 
 # ============================================================================
-# Старые команды (используют docker-compose.yml)
+# Канон / линты UI / i18n / логирование
 # ============================================================================
 
-build:
-	docker-compose build
+check-ui-canon:
+	@./scripts/check_ui_canon.sh
 
-# Пересборка и пуш базового образа (при изменении core зависимостей)
+check-logging:
+	@./scripts/check_logging_canon.sh
+
+check-ui-factories:
+	@uv run python scripts/check_ui_factories.py
+
+check-command-rest-mirror:
+	@uv run python scripts/check_command_rest_mirror.py
+
+check-core-frontend-canon:
+	@uv run python scripts/check_core_frontend_canon.py
+
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-i18n check-i18n-keys
+	@echo "check-events-canon: OK"
+
+check-i18n:
+	@./scripts/check_i18n.sh
+
+check-i18n-keys:
+	@uv run python scripts/check_i18n_keys.py
+
+check-inline-docs:
+	@uv run pytest tests/core/test_inline_docs_inventory.py -q
+
+clean-i18n-unused:
+	@uv run python scripts/clean_i18n_unused.py --apply
+
+build-i18n:
+	uv run python -m scripts.build_i18n
+
+# ============================================================================
+# Базовый образ (используется при изменении core зависимостей в Dockerfile.base)
+# ============================================================================
+
 base:
-	@echo "🔧 Сборка и пуш базового образа zambas/agent-lab-base:latest..."
+	@echo "Сборка и пуш базового образа zambas/agent-lab-base:latest..."
 	docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.base -t zambas/agent-lab-base:latest --push .
-	@echo "✅ Базовый образ zambas/agent-lab-base:latest обновлён"
 
-docker-build:
-	@echo "Building Docker images for $(DOCKER_PLATFORM)..."
-	docker buildx build --platform $(DOCKER_PLATFORM) --target agents -t $(DOCKER_REGISTRY):agents --load .
-	docker buildx build --platform $(DOCKER_PLATFORM) --target frontend -t $(DOCKER_REGISTRY):frontend --load .
-	docker buildx build --platform $(DOCKER_PLATFORM) --target crm -t $(DOCKER_REGISTRY):crm --load .
-	docker buildx build --platform $(DOCKER_PLATFORM) --target worker -t $(DOCKER_REGISTRY):worker --load .
-	@echo "Done! Images built for $(DOCKER_PLATFORM)."
+# ============================================================================
+# Kubernetes / Helm: деплой и операции
+# ============================================================================
 
-docker-push:
-	@echo "Pushing images to $(DOCKER_REGISTRY)..."
-	docker push $(DOCKER_REGISTRY):agents
-	docker push $(DOCKER_REGISTRY):frontend
-	docker push $(DOCKER_REGISTRY):crm
-	docker push $(DOCKER_REGISTRY):worker
-	@echo "Done! Images pushed to Docker Hub."
+# Локальная валидация чарта (без обращения к кластеру).
+k8s-lint:
+	helm lint $(HELM_CHART)
 
-deploy: docker-build docker-push
-	@echo "Running deploy script..."
-	./deploy/deploy.sh
+# Рендер чарта без apply (для проверки итоговых манифестов).
+k8s-template:
+	helm template $(K8S_RELEASE) $(HELM_CHART) \
+		--namespace $(K8S_NAMESPACE) \
+		--values $(HELM_VALUES) \
+		--values $(HELM_VALUES_PROD) \
+		--set image.tag=$(IMAGE_TAG)
 
-deploy-fast:
-	@echo "Deploy without rebuild (just pull from registry)..."
-	./deploy/deploy.sh
+# Применить чарт в текущий kubeconfig-кластер. Атомарно, ждёт rollout.
+k8s-deploy:
+	helm upgrade --install $(K8S_RELEASE) $(HELM_CHART) \
+		--namespace $(K8S_NAMESPACE) \
+		--create-namespace \
+		--values $(HELM_VALUES) \
+		--values $(HELM_VALUES_PROD) \
+		--set image.tag=$(IMAGE_TAG) \
+		--wait --timeout 15m
 
-# Деплой отдельных сервисов
-deploy-agents:
-	@echo "Building and deploying agents..."
-	docker buildx build --platform $(DOCKER_PLATFORM) --target agents -t $(DOCKER_REGISTRY):agents --load .
-	docker push $(DOCKER_REGISTRY):agents
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull agents && sudo docker compose up -d agents"
+# Снимок состояния кластера: ноды, поды, сервисы, ingress, PVC.
+k8s-status:
+	@echo "=== Nodes ==="
+	@kubectl get nodes -o wide
+	@echo ""
+	@echo "=== Pods ($(K8S_NAMESPACE)) ==="
+	@kubectl get pods -n $(K8S_NAMESPACE) -o wide
+	@echo ""
+	@echo "=== Services ($(K8S_NAMESPACE)) ==="
+	@kubectl get svc -n $(K8S_NAMESPACE)
+	@echo ""
+	@echo "=== Ingress ($(K8S_NAMESPACE)) ==="
+	@kubectl get ingress -n $(K8S_NAMESPACE)
+	@echo ""
+	@echo "=== PVC ($(K8S_NAMESPACE)) ==="
+	@kubectl get pvc -n $(K8S_NAMESPACE)
 
-deploy-frontend:
-	@echo "Building and deploying frontend..."
-	docker buildx build --platform $(DOCKER_PLATFORM) --target frontend -t $(DOCKER_REGISTRY):frontend --load .
-	docker push $(DOCKER_REGISTRY):frontend
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull frontend && sudo docker compose up -d frontend"
+# Поток логов конкретного Deployment: make k8s-logs SVC=frontend
+k8s-logs:
+	@if [ -z "$(SVC)" ]; then echo "Usage: make k8s-logs SVC=<deployment-name>"; exit 1; fi
+	kubectl logs -n $(K8S_NAMESPACE) deployment/$(SVC) -f --tail=200
 
-deploy-crm:
-	@echo "Building and deploying crm..."
-	docker buildx build --platform $(DOCKER_PLATFORM) --target crm -t $(DOCKER_REGISTRY):crm --load .
-	docker push $(DOCKER_REGISTRY):crm
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull crm && sudo docker compose up -d crm"
+# Откат на предыдущую ревизию helm release.
+k8s-rollback:
+	helm rollback $(K8S_RELEASE) -n $(K8S_NAMESPACE)
 
-deploy-worker:
-	@echo "Building and deploying worker..."
-	docker buildx build --platform $(DOCKER_PLATFORM) --target worker -t $(DOCKER_REGISTRY):worker --load .
-	docker push $(DOCKER_REGISTRY):worker
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull taskiq-worker taskiq-scheduler && sudo docker compose up -d taskiq-worker taskiq-scheduler"
+# Полное удаление чарта (PVC сохраняются — их удалять вручную).
+k8s-uninstall:
+	helm uninstall $(K8S_RELEASE) -n $(K8S_NAMESPACE)
 
-deploy-rag:
-	@echo "Building and deploying rag..."
-	docker buildx build --platform $(DOCKER_PLATFORM) --target rag -t $(DOCKER_REGISTRY):rag --load .
-	docker push $(DOCKER_REGISTRY):rag
-	ssh $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) "cd $(AGENT_LAB_REMOTE_DIR) && git pull && $(_REMOTE_BUILD_I18N) && sudo docker compose pull rag && sudo docker compose up -d rag"
+# Полная проверка здоровья кластера (deploy/scripts/cluster-health.sh).
+# CHECK_PUBLIC=0 отключает curl-проверки публичных URL (например, в CI без доступа).
+k8s-health:
+	@CHECK_PUBLIC="$${CHECK_PUBLIC:-1}" PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/cluster-health.sh
 
-conf:
-	@echo "Копирование conf.json на продакшен..."
-	scp conf.json $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST):$(AGENT_LAB_REMOTE_DIR)/conf.json
-	@echo "Конфиг скопирован (единый корневой conf.json, слои сервисов внутри services.*)."
+# Бэкап Postgres: backups/dump-<ts>.sql.gz. С S3=s3://... отправляет в Selectel.
+k8s-backup:
+	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/backup-postgres.sh $(if $(S3),--s3 $(S3),)
 
-# Снимок нагрузки на удалённом хосте (те же AGENT_LAB_* что у деплоя)
-stats:
-	@echo "Подключение: $(AGENT_LAB_SSH_USER)@$(AGENT_LAB_SSH_HOST) REMOTE_DIR=$(AGENT_LAB_REMOTE_DIR)"
-	@SSH_USER="$(AGENT_LAB_SSH_USER)" SSH_HOST="$(AGENT_LAB_SSH_HOST)" REMOTE_DIR="$(AGENT_LAB_REMOTE_DIR)" ./scripts/remote_server_stats.sh || { \
-		echo ""; \
-		echo "SSH не удался. Переопределите: make stats AGENT_LAB_SSH_HOST=<ip> AGENT_LAB_SSH_USER=<user>"; \
-		exit 255; \
-	}
+# Restore: make k8s-restore FILE=backups/dump-...sql.gz [YES=1 — без подтверждения]
+k8s-restore:
+	@if [ -z "$(FILE)" ]; then echo "Usage: make k8s-restore FILE=<path/to/dump.sql.gz>"; exit 1; fi
+	@PLATFORM_NS=$(K8S_NAMESPACE) YES="$${YES:-0}" bash deploy/scripts/restore-postgres.sh $(FILE)
 
-deploy-code: docker-build docker-push
-	@echo "Deploy with code changes (uses Docker cache for deps)..."
-	./deploy/deploy.sh
+# Создать/обновить Secret platform-secrets из переменных окружения.
+# Запуск: source .env.k8s.secrets && make k8s-secrets-sync
+k8s-secrets-sync:
+	@if [ -z "$(POSTGRES_PASSWORD)" ] || [ -z "$(AUTH_JWT_SECRET)" ]; then \
+		echo "Заполните переменные окружения (POSTGRES_PASSWORD, AUTH_JWT_SECRET, ...). См. deploy/README.md"; \
+		exit 1; \
+	fi
+	kubectl create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create secret generic platform-secrets -n $(K8S_NAMESPACE) \
+		--from-literal=postgres-password="$(POSTGRES_PASSWORD)" \
+		--from-literal=auth-jwt-secret="$(AUTH_JWT_SECRET)" \
+		--from-literal=hf-token="$${HF_TOKEN:-}" \
+		--from-literal=auth-yandex-client-id="$${AUTH_YANDEX_CLIENT_ID:-}" \
+		--from-literal=auth-yandex-client-secret="$${AUTH_YANDEX_CLIENT_SECRET:-}" \
+		--from-literal=auth-google-client-id="$${AUTH_GOOGLE_CLIENT_ID:-}" \
+		--from-literal=auth-google-client-secret="$${AUTH_GOOGLE_CLIENT_SECRET:-}" \
+		--from-literal=auth-github-client-id="$${AUTH_GITHUB_CLIENT_ID:-}" \
+		--from-literal=auth-github-client-secret="$${AUTH_GITHUB_CLIENT_SECRET:-}" \
+		--from-literal=auth-amocrm-client-id="$${AUTH_AMOCRM_CLIENT_ID:-}" \
+		--from-literal=auth-amocrm-client-secret="$${AUTH_AMOCRM_CLIENT_SECRET:-}" \
+		--from-literal=auth-apple-private-key="$${AUTH_APPLE_PRIVATE_KEY:-}" \
+		--from-literal=auth-demo-password="$${AUTH_DEMO_PASSWORD:-}" \
+		--from-literal=push-vapid-public-key="$${PUSH_VAPID_PUBLIC_KEY:-}" \
+		--from-literal=push-vapid-private-key="$${PUSH_VAPID_PRIVATE_KEY:-}" \
+		--from-literal=push-apns-private-key="$${PUSH_APNS_PRIVATE_KEY:-}" \
+		--from-literal=push-fcm-credentials-json="$${PUSH_FCM_CREDENTIALS_JSON:-}" \
+		--from-literal=push-fcm-project-id="$${PUSH_FCM_PROJECT_ID:-}" \
+		--from-literal=selectel-access-key="$(SELECTEL_ACCESS_KEY)" \
+		--from-literal=selectel-secret-key="$(SELECTEL_SECRET_KEY)" \
+		--from-literal=livekit-api-key="$(LIVEKIT_API_KEY)" \
+		--from-literal=livekit-api-secret="$(LIVEKIT_API_SECRET)" \
+		--from-literal=turn-secret="$(TURN_SECRET)" \
+		--from-literal=onlyoffice-jwt-secret="$(ONLYOFFICE_JWT_SECRET)" \
+		--from-literal=grafana-admin-password="$(GRAFANA_ADMIN_PASSWORD)" \
+		--from-literal=llm-bothub-api-key="$${LLM_BOTHUB_API_KEY:-}" \
+		--from-literal=llm-openrouter-api-key="$${LLM_OPENROUTER_API_KEY:-}" \
+		--from-literal=stt-cloud-ru-api-key="$${STT_CLOUD_RU_API_KEY:-}" \
+		--from-literal=rag-embedding-api-key="$${RAG_EMBEDDING_API_KEY:-}" \
+		--from-literal=yoomoney-account-number="$${YOOMONEY_ACCOUNT_NUMBER:-}" \
+		--from-literal=yoomoney-notification-secret="$${YOOMONEY_NOTIFICATION_SECRET:-}" \
+		--from-literal=yoomoney-client-id="$${YOOMONEY_CLIENT_ID:-}" \
+		--from-literal=yoomoney-client-secret="$${YOOMONEY_CLIENT_SECRET:-}" \
+		--from-literal=yoomoney-access-token="$${YOOMONEY_ACCESS_TOKEN:-}" \
+		--dry-run=client -o yaml | kubectl apply -f -
 
-prod:
-	@echo "🔄 Обновление репозитория (git pull)..."
-	@git pull --rebase --autostash
-	@echo "🛑 Остановка текущих контейнеров..."
-	docker-compose down
-	@echo "🧹 Очистка висячих образов и builder cache..."
-	docker image prune -f
-	docker builder prune -f
-	@echo "🏗️  Сборка образов (pull базовых образов)..."
-	docker-compose build --pull
-	@echo "🚀 Запуск сервисов в фоне..."
-	docker-compose up -d
-	@echo "🧽 Финальная очистка висячих образов..."
-	docker image prune -f
-	@echo "✅ Прод-запуск завершён"
-
-up:
-	docker-compose up -d
-
-rebuild:
-	docker-compose up -d --build
-
-down:
-	docker-compose down
-
-logs:
-	docker-compose logs -f
-
-clean:
-	docker-compose down -v
+# ============================================================================
+# Помощь
+# ============================================================================
 
 help:
 	@echo "============================================================================"
-	@echo "Изолированные окружения (dev/test/prod):"
+	@echo "Локальная разработка (Docker для БД/Redis, Python — на хосте):"
 	@echo "============================================================================"
-	@echo "Development (порты: 54321, 63791, 19001-19011, Chromium CDP 9222 — docker-compose-dev.yaml):"
-	@echo "  make dev-up          - Запустить dev окружение (включая MinIO и chromium-cdp)"
-	@echo "  make dev-down        - Остановить dev окружение"
-	@echo "  make dev-logs        - Логи dev окружения"
+	@echo "  make dev-up          - Запустить инфраструктуру (Postgres :54321, Redis :63791, MinIO)"
+	@echo "  make dev-down        - Остановить dev"
+	@echo "  make dev-logs        - Логи dev"
 	@echo "  make dev-clean       - Полная очистка (включая volumes)"
-	@echo "  make dev-minio-restart - Перезапуск MinIO (часто убирает RequestTimeTooSkewed при dev на macOS)"
+	@echo "  make dev-minio-restart - Перезапуск MinIO (фикс RequestTimeTooSkewed на macOS)"
 	@echo ""
-	@echo "Локальные процессы (без Docker), все сервисы:"
-	@echo "  make app             - flows, frontend, crm, rag, sync, provider_litserve, workers, scheduler (см. scripts/run.py all)"
-	@echo "  make app APP_KILL=1  - то же, сначала kill -9 по PID на портах 8001–8006 и 8014 (зависший uvicorn)"
-	@echo "  make app ex flows_worker        - all без этих сервисов (ex|x, затем имя; на macOS: не «--ex» без «make --»)"
-	@echo "  make app APP_EXCLUDE=…          - то же, список через запятую (см. mk/app.mk)"
-	@echo "  MinIO Console (dev): http://localhost:19011 (minioadmin/minioadmin)"
-	@echo ""
-	@echo "Testing (порты: 54322, 63792, 19002-19012) см. mk/test.mk:"
-	@echo "  make test / test-unit / test-down - pytest и test-up (основной поток)"
-	@echo "  make test-integration / test-e2e   - через контейнер tests_runner"
-	@echo "  make test-runner       - один прогон: up --abort-on-exit tests_runner"
-	@echo "  make test-runner-down  - compose-test down -v"
-	@echo "  make test-runner-unit  - pytest -m unit в tests_runner"
-	@echo ""
-	@echo "Frontend тесты (создание компаний и агентов):"
-	@echo "  make test-frontend   - Все frontend тесты"
-	@echo ""
-	@echo "Production (стандартные порты: 5432, 6379):"
-	@echo "  make prod-up         - Запустить prod окружение"
-	@echo "  make prod-down       - Остановить prod окружение"
-	@echo "  make prod-logs       - Логи prod окружения"
-	@echo "  make prod-build      - Собрать prod образы"
-	@echo "  make prod-restart    - Перезапустить сервисы"
+	@echo "  make app             - flows, frontend, crm, rag, sync, провайдеры, воркеры (см. mk/app.mk)"
+	@echo "  make app APP_KILL=1  - то же, освободив порты 8001-8006/8014 перед запуском"
 	@echo ""
 	@echo "============================================================================"
-	@echo "Деплой (Docker Hub):"
+	@echo "Тесты:"
 	@echo "============================================================================"
-	@echo "  make base            - Пересобрать и запушить базовый образ (при изменении core)"
-	@echo "  make deploy          - Полный деплой (build + push + deploy.sh)"
-	@echo "  make deploy-fast     - Быстрый деплой (только pull с registry, без сборки)"
-	@echo "  make deploy-agents   - Деплой только agents"
-	@echo "  make deploy-frontend - Деплой только frontend"
-	@echo "  make deploy-crm      - Деплой только crm"
-	@echo "  make deploy-worker   - Деплой только worker"
-	@echo "  make conf            - Скопировать conf.json на продакшен (секреты)"
-	@echo "  make stats           - SSH: снимок CPU/RAM/диск/Docker/compose на сервере"
-	@echo "  make docker-build    - Только собрать образы локально"
-	@echo "  make docker-push     - Только запушить образы в Docker Hub"
+	@echo "  make test            - Полный прогон (frontend-core + unit + retry, mk/test.mk)"
+	@echo "  make test-unit       - Только unit/API"
+	@echo "  make test-rag        - RAG тесты"
+	@echo "  make test-frontend   - Frontend API тесты"
+	@echo "  make test-down       - Остановить test-стек"
 	@echo ""
 	@echo "============================================================================"
-	@echo "Основные команды (старые, используют docker-compose.yml):"
+	@echo "Канон UI / i18n / логирование:"
 	@echo "============================================================================"
-	@echo "  make build         - Собрать образы (docker-compose)"
-	@echo "  make prod          - Git pull, prune, build --pull, up -d (прод-запуск)"
-	@echo "  make up            - Запустить все сервисы"
-	@echo "  make down          - Остановить все сервисы"
-	@echo "  make logs          - Показать логи всех сервисов"
-	@echo "  make clean         - Удалить все (включая volumes)"
+	@echo "  make check-events-canon - core lib + apps + ui-factories + REST-зеркало + i18n"
+	@echo "  make check-i18n         - JSON ru/en парность"
+	@echo "  make check-i18n-keys    - Cross-check код ↔ JSON"
+	@echo "  make check-logging      - Канон structlog, get_logger, контракт"
 	@echo ""
+	@echo "============================================================================"
+	@echo "Миграции БД:"
+	@echo "============================================================================"
+	@echo "  make migrate                      - Применить миграции для всех сервисов"
+	@echo "  make migrate-new m=\"...\" s=shared - Создать новую autogenerate ревизию"
+	@echo "  make migrate-empty m=\"...\" s=crm  - Создать пустую ревизию"
+	@echo ""
+	@echo "============================================================================"
+	@echo "Kubernetes / Helm деплой (см. deploy/README.md и deploy/cluster-setup.md):"
+	@echo "============================================================================"
+	@echo "  make k8s-lint            - helm lint чарта"
+	@echo "  make k8s-template        - Рендер всех манифестов в stdout (без apply)"
+	@echo "  make k8s-deploy          - helm upgrade --install (атомарно, ждёт rollout)"
+	@echo "  make k8s-deploy IMAGE_TAG=<sha> - С конкретным тегом образа"
+	@echo "  make k8s-status          - Снимок: nodes, pods, svc, ingress, pvc"
+	@echo "  make k8s-logs SVC=frontend - Логи Deployment frontend"
+	@echo "  make k8s-rollback        - helm rollback на предыдущую ревизию"
+	@echo "  make k8s-secrets-sync    - Создать/обновить Secret platform-secrets из ENV"
+	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
+	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"
+	@echo "  make k8s-backup [S3=s3://...] - pg_dumpall в backups/ (опционально в Selectel S3)"
+	@echo "  make k8s-restore FILE=<path>  - Восстановление дампа в pod postgres-0"
+	@echo ""
+	@echo "============================================================================"
 	@echo "Документация (Zensical):"
-	@echo "  make doc-docker - Собрать только стадию docs-builder (Docker)"
-	@echo "  make doc        - docs_prepare + zensical RU/EN build -> documentation-dist/"
-	@echo "  make doc-serve  - docs_prepare + zensical serve (zensical.ru.toml dev_addr)"
+	@echo "============================================================================"
+	@echo "  make doc        - docs_prepare + zensical RU/EN build → documentation-dist/"
+	@echo "  make doc-serve  - docs_prepare + zensical serve (локальный предпросмотр)"
 	@echo "  make doc-clean  - Удалить собранную документацию"
-	@echo "  make test-ui-doc - E2E UI (test-ui) затем make doc (обновить documentation-dist)"
+	@echo "  make test-ui-doc - test-ui затем make doc"
 
-include mk/db.mk
 include mk/app.mk
-include mk/worker.mk
-include mk/sgr.mk
 include mk/test.mk
 include mk/migrate.mk
 
 # Документация
 .PHONY: doc doc-serve doc-docker doc-clean docs-build docs-serve docs-clean docs-docker-build
 
-# Короткие алиасы
 doc:
 	@echo "Локальная сборка документации (Zensical RU + EN)..."
 	rm -rf documentation-dist build/documentation-ru build/documentation-en build/zensical-en-out
@@ -381,9 +345,8 @@ doc-docker:
 doc-clean:
 	@echo "Очистка артефактов документации..."
 	rm -rf documentation-dist/ build/documentation-ru build/documentation-en build/zensical-en-out site/ .cache
-	@echo "Готово"
 
-# Полные имена (для обратной совместимости)
+# Алиасы для обратной совместимости
 docs-build: doc
 docs-serve: doc-serve
 docs-docker-build: doc-docker

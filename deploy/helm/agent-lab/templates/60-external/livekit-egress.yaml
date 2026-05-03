@@ -1,0 +1,49 @@
+{{- if .Values.livekitEgress.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: livekit-egress
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: livekit-egress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: livekit-egress
+  template:
+    metadata:
+      labels:
+        app: livekit-egress
+    spec:
+      {{- include "agentlab.masterNodeSelector" . | nindent 6 }}
+      containers:
+        - name: egress
+          image: {{ .Values.livekitEgress.image }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LIVEKIT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: livekit-api-key
+            - name: LIVEKIT_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: livekit-api-secret
+            - name: EGRESS_CONFIG_BODY
+              value: |
+                api_key: ${LIVEKIT_API_KEY}
+                api_secret: ${LIVEKIT_API_SECRET}
+                ws_url: ws://livekit:7880
+                redis:
+                  address: redis:6379
+                  db: 2
+                logging:
+                  level: info
+                  json: true
+                session_limits:
+                  file_output_max_duration: 1h
+{{- end }}

@@ -1,0 +1,21 @@
+# Production overrides для humanitec.ru.
+# Применяется поверх values.yaml: helm upgrade ... --values values.yaml --values values-prod.yaml
+
+domain: humanitec.ru
+masterNodeName: master
+
+ingress:
+  apexHost: humanitec.ru
+  wildcardHost: "*.humanitec.ru"
+  livekitHost: livekit.humanitec.ru
+  onlyofficeHost: onlyoffice.humanitec.ru
+  grafanaHost: grafana.humanitec.ru
+
+litserve:
+  enabled: true
+
+observability:
+  loki:
+    storage: 100Gi
+  tempo:
+    storage: 50Gi

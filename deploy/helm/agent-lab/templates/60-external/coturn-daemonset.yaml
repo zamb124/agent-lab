@@ -1,0 +1,47 @@
+{{- if .Values.coturn.enabled }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: coturn
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: coturn
+spec:
+  selector:
+    matchLabels:
+      app: coturn
+  template:
+    metadata:
+      labels:
+        app: coturn
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.masterNodeName | quote }}
+      containers:
+        - name: coturn
+          image: {{ .Values.coturn.image }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TURN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platformSecretName }}
+                  key: turn-secret
+          command:
+            - sh
+            - -c
+            - |
+              exec turnserver -n --log-file=stdout --lt-cred-mech \
+                --realm={{ .Values.coturn.realm }} \
+                --use-auth-secret \
+                --static-auth-secret="$TURN_SECRET" \
+                --min-port={{ .Values.coturn.minPort }} \
+                --max-port={{ .Values.coturn.maxPort }} \
+                --no-multicast-peers
+          securityContext:
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+{{- end }}

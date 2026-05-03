@@ -2,7 +2,8 @@
 Идемпотентное создание сервисных БД и расширений pgvector по migrations/services.json.
 
 Не вызывается из scripts.db_migrate: миграции Alembic идут сразу к целевым URL. Для ручного/скриптового
-вызова (аналог bootstrap_idempotent.sql) — asyncio.run(ensure_postgres_service_databases_async()).
+вызова (идемпотентное создание сервисных БД и расширения vector) —
+asyncio.run(ensure_postgres_service_databases_async()).
 """
 
 from __future__ import annotations

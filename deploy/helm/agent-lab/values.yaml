@@ -1,0 +1,310 @@
+# Дефолтные значения чарта Humanitec Platform.
+# Production-overrides — values-prod.yaml.
+
+namespace: platform
+
+image:
+  repository: ghcr.io/zamb124/agent-lab
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Public domain для Ingress + сервисных URL платформы.
+domain: humanitec.ru
+
+# Имя ноды master (kubernetes.io/hostname). Postgres/Redis/Loki/Tempo прибиваются к ней.
+masterNodeName: master
+
+# Лейбл, которым размечается GPU-нода (kubectl label node <name> accelerator=nvidia-gpu).
+gpuNodeSelectorKey: accelerator
+gpuNodeSelectorValue: nvidia-gpu
+
+storageClassName: microk8s-hostpath
+
+postgres:
+  image: pgvector/pgvector:pg17
+  storage: 50Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 8Gi
+  maxConnections: 300
+
+redis:
+  image: redis:7-alpine
+  storage: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# Конфигурация платформы (conf.json).
+# Файл deploy/helm/agent-lab/files/app-conf.json (если положить) монтируется как ConfigMap.
+# По умолчанию используется корневой conf.json репозитория, копируемый CI в files/.
+appConfigConfigMap: app-conf
+
+# Глобальные переменные окружения для всех подов приложения и воркеров.
+# Поверх задаются конкретные SERVER__HOST/PORT в каждом Deployment.
+appCommonEnv:
+  databasePrefix: postgres
+  redisService: redis
+  redisPort: 6379
+  postgresService: postgres
+  postgresPort: 5432
+
+applications:
+  flows:
+    enabled: true
+    port: 8001
+    replicas: 1
+    serviceName: flows
+    command: ["python", "-m", "apps.flows.main"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  frontend:
+    enabled: true
+    port: 8002
+    replicas: 1
+    serviceName: frontend
+    command: ["python", "-m", "apps.frontend.main"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+  crm:
+    enabled: true
+    port: 8003
+    replicas: 1
+    serviceName: crm
+    command: ["python", "-m", "apps.crm.main"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  rag:
+    enabled: true
+    port: 8004
+    replicas: 1
+    serviceName: rag
+    command: ["python", "-m", "apps.rag.main"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  sync:
+    enabled: true
+    port: 8005
+    replicas: 1
+    serviceName: sync
+    command: ["python", "-m", "apps.sync.main"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  scheduler-api:
+    enabled: true
+    port: 8006
+    replicas: 1
+    serviceName: scheduler-api
+    command: ["python", "-m", "apps.scheduler.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  office:
+    enabled: true
+    port: 8008
+    replicas: 1
+    serviceName: office
+    command: ["python", "-m", "apps.office.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  voice:
+    enabled: true
+    port: 8015
+    replicas: 1
+    serviceName: voice
+    command: ["python", "-m", "apps.voice.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+workers:
+  flows-worker:
+    enabled: true
+    replicas: 2
+    command: ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  scheduler:
+    enabled: true
+    replicas: 1
+    command: ["taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+  rag-worker:
+    enabled: true
+    replicas: 1
+    command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  sync-worker:
+    enabled: true
+    replicas: 1
+    command: ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  crm-worker:
+    enabled: true
+    replicas: 1
+    command: ["taskiq", "worker", "apps.crm_worker.worker:worker_app", "--workers", "2"]
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  idle-worker:
+    enabled: true
+    replicas: 1
+    command: ["taskiq", "worker", "apps.idle_worker.worker:worker_app", "--workers", "2"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+litserve:
+  enabled: true
+  port: 8014
+  serviceName: provider-litserve
+  modelCacheSize: 50Gi
+  modelId: BAAI/bge-reranker-v2-gemma
+  embeddingModelId: BAAI/bge-m3
+  resources:
+    requests:
+      cpu: "1"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 16Gi
+
+livekit:
+  enabled: true
+  image: livekit/livekit-server:latest
+  apiKey: devkey
+  publicUrl: wss://livekit.humanitec.ru
+
+livekitEgress:
+  enabled: true
+  image: livekit/egress:latest
+
+coturn:
+  enabled: true
+  image: coturn/coturn:latest
+  realm: agentlab
+  minPort: 49152
+  maxPort: 65535
+
+onlyoffice:
+  enabled: true
+  image: onlyoffice/documentserver:latest
+  publicUrl: https://onlyoffice.humanitec.ru
+
+observability:
+  loki:
+    enabled: true
+    image: grafana/loki:latest
+    storage: 100Gi
+  tempo:
+    enabled: true
+    image: grafana/tempo:latest
+    storage: 50Gi
+  grafana:
+    enabled: true
+    image: grafana/grafana:latest
+    publicUrl: https://grafana.humanitec.ru
+  alloy:
+    enabled: true
+    image: grafana/alloy:latest
+
+ingress:
+  enabled: true
+  className: nginx
+  clusterIssuer: letsencrypt-prod
+  apexHost: humanitec.ru
+  wildcardHost: "*.humanitec.ru"
+  livekitHost: livekit.humanitec.ru
+  onlyofficeHost: onlyoffice.humanitec.ru
+  grafanaHost: grafana.humanitec.ru
+  tlsSecretName: platform-tls
+  livekitTlsSecretName: livekit-tls
+  onlyofficeTlsSecretName: onlyoffice-tls
+  grafanaTlsSecretName: grafana-tls
+  proxyBodySize: 100m
+  proxyReadTimeout: "300"
+  proxyConnectTimeout: "60"
+
+certManager:
+  enabled: true
+  email: ops@humanitec.ru
+
+# Имя секрета с переменными окружения платформы (создаётся CI через kubectl create secret).
+platformSecretName: platform-secrets

@@ -41,15 +41,15 @@ alwaysApply: false
 - **platform_office**: `office_document_bindings` — привязки файлов Office к `company_id` и namespace (BFF).
 - **platform_tracing**: только **`spans`** (OpenTelemetry + журнал по сущности); не shared. См. **`tracing.mdc`**.
 
-У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. Физические БД **не** создаёт Alembic; при деплое после `postgres up` выполняется идемпотентный **`migrations/postgres/bootstrap_idempotent.sql`** (на случай, если первый init кластера не создал сервисные БД). Опционально тот же смысл можно выполнить из Python: **`core.db.postgres_service_databases.ensure_postgres_service_databases_async`** (не вызывается из `scripts.db_migrate`).
+У каждого дерева Alembic — **своя** физическая БД и своя строка `alembic_version`. Указывать один и тот же `…/platform_db` во всех `database.*_url` нельзя: после миграции `shared` в БД окажется ревизия `shared_0001`, а при `upgrade` для `flows` Alembic не найдёт эту ревизию в `migrations/flows/`. Локальный Postgres: `docker-compose-dev.yaml` монтирует `migrations/postgres/init.sql`, `POSTGRES_DB=platform_shared`, остальные БД создаёт init-скрипт. В проде тот же `init.sql` лежит в ConfigMap `postgres-init-scripts` Helm-чарта (`deploy/helm/agent-lab/templates/10-postgres/configmap-init.yaml`) и монтируется в `/docker-entrypoint-initdb.d/` Pod'а Postgres. Физические БД **не** создаёт Alembic; при необходимости создать БД на живом кластере можно вызвать **`core.db.postgres_service_databases.ensure_postgres_service_databases_async`** из Python (не вызывается из `scripts.db_migrate`).
 
-Если в `init.sql` позже добавили новую БД, а том Postgres dev **уже существовал**, entrypoint-initdb **не** выполнится снова — будет `database "…" does not exist`. Локально: **`make dev-bootstrap-postgres`** (прогоняет `bootstrap_idempotent.sql` в контейнере `agentlab_postgres_dev`) или вручную `psql` с тем же файлом.
+Если в `init.sql` позже добавили новую БД, а том Postgres dev **уже существовал**, entrypoint-initdb **не** выполнится снова — будет `database "…" does not exist`. Локально: **`make dev-bootstrap-postgres`** (прогоняет `python -m scripts.db_migrate upgrade` — Alembic не создаёт БД, поэтому при отсутствующей БД сначала вручную через `psql -U platform_user -d postgres -c 'CREATE DATABASE platform_<svc>'` либо пересоздать том через `make dev-clean && make dev-up`). На проде это решается само — Helm-чарт пересоздаёт Postgres только при чистом PVC, и тогда `init.sql` отрабатывает целиком.
 
 ## PostgreSQL и pgvector
 
 Расширение в SQL называется **`vector`** (пакет pgvector в каталоге PostgreSQL), не `pgvector`. В миграциях: `CREATE EXTENSION IF NOT EXISTS vector`.
 
-Нужен сервер с установленным pgvector: образ **`pgvector/pgvector:pg17`** (`docker-compose-dev.yaml`, `docker-compose-prod.yaml`, `docker-compose-test.yaml`) или сборка Postgres с пакетом pgvector на хосте. Обычный `postgres:17` без pgvector миграции shared/crm/rag не пройдут. В `init.sql` расширение `vector` подключается к `platform_shared`, `platform_crm`, `platform_rag` (см. `services.json` → `postgres.vector_extensions`).
+Нужен сервер с установленным pgvector: образ **`pgvector/pgvector:pg17`** (`docker-compose-dev.yaml`, `docker-compose-test.yaml`, в проде — `deploy/helm/agent-lab/values.yaml` → `postgres.image`) или сборка Postgres с пакетом pgvector на хосте. Обычный `postgres:17` без pgvector миграции shared/crm/rag не пройдут. В `init.sql` расширение `vector` подключается к `platform_shared`, `platform_crm`, `platform_rag` (см. `services.json` → `postgres.vector_extensions`).
 
 **asyncpg + `op.execute`:** миграции идут через SQLAlchemy async + asyncpg. В одном вызове `op.execute(...)` допустима **ровно одна** SQL-команда (один prepared statement). Несколько выражений через `;` в одной строке даёт `cannot insert multiple commands into a prepared statement` — делить на отдельные `op.execute`.
 
@@ -60,7 +60,7 @@ migrations/
 ├── services.json       # манифест: сервисы, модули моделей, ключи database.*, список БД Postgres
 ├── postgres/
 │   ├── init.sql                    # CREATE DATABASE + vector (entrypoint-initdb.d при новом томе)
-│   └── bootstrap_idempotent.sql    # то же по смыслу, идемпотентно; деплой на уже живом кластере
+│   # init.sql также монтируется в проде через ConfigMap deploy/helm/agent-lab/templates/10-postgres/configmap-init.yaml
 ├── shared/
 │   ├── alembic.ini
 │   ├── env.py
@@ -112,11 +112,13 @@ uv run python -m scripts.db_migrate current --service rag
 
 `core.db.migrations.run_migrations_async()` итерируется по реестру и применяет `upgrade head` к каждой БД. Перед вызовом: **`core.db.migration_manifest.bootstrap_migration_registry()`**.
 
-Init-контейнер в `docker-compose-prod.yaml`:
+В проде миграции запускаются как **Helm hook Job** `migrations` (`post-install`/`post-upgrade`) из `deploy/helm/agent-lab/templates/20-migrations-job.yaml`:
 
 ```yaml
 command: ["python", "-m", "scripts.db_migrate", "upgrade"]
 ```
+
+InitContainer `wait-postgres` ждёт `pg_isready`, потом основной контейнер выполняет миграции. Job помечен `helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded` — каждый `helm upgrade` создаёт свежий Job.
 
 ## Ключевые файлы
 

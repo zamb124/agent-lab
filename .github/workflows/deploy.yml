@@ -3,26 +3,24 @@ name: Deploy
 on:
   workflow_dispatch:
     inputs:
-      deploy_litserve:
-        description: "Деплой provider_litserve на ноду LITSERVE_HOST (SSH: SERVER_USER/SERVER_SSH_KEY)"
-        type: boolean
-        default: true
-      install_litserve_gpu_stack:
-        description: "На LITSERVE_HOST: установить NVIDIA driver + nvidia-container-toolkit (может потребовать reboot; затем снова запустите Deploy)"
-        type: boolean
-        default: false
+      image_tag:
+        description: "Тег образа для деплоя (по умолчанию — короткий SHA коммита)"
+        required: false
+        default: ""
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/agent-lab
+  K8S_NAMESPACE: platform
+  K8S_RELEASE: agent-lab
+  HELM_CHART: ./deploy/helm/agent-lab
 
 jobs:
-  build-and-push:
+  build:
     name: Build & Push Docker image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
 
@@ -33,23 +31,14 @@ jobs:
         run: |
           set -e
           df -h
-
           docker system prune -af --volumes || true
           docker builder prune -af || true
-
-          if [ -d "/opt/hostedtoolcache" ]; then
-            sudo rm -rf /opt/hostedtoolcache || true
-          fi
-          if [ -d "/usr/local/lib/android" ]; then
-            sudo rm -rf /usr/local/lib/android || true
-          fi
-          if [ -d "/usr/share/dotnet" ]; then
-            sudo rm -rf /usr/share/dotnet || true
-          fi
-
+          if [ -d "/opt/hostedtoolcache" ]; then sudo rm -rf /opt/hostedtoolcache || true; fi
+          if [ -d "/usr/local/lib/android" ]; then sudo rm -rf /usr/local/lib/android || true; fi
+          if [ -d "/usr/share/dotnet" ]; then sudo rm -rf /usr/share/dotnet || true; fi
           df -h
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -80,383 +69,147 @@ jobs:
           cache-to: type=gha,mode=min
 
   deploy:
-    name: Deploy to server
+    name: Deploy to Kubernetes
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: build
     environment: production
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy deploy files to server
-        uses: appleboy/scp-action@v0.1.7
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose-prod.yaml,conf.json,deploy/prepare-static.sh,deploy/observability/"
-          target: /opt/agent-lab/
+          version: v1.30.0
 
-      # docker-compose-prod монтирует ./migrations/postgres/init.sql — без файла на хосте
-      # первый старт Postgres с пустым volume не создаст platform_agents и остальные БД.
-      # onlyoffice-documentserver монтирует ./deploy/onlyoffice/themes/*.json — иначе Docker создаст каталог вместо файла.
-      - name: Ensure server paths for compose volume mounts
-        uses: appleboy/ssh-action@v1
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            mkdir -p /opt/agent-lab/migrations/postgres
-            mkdir -p /opt/agent-lab/deploy/onlyoffice/themes
-            mkdir -p /opt/agent-lab/deploy/observability
-            rm -rf /opt/agent-lab/migrations/postgres/init.sql
+          version: v3.16.2
 
-      # Без strip_components файл окажется в .../postgres/migrations/postgres/init.sql,
-      # требуемый путь .../postgres/init.sql не создаётся — Docker смонтирует его как каталог.
-      - name: Copy Postgres SQL for volume mount and bootstrap
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "migrations/postgres/init.sql,migrations/postgres/bootstrap_idempotent.sql"
-          target: /opt/agent-lab/migrations/postgres/
-          strip_components: 2
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl config current-context
+          kubectl get nodes -o wide
 
-      - name: Copy OnlyOffice theme (documentserver volume mount)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "deploy/onlyoffice/themes/theme-humanitec-light.json"
-          target: /opt/agent-lab/deploy/onlyoffice/themes/
-          strip_components: 3
+      - name: Resolve image tag
+        id: tag
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ needs.build.outputs.image_tag }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "FATAL: image_tag empty"
+            exit 1
+          fi
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Deploying image tag: $TAG"
 
-      - name: Deploy on server
-        uses: appleboy/ssh-action@v1
+      - name: Sync platform-secrets
         env:
-          IMAGE_TAG: ${{ env.IMAGE }}:${{ needs.build-and-push.outputs.image_tag }}
-          IMAGE: ${{ env.IMAGE }}:${{ needs.build-and-push.outputs.image_tag }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          AUTH__JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
-          SELECTEL_ACCESS_KEY: ${{ secrets.SELECTEL_ACCESS_KEY }}
-          SELECTEL_SECRET_KEY: ${{ secrets.SELECTEL_SECRET_KEY }}
+          AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           AUTH_YANDEX_CLIENT_ID: ${{ secrets.AUTH_YANDEX_CLIENT_ID }}
           AUTH_YANDEX_CLIENT_SECRET: ${{ secrets.AUTH_YANDEX_CLIENT_SECRET }}
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
           AUTH_GITHUB_CLIENT_ID: ${{ secrets.AUTH_GITHUB_CLIENT_ID }}
           AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.AUTH_GITHUB_CLIENT_SECRET }}
-          # AmoCRM: в репозитории задать AUTH_AMOCRM_CLIENT_ID / AUTH_AMOCRM_CLIENT_SECRET; в conf.json на сервере auth.providers.amocrm.enabled: true (шаблон в репо может оставаться false).
           AUTH_AMOCRM_CLIENT_ID: ${{ secrets.AUTH_AMOCRM_CLIENT_ID }}
           AUTH_AMOCRM_CLIENT_SECRET: ${{ secrets.AUTH_AMOCRM_CLIENT_SECRET }}
           AUTH_APPLE_PRIVATE_KEY: ${{ secrets.AUTH_APPLE_PRIVATE_KEY }}
           AUTH_DEMO_PASSWORD: ${{ secrets.AUTH_DEMO_PASSWORD }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          PUSH__ENABLED: ${{ secrets.PUSH__ENABLED }}
-          PUSH__VAPID_PUBLIC_KEY: ${{ secrets.PUSH__VAPID_PUBLIC_KEY }}
-          PUSH__VAPID_PRIVATE_KEY: ${{ secrets.PUSH__VAPID_PRIVATE_KEY }}
-          PUSH__VAPID_EMAIL: ${{ secrets.PUSH__VAPID_EMAIL || 'ops@humanitec.ru' }}
-          # APNs: отдельный .p8 только если не тот же, что у Sign in with Apple (иначе хватит AUTH_APPLE_PRIVATE_KEY + push.apns_bundle_id в conf.json).
-          PUSH__APNS_PRIVATE_KEY: ${{ secrets.PUSH__APNS_PRIVATE_KEY }}
-          # FCM (Android Capacitor): service account JSON Firebase одной строкой; project_id опционально перекрывает значение из JSON.
-          PUSH__FCM_CREDENTIALS_JSON: ${{ secrets.PUSH__FCM_CREDENTIALS_JSON }}
-          PUSH__FCM_PROJECT_ID: ${{ secrets.PUSH__FCM_PROJECT_ID }}
+          PUSH_VAPID_PUBLIC_KEY: ${{ secrets.PUSH__VAPID_PUBLIC_KEY }}
+          PUSH_VAPID_PRIVATE_KEY: ${{ secrets.PUSH__VAPID_PRIVATE_KEY }}
+          PUSH_APNS_PRIVATE_KEY: ${{ secrets.PUSH__APNS_PRIVATE_KEY }}
+          PUSH_FCM_CREDENTIALS_JSON: ${{ secrets.PUSH__FCM_CREDENTIALS_JSON }}
+          PUSH_FCM_PROJECT_ID: ${{ secrets.PUSH__FCM_PROJECT_ID }}
+          SELECTEL_ACCESS_KEY: ${{ secrets.SELECTEL_ACCESS_KEY }}
+          SELECTEL_SECRET_KEY: ${{ secrets.SELECTEL_SECRET_KEY }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
-          LIVEKIT_PUBLIC_URL: ${{ secrets.LIVEKIT_PUBLIC_URL }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
           TURN_SECRET: ${{ secrets.TURN_SECRET }}
-          DEPLOYMENT_VERSION: ${{ github.sha }}
+          ONLYOFFICE_JWT_SECRET: ${{ secrets.ONLYOFFICE_JWT_SECRET }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           LLM_BOTHUB_API_KEY: ${{ secrets.LLM_BOTHUB_API_KEY }}
           LLM_OPENROUTER_API_KEY: ${{ secrets.LLM_OPENROUTER_API_KEY }}
-          STT__CLOUD_RU__API_KEY: ${{ secrets.STT__CLOUD_RU__API_KEY }}
-          STT_CLOUD_RU_API_KEY: ${{ secrets.STT_CLOUD_RU_API_KEY }}
+          STT_CLOUD_RU_API_KEY: ${{ secrets.STT__CLOUD_RU__API_KEY }}
           RAG_EMBEDDING_API_KEY: ${{ secrets.RAG_EMBEDDING_API_KEY }}
-          ONLYOFFICE_JWT_SECRET: ${{ secrets.ONLYOFFICE_JWT_SECRET }}
-          OFFICE_DOCUMENT_SERVER_PUBLIC_URL: ${{ secrets.OFFICE_DOCUMENT_SERVER_PUBLIC_URL }}
-          OFFICE_CALLBACK_PUBLIC_BASE_URL: ${{ secrets.OFFICE_CALLBACK_PUBLIC_BASE_URL }}
           YOOMONEY_ACCOUNT_NUMBER: ${{ secrets.YOOMONEY_ACCOUNT_NUMBER }}
           YOOMONEY_NOTIFICATION_SECRET: ${{ secrets.YOOMONEY_NOTIFICATION_SECRET }}
           YOOMONEY_CLIENT_ID: ${{ secrets.YOOMONEY_CLIENT_ID }}
           YOOMONEY_CLIENT_SECRET: ${{ secrets.YOOMONEY_CLIENT_SECRET }}
-          PROVIDER_LITSERVE__INFRA__BACKEND: ${{ secrets.PROVIDER_LITSERVE__INFRA__BACKEND }}
-          PROVIDER_LITSERVE__INFRA__MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__MODEL_ID }}
-          PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          PROVIDER_LITSERVE_API_BASE_URL: ${{ secrets.PROVIDER_LITSERVE_API_BASE_URL }}
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          command_timeout: 30m
-          envs: IMAGE_TAG,IMAGE,POSTGRES_PASSWORD,AUTH__JWT_SECRET,SELECTEL_ACCESS_KEY,SELECTEL_SECRET_KEY,AUTH_YANDEX_CLIENT_ID,AUTH_YANDEX_CLIENT_SECRET,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GITHUB_CLIENT_ID,AUTH_GITHUB_CLIENT_SECRET,AUTH_AMOCRM_CLIENT_ID,AUTH_AMOCRM_CLIENT_SECRET,AUTH_APPLE_PRIVATE_KEY,AUTH_DEMO_PASSWORD,GHCR_TOKEN,GITHUB_ACTOR,PUSH__ENABLED,PUSH__VAPID_PUBLIC_KEY,PUSH__VAPID_PRIVATE_KEY,PUSH__VAPID_EMAIL,PUSH__APNS_PRIVATE_KEY,PUSH__FCM_CREDENTIALS_JSON,PUSH__FCM_PROJECT_ID,LIVEKIT_API_KEY,LIVEKIT_API_SECRET,LIVEKIT_PUBLIC_URL,SERVER_HOST,TURN_SECRET,DEPLOYMENT_VERSION,LLM_BOTHUB_API_KEY,LLM_OPENROUTER_API_KEY,STT__CLOUD_RU__API_KEY,STT_CLOUD_RU_API_KEY,RAG_EMBEDDING_API_KEY,ONLYOFFICE_JWT_SECRET,OFFICE_DOCUMENT_SERVER_PUBLIC_URL,OFFICE_CALLBACK_PUBLIC_BASE_URL,YOOMONEY_ACCOUNT_NUMBER,YOOMONEY_NOTIFICATION_SECRET,YOOMONEY_CLIENT_ID,YOOMONEY_CLIENT_SECRET,PROVIDER_LITSERVE__INFRA__BACKEND,PROVIDER_LITSERVE__INFRA__MODEL_ID,PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID,HF_TOKEN,GRAFANA_ADMIN_PASSWORD,PROVIDER_LITSERVE_API_BASE_URL
-          script: |
-            set -e
-
-            mkdir -p /opt/agent-lab
-            rm -f /opt/agent-lab/.env
-
-            cd /opt/agent-lab
-
-            if [ -n "${PROVIDER_LITSERVE_API_BASE_URL:-}" ]; then
-              export PROVIDER_LITSERVE__API__BASE_URL="${PROVIDER_LITSERVE_API_BASE_URL}"
-            else
-              unset PROVIDER_LITSERVE__API__BASE_URL 2>/dev/null || true
-            fi
-
-            export ONLYOFFICE_JWT_SECRET="${ONLYOFFICE_JWT_SECRET:-}"
-            export OFFICE_DOCUMENT_SERVER_PUBLIC_URL="${OFFICE_DOCUMENT_SERVER_PUBLIC_URL:-}"
-            export OFFICE_CALLBACK_PUBLIC_BASE_URL="${OFFICE_CALLBACK_PUBLIC_BASE_URL:-}"
-            export PROVIDER_LITSERVE__INFRA__BACKEND="${PROVIDER_LITSERVE__INFRA__BACKEND:-}"
-            export PROVIDER_LITSERVE__INFRA__MODEL_ID="${PROVIDER_LITSERVE__INFRA__MODEL_ID:-}"
-            export PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID="${PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID:-}"
-            export HF_TOKEN="${HF_TOKEN:-}"
-
-            if [ ! -f migrations/postgres/init.sql ]; then
-              echo "FATAL: migrations/postgres/init.sql должен быть обычным файлом (см. scp strip_components)."
-              ls -la migrations/postgres/ 2>/dev/null || true
-              exit 1
-            fi
-            if [ ! -f migrations/postgres/bootstrap_idempotent.sql ]; then
-              echo "FATAL: migrations/postgres/bootstrap_idempotent.sql отсутствует."
-              exit 1
-            fi
-
-            # ghcr.io с сервера иногда даёт TLS handshake timeout — несколько попыток с паузой
-            retry() {
-              local attempt max=5 delay=25
-              for attempt in $(seq 1 $max); do
-                if "$@"; then
-                  return 0
-                fi
-                if [ "$attempt" -lt "$max" ]; then
-                  echo "Команда не удалась (попытка $attempt/$max), повтор через ${delay}s..."
-                  sleep "$delay"
-                fi
-              done
-              return 1
-            }
-
-            for attempt in $(seq 1 5); do
-              if echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin; then
-                break
-              fi
-              if [ "$attempt" -eq 5 ]; then
-                exit 1
-              fi
-              echo "docker login: попытка $attempt/5 не удалась, повтор через 25s..."
-              sleep 25
-            done
-
-            retry docker compose -f docker-compose-prod.yaml pull
-
-            docker rm -f agentlab_provider_litserve 2>/dev/null || true
-
-            docker compose -f docker-compose-prod.yaml up -d postgres redis
-
-            _wait=0
-            until docker compose -f docker-compose-prod.yaml exec -T postgres pg_isready -U platform_user -d postgres >/dev/null 2>&1; do
-              _wait=$((_wait + 1))
-              if [ "$_wait" -gt 90 ]; then
-                echo "FATAL: postgres не принял соединения за ~3 минуты"
-                exit 1
-              fi
-              sleep 2
-            done
-
-            docker compose -f docker-compose-prod.yaml exec -T postgres \
-              psql -U platform_user -d postgres -v ON_ERROR_STOP=1 \
-              < migrations/postgres/bootstrap_idempotent.sql
-
-            docker compose -f docker-compose-prod.yaml run --rm migrations || {
-              echo "=== docker compose ps ==="
-              docker compose -f docker-compose-prod.yaml ps -a
-              echo "=== agentlab_postgres logs ==="
-              docker logs agentlab_postgres --tail 200 2>&1 || true
-              echo "=== agentlab_postgres inspect health ==="
-              docker inspect agentlab_postgres --format '{{json .State.Health}}' 2>&1 || true
-              exit 1
-            }
-
-            docker compose -f docker-compose-prod.yaml up -d \
-              agents frontend crm rag sync onlyoffice-documentserver office scheduler-api \
-              flows_worker scheduler crm_worker rag_worker sync_worker idle_worker \
-              livekit livekit-egress coturn \
-              loki tempo alloy grafana
-
-            _egress_wait=0
-            until [ "$(docker inspect -f '{{.State.Running}}' agentlab_livekit_egress 2>/dev/null || echo false)" = "true" ]; do
-              _egress_wait=$((_egress_wait + 1))
-              if [ "$_egress_wait" -gt 30 ]; then
-                echo "FATAL: livekit-egress не запустился за 60 секунд"
-                docker logs agentlab_livekit_egress --tail 200 2>&1 || true
-                exit 1
-              fi
-              sleep 2
-            done
-
-            docker image prune -f
-
-            # Подготовка статики: извлекаем UI файлы и i18n из Docker образа
-            # static-server (nginx pod) уже настроен через ingress.sh при первом деплое
-            # При каждом деплое нужно только обновить файлы на диске
-            echo "Подготовка статики из образа ${IMAGE}..."
-            REMOTE_DIR=/opt/agent-lab IMAGE=${IMAGE} bash /opt/agent-lab/deploy/prepare-static.sh
-
-            # Перезапускаем static-server если он уже запущен (подхватывает новые файлы)
-            microk8s kubectl rollout restart deployment/static-server -n default 2>/dev/null || true
-            microk8s kubectl rollout status deployment/static-server -n default --timeout=60s 2>/dev/null || true
-
-  deploy-litserve:
-    name: Deploy provider_litserve (remote node)
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    environment: production
-    if: ${{ github.event.inputs.deploy_litserve != 'false' }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate litserve SSH secrets
-        env:
-          LITSERVE_HOST: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          YOOMONEY_ACCESS_TOKEN: ${{ secrets.YOOMONEY_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
 
-          if [ -z "${LITSERVE_HOST:-}" ]; then
-            echo "Missing required secret: LITSERVE_HOST" >&2
-            exit 1
-          fi
-          if [ -z "${SERVER_USER:-}" ]; then
-            echo "Missing required secret: SERVER_USER" >&2
-            exit 1
-          fi
-          if [ -z "${SERVER_SSH_KEY:-}" ]; then
-            echo "Missing required secret: SERVER_SSH_KEY (private key content)" >&2
-            exit 1
-          fi
+          for required in POSTGRES_PASSWORD AUTH_JWT_SECRET SELECTEL_ACCESS_KEY SELECTEL_SECRET_KEY LIVEKIT_API_KEY LIVEKIT_API_SECRET TURN_SECRET ONLYOFFICE_JWT_SECRET GRAFANA_ADMIN_PASSWORD; do
+            if [ -z "${!required:-}" ]; then
+              echo "FATAL: required secret $required is empty" >&2
+              exit 1
+            fi
+          done
 
-      - name: Copy compose and conf to litserve host
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose-litserve.yaml,conf.json,deploy/bootstrap-litserve-node.sh,deploy/bootstrap-litserve-node-gpu.sh,deploy/verify-litserve-gpu-node.sh,deploy/firewall-main-platform-for-litserve-node.sh,deploy/LITSERVE_GPU_HOST.md"
-          target: /opt/agent-lab/
+          kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Ensure postgres init.sql path on litserve host
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            mkdir -p /opt/agent-lab/migrations/postgres
-            rm -rf /opt/agent-lab/migrations/postgres/init.sql
+          kubectl create secret generic platform-secrets -n "$K8S_NAMESPACE" \
+            --from-literal=postgres-password="$POSTGRES_PASSWORD" \
+            --from-literal=auth-jwt-secret="$AUTH_JWT_SECRET" \
+            --from-literal=hf-token="${HF_TOKEN:-}" \
+            --from-literal=auth-yandex-client-id="${AUTH_YANDEX_CLIENT_ID:-}" \
+            --from-literal=auth-yandex-client-secret="${AUTH_YANDEX_CLIENT_SECRET:-}" \
+            --from-literal=auth-google-client-id="${AUTH_GOOGLE_CLIENT_ID:-}" \
+            --from-literal=auth-google-client-secret="${AUTH_GOOGLE_CLIENT_SECRET:-}" \
+            --from-literal=auth-github-client-id="${AUTH_GITHUB_CLIENT_ID:-}" \
+            --from-literal=auth-github-client-secret="${AUTH_GITHUB_CLIENT_SECRET:-}" \
+            --from-literal=auth-amocrm-client-id="${AUTH_AMOCRM_CLIENT_ID:-}" \
+            --from-literal=auth-amocrm-client-secret="${AUTH_AMOCRM_CLIENT_SECRET:-}" \
+            --from-literal=auth-apple-private-key="${AUTH_APPLE_PRIVATE_KEY:-}" \
+            --from-literal=auth-demo-password="${AUTH_DEMO_PASSWORD:-}" \
+            --from-literal=push-vapid-public-key="${PUSH_VAPID_PUBLIC_KEY:-}" \
+            --from-literal=push-vapid-private-key="${PUSH_VAPID_PRIVATE_KEY:-}" \
+            --from-literal=push-apns-private-key="${PUSH_APNS_PRIVATE_KEY:-}" \
+            --from-literal=push-fcm-credentials-json="${PUSH_FCM_CREDENTIALS_JSON:-}" \
+            --from-literal=push-fcm-project-id="${PUSH_FCM_PROJECT_ID:-}" \
+            --from-literal=selectel-access-key="$SELECTEL_ACCESS_KEY" \
+            --from-literal=selectel-secret-key="$SELECTEL_SECRET_KEY" \
+            --from-literal=livekit-api-key="$LIVEKIT_API_KEY" \
+            --from-literal=livekit-api-secret="$LIVEKIT_API_SECRET" \
+            --from-literal=turn-secret="$TURN_SECRET" \
+            --from-literal=onlyoffice-jwt-secret="$ONLYOFFICE_JWT_SECRET" \
+            --from-literal=grafana-admin-password="$GRAFANA_ADMIN_PASSWORD" \
+            --from-literal=llm-bothub-api-key="${LLM_BOTHUB_API_KEY:-}" \
+            --from-literal=llm-openrouter-api-key="${LLM_OPENROUTER_API_KEY:-}" \
+            --from-literal=stt-cloud-ru-api-key="${STT_CLOUD_RU_API_KEY:-}" \
+            --from-literal=rag-embedding-api-key="${RAG_EMBEDDING_API_KEY:-${LLM_OPENROUTER_API_KEY:-}}" \
+            --from-literal=yoomoney-account-number="${YOOMONEY_ACCOUNT_NUMBER:-}" \
+            --from-literal=yoomoney-notification-secret="${YOOMONEY_NOTIFICATION_SECRET:-}" \
+            --from-literal=yoomoney-client-id="${YOOMONEY_CLIENT_ID:-}" \
+            --from-literal=yoomoney-client-secret="${YOOMONEY_CLIENT_SECRET:-}" \
+            --from-literal=yoomoney-access-token="${YOOMONEY_ACCESS_TOKEN:-}" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Copy Postgres SQL for volume mount parity
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "migrations/postgres/init.sql"
-          target: /opt/agent-lab/migrations/postgres/
-          strip_components: 2
+      - name: Helm lint (sanity)
+        run: helm lint "$HELM_CHART"
 
-      - name: Pull and start provider_litserve on litserve host
-        uses: appleboy/ssh-action@v1
+      - name: Helm upgrade --install
+        run: |
+          helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
+            --namespace "$K8S_NAMESPACE" \
+            --create-namespace \
+            --values "$HELM_CHART/values.yaml" \
+            --values "$HELM_CHART/values-prod.yaml" \
+            --set image.tag="${{ steps.tag.outputs.image_tag }}" \
+            --wait --timeout 15m
+
+      - name: Verify rollout (cluster-health.sh)
         env:
-          IMAGE: ${{ env.IMAGE }}:${{ needs.build-and-push.outputs.image_tag }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          AUTH__JWT_SECRET: ${{ secrets.AUTH__JWT_SECRET }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          DEPLOYMENT_VERSION: ${{ github.sha }}
-          INSTALL_LITSERVE_GPU_STACK: ${{ github.event.inputs.install_litserve_gpu_stack }}
-          PROVIDER_LITSERVE__INFRA__BACKEND: ${{ secrets.PROVIDER_LITSERVE__INFRA__BACKEND }}
-          PROVIDER_LITSERVE__INFRA__MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__MODEL_ID }}
-          PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID: ${{ secrets.PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID }}
-        with:
-          host: ${{ secrets.LITSERVE_HOST || '188.246.224.228' }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          command_timeout: 45m
-          envs: IMAGE,POSTGRES_PASSWORD,SERVER_HOST,AUTH__JWT_SECRET,HF_TOKEN,GHCR_TOKEN,GITHUB_ACTOR,DEPLOYMENT_VERSION,INSTALL_LITSERVE_GPU_STACK,PROVIDER_LITSERVE__INFRA__BACKEND,PROVIDER_LITSERVE__INFRA__MODEL_ID,PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID
-          script: |
-            set -e
-            cd /opt/agent-lab
-
-            GST="${INSTALL_LITSERVE_GPU_STACK:-false}"
-            if [ "${GST}" = "true" ]; then
-              chmod +x deploy/bootstrap-litserve-node-gpu.sh || true
-              gv=0
-              bash deploy/bootstrap-litserve-node-gpu.sh || gv=$?
-              if [ "${gv}" -eq 10 ]; then
-                echo "install_litserve_gpu_stack: нужен reboot; после перезапуска ВМ повторите Deploy" >&2
-                exit 10
-              fi
-              if [ "${gv}" -ne 0 ]; then
-                exit "${gv}"
-              fi
-            fi
-
-            if ! command -v docker >/dev/null 2>&1; then
-              export MAIN_PLATFORM_HOST="${SERVER_HOST}"
-              chmod +x deploy/bootstrap-litserve-node.sh
-              bash deploy/bootstrap-litserve-node.sh
-            fi
-
-            H="${SERVER_HOST}"
-            export DATABASE__SHARED_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_shared"
-            export DATABASE__FLOWS_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_agents"
-            export DATABASE__CRM_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_crm"
-            export DATABASE__SYNC_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_sync"
-            export DATABASE__RAG_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_rag"
-            export DATABASE__OFFICE_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_office"
-            export DATABASE__TRACING_URL="postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD}@${H}:5432/platform_tracing"
-            export DATABASE__REDIS_URL="redis://${H}:6379/0"
-            export TASKS__BROKER_URL="redis://${H}:6379/1"
-
-            for attempt in $(seq 1 5); do
-              if echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin; then
-                break
-              fi
-              if [ "$attempt" -eq 5 ]; then
-                exit 1
-              fi
-              sleep 25
-            done
-
-            export PROVIDER_LITSERVE__INFRA__BACKEND="${PROVIDER_LITSERVE__INFRA__BACKEND:-flagllm}"
-            export PROVIDER_LITSERVE__INFRA__MODEL_ID="${PROVIDER_LITSERVE__INFRA__MODEL_ID:-}"
-            export PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID="${PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID:-}"
-
-            docker compose -f docker-compose-litserve.yaml pull
-            docker compose -f docker-compose-litserve.yaml up -d
-
-            _w=0
-            until curl -fsS "http://127.0.0.1:8014/health" >/dev/null 2>&1; do
-              _w=$((_w + 1))
-              if [ "$_w" -gt 120 ]; then
-                echo "FATAL: litserve health timeout"
-                docker logs agentlab_provider_litserve --tail 200 2>&1 || true
-                exit 1
-              fi
-              sleep 2
-            done
-
-            chmod +x deploy/verify-litserve-gpu-node.sh || true
-            bash deploy/verify-litserve-gpu-node.sh
-
-            docker image prune -f
+          PLATFORM_NS: ${{ env.K8S_NAMESPACE }}
+          # CHECK_PUBLIC=1 — проверяем https://humanitec.ru/* через ingress
+          CHECK_PUBLIC: "1"
+        run: bash deploy/scripts/cluster-health.sh

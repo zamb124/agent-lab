@@ -8,40 +8,6 @@ Humanitec - Platform
 
 ## Быстрый старт
 
-### Docker (рекомендуется)
-
-```bash
-# Скопировать конфигурацию
-cp conf.example conf.json
-
-# Собрать и запустить все сервисы
-make build
-make up
-
-# Проверить логи
-make logs
-
-# Остановить
-make down
-```
-
-### Отдельные сервисы
-
-```bash
-make db-up       # Запустить только БД
-make app-up      # Запустить приложение
-make flows-worker-up   # Запустить flows_worker
-make sgr-up      # Запустить SGR сервис
-```
-
-### Тесты
-
-```bash
-make test        # Запуск тестов (без интеграционных)
-make test-all    # Все тесты (включая интеграционные)
-
-```
-
 ### Локальная разработка
 
 ```bash
@@ -51,12 +17,40 @@ uv sync
 # Сервис browser (Playwright + CDP / Lightpanda): зависимость playwright в группе browser
 uv sync --group browser
 
-# Запуск локально
-uv run python scripts/run.py all
+# Поднять инфраструктуру (Postgres :54321, Redis :63791, MinIO :19001/19011)
+make dev-up
 
-# Запуск воркера локально
-uv run taskiq worker apps.flows_worker.worker:worker_app
+# Все сервисы и воркеры локально
+make app
+# или с предварительным освобождением портов 8001-8006/8014:
+make app APP_KILL=1
 ```
+
+### Тесты
+
+```bash
+make test        # Полный прогон (frontend-core + unit + retry-failed)
+make test-unit   # Только unit/API
+make test-rag    # RAG тесты с pgvector + MinIO
+```
+
+### Production деплой
+
+Production разворачивается единым **Helm-чартом** в **MicroK8s** кластере (master + GPU worker). Никаких Docker Compose в проде, никаких ручных скриптов на серверах.
+
+```bash
+# Локально (требует kubectl с настроенным kubeconfig к кластеру)
+make k8s-lint                       # helm lint
+make k8s-template                   # рендер всех манифестов в stdout
+make k8s-deploy IMAGE_TAG=<sha>     # helm upgrade --install (атомарно, ждёт rollout)
+make k8s-status                     # nodes + pods + svc + ingress + pvc
+make k8s-logs SVC=frontend          # поток логов конкретного Deployment
+make k8s-rollback                   # helm rollback на предыдущую ревизию
+```
+
+Из CI: `.github/workflows/deploy.yml` собирает образ → push в GHCR → `helm upgrade --install` через `KUBECONFIG_B64` секрет.
+
+Полная документация по деплою — [deploy/README.md](deploy/README.md), одноразовая настройка кластера — [deploy/cluster-setup.md](deploy/cluster-setup.md).
 
 Подробнее о командах: [docs/makefile.md](docs/makefile.md)
 Конфигурация: [docs/configuration.md](docs/configuration.md)
@@ -67,34 +61,31 @@ uv run taskiq worker apps.flows_worker.worker:worker_app
 /agent-lab/
 ├── .env                    # Переменные окружения (не в git)
 ├── .gitignore
-├── docker-compose-prod.yaml # Оркестрация production сервисов
+├── docker-compose-dev.yaml # Локальная инфраструктура (Postgres, Redis, MinIO)
+├── docker-compose-test.yaml # Тестовое окружение
 ├── Dockerfile             # Docker образ
-├── Makefile               # Команды для разработки
+├── Makefile               # Команды для разработки и k8s-деплоя
 ├── mk/                    # Модульные Makefile
-│   ├── db.mk             # Команды для БД
-│   ├── app.mk            # Команды для приложения
-│   ├── worker.mk         # Команды для worker
-│   ├── sgr.mk            # Команды для SGR
-│   └── test.mk           # Команды для тестов
+│   ├── app.mk            # Локальный запуск (make app)
+│   ├── test.mk           # Тесты
+│   └── migrate.mk        # Alembic миграции
 ├── pyproject.toml         # Зависимости проекта (UV)
 ├── pytest.ini            # Настройки тестов
 ├── uv.lock               # Блокировка зависимостей
-├── conf.example          # Шаблон конфигурации
 ├── conf.json             # Рабочая конфигурация
 │
 ├── README.md             # Главная страница проекта
 ├── scripts/run.py       # Локальный запуск сервисов и воркеров
-├── run_worker.py        # Запуск воркера задач
-├── run_tests.py         # Запуск тестов
-├── debug_task.py        # Отладка задач
-├── cleanup_non_company_data.py  # Очистка данных
-├── amocrm_export_data.py # Экспорт данных из AmoCRM
 │
-├── certs/               # SSL сертификаты
-├── deploy/              # Конфигурация деплоя
-│   ├── conf.json
-│   ├── nginx.conf
-│   └── README.md
+├── deploy/              # Helm-чарт + документация деплоя
+│   ├── README.md        # Helm install, KUBECONFIG_B64, GitHub Secrets
+│   ├── cluster-setup.md # Одноразовая настройка нод MicroK8s
+│   └── helm/agent-lab/  # Единый Helm-чарт всего стека
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       ├── values-prod.yaml
+│       ├── templates/   # postgres, redis, apps, workers, gpu, ingress, observability
+│       └── files/       # ConfigMap источники (loki, tempo, alloy, dashboards)
 │
 ├── docs/                # Документация
 │   ├── README.md        # Навигация
@@ -147,9 +138,9 @@ uv run taskiq worker apps.flows_worker.worker:worker_app
 
 **pyproject.toml** - Конфигурация проекта с UV. Зависимости: FastAPI, PostgreSQL, Pydantic.
 
-**docker-compose-prod.yaml** - Оркестрация production сервисов.
+**deploy/helm/agent-lab/** - Единый Helm-чарт всего стека (БД, приложения, воркеры, GPU litserve, observability, ingress).
 
-**Makefile** - Команды для разработки (up, down, logs, test).
+**Makefile** - Команды для разработки (dev-up, app, test) и Kubernetes деплоя (k8s-deploy, k8s-status, k8s-logs).
 
 **conf.json** - Основной конфиг (LLM, БД, Telegram, S3). Подробнее: [docs/configuration.md](docs/configuration.md)
 
@@ -274,6 +265,6 @@ uv run python run_worker.py
 # Запуск тестов
 uv run pytest
 
-# Запуск с Docker
-docker-compose up -d
+# Поднять локальную инфраструктуру (Postgres/Redis/MinIO)
+make dev-up
 ```

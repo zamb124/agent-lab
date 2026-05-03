@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.appConfigConfigMap }}
+  namespace: {{ .Values.namespace }}
+data:
+  conf.json: |-
+{{ .Files.Get "files/app-conf.json" | indent 4 }}

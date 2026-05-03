@@ -1,0 +1,90 @@
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform
+  namespace: {{ .Values.namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | quote }}
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.proxyBodySize | quote }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyReadTimeout | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxyReadTimeout | quote }}
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: {{ .Values.ingress.proxyConnectTimeout | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.apexHost | quote }}
+        - {{ .Values.ingress.wildcardHost | quote }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  rules:
+    {{- range $host := list .Values.ingress.apexHost .Values.ingress.wildcardHost }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /flows
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.flows.serviceName }}
+                port:
+                  number: {{ $.Values.applications.flows.port }}
+          - path: /crm
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.crm.serviceName }}
+                port:
+                  number: {{ $.Values.applications.crm.port }}
+          - path: /rag
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.rag.serviceName }}
+                port:
+                  number: {{ $.Values.applications.rag.port }}
+          - path: /sync
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.sync.serviceName }}
+                port:
+                  number: {{ $.Values.applications.sync.port }}
+          - path: /documents
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.office.serviceName }}
+                port:
+                  number: {{ $.Values.applications.office.port }}
+          - path: /scheduler
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $.Values.applications "scheduler-api" "serviceName" }}
+                port:
+                  number: {{ index $.Values.applications "scheduler-api" "port" }}
+          - path: /voice
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.voice.serviceName }}
+                port:
+                  number: {{ $.Values.applications.voice.port }}
+          - path: /litserve
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.litserve.serviceName }}
+                port:
+                  number: {{ $.Values.litserve.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.frontend.serviceName }}
+                port:
+                  number: {{ $.Values.applications.frontend.port }}
+    {{- end }}
+{{- end }}

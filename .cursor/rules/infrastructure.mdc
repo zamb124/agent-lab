@@ -1,88 +1,118 @@
 ---
-description: "Инфраструктура: сервер, MicroK8s Ingress, деплой, DNS"
+description: "Инфраструктура: MicroK8s кластер, Helm-чарт, ingress, observability, GPU-нода"
 alwaysApply: false
 ---
 
 # Инфраструктура
 
-## Серверы
+Платформа разворачивается единым **Helm-чартом** в **MicroK8s** кластере из двух нод. Один источник правды — `[deploy/helm/agent-lab/](deploy/helm/agent-lab/)`. Никаких Docker Compose в проде, никаких ручных `ufw`-правил, никаких отдельных bootstrap-скриптов на нодах.
 
-| Роль | IP | SSH | Рабочая директория |
+## Кластер MicroK8s
+
+| Роль | IP | Лейблы | Что бежит |
 |---|---|---|---|
-| Нода A (платформа, Compose, MicroK8s ingress) | `84.38.184.105` | `root@84.38.184.105` | `/opt/agent-lab/` |
-| Нода B (`provider_litserve` только) | `188.246.224.228` | по ключу деплоя (`LITSERVE_SSH_*`) | `/opt/agent-lab/` |
+| Master (control-plane) | `84.38.184.105` | `kubernetes.io/hostname=master` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры платформы, LiveKit, Coturn, OnlyOffice, ingress-nginx |
+| GPU Worker | `188.246.224.228` | `accelerator=nvidia-gpu` | `provider_litserve` (через `nodeSelector`) |
 
-Домен apex и wildcard: `humanitec.ru`.
+Связь между нодами — через Calico/Flannel CNI кластера. Постгрес и Redis доступны из любой ноды по ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` без проброса портов на хост и без `ufw allow`.
 
-### Удалённый `provider_litserve` (нода B)
+Домен apex и wildcard: `humanitec.ru` (DNS `@` и `*` → `84.38.184.105`).
 
-- Один образ GHCR (`target: full`), как у всей платформы.
-- На ноде A сервис `provider_litserve` в **`docker-compose-prod.yaml`** включён только с профилем **`litserve_local`**. Обычный деплой (`docker compose up -d` **без** `--profile litserve_local`) **не** поднимает локальный контейнер; перед обновлением стека старый контейнер удаляется (`docker rm -f agentlab_provider_litserve`).
-- На ноде B используется **`docker-compose-litserve.yaml`** (порт `8014`, тома `provider_litserve_data`, `provider_litserve_hf_cache`).
-- Процесс требует **`database.shared_url`** и **`database.redis_url`** к shared-базе и Redis на ноде A: в compose опубликованы **`5432`** (postgres) и **`6379`** (redis) на хост A. На A выполните **`deploy/firewall-main-platform-for-litserve-node.sh`** с `LITSERVE_NODE_IP=188.246.224.228` (только этот IP к PostgreSQL и Redis). На B — **`deploy/bootstrap-litserve-node.sh`** (`MAIN_PLATFORM_HOST=84.38.184.105`), затем `ufw` уже разрешает **8014** только с IP ноды A.
-- Маршрут **`https://humanitec.ru/litserve/*`**: в **`conf.local.json`** у элемента `ingress.services` с `"name": "provider_litserve"` задайте **`"upstream_host": "188.246.224.228"`**, затем **`bash deploy/ingress.sh`**. Пример фрагмента: **`deploy/conf.local.ingress-litserve-remote.example.json`**.
-- Клиенты платформы (RAG, CRM rerank и т.д.) используют **`PROVIDER_LITSERVE__API__BASE_URL`**. Для удалённого API через ingress: секрет GitHub **`PROVIDER_LITSERVE_API_BASE_URL`** = `https://humanitec.ru/litserve/v1` (workflow маппит в **`PROVIDER_LITSERVE__API__BASE_URL`** при деплое на A). Если секрет пустой — используется дефолт Compose `http://provider_litserve:8014/v1` (локальный контейнер при профиле `litserve_local`).
-- CI: `.github/workflows/deploy.yml` — job **`deploy-litserve`** (отключается флагом **`deploy_litserve: false`** при ручном запуске). Секреты: см. **`deploy/GITHUB_SECRETS_LITSERVE.md`**.
-- Откат на локальный litserve на A: **`deploy/ROLLBACK_LITSERVE.md`**.
+### Одноразовая настройка нод
 
-### Smoke после переключения на удалённый litserve
+См. **`[deploy/cluster-setup.md](deploy/cluster-setup.md)`** — установка MicroK8s, `microk8s add-node` / `microk8s join`, `microk8s enable gpu`, лейбл `accelerator=nvidia-gpu` на GPU-ноду.
 
-- `curl -fsS https://humanitec.ru/litserve/health` и при необходимости `/litserve/v1/models` с заголовком авторизации системной компании.
-- Загрузка документа в RAG и семантический поиск; в логах **`rag_worker`** базовый URL запросов к embeddings — `https://humanitec.ru/litserve/v1` (или ваш публичный origin).
-- Сценарий CRM с rerank — без ошибок HTTP к `/rerank`.
+## Helm-чарт
 
-## Стек
-
-- **Docker Compose** — запускает все сервисы (`/opt/agent-lab/docker-compose-prod.yaml`)
-- **MicroK8s** — Kubernetes ingress-nginx + cert-manager (Let's Encrypt)
-- **Selectel S3** — объектное хранилище (`s3.ru-3.storage.selcloud.ru`, бакет `shvedzilla`)
-
-## Маршрутизация (Ingress)
-
-Один ingress `humanitec-ingress` с path-based роутингом — работает одинаково для корневого домена и поддоменов компаний. Список сервисов и путей задаётся в **`conf.local.json`** → **`ingress.services`**, применяется скриптом **`deploy/ingress.sh`** (создаёт Service/Endpoints на IP хоста и Ingress; префиксы OnlyOffice — см. **`office.mdc`**). Аннотация **`nginx.ingress.kubernetes.io/proxy-body-size: "100m"`** на `humanitec-ingress` (см. `deploy/ingress.sh`) — без неё nginx ingress отдаёт **413** на большие POST (например `/documents`). Отдельный `livekit-ingress` для WebRTC:
+`[deploy/helm/agent-lab/](deploy/helm/agent-lab/)` — единственный источник манифестов:
 
 ```
-humanitec.ru/           → frontend-svc  :8002
-humanitec.ru/flows      → flows (apps.flows) :8001
-humanitec.ru/crm        → crm-svc       :8003
-humanitec.ru/rag        → rag-svc       :8004
-humanitec.ru/sync       → sync-svc      :8005 (WebSocket)
-humanitec.ru/web-apps   → onlyoffice-svc :8088  (Document Server на хосте)
-humanitec.ru/common     → onlyoffice-svc :8088
-humanitec.ru/cache      → onlyoffice-svc :8088
-humanitec.ru/fonts      → onlyoffice-svc :8088
-humanitec.ru/sdkjs      → onlyoffice-svc :8088
-
-*.humanitec.ru/*        → те же правила (поддомен = slug компании)
-
-livekit.humanitec.ru/   → livekit-svc   :7880 (WebSocket/WSS для WebRTC)
+deploy/helm/agent-lab/
+  Chart.yaml
+  values.yaml          # дефолты
+  values-prod.yaml     # production overrides
+  templates/
+    00-namespace.yaml
+    02-configmap-app-conf.yaml
+    10-postgres/        # StatefulSet + Service + ConfigMap init
+    11-redis/           # StatefulSet + Service
+    20-migrations-job.yaml  # helm hook post-install/post-upgrade
+    30-apps/            # 8 application Deployments + Services через range
+    40-workers/         # 6 worker Deployments через range
+    50-gpu/litserve.yaml  # nodeSelector: accelerator=nvidia-gpu
+    60-external/        # livekit, livekit-egress, coturn DaemonSet, onlyoffice
+    70-observability/   # loki, tempo, grafana, alloy DaemonSet
+    80-ingress/         # cluster-issuer + 4 Ingress
+  files/                # ConfigMap источники (loki, tempo, alloy, dashboards)
 ```
 
-LiveKit требует отдельный поддомен с собственным TLS-сертификатом (HTTP-01 через cert-manager).
-`LIVEKIT_PUBLIC_URL = wss://livekit.humanitec.ru` — добавить в GitHub Secrets.
+`values.yaml` объявляет:
+- образ `image.repository=ghcr.io/zamb124/agent-lab`, `image.tag=latest` (перекрывается в CI: `--set image.tag=$SHA`);
+- `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo через `nodeSelector`;
+- `gpuNodeSelectorKey/Value: accelerator=nvidia-gpu` — куда прибивается LitServe;
+- `applications.<name>` (8 сервисов: flows/frontend/crm/rag/sync/office/scheduler-api/voice) — порт, реплики, command;
+- `workers.<name>` (6 воркеров) — реплики и command для TaskIQ;
+- `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice` — внешние компоненты;
+- `observability.{loki,tempo,grafana,alloy}` — стек;
+- `ingress.*` — apex/wildcard, hostname'ы для livekit/onlyoffice/grafana, cert-manager issuer;
+- `platformSecretName: platform-secrets` — имя Secret с переменными окружения.
 
-Поддомен компании (`qqq.humanitec.ru`) обрабатывается `AuthMiddleware` в каждом сервисе — он читает `Host` хедер и резолвит `company_id` через Redis.
+`templates/_helpers.tpl::agentlab.appEnv` — общий блок env для всех приложений и воркеров: URL баз через ClusterIP `postgres`/`redis`, OAuth, LLM, S3, push, OnlyOffice, OTLP. Все секреты — `valueFrom.secretKeyRef` на `platform-secrets`.
 
-Запросы **`/manifest.json`**, **`/sw.js`**, **`/offline.html`** на общем хосте обычно попадают на сервис с префиксом **`/`** (frontend). Локально при прямом доступе к порту любого сервиса те же пути отдаёт этот инстанс через **`create_service_app`** (см. `core/frontend/pwa/`, `frontend.mdc`).
+## Сервисы платформы (Deployments)
 
-**`/.well-known/apple-app-site-association`** и **`/.well-known/assetlinks.json`**: отдавать как **JSON** с корректным `Content-Type`, **без** SPA-fallback и без редиректа на другой хост. В приложении — через **`register_platform_pwa_routes`** при наличии файлов в **`core/frontend/pwa/`**. Если перед фронтом стоит отдельный nginx: отдельные **`location =`** для этих путей до общего **`try_files`** к **`index.html`**.
+| Сервис | Порт | Реплики | Командa |
+|---|---|---|---|
+| flows | 8001 | 1 | `python -m apps.flows.main` |
+| frontend | 8002 | 1 | `python -m apps.frontend.main` |
+| crm | 8003 | 1 | `python -m apps.crm.main` |
+| rag | 8004 | 1 | `python -m apps.rag.main` |
+| sync | 8005 | 1 | `python -m apps.sync.main` |
+| scheduler-api | 8006 | 1 | `python -m apps.scheduler.main` |
+| office | 8008 | 1 | `python -m apps.office.main` |
+| voice | 8015 | 1 | `python -m apps.voice.main` |
+| provider-litserve (GPU) | 8014 | 1 | `python -m apps.provider_litserve.main` (nodeSelector) |
+| flows-worker | — | 2 | `taskiq worker apps.flows_worker.worker:worker_app --workers 4` |
+| scheduler | — | 1 | `taskiq scheduler apps.scheduler.scheduler:scheduler` |
+| rag-worker | — | 1 | `taskiq worker apps.rag_worker.worker:worker_app --workers 2` |
+| sync-worker | — | 1 | `taskiq worker apps.sync_worker.worker:worker_app --workers 2` |
+| crm-worker | — | 1 | `taskiq worker apps.crm_worker.worker:worker_app --workers 2` |
+| idle-worker | — | 1 | `taskiq worker apps.idle_worker.worker:worker_app --workers 2` |
 
-## Сервисы на хосте
+Один образ `ghcr.io/zamb124/agent-lab:latest`, разные `command:` через `values.yaml`.
 
-Все сервисы слушают на `0.0.0.0` (нужно для доступа из K8s Endpoints):
+**Frontend и static:** `templates/30-apps/deployments.yaml` для frontend добавляет `initContainer` `extract-static`, который копирует `/app/static/` в `emptyDir` `shared-static`. Отдельный static-server pod больше не нужен — frontend сам обслуживает статику из своего же образа.
 
-| Сервис | Порт | Команда |
+**CRM vendor (three.js, 3d-force-graph):** в Docker-образ запекается `node_modules/three/build` и `node_modules/3d-force-graph/dist` (стадия `js-vendor`), CRM Deployment отдаёт `/crm/ui/vendor/...` напрямую из `/app/node_modules/...`.
+
+## БД и миграции
+
+`postgres` — StatefulSet с PVC 50Gi на master-ноде (`storageClassName: microk8s-hostpath`). Все 7 сервисных БД создаются через `ConfigMap postgres-init-scripts` (mounted в `/docker-entrypoint-initdb.d/01-init-databases.sql` при первом старте). Содержимое — `[migrations/postgres/init.sql](migrations/postgres/init.sql)`.
+
+`redis` — StatefulSet с PVC 10Gi на master-ноде, AOF включён.
+
+Alembic миграции запускаются как **Helm hook Job** `migrations` (`post-install`, `post-upgrade`). InitContainer `wait-postgres` ждёт `pg_isready`, потом основной контейнер выполняет `python -m scripts.db_migrate upgrade`. Делать что-либо вручную через psql на новом стенде не нужно.
+
+## Ingress
+
+`ingress-nginx` (MicroK8s `enable ingress`) + `cert-manager` (Let's Encrypt HTTP-01).
+
+| Хост | TLS Secret | Маршруты |
 |---|---|---|
-| flows | 8001 | `python -m apps.flows.main` |
-| frontend | 8002 | `python -m apps.frontend.main` |
-| crm | 8003 | `python -m apps.crm.main` |
+| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `/flows /crm /rag /sync /documents /scheduler /voice /litserve /` |
+| `livekit.humanitec.ru` | `livekit-tls` | `/` → livekit:7880 |
+| `onlyoffice.humanitec.ru` | `onlyoffice-tls` | `/` → onlyoffice:80 |
+| `grafana.humanitec.ru` | `grafana-tls` | `/` → grafana:3000 |
 
-**CRM vendor (three.js, 3d-force-graph):** HTML тянет `/crm/ui/vendor/...`; FastAPI монтирует файлы из `node_modules` относительно корня репозитория (`apps/crm/main.py`). В Docker-образах **`crm`** и **`full`** стадия **`js-vendor`** (`npm ci`) копирует `node_modules/three/build` и `node_modules/3d-force-graph/dist` в `/app/node_modules/...`, иначе запросы к vendor попадали бы в SPA и отдавали `index.html` вместо JS.
-| rag | 8004 | `python -m apps.rag.main` |
-| sync | 8005 | `python -m apps.sync.main` |
-| voice | 8015 | `python -m apps.voice.main` |
+`platform` Ingress (`templates/80-ingress/platform-ingress.yaml`) генерирует одинаковые правила для apex и wildcard через `range`. Аннотации: `proxy-body-size: 100m`, `proxy-read-timeout: 300s` (нужны для `/documents` и WebSocket sync).
 
-Один Docker-образ `ghcr.io/zamb124/agent-lab:latest` — разные `command:` в compose.
+`ClusterIssuer letsencrypt-prod` создаётся чартом (`templates/80-ingress/cluster-issuer.yaml`); email — `values.certManager.email`. cert-manager должен быть установлен на кластере (`microk8s enable cert-manager`).
+
+**Wildcard TLS:** при использовании HTTP-01 доступен только apex. Для `*.humanitec.ru` нужен DNS-01 — отдельный webhook (например, `cert-manager-webhook-regru`) и `Certificate` объект, монтируемый в тот же Secret `platform-tls`. Конфигурация webhook'а — вне Helm-чарта (одноразовая ручная настройка, см. `[deploy/cluster-setup.md](deploy/cluster-setup.md)`).
+
+`AuthMiddleware` каждого сервиса читает `Host` хедер и резолвит `company_id` для поддоменов.
+
+`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known/apple-app-site-association`, `/.well-known/assetlinks.json` отдаются frontend сервисом через `register_platform_pwa_routes` (`core/frontend/pwa/`).
 
 ## DNS
 
@@ -90,107 +120,103 @@ LiveKit требует отдельный поддомен с собственн
 - `@` → `84.38.184.105`
 - `*` → `84.38.184.105`
 
+## GPU-нода (provider_litserve)
+
+LitServe — единственный под на GPU-ноде через `nodeSelector: accelerator=nvidia-gpu` + `tolerations: nvidia.com/gpu`. Manifest: `[deploy/helm/agent-lab/templates/50-gpu/litserve.yaml](deploy/helm/agent-lab/templates/50-gpu/litserve.yaml)`.
+
+- Образ: тот же `ghcr.io/zamb124/agent-lab:latest`, команда `python -m apps.provider_litserve.main`.
+- ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=BAAI/bge-reranker-v2-gemma`, `EMBEDDING_MODEL_ID=BAAI/bge-m3`, `HF_TOKEN` из `platform-secrets`.
+- Ресурсы: `nvidia.com/gpu: 1` (request + limit).
+- Кэш моделей: PVC `litserve-model-cache` (50Gi по умолчанию) на GPU-ноде.
+- Доступ к Postgres/Redis: через ClusterIP `postgres:5432` / `redis:6379` поверх кластерной сети (никаких `ufw allow`).
+- Доступ от других сервисов: через ClusterIP `provider-litserve.platform.svc.cluster.local:8014` (env `PROVIDER_LITSERVE__API__BASE_URL=http://provider-litserve:8014/v1` — задано в `agentlab.appEnv`).
+- Внешний URL: `https://humanitec.ru/litserve/*` через `platform` Ingress.
+
+NVIDIA driver и `nvidia-container-toolkit` ставятся на GPU-ноду один раз при настройке (`microk8s enable gpu` или скрипт из `[deploy/cluster-setup.md](deploy/cluster-setup.md)`). На уровне Pod больше ничего настраивать не нужно — Device Plugin сам пробрасывает `/dev/nvidia*` при наличии request `nvidia.com/gpu`.
+
+### Smoke-тест GPU после деплоя
+
+```bash
+kubectl get pods -n platform -o wide | grep provider-litserve   # должен быть на GPU-ноде
+kubectl exec -n platform deployment/provider-litserve -- nvidia-smi
+curl -fsS https://humanitec.ru/litserve/health
+```
+
+Загрузка документа в RAG и семантический поиск — без ошибок. CRM rerank — без ошибок HTTP к `/rerank`.
+
 ## Деплой
 
-Локально: снимок нагрузки на сервере — переменные **`AGENT_LAB_SSH_USER`**, **`AGENT_LAB_SSH_HOST`**, **`AGENT_LAB_REMOTE_DIR`** в `Makefile` (дефолт под этот сервер). Имена с префиксом `AGENT_LAB_`, чтобы глобальный `export SSH_HOST=...` в шелле не перебивал дефолт Make.
+CI: **`[.github/workflows/deploy.yml](.github/workflows/deploy.yml)`** — `workflow_dispatch` или push в `main`:
 
+1. `build` job: `docker build --target full` → push в GHCR (`ghcr.io/zamb124/agent-lab:<sha>` + `:latest`).
+2. `deploy` job:
+   - `kubectl create secret generic platform-secrets ... --dry-run -o yaml | kubectl apply -f -` — синхронизация секретов из GitHub Secrets.
+   - `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace --values values.yaml --values values-prod.yaml --set image.tag=<sha> --wait --timeout 15m`.
+3. Verification: `kubectl get pods -n platform`.
+
+Никаких SSH, SCP, `docker compose` в CI. Доступ к кластеру — через секрет `KUBECONFIG_B64` (base64 от `~/.kube/config` master-ноды).
+
+Локально:
 ```bash
-make stats
-# другой хост/пользователь/каталог:
-# make stats AGENT_LAB_SSH_HOST=1.2.3.4 AGENT_LAB_SSH_USER=deploy AGENT_LAB_REMOTE_DIR=/opt/agent-lab
+make k8s-lint            # helm lint
+make k8s-template        # рендер всех манифестов
+make k8s-deploy IMAGE_TAG=<sha>  # helm upgrade --install
+make k8s-status          # nodes + pods + svc + ingress + pvc
+make k8s-logs SVC=frontend
+make k8s-rollback        # helm rollback на предыдущую ревизию
+make k8s-uninstall       # helm uninstall (PVC сохраняются)
 ```
 
-Триггер: `workflow_dispatch` → `.github/workflows/deploy.yml`:
-1. Сборка образа (target `full`) → push в GHCR (`IMAGE` + тег из metadata-action)
-2. SCP на `/opt/agent-lab/`: `docker-compose-prod.yaml`, `conf.json`, **`migrations/postgres/init.sql`** (нужен bind-mount у сервиса `postgres`)
-3. SSH: `docker compose pull` → `postgres`+`redis` → одноразовый контейнер **`migrations`** (`python -m scripts.db_migrate upgrade`) → остальные сервисы
-
-`x-common-env` в `docker-compose-prod.yaml` задаёт `DATABASE__SHARED_URL`, `DATABASE__FLOWS_URL`, …, **`DATABASE__TRACING_URL`** (`…/platform_tracing`) на хост `postgres` — они **перекрывают** URL из `conf.json` внутри контейнеров. Репозиторный `conf.json` с `localhost` на сервере не мешает, пока заданы переменные окружения compose. БД `platform_tracing` создаётся из смонтированного **`migrations/postgres/init.sql`** при первом старте тома; на живом кластере без этой БД — **`bootstrap_idempotent.sql`** (см. **`migrations.mdc`**, **`tracing.mdc`**).
-
-**Версия деплоя и кэш UI:** при деплое через GitHub Actions в SSH-сессию передаётся `DEPLOYMENT_VERSION=${{ github.sha }}` → в compose `SERVER__DEPLOYMENT_VERSION` → заголовок `X-Deployment-Version` на ответах HTTP-сервисов (`DeploymentHeadersMiddleware` в `create_service_app`). Локально без переменной можно задать `SERVER__DEPLOYMENT_VERSION` в `.env` или опустить. Ingress в `deploy/ingress.sh` для `humanitec-ingress` сбрасывает `Cache-Control` с бэкенда и выставляет `no-cache, must-revalidate` для клиента — после переконфигурации ingress перезапустить `bash deploy/ingress.sh`.
-
-Секреты — в GitHub Secrets (environment `production`).
-
-**Web Push (VAPID):** GitHub Secrets с теми же именами, что и env: `PUSH__ENABLED`, `PUSH__VAPID_PUBLIC_KEY`, `PUSH__VAPID_PRIVATE_KEY`, `PUSH__VAPID_EMAIL` (последний опционально — в workflow fallback `ops@humanitec.ru`). Workflow передаёт их в SSH-сессию, `docker-compose-prod.yaml` прокидывает в `x-common-env` и перекрывает `conf.json`. После добавления секретов — redeploy.
-
-**APNs (нативный iOS):** `team_id`, `key_id`, `bundle_id`, `use_sandbox` — в **`conf.json`** на сервере (`push.*` и/или `auth.providers.apple` для team/key при переиспользовании ключа Sign in with Apple). В compose опционально **`PUSH__APNS_PRIVATE_KEY`**, если нужен отдельный `.p8` только для push; иначе достаточно **`AUTH_APPLE_PRIVATE_KEY`** (тот же PEM, если у ключа в кабинете Apple включены и Sign in with Apple, и APNs). Секрет `PUSH__APNS_PRIVATE_KEY` в GitHub — только при отдельном ключе для пушей.
-
-**AmoCRM (OAuth интеграция CRM):** в GitHub Secrets **`AUTH_AMOCRM_CLIENT_ID`**, **`AUTH_AMOCRM_CLIENT_SECRET`**; в `docker-compose-prod.yaml` они мапятся в **`AUTH__PROVIDERS__AMOCRM__*`** (как Yandex/Google). `auth_url` / `token_url` / `enabled` — в **`conf.json`**, попадающем на сервер из репозитория при деплое; для прода включите **`auth.providers.amocrm.enabled`**, если в шаблоне выключено.
-
-**Существующий volume Postgres** со старой схемой (одна БД вместо `platform_*`) требует ручной миграции данных или нового volume — не автоматизировано в workflow.
-
-### Postgres `unhealthy` при деплое
-
-Healthcheck в `docker-compose-prod.yaml` использует `pg_isready` с `platform_user`, с запасным вариантом `-U postgres` для volume, где суперпользователь ещё только `postgres`. Первый старт с `init.sql` (несколько БД + `CREATE EXTENSION vector`) на медленном диске может идти несколько минут — `start_period: 300s`, `timeout: 30s` на команду проверки, чтобы не обрывать `pg_isready` раньше времени.
-
-Если контейнер всё равно unhealthy: `docker logs agentlab_postgres`, проверить OOM, права на volume, ошибки init. После смены `POSTGRES_PASSWORD` старый volume продолжит старый пароль в данных — приложение может не подключаться, но локальный `pg_isready` часто всё ещё проходит.
-
-## Управление Ingress
-
-Для переконфигурации ingress запускать локально:
-```bash
-bash deploy/ingress.sh
-```
-
-Читает `conf.local.json` → `ingress.services` и `selectel.ip/login`. Для **`/documents`** — элемент **`office`** (см. `deploy/ingress.sh`). **Wildcard:** скрипт не затирает **`ClusterIssuer letsencrypt`**, если он уже есть; в **`humanitec-ingress`** добавляется **`tls`** для **`*.домен`**, если найден секрет (паттерны `*-wildcard-tls` или **`ingress.wildcard_tls_secret`**). Иначе повторный `apply` оставлял только apex TLS и ломал HTTPS на поддоменах.
-
-Прямые команды на сервере:
-```bash
-microk8s kubectl get ingress
-microk8s kubectl get certificate
-microk8s kubectl describe certificate humanitec-ru-tls
-```
+Полный список секретов и переменных, используемых чартом, — в `[deploy/README.md](deploy/README.md)`.
 
 ## Observability
 
-Стек наблюдаемости — Docker Compose (как и все сервисы платформы). Конфиги в `deploy/observability/`.
+Стек observability — часть того же Helm-чарта (templates/70-observability):
 
-| Компонент | Контейнер | Порт | Роль |
+| Компонент | Тип ресурса | PVC | Роль |
 |---|---|---|---|
-| **Grafana** | `agentlab_grafana` | 3000 | UI, дашборды, Explore. `https://grafana.humanitec.ru` |
-| **Loki** | `agentlab_loki` | 3100 | Хранилище логов (14 дней) |
-| **Tempo** | `agentlab_tempo` | 3200 | Хранилище трейсов (7 дней) |
-| **Alloy** | `agentlab_alloy` | 12345 | Сбор Docker логов + OTLP relay |
+| **Loki** | StatefulSet (master) | 100Gi | Хранилище логов (14 дней, см. `files/loki.yaml`) |
+| **Tempo** | StatefulSet (master) | 50Gi | Хранилище трейсов (см. `files/tempo.yaml`) |
+| **Grafana** | Deployment (master) + PVC 10Gi | 10Gi | UI, дашборды, Explore. `https://grafana.humanitec.ru` |
+| **Alloy** | DaemonSet (все ноды) | — | Сбор pod-логов через kubelet API + OTLP relay в Tempo |
 
-**Сбор логов — два пути:**
+**Сбор логов:** Alloy DaemonSet (`templates/70-observability/alloy-daemonset.yaml`) с `ServiceAccount` + `ClusterRole` на чтение pods/namespaces/nodes. Конфиг (`files/alloy.config`) использует `discovery.kubernetes role=pod`, фильтрует ноду `spec.nodeName=$HOSTNAME`, размечает поток метками `namespace`, `pod`, `container`, `service` (из лейбла `app=<name>` пода), `node`. JSON-парсер вытаскивает `level` как Loki label, остальные поля (trace_id, request_id, user_id, …) остаются в теле — достаются `| json | field = "value"`.
 
-| Среда | Путь | Как работает |
-|---|---|---|
-| `prod`/`test` | Docker stdout → Alloy → Loki | Alloy (`discovery.docker`) читает stdout контейнеров `agentlab_*`, извлекает label `service` из имени контейнера, `level` из JSON. |
-| `dev` (хост, `make app`) | LokiHandler → Loki напрямую | `core/logging/loki_handler.py` отправляет JSON-батчи в `http://localhost:3100/loki/api/v1/push`. Активируется при `logging.loki_url` + `logging.loki_enabled: true` в `conf.json`. |
+**Сбор трейсов:** OTLP gRPC `alloy:4317` (env `OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317` в `agentlab.appEnv`). Alloy форвардит в Tempo через `tempo.platform.svc.cluster.local:4317`.
 
-**Label `service`** в Loki = имя сервиса (для Docker: из имени контейнера; для хоста: из `service_name` аргумента `setup_logging`). Дашборды и алерты фильтруют по `{service=~"..."}`.
+**Авторизация Grafana:** `auth.proxy` — заголовок `X-Auth-User` от nginx. Для production включается через `frontend /api/auth/grafana-check` + JWT cookie + проверка `company_id == "system"` на уровне отдельного auth-snippet в Ingress (внешняя настройка, не в чарте).
 
-**Авторизация Grafana:** nginx `auth_request` → `frontend /api/auth/grafana-check` → JWT cookie → только `company_id == "system"`. Grafana в режиме `auth.proxy`.
-
-**Корреляция:** trace_id в логах (Loki) → Derived Field → Tempo waterfall. Tempo → Trace-to-Logs → Loki.
+**Корреляция:** trace_id в логах (Loki) → Derived Field → Tempo waterfall.
 
 **Поиск логов:** Grafana → Explore → Loki:
 ```
 {service="crm"} | json | level="ERROR"
 {service="flows"} | json | trace_id = "abc123..."
+{namespace="platform", service=~"flows|crm"} | json | request_id="..."
 ```
 
 ### Дашборды
 
-Дашборды provisioned как код (JSON в `deploy/observability/dashboards/`). Обновления применяются автоматически при рестарте Grafana или через `updateIntervalSeconds: 30`.
+Дашборды provisioned как код (JSON в `[deploy/helm/agent-lab/files/dashboards/](deploy/helm/agent-lab/files/dashboards/)`, ConfigMap `grafana-dashboards`).
 
 | Дашборд | UID | Источник | Описание |
 |---|---|---|---|
-| **Platform Overview** | `platform-overview` | Loki | Service health grid, total RPS, error rate %, P99 latency, log volume, active traces |
-| **HTTP Requests** | `http-requests` | Loki | RPS by service/route, status distribution, P50/P95/P99 latency, 4xx/5xx trends, top slow routes |
-| **Errors & Exceptions** | `errors-exceptions` | Loki | Error rate by service, exception types, top messages, contract violations, recent ERROR logs |
-| **TaskIQ Workers** | `taskiq-workers` | Loki | Tasks/min, failure rate, avg duration, retries, top failing tasks |
-| **LLM Usage** | `llm-usage` | Loki | Input/output tokens, requests by provider/model, P99 latency, error rate, cost estimate |
-| **Traces** | `traces-explorer` | Tempo | Trace search by trace_id, slow traces table, span duration histogram |
-| **Log Volume** | `log-volume` | Loki | Logs/min by service/level, volume trends, top loggers |
-| **WebSocket / Realtime** | `websocket` | Loki | WS connects/disconnects, ws_command/min по типам, recent WS logs |
-| **Database** | `database` | Loki | SQLAlchemy/DB ошибки, HTTP P95 как proxy DB-нагрузки, slow HTTP (>1000ms), recent error logs |
-| **Security** | `security` | Loki | HTTP 401/4xx rate, top 4xx routes, auth middleware warnings, recent auth events |
+| **Platform Overview** | `platform-overview` | Loki | Service health, RPS, error rate, P99 latency |
+| **HTTP Requests** | `http-requests` | Loki | RPS, status, P50/P95/P99, top slow routes |
+| **Errors & Exceptions** | `errors-exceptions` | Loki | Error rate, exception types, contract violations |
+| **TaskIQ Workers** | `taskiq-workers` | Loki | Tasks/min, failure rate, retries |
+| **LLM Usage** | `llm-usage` | Loki | Tokens, requests, latency, cost estimate |
+| **Traces** | `traces-explorer` | Tempo | Trace search, slow traces table |
+| **Log Volume** | `log-volume` | Loki | Logs/min by service/level |
+| **WebSocket / Realtime** | `websocket` | Loki | WS connects, ws_command/min |
+| **Database** | `database` | Loki | DB ошибки, slow HTTP как proxy DB-нагрузки |
+| **Security** | `security` | Loki | HTTP 401/4xx, auth events |
+
+Добавление нового дашборда: положить JSON в `files/dashboards/`, `make k8s-deploy` подхватит автоматически (новая ревизия ConfigMap → Grafana sidecar reload).
 
 ### Alerting
 
-Alert rules provisioned через YAML в `deploy/observability/grafana-alerts/`. Unified alerting на базе LogQL (Loki).
+Alert rules — `[deploy/helm/agent-lab/files/grafana-alerts/](deploy/helm/agent-lab/files/grafana-alerts/)` (ConfigMap `grafana-alerts`). Unified alerting на базе LogQL.
 
 | Алерт | Условие | Severity |
 |---|---|---|
@@ -203,14 +229,31 @@ Alert rules provisioned через YAML в `deploy/observability/grafana-alerts/
 | **Slow HTTP P99** | P99 latency > 5000 мс за 5 мин | warning |
 | **High DB Latency** | P95 DB latency > 1000 мс за 5 мин | warning |
 
-Contact points и notification policies — placeholder (`ops@humanitec.ru`). Для production настройте SMTP или webhook через Grafana UI или CI-секреты.
+Contact points (email/webhook) — placeholder; для production настройте через Grafana UI или дополните `files/grafana-alerts/contact-points.yaml`.
 
-### Как добавить новый дашборд
+## Локальная разработка
 
-1. Создать JSON в `deploy/observability/dashboards/`
-2. Указать уникальный `uid` и `title`
-3. Рестарт Grafana подхватит автоматически (или подождать 30 сек)
+Никакого Kubernetes на dev-машине не нужно. Postgres/Redis/MinIO — `[docker-compose-dev.yaml](docker-compose-dev.yaml)`:
+
+```bash
+make dev-up          # postgres :54321, redis :63791, MinIO :19001/19011
+make app             # все Python сервисы локально через scripts/run.py
+```
+
+Тесты — `[docker-compose-test.yaml](docker-compose-test.yaml)` (`make test`, `make test-up/down`).
+
+## Что не покрывает Helm-чарт (одноразово вручную)
+
+- Установка MicroK8s на нодах (`snap install microk8s`).
+- `microk8s enable dns ingress cert-manager hostpath-storage gpu`.
+- `microk8s add-node` на master, `microk8s join` на GPU-ноде.
+- `kubectl label node <gpu-node> accelerator=nvidia-gpu`.
+- DNS-01 webhook для wildcard `*.humanitec.ru` (cert-manager-webhook-regru или аналог).
+- A-записи у регистратора домена.
+- Создание секрета `KUBECONFIG_B64` в GitHub Settings.
+
+Все эти шаги документированы в `[deploy/cluster-setup.md](deploy/cluster-setup.md)`.
 
 ## Параллельный сервис
 
-На сервере также крутится отдельный проект `ytai.tech` (порт 8000, ingress `sync-ingress`) — не трогать.
+На master-ноде также крутится отдельный проект `ytai.tech` (порт 8000, отдельный ingress) — не трогать, он живёт вне `platform` namespace.
