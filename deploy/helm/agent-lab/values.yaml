@@ -309,5 +309,43 @@ certManager:
   enabled: true
   email: ops@humanitec.ru
 
-# Имя секрета с переменными окружения платформы (создаётся CI через kubectl create secret).
+# Secret platform-secrets: манифест в templates/01-platform-secrets.yaml при platformSecrets.create=true.
+# Значения задаются только через helm (--set-string), например из deploy/scripts/helm_platform_secrets_lib.sh.
+platformSecrets:
+  create: false
+  postgresPassword: ""
+  authJwtSecret: ""
+  hfToken: ""
+  authYandexClientId: ""
+  authYandexClientSecret: ""
+  authGoogleClientId: ""
+  authGoogleClientSecret: ""
+  authGithubClientId: ""
+  authGithubClientSecret: ""
+  authAmocrmClientId: ""
+  authAmocrmClientSecret: ""
+  authApplePrivateKey: ""
+  authDemoPassword: ""
+  pushVapidPublicKey: ""
+  pushVapidPrivateKey: ""
+  pushApnsPrivateKey: ""
+  pushFcmCredentialsJson: ""
+  pushFcmProjectId: ""
+  selectelAccessKey: ""
+  selectelSecretKey: ""
+  livekitApiKey: ""
+  livekitApiSecret: ""
+  turnSecret: ""
+  onlyofficeJwtSecret: ""
+  grafanaAdminPassword: ""
+  llmBothubApiKey: ""
+  llmOpenrouterApiKey: ""
+  sttCloudRuApiKey: ""
+  ragEmbeddingApiKey: ""
+  yoomoneyAccountNumber: ""
+  yoomoneyNotificationSecret: ""
+  yoomoneyClientId: ""
+  yoomoneyClientSecret: ""
+  yoomoneyAccessToken: ""
+
 platformSecretName: platform-secrets

@@ -1392,10 +1392,21 @@ class TestSyncPendingTransactions:
 
         await storage.delete(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
 
-    async def test_sync_no_token_raises(self, frontend_container, unique_id):
-        """sync_pending_transactions без токена бросает ValueError."""
+    async def test_sync_no_token_raises(
+        self, frontend_container, unique_id, monkeypatch
+    ):
+        """sync_pending_transactions без токена бросает ValueError до HTTP."""
+
         storage = frontend_container.company_repository._storage
         await storage.delete(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
+
+        async def _no_token(_storage):
+            return None
+
+        monkeypatch.setattr(
+            "core.clients.payment.yoomoney_provider.load_access_token",
+            _no_token,
+        )
 
         provider = _make_yoomoney_provider()
 

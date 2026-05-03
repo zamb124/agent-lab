@@ -143,8 +143,12 @@ jobs:
           echo "image_tag=$TAG" >> $GITHUB_OUTPUT
           echo "Deploying image tag: $TAG"
 
-      - name: Sync platform-secrets
+      - name: Helm lint (sanity)
+        run: helm lint "$HELM_CHART"
+
+      - name: Helm upgrade --install
         env:
+          LITSERVE_NODE: ${{ inputs.litserve_node }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -194,53 +198,6 @@ jobs:
             exit 1
           fi
 
-          kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl create secret generic platform-secrets -n "$K8S_NAMESPACE" \
-            --from-literal=postgres-password="$POSTGRES_PASSWORD" \
-            --from-literal=auth-jwt-secret="$AUTH_JWT_SECRET" \
-            --from-literal=hf-token="${HF_TOKEN:-}" \
-            --from-literal=auth-yandex-client-id="${AUTH_YANDEX_CLIENT_ID:-}" \
-            --from-literal=auth-yandex-client-secret="${AUTH_YANDEX_CLIENT_SECRET:-}" \
-            --from-literal=auth-google-client-id="${AUTH_GOOGLE_CLIENT_ID:-}" \
-            --from-literal=auth-google-client-secret="${AUTH_GOOGLE_CLIENT_SECRET:-}" \
-            --from-literal=auth-github-client-id="${AUTH_GITHUB_CLIENT_ID:-}" \
-            --from-literal=auth-github-client-secret="${AUTH_GITHUB_CLIENT_SECRET:-}" \
-            --from-literal=auth-amocrm-client-id="${AUTH_AMOCRM_CLIENT_ID:-}" \
-            --from-literal=auth-amocrm-client-secret="${AUTH_AMOCRM_CLIENT_SECRET:-}" \
-            --from-literal=auth-apple-private-key="${AUTH_APPLE_PRIVATE_KEY:-}" \
-            --from-literal=auth-demo-password="${AUTH_DEMO_PASSWORD:-}" \
-            --from-literal=push-vapid-public-key="${PUSH_VAPID_PUBLIC_KEY:-}" \
-            --from-literal=push-vapid-private-key="${PUSH_VAPID_PRIVATE_KEY:-}" \
-            --from-literal=push-apns-private-key="${PUSH_APNS_PRIVATE_KEY:-}" \
-            --from-literal=push-fcm-credentials-json="${PUSH_FCM_CREDENTIALS_JSON:-}" \
-            --from-literal=push-fcm-project-id="${PUSH_FCM_PROJECT_ID:-}" \
-            --from-literal=selectel-access-key="$SELECTEL_ACCESS_KEY" \
-            --from-literal=selectel-secret-key="$SELECTEL_SECRET_KEY" \
-            --from-literal=livekit-api-key="$LIVEKIT_API_KEY" \
-            --from-literal=livekit-api-secret="$LIVEKIT_API_SECRET" \
-            --from-literal=turn-secret="$TURN_SECRET" \
-            --from-literal=onlyoffice-jwt-secret="$ONLYOFFICE_JWT_SECRET" \
-            --from-literal=grafana-admin-password="$GRAFANA_ADMIN_PASSWORD" \
-            --from-literal=llm-bothub-api-key="${LLM_BOTHUB_API_KEY:-}" \
-            --from-literal=llm-openrouter-api-key="${LLM_OPENROUTER_API_KEY:-}" \
-            --from-literal=stt-cloud-ru-api-key="${STT_CLOUD_RU_API_KEY:-}" \
-            --from-literal=rag-embedding-api-key="${RAG_EMBEDDING_API_KEY:-${LLM_OPENROUTER_API_KEY:-}}" \
-            --from-literal=yoomoney-account-number="${YOOMONEY_ACCOUNT_NUMBER:-}" \
-            --from-literal=yoomoney-notification-secret="${YOOMONEY_NOTIFICATION_SECRET:-}" \
-            --from-literal=yoomoney-client-id="${YOOMONEY_CLIENT_ID:-}" \
-            --from-literal=yoomoney-client-secret="${YOOMONEY_CLIENT_SECRET:-}" \
-            --from-literal=yoomoney-access-token="${YOOMONEY_ACCESS_TOKEN:-}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Helm lint (sanity)
-        run: helm lint "$HELM_CHART"
-
-      - name: Helm upgrade --install
-        env:
-          LITSERVE_NODE: ${{ inputs.litserve_node }}
-        run: |
-          set -euo pipefail
           case "$LITSERVE_NODE" in
             gpu) LITSERVE_SCHEDULE_GPU=true ;;
             cpu) LITSERVE_SCHEDULE_GPU=false ;;
@@ -250,6 +207,10 @@ jobs:
               ;;
           esac
           echo "LitServe: litserve_node=$LITSERVE_NODE -> scheduleOnGpuNode=$LITSERVE_SCHEDULE_GPU"
+
+          source deploy/scripts/helm_platform_secrets_lib.sh
+          helm_platform_secrets_fill_flags
+
           helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
             --namespace "$K8S_NAMESPACE" \
             --create-namespace \
@@ -257,6 +218,7 @@ jobs:
             --values "$HELM_CHART/values-prod.yaml" \
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
             --set litserve.scheduleOnGpuNode="$LITSERVE_SCHEDULE_GPU" \
+            "${HELM_PLATFORM_SECRETS_FLAGS[@]}" \
             --wait --timeout 15m
 
       - name: Verify rollout (cluster-health.sh)

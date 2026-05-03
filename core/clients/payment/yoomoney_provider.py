@@ -126,7 +126,13 @@ class YooMoneyProvider(BasePaymentProvider):
                 "YooMoney access_token не найден или истёк. "
                 "Выполните OAuth-авторизацию через /api/billing/yoomoney/authorize"
             )
-        self._access_token = token_data.token
+        token = (token_data.token or "").strip()
+        if not token:
+            raise ValueError(
+                "YooMoney access_token не найден или истёк. "
+                "Выполните OAuth-авторизацию через /api/billing/yoomoney/authorize"
+            )
+        self._access_token = token
         return self._access_token
 
     async def create_payment(self, request: PaymentRequest) -> PaymentResponse:

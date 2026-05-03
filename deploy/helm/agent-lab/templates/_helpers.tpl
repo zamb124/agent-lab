@@ -7,8 +7,8 @@
 
 {{/*
 Платформенные ENV для всех app/worker подов: URL баз, секреты, OAuth, LLM, S3, push, OnlyOffice, OTLP.
-Все секреты берутся из Secret platformSecretName (создаётся CI через kubectl create secret).
-URL баз — через ClusterIP postgres / redis в namespace platform.
+Все секреты берутся из Secret platformSecretName (Helm-манифест при platformSecrets.create=true).
+URL баз — через ClusterIP postgres / redis в namespace релиза.
 */}}
 {{- define "agentlab.appEnv" -}}
 - name: POSTGRES_PASSWORD

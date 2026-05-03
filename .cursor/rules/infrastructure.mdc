@@ -32,7 +32,7 @@ deploy/helm/agent-lab/
   values.yaml          # дефолты
   values-prod.yaml     # production overrides
   templates/
-    00-namespace.yaml
+    01-platform-secrets.yaml   # Secret platform-secrets при platformSecrets.create=true (+ --set-string из CI/lib.sh)
     02-configmap-app-conf.yaml
     10-postgres/        # StatefulSet + Service + ConfigMap init
     11-redis/           # StatefulSet + Service
@@ -55,9 +55,9 @@ deploy/helm/agent-lab/
 - `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice` — внешние компоненты;
 - `observability.{loki,tempo,grafana,alloy}` — стек;
 - `ingress.*` — apex/wildcard, hostname'ы для livekit/onlyoffice/grafana, cert-manager issuer;
-- `platformSecretName: platform-secrets` — имя Secret с переменными окружения.
+- `platformSecrets` + `platformSecretName: platform-secrets` — Helm создаёт Secret из `templates/01-platform-secrets.yaml`, когда `platformSecrets.create=true` (значения через `--set-string`, см. `[deploy/scripts/helm_platform_secrets_lib.sh](deploy/scripts/helm_platform_secrets_lib.sh)` и CI). Namespace релиза создаётся только `helm upgrade --install ... --create-namespace` (отдельного манифеста Namespace в чарте нет).
 
-`templates/_helpers.tpl::agentlab.appEnv` — общий блок env для всех приложений и воркеров: URL баз через ClusterIP `postgres`/`redis`, OAuth, LLM, S3, push, OnlyOffice, OTLP. Все секреты — `valueFrom.secretKeyRef` на `platform-secrets`.
+`templates/_helpers.tpl::agentlab.appEnv` — общий блок env для всех приложений и воркеров: URL баз через ClusterIP `postgres`/`redis`, OAuth, LLM, S3, push, OnlyOffice, OTLP. Все секреты — `valueFrom.secretKeyRef` на Secret с именем `platformSecretName`.
 
 ## Сервисы платформы (Deployments)
 
@@ -149,9 +149,7 @@ curl -fsS https://humanitec.ru/litserve/health
 CI: **`[.github/workflows/deploy.yml](.github/workflows/deploy.yml)`** — `workflow_dispatch` или push в `main`:
 
 1. `build` job: `docker build --target full` → push в GHCR (`ghcr.io/zamb124/agent-lab:<sha>` + `:latest`).
-2. `deploy` job:
-   - `kubectl create secret generic platform-secrets ... --dry-run -o yaml | kubectl apply -f -` — синхронизация секретов из GitHub Secrets.
-   - `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace --values values.yaml --values values-prod.yaml --set image.tag=<sha> --wait --timeout 15m`.
+2. `deploy` job: один проход `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace ...`; секреты из GitHub Actions передаются в чарт через аргументы из `[deploy/scripts/helm_platform_secrets_lib.sh](deploy/scripts/helm_platform_secrets_lib.sh)` (`platformSecrets.create=true` и `--set-string platformSecrets.*`).
 3. Verification: `kubectl get pods -n platform`.
 
 Никаких SSH, SCP, `docker compose` в CI. Доступ к кластеру — через секрет `KUBECONFIG_B64` (base64 от `~/.kube/config` master-ноды).
@@ -160,7 +158,7 @@ CI: **`[.github/workflows/deploy.yml](.github/workflows/deploy.yml)`** — `work
 ```bash
 make k8s-lint            # helm lint
 make k8s-template        # рендер всех манифестов
-make k8s-deploy IMAGE_TAG=<sha>  # helm upgrade --install
+make k8s-deploy IMAGE_TAG=<sha>  # helm upgrade --install; при заданных POSTGRES_PASSWORD и др. — Secret из чарта в том же проходе
 make k8s-status          # nodes + pods + svc + ingress + pvc
 make k8s-logs SVC=frontend
 make k8s-rollback        # helm rollback на предыдущую ревизию

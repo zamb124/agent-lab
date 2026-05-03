@@ -152,14 +152,25 @@ k8s-template:
 		--set image.tag=$(IMAGE_TAG)
 
 # Применить чарт в текущий kubeconfig-кластер. Атомарно, ждёт rollout.
+# Требует bash (массив аргументов из deploy/scripts/helm_platform_secrets_lib.sh).
 k8s-deploy:
+	@bash -ec '\
+	set -euo pipefail; \
+	. deploy/scripts/helm_platform_secrets_lib.sh; \
+	EXTRA=(); \
+	if [ -n "$${POSTGRES_PASSWORD:-}" ]; then \
+	  helm_platform_secrets_fill_flags; \
+	  EXTRA=("$${HELM_PLATFORM_SECRETS_FLAGS[@]}"); \
+	fi; \
 	helm upgrade --install $(K8S_RELEASE) $(HELM_CHART) \
-		--namespace $(K8S_NAMESPACE) \
-		--create-namespace \
-		--values $(HELM_VALUES) \
-		--values $(HELM_VALUES_PROD) \
-		--set image.tag=$(IMAGE_TAG) \
-		--wait --timeout 15m
+	  --namespace $(K8S_NAMESPACE) \
+	  --create-namespace \
+	  --values $(HELM_VALUES) \
+	  --values $(HELM_VALUES_PROD) \
+	  --set image.tag=$(IMAGE_TAG) \
+	  "$${EXTRA[@]}" \
+	  --wait --timeout 15m \
+	'
 
 # Снимок состояния кластера: ноды, поды, сервисы, ingress, PVC.
 k8s-status:
@@ -205,50 +216,27 @@ k8s-restore:
 	@if [ -z "$(FILE)" ]; then echo "Usage: make k8s-restore FILE=<path/to/dump.sql.gz>"; exit 1; fi
 	@PLATFORM_NS=$(K8S_NAMESPACE) YES="$${YES:-0}" bash deploy/scripts/restore-postgres.sh $(FILE)
 
-# Создать/обновить Secret platform-secrets из переменных окружения.
+# Обновить Secret platform-secrets через Helm (релиз уже установлен; те же переменные ENV, что для деплоя).
 # Запуск: source .env.k8s.secrets && make k8s-secrets-sync
 k8s-secrets-sync:
 	@if [ -z "$(POSTGRES_PASSWORD)" ] || [ -z "$(AUTH_JWT_SECRET)" ]; then \
 		echo "Заполните переменные окружения (POSTGRES_PASSWORD, AUTH_JWT_SECRET, ...). См. deploy/README.md"; \
 		exit 1; \
 	fi
-	kubectl create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	kubectl create secret generic platform-secrets -n $(K8S_NAMESPACE) \
-		--from-literal=postgres-password="$(POSTGRES_PASSWORD)" \
-		--from-literal=auth-jwt-secret="$(AUTH_JWT_SECRET)" \
-		--from-literal=hf-token="$${HF_TOKEN:-}" \
-		--from-literal=auth-yandex-client-id="$${AUTH_YANDEX_CLIENT_ID:-}" \
-		--from-literal=auth-yandex-client-secret="$${AUTH_YANDEX_CLIENT_SECRET:-}" \
-		--from-literal=auth-google-client-id="$${AUTH_GOOGLE_CLIENT_ID:-}" \
-		--from-literal=auth-google-client-secret="$${AUTH_GOOGLE_CLIENT_SECRET:-}" \
-		--from-literal=auth-github-client-id="$${AUTH_GITHUB_CLIENT_ID:-}" \
-		--from-literal=auth-github-client-secret="$${AUTH_GITHUB_CLIENT_SECRET:-}" \
-		--from-literal=auth-amocrm-client-id="$${AUTH_AMOCRM_CLIENT_ID:-}" \
-		--from-literal=auth-amocrm-client-secret="$${AUTH_AMOCRM_CLIENT_SECRET:-}" \
-		--from-literal=auth-apple-private-key="$${AUTH_APPLE_PRIVATE_KEY:-}" \
-		--from-literal=auth-demo-password="$${AUTH_DEMO_PASSWORD:-}" \
-		--from-literal=push-vapid-public-key="$${PUSH_VAPID_PUBLIC_KEY:-}" \
-		--from-literal=push-vapid-private-key="$${PUSH_VAPID_PRIVATE_KEY:-}" \
-		--from-literal=push-apns-private-key="$${PUSH_APNS_PRIVATE_KEY:-}" \
-		--from-literal=push-fcm-credentials-json="$${PUSH_FCM_CREDENTIALS_JSON:-}" \
-		--from-literal=push-fcm-project-id="$${PUSH_FCM_PROJECT_ID:-}" \
-		--from-literal=selectel-access-key="$(SELECTEL_ACCESS_KEY)" \
-		--from-literal=selectel-secret-key="$(SELECTEL_SECRET_KEY)" \
-		--from-literal=livekit-api-key="$(LIVEKIT_API_KEY)" \
-		--from-literal=livekit-api-secret="$(LIVEKIT_API_SECRET)" \
-		--from-literal=turn-secret="$(TURN_SECRET)" \
-		--from-literal=onlyoffice-jwt-secret="$(ONLYOFFICE_JWT_SECRET)" \
-		--from-literal=grafana-admin-password="$(GRAFANA_ADMIN_PASSWORD)" \
-		--from-literal=llm-bothub-api-key="$${LLM_BOTHUB_API_KEY:-}" \
-		--from-literal=llm-openrouter-api-key="$${LLM_OPENROUTER_API_KEY:-}" \
-		--from-literal=stt-cloud-ru-api-key="$${STT_CLOUD_RU_API_KEY:-}" \
-		--from-literal=rag-embedding-api-key="$${RAG_EMBEDDING_API_KEY:-}" \
-		--from-literal=yoomoney-account-number="$${YOOMONEY_ACCOUNT_NUMBER:-}" \
-		--from-literal=yoomoney-notification-secret="$${YOOMONEY_NOTIFICATION_SECRET:-}" \
-		--from-literal=yoomoney-client-id="$${YOOMONEY_CLIENT_ID:-}" \
-		--from-literal=yoomoney-client-secret="$${YOOMONEY_CLIENT_SECRET:-}" \
-		--from-literal=yoomoney-access-token="$${YOOMONEY_ACCESS_TOKEN:-}" \
-		--dry-run=client -o yaml | kubectl apply -f -
+	@if ! kubectl get ns "$(K8S_NAMESPACE)" >/dev/null 2>&1; then \
+		echo "Namespace $(K8S_NAMESPACE) не найден. Сначала: make k8s-deploy (helm создаёт ns через --create-namespace)."; \
+		exit 1; \
+	fi
+	@bash -ec '\
+	set -euo pipefail; \
+	. deploy/scripts/helm_platform_secrets_lib.sh; \
+	helm_platform_secrets_fill_flags; \
+	helm upgrade $(K8S_RELEASE) $(HELM_CHART) \
+	  --namespace $(K8S_NAMESPACE) \
+	  --reuse-values \
+	  "$${HELM_PLATFORM_SECRETS_FLAGS[@]}" \
+	  --wait --timeout 15m \
+	'
 
 # ============================================================================
 # Помощь
@@ -301,7 +289,7 @@ help:
 	@echo "  make k8s-status          - Снимок: nodes, pods, svc, ingress, pvc"
 	@echo "  make k8s-logs SVC=frontend - Логи Deployment frontend"
 	@echo "  make k8s-rollback        - helm rollback на предыдущую ревизию"
-	@echo "  make k8s-secrets-sync    - Создать/обновить Secret platform-secrets из ENV"
+	@echo "  make k8s-secrets-sync    - Обновить Secret platform-secrets через helm (--reuse-values)"
 	@echo "  make k8s-uninstall       - helm uninstall (PVC сохраняются)"
 	@echo "  make k8s-health          - Полная проверка кластера (deploy/scripts/cluster-health.sh)"
 	@echo "  make k8s-backup [S3=s3://...] - pg_dumpall в backups/ (опционально в Selectel S3)"

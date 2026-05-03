@@ -107,11 +107,22 @@ def _all_messages_text(call: dict[str, Any]) -> str:
 
 
 def _find_analyze_call(calls: list[dict[str, Any]]) -> dict[str, Any]:
-    """Ищет в журнале вызов analyze: user-сообщение содержит блок типов CRM."""
+    """Ищет в журнале вызов analyze по фрагментам prompts/analyze.md."""
+
+    def _matches_analyze_prompt(text: str) -> bool:
+        if "ТИПЫ ENTITIES" not in text:
+            return False
+        if "РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
+            return True
+        if "РАЗРЕШЕННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
+            return True
+        if "# CRM Text Analyzer" in text or "CRM Text Analyzer" in text:
+            return True
+        return False
 
     for call in calls:
         text = _all_messages_text(call)
-        if "ТИПЫ ENTITIES" in text and "РАЗРЕШЁННЫЕ ИДЕНТИФИКАТОРЫ СУЩНОСТЕЙ" in text:
+        if _matches_analyze_prompt(text):
             return call
     raise AssertionError(
         f"в журнале MockLLM нет analyze-вызова (всего вызовов: {len(calls)}); "

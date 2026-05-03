@@ -47,7 +47,7 @@ make k8s-health
 
 GitHub → Actions → Deploy → Run workflow. Опционально передать `image_tag` (по умолчанию короткий SHA).
 
-CI делает: build → push GHCR → kubectl create secret platform-secrets → helm upgrade --install → cluster-health.sh.
+CI делает: build → push GHCR → один проход `helm upgrade --install` (`--create-namespace`, секреты через `deploy/scripts/helm_platform_secrets_lib.sh`) → cluster-health.sh.
 
 ### Вручную (для ad-hoc образов)
 

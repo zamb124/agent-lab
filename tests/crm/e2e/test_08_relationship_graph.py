@@ -1071,6 +1071,7 @@ class TestPerformance:
             assert nodes_by_id[entity_id]["level"] == i
     
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)
     async def test_wide_graph(self, crm_client, unique_id, auth_headers_system):
         """Test 8.3: Широкий граф (много соседей)"""
         root_id = await create_entity(crm_client, "contact", f"Root {unique_id}", auth_headers_system)

@@ -87,14 +87,22 @@ async def init_company_resources(
         loaded_tools = await load_tools_to_db(container.tool_repository)
         logger.info(f"Загружено {len(loaded_tools)} tools для {company_id}")
 
-        await ensure_default_mcp_servers_for_company(container=container)
-        synced = await sync_auto_mcp_servers_for_company(container=container)
-        logger.info(
-            "MCP синхронизация для %s: servers=%s tools=%s",
-            company_id,
-            synced["servers"],
-            synced["tools"],
-        )
+        try:
+            await ensure_default_mcp_servers_for_company(container=container)
+            synced = await sync_auto_mcp_servers_for_company(container=container)
+            logger.info(
+                "MCP синхронизация для %s: servers=%s tools=%s",
+                company_id,
+                synced["servers"],
+                synced["tools"],
+            )
+        except Exception as mcp_err:
+            logger.warning(
+                "MCP синхронизация при init_company_resources пропущена (%s): %s",
+                company_id,
+                mcp_err,
+                exc_info=True,
+            )
         
         loader = FlowsLoader(
             bundles_dir=bundles_dir,

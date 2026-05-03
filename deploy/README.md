@@ -109,7 +109,7 @@ MicroK8s cluster
 | `PUSH_FCM_CREDENTIALS_JSON` / `PUSH_FCM_PROJECT_ID` | (опционально) FCM service account |
 | `YOOMONEY_*` | (опционально) платежи YooMoney |
 
-Эти переменные читаются GitHub Actions и передаются в `kubectl create secret generic platform-secrets --from-literal=...`.
+Эти переменные задаются в GitHub Actions как env и передаются в Helm (`platformSecrets.*`, см. `deploy/scripts/helm_platform_secrets_lib.sh`).
 
 ## Ручной деплой (без CI)
 
@@ -120,7 +120,7 @@ kubectl get nodes
 # master       Ready    control-plane   ...
 # gpu-worker   Ready    <none>          ...
 
-# 2. Создать platform-secrets вручную (подставить значения):
+# 2. Экспорт секретов и установка релиза (namespace создаётся `helm --create-namespace`, Secret — шаблон чарта при переданных platformSecrets):
 export POSTGRES_PASSWORD=...
 export AUTH_JWT_SECRET=...
 export SELECTEL_ACCESS_KEY=...
@@ -130,12 +130,12 @@ export LIVEKIT_API_SECRET=...
 export TURN_SECRET=...
 export ONLYOFFICE_JWT_SECRET=...
 export GRAFANA_ADMIN_PASSWORD=...
-make k8s-secrets-sync
-
-# 3. Применить чарт
 make k8s-deploy IMAGE_TAG=latest
 
-# 4. Проверка
+# При необходимости обновить только секреты (релиз уже есть):
+# source .env.k8s.secrets && make k8s-secrets-sync
+
+# 3. Проверка
 make k8s-status
 make k8s-logs SVC=frontend
 ```
@@ -202,7 +202,7 @@ deploy/helm/agent-lab/
 │   └── grafana-alerts/         # 3 файла (rules, contact-points, policies)
 └── templates/
     ├── _helpers.tpl            # agentlab.appEnv, agentlab.image, agentlab.confVolume(Mount)
-    ├── 00-namespace.yaml
+    ├── 01-platform-secrets.yaml  # Secret platform-secrets при platformSecrets.create=true
     ├── 02-configmap-app-conf.yaml
     ├── 10-postgres/            # StatefulSet + Service + ConfigMap init
     ├── 11-redis/               # StatefulSet + Service

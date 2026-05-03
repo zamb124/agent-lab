@@ -62,14 +62,17 @@ def _analyze_llm_response(*, note_name: str, person_name: str) -> str:
             "note": {
                 "entity_type": "note",
                 "name": note_name,
-                "description": "Итог анализа.",
+                "description": "Итог анализа заметки и вложений для теста.",
+                "attributes": {},
+                "confidence": 0.85,
             },
             "entities": [
                 {
                     "entity_type": "task",
                     "name": person_name,
-                    "description": "Менеджер проекта",
+                    "description": "Менеджер проекта по согласованию.",
                     "attributes": {"role": "менеджер"},
+                    "confidence": 0.88,
                 },
             ],
             "relationships": [
@@ -84,6 +87,7 @@ def _analyze_llm_response(*, note_name: str, person_name: str) -> str:
                 }
             ],
             "metadata": _ANALYZE_META,
+            "attachment_summaries": [],
         }
     )
 

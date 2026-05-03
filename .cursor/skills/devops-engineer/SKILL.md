@@ -166,10 +166,10 @@ helm rollback agent-lab <REV> -n platform
 
 ### Добавить секрет
 
-1. Новый ключ в Kubernetes Secret `platform-secrets`: правка `_helpers.tpl::agentlab.appEnv` (`secretKeyRef.key`).
+1. Новый ключ в Kubernetes Secret `platform-secrets`: правка `templates/01-platform-secrets.yaml` (`stringData`), `_helpers.tpl::agentlab.appEnv` (`secretKeyRef.key`).
 2. Новый GitHub Secret в репо.
-3. Правка `.github/workflows/deploy.yml` шаг "Sync platform-secrets" (`--from-literal=<key>="$ENV_VAR"`).
-4. Правка `make k8s-secrets-sync` в Makefile (та же пара).
+3. Правка `deploy/scripts/helm_platform_secrets_lib.sh` (переменная окружения и `--set-string` для поля `platformSecrets.*`).
+4. Правка `.github/workflows/deploy.yml` — блок `env` шага Helm (проброс секрета в переменную окружения).
 5. Правка `deploy/README.md` раздел "Платформа" (таблица секретов).
 6. PR + deploy. `kubectl describe secret platform-secrets -n platform` — проверить наличие нового ключа.
 

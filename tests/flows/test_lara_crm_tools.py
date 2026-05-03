@@ -168,12 +168,16 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
                             "entity_type": "note",
                             "name": note_title,
                             "description": "Краткое содержание для анализа.",
+                            "attributes": {},
+                            "confidence": 0.9,
                         },
                         "entities": [
                             {
                                 "entity_type": "task",
                                 "name": f"Задача {unique_id}",
                                 "description": "Проверка извлечения сущности",
+                                "attributes": {},
+                                "confidence": 0.85,
                             }
                         ],
                         "relationships": [],
@@ -266,12 +270,16 @@ async def test_crm_create_note_and_analyze_tool_chains(
                             "entity_type": "note",
                             "name": note_title,
                             "description": "Комбо: заметка и анализ.",
+                            "attributes": {},
+                            "confidence": 0.9,
                         },
                         "entities": [
                             {
                                 "entity_type": "contact",
                                 "name": f"Контакт {unique_id}",
                                 "description": "Извлечённый контакт",
+                                "attributes": {},
+                                "confidence": 0.87,
                             }
                         ],
                         "relationships": [],

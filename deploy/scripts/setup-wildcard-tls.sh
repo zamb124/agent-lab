@@ -16,8 +16,9 @@
 #   2. helm install cert-manager-webhook-regru в namespace cert-manager (если нет).
 #   3. Применяет Secret regru-credentials.
 #   4. Применяет ClusterIssuer letsencrypt-prod-dns01.
-#   5. Применяет Certificate platform-tls в namespace platform → выдаст Secret platform-tls.
-#   6. Ждёт Ready=True (до 5 мин).
+#   5. Проверяет namespace platform (должен существовать после деплоя agent-lab).
+#   6. Применяет Certificate platform-tls в namespace platform → выдаст Secret platform-tls.
+#   7. Ждёт Ready=True (до 5 мин).
 
 set -uo pipefail
 
@@ -99,8 +100,11 @@ spec:
                 key: password
 EOF
 
-# 5. Namespace platform (если нет)
-$K create namespace "$PLATFORM_NS" --dry-run=client -o yaml | $K apply -f -
+# 5. Namespace platform (должен быть создан релизом agent-lab: helm --create-namespace).
+if ! $K get namespace "$PLATFORM_NS" >/dev/null 2>&1; then
+  log_error "namespace $PLATFORM_NS отсутствует. Сначала установите платформу (helm upgrade --install agent-lab ... --create-namespace)."
+  exit 1
+fi
 
 # 6. Certificate
 log_do "Certificate $PLATFORM_TLS_SECRET в $PLATFORM_NS"
