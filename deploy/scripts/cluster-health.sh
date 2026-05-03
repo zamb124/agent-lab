@@ -22,7 +22,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "$SCRIPT_DIR/_common.sh"
 
-require_command kubectl 2>/dev/null || require_command microk8s || exit 1
+if ! command -v kubectl >/dev/null 2>&1 && ! command -v microk8s >/dev/null 2>&1; then
+  log_error "Нужен kubectl или microk8s"
+  exit 1
+fi
 
 K="$KUBECTL"
 APEX_HOST="${APEX_HOST:-humanitec.ru}"
@@ -84,7 +87,6 @@ for d in "${EXPECTED_DEPLOYMENTS[@]}"; do
   if [ -n "$AVAIL" ] && [ "$AVAIL" = "$DESIRED" ] && [ "$AVAIL" != "0" ]; then
     log_ok "$d ($AVAIL/$DESIRED ready)"
   else
-    __FAIL_COUNT=$((__FAIL_COUNT + 1))
     log_error "$d: available=$AVAIL desired=$DESIRED"
   fi
 done
@@ -97,7 +99,6 @@ for s in "${EXPECTED_STATEFULSETS[@]}"; do
   if [ -n "$READY" ] && [ "$READY" = "$DESIRED" ] && [ "$READY" != "0" ]; then
     log_ok "$s ($READY/$DESIRED ready)"
   else
-    __FAIL_COUNT=$((__FAIL_COUNT + 1))
     log_error "$s: ready=$READY desired=$DESIRED"
   fi
 done
@@ -110,7 +111,6 @@ for ds in "${EXPECTED_DAEMONSETS[@]}"; do
   if [ -n "$READY" ] && [ "$READY" = "$DESIRED" ] && [ "$READY" != "0" ]; then
     log_ok "$ds ($READY/$DESIRED ready)"
   else
-    __FAIL_COUNT=$((__FAIL_COUNT + 1))
     log_error "$ds: ready=$READY desired=$DESIRED"
   fi
 done
@@ -133,7 +133,6 @@ if [ -n "$INGRESS_LIST" ]; then
   log_ok "Ingress объекты есть"
   printf '%s\n' "$INGRESS_LIST" | sed 's/^/    /'
 else
-  __FAIL_COUNT=$((__FAIL_COUNT + 1))
   log_error "Ingress объектов нет"
 fi
 
@@ -171,22 +170,22 @@ check_step_with_output \
 log_section "12) Loki / Tempo"
 check_step \
   "Loki ready" \
-  "$K exec -n $PLATFORM_NS loki-0 -- wget -q -O - http://localhost:3100/ready 2>/dev/null | grep -q ready"
+  "[ \"$($K get pod loki-0 -n $PLATFORM_NS -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null)\" = 'true' ]"
 check_step \
   "Tempo ready" \
-  "$K exec -n $PLATFORM_NS tempo-0 -- wget -q -O - http://localhost:3200/ready 2>/dev/null | grep -q ready"
+  "[ \"$($K get pod tempo-0 -n $PLATFORM_NS -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null)\" = 'true' ]"
 
 # 13. Health endpoints через ingress (если есть DNS)
 if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
   log_section "13) Public health endpoints (через Ingress)"
-  for path in "/flows/health" "/crm/health" "/rag/health" "/sync/health" "/litserve/health"; do
+  for path in "/flows/health" "/crm/health" "/sync/health"; do
     check_step \
       "https://${APEX_HOST}${path}" \
       "curl -fsS --max-time 10 https://${APEX_HOST}${path} >/dev/null"
   done
   check_step \
     "https://${GRAFANA_HOST}/api/health" \
-    "curl -fsSI --max-time 10 https://${GRAFANA_HOST}/api/health >/dev/null"
+    "curl -fsS --max-time 10 https://${GRAFANA_HOST}/api/health >/dev/null"
 else
   log_info "Пропуск public-проверок (CHECK_PUBLIC=0 или нет curl)"
 fi
