@@ -31,6 +31,7 @@
 Переменные окружения имеют приоритет над конфигами.
 """
 import os
+import shutil
 import signal
 import sys
 import subprocess
@@ -136,16 +137,20 @@ SERVICES = {
 }
 
 
+def _python_m_prefix() -> list[str]:
+    uv_bin = shutil.which("uv")
+    if uv_bin is not None:
+        return [uv_bin, "run", "python", "-u", "-m"]
+    return [sys.executable, "-u", "-m"]
+
+
 def build_command(service: str) -> list[str]:
     if service not in SERVICES:
         raise ValueError(f"Неизвестный сервис: {service}")
     config = SERVICES[service]
     service_type = config["type"]
     if service_type == "uvicorn":
-        return [
-            sys.executable,
-            "-u",
-            "-m",
+        return _python_m_prefix() + [
             "uvicorn",
             config["app"],
             "--host",
@@ -156,24 +161,17 @@ def build_command(service: str) -> list[str]:
             "--no-access-log",
         ]
     if service_type == "taskiq-worker":
-        cmd = [
-            sys.executable,
-            "-u",
-            "-m",
+        return _python_m_prefix() + [
             "taskiq",
             "worker",
             config["worker_app"],
             "--workers",
             config["workers"],
         ]
-        return cmd
     if service_type == "module":
-        return [sys.executable, "-u", "-m", config["module"]]
+        return _python_m_prefix() + [config["module"]]
     if service_type == "taskiq-scheduler":
-        return [
-            sys.executable,
-            "-u",
-            "-m",
+        return _python_m_prefix() + [
             "taskiq",
             "scheduler",
             config["scheduler"],
@@ -351,6 +349,7 @@ def run_all(exclude: set[str] | None = None) -> None:
         print(f"Запуск {name}: {' '.join(cmd)}", flush=True)
         proc = subprocess.Popen(
             cmd,
+            cwd=str(project_root),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -427,6 +426,7 @@ def main() -> None:
     print(f"Запуск {service}: {' '.join(cmd)}", flush=True)
     result = subprocess.run(
         cmd,
+        cwd=str(project_root),
         stdout=sys.stdout,
         stderr=sys.stderr,
         env=build_env(service),

@@ -11,6 +11,7 @@
     "example"
   ],
   "permission": [],
+  "branches": {},
   "entry": "wiki_rasputin_agent",
   "nodes": {
     "wiki_rasputin_agent": {
