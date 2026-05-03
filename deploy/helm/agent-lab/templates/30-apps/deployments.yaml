@@ -22,6 +22,8 @@ spec:
         app.kubernetes.io/component: application
     spec:
 {{- include "agentlab.podImagePullSecrets" $ | nindent 6 }}
+      initContainers:
+        {{- include "agentlab.dbReadyAndMigrateInitContainers" $ | nindent 8 }}
       containers:
         {{- if eq $name "browser" }}
         - name: chromium-cdp

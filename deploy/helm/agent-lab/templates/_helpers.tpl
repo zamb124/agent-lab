@@ -311,3 +311,55 @@ imagePullSecrets:
 nodeSelector:
   kubernetes.io/hostname: {{ .Values.masterNodeName | quote }}
 {{- end -}}
+
+{{/*
+Init-containers для всех app/worker подов:
+  1. wait-postgres — пингует Service postgres:5432 через pg_isready (до 3 минут)
+  2. db-migrate    — `python -m scripts.db_migrate upgrade` (все сервисные БД из migrations/services.json)
+
+Канон: каждый Pod при старте безопасно прогоняет Alembic upgrade head. Alembic держит
+DDL-блокировку на alembic_version → параллельный старт нескольких pods не вызывает гонок:
+один мигрирует, остальные видят head и no-op'ятся.
+
+Этот подход заменяет отдельный pre-install hook Job (который при первом install не мог
+дождаться Postgres — Service postgres ещё не существует в pre-install фазе).
+Использовать в каждом Deployment / StatefulSet с доступом к Postgres:
+  spec:
+    template:
+      spec:
+        initContainers:
+          {{`{{- include "agentlab.dbReadyAndMigrateInitContainers" . | nindent 10 }}`}}
+*/}}
+{{- define "agentlab.dbReadyAndMigrateInitContainers" -}}
+- name: wait-postgres
+  image: {{ .Values.postgres.image }}
+  imagePullPolicy: IfNotPresent
+  env:
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.platformSecretName }}
+          key: postgres-password
+  command:
+    - sh
+    - -c
+    - |
+      for i in $(seq 1 90); do
+        if PGPASSWORD="$POSTGRES_PASSWORD" pg_isready -h {{ .Values.appCommonEnv.postgresService }} -U platform_user -d postgres -t 2; then
+          echo "postgres ready"
+          exit 0
+        fi
+        echo "wait postgres ($i/90)"
+        sleep 2
+      done
+      echo "postgres unavailable after 180s" >&2
+      exit 1
+- name: db-migrate
+  image: {{ include "agentlab.image" . }}
+  imagePullPolicy: {{ .Values.image.pullPolicy }}
+  command: ["python", "-m", "scripts.db_migrate", "upgrade"]
+  env:
+    {{- include "agentlab.appEnv" . | nindent 4 }}
+  volumeMounts:
+    {{- include "agentlab.confVolumeMount" . | nindent 4 }}
+{{- end -}}
