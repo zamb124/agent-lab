@@ -158,7 +158,17 @@ kubectl exec -n platform deployment/alloy -c alloy -- env | grep OTEL
 - Alloy не форвардит → лог alloy.
 - Tempo переполнен → проверить PVC.
 
-## 9. `helm upgrade` завис / timeout
+## 9. Helm
+
+### 9.1 Первый install: `invalid ownership metadata` у Secret `platform-secrets`
+
+**Симптомы:** `Release "agent-lab" does not exist. Installing...` затем ошибка про отсутствие `app.kubernetes.io/managed-by: Helm` и аннотаций `meta.helm.sh/release-name` у существующего Secret.
+
+**Причина:** в namespace **`platform`** уже есть **`platform-secrets`**, созданный не через Helm (kubectl, сторонний скрипт), а деплой включает **`platformSecrets.create: true`**.
+
+**Решение:** при необходимости сохранить ключи, затем `kubectl delete secret platform-secrets -n platform` и повторить деплой. Префлайт: **`deploy/scripts/helm_precheck_install_secret_conflict.sh`** (CI и **`make k8s-deploy`** с **`POSTGRES_PASSWORD`**). Подробнее — **`deploy/README.md`** (раздел про первый install).
+
+### 9.2 `helm upgrade` завис / timeout
 
 **Команды:**
 ```bash
