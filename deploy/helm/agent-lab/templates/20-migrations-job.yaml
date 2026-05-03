@@ -8,8 +8,9 @@ metadata:
     "helm.sh/hook-weight": "10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
+  # Без ttlSecondsAfterFinished: TTL controller удаляет завершённые Job (Complete и Failed),
+  # из-за чего теряются логи диагностики. Успешный hook очищается Helm по hook-delete-policy.
   backoffLimit: 5
-  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       name: migrations

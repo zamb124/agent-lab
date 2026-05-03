@@ -16,7 +16,7 @@ kubectl logs -n platform $POD --tail=200
 **Типовые причины:**
 - ENV не задан → проверить `kubectl get secret platform-secrets -n platform -o yaml | grep <key>`. Решение: `make k8s-secrets-sync`.
 - Postgres недоступен → `kubectl exec -n platform postgres-0 -- pg_isready`. Если нет — см. секцию 4.
-- Схема БД не применена (`relation ... does not exist`) → Job **`migrations`** (Helm hook): `kubectl get jobs -n platform`, логи pod миграций; после успешных миграций перезапуск приложений: **`make k8s-post-migrate-rollout`** (или `SKIP_MIGRATION_JOB_WAIT=1`, если Job уже удалён hook после успеха).
+- Схема БД не применена (`relation ... does not exist`) → Helm Job **`migrations`** (`post-install`/`post-upgrade`). Пустой **`kubectl get jobs`** не доказывает, что Job не запускался: при успехе hook ресурс удаляется политикой **`helm.sh/hook-delete-policy`** (`hook-succeeded` / следующий апгрейд). Проверяй **`helm history`** (`failed`, **`context deadline exceeded`**, **`pending-upgrade`**): при **`helm --wait`** деплойменты без таблиц не становятся Ready и упираются в таймаут; параллельно Job миграций мог **упасть** (конфиг БД в **`app-conf`**, секреты, ошибка alembic) — тогда схемы не будет. Зависший релиз: **`make k8s-helm-clear-pending`**, повторный деплой; логи миграций смотреть сразу после апгрейда (**`kubectl logs job/migrations`** пока объект есть). После успешных миграций: **`make k8s-post-migrate-rollout`**.
 - OOMKilled → `kubectl describe pod` → Events показывают OOMKilled. Решение: поднять `resources.limits.memory` в `values.yaml`.
 - Образ не подгрузился (`ImagePullBackOff`) — см. секцию 2.
 
