@@ -21,6 +21,7 @@ spec:
         app: {{ $app.serviceName }}
         app.kubernetes.io/component: application
     spec:
+{{- include "agentlab.podImagePullSecrets" $ | nindent 6 }}
       {{- if eq $name "frontend" }}
       initContainers:
         - name: extract-static
@@ -32,7 +33,7 @@ spec:
             - |
               set -e
               mkdir -p /shared-static
-              cp -r /app/static/. /shared-static/ 2>/dev/null || true
+              cp -r /app/static/. /shared-static/
               echo "static prepared"
           volumeMounts:
             - name: shared-static

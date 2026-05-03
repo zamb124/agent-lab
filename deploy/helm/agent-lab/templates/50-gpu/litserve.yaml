@@ -50,6 +50,7 @@ spec:
         app: {{ .Values.litserve.serviceName }}
         app.kubernetes.io/component: gpu-inference
     spec:
+{{- include "agentlab.podImagePullSecrets" . | nindent 6 }}
       {{- if .Values.litserve.scheduleOnGpuNode }}
       nodeSelector:
         {{ .Values.gpuNodeSelectorKey }}: {{ .Values.gpuNodeSelectorValue | quote }}

@@ -2,7 +2,11 @@
 # Применяется поверх values.yaml: helm upgrade ... --values values.yaml --values values-prod.yaml
 
 domain: humanitec.ru
-masterNodeName: master
+masterNodeName: sync
+
+image:
+  pullSecrets:
+    - ghcr-agent-lab-pull
 
 ingress:
   apexHost: humanitec.ru

@@ -8,11 +8,6 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-_rag="${RAG_EMBEDDING_API_KEY:-}"
-if [[ -z "${_rag}" ]]; then
-  _rag="${LLM_OPENROUTER_API_KEY:-}"
-fi
-
 jq -n \
   --arg postgresPassword "${POSTGRES_PASSWORD:-}" \
   --arg authJwtSecret "${AUTH_JWT_SECRET:-}" \
@@ -42,7 +37,7 @@ jq -n \
   --arg llmBothubApiKey "${LLM_BOTHUB_API_KEY:-}" \
   --arg llmOpenrouterApiKey "${LLM_OPENROUTER_API_KEY:-}" \
   --arg sttCloudRuApiKey "${STT_CLOUD_RU_API_KEY:-}" \
-  --arg ragEmbeddingApiKey "${_rag}" \
+  --arg ragEmbeddingApiKey "${RAG_EMBEDDING_API_KEY:-}" \
   --arg yoomoneyAccountNumber "${YOOMONEY_ACCOUNT_NUMBER:-}" \
   --arg yoomoneyNotificationSecret "${YOOMONEY_NOTIFICATION_SECRET:-}" \
   --arg yoomoneyClientId "${YOOMONEY_CLIENT_ID:-}" \

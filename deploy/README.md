@@ -43,7 +43,9 @@ MicroK8s cluster
 [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — ручной запуск (**Actions → Deploy → Run workflow**):
 
 1. **`build`** — `docker build --target full` → push в GHCR (`ghcr.io/<owner>/agent-lab:<sha>` + `:latest` на default branch).
-2. **`deploy`** — `helm upgrade --install` через `KUBECONFIG_B64`, с выбором **`litserve_node`**: **`gpu`** (по умолчанию, нода с `accelerator=nvidia-gpu`) или **`cpu`** (под на master, медленнее), затем `bash deploy/scripts/cluster-health.sh`.
+2. **`deploy`** — после **`KUBECONFIG_B64`** создаётся или обновляется Kubernetes Secret **`ghcr-agent-lab-pull`** из обязательных **`GHCR_PULL_USERNAME`** и **`GHCR_PULL_TOKEN`** (repository secrets; без них job падает), затем **`helm upgrade --install`** с выбором **`litserve_node`**: **`gpu`** (по умолчанию, нода с `accelerator=nvidia-gpu`) или **`cpu`** (под на ноде **`masterNodeName`**, см. `values-prod.yaml`), затем `bash deploy/scripts/cluster-health.sh`.
+
+Полный список секретов: [`deploy/github-actions-secrets-checklist.md`](github-actions-secrets-checklist.md).
 
 Параметры workflow:
 
@@ -52,6 +54,8 @@ MicroK8s cluster
 | `image_tag` | Пусто = тег из build (короткий SHA); иначе явный тег образа. |
 | `litserve_node` | `gpu` или `cpu` → `--set litserve.scheduleOnGpuNode=true/false`. |
 | `replace_orphan_platform_secret` | `true` один раз: удалить существующий `platform-secrets` без Helm перед первым install (иначе precheck остановит job). |
+
+**Локальный `make k8s-deploy`** с **`values-prod.yaml`** не создаёт docker-registry Secret: перед установкой выполните ту же команду, что в workflow (**`kubectl create secret docker-registry ghcr-agent-lab-pull ...`**), или задайте свой список **`image.pullSecrets`** и имя секрета в кластере.
 
 Никакого SSH, SCP, `docker compose`. Один helm-релиз, единый артефакт. В CI **`helm --wait --timeout 30m`** (первый install может упираться в pull образов и StatefulSets). Ошибка **`context deadline exceeded`**: проверить **`kubectl get pods -n platform`**, **`kubectl get events -n platform`**; при необходимости увеличить timeout в [deploy.yml](../.github/workflows/deploy.yml) или **`make k8s-deploy HELM_WAIT_TIMEOUT=45m`**.
 

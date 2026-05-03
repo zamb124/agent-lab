@@ -21,6 +21,7 @@ spec:
         app: {{ $name }}
         app.kubernetes.io/component: worker
     spec:
+{{- include "agentlab.podImagePullSecrets" $ | nindent 6 }}
       containers:
         - name: worker
           image: {{ include "agentlab.image" $ }}

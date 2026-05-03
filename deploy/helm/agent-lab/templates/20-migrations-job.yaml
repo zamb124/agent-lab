@@ -14,6 +14,7 @@ spec:
     metadata:
       name: migrations
     spec:
+{{- include "agentlab.podImagePullSecrets" . | nindent 6 }}
       restartPolicy: Never
       initContainers:
         - name: wait-postgres

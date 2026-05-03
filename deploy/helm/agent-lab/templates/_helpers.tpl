@@ -2,7 +2,7 @@
 Полное имя образа.
 */}}
 {{- define "agentlab.image" -}}
-{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- printf "%s:%s" .Values.image.repository (required "agent-lab Helm: задайте image.tag (не используйте подстановку из Chart.AppVersion)" .Values.image.tag) -}}
 {{- end -}}
 
 {{/*
@@ -39,7 +39,7 @@ URL баз — через ClusterIP postgres / redis в namespace релиза.
 - name: SERVER__DEBUG
   value: "false"
 - name: SERVER__DEPLOYMENT_VERSION
-  value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
+  value: {{ required "agent-lab Helm: задайте image.tag для SERVER__DEPLOYMENT_VERSION" .Values.image.tag | quote }}
 - name: SERVER__FLOWS_SERVICE_URL
   value: http://{{ .Values.applications.flows.serviceName }}:{{ .Values.applications.flows.port }}
 - name: SERVER__FRONTEND_SERVICE_URL
@@ -272,6 +272,19 @@ URL баз — через ClusterIP postgres / redis в namespace релиза.
 - name: LOGGING__LOKI_QUERY_URL
   value: http://loki:3100
 {{- end -}}
+
+{{/*
+imagePullSecrets для подов с образом платформы (приватный GHCR и т.п.).
+Пустой список — секция не рендерится; для production задайте в values окружения.
+*/}}
+{{- define "agentlab.podImagePullSecrets" }}
+{{- with .Values.image.pullSecrets }}
+imagePullSecrets:
+{{- range . }}
+  - name: {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}
 
 {{/*
 Стандартный volumeMount для conf.json (ConfigMap → /app/conf.json).
