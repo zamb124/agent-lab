@@ -29,9 +29,20 @@ spec:
         - name: chromium-cdp
           image: zenika/alpine-chrome:latest
           imagePullPolicy: IfNotPresent
+          # runAsUser: 0 + --no-zygote: zenika/alpine-chrome запускает chromium от non-root
+          # 'chrome' user, который не может записать /proc/<pid>/oom_score_adj — zygote
+          # crashит с "Permission denied (13)" и порт 9222 не открывается. root + --no-zygote
+          # обходит multi-process zygote подход (для headless K8s pod это безопасно).
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command:
             - chromium-browser
             - --headless=new
+            - --no-zygote
             - --ozone-platform=headless
             - --disable-gpu
             - --no-sandbox
