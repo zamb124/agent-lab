@@ -1,5 +1,9 @@
 name: Deploy
 
+concurrency:
+  group: agent-lab-deploy-${{ github.repository }}
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
@@ -175,6 +179,12 @@ jobs:
 
       - name: Helm lint (sanity)
         run: helm lint "$HELM_CHART"
+
+      - name: Helm clear pending release lock (if any)
+        env:
+          HELM_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+          HELM_RELEASE: ${{ env.K8S_RELEASE }}
+        run: bash deploy/scripts/helm_clear_pending_release.sh
 
       - name: Helm upgrade --install
         env:
