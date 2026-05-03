@@ -25,7 +25,11 @@ MASTER_HOSTNAME="${MASTER_HOSTNAME:-master}"
 # Канал K8s одинаков на всех нодах кластера (инвариант).
 # Latest stable: см. `snap info microk8s` колонка `latest/stable`.
 MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.35/stable}"
-ADDONS=(dns hostpath-storage ingress cert-manager)
+# Core-аддоны (всегда нужны).
+ADDONS_CORE=(dns hostpath-storage ingress cert-manager)
+# Community-аддоны (включаются после `microk8s enable community`).
+# - portainer: web UI управления кластером, NodePort http://<master>:30777, https 30779.
+ADDONS_COMMUNITY=(portainer)
 
 log_section "Bootstrap master ноды (hostname=$MASTER_HOSTNAME)"
 
@@ -70,15 +74,33 @@ if ! microk8s status --wait-ready --timeout 300 >/dev/null 2>&1; then
 fi
 log_ok "microk8s ready"
 
-# 5. Аддоны (microk8s enable идемпотентен — повторный enable выводит "is already enabled")
-for addon in "${ADDONS[@]}"; do
+# 5. Core-аддоны (microk8s enable идемпотентен — повторный enable выводит "is already enabled").
+for addon in "${ADDONS_CORE[@]}"; do
   if microk8s status --addon "$addon" 2>/dev/null | grep -q enabled; then
-    log_skip "addon: $addon"
+    log_skip "core addon: $addon"
   else
-    log_do "addon: $addon"
+    log_do "core addon: $addon"
     if ! microk8s enable "$addon"; then
-      log_error "Не удалось включить addon: $addon"
+      log_error "Не удалось включить core addon: $addon"
       exit 1
+    fi
+  fi
+done
+
+# 5b. Community repository + community-аддоны (portainer и т.п.).
+if microk8s status --addon community 2>/dev/null | grep -q enabled; then
+  log_skip "community repository"
+else
+  log_do "microk8s enable community (для community-аддонов)"
+  microk8s enable community
+fi
+for addon in "${ADDONS_COMMUNITY[@]}"; do
+  if microk8s status --addon "$addon" 2>/dev/null | grep -q enabled; then
+    log_skip "community addon: $addon"
+  else
+    log_do "community addon: $addon"
+    if ! microk8s enable "$addon"; then
+      log_warn "Не удалось включить community addon: $addon (пропускаем — не критично)"
     fi
   fi
 done
