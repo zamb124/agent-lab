@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       litserve_node:
-        description: "Нода для provider-litserve (GPU-воркер или CPU на master)"
+        description: "Нода для provider-litserve. Default gpu (gpu-worker в кластере, accelerator=nvidia-gpu). Cpu — fallback при недоступности GPU-ноды."
         required: true
         default: gpu
         type: choice

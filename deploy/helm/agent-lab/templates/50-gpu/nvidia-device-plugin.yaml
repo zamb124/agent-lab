@@ -1,0 +1,71 @@
+{{- if .Values.nvidiaDevicePlugin.enabled }}
+# NVIDIA k8s-device-plugin DaemonSet — публикует nvidia.com/gpu в Allocatable
+# на нодах с лейблом {{ .Values.gpuNodeSelectorKey }}={{ .Values.gpuNodeSelectorValue }}.
+#
+# Альтернатива тяжёлому NVIDIA gpu-operator. Operator-toolkit-daemonset переписывает
+# containerd config и выставляет disabled_plugins=["io.containerd.grpc.v1.cri"],
+# что отключает CRI plugin и валит kubelet (Unimplemented runtime.v1.RuntimeService).
+# Host-driver + nvidia-container-toolkit + drop-in /etc/containerd/conf.d/99-nvidia.toml
+# ставит deploy/scripts/bootstrap-gpu-worker.sh — здесь только device-plugin.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-device-plugin-daemonset
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: nvidia-device-plugin
+    app.kubernetes.io/component: gpu
+    app.kubernetes.io/part-of: agent-lab
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nvidia-device-plugin
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nvidia-device-plugin
+        app.kubernetes.io/component: gpu
+    spec:
+      nodeSelector:
+        {{ .Values.gpuNodeSelectorKey }}: {{ .Values.gpuNodeSelectorValue | quote }}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      priorityClassName: system-node-critical
+      hostPID: true
+      containers:
+        - name: nvidia-device-plugin
+          image: "{{ .Values.nvidiaDevicePlugin.image }}:{{ .Values.nvidiaDevicePlugin.tag }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: FAIL_ON_INIT_ERROR
+              value: "false"
+            - name: PASS_DEVICE_SPECS
+              value: "true"
+            - name: DEVICE_LIST_STRATEGY
+              value: "envvar,cdi-annotations"
+            - name: DEVICE_ID_STRATEGY
+              value: "uuid"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: cdi-root
+              mountPath: /var/run/cdi
+              readOnly: true
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+        - name: cdi-root
+          hostPath:
+            path: /var/run/cdi
+{{- end }}

@@ -264,6 +264,17 @@ litserve:
       cpu: "4"
       memory: 16Gi
 
+# NVIDIA k8s-device-plugin: лёгкий DaemonSet, ставит nvidia.com/gpu в Allocatable для GPU-ноды.
+# Используется вместо тяжёлого NVIDIA gpu-operator (operator переписывает containerd config и
+# ставит disabled_plugins=["io.containerd.grpc.v1.cri"], что валит kubelet с
+# Unimplemented runtime.v1.RuntimeService).
+# Host-driver и nvidia-container-toolkit ставит deploy/scripts/bootstrap-gpu-worker.sh
+# (drop-in /etc/containerd/conf.d/99-nvidia.toml через nvidia-ctk).
+nvidiaDevicePlugin:
+  enabled: true
+  image: nvcr.io/nvidia/k8s-device-plugin
+  tag: v0.19.1
+
 livekit:
   enabled: true
   image: livekit/livekit-server:latest

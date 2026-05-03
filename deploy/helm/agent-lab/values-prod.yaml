@@ -2,7 +2,8 @@
 # Применяется поверх values.yaml: helm upgrade ... --values values.yaml --values values-prod.yaml
 
 domain: humanitec.ru
-masterNodeName: sync
+# Имя master-ноды в kube (microk8s hostname после bootstrap-master.sh = "master").
+masterNodeName: master
 
 image:
   pullSecrets:
@@ -15,10 +16,10 @@ ingress:
   onlyofficeHost: onlyoffice.humanitec.ru
   grafanaHost: grafana.humanitec.ru
 
-litserve:
-  enabled: true
-  # Пока GPU-нода не в кластере (microk8s join + label accelerator=nvidia-gpu), LitServe остаётся Pending.
-  scheduleOnGpuNode: false
+# litserve.scheduleOnGpuNode = true (по умолчанию из values.yaml) — нода gpu-worker
+# подключена через deploy/scripts/join-cluster.sh, label accelerator=nvidia-gpu.
+# NVIDIA k8s-device-plugin DaemonSet (templates/50-gpu/nvidia-device-plugin.yaml) публикует
+# nvidia.com/gpu в Allocatable. workflow_dispatch.litserve_node=gpu (default).
 
 observability:
   loki:

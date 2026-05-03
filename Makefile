@@ -211,6 +211,18 @@ k8s-helm-clear-pending:
 k8s-uninstall:
 	helm uninstall $(K8S_RELEASE) -n $(K8S_NAMESPACE)
 
+# Идемпотентный полный снос legacy docker compose стека на хосте (PROD-ready дисмисс).
+# По умолчанию — dry-run (вывод inventory). Реальный снос: CONFIRM=1 make k8s-decommission-compose.
+# Целевой хост: SSH_TARGET=root@<host>; default — master (см. _common.sh::MASTER_HOST_IP).
+k8s-decommission-compose:
+	@bash deploy/scripts/decommission-compose.sh
+
+# Идемпотентный полный reset кластера: helm uninstall + namespace delete + snap remove microk8s --purge.
+# По умолчанию — dry-run. Реальный reset: CONFIRM=1 make k8s-cluster-reset.
+# После — bootstrap-master.sh + bootstrap-gpu-worker.sh + join-cluster.sh + make k8s-deploy.
+k8s-cluster-reset:
+	@K8S_NAMESPACE=$(K8S_NAMESPACE) K8S_RELEASE=$(K8S_RELEASE) bash deploy/scripts/cluster-reset.sh
+
 # После успешных миграций (или если Job migrations уже удалён hook): rollout restart приложений и воркеров.
 k8s-post-migrate-rollout:
 	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/k8s_post_migrate_rollout.sh

@@ -22,8 +22,9 @@ source "$SCRIPT_DIR/_common.sh"
 require_root || exit 1
 
 MASTER_HOSTNAME="${MASTER_HOSTNAME:-master}"
-# Трек Kubernetes: см. `snap info microk8s`. Для новых нод — актуальный stable-трек (не ниже 1.33).
-MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.33/stable}"
+# Канал K8s одинаков на всех нодах кластера (инвариант).
+# Latest stable: см. `snap info microk8s` колонка `latest/stable`.
+MICROK8S_CHANNEL="${MICROK8S_CHANNEL:-1.35/stable}"
 ADDONS=(dns hostpath-storage ingress cert-manager)
 
 log_section "Bootstrap master ноды (hostname=$MASTER_HOSTNAME)"
@@ -34,11 +35,19 @@ idempotent \
   "[ \"$(hostname)\" = '$MASTER_HOSTNAME' ]" \
   "hostnamectl set-hostname '$MASTER_HOSTNAME'"
 
-# 2. snap MicroK8s
-idempotent \
-  "snap install microk8s ($MICROK8S_CHANNEL)" \
-  "snap list microk8s 2>/dev/null | grep -q microk8s" \
-  "snap install microk8s --classic --channel=$MICROK8S_CHANNEL"
+# 2. snap MicroK8s — установка / refresh на канал кластера (общий для master и gpu-worker).
+if snap list microk8s 2>/dev/null | grep -q microk8s; then
+  CURRENT_CHANNEL="$(snap list microk8s 2>/dev/null | awk 'NR==2{print $4}')"
+  if [ "$CURRENT_CHANNEL" != "$MICROK8S_CHANNEL" ]; then
+    log_do "snap refresh microk8s $CURRENT_CHANNEL → $MICROK8S_CHANNEL"
+    snap refresh microk8s --channel="$MICROK8S_CHANNEL"
+  else
+    log_skip "microk8s already on $MICROK8S_CHANNEL"
+  fi
+else
+  log_do "snap install microk8s ($MICROK8S_CHANNEL)"
+  snap install microk8s --classic --channel="$MICROK8S_CHANNEL"
+fi
 
 # 3. Группы для пользователя ubuntu (если есть). Не падаем, если пользователя нет.
 if id ubuntu >/dev/null 2>&1; then

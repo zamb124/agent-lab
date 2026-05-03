@@ -4,13 +4,22 @@ metadata:
   name: migrations
   namespace: {{ .Values.namespace }}
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "10"
+    # pre-install/pre-upgrade: миграции применяются ДО того, как Helm --wait начинает ждать готовность
+    # Deployments приложений. Иначе apps стартуют на пустой схеме, падают в CrashLoop, --wait упирается
+    # в таймаут и post-* hook никогда не достигается — deadlock.
+    # На первом install Postgres StatefulSet ещё не существует — wait-postgres init-контейнер не дождётся
+    # сервиса postgres и Job упадёт. Поэтому первый install выполняется в два прохода (см. deploy/README.md):
+    # сначала helm install --skip-hooks, затем повторный helm upgrade без skip-hooks.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   # Без ttlSecondsAfterFinished: TTL controller удаляет завершённые Job (Complete и Failed),
   # из-за чего теряются логи диагностики. Успешный hook очищается Helm по hook-delete-policy.
   backoffLimit: 5
+  # Жёсткий потолок на миграцию: при затяжных Alembic upgrade Job падает быстрее, чем
+  # helm --timeout (30m), и CI получает понятную причину, а не общий context deadline exceeded.
+  activeDeadlineSeconds: 900
   template:
     metadata:
       name: migrations
