@@ -62,6 +62,18 @@ MicroK8s cluster
 
 Скрипт: **`deploy/scripts/render_helm_app_conf.py`**.
 
+### Первый `helm install`: «invalid ownership metadata» у Secret `platform-secrets`
+
+Если релиза **`agent-lab`** ещё нет, а в **`platform`** уже есть **`platform-secrets`** (ручной `kubectl`, не Helm), первый деплой с **`platformSecrets.create: true`** падает: Helm не может заявить ресурс без меток **`app.kubernetes.io/managed-by: Helm`** и аннотаций **`meta.helm.sh/release-*`**.
+
+Удалите сиротский секрет и повторите деплой (значения возьмутся из GitHub Secrets):
+
+```bash
+kubectl delete secret platform-secrets -n platform
+```
+
+Перед установкой тот же случай отлавливает **`deploy/scripts/helm_precheck_install_secret_conflict.sh`** (CI и **`make k8s-deploy`** при заданном **`POSTGRES_PASSWORD`**).
+
 ## Идемпотентные скрипты (`deploy/scripts/`)
 
 Все операции над кластером — через скрипты с общей библиотекой [`_common.sh`](scripts/_common.sh).
@@ -78,6 +90,7 @@ MicroK8s cluster
 | [`restore-postgres.sh`](scripts/restore-postgres.sh) | локально / master | Restore из дампа в pod `postgres-0` |
 | [`migrate-data-from-compose.sh`](scripts/migrate-data-from-compose.sh) | локально | Одноразово: SSH на старый docker-compose хост → `pg_dumpall` → restore в новый кластер |
 | [`render_helm_app_conf.py`](scripts/render_helm_app_conf.py) | локально / CI | `conf.json` + `files/app-conf.k8s-overlay.json` → `files/app-conf.json` для Helm ConfigMap |
+| [`helm_precheck_install_secret_conflict.sh`](scripts/helm_precheck_install_secret_conflict.sh) | CI / `make k8s-deploy` с секретами | Перед первым install: если релиза нет, а `platform-secrets` уже есть без меток Helm — понятная ошибка вместо «invalid ownership metadata» |
 
 Обёртки в Makefile: `make k8s-deploy` / `k8s-health` / `k8s-backup` / `k8s-restore` / `k8s-rollback` / `k8s-uninstall`.
 

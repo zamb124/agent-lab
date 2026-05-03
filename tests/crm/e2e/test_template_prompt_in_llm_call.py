@@ -66,6 +66,15 @@ def _empty_analyze_response_for(note_title: str) -> dict[str, Any]:
     }
 
 
+def _analyze_mock_redis_queue(note_title: str) -> list[dict[str, Any]]:
+    """
+    Два одинаковых ответа в очереди MockLLM: при полном прогоне с TaskIQ возможен лишний
+    pop из mock_llm:responses до analyze; второй слот гарантирует валидный JSON для analyze.
+    """
+    one = _empty_analyze_response_for(note_title)
+    return [one, one]
+
+
 async def _create_namespace_from_template(
     crm_client, auth_headers, template_id: str, suffix: str
 ) -> str:
@@ -199,7 +208,7 @@ class TestTemplatePromptReachesLLM:
         assert update_resp.status_code == 200, update_resp.text
 
         note_title = f"Кампания probe {unique_id}"
-        await mock_llm_redis([_empty_analyze_response_for(note_title)])
+        await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -274,7 +283,7 @@ class TestTemplatePromptReachesLLM:
         assert update_resp.status_code == 200, update_resp.text
 
         note_title = f"Тикет probe {unique_id}"
-        await mock_llm_redis([_empty_analyze_response_for(note_title)])
+        await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",
@@ -356,7 +365,7 @@ class TestTemplatePromptReachesLLM:
             await repo.update(mentions_row)
 
             note_title = f"Звонок probe {unique_id}"
-            await mock_llm_redis([_empty_analyze_response_for(note_title)])
+            await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
             note_resp = await crm_client.post(
                 "/crm/api/v1/entities/",
@@ -423,7 +432,7 @@ class TestTemplatePromptReachesLLM:
         )
 
         note_title = f"Тикет seed-prompt probe {unique_id}"
-        await mock_llm_redis([_empty_analyze_response_for(note_title)])
+        await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
         note_resp = await crm_client.post(
             "/crm/api/v1/entities/",

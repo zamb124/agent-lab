@@ -158,12 +158,7 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     import time
 
     note_title = f"Lara analyze {unique_id}"
-    await mock_llm_redis(
-        [
-            {
-                "type": "text",
-                "content": json.dumps(
-                    {
+    _analyze_body = {
                         "note": {
                             "entity_type": "note",
                             "name": note_title,
@@ -187,12 +182,12 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
                             "key_topics": [],
                         },
                         "attachment_summaries": [],
-                    },
-                    ensure_ascii=False,
-                ),
-            }
-        ]
-    )
+                    }
+    _slot = {
+        "type": "text",
+        "content": json.dumps(_analyze_body, ensure_ascii=False),
+    }
+    await mock_llm_redis([_slot, _slot])
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     create_propose_raw = await crm_create_note._run_impl(
@@ -269,12 +264,7 @@ async def test_crm_create_note_and_analyze_tool_chains(
     import time
 
     note_title = f"Lara combo {unique_id}"
-    await mock_llm_redis(
-        [
-            {
-                "type": "text",
-                "content": json.dumps(
-                    {
+    _combo_body = {
                         "note": {
                             "entity_type": "note",
                             "name": note_title,
@@ -298,12 +288,12 @@ async def test_crm_create_note_and_analyze_tool_chains(
                             "key_topics": [],
                         },
                         "attachment_summaries": [],
-                    },
-                    ensure_ascii=False,
-                ),
-            }
-        ]
-    )
+                    }
+    _combo_slot = {
+        "type": "text",
+        "content": json.dumps(_combo_body, ensure_ascii=False),
+    }
+    await mock_llm_redis([_combo_slot, _combo_slot])
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     create_propose_raw = await crm_create_note._run_impl(

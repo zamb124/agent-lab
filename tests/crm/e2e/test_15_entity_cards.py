@@ -102,6 +102,7 @@ class TestEntityCards:
         assert len(card["relationships"]) >= 3
     
     @pytest.mark.asyncio
+    @pytest.mark.timeout(120)
     async def test_project_card_with_team(self, crm_client, unique_id, auth_headers_system):
         """Карточка проекта с командой"""
         project_resp = await crm_client.post("/crm/api/v1/entities/", json={

@@ -163,6 +163,7 @@ k8s-deploy: render-helm-app-conf
 	JSON_ARGS=(); \
 	if [ -n "$${POSTGRES_PASSWORD:-}" ]; then \
 	  JSON_ARGS=(--set-json "platformSecrets=$$(bash deploy/scripts/helm_platform_secrets_json.sh)"); \
+	  HELM_WILL_CREATE_PLATFORM_SECRET=1 HELM_RELEASE="$(K8S_RELEASE)" HELM_NAMESPACE="$(K8S_NAMESPACE)" bash deploy/scripts/helm_precheck_install_secret_conflict.sh; \
 	fi; \
 	helm upgrade --install $(K8S_RELEASE) $(HELM_CHART) \
 	  --namespace $(K8S_NAMESPACE) \

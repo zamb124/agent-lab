@@ -1404,16 +1404,10 @@ async def rag_provider_pgvector():
 
     provider = PgVectorProvider(config, embedding_config)
     yield provider
-    
-    # Cleanup: удаляем тестовые namespaces
-    try:
-        namespaces = await provider.list_namespaces()
-        for namespace in namespaces:
-            if namespace.name.startswith("test_"):
-                await provider.delete_namespace(namespace.name)
-    except Exception as e:
-        # pgvector может быть недоступен при teardown
-        pass
+
+    # Не удаляем все namespace с префиксом test_: при pytest-xdist общая БД RAG
+    # и teardown одного воркера сносит данные параллельных тестов на других воркерах.
+    # Имена вида test_ns_<uuid> уникальны; накопление строк не влияет на изоляцию тестов.
 
 
 @pytest.fixture

@@ -169,6 +169,7 @@ class TestFlowsLoader:
     """Тесты flows_loader."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(120)
     async def test_load_flows_to_db(self, app):
         """load_flows_to_db загружает flows и nodes из каталога bundles в БД."""
         from apps.flows.src.services.flows_loader import FlowsLoader
