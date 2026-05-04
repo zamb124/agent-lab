@@ -12,10 +12,14 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/page-header.js';
 import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
-import { createFlowVoiceSession, disposeFlowVoiceSession } from '../_helpers/flow-voice-session.js';
+import {
+    createFlowVoiceSession,
+    disposeFlowVoiceSession,
+    formatFlowVoiceConnectErrorDetail,
+} from '../_helpers/flow-voice-session.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
-import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { asArray, asString, isPlainObject, authActiveCompanyId } from '../_helpers/flows-resolvers.js';
 import { a2aStateMessagesToChatMessages } from '../_helpers/chat-session-messages.js';
 import { resolveFlowsChatTaskId } from '../_helpers/resolve-flows-chat-task-id.js';
 
@@ -156,7 +160,7 @@ export class ChatPage extends PlatformPage {
         this._cancel = this.useOp('flows/chat_cancel');
         this._sessionState = this.useOp('flows/session_state');
         this._flows = this.useResource('flows/flows');
-        this._activeCompanySel = this.select((s) => s.companies.active);
+        this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
         this._voiceOn = false;
         this._voiceStatus = 'idle';
         /** @type {VoiceMediaSession|null} */
@@ -200,13 +204,10 @@ export class ChatPage extends PlatformPage {
     async _startVoice() {
         if (this._voiceOn) return;
         if (!this.flowId) return;
-        const company = this._activeCompanySel.value;
-        const companyId =
-            company && typeof company === 'object' && typeof company.company_id === 'string'
-                ? company.company_id
-                : '';
+        const companyId = asString(this._activeCompanySel.value);
         if (companyId === '') {
             this._voiceStatus = 'no_company';
+            this.toast('flows:platform_chat.toast_voice_no_company', { type: 'warning' });
             return;
         }
         const initialContextId = this._chat.state?.currentContextId || null;
@@ -239,7 +240,9 @@ export class ChatPage extends PlatformPage {
             this._voiceStatus = 'error';
             this.toast('flows:platform_chat.toast_voice_error', {
                 type: 'error',
-                vars: { detail: err && err.message ? err.message : String(err) },
+                vars: {
+                    detail: formatFlowVoiceConnectErrorDetail(err, (key) => this.t(key)),
+                },
             });
             return;
         }

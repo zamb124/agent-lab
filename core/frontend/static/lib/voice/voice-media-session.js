@@ -181,8 +181,19 @@ export class VoiceMediaSession extends EventTarget {
      */
     async startRecording() {
         if (this._recording) return;
+        if (typeof window !== 'undefined' && window.isSecureContext === false) {
+            const loc = window.location;
+            const portPart = loc.port ? `:${loc.port}` : '';
+            const localhostUrl = `http://127.0.0.1${portPart}${loc.pathname}${loc.search}`;
+            throw new Error(
+                'Микрофон: Chromium не отдаёт getUserMedia для HTTP на этом хосте (нет secure context) — это правило браузера, не «запрет dev» в платформе. ' +
+                    `Откройте тот же путь через loopback, например: ${localhostUrl} , либо HTTPS / флаг Chrome «Insecure origins treated as secure» для dev.`,
+            );
+        }
         if (!hasGetUserMediaApi()) {
-            throw new Error('VoiceMediaSession: getUserMedia not available');
+            throw new Error(
+                'VoiceMediaSession: getUserMedia not available (нет navigator.mediaDevices; часто встроенный превью-браузер, нестандартный WebView или политика безопасности).',
+            );
         }
         this._mediaStream = await getUserMediaCompat({
             audio: {

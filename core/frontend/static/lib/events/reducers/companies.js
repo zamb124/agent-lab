@@ -6,6 +6,8 @@
  *   loading:     boolean
  *   error:       string|null
  *   slugChecks:  { [slug]: { available: boolean } }
+ *
+ * Активная компания сессии — в state.auth (`activeCompanyId`, `user.company_id`), не здесь.
  */
 
 export const COMPANIES_EVENTS = Object.freeze({

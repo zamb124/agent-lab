@@ -163,7 +163,9 @@ async def voice_session(
     all_tasks: list[asyncio.Task[Any]] = []
 
     def _spawn(coro: Awaitable[Any], task_name: str) -> None:
-        task = run_with_log_context(coro, name=task_name)
+        task = run_with_log_context(
+            coro, name=task_name, background_kind="voice_session"
+        )
         all_tasks.append(task)
         session.add_task(task)
 

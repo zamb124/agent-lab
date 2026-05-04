@@ -77,10 +77,24 @@ class FakeChannel:
         self.errors.append((code, detail))
 
 
-async def _drain(task: asyncio.Task[None], *, timeout: float = 2.0) -> None:
+async def _spawn_worker(
+    session: VoiceSession, streamer: FakeTTSStreamer, channel: FakeChannel
+) -> asyncio.Task[None]:
+    """Запустить speak-worker и прицепить его к session для cancel()."""
+    task = asyncio.create_task(
+        run_speak_worker(session, streamer, channel=channel)
+    )
+    session.add_task(task)
+    return task
+
+
+async def _shutdown(
+    session: VoiceSession, task: asyncio.Task[None], *, timeout: float = 2.0
+) -> None:
+    await session.cancel()
     try:
         await asyncio.wait_for(task, timeout=timeout)
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, asyncio.TimeoutError):
         pass
 
 
@@ -92,17 +106,16 @@ async def test_speak_worker_emits_pcm_after_sentence_boundary(
     streamer = FakeTTSStreamer(bytes_per_call=16)
     channel = FakeChannel()
 
-    worker = asyncio.create_task(run_speak_worker(session, streamer, channel=channel))
+    worker = await _spawn_worker(session, streamer, channel)
 
     await enqueue_speak(session, "Привет мир это тест.")
     await asyncio.sleep(0.05)
 
-    await session.cancel()
-    await _drain(worker)
-
     assert len(channel.pcm_frames) >= 1
     assert channel.tts_states[:1] == ["playing"]
     assert any("Привет" in text for text in streamer.calls)
+
+    await _shutdown(session, worker)
 
 
 @pytest.mark.asyncio
@@ -113,19 +126,18 @@ async def test_speak_worker_end_of_utterance_flushes_chunker(
     streamer = FakeTTSStreamer(bytes_per_call=8)
     channel = FakeChannel()
 
-    worker = asyncio.create_task(run_speak_worker(session, streamer, channel=channel))
+    worker = await _spawn_worker(session, streamer, channel)
 
     await enqueue_speak(session, "Недописанная фраза без точки")
     await enqueue_end_of_utterance(session)
     await asyncio.sleep(0.05)
 
-    await session.cancel()
-    await _drain(worker)
-
     assert any(
         "Недописанная" in text for text in streamer.calls
     ), "Flush по _END_OF_UTTERANCE должен вызвать TTS на остатке буфера."
     assert "stopped" in channel.tts_states
+
+    await _shutdown(session, worker)
 
 
 @pytest.mark.asyncio
@@ -136,16 +148,15 @@ async def test_speak_worker_end_of_utterance_without_text_just_stops(
     streamer = FakeTTSStreamer()
     channel = FakeChannel()
 
-    worker = asyncio.create_task(run_speak_worker(session, streamer, channel=channel))
+    worker = await _spawn_worker(session, streamer, channel)
 
     await enqueue_end_of_utterance(session)
     await asyncio.sleep(0.05)
 
-    await session.cancel()
-    await _drain(worker)
-
     assert streamer.calls == []
     assert channel.tts_states == []
+
+    await _shutdown(session, worker)
 
 
 @pytest.mark.asyncio
@@ -156,17 +167,16 @@ async def test_speak_worker_ignores_empty_and_non_str_payload(
     streamer = FakeTTSStreamer()
     channel = FakeChannel()
 
-    worker = asyncio.create_task(run_speak_worker(session, streamer, channel=channel))
+    worker = await _spawn_worker(session, streamer, channel)
 
     await session.synthesis_queue.put("")
     await session.synthesis_queue.put(123)  # type: ignore[arg-type]
     await asyncio.sleep(0.05)
 
-    await session.cancel()
-    await _drain(worker)
-
     assert streamer.calls == []
     assert channel.pcm_frames == []
+
+    await _shutdown(session, worker)
 
 
 @pytest.mark.asyncio

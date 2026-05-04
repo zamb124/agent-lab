@@ -351,6 +351,8 @@
     "voice_status_error": "Voice mode: error",
     "voice_status_closed": "Voice mode: connection closed",
     "voice_status_no_company": "Voice mode: no active company",
+    "toast_voice_no_company": "No active company in the request context. Voice mode is unavailable.",
+    "toast_voice_ws_hint": "Could not connect to the voice gateway on this origin. Start the voice service (port 8015), e.g. with make app. WebSocket proxying from the flows process requires SERVER__ENV=development or test and a host such as *.lvh.me or localhost.",
     "toast_voice_error": "Voice mode failed: {{detail}}"
   },
   "chat_messages": {

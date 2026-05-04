@@ -351,6 +351,8 @@
     "voice_status_error": "Голосовой режим: ошибка",
     "voice_status_closed": "Голосовой режим: соединение закрыто",
     "voice_status_no_company": "Голосовой режим: нет активной компании",
+    "toast_voice_no_company": "Нет активной компании в контексте запроса. Голосовой режим недоступен.",
+    "toast_voice_ws_hint": "Не удалось подключиться к голосовому шлюзу на этом origin. Запустите сервис voice (порт 8015), например через make app. Для прокси WebSocket с процесса flows нужны SERVER__ENV=development или test и host вида *.lvh.me или localhost.",
     "toast_voice_error": "Ошибка голосового режима: {{detail}}"
   },
   "chat_messages": {

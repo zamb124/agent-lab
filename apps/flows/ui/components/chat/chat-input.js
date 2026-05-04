@@ -274,6 +274,8 @@ export class ChatInput extends PlatformElement {
     static properties = {
         disabled: { type: Boolean },
         loading: { type: Boolean },
+        /** Синхронизируется с родителем (`chat-page` передаёт стриминг A2A). */
+        streaming: { type: Boolean },
         placeholder: { type: String },
         maxLength: { type: Number },
         maxFileSize: { type: Number },
@@ -288,6 +290,7 @@ export class ChatInput extends PlatformElement {
         super();
         this.disabled = false;
         this.loading = false;
+        this.streaming = false;
         this.placeholder = 'Send a message';
         this.maxLength = 10000;
         this.maxFileSize = 10 * 1024 * 1024; // 10MB
@@ -304,6 +307,13 @@ export class ChatInput extends PlatformElement {
 
     get fileInputEl() {
         return this.shadowRoot?.querySelector('.file-input');
+    }
+
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        if (changed.has('streaming')) {
+            this.loading = this.streaming;
+        }
     }
 
     _onInput(e) {
@@ -424,7 +434,9 @@ export class ChatInput extends PlatformElement {
                     ${this._selectedFiles.map((file, index) => this._renderFilePreview(file, index))}
                 </div>
             ` : ''}
-            ${this.showVoice && this.voiceActive
+            ${this.showVoice &&
+            (this.voiceActive ||
+                (this.voiceStatus !== 'idle' && this.voiceStatus !== 'closed'))
                 ? html`
                       <div class="voice-status-hint">
                           ${this.t(`platform_chat.voice_status_${this.voiceStatus}`)}
@@ -473,7 +485,7 @@ export class ChatInput extends PlatformElement {
                                   ? this.t('platform_chat.btn_voice_off')
                                   : this.t('platform_chat.btn_voice_on')}
                               aria-pressed=${this.voiceActive ? 'true' : 'false'}
-                              ?disabled=${this.disabled || this.loading}
+                              ?disabled=${this.disabled}
                               @click=${this._onVoiceClick}
                           >
                               <platform-icon

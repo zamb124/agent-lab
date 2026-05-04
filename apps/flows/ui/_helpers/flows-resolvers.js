@@ -36,6 +36,28 @@ export function asBoolean(value) {
 }
 
 /**
+ * Активная компания для клиентских вызовов (voice, и т.д.) из `state.auth`.
+ * Слайс `companies` хранит только список (`list`); объекта `companies.active` в сторе нет.
+ */
+export function authActiveCompanyId(state) {
+    if (!isPlainObject(state)) {
+        return '';
+    }
+    const auth = state.auth;
+    if (!isPlainObject(auth)) {
+        return '';
+    }
+    if (isNonEmptyString(auth.activeCompanyId)) {
+        return auth.activeCompanyId;
+    }
+    const user = auth.user;
+    if (isPlainObject(user) && isNonEmptyString(user.company_id)) {
+        return user.company_id;
+    }
+    return '';
+}
+
+/**
  * Возвращает строку value, если она непустая; иначе fallback (обязателен).
  */
 export function stringOr(value, fallback) {

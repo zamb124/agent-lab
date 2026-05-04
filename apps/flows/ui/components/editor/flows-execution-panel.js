@@ -35,10 +35,15 @@ import {
     asArray,
     asObject,
     asString,
+    authActiveCompanyId,
     deriveRunPanelStatus,
 } from '../../_helpers/flows-resolvers.js';
 import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-id.js';
-import { createFlowVoiceSession, disposeFlowVoiceSession } from '../../_helpers/flow-voice-session.js';
+import {
+    createFlowVoiceSession,
+    disposeFlowVoiceSession,
+    formatFlowVoiceConnectErrorDetail,
+} from '../../_helpers/flow-voice-session.js';
 
 const ACCEPT_FILE_TYPES = '*/*';
 const EMPTY_TRACE = Object.freeze([]);
@@ -342,7 +347,11 @@ export class FlowsExecutionPanel extends PlatformElement {
                 flex-direction: row;
                 align-items: center;
                 gap: var(--space-2);
+                /* Пусть клики проходят к textarea в промежутках; сами кнопки — auto. */
                 pointer-events: none;
+            }
+            .compose-actions glass-button {
+                pointer-events: auto;
             }
             .compose-actions glass-button[data-voice-active] {
                 box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
@@ -430,7 +439,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._voiceMedia = null;
         /** @type {import('@platform/lib/voice/voice-agent-bridge.js').VoiceAgentBridge | null} */
         this._voiceBridge = null;
-        this._activeCompanySel = this.select((s) => s.companies.active);
+        this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
     }
 
     disconnectedCallback() {
@@ -778,13 +787,10 @@ export class FlowsExecutionPanel extends PlatformElement {
     async _startExecPanelVoice() {
         if (this._voiceOn) return;
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) return;
-        const company = this._activeCompanySel.value;
-        const companyId =
-            company && typeof company === 'object' && typeof company.company_id === 'string'
-                ? company.company_id
-                : '';
+        const companyId = asString(this._activeCompanySel.value);
         if (companyId === '') {
             this._voiceStatus = 'no_company';
+            this.toast('flows:platform_chat.toast_voice_no_company', { type: 'warning' });
             return;
         }
         this._ensureContextId();
@@ -820,7 +826,9 @@ export class FlowsExecutionPanel extends PlatformElement {
             this._voiceStatus = 'error';
             this.toast('flows:platform_chat.toast_voice_error', {
                 type: 'error',
-                vars: { detail: err && err.message ? err.message : String(err) },
+                vars: {
+                    detail: formatFlowVoiceConnectErrorDetail(err, (key) => this.t(key)),
+                },
             });
             return;
         }
