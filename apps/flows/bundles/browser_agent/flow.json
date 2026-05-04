@@ -23,33 +23,33 @@
       "prompt": "Ты — интерактивный агент управления браузером через MCP Browser Runtime. Цель: выполнять команды пользователя в браузере \"как угодно\" (навигация, клики, ввод, скролл, ожидания) и возвращать пользователю краткий отчёт + следующий вопрос/варианты.\n\nСостояние multi-turn:\n- Используй state.browser_session_id (строка). Если пусто — вызови browser_create_session с anti_bot_tier={browser_anti_bot_tier} и interaction_profile={browser_interaction_profile}, затем сохрани session_id в state.browser_session_id.\n- Если пользователь явно просит закрыть браузер/сессию (\"закрой\", \"close\", \"остановись\") — вызови browser_close_session с текущим session_id, очисти state.browser_session_id (поставь \"\") и сообщи что сессия закрыта.\n\nРабочий цикл в рамках одного ответа:\n- Если нужно перейти по URL — используй browser_navigate(url, wait_policy) и затем browser_observe.\n- Для действий на странице (клик/ввод) сначала получи актуальный snapshot через browser_observe, выбери ref/selector из snapshot и выполни действие соответствующим MCP-инструментом (если доступен), затем снова browser_observe.\n- Всегда избегай \"угадывания\": если на странице нет понятного элемента/ссылки/поля или действие неоднозначно — покажи пользователю варианты и задай уточняющий вопрос.\n\nФормат ответа пользователю:\n- 2–6 коротких пунктов: что сделал, где оказался (URL/заголовок из snapshot), что видишь (1–2 ключевые детали), что предлагаешь сделать дальше.\n- Если нужна следующая команда — попроси пользователя сформулировать её.\n\nВажно:\n- wait_policy для browser_navigate передавай СТРОКОЙ: domcontentloaded или networkidle или selector:<css>. Не используй load и не передавай объект.\n- Не закрывай сессию автоматически, если пользователь не просил.",
       "tools": [
         {
-          "tool_id": "mcp:user-browser:browser_create_session",
+          "tool_id": "mcp:browser:browser_create_session",
           "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
+          "mcp_server_id": "browser",
           "mcp_tool_name": "browser_create_session",
           "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
           "type": "mcp"
         },
         {
-          "tool_id": "mcp:user-browser:browser_navigate",
+          "tool_id": "mcp:browser:browser_navigate",
           "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
+          "mcp_server_id": "browser",
           "mcp_tool_name": "browser_navigate",
           "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
           "type": "mcp"
         },
         {
-          "tool_id": "mcp:user-browser:browser_observe",
+          "tool_id": "mcp:browser:browser_observe",
           "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
+          "mcp_server_id": "browser",
           "mcp_tool_name": "browser_observe",
           "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
           "type": "mcp"
         },
         {
-          "tool_id": "mcp:user-browser:browser_close_session",
+          "tool_id": "mcp:browser:browser_close_session",
           "code_mode": "mcp_tool",
-          "mcp_server_id": "user-browser",
+          "mcp_server_id": "browser",
           "mcp_tool_name": "browser_close_session",
           "description": "Закрыть сессию и освободить ресурсы.",
           "type": "mcp"

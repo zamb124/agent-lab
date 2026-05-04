@@ -400,7 +400,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "function",
         "doc": (
             "Получить MCP-клиент по server_id из конфигурации компании:\n"
-            "client = await get_mcp_client('user-browser', state=state, timeout=60.0)\n"
+            "client = await get_mcp_client('browser', state=state, timeout=60.0)\n"
             "result = await client.call_tool('browser_observe', {'session_id': '...'})"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
@@ -411,7 +411,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "type": "function",
         "doc": (
             "Вызвать MCP tool без ручной сборки JSON-RPC:\n"
-            "res = await call_mcp_tool('user-browser', 'browser_observe', {'session_id': '...'}, state=state)\n"
+            "res = await call_mcp_tool('browser', 'browser_observe', {'session_id': '...'}, state=state)\n"
             "text = res.get_text(); content = res.content; is_error = res.is_error"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],

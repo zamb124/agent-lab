@@ -35,7 +35,7 @@ async def test_duckduckgo_links_returns_urls_from_snapshot() -> None:
         state=None,
         timeout: float = 60.0,
     ) -> MCPCallResult:
-        assert server_id == "user-browser"
+        assert server_id == "browser"
         nonlocal observe_count
         if tool_name == "browser_create_session":
             payload: dict = {"session_id": "sess-1"}
