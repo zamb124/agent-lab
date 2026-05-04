@@ -266,9 +266,14 @@
   },
   "voice": {
     "stt": {
-      "provider": "cloud_ru",
+      "provider": "litserve",
       "default_language": "ru",
       "mock_transcript_text": "Тестовая транскрипция",
+      "litserve": {
+        "enabled": true,
+        "base_url": "https://humanitec.ru/litserve",
+        "timeout_s": 120.0
+      },
       "cloud_ru": {
         "enabled": true,
         "api_key": "",
@@ -278,6 +283,15 @@
         "temperature": 0.5,
         "language": "ru",
         "timeout": 120.0
+      }
+    },
+    "tts": {
+      "provider": "litserve",
+      "default_response_format": "wav",
+      "litserve": {
+        "enabled": true,
+        "base_url": "https://humanitec.ru/litserve",
+        "timeout_s": 120.0
       }
     }
   },

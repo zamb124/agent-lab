@@ -173,7 +173,6 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         if (!auth) return null;
         const cid = auth.activeCompanyId;
         if (typeof cid !== 'string' || cid.length === 0) return null;
-        if (cid === 'system') return null;
         return cid;
     }
 

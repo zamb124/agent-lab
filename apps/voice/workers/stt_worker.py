@@ -21,6 +21,7 @@ from typing import Awaitable, Callable, Optional
 
 from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from apps.voice.services.voice_barge_in import BargeInController
+from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import VoiceSession
 from core.logging import get_logger
 
@@ -44,6 +45,7 @@ async def run_stt_worker(
     on_vad_state: OnVadState = None,
     barge_in: Optional[BargeInController] = None,
     language: Optional[str] = None,
+    channel: Optional[VoiceClientChannel] = None,
 ) -> None:
     """Пайплайн: audio_in_queue → VAD → STT → callbacks.
 
@@ -104,7 +106,26 @@ async def run_stt_worker(
                 if not had_speech:
                     continue
 
-                result = await stt_provider.flush_buffer()
+                try:
+                    result = await stt_provider.flush_buffer()
+                except Exception as exc:
+                    logger.exception(
+                        "voice.stt_worker.flush_failed",
+                        session_id=session.session_id,
+                    )
+                    if channel is not None and channel.is_open:
+                        try:
+                            await channel.send_error(
+                                code="voice/stt/flush_failed",
+                                detail=str(exc),
+                            )
+                        except Exception:
+                            logger.warning(
+                                "voice.stt_worker.error_notify_failed",
+                                session_id=session.session_id,
+                            )
+                    raise
+
                 if result is None or not result.text:
                     continue
 

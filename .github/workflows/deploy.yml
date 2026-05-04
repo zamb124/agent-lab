@@ -128,6 +128,9 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: build
+    # Helm --wait на большом чарте (много Deployment/StatefulSet + pull образов) может занимать >30m;
+    # job timeout должен быть выше, чем helm --timeout.
+    timeout-minutes: 120
     # Без GitHub Environment: иначе секрет с тем же именем в Environment перекрывает Repository,
     # и пустой KUBECONFIG_B64 в «production» ломает деплой. Нужны reviewers — GitHub Rulesets / отдельный процесс.
 
@@ -327,7 +330,7 @@ jobs:
             --set image.tag="${{ steps.tag.outputs.image_tag }}" \
             $NODE_SETS \
             --set-json "platformSecrets=$(bash deploy/scripts/helm_platform_secrets_json.sh)" \
-            --wait --timeout 30m
+            --wait --timeout 60m
 
       - name: Verify rollout (cluster-health.sh)
         env:

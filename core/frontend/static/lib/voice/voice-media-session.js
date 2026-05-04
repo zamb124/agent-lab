@@ -22,7 +22,21 @@ import { getUserMediaCompat, hasGetUserMediaApi } from '../utils/voice-recording
 const PCM_CAPTURE_WORKLET_NAME = 'pcm-capture';
 
 const PCM_CAPTURE_WORKLET_SOURCE = `
+const OUT_SAMPLE_RATE = 16000;
+
+function floatToInt16(sample) {
+    const s = Math.max(-1, Math.min(1, sample));
+    const v = s < 0 ? s * 0x8000 : s * 0x7fff;
+    return v | 0;
+}
+
 class PCMCaptureProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+        this._tail = new Float32Array(0);
+        this._nextOutSampleIndex = 0;
+    }
+
     process(inputs) {
         const input = inputs[0];
         if (!input || input.length === 0) {
@@ -32,12 +46,47 @@ class PCMCaptureProcessor extends AudioWorkletProcessor {
         if (!channel || channel.length === 0) {
             return true;
         }
-        const pcm = new Int16Array(channel.length);
-        for (let i = 0; i < channel.length; i++) {
-            const sample = Math.max(-1, Math.min(1, channel[i]));
-            pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        const inRate = sampleRate;
+        if (inRate <= 0) {
+            return true;
         }
-        this.port.postMessage(pcm.buffer, [pcm.buffer]);
+        const mergedLen = this._tail.length + channel.length;
+        const merged = new Float32Array(mergedLen);
+        merged.set(this._tail);
+        merged.set(channel, this._tail.length);
+
+        const ratio = inRate / OUT_SAMPLE_RATE;
+        const pcmParts = [];
+
+        while (true) {
+            const inPos = this._nextOutSampleIndex * ratio;
+            const i0 = Math.floor(inPos);
+            const i1 = i0 + 1;
+            if (i1 >= merged.length) {
+                break;
+            }
+            const frac = inPos - i0;
+            const s = merged[i0] * (1 - frac) + merged[i1] * frac;
+            pcmParts.push(floatToInt16(s));
+            this._nextOutSampleIndex += 1;
+        }
+
+        const keepFloat = Math.floor(this._nextOutSampleIndex * ratio);
+        const keepFrom = keepFloat > 0 ? keepFloat - 1 : 0;
+        if (keepFrom >= merged.length) {
+            this._tail = new Float32Array(0);
+        } else {
+            this._tail = merged.subarray(keepFrom);
+        }
+
+        const totalLen = pcmParts.length;
+        if (totalLen > 0) {
+            const pcm = new Int16Array(totalLen);
+            for (let i = 0; i < totalLen; i++) {
+                pcm[i] = pcmParts[i];
+            }
+            this.port.postMessage(pcm.buffer, [pcm.buffer]);
+        }
         return true;
     }
 }
@@ -214,7 +263,8 @@ export class VoiceMediaSession extends EventTarget {
         if (typeof Ctx !== 'function') {
             throw new Error('VoiceMediaSession: AudioContext not available');
         }
-        this._captureCtx = new Ctx({ sampleRate: VOICE_CAPTURE_SAMPLE_RATE });
+        /** Реальный sampleRate часто 44100/48000 (браузер игнорирует hint); ресемплинг в worklet → 16kHz. */
+        this._captureCtx = new Ctx();
         const blob = new Blob([PCM_CAPTURE_WORKLET_SOURCE], { type: 'application/javascript' });
         const url = URL.createObjectURL(blob);
         try {

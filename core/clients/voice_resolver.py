@@ -16,8 +16,13 @@ CI (`scripts/check_voice_resolver_usage.py`).
 3. **Deployment-default** — `settings.voice.<kind>` (`STTProvidersConfig`,
    `TTSProvidersConfig`, `VADProvidersConfig`).
 
-Если итоговое значение обязательного поля отсутствует — `raise ValueError`
-без неявных дефолтов и фолбеков.
+4. **LitServe api id по каталогу** — если итоговый провайдер `litserve`, а поле
+   `model` после шагов 1–3 пустое, подставляется
+   `provider_litserve.infra.<stt|tts|vad>_default_api_model_id` (должно
+   совпадать с моделью в конфиге процесса `provider_litserve`).
+
+Если итоговое значение обязательного поля после всех шагов отсутствует —
+`raise ValueError` без маскировки.
 
 ## Кэш per-company записей
 
@@ -31,7 +36,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 from core.clients.speech_override import SpeechOverride
 from core.clients.stt_client import (
@@ -163,6 +168,22 @@ def _validate_override(override: Optional[SpeechOverride]) -> SpeechOverride:
     return override
 
 
+def _fallback_litserve_api_model_id(
+    *,
+    resolved: Optional[str],
+    kind: Literal["stt", "tts", "vad"],
+) -> Optional[str]:
+    """Если ``voice.<kind>.default_model`` и override/company пусты, берём api id каталога LitServe."""
+    if resolved is not None and resolved != "":
+        return resolved
+    infra = get_settings().provider_litserve.infra
+    if kind == "stt":
+        return infra.stt_default_api_model_id
+    if kind == "tts":
+        return infra.tts_default_api_model_id
+    return infra.vad_default_api_model_id
+
+
 def _resolve_str(
     *,
     override_value: Optional[str],
@@ -232,9 +253,10 @@ async def get_stt_client(
 ) -> BaseSTTClient:
     """Получить STT-клиента с применённым tier-резолвом.
 
-    Возвращает готовый клиент — никаких неявных дефолтов сверх того, что
-    зафиксировано в `STTProvidersConfig`. Если итоговый провайдер не
-    реализован или ключи отсутствуют — `raise ValueError`/`NotImplementedError`.
+    Для `litserve` допускается финальный api id модели из каталога LitServe
+    (см. модульный докстринг), если `voice.stt.default_model` и override/company
+    пусты. Если итоговый провайдер не реализован или ключи отсутствуют —
+    `raise ValueError`/`NotImplementedError`.
     """
     _validate_company_id(company_id)
     override = _validate_override(override)
@@ -251,6 +273,8 @@ async def get_stt_client(
         company_value=company_row.model if company_row else None,
         default_value=settings_voice_stt.default_model,
     )
+    if provider_name == "litserve":
+        model = _fallback_litserve_api_model_id(resolved=model, kind="stt")
     language = _resolve_str(
         override_value=override.language,
         company_value=company_row.language if company_row else None,
@@ -290,6 +314,8 @@ async def get_tts_client(
         company_value=company_row.model if company_row else None,
         default_value=cfg.default_model,
     )
+    if provider_name == "litserve":
+        model = _fallback_litserve_api_model_id(resolved=model, kind="tts")
     voice = _resolve_optional_str(
         override_value=override.voice,
         company_value=company_row.voice if company_row else None,
@@ -341,6 +367,8 @@ async def get_vad_client(
         company_value=company_row.model if company_row else None,
         default_value=cfg.default_model,
     )
+    if provider_name == "litserve":
+        model = _fallback_litserve_api_model_id(resolved=model, kind="vad")
     sample_rate = _resolve_int(
         override_value=override.sample_rate,
         company_value=company_row.sample_rate if company_row else None,

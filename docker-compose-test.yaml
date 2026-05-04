@@ -67,7 +67,7 @@ services:
       - JWT_ENABLED=true
       - JWT_SECRET=test-onlyoffice-jwt-secret
     volumes:
-      - ./deploy/onlyoffice/themes/theme-humanitec-light.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
+      - ./deploy/helm/agent-lab/files/onlyoffice-theme.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
     depends_on:
       redis-test:
         condition: service_healthy
@@ -296,7 +296,7 @@ services:
     container_name: agentlab_loki_test
     command: -config.file=/etc/loki/loki.yaml
     volumes:
-      - ./deploy/observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - ./deploy/helm/agent-lab/files/loki.yaml:/etc/loki/loki.yaml:ro
     ports:
       - "3110:3100"
     networks:
@@ -309,7 +309,7 @@ services:
     container_name: agentlab_tempo_test
     command: -config.file=/etc/tempo/tempo.yaml
     volumes:
-      - ./deploy/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ./deploy/helm/agent-lab/files/tempo.yaml:/etc/tempo/tempo.yaml:ro
     ports:
       - "3210:3200"
     networks:
@@ -345,10 +345,10 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
     volumes:
-      - ./deploy/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
-      - ./deploy/observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
-      - ./deploy/observability/dashboards:/etc/grafana/provisioning/dashboards/platform:ro
-      - ./deploy/observability/grafana-alerts:/etc/grafana/provisioning/alerting:ro
+      - ./deploy/helm/agent-lab/files/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+      - ./deploy/helm/agent-lab/files/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./deploy/helm/agent-lab/files/dashboards:/etc/grafana/provisioning/dashboards/platform:ro
+      - ./deploy/helm/agent-lab/files/grafana-alerts:/etc/grafana/provisioning/alerting:ro
     ports:
       - "3010:3000"
     depends_on:

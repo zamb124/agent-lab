@@ -183,6 +183,7 @@ async def voice_session(
                 on_vad_state=_on_vad_state,
                 barge_in=barge_in,
                 language=language,
+                channel=channel,
             ),
             f"voice.stt_worker.{session_id}",
         )
@@ -195,7 +196,32 @@ async def voice_session(
             f"voice.heartbeat.{session_id}",
         )
 
-        await asyncio.gather(*all_tasks, return_exceptions=True)
+        # Не использовать gather без отмены: ws_receiver может завершиться при
+        # disconnect клиента, тогда воркеры остаются в блокирующих get() очередей
+        # навсегда — gather бы не вернулся. Ждём первого завершившегося участника,
+        # затем в finally session.cancel() снимает остальные.
+        done, _pending = await asyncio.wait(
+            all_tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in done:
+            if task.cancelled():
+                continue
+            exc = task.exception()
+            if exc is not None:
+                logger.warning(
+                    "voice.session.worker_first_completed_with_error",
+                    session_id=session_id,
+                    worker=task.get_name(),
+                    exception_type=type(exc).__name__,
+                    exception_detail=str(exc),
+                )
+            else:
+                logger.debug(
+                    "voice.session.worker_first_completed_ok",
+                    session_id=session_id,
+                    worker=task.get_name(),
+                )
 
     except WebSocketDisconnect:
         logger.info("voice.session.disconnected", session_id=session_id)

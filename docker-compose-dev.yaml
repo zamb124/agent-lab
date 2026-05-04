@@ -251,7 +251,7 @@ services:
       - JWT_ENABLED=true
       - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-dev-onlyoffice-jwt-secret}
     volumes:
-      - ./deploy/onlyoffice/themes/theme-humanitec-light.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
+      - ./deploy/helm/agent-lab/files/onlyoffice-theme.json:/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes/theme-humanitec-light.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -282,7 +282,7 @@ services:
     container_name: agentlab_loki_dev
     command: -config.file=/etc/loki/loki.yaml
     volumes:
-      - ./deploy/observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - ./deploy/helm/agent-lab/files/loki.yaml:/etc/loki/loki.yaml:ro
       - loki_dev_data:/loki
     ports:
       - "3100:3100"
@@ -294,7 +294,7 @@ services:
     container_name: agentlab_tempo_dev
     command: -config.file=/etc/tempo/tempo.yaml
     volumes:
-      - ./deploy/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ./deploy/helm/agent-lab/files/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo_dev_data:/var/tempo
     ports:
       - "3200:3200"
@@ -330,10 +330,10 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
       GF_USERS_ALLOW_ORG_CREATE: "false"
     volumes:
-      - ./deploy/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
-      - ./deploy/observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
-      - ./deploy/observability/dashboards:/etc/grafana/provisioning/dashboards/platform:ro
-      - ./deploy/observability/grafana-alerts:/etc/grafana/provisioning/alerting:ro
+      - ./deploy/helm/agent-lab/files/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+      - ./deploy/helm/agent-lab/files/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./deploy/helm/agent-lab/files/dashboards:/etc/grafana/provisioning/dashboards/platform:ro
+      - ./deploy/helm/agent-lab/files/grafana-alerts:/etc/grafana/provisioning/alerting:ro
       - grafana_dev_data:/var/lib/grafana
     ports:
       - "3000:3000"
