@@ -4,9 +4,10 @@
  * Не знает про A2A, Flows, embed или чат-UI. Делает ровно три вещи:
  *
  *  1. Держит WS `/voice/api/ws/session/{id}` и автоматом отправляет
- *     PCM 16kHz mono 16-bit: при наличии — **`AudioWorklet`** (`voice-mic-capture`),
- *     иначе устаревший **`ScriptProcessorNode`**, затем fallback `AnalyserNode` + pump. Флаг **`_recording`**
- *     поднимают **до** сборки графа, иначе ранние `onaudioprocess` отрезаются.
+ *     PCM 16kHz mono 16-bit: при наличии — **`MediaStreamTrackProcessor`**
+ *     (`AudioData`); при прежнем окончании readable / ошибке `read()` — fallback на **`AudioContext`**
+ *     и **`AudioWorklet`** (`voice-mic-capture`), иначе **`ScriptProcessorNode`**, затем **`AnalyserNode`** + pump.
+ *     Флаг **`_recording`** поднимают **до** сборки графа, иначе ранние `onaudioprocess` отрезаются.
  *     Тихий oscillator; таймер **`~140 ms`** и **`onstatechange`** поднимают контекст из `suspended`/`interrupted`.
  *  2. Принимает от voice text-frames (`transcript`, `vad`, `tts_state`,
  *     `error`, `ping`, `media_config`) и диспатчит как DOM `CustomEvent`.
@@ -199,6 +200,10 @@ export class VoiceMediaSession extends EventTarget {
         this._mspReader = null;
         /** @type {unknown} */
         this._mspProcessor = null;
+        /** Дорожка, с которой подняли MSP (для fallback при прежнем окончании readable). */
+        this._mspCaptureTrackRef = null;
+        /** После сбоя MSP не пробовать MSTP до следующего полного цикла сессии. */
+        this._mspCapturePermanentDisable = false;
         this._recording = false;
 
         /** @type {AudioContext|null} */
@@ -431,11 +436,23 @@ export class VoiceMediaSession extends EventTarget {
 
         this._captureResamplerState = { tail: new Float32Array(0), nextOutSampleIndex: 0 };
 
-        if (this._tryAttachMediaStreamTrackProcessor(audioTrack)) {
+        if (!this._mspCapturePermanentDisable && this._tryAttachMediaStreamTrackProcessor(audioTrack)) {
             this._scheduleMutedMicDiagnostics();
             return;
         }
 
+        await this._initAudioContextMicCaptureFromMediaStream();
+    }
+
+    /**
+     * Захват uplink через Web Audio (MediaStream → worklet / ScriptProcessor / Analyser).
+     * Вызывается при отказе MSTP или после прежнего завершения MSP pump.
+     * @returns {Promise<void>}
+     */
+    async _initAudioContextMicCaptureFromMediaStream() {
+        if (this._captureCtx !== null || this._mediaStream === null) {
+            return;
+        }
         const Ctx = window.AudioContext || window.webkitAudioContext;
         if (typeof Ctx !== 'function') {
             throw new Error('VoiceMediaSession: AudioContext not available');
@@ -654,6 +671,9 @@ export class VoiceMediaSession extends EventTarget {
      * @returns {boolean}
      */
     _tryAttachMediaStreamTrackProcessor(track) {
+        if (this._mspCapturePermanentDisable) {
+            return false;
+        }
         if (
             typeof window === 'undefined'
             || typeof MediaStreamTrackProcessor !== 'function'
@@ -675,9 +695,11 @@ export class VoiceMediaSession extends EventTarget {
             this._mspAbort = abortController;
             this._mspProcessor = processor;
             this._mspReader = reader;
+            this._mspCaptureTrackRef = track;
             void this._runMediaStreamTrackProcessorPump(reader, abortController.signal);
             return true;
         } catch {
+            this._mspCaptureTrackRef = null;
             return false;
         }
     }
@@ -744,9 +766,26 @@ export class VoiceMediaSession extends EventTarget {
                 try {
                     readResult = await reader.read();
                 } catch {
+                    if (!signal.aborted && !this._closed && this._recording) {
+                        this._mspCapturePermanentDisable = true;
+                    }
                     break;
                 }
                 if (readResult.done) {
+                    const tr = this._mspCaptureTrackRef;
+                    const live =
+                        tr !== null
+                        && typeof tr === 'object'
+                        && typeof tr.readyState === 'string'
+                        && tr.readyState === 'live';
+                    if (
+                        live
+                        && !signal.aborted
+                        && !this._closed
+                        && this._recording
+                    ) {
+                        this._mspCapturePermanentDisable = true;
+                    }
                     break;
                 }
                 const audioData = readResult.value;
@@ -796,6 +835,46 @@ export class VoiceMediaSession extends EventTarget {
                 /* noop */
             }
             this._mspProcessor = null;
+        }
+
+        if (
+            this._mspCapturePermanentDisable
+            && !this._closed
+            && this._recording
+            && this._captureCtx === null
+            && this._mediaStream !== null
+        ) {
+            this._captureResamplerState = {
+                tail: new Float32Array(0),
+                nextOutSampleIndex: 0,
+            };
+            try {
+                await this._initAudioContextMicCaptureFromMediaStream();
+                if (
+                    !this._closed
+                    && this._captureCtx !== null
+                    && this._recording
+                    && this._ws !== null
+                    && this._ws.readyState === WebSocket.OPEN
+                ) {
+                    try {
+                        await this._captureCtx.resume();
+                    } catch {
+                        /* noop */
+                    }
+                }
+            } catch (err) {
+                this._recording = false;
+                this._dispatch('error', {
+                    code: 'voice/client/pcm_capture_failed',
+                    detail: err instanceof Error ? err.message : String(err),
+                });
+                try {
+                    this._teardownCapture();
+                } catch {
+                    /* noop */
+                }
+            }
         }
     }
 
@@ -1036,6 +1115,7 @@ export class VoiceMediaSession extends EventTarget {
             }
         }
         this._mspProcessor = null;
+        this._mspCaptureTrackRef = null;
         this._captureResamplerState = null;
         if (typeof document !== 'undefined' && this._captureVisibilityHandler !== null) {
             document.removeEventListener('visibilitychange', this._captureVisibilityHandler);

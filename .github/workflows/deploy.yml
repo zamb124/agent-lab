@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Тег образа (по умолчанию — короткий SHA коммита)"
+        description: "Оставить пустым: в Helm уйдёт короткий SHA того же коммита, что и docker push. Иначе — ровно существующий тег в ghcr.io (опечатка даёт ImagePullBackOff и pending-upgrade)."
         required: false
         default: ""
       apps_node:
@@ -78,10 +78,19 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
+      # Совпадает с type=sha,format=short в docker/metadata-action; не полагаться на meta.outputs.version (не всегда short SHA).
+      image_tag: ${{ steps.helm_image_tag.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Helm image tag (short commit SHA)
+        id: helm_image_tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_SHA:0:7}"
+          printf '%s\n' "${tag}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Free disk space before Docker build
         run: |
@@ -205,16 +214,18 @@ jobs:
       - name: Resolve image tag
         id: tag
         run: |
+          set -euo pipefail
           TAG="${{ inputs.image_tag }}"
+          TAG="$(printf '%s' "${TAG}" | tr -d '[:space:]')"
           if [ -z "$TAG" ]; then
             TAG="${{ needs.build.outputs.image_tag }}"
           fi
           if [ -z "$TAG" ]; then
-            echo "FATAL: image_tag empty"
+            echo "::error title=Missing image_tag::Не задан inputs.image_tag и пустой needs.build.outputs.image_tag."
             exit 1
           fi
-          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Deploying image tag: $TAG"
+          printf '%s\n' "image_tag=$TAG" >> "${GITHUB_OUTPUT}"
+          printf '%s\n' "Deploying image tag: ${TAG}"
 
       - name: Render Helm app-conf (conf.json + K8s overlay)
         run: python3 deploy/scripts/render_helm_app_conf.py
