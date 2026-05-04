@@ -2,7 +2,8 @@
 name = "agent-lab"
 version = "0.1.0"
 description = "Agent Platform - платформа агентских систем"
-requires-python = ">=3.13"
+# Верхняя граница: kokoro → misaki[en] → spacy; wheels spacy пока только cp313.
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "google-auth>=2.43.0",
     "greenlet",
