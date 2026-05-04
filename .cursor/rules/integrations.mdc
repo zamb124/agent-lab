@@ -1,231 +1,151 @@
 ---
-description: "Интеграции: A2A, TaskIQ, Redis Pub/Sub, HTTP, внешние flows (A2A), OAuth для внешних сервисов"
+description: "Интеграции: A2A, ServiceClient, get_httpx_client, внешние flows, OAuth для внешних сервисов"
 alwaysApply: false
 ---
 # Интеграции
 
-## TaskIQ - Очереди задач
+См. также: `taskiq.mdc` (TaskIQ), `streaming.mdc` (Stream-First, Emitter/Subscriber), `database.mdc` (репозиторий vs ServiceClient).
 
-**Компоненты:**
-- RedisStreamBroker (Redis Streams + consumer groups)
-- RedisAsyncResultBackend (хранение результатов)
-- ListRedisScheduleSource (отложенные задачи)
-- SessionLockMiddleware (FIFO per session)
+## Stream-First (LLM)
 
-```python
-from apps.flows_worker.broker import broker
-
-@broker.task(retry_on_error=True, max_retries=3)
-async def my_task(param: str) -> str:
-    return "result"
-
-# Вызов
-task = await my_task.kiq(param="value")
-result = await task.wait_result(timeout=30)
-```
-
-**Основные задачи:**
-- `process_flow_task` - выполнение flow
-- `execute_tool` - выполнение tool
-- `execute_inline_code` - SafeEval для inline кода
-
-**CRM (`crm_worker`):** тяжёлые шаги интеграций namespace (`run_namespace_integration_job`, тип `namespace_integration_job`, см. флаги коннектора в `apps/crm/integrations/protocol.py`) не блокируют HTTP: при `entities_sync_runs_in_worker` / `custom_fields_sync_runs_in_worker` API отдаёт 202 и `TaskResponse`, прогресс в `crm_tasks`.
-
-**Отложенные задачи:**
-```python
-from datetime import datetime, timezone, timedelta
-
-execute_at = datetime.now(timezone.utc) + timedelta(hours=1)
-schedule = await my_task.schedule_by_time(
-    schedule_source, execute_at, param="value"
-)
-```
-
-## Redis Pub/Sub - Streaming
-
-**Stream-First:** LLM ВСЕГДА через `.stream()`, все события через Redis Pub/Sub.
+LLM **всегда** через `.stream()`, события через Redis Pub/Sub. Подробности — `streaming.mdc`.
 
 ```python
 from apps.flows.src.streaming import Emitter, EventSubscriber
 
-# Публикация (в worker)
 emitter = Emitter(redis_client, state)
 await emitter.emit_text("Hello")
 await emitter.emit_tool_call("calculator", {"x": 1}, "call_123")
 await emitter.emit_complete("Done")
 await emitter.emit_interrupt(state.interrupt)
 
-# Подписка (в API)
 subscriber = EventSubscriber(redis_client)
 async for event in subscriber.subscribe(task_id):
-    yield event  # SSE/WebSocket
+    yield event   # SSE/WebSocket
 ```
 
-**A2A типы (из a2a-sdk):**
-- `TaskStatusUpdateEvent` - статус задачи (working, input-required, completed, failed)
-- `TaskArtifactUpdateEvent` - текстовые чанки от LLM
+A2A типы из `a2a-sdk` (свои не создавать): `TaskStatusUpdateEvent` (working/input-required/completed/failed), `TaskArtifactUpdateEvent` (текстовые чанки от LLM). Автоматически добавляются `task_id`, `context_id`, `trace_id`, `span_id` (OpenTelemetry).
 
-**A2A вложения (`FilePart`):** `FileWithBytes` на HTTP API flows не пишется на локальный диск: канал вызывает `FileProcessor.persist_uploaded_file_as_state_files_item` (внутри — `persist_uploaded_file` / S3 + `FileRecord`). Имя без суффикса дополняется расширением по MIME в `process_file_from_bytes`. В `state.files` — `file_id` и same-origin `path` вида `/{server.name}/api/v1/files/download/{file_id}`. `FileWithUri` — без персиста, в `path` остаётся URI. Нужен `active_company` в контексте. При takeover ответ пользователя с файлами: в `dialog_log` уходят только `file_id` из этих записей (чтение локального path с диска не используется).
-
-**Автоматически добавляется:**
-- `task_id`, `context_id`
-- `trace_id`, `span_id` (OpenTelemetry)
+**A2A вложения (`FilePart`):** `FileWithBytes` на HTTP API flows не пишется на локальный диск — канал вызывает `FileProcessor.persist_uploaded_file_as_state_files_item` (внутри — `persist_uploaded_file` / S3 + `FileRecord`). Имя без суффикса дополняется расширением по MIME в `process_file_from_bytes`. В `state.files` — `file_id` и same-origin `path` вида `/{server.name}/api/v1/files/download/{file_id}`. `FileWithUri` — без персиста, `path` остаётся URI. Нужен `active_company` в контексте. При takeover ответ пользователя с файлами — в `dialog_log` уходят только `file_id` (чтение локального path с диска не используется).
 
 ## HTTP клиенты
 
-### Межсервисное взаимодействие: данные и HTTP
+### Межсервисный доступ
 
-**Данные:** если у процесса есть доступ к БД домена — **репозиторий**, не отдельный HTTP-клиент к peer-сервису (см. `repository_inter_service.mdc`).
+**Данные:** при доступной БД домена — **репозиторий**, не отдельный HTTP-клиент к peer (см. `database.mdc` → «Межсервисный доступ к данным»).
 
-**HTTP к API другого сервиса** — **только** `ServiceClient` (прямой `httpx.AsyncClient` между сервисами запрещён).
+**HTTP к API другого сервиса** — **только** `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
 
 ```python
 from core.clients import ServiceClient
-
 client = ServiceClient()
 response = await client.get("flows", "/flows/api/v1/flows/")
 response = await client.post("crm", "/crm/api/v1/entities/", json=data)
 ```
 
-**Сервисы:** `flows`, `crm`, `frontend`, `rag`, `sync`, `office`, `scheduler`, `voice` (и др. по `ServerConfig` / `get_service_url`).
+Сервисы: `flows`, `crm`, `frontend`, `rag`, `sync`, `office`, `scheduler`, `voice` (и др. по `ServerConfig`/`get_service_url`). Документы — на BFF: `ServiceClient("office", "/documents/api/v1/...")` (секреты OnlyOffice только в процессе `apps/office`). В проде Document Server — на субдомене `onlyoffice.{domain}` (единый Ingress `path: /`); см. `office.mdc`.
 
-Вызовы REST **документов** с других сервисов — на BFF: `ServiceClient` → `"office"`, путь `/documents/api/v1/...` (секреты OnlyOffice только в процессе `apps/office`). В проде Document Server — на **субдомене** `onlyoffice.{domain}` (единый Ingress `path: /`), не на основном домене с набором Prefix. См. **`office.mdc`**.
+`ServiceClient` автоматически передаёт `trace_id`, `request_id`, авторизацию, `X-Company-Id`, `X-User-Id`, `X-Platform-Namespace` из `get_context()` (см. `logging.mdc`, `architecture.mdc`).
 
-**Браузер и тот же origin (shell на :8002, API flows на :8001):** без ingress в `development` / `test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`: путь `/flows/...`, `/crm/...`, `/voice/...`, `/documents/...` и т.д. пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), а не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании; `/sync` часто в `anonymous` и ведёт себя иначе. Префиксы OnlyOffice **`/web-apps`**, **`/common`**, **`/cache`**, **`/fonts`**, **`/sdkjs`**, **`/downloadfile`**, пути **`/{semver}-{hex}/web-apps/...`**, **`/{semver}-{hex}/sdkjs/...`**, **`/{semver}-{hex}/fonts/...`**, **`/{semver}-{hex}/doc/...`** (co-editing / Socket.IO) при заданном **`server.document_server_dev_upstream_url`** уходят на Document Server с **`Host`** = **`Host`** запроса браузера (как у прочих прокси в middleware), чтобы подписанные URL DS не указывали на порт контейнера и не ломали CORS. Локальный Host определяется через `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
+**Заголовки httpx** должны быть encodable в latin-1: не класть в заголовки сырой `user_id` с Unicode (например гость `guest:…:Кириллица`). Контекст пользователя — в JWT (`Authorization`), см. `_build_interservice_auth_headers` в `apps/sync/realtime/tasks.py`.
 
-**Преимущества:**
-- Автоматическая передача trace_id, авторизации
-- Валидация по OpenAPI
-- Единая конфигурация URL
+### DevInterServiceProxy (development/test)
 
-**Заголовки httpx:** значения должны быть encodable в latin-1. Не класть в заголовки сырой `user_id` с Unicode (например гость `guest:…:Кириллица`). Контекст пользователя для межсервисного вызова — в JWT (`Authorization`); см. `_build_interservice_auth_headers` в `apps/sync/realtime/tasks.py`.
+Браузер и тот же origin (shell на :8002, API flows на :8001): без ingress в `development`/`test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`. Путь `/flows/...`, `/crm/...`, `/voice/...`, `/documents/...` пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании, `/sync` часто в `anonymous`.
 
-### Внешние API - get_httpx_client
+Префиксы OnlyOffice (`/web-apps`, `/common`, `/cache`, `/fonts`, `/sdkjs`, `/downloadfile`) и пути `/{semver}-{hex}/{web-apps,sdkjs,fonts,doc}/...` (co-editing / Socket.IO) при заданном `server.document_server_dev_upstream_url` уходят на Document Server с `Host` = `Host` запроса браузера — иначе подписанные URL DS указывают на порт контейнера и ломают CORS.
+
+Локальный Host — `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
+
+### Внешние API — `get_httpx_client`
 
 ```python
 from core.http import get_httpx_client
 
-# OAuth провайдеры - БЕЗ прокси
 async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
-    response = await client.get(url)
+    response = await client.get(url)            # OAuth провайдеры — БЕЗ прокси
 
-# Внутренние API - с прокси
 async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
-    response = await client.get(url)
+    response = await client.get(url)            # внутренние API — с прокси
 ```
 
-**ЗАПРЕЩЕНО:** `httpx.AsyncClient()` напрямую!
+**Запрещено:** `httpx.AsyncClient()` напрямую.
 
-## Внешние flows (A2A протокол)
-
-### Регистрация по URL
+## Внешние flows (A2A)
 
 ```python
-# Из конфига (список в `ExternalFlowsConfig.flows`)
 await container.flow_discovery.init_from_config(config.external_flows.flows)
 
-# Динамическая регистрация (метод исторически называется register_agent — регистрирует flow по A2A card)
 external_flow = await container.flow_discovery.register_agent(
     url="http://remote-flow:8080",
-    auth_headers={"Authorization": "Bearer token"}
+    auth_headers={"Authorization": "Bearer token"},
 )
 ```
 
-### RemoteFlowNode в конфиге flow
+`RemoteFlowNode` в FlowConfig:
 
 ```json
-{
-  "type": "remote_flow",
-  "flow_id": "external_flow",
-  "input_mapping": {"content": "@state:user_query"},
-  "branch_id": "default"
-}
+{"type": "remote_flow", "flow_id": "external_flow",
+ "input_mapping": {"content": "@state:user_query"}, "branch_id": "default"}
 ```
 
-**Требования к внешнему endpoint (A2A):**
-- `GET /.well-known/agent-card.json`
-- `POST /tasks/send` (JSON-RPC 2.0)
+Требования к внешнему endpoint (A2A): `GET /.well-known/agent-card.json`, `POST /tasks/send` (JSON-RPC 2.0).
 
-### A2A `message/stream`: metadata.mock (моки)
+### A2A `message/stream`: `metadata.mock`
 
-В `params.metadata` для отладки передаётся **`mock`** — объект в формате **MockConfig** (`enabled`, `llm`, `tools`, `nodes`, `flows`), см. `apps/flows/src/mock/config.py` и `resolve_mock_config` в `apps/flows/src/channels/base.py`. Ключ **`mocks` не используется** бэкендом.
+В `params.metadata` для отладки передаётся **`mock`** — объект формата `MockConfig` (`enabled`, `llm`, `tools`, `nodes`, `flows`, см. `apps/flows/src/mock/config.py` и `resolve_mock_config` в `apps/flows/src/channels/base.py`). Ключ `mocks` бэкендом не используется. Сборка из UI редактора execution-panel — `apps/flows/ui/utils/build-mock-config.js`, отправка через `a2a.service` (`metadata.mock`).
 
-Сборка из UI редактора execution-panel: `apps/flows/ui/utils/build-mock-config.js`, отправка через `a2a.service` (`metadata.mock`).
-
-## External API
-
-### ExternalAPINode в конфиге ноды / FlowConfig
+## External API node
 
 ```json
-{
-  "type": "external_api",
-  "url": "https://@var:api.host/endpoint",
-  "method": "POST",
-  "auth_headers": {"Authorization": "Bearer @var:auth.token"},
-  "parameters": [
-    {
-      "name": "city",
-      "source": "@state:user.city",
-      "type": "string",
-      "location": "query"
-    }
-  ],
-  "state_mapping": {"result": "api_result"}
-}
+{"type": "external_api", "url": "https://@var:api.host/endpoint", "method": "POST",
+ "auth_headers": {"Authorization": "Bearer @var:auth.token"},
+ "parameters": [{"name": "city", "source": "@state:user.city", "type": "string", "location": "query"}],
+ "state_mapping": {"result": "api_result"}}
 ```
 
-**Поддержка @var: с вложенными путями:**
-- `@var:api.host` → `variables["api"]["host"]`
-- `@var:auth.tokens.access` → `variables["auth"]["tokens"]["access"]`
+`@var:` поддерживает вложенные пути: `@var:api.host` → `variables["api"]["host"]`; `@var:auth.tokens.access` → `variables["auth"]["tokens"]["access"]`.
 
-## Универсальный механизм авторизации интеграций
+## OAuth интеграции (универсальный механизм)
 
-**Модуль:** `core/integrations/` — единый OAuth2 flow для всех внешних интеграций (Google, Yandex, будущие).
-
-### Компоненты
+Модуль `core/integrations/` — единый OAuth2 flow для всех внешних интеграций (Google, Yandex, будущие). Не дублировать OAuth-логику в сервисах.
 
 | Файл | Назначение |
-|------|-----------|
+|---|---|
 | `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig` |
 | `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
-| `core/integrations/oauth_service.py` | `OAuthService` — `build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
-| `core/api/integrations.py` | OAuth callback: `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`); дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём; после успеха редирект на `post_auth_redirect_origin` + `return_path`, если в state был допустимый `return_origin` при старте (`core.utils.domain.is_allowed_integration_return_origin`), иначе на `platform_public_base_url` + `return_path` |
-
-### Приоритет credentials в тулах
-
-1. **Company-level** — `state.variables` (SA JSON, static token) — преднастроено админом
-2. **Per-user OAuth** — `integration_credentials` в БД — `company_id` и `user_id` из `get_context()`, НЕ из state
-3. **Нет ничего** — тул бросает `FlowInterrupt(body=OAuthInterrupt(...))`, flow ставится на паузу; после OAuth callback — автоматический resume
-
-### FlowInterrupt для OAuth (auto-resume)
-
-- `OAuthInterrupt` (`core/state/interrupt.py`): `kind=oauth_required`, поля `question`, `auth_url`, `provider`, `service`
-- `build_auth_url(..., flow_context=...)`: в OAuth state (Storage) сохраняется контекст flow (`flow_id`, `session_id`, `task_id`, `context_id`, `branch_id`, `channel`, `context_data`)
-- OAuth callback (`core/api/integrations.py`): после `complete_oauth` — если `flow_context` есть, вызывает `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`
-- SSE: `emit_interrupt` для `OAUTH_REQUIRED` отправляет `input-required` с **`final=False`** и **`platform_oauth_continue=true`** — SSE остаётся открытым
-- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (target=_blank), юзер авторизуется в новой вкладке → flow продолжается автоматически
-
-### Безопасность
-
-`company_id` для чтения/записи credentials — ТОЛЬКО из `get_context().active_company.company_id`. Разработчик flow не может подменить через `input_mapping` или `state.variables`.
-
-### Прозрачность
-
-Вся логика авторизации ЯВНО в коде тула: переменные, OAuth-проверка, создание клиента. Никаких скрытых resolver-ов. Разработчик flow видит каждый шаг и может менять имена переменных, убирать OAuth-ветку, добавлять свою логику.
-
-### CalendarService
-
-Делегирует OAuth в `OAuthService` (через конструктор). Credentials хранятся в `integration_credentials`, calendar-специфичные настройки — в `metadata.calendar_settings` JSONB.
-
-### DI
+| `core/integrations/oauth_service.py` | `OAuthService.build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
+| `core/api/integrations.py` | OAuth callback `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`). Дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём; после успеха — редирект на `post_auth_redirect_origin` + `return_path` (если в state был допустимый `return_origin` при старте, см. `core.utils.domain.is_allowed_integration_return_origin`), иначе — `platform_public_base_url` + `return_path` |
 
 `BaseContainer` предоставляет `oauth_service` и `integration_credential_repository` для всех сервисов.
 
+### Приоритет credentials в тулах
+
+1. **Company-level** — `state.variables` (SA JSON, static token) — преднастроено админом.
+2. **Per-user OAuth** — `integration_credentials` в БД — `company_id` и `user_id` из `get_context()`, **не** из state.
+3. **Нет ничего** — тул бросает `FlowInterrupt(body=OAuthInterrupt(...))`, flow ставится на паузу; после OAuth callback — автоматический resume.
+
+### Auto-resume после OAuth
+
+- `OAuthInterrupt` (`core/state/interrupt.py`): `kind=oauth_required`, поля `question`, `auth_url`, `provider`, `service`.
+- `build_auth_url(..., flow_context=...)` сохраняет в OAuth state (Storage) контекст flow: `flow_id`, `session_id`, `task_id`, `context_id`, `branch_id`, `channel`, `context_data`.
+- OAuth callback после `complete_oauth` — если `flow_context` есть, вызывает `process_flow_task.kiq(is_resume=True, content="oauth_completed:...")`.
+- SSE: `emit_interrupt` для `OAUTH_REQUIRED` отправляет `input-required` с `final=False` и `platform_oauth_continue=true` — SSE остаётся открытым.
+- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (`target=_blank`); юзер авторизуется в новой вкладке → flow продолжается автоматически.
+
+### Безопасность и прозрачность
+
+- `company_id` для чтения/записи credentials — **только** из `get_context().active_company.company_id`. Разработчик flow не может подменить через `input_mapping` или `state.variables`.
+- Вся логика авторизации **явно в коде тула**: переменные, OAuth-проверка, создание клиента. Никаких скрытых resolver-ов; разработчик flow видит каждый шаг.
+
+### CalendarService
+
+Делегирует OAuth в `OAuthService` (через конструктор). Credentials — в `integration_credentials`, calendar-специфичные настройки — в `metadata.calendar_settings` JSONB.
+
 ## КРИТИЧНЫЕ ПРАВИЛА
 
-1. **TaskIQ:** Задачи регистрируются на брокере своего worker-модуля (`apps.flows_worker.broker`, `apps.idle_worker.broker`, `apps.rag_worker.broker`, `apps.sync.realtime.broker`, `apps.crm_worker.broker`); FIFO per session автоматически
-2. **Streaming:** LLM ТОЛЬКО через `.stream()`, события через Redis Pub/Sub
-3. **Данные между сервисами:** репозиторий при доступной БД (`repository_inter_service.mdc`). **HTTP между сервисами:** только `ServiceClient`; внешние API — `get_httpx_client`
-4. **A2A типы:** Используй типы из `a2a-sdk`, НЕ создавай свои
-5. **OAuth:** ВСЕГДА `use_proxy_from_config=False`
-6. **Интеграции:** Авторизация внешних сервисов — через `core/integrations/OAuthService`, не дублировать OAuth-логику в сервисах
+1. Между сервисами для данных — репозиторий при доступной БД; для HTTP — только `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
+2. Внешние API — `get_httpx_client`. OAuth-провайдеры — `use_proxy_from_config=False`.
+3. LLM — только через `.stream()`, события — Redis Pub/Sub (`streaming.mdc`).
+4. A2A — типы из `a2a-sdk`; свои не создавать.
+5. OAuth внешних сервисов — через `core/integrations/OAuthService`, не дублировать в сервисах.

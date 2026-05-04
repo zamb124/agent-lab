@@ -34,13 +34,20 @@ pytestmark = pytest.mark.timeout(15)
 async def test_litserve_stt_client_returns_transcript(
     fake_speech_server: FakeSpeechServer, unique_id: str
 ) -> None:
-    """LitserveSTTClient: POST /v1/audio/transcriptions → JSON {text}."""
+    """LitserveSTTClient: POST /v1/audio/transcriptions → JSON {text}.
+
+    Контракт: тело — JSON `{"model", "language", "file": [int,...]}`,
+    `STTLitAPI.parse_stt_body` берёт байты из `raw["file"]` (list[int] →
+    `bytes(...)`). Multipart не используется.
+    """
     expected_text = f"Привет мир {unique_id}"
+    expected_audio = b"\x00\x01\x02\x03"
 
     async def _handler(request: web.Request) -> web.StreamResponse:
-        form = await request.post()
-        assert form.get("model") == "gigaam-v3-rnnt-ru"
-        assert form.get("language") == "ru"
+        body = await request.json()
+        assert body.get("model") == "gigaam-v3-rnnt-ru"
+        assert body.get("language") == "ru"
+        assert bytes(body.get("file") or []) == expected_audio
         return web.json_response({"text": expected_text})
 
     fake_speech_server.route("POST", "/v1/audio/transcriptions", _handler)
@@ -52,7 +59,7 @@ async def test_litserve_stt_client_returns_transcript(
         timeout=10.0,
     )
     result = await client.transcribe_audio(
-        audio_bytes=b"\x00\x01\x02\x03",
+        audio_bytes=expected_audio,
         file_name=f"audio-{unique_id}.wav",
         mime_type="audio/wav",
     )

@@ -159,3 +159,42 @@ def test_pcm_to_wav_produces_valid_wav_header():
         assert wf.getnchannels() == 1
         assert wf.getsampwidth() == 2
         assert wf.getnframes() == 8
+
+
+def test_audio_lit_apis_decode_request_annotation_is_fastapi_request():
+    """LitServe ожидает аннотацию ``request: fastapi.Request`` в ``decode_request``.
+
+    `litserve.server.LitAPIRequestHandler._prepare_request` именно по этой
+    аннотации решает читать body вручную (`await request.json()` /
+    `await request.form()`). Любая другая (`Any`, отсутствие — fallback на
+    `Request` тоже работает) делегирует валидацию body FastAPI, что для
+    больших JSON-тел /v1/audio/* возвращает 422 ещё до `decode_request`.
+
+    Важно: при ``from __future__ import annotations`` в модуле LitAPI
+    `inspect.signature(...).parameters["request"].annotation` становится
+    строкой ``'Request'`` — сравнение с классом ``Request`` в LitServe ломается,
+    в multiprocessing-queue попадает сырой ASGI-``Request`` (pickle → 500,
+    ``Can't get local object 'FastAPI.setup.<locals>.openapi'``).
+    """
+    import inspect
+    import typing
+
+    from fastapi import Request
+
+    from apps.provider_litserve.stt.api import STTLitAPI
+    from apps.provider_litserve.tts.api import TTSLitAPI
+    from apps.provider_litserve.vad.api import VADLitAPI
+
+    for cls in (STTLitAPI, TTSLitAPI, VADLitAPI):
+        hints = typing.get_type_hints(cls.decode_request)
+        assert hints.get("request") is Request, (
+            f"{cls.__name__}.decode_request: ожидался request: fastapi.Request, "
+            f"получено {hints.get('request')!r}"
+        )
+        raw_ann = inspect.signature(cls.decode_request).parameters[
+            "request"
+        ].annotation
+        assert raw_ann is Request, (
+            f"{cls.__name__}.decode_request: параметр request должен быть аннотирован "
+            f"классом fastapi.Request в runtime (не строкой/ForwardRef): получено {raw_ann!r}"
+        )

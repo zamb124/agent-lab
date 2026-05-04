@@ -3,17 +3,21 @@
 Единственный источник правды для событий распознавания в voice-сессии:
 
 * ``on_vad_state(session, "started"|"ended")`` — смена состояния VAD
-  (первая речевая граница / окончание паузы);
+  (передний фронт речи / устойчивая пауза). Все пороги/гистерезис/
+  длительности smoothing живут внутри ``StreamingVADProvider`` (см.
+  `voice.mdc`); worker — машина состояний на единственном булевом
+  ``is_speech``, без своих счётчиков silence/speech;
 * ``on_final_transcription(session, text, language)`` — финальная фраза
-  после тишины: возврат от ``stt_provider.flush_buffer()``;
+  после паузы: возврат от ``stt_provider.flush_buffer()``;
 * ``on_partial_transcription(session, text, language)`` — промежуточная
   транскрипция при открытом VAD-окне (chunked-batch ``peek_transcript``);
 * при ``tts_is_active=True`` и срабатывании ``BargeInController`` —
   воркер сам вызывает ``execute_barge_in(session)`` со сбросом STT/VAD.
 
-Никакой бизнес-логики: ни LLM, ни маршрутизации сообщений. Только
-media-события, которые клиент (или универсальный ``VoiceClientChannel``)
-транслирует в text-frames WS.
+При переходе SILENCE → SPEECH worker вызывает
+``vad_provider.consume_preroll()`` и пушит pre-roll PCM в STT-буфер
+перед текущим фреймом — без этого первые ~150-300 мс слова теряются и
+STT отдаёт огрызок (см. `voice.mdc` секция «Streaming VAD»).
 """
 
 from __future__ import annotations
@@ -39,7 +43,6 @@ OnPartialTranscription = Optional[
 OnVadState = Optional[Callable[[VoiceSession, str], Awaitable[None]]]
 
 _FRAME_DURATION_S = 0.02
-_SILENCE_THRESHOLD = 10
 
 
 async def run_stt_worker(
@@ -54,17 +57,7 @@ async def run_stt_worker(
     language: Optional[str] = None,
     channel: Optional[VoiceClientChannel] = None,
 ) -> None:
-    """Пайплайн: audio_in_queue → VAD → STT → callbacks.
-
-    При первой речевой границе вызывается ``on_vad_state(session, "started")``,
-    после ``_SILENCE_THRESHOLD`` тихих фреймов — ``on_vad_state(session,
-    "ended")`` и, если буфер не пуст, ``flush_buffer`` + ``on_final_transcription``.
-
-    Если ``settings.voice.stt.partial_transcripts_enabled`` — каждые
-    ``partial_min_speech_frames`` 20 ms-фреймов речи воркер вызывает
-    ``stt_provider.peek_transcript(...)`` и (при непустом тексте)
-    ``on_partial_transcription``.
-    """
+    """Пайплайн: audio_in_queue → VAD → STT → callbacks."""
     stt_cfg = get_settings().voice.stt
     partial_enabled = stt_cfg.partial_transcripts_enabled
     partial_step = stt_cfg.partial_min_speech_frames
@@ -72,9 +65,8 @@ async def run_stt_worker(
         16000 * 2 * stt_cfg.partial_min_buffer_ms // 1000
     )
 
-    speech_frames: int = 0
-    silence_frames: int = 0
     vad_open: bool = False
+    speech_frames_in_window: int = 0
     last_partial_at_frame: int = 0
 
     while session.active:
@@ -92,21 +84,27 @@ async def run_stt_worker(
             )
             continue
 
+        if is_speech and not vad_open:
+            vad_open = True
+            speech_frames_in_window = 0
+            last_partial_at_frame = 0
+            consume_preroll = getattr(vad_provider, "consume_preroll", None)
+            if callable(consume_preroll):
+                preroll = consume_preroll()
+                if preroll:
+                    await stt_provider.push_audio(preroll)
+            if on_vad_state is not None:
+                await on_vad_state(session, "started")
+
         if is_speech:
-            if not vad_open:
-                vad_open = True
-                last_partial_at_frame = 0
-                if on_vad_state is not None:
-                    await on_vad_state(session, "started")
-            speech_frames += 1
-            silence_frames = 0
+            speech_frames_in_window += 1
             await stt_provider.push_audio(audio_frame)
 
             if (
                 barge_in is not None
                 and session.is_tts_active
                 and barge_in.is_barge_in(
-                    vad_speech_seconds=speech_frames * _FRAME_DURATION_S,
+                    vad_speech_seconds=speech_frames_in_window * _FRAME_DURATION_S,
                     stt_preview_text="",
                     tts_is_active=True,
                 )
@@ -116,18 +114,17 @@ async def run_stt_worker(
                     stt_provider=stt_provider,
                     vad_provider=vad_provider,
                 )
-                speech_frames = 0
-                silence_frames = 0
                 vad_open = False
+                speech_frames_in_window = 0
                 last_partial_at_frame = 0
                 continue
 
             if (
                 partial_enabled
                 and on_partial_transcription is not None
-                and speech_frames - last_partial_at_frame >= partial_step
+                and speech_frames_in_window - last_partial_at_frame >= partial_step
             ):
-                last_partial_at_frame = speech_frames
+                last_partial_at_frame = speech_frames_in_window
                 try:
                     partial = await stt_provider.peek_transcript(
                         min_buffer_bytes=partial_min_buffer_bytes,
@@ -142,52 +139,46 @@ async def run_stt_worker(
                     await on_partial_transcription(
                         session, partial.text, language
                     )
-        else:
-            silence_frames += 1
+            continue
 
-            if vad_open and silence_frames >= _SILENCE_THRESHOLD:
-                vad_open = False
-                had_speech = speech_frames > 0
-                speech_frames = 0
-                silence_frames = 0
-                last_partial_at_frame = 0
+        if not is_speech and vad_open:
+            vad_open = False
+            speech_frames_in_window = 0
+            last_partial_at_frame = 0
 
-                if on_vad_state is not None:
-                    await on_vad_state(session, "ended")
+            if on_vad_state is not None:
+                await on_vad_state(session, "ended")
 
-                if not had_speech:
-                    continue
-
-                try:
-                    result = await stt_provider.flush_buffer()
-                except Exception as exc:
-                    logger.exception(
-                        "voice.stt_worker.flush_failed",
-                        session_id=session.session_id,
-                    )
-                    if channel is not None and channel.is_open:
-                        try:
-                            await channel.send_error(
-                                code="voice/stt/flush_failed",
-                                detail=str(exc),
-                            )
-                        except Exception:
-                            logger.warning(
-                                "voice.stt_worker.error_notify_failed",
-                                session_id=session.session_id,
-                            )
-                    raise
-
-                if result is None or not result.text:
-                    continue
-
-                logger.info(
-                    "voice.stt_worker.transcription",
+            try:
+                result = await stt_provider.flush_buffer()
+            except Exception as exc:
+                logger.exception(
+                    "voice.stt_worker.flush_failed",
                     session_id=session.session_id,
-                    text_length=len(result.text),
                 )
-                if on_final_transcription is not None:
-                    await on_final_transcription(session, result.text, language)
+                if channel is not None and channel.is_open:
+                    try:
+                        await channel.send_error(
+                            code="voice/stt/flush_failed",
+                            detail=str(exc),
+                        )
+                    except Exception:
+                        logger.warning(
+                            "voice.stt_worker.error_notify_failed",
+                            session_id=session.session_id,
+                        )
+                raise
+
+            if result is None or not result.text:
+                continue
+
+            logger.info(
+                "voice.stt_worker.transcription",
+                session_id=session.session_id,
+                text_length=len(result.text),
+            )
+            if on_final_transcription is not None:
+                await on_final_transcription(session, result.text, language)
 
 
 __all__ = [

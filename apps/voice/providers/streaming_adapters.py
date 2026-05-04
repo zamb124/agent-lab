@@ -142,11 +142,35 @@ class StreamingTTSProvider(BaseTTSProvider):
 
 
 class StreamingVADProvider(BaseVADProvider):
-    """Streaming VAD через любой `BaseVADClient`.
+    """Streaming VAD по канону LiveKit/Pipecat поверх ``BaseVADClient``.
 
-    Накапливает PCM-фреймы внутри окна (`window_ms`, по умолчанию 200ms)
-    и периодически вызывает `vad_client.detect_segments()`. Возвращает
-    `True` если в окне найдена речь.
+    Архитектура (`https://docs.livekit.io/agents/build/turns/vad`):
+
+    1. Клиент шлёт PCM произвольной длины (типично 20 ms = 320 сэмплов на
+       16 kHz). Провайдер копит во внутреннем буфере и режет на
+       **фиксированные** chunks ровно по 512 сэмплов на 16 kHz / 256 на
+       8 kHz — silero-vad v5 принимает только такие размеры
+       (`https://github.com/snakers4/silero-vad/wiki/FAQ`).
+    2. На каждом 32 ms-чанке вызывается ``vad_client.detect_speech_prob``
+       — **без** сброса state модели между вызовами; state хранит
+       контекст голосовой сессии, без которого короткие чанки неотличимы
+       от шума.
+    3. Решение state (`SILENCE` ↔ `SPEECH`) обновляется через гистерезис
+       и сглаживание длительности:
+       * SILENCE → SPEECH: prob ≥ ``activation_threshold`` непрерывно
+         в течение ``min_speech_ms`` (защита от ложных стартов на
+         щелчках).
+       * SPEECH → SILENCE: prob < ``deactivation_threshold`` непрерывно
+         в течение ``min_silence_ms`` (граница конца фразы).
+    4. Pre-roll buffer ``prefix_padding_ms`` — rolling-окно последних N мс
+       PCM. При переходе SILENCE → SPEECH ``stt_worker`` вызывает
+       ``consume_preroll()`` и пушит pre-roll в STT, чтобы не потерять
+       первый звук слова.
+
+    Не-streaming клиент (`supports_streaming=False`) не поддерживается:
+    real-time VAD без per-chunk вероятности невозможен. Платформенный
+    деплоймент-default — `silero_local`; `mock` для тестов; для litserve
+    нужен per-frame `/v1/audio/vad/prob` endpoint (TODO провайдер).
     """
 
     def __init__(
@@ -154,19 +178,58 @@ class StreamingVADProvider(BaseVADProvider):
         *,
         vad_client: BaseVADClient,
         sample_rate: int = 16000,
-        threshold: Optional[float] = None,
-        window_ms: int = 200,
+        activation_threshold: float = 0.5,
+        deactivation_threshold: float = 0.35,
+        min_speech_ms: int = 50,
+        min_silence_ms: int = 550,
+        prefix_padding_ms: int = 500,
     ) -> None:
-        if sample_rate <= 0:
-            raise ValueError("StreamingVADProvider: sample_rate должен быть > 0.")
-        if window_ms <= 0:
-            raise ValueError("StreamingVADProvider: window_ms должен быть > 0.")
+        if sample_rate not in (8000, 16000):
+            raise ValueError(
+                "StreamingVADProvider: sample_rate должен быть 8000 или 16000."
+            )
+        if not vad_client.supports_streaming:
+            raise ValueError(
+                f"StreamingVADProvider: vad_client {type(vad_client).__name__} "
+                "не поддерживает streaming (supports_streaming=False); используйте "
+                "silero_local или mock."
+            )
+        if not 0.0 <= activation_threshold <= 1.0:
+            raise ValueError("activation_threshold должен быть в [0.0, 1.0].")
+        if not 0.0 <= deactivation_threshold <= 1.0:
+            raise ValueError("deactivation_threshold должен быть в [0.0, 1.0].")
+        if deactivation_threshold > activation_threshold:
+            raise ValueError(
+                "deactivation_threshold должен быть ≤ activation_threshold "
+                "(гистерезис)."
+            )
+        if min_speech_ms < 0:
+            raise ValueError("min_speech_ms должен быть ≥ 0.")
+        if min_silence_ms < 0:
+            raise ValueError("min_silence_ms должен быть ≥ 0.")
+        if prefix_padding_ms < 0:
+            raise ValueError("prefix_padding_ms должен быть ≥ 0.")
+
         self._vad_client = vad_client
         self._sample_rate = sample_rate
-        self._threshold = threshold
-        self._window_bytes = int(sample_rate * 2 * window_ms / 1000)
-        self._buffer: bytearray = bytearray()
+        self._activation_threshold = activation_threshold
+        self._deactivation_threshold = deactivation_threshold
+        self._min_speech_ms = min_speech_ms
+        self._min_silence_ms = min_silence_ms
+
+        self._chunk_samples = 512 if sample_rate == 16000 else 256
+        self._chunk_bytes = self._chunk_samples * 2
+        self._chunk_duration_ms = self._chunk_samples * 1000 // sample_rate
+
+        self._preroll_max_bytes = sample_rate * 2 * prefix_padding_ms // 1000
+
+        self._chunk_buffer: bytearray = bytearray()
+        self._preroll_buffer: bytearray = bytearray()
         self._lock = asyncio.Lock()
+
+        self._state: str = "silence"
+        self._pending_speech_ms: int = 0
+        self._pending_silence_ms: int = 0
 
     async def detect_speech(self, audio_pcm: bytes, sample_rate: int) -> bool:
         if sample_rate != self._sample_rate:
@@ -174,23 +237,70 @@ class StreamingVADProvider(BaseVADProvider):
                 f"StreamingVADProvider: ожидается sample_rate={self._sample_rate}, "
                 f"получено {sample_rate}."
             )
+
         async with self._lock:
-            self._buffer.extend(audio_pcm)
-            if len(self._buffer) < self._window_bytes:
-                return False
+            self._preroll_buffer.extend(audio_pcm)
+            if len(self._preroll_buffer) > self._preroll_max_bytes:
+                excess = len(self._preroll_buffer) - self._preroll_max_bytes
+                del self._preroll_buffer[:excess]
 
-            audio_window = bytes(self._buffer)
-            self._buffer = bytearray()
+            self._chunk_buffer.extend(audio_pcm)
+            while len(self._chunk_buffer) >= self._chunk_bytes:
+                chunk = bytes(self._chunk_buffer[: self._chunk_bytes])
+                del self._chunk_buffer[: self._chunk_bytes]
+                prob = await self._vad_client.detect_speech_prob(
+                    audio_bytes=chunk,
+                    sample_rate=self._sample_rate,
+                )
+                self._update_state(prob)
 
-        segments = await self._vad_client.detect_segments(
-            audio_bytes=audio_window,
-            sample_rate=self._sample_rate,
-            threshold=self._threshold,
-        )
-        return len(segments) > 0
+            return self._state == "speech"
+
+    def _update_state(self, prob: float) -> None:
+        if self._state == "silence":
+            if prob >= self._activation_threshold:
+                self._pending_speech_ms += self._chunk_duration_ms
+                self._pending_silence_ms = 0
+                if self._pending_speech_ms >= self._min_speech_ms:
+                    self._state = "speech"
+                    self._pending_speech_ms = 0
+            else:
+                self._pending_speech_ms = 0
+            return
+
+        if prob < self._deactivation_threshold:
+            self._pending_silence_ms += self._chunk_duration_ms
+            self._pending_speech_ms = 0
+            if self._pending_silence_ms >= self._min_silence_ms:
+                self._state = "silence"
+                self._pending_silence_ms = 0
+        else:
+            self._pending_silence_ms = 0
+
+    def consume_preroll(self) -> bytes:
+        """Забрать накопленный pre-roll PCM (rolling последние ``prefix_padding_ms``).
+
+        Используется ``stt_worker`` ровно один раз на переходе
+        SILENCE → SPEECH: то, что лежало в rolling-буфере до старта VAD,
+        пушим в ``stt_provider.push_audio`` перед текущим фреймом.
+        """
+        out = bytes(self._preroll_buffer)
+        self._preroll_buffer = bytearray()
+        return out
+
+    @property
+    def state(self) -> str:
+        return self._state
 
     def reset_state(self) -> None:
-        self._buffer = bytearray()
+        self._chunk_buffer = bytearray()
+        self._preroll_buffer = bytearray()
+        self._state = "silence"
+        self._pending_speech_ms = 0
+        self._pending_silence_ms = 0
+        reset_streaming = getattr(self._vad_client, "reset_streaming_state", None)
+        if callable(reset_streaming):
+            reset_streaming()
 
 
 __all__ = [

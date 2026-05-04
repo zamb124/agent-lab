@@ -1,113 +1,88 @@
 ---
+description: "platform-field: единственный канон типизированного ввода/отображения атрибутов"
 alwaysApply: false
-description: "Core-компоненты типов данных: platform-field, типизированный ввод/отображение атрибутов"
-
 ---
 # Data Type Components (`platform-field`)
 
-## Назначение
+`<platform-field>` — **единственный** допустимый способ ввода и отображения типизированных значений атрибутов в UI. Компонент-диспетчер делегирует рендеринг подкомпоненту по `type`.
 
-`<platform-field>` — единственный допустимый способ ввода и отображения типизированных значений атрибутов в UI. Компонент-диспетчер делегирует рендеринг подкомпоненту на основании `type`.
+## Файлы
 
-## Расположение
+`core/frontend/static/lib/components/fields/`:
 
-Все файлы в `core/frontend/static/lib/components/fields/`:
-
-| Файл | Описание |
-|------|----------|
-| `platform-field.js` | Диспетчер: принимает `type`, делегирует подкомпоненту |
-| `platform-field-string.js` | Строка (`<input type="text">` / текст) |
+| Файл | Назначение |
+|---|---|
+| `platform-field.js` | Диспетчер по `type` |
+| `platform-field-string.js` | Строка |
 | `platform-field-text.js` | Многострочный текст (`<textarea>` / `pre-wrap`) |
-| `platform-field-number.js` | Число и целое число (`<input type="number">`) |
-| `platform-field-boolean.js` | Булево (`<platform-switch>` / "Да"/"Нет") |
+| `platform-field-number.js` | Число / целое (`<input type="number">`) |
+| `platform-field-boolean.js` | Булево (`<platform-switch>` / «Да/Нет») |
 | `platform-field-date.js` | Дата и дата-время (`<platform-date-picker>`) |
-| `platform-field-enum.js` | Перечисление (`<select>` / чип) |
+| `platform-field-enum.js` | Перечисление |
 | `platform-field-array.js` | Массив (`<tag-input>` / чипы) |
-| `platform-field-object.js` | JSON-объект (textarea / pre) |
-| `platform-field-external-refs.js` | `attributes.external_refs` — карточки по провайдерам (read-only в форме) |
+| `platform-field-object.js` | JSON-объект |
+| `platform-field-external-refs.js` | `attributes.external_refs` — карточки по провайдерам (read-only) |
 
 ## API
 
 ```html
 <platform-field
-    .type=${'string'}
-    .value=${someValue}
-    .config=${{ values: ['a', 'b'] }}
-    .label=${'Название поля'}
-    .placeholder=${'Подсказка'}
-    mode="edit"
-    ?disabled=${false}
-    @change=${(e) => handleChange(e.detail.value)}
-></platform-field>
+  .type=${'string'}
+  .value=${someValue}
+  .config=${{ values: ['a','b'] }}
+  .label=${'Название'}
+  .placeholder=${'Подсказка'}
+  mode="edit"
+  ?disabled=${false}
+  @change=${(e) => handleChange(e.detail.value)}>
+</platform-field>
 ```
 
-### Свойства
-
-| Свойство | Тип | Описание |
-|----------|-----|----------|
-| `type` | `string` | Тип данных: `string`, `text`, `number`, `integer`, `boolean`, `date`, `datetime`, `enum`, `array`, `object`, `external_refs` |
+| Свойство | Тип | Что |
+|---|---|---|
+| `type` | `string` | `string`, `text`, `number`, `integer`, `boolean`, `date`, `datetime`, `enum`, `array`, `object`, `external_refs` |
 | `value` | `any` | Типизированное значение |
-| `mode` | `string` | `view` (readonly) или `edit` (ввод) |
-| `label` | `string` | Подпись поля (опционально) |
-| `config` | `object` | Конфигурация по типу. Для `enum`: `{ values: [...] }` |
-| `placeholder` | `string` | Placeholder для edit-режима |
-| `disabled` | `boolean` | Заблокировано |
+| `mode` | `'view' \| 'edit'` | view = readonly |
+| `label` | `string` | Опц. |
+| `config` | `object` | По типу. Для `enum` — `{ values: [...] }` |
+| `placeholder` | `string` | Edit-режим |
+| `disabled` | `boolean` | — |
 
-### Событие `change`
-
-`detail.value` содержит типизированное значение: `number` для number/integer, `boolean` для boolean, `Array` для array и т.д.
+`@change` — `detail.value` содержит **типизированное** значение (`number` для number/integer, `boolean` для boolean, `Array` для array, …).
 
 ## Импорт
 
-```javascript
+```js
 import '@platform/lib/components/fields/platform-field.js';
 ```
 
 Side-effect import: диспетчер автоматически импортирует все подкомпоненты.
 
-## i18n
+## i18n (namespace `platform`)
 
-Ключи в namespace `platform` (`core/i18n/translations/{locale}/platform.json`):
+`platform_field.empty_value`, `boolean_true`/`boolean_false`, `array_placeholder`, `object_placeholder`, `external_refs_*` (empty, record_id, last_seen, account_key, raw_version, readonly).
 
-- `platform_field.empty_value` — "Не задано" / "Not set"
-- `platform_field.boolean_true` — "Да" / "Yes"
-- `platform_field.boolean_false` — "Нет" / "No"
-- `platform_field.array_placeholder`
-- `platform_field.object_placeholder`
-- `platform_field.external_refs_*` (empty, record_id, last_seen, account_key, raw_version, readonly)
+## Обязательные правила
 
-## ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА
+1. **Атрибуты с известным типом** (схема `required_fields` / `optional_fields`) — **только** `<platform-field type=...>`. Голый `<input type="text">` для типизированных значений запрещён.
+2. **Отображение значений** — `<platform-field mode="view" .type=${...} .value=${...}>`. Строковая интерполяция `${value}` для значений атрибутов запрещена.
+3. **Новый тип данных:**
+   1. `platform-field-{type}.js` в `core/frontend/static/lib/components/fields/`.
+   2. Регистрация в `FIELD_TYPE_MAP` и `switch` в `platform-field.js`.
+   3. `type_id` в `SCHEMA_OPTIONS_RESPONSE` в `apps/crm/api/namespaces.py`.
+   4. Проверка в `_check_field_type` в `apps/crm/services/entity_service.py`.
+4. **Наследование** — все подкомпоненты наследуют `PlatformElement`; используют `PlatformElement.styles`, `formStyles`, при необходимости `buttonStyles`.
 
-### 1. Для атрибутов с известным типом — ТОЛЬКО `platform-field`
+## Запрещено
 
-Если тип поля известен из схемы (`required_fields` / `optional_fields` типа сущности) — использовать `<platform-field>` с соответствующим `type`. Голый `<input type="text">` для значений с известным типом **запрещён**.
-
-### 2. Для отображения значений атрибутов — ТОЛЬКО `platform-field` в режиме `view`
-
-Запрещено выводить значения атрибутов через `${value}` (строковую интерполяцию). Используй `<platform-field mode="view" .type=${...} .value=${...}>`.
-
-### 3. Добавление нового типа данных
-
-При появлении нового типа:
-1. Создать `platform-field-{type}.js` в `core/frontend/static/lib/components/fields/`
-2. Зарегистрировать в `FIELD_TYPE_MAP` и `switch` в `platform-field.js`
-3. Добавить `type_id` в `SCHEMA_OPTIONS_RESPONSE` в `apps/crm/api/namespaces.py`
-4. Добавить проверку в `_check_field_type` в `apps/crm/services/entity_service.py`
-
-### 4. Наследование от `PlatformElement`
-
-Все подкомпоненты наследуют `PlatformElement`, используют `PlatformElement.styles` и shared styles. Стили из `formStyles` — для инпутов, `buttonStyles` — по необходимости.
-
-### 5. Запрещённые практики
-
-- `<input type="text">` для boolean, number, date, enum полей
-- `<input type="checkbox">` вместо `<platform-switch>` через `platform-field-boolean`
-- Нативный `<input type="date">` / `<input type="datetime-local">` вместо `<platform-date-picker>` через `platform-field-date`
-- Самодельные select/dropdown для enum вместо `platform-field-enum`
-- Прямой `JSON.stringify(value)` в шаблоне вместо `<platform-field type="object" mode="view">`
+- `<input type="text">` для boolean/number/date/enum.
+- `<input type="checkbox">` вместо `<platform-switch>` через `platform-field-boolean`.
+- Нативный `<input type="date">` / `datetime-local` вместо `platform-field-date` (`<platform-date-picker>`).
+- Самодельные select/dropdown для enum вместо `platform-field-enum`.
+- `JSON.stringify(value)` в шаблоне вместо `platform-field type="object" mode="view"`.
 
 ## Связанные файлы
 
-- `apps/crm/api/namespaces.py` — `SCHEMA_OPTIONS_RESPONSE` (канонический список типов)
-- `apps/crm/services/entity_service.py` — `_check_field_type` (серверная валидация)
-- `apps/crm/ui/components/entity-card.js` — единая карточка: атрибуты в view и edit/create (`panel-mode`, `platform-field`)
+- `apps/crm/api/namespaces.py` — `SCHEMA_OPTIONS_RESPONSE` (канон типов).
+- `apps/crm/services/entity_service.py` — `_check_field_type` (серверная валидация).
+- `apps/crm/ui/components/entity-card.js` — единая карточка: атрибуты в view и edit/create (`panel-mode`, `platform-field`).

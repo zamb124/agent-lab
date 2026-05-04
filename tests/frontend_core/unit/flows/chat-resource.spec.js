@@ -187,6 +187,19 @@ describe('flows/chat extraReducer: push-события', () => {
         expect(assistant.streaming).toBe(false);
     });
 
+    it('повторный completed для того же task_id не создаёт второго ассистента', () => {
+        const { bus, getState } = setup();
+        bus.dispatch('flows/chat/content_chunk', { task_id: 'tsk1', text: 'done' });
+        bus.dispatch('flows/chat/completed', { task_id: 'tsk1', content: 'done' });
+        bus.dispatch('flows/chat/completed', { task_id: 'tsk1', content: 'done' });
+        const msgs = getState().flowsChat.messagesByContextId.ctx1.messages;
+        const assistants = msgs.filter(
+            (m) => m && m.role === 'assistant' && m.taskId === 'tsk1',
+        );
+        expect(assistants.length).toBe(1);
+        expect(assistants[0].content).toBe('done');
+    });
+
     it('failed выставляет error и снимает streaming', () => {
         const { bus, getState } = setup();
         bus.dispatch('flows/chat/failed', { task_id: 'tsk1', error: 'bad' });

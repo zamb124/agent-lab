@@ -375,6 +375,17 @@ class LitserveSTTClient(BaseSTTClient):
         mime_type: str,
         language: str | None = None,
     ) -> STTTranscriptionResult:
+        """Отправить аудио в provider-litserve `/v1/audio/transcriptions`.
+
+        Тело — **JSON**: ``{"model": ..., "language": ..., "file": [int,...]}``.
+        Это совпадает с контрактом ``STTLitAPI.decode_request`` /
+        ``parse_stt_body`` (`apps/provider_litserve/stt/engines.py`):
+        litserve декодирует JSON в dict, ``parse_stt_body`` берёт байты из
+        ``raw["file"] or raw["audio"]`` и поддерживает list[int] →
+        ``bytes(...)``. Multipart не используется — litserve не парсит
+        multipart автоматически. ``file_name``/``mime_type`` сохраняются
+        в логах для совместимости с другими клиентами.
+        """
         if not audio_bytes:
             raise ValueError("audio_bytes не может быть пустым.")
         if file_name == "":
@@ -387,11 +398,14 @@ class LitserveSTTClient(BaseSTTClient):
             raise ValueError("language не может быть пустым.")
 
         url = f"{self._base_url}/v1/audio/transcriptions"
-        data = {"model": self._model, "language": selected_language}
-        files = {"file": (file_name, audio_bytes, mime_type)}
+        payload = {
+            "model": self._model,
+            "language": selected_language,
+            "file": list(audio_bytes),
+        }
 
         async with get_httpx_client(timeout=self._timeout) as client:
-            response = await client.post(url, data=data, files=files)
+            response = await client.post(url, json=payload)
         response.raise_for_status()
 
         body_json = response.json()

@@ -185,10 +185,15 @@ function _ensureContextBucket(state, contextId) {
     };
 }
 
+/** Один bubble ассистента на `taskId` на всём жизненном цикле (стрим → completed).
+ * Нельзя фильтровать `streaming !== false`: после `flows/chat/completed` у сообщения
+ * `streaming: false`; повторный терминальный `status-update` иначе не находит строку
+ * и создаёт второго ассистента (дубль в UI).
+ */
 function _findOrCreateAssistantMessage(messages, taskId) {
     if (!Array.isArray(messages)) return { messages: [], message: null };
     const idx = messages.findIndex(
-        (m) => m && m.role === 'assistant' && m.taskId === taskId && m.streaming !== false,
+        (m) => m && m.role === 'assistant' && m.taskId === taskId,
     );
     if (idx >= 0) {
         return { messages, message: messages[idx], idx };
@@ -217,7 +222,7 @@ function _ensurePlaceholderAssistant(messages, taskId) {
         return messages;
     }
     const has = messages.some(
-        (m) => m && m.role === 'assistant' && m.taskId === taskId && m.streaming !== false,
+        (m) => m && m.role === 'assistant' && m.taskId === taskId,
     );
     if (has) {
         return messages;

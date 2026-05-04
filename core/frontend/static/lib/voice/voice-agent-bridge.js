@@ -50,6 +50,7 @@ const CLIENT_BARGE_MIN_SPEECH_MS = 300;
  * @property {() => Promise<Record<string, unknown>|null|undefined>} [getStreamMetadata] — metadata для A2A (как у текстовой отправки: variables и т.д.).
  * @property {(text: string) => Promise<void>} [beforeA2aStream] — перед fetch (например добавить user/assistant пузыри в чат).
  * @property {(event: object) => void} [onA2aStreamEvent] — каждое SSE-событие для отображения в том же UI, что и текстовый стрим.
+ * @property {() => boolean} [getTtsOutputEnabled] — если вернёт false, не вызывать `speak` (текст A2A по-прежнему в UI через `onA2aStreamEvent`).
  */
 
 export class VoiceAgentBridge extends EventTarget {
@@ -84,6 +85,8 @@ export class VoiceAgentBridge extends EventTarget {
         this._beforeA2aStream = typeof options.beforeA2aStream === 'function' ? options.beforeA2aStream : null;
         this._onA2aStreamEvent =
             typeof options.onA2aStreamEvent === 'function' ? options.onA2aStreamEvent : null;
+        this._getTtsOutputEnabled =
+            typeof options.getTtsOutputEnabled === 'function' ? options.getTtsOutputEnabled : () => true;
 
         /** @type {AbortController|null} */
         this._currentAbort = null;
@@ -354,7 +357,9 @@ export class VoiceAgentBridge extends EventTarget {
                 text,
                 last: result.lastChunk === true,
             });
-            this._media.speak(text, { final: result.lastChunk === true });
+            if (this._getTtsOutputEnabled()) {
+                this._media.speak(text, { final: result.lastChunk === true });
+            }
             return;
         }
 

@@ -60,7 +60,11 @@ class VoiceContainer(BaseContainer):
         return StreamingVADProvider(
             vad_client=vad_client,
             sample_rate=cfg.default_sample_rate,
-            threshold=cfg.default_threshold,
+            activation_threshold=cfg.activation_threshold,
+            deactivation_threshold=cfg.deactivation_threshold,
+            min_speech_ms=cfg.min_speech_ms,
+            min_silence_ms=cfg.min_silence_ms,
+            prefix_padding_ms=cfg.prefix_padding_ms,
         )
 
     async def create_stt_provider(

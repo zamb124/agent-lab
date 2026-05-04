@@ -1,67 +1,60 @@
 ---
-description: "Инфраструктура: MicroK8s кластер, Helm-чарт, ingress, observability, GPU-нода"
+description: "Инфраструктура: MicroK8s, Helm-чарт, ingress, observability, GPU-нода"
 alwaysApply: false
 ---
-
 # Инфраструктура
 
-Платформа разворачивается единым **Helm-чартом** в **MicroK8s** кластере из двух нод. Один источник правды — `[deploy/helm/agent-lab/](deploy/helm/agent-lab/)`. Никаких Docker Compose в проде, никаких ручных `ufw`-правил, никаких отдельных bootstrap-скриптов на нодах.
+Платформа разворачивается единым **Helm-чартом** в **MicroK8s** кластере из двух нод. Один источник правды — `deploy/helm/agent-lab/`. Никаких Docker Compose в проде, никаких ручных `ufw`-правил, никаких отдельных bootstrap-скриптов на нодах.
 
-## Кластер MicroK8s
+## Кластер
 
 | Роль | IP | Лейблы | Что бежит |
 |---|---|---|---|
-| Master (control-plane) | `84.38.184.105` | `kubernetes.io/hostname=master` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры платформы, LiveKit, Coturn, OnlyOffice, ingress-nginx |
+| Master | `84.38.184.105` | `kubernetes.io/hostname=master` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры, LiveKit, Coturn, OnlyOffice, ingress-nginx |
 | GPU Worker | `188.246.224.228` | `accelerator=nvidia-gpu` | `provider_litserve` (через `nodeSelector`) |
 
-Связь между нодами — через Calico/Flannel CNI кластера. Постгрес и Redis доступны из любой ноды по ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` без проброса портов на хост и без `ufw allow`.
+Связь между нодами — через Calico/Flannel CNI. Postgres и Redis доступны из любой ноды по ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379` — без проброса портов на хост и `ufw allow`.
 
 Домен apex и wildcard: `humanitec.ru` (DNS `@` и `*` → `84.38.184.105`).
 
-### Одноразовая настройка нод
-
-См. **`[deploy/cluster-setup.md](deploy/cluster-setup.md)`** — установка MicroK8s, `microk8s add-node` / `microk8s join`, `microk8s enable gpu`, лейбл `accelerator=nvidia-gpu` на GPU-ноду.
+Одноразовая настройка нод — `deploy/cluster-setup.md` (установка MicroK8s, `microk8s add-node`/`join`, `microk8s enable gpu`, лейбл `accelerator=nvidia-gpu`).
 
 ## Helm-чарт
 
-`[deploy/helm/agent-lab/](deploy/helm/agent-lab/)` — единственный источник манифестов:
+`deploy/helm/agent-lab/` — единственный источник манифестов:
 
 ```
-deploy/helm/agent-lab/
-  Chart.yaml
-  values.yaml          # дефолты
-  values-prod.yaml     # production overrides
-  templates/
-    01-platform-secrets.yaml   # Secret platform-secrets при platformSecrets.create=true (+ --set-string из CI/lib.sh)
-    02-configmap-app-conf.yaml
-    10-postgres/        # StatefulSet + Service + ConfigMap init
-    11-redis/           # StatefulSet + Service
-    20-migrations-job.yaml  # helm hook post-install/post-upgrade
-    30-apps/            # 9 application Deployments + Services через range
-    40-workers/         # 6 worker Deployments через range
-    50-gpu/litserve.yaml  # nodeSelector: accelerator=nvidia-gpu
-    60-external/        # livekit, livekit-egress, coturn DaemonSet, onlyoffice
-    70-observability/   # loki, tempo, grafana, alloy DaemonSet
-    80-ingress/         # cluster-issuer + 4 Ingress
-  files/                # ConfigMap источники (loki, tempo, alloy, dashboards)
+Chart.yaml, values.yaml, values-prod.yaml
+templates/
+  01-platform-secrets.yaml      # Secret platform-secrets при platformSecrets.create=true
+  02-configmap-app-conf.yaml
+  10-postgres/                  # StatefulSet + Service + ConfigMap init
+  11-redis/                     # StatefulSet + Service
+  20-migrations-job.yaml        # helm hook post-install/post-upgrade
+  30-apps/                      # 9 application Deployments + Services через range
+  40-workers/                   # 6 worker Deployments через range
+  50-gpu/litserve.yaml          # nodeSelector: accelerator=nvidia-gpu
+  60-external/                  # livekit, livekit-egress, coturn DaemonSet, onlyoffice
+  70-observability/             # loki, tempo, grafana, alloy DaemonSet
+  80-ingress/                   # cluster-issuer + 4 Ingress
+files/                          # ConfigMap источники (loki, tempo, alloy, dashboards)
 ```
 
-`values.yaml` объявляет:
-- образ `image.repository=ghcr.io/zamb124/agent-lab`, `image.tag=latest` (перекрывается в CI: `--set image.tag=$SHA`);
-- `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo через `nodeSelector`;
+`values.yaml`:
+
+- образ `image.repository=ghcr.io/zamb124/agent-lab`, `image.tag=latest` (CI: `--set image.tag=$SHA`);
+- `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo;
 - `gpuNodeSelectorKey/Value: accelerator=nvidia-gpu` — куда прибивается LitServe;
 - `applications.<name>` (9 сервисов: flows/frontend/crm/rag/sync/office/scheduler-api/voice/browser) — порт, реплики, command;
 - `workers.<name>` (6 воркеров) — реплики и command для TaskIQ;
-- `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice` — внешние компоненты;
-- `observability.{loki,tempo,grafana,alloy}` — стек;
-- `ingress.*` — apex/wildcard, hostname'ы для livekit/onlyoffice/grafana, cert-manager issuer;
-- `platformSecrets` + `platformSecretName: platform-secrets` — Helm создаёт Secret из `templates/01-platform-secrets.yaml`, когда `platformSecrets.create=true` (значения через `--set-json platformSecrets=...` из `[deploy/scripts/helm_platform_secrets_json.sh](deploy/scripts/helm_platform_secrets_json.sh)` и CI). Namespace релиза создаётся только `helm upgrade --install ... --create-namespace` (отдельного манифеста Namespace в чарте нет).
+- `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice`, `observability.{loki,tempo,grafana,alloy}`, `ingress.*`;
+- `platformSecrets` + `platformSecretName: platform-secrets` — Helm создаёт Secret из `templates/01-platform-secrets.yaml` при `platformSecrets.create=true`. Значения через `--set-json platformSecrets=...` из `deploy/scripts/helm_platform_secrets_json.sh` и CI. Namespace релиза создаётся `helm upgrade --install ... --create-namespace`.
 
-`templates/_helpers.tpl::agentlab.appEnv` — общий блок env для всех приложений и воркеров: URL баз через ClusterIP `postgres`/`redis`, OAuth, LLM, S3, push, OnlyOffice, OTLP. Все секреты — `valueFrom.secretKeyRef` на Secret с именем `platformSecretName`.
+`templates/_helpers.tpl::agentlab.appEnv` — общий блок env: URL баз через ClusterIP `postgres`/`redis`, OAuth, LLM, S3, push, OnlyOffice, OTLP. Все секреты — `valueFrom.secretKeyRef` на `platformSecretName`.
 
-## Сервисы платформы (Deployments)
+## Сервисы
 
-| Сервис | Порт | Реплики | Командa |
+| Сервис | Порт | Реплики | Command |
 |---|---|---|---|
 | flows | 8001 | 1 | `python -m apps.flows.main` |
 | frontend | 8002 | 1 | `python -m apps.frontend.main` |
@@ -71,7 +64,7 @@ deploy/helm/agent-lab/
 | scheduler-api | 8006 | 1 | `python -m apps.scheduler.main` |
 | office | 8008 | 1 | `python -m apps.office.main` |
 | voice | 8015 | 1 | `python -m apps.voice.main` |
-| browser | 8009 | 1 | `python -m apps.browser.main` + sidecar `zenika/alpine-chrome` (CDP 9222 в том же Pod) |
+| browser | 8009 | 1 | `python -m apps.browser.main` + sidecar `zenika/alpine-chrome` (CDP 9222 в Pod) |
 | provider-litserve (GPU) | 8014 | 1 | `python -m apps.provider_litserve.main` (nodeSelector) |
 | flows-worker | — | 2 | `taskiq worker apps.flows_worker.worker:worker_app --workers 4` |
 | scheduler | — | 1 | `taskiq scheduler apps.scheduler.scheduler:scheduler` |
@@ -82,19 +75,19 @@ deploy/helm/agent-lab/
 
 Один образ `ghcr.io/zamb124/agent-lab:latest`, разные `command:` через `values.yaml`.
 
-**Frontend и static:** `templates/30-apps/deployments.yaml` для frontend добавляет `initContainer` `extract-static`, который копирует `/app/static/` в `emptyDir` `shared-static`. Отдельный static-server pod больше не нужен — frontend сам обслуживает статику из своего же образа.
+**Frontend:** Deployment добавляет `initContainer` `extract-static`, копирует `/app/static/` в `emptyDir` `shared-static`. Frontend сам обслуживает статику.
 
-**Browser Runtime:** Deployment `browser` в том же чарте; контейнер `chromium-cdp` даёт CDP (`http://127.0.0.1:9222` внутри Pod), приложение подключается через Playwright `connect_over_cdp`. Публичный Ingress для browser не открывается; flows/workers ходят на ClusterIP `http://browser:8009` через `SERVER__BROWSER_SERVICE_URL`. Локально **`DevInterServiceProxy`** не регистрирует префикс `browser`: доступ к Browser Runtime с общего origin shell не проксируется — только межсервисные вызовы по `SERVER__BROWSER_SERVICE_URL` / порту 8009.
+**Browser Runtime:** контейнер `chromium-cdp` даёт CDP `http://127.0.0.1:9222` внутри Pod, приложение подключается через Playwright `connect_over_cdp`. Публичного Ingress нет; flows/workers ходят на ClusterIP `http://browser:8009` через `SERVER__BROWSER_SERVICE_URL`. Локально `DevInterServiceProxy` не регистрирует префикс `browser` — только межсервисные вызовы по `SERVER__BROWSER_SERVICE_URL` / порту 8009.
 
-**CRM vendor (three.js, 3d-force-graph):** в Docker-образ запекается `node_modules/three/build` и `node_modules/3d-force-graph/dist` (стадия `js-vendor`), CRM Deployment отдаёт `/crm/ui/vendor/...` напрямую из `/app/node_modules/...`.
+**CRM vendor (three.js, 3d-force-graph):** в Docker-образ запекается `node_modules/three/build` и `node_modules/3d-force-graph/dist` (стадия `js-vendor`); CRM Deployment отдаёт `/crm/ui/vendor/...` напрямую из `/app/node_modules/...`.
 
 ## БД и миграции
 
-`postgres` — StatefulSet с PVC 50Gi на master-ноде (`storageClassName: microk8s-hostpath`). Все 7 сервисных БД создаются через `ConfigMap postgres-init-scripts` (mounted в `/docker-entrypoint-initdb.d/01-init-databases.sql` при первом старте). Содержимое — `[migrations/postgres/init.sql](migrations/postgres/init.sql)`.
+`postgres` — StatefulSet с PVC 50Gi на master (`storageClassName: microk8s-hostpath`). Все 7 сервисных БД создаются через `ConfigMap postgres-init-scripts` (mounted в `/docker-entrypoint-initdb.d/01-init-databases.sql` при первом старте; источник — `migrations/postgres/init.sql`).
 
-`redis` — StatefulSet с PVC 10Gi на master-ноде, AOF включён.
+`redis` — StatefulSet с PVC 10Gi на master, AOF включён.
 
-Alembic миграции запускаются как **Helm hook Job** `migrations` (`post-install`, `post-upgrade`). InitContainer `wait-postgres` ждёт `pg_isready`, потом основной контейнер выполняет `python -m scripts.db_migrate upgrade`. Делать что-либо вручную через psql на новом стенде не нужно.
+Alembic миграции — **Helm hook Job** `migrations` (`post-install`, `post-upgrade`). InitContainer `wait-postgres` ждёт `pg_isready`, затем `python -m scripts.db_migrate upgrade`. Ничего вручную через psql не нужно.
 
 ## Ingress
 
@@ -102,44 +95,42 @@ Alembic миграции запускаются как **Helm hook Job** `migrat
 
 | Хост | TLS Secret | Маршруты |
 |---|---|---|
-| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | Префиксы `/flows`, `/crm`, `/rag`, `/sync`, `/documents`, `/scheduler`, `/voice`, `/litserve`, `/` — только если соответствующий сервис включён в **`values.yaml`** (`applications.*.enabled` или `litserve.enabled`); см. **`templates/80-ingress/platform-ingress.yaml`** |
-
-**Проверка состава кластера:** списки ожидаемых Deployments/StatefulSets/DaemonSets в **`deploy/scripts/cluster-health.sh`** должны соответствовать фактически включённым компонентам из Helm values; при отключении сервиса правьте **`EXPECTED_*`** в этом скрипте. Подробнее — **`deploy/README.md`** («Состав приложений: Helm и cluster-health»).
+| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `/flows`, `/crm`, `/rag`, `/sync`, `/documents`, `/scheduler`, `/voice`, `/litserve`, `/` — только если соответствующий сервис включён в `values.yaml` (`applications.*.enabled` / `litserve.enabled`); `templates/80-ingress/platform-ingress.yaml` |
 | `livekit.humanitec.ru` | `livekit-tls` | `/` → livekit:7880 |
 | `onlyoffice.humanitec.ru` | `onlyoffice-tls` | `/` → onlyoffice:80 |
 | `grafana.humanitec.ru` | `grafana-tls` | `/` → grafana:3000 |
 
-`platform` Ingress (`templates/80-ingress/platform-ingress.yaml`) генерирует одинаковые правила для apex и wildcard через `range`. Аннотации: `proxy-body-size: 100m`, `proxy-read-timeout: 300s` (нужны для `/documents` и WebSocket sync).
+`platform` Ingress генерирует одинаковые правила для apex и wildcard через `range`. Аннотации: `proxy-body-size: 100m`, `proxy-read-timeout: 300s` (для `/documents` и WebSocket sync).
 
-`ClusterIssuer letsencrypt-prod` создаётся чартом (`templates/80-ingress/cluster-issuer.yaml`); email — `values.certManager.email`. cert-manager должен быть установлен на кластере (`microk8s enable cert-manager`).
+`ClusterIssuer letsencrypt-prod` создаётся чартом (`templates/80-ingress/cluster-issuer.yaml`); email — `values.certManager.email`. cert-manager должен быть установлен (`microk8s enable cert-manager`).
 
-**Wildcard TLS:** при использовании HTTP-01 доступен только apex. Для `*.humanitec.ru` нужен DNS-01 — отдельный webhook (например, `cert-manager-webhook-regru`) и `Certificate` объект, монтируемый в тот же Secret `platform-tls`. Конфигурация webhook'а — вне Helm-чарта (одноразовая ручная настройка, см. `[deploy/cluster-setup.md](deploy/cluster-setup.md)`).
+**Wildcard TLS:** при HTTP-01 доступен только apex. Для `*.humanitec.ru` нужен DNS-01 — отдельный webhook (например `cert-manager-webhook-regru`) и `Certificate`-объект, монтируемый в тот же Secret `platform-tls`. Конфигурация webhook вне чарта (одноразовая, см. `deploy/cluster-setup.md`).
 
-`AuthMiddleware` каждого сервиса читает `Host` хедер и резолвит `company_id` для поддоменов.
+`AuthMiddleware` каждого сервиса читает `Host` и резолвит `company_id` для поддоменов.
 
-`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known/apple-app-site-association`, `/.well-known/assetlinks.json` отдаются frontend сервисом через `register_platform_pwa_routes` (`core/frontend/pwa/`).
+PWA-маршруты (`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known/apple-app-site-association`, `/.well-known/assetlinks.json`) отдаёт frontend через `register_platform_pwa_routes` (`core/frontend/pwa/`).
+
+**Cluster health:** списки ожидаемых Deployments/StatefulSets/DaemonSets в `deploy/scripts/cluster-health.sh::EXPECTED_*` должны соответствовать включённым компонентам Helm values; при отключении сервиса править этот скрипт. См. `deploy/README.md`.
 
 ## DNS
 
-Две A-записи у регистратора (reg.ru):
-- `@` → `84.38.184.105`
-- `*` → `84.38.184.105`
+Две A-записи у регистратора (reg.ru): `@` → `84.38.184.105`, `*` → `84.38.184.105`.
 
 ## GPU-нода (provider_litserve)
 
-LitServe — единственный под на GPU-ноде через `nodeSelector: accelerator=nvidia-gpu` + `tolerations: nvidia.com/gpu`. Manifest: `[deploy/helm/agent-lab/templates/50-gpu/litserve.yaml](deploy/helm/agent-lab/templates/50-gpu/litserve.yaml)`.
+LitServe — единственный под на GPU-ноде через `nodeSelector: accelerator=nvidia-gpu` + `tolerations: nvidia.com/gpu`. Манифест: `templates/50-gpu/litserve.yaml`.
 
-- Образ: тот же `ghcr.io/zamb124/agent-lab:latest`, команда `python -m apps.provider_litserve.main`.
+- Образ: тот же `ghcr.io/zamb124/agent-lab:latest`, command `python -m apps.provider_litserve.main`.
 - ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=BAAI/bge-reranker-v2-gemma`, `EMBEDDING_MODEL_ID=BAAI/bge-m3`, `HF_TOKEN` из `platform-secrets`.
 - Ресурсы: `nvidia.com/gpu: 1` (request + limit).
-- Кэш моделей: PVC `litserve-model-cache` (50Gi по умолчанию) на GPU-ноде.
-- Доступ к Postgres/Redis: через ClusterIP `postgres:5432` / `redis:6379` поверх кластерной сети (никаких `ufw allow`).
-- Доступ от других сервисов: через ClusterIP `provider-litserve.platform.svc.cluster.local:8014` (env `PROVIDER_LITSERVE__API__BASE_URL=http://provider-litserve:8014/v1` — задано в `agentlab.appEnv`).
-- Внешний URL: `https://humanitec.ru/litserve/*` через `platform` Ingress.
+- Кэш моделей: PVC `litserve-model-cache` (50Gi).
+- Доступ к Postgres/Redis: ClusterIP `postgres:5432` / `redis:6379`.
+- Доступ от других сервисов: ClusterIP `provider-litserve.platform.svc.cluster.local:8014` (env `PROVIDER_LITSERVE__API__BASE_URL=http://provider-litserve:8014/v1` — задано в `agentlab.appEnv`).
+- Внешний URL: `https://humanitec.ru/litserve/*`.
 
-NVIDIA driver и `nvidia-container-toolkit` ставятся на GPU-ноду один раз при настройке (`microk8s enable gpu` или скрипт из `[deploy/cluster-setup.md](deploy/cluster-setup.md)`). На уровне Pod больше ничего настраивать не нужно — Device Plugin сам пробрасывает `/dev/nvidia*` при наличии request `nvidia.com/gpu`.
+NVIDIA driver и `nvidia-container-toolkit` ставятся на GPU-ноду один раз (`microk8s enable gpu` или скрипт из `deploy/cluster-setup.md`). На уровне Pod больше ничего настраивать не нужно — Device Plugin сам пробрасывает `/dev/nvidia*` при request `nvidia.com/gpu`.
 
-### Smoke-тест GPU после деплоя
+### Smoke-тест GPU
 
 ```bash
 kubectl get pods -n platform -o wide | grep provider-litserve   # должен быть на GPU-ноде
@@ -147,116 +138,72 @@ kubectl exec -n platform deployment/provider-litserve -- nvidia-smi
 curl -fsS https://humanitec.ru/litserve/health
 ```
 
-Загрузка документа в RAG и семантический поиск — без ошибок. CRM rerank — без ошибок HTTP к `/rerank`.
-
 ## Деплой
 
-CI: **`[.github/workflows/deploy.yml](.github/workflows/deploy.yml)`** — `workflow_dispatch` или push в `main`:
+CI (`.github/workflows/deploy.yml`, `workflow_dispatch` или push в `main`):
 
 1. `build` job: `docker build --target full` → push в GHCR (`ghcr.io/zamb124/agent-lab:<sha>` + `:latest`).
-2. `deploy` job: один проход `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace ...`; секреты из GitHub Actions передаются в чарт через `[deploy/scripts/helm_platform_secrets_json.sh](deploy/scripts/helm_platform_secrets_json.sh)` и `--set-json platformSecrets=...` (`create: true` внутри JSON).
+2. `deploy` job: `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace ...`; секреты из GitHub Actions передаются через `deploy/scripts/helm_platform_secrets_json.sh` и `--set-json platformSecrets=...` (`create: true` внутри JSON).
 3. Verification: `kubectl get pods -n platform`.
 
-Никаких SSH, SCP, `docker compose` в CI. Доступ к кластеру — через секрет `KUBECONFIG_B64` (base64 от `~/.kube/config` master-ноды).
+Никаких SSH/SCP/`docker compose` в CI. Доступ к кластеру — секрет `KUBECONFIG_B64` (base64 от `~/.kube/config` master).
 
-Локально:
-```bash
-make k8s-lint            # helm lint
-make k8s-template        # рендер всех манифестов
-make k8s-deploy IMAGE_TAG=<sha>  # helm upgrade --install; при заданных POSTGRES_PASSWORD и др. — Secret из чарта в том же проходе
-make k8s-status          # nodes + pods + svc + ingress + pvc
-make k8s-logs SVC=frontend
-make k8s-rollback        # helm rollback на предыдущую ревизию
-make k8s-uninstall       # helm uninstall (PVC сохраняются)
-```
-
-Полный список секретов и переменных, используемых чартом, — в `[deploy/README.md](deploy/README.md)`.
+Локально: `make k8s-lint`, `make k8s-template`, `make k8s-deploy IMAGE_TAG=<sha>`, `make k8s-status`, `make k8s-logs SVC=frontend`, `make k8s-rollback`, `make k8s-uninstall` (PVC сохраняются). Полный список секретов и переменных — `deploy/README.md`.
 
 ## Observability
 
-Стек observability — часть того же Helm-чарта (templates/70-observability):
+Стек — часть Helm-чарта (`templates/70-observability/`):
 
-| Компонент | Тип ресурса | PVC | Роль |
+| Компонент | Тип | PVC | Роль |
 |---|---|---|---|
-| **Loki** | StatefulSet (master) | 100Gi | Хранилище логов (14 дней, см. `files/loki.yaml`) |
-| **Tempo** | StatefulSet (master) | 50Gi | Хранилище трейсов (см. `files/tempo.yaml`) |
-| **Grafana** | Deployment (master) + PVC 10Gi | 10Gi | UI, дашборды, Explore. `https://grafana.humanitec.ru` |
+| **Loki** | StatefulSet (master) | 100Gi | Логи (14 дней, `files/loki.yaml`) |
+| **Tempo** | StatefulSet (master) | 50Gi | Трейсы (`files/tempo.yaml`) |
+| **Grafana** | Deployment (master) | 10Gi | UI, дашборды, Explore. `https://grafana.humanitec.ru` |
 | **Alloy** | DaemonSet (все ноды) | — | Сбор pod-логов через kubelet API + OTLP relay в Tempo |
 
-**Сбор логов:** Alloy DaemonSet (`templates/70-observability/alloy-daemonset.yaml`) с `ServiceAccount` + `ClusterRole` на чтение pods/namespaces/nodes. Конфиг (`files/alloy.config`) использует `discovery.kubernetes role=pod`, фильтрует ноду `spec.nodeName=$HOSTNAME`, размечает поток метками `namespace`, `pod`, `container`, `service` (из лейбла `app=<name>` пода), `node`. JSON-парсер вытаскивает `level` как Loki label, остальные поля (trace_id, request_id, user_id, …) остаются в теле — достаются `| json | field = "value"`.
+**Сбор логов:** Alloy DaemonSet с `ServiceAccount` + `ClusterRole` на чтение pods/namespaces/nodes. Конфиг `files/alloy.config`: `discovery.kubernetes role=pod`, фильтр `spec.nodeName=$HOSTNAME`, метки потока `namespace`, `pod`, `container`, `service` (из лейбла `app=<name>`), `node`. JSON-парсер вытаскивает `level` как Loki label; остальные поля (`trace_id`, `request_id`, `user_id`, …) остаются в теле, достаются `| json | field = "value"`.
 
-**Сбор трейсов:** OTLP gRPC `alloy:4317` (env `OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317` в `agentlab.appEnv`). Alloy форвардит в Tempo через `tempo.platform.svc.cluster.local:4317`.
+**Сбор трейсов:** OTLP gRPC `alloy:4317` (`OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317` в `agentlab.appEnv`); Alloy форвардит в Tempo через `tempo.platform.svc.cluster.local:4317`.
 
-**Авторизация Grafana:** `auth.proxy` — заголовок `X-Auth-User` от nginx. Для production включается через `frontend /api/auth/grafana-check` + JWT cookie + проверка `company_id == "system"` на уровне отдельного auth-snippet в Ingress (внешняя настройка, не в чарте).
+**Авторизация Grafana:** `auth.proxy` — заголовок `X-Auth-User` от nginx. Production: frontend `/api/auth/grafana-check` + JWT cookie + проверка `company_id == "system"` через отдельный auth-snippet в Ingress (внешняя настройка, не в чарте).
 
-**Корреляция:** trace_id в логах (Loki) → Derived Field → Tempo waterfall.
+**Корреляция:** `trace_id` в логах (Loki) → Derived Field → Tempo waterfall. Поиск:
 
-**Поиск логов:** Grafana → Explore → Loki:
 ```
 {service="crm"} | json | level="ERROR"
-{service="flows"} | json | trace_id = "abc123..."
+{service="flows"} | json | trace_id="abc123..."
 {namespace="platform", service=~"flows|crm"} | json | request_id="..."
 ```
 
-### Дашборды
+### Дашборды и алерты
 
-Дашборды provisioned как код (JSON в `[deploy/helm/agent-lab/files/dashboards/](deploy/helm/agent-lab/files/dashboards/)`, ConfigMap `grafana-dashboards`).
+Дашборды provisioned как код (`deploy/helm/agent-lab/files/dashboards/`, ConfigMap `grafana-dashboards`): Platform Overview, HTTP Requests, Errors & Exceptions, TaskIQ Workers, LLM Usage, Traces, Log Volume, WebSocket / Realtime, Database, Security. Добавление: положить JSON в `files/dashboards/`, `make k8s-deploy` подхватит автоматически (новая ревизия ConfigMap → Grafana sidecar reload).
 
-| Дашборд | UID | Источник | Описание |
-|---|---|---|---|
-| **Platform Overview** | `platform-overview` | Loki | Service health, RPS, error rate, P99 latency |
-| **HTTP Requests** | `http-requests` | Loki | RPS, status, P50/P95/P99, top slow routes |
-| **Errors & Exceptions** | `errors-exceptions` | Loki | Error rate, exception types, contract violations |
-| **TaskIQ Workers** | `taskiq-workers` | Loki | Tasks/min, failure rate, retries |
-| **LLM Usage** | `llm-usage` | Loki | Tokens, requests, latency, cost estimate |
-| **Traces** | `traces-explorer` | Tempo | Trace search, slow traces table |
-| **Log Volume** | `log-volume` | Loki | Logs/min by service/level |
-| **WebSocket / Realtime** | `websocket` | Loki | WS connects, ws_command/min |
-| **Database** | `database` | Loki | DB ошибки, slow HTTP как proxy DB-нагрузки |
-| **Security** | `security` | Loki | HTTP 401/4xx, auth events |
-
-Добавление нового дашборда: положить JSON в `files/dashboards/`, `make k8s-deploy` подхватит автоматически (новая ревизия ConfigMap → Grafana sidecar reload).
-
-### Alerting
-
-Alert rules — `[deploy/helm/agent-lab/files/grafana-alerts/](deploy/helm/agent-lab/files/grafana-alerts/)` (ConfigMap `grafana-alerts`). Unified alerting на базе LogQL.
-
-| Алерт | Условие | Severity |
-|---|---|---|
-| **High Error Rate** | ERROR rate > 5% за 5 мин | critical |
-| **Service Down** | Нет логов от сервиса > 2 мин | critical |
-| **High 5xx Rate** | 5xx rate > 1% за 5 мин | warning |
-| **TaskIQ High Failure Rate** | task_failed rate > 5% за 10 мин | warning |
-| **LLM Errors** | > 10 LLM errors за 5 мин | warning |
-| **Log Contract Violations** | > 0 contract violations за 1 мин | critical |
-| **Slow HTTP P99** | P99 latency > 5000 мс за 5 мин | warning |
-| **High DB Latency** | P95 DB latency > 1000 мс за 5 мин | warning |
-
-Contact points (email/webhook) — placeholder; для production настройте через Grafana UI или дополните `files/grafana-alerts/contact-points.yaml`.
+Alert rules — `deploy/helm/agent-lab/files/grafana-alerts/` (ConfigMap `grafana-alerts`). Unified alerting на LogQL: High Error Rate (>5%/5 мин, critical), Service Down (нет логов >2 мин, critical), High 5xx Rate (>1%/5 мин, warning), TaskIQ High Failure Rate (>5%/10 мин, warning), LLM Errors (>10/5 мин, warning), Log Contract Violations (>0/1 мин, critical), Slow HTTP P99 (>5000 мс/5 мин, warning), High DB Latency (P95 >1000 мс/5 мин, warning). Contact points (email/webhook) — placeholder; production настраивается через Grafana UI или `files/grafana-alerts/contact-points.yaml`.
 
 ## Локальная разработка
 
-Никакого Kubernetes на dev-машине не нужно. Postgres/Redis/MinIO — `[docker-compose-dev.yaml](docker-compose-dev.yaml)`:
+Никакого Kubernetes на dev-машине. Postgres/Redis/MinIO — `docker-compose-dev.yaml`:
 
 ```bash
 make dev-up          # postgres :54321, redis :63791, MinIO :19001/19011
 make app             # все Python сервисы локально через scripts/run.py
 ```
 
-Тесты — `[docker-compose-test.yaml](docker-compose-test.yaml)` (`make test`, `make test-up/down`).
+Тесты — `docker-compose-test.yaml` (`make test`, `make test-up/down`).
 
-## Что не покрывает Helm-чарт (одноразово вручную)
+## Что не покрывает чарт (одноразовая ручная настройка)
 
-- Установка MicroK8s на нодах (`snap install microk8s`).
+- Установка MicroK8s (`snap install microk8s`).
 - `microk8s enable dns ingress cert-manager hostpath-storage gpu`.
-- `microk8s add-node` на master, `microk8s join` на GPU-ноде.
+- `microk8s add-node` на master, `microk8s join` на GPU.
 - `kubectl label node <gpu-node> accelerator=nvidia-gpu`.
 - DNS-01 webhook для wildcard `*.humanitec.ru` (cert-manager-webhook-regru или аналог).
 - A-записи у регистратора домена.
 - Создание секрета `KUBECONFIG_B64` в GitHub Settings.
 
-Все эти шаги документированы в `[deploy/cluster-setup.md](deploy/cluster-setup.md)`.
+Все шаги — `deploy/cluster-setup.md`.
 
 ## Параллельный сервис
 
-На master-ноде также крутится отдельный проект `ytai.tech` (порт 8000, отдельный ingress) — не трогать, он живёт вне `platform` namespace.
+На master также крутится отдельный проект `ytai.tech` (порт 8000, отдельный ingress) — не трогать, живёт вне `platform` namespace.

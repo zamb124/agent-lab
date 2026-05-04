@@ -1,130 +1,106 @@
 ---
-description: "ExecutionState — состояние выполнения flow"
+description: "ExecutionState: нативный Pydantic, frozen system fields, merge параллели"
 alwaysApply: false
 ---
 # ExecutionState
 
-## Основной принцип
-
-ExecutionState - нативный Pydantic объект ВЕЗДЕ в системе.
-Сериализация только на границах: БД, TaskIQ, API.
+`ExecutionState` — нативный Pydantic-объект **везде** в системе. Сериализация (`model_dump`/`model_validate`) — только на границах: БД, TaskIQ, API, tracing.
 
 ## Ключевые поля
 
-    task_id: str           # ID задачи
-    context_id: str        # ID контекста
-    user_id: str           # ID пользователя
-    session_id: str        # flow_id:context_id
-    flow_config_version: Optional[str]  # снимок FlowConfig в flows_versions; None = latest при загрузке
+```
+task_id, context_id, user_id
+session_id              # flow_id:context_id
+flow_config_version     # снимок FlowConfig в flows_versions; None = latest при загрузке
 
-Граф нод и полный JSON flow в state **не хранятся**. Ресурсы flow/skill: `FlowFactory.get_resource_maps(session_flow_id, branch_id, flow_config_version)`.
-    
-    content: str           # Входной запрос
-    response: str          # Итоговый ответ
-    result: Any            # Произвольный результат ноды/tool (CodeNode, inline execute)
-    validation: Optional[dict]  # Валидация ноды; копируется в node_history.calls; условия рёбер validation.*
-    
-    messages: List[Message]           # Полный лог диалога (только append; не сокращать из-за фильтра LLM)
-    tool_results: Dict[str, Any]      # Результаты tools
-    variables: Dict[str, Any]         # Переменные flow (variables)
-    files: List[dict]                 # Вложения; при старте новой сессии включает записи из `nodes[*].files` графа + файлы запроса (см. flows.mdc)
-    
-    current_nodes: List[str]          # Текущие ноды (для resume)
+content                 # входной запрос
+response                # итоговый ответ
+result                  # произвольный результат ноды/tool (CodeNode, inline execute)
+validation              # копируется в node_history.calls; условия рёбер validation.*
 
-    node_history: Dict[str, Dict]     # Вызовы нод за последний проход Flow.run; в начале каждого Flow.run очищается (лимит повторных заходов в code-ноду только в этом проходе)
+messages                # полный лог диалога (только append; не сокращать из-за фильтра LLM)
+tool_results            # результаты tools
+variables               # переменные flow
+files                   # вложения; при старте сессии включают записи nodes[*].files графа + файлы запроса (flows.mdc)
 
-    flow_deadline_monotonic: Optional[float]  # дедлайн run на time.monotonic() (старт канала: apply_flow_wall_clock_deadline)
-    flow_timeout_effective_seconds: Optional[int]  # сколько секунд задано на этот run (сообщения об ошибке)
+current_nodes           # для resume
+
+node_history            # вызовы нод за последний проход Flow.run; в начале каждого Flow.run очищается
+
+flow_deadline_monotonic           # дедлайн run на time.monotonic() (apply_flow_wall_clock_deadline)
+flow_timeout_effective_seconds    # сколько секунд задано на этот run
+```
+
+Граф нод и полный JSON flow в state **не хранятся**. Ресурсы flow/skill — `FlowFactory.get_resource_maps(session_flow_id, branch_id, flow_config_version)`.
 
 ## interrupt
 
 - `state.interrupt: Optional[InterruptData]` — типизированное прерывание (HITL).
-- `state.hitl_handoff_correlation_id: Optional[str]` — при **resume** после ответа по задаче оператора (`body` = `operator_task`): перед сбросом `interrupt` в `Flow.run` сюда копируется `correlation_id`, чтобы `hitl_node` при повторном входе подтянула задачу из БД, выставила `response` и отдала управление по исходящим рёбрам (без повторного `FlowInterrupt`).
-- `InterruptData`: поле **`body`** — discriminated union (`user_message` | `operator_task` и др.), см. `core/state/interrupt.py`; поле **`system`** — `InterruptSystemContext` (`tool_call`, `path`, `task_id`, `context_id`).
-- Свойство **`interrupt.question`** — строка для A2A/UI (текст вопроса или статусная строка для пользователя).
-- Legacy dict `{question, context?}` при `model_validate` мигрирует в `body` + `system` (одна точка в `InterruptData`).
-- Запись в state только через **`InterruptManager.apply_interrupt`** (или эквивалентный путь из него); канал дополняет `system` через **`InterruptManager.enrich_system_from_channel`**.
+- `state.hitl_handoff_correlation_id: Optional[str]` — при resume после ответа по задаче оператора (`body = operator_task`): перед сбросом `interrupt` в `Flow.run` сюда копируется `correlation_id`, чтобы `hitl_node` при повторном входе подтянула задачу из БД, выставила `response` и пошла по исходящим рёбрам без повторного `FlowInterrupt`.
+- `InterruptData.body` — discriminated union (`user_message` | `operator_task` | …), `core/state/interrupt.py`. `system` — `InterruptSystemContext` (`tool_call`, `path`, `task_id`, `context_id`).
+- `interrupt.question` — строка для A2A/UI.
+- Legacy `{question, context?}` при `model_validate` мигрирует в `body` + `system`.
+- Запись только через `InterruptManager.apply_interrupt` (или эквивалент); канал дополняет `system` через `InterruptManager.enrich_system_from_channel`.
 
-## messages и metadata.node_id
+## messages и `metadata.node_id`
 
-- `state.messages` — единый упорядоченный лог; **`messages_filter` у `llm_node` не удаляет** записи, а задаёт **срез для входа в LLM** при каждом запросе.
-- В `Message.metadata` для реплик из runtime flows поле **`node_id`**: id ноды-источника (user/tool/assistant в рамках этой LLM-ноды). Служебные источники: см. `apps/flows/src/runtime/message_metadata.py` (`__channel__`, `__eval__`, `__task__` и т.д.).
-- Для `messages_filter` `own` / список нод в срез входят только сообщения с подходящим **`metadata.node_id`** (в т.ч. user-реплики той же ноды), не «все user подряд».
+- `state.messages` — единый упорядоченный лог. **`messages_filter` у `llm_node` не удаляет** записи, а задаёт срез для входа в LLM при каждом запросе.
+- `Message.metadata.node_id` — id ноды-источника (user/tool/assistant в рамках этой LLM-ноды). Служебные источники — `apps/flows/src/runtime/message_metadata.py` (`__channel__`, `__eval__`, `__task__`, …).
+- Для `messages_filter: own` или список нод в срез входят только сообщения с подходящим `metadata.node_id` (включая user-реплики той же ноды), не «все user подряд».
 
 ## tool_results
 
-Результаты всех выполненных tools:
+```python
+state.tool_results = {"calculator": "42", "weather": "{'temp': 20}", "search": "[...]"}
+```
 
-    state.tool_results = {
-        "calculator": "42",
-        "weather": "{'temp': 20}",
-        "search": "[...]"
-    }
-
-При параллельном выполнении - merge через update().
+При параллельном выполнении — merge через `update()`.
 
 ## Динамические поля
 
-Ноды могут записывать поля **вне системного замораживания** и ожидаемые доменные поля (`variables`, `result`, `response`, `tool_results`, `files`, произвольные extra-поля):
+Ноды записывают поля **вне** системного frozen-списка (`variables`, `result`, `response`, `tool_results`, `files`, произвольные extra):
 
-    def execute(args, state):
-        state.my_custom_field = "value"
-        state.counter = 42
-        state.data = {"key": "value"}
-
-Чтение:
-
+```python
+def execute(args, state):
+    state.my_custom_field = "value"
+    state.counter = 42
+    state.data = {"key": "value"}
     value = state.my_custom_field
+```
 
-## Системные поля и user-код (CodeNode / inline tool)
+## Frozen system fields (запрет в user-коде)
 
-Запрещено менять из тела кода ноды или inline tool (прямое присваивание, `merge_state` / `set_nested` с этими ключами, ключи в возвращаемом dict без `output_mapping` на безопасные поля): идентификаторы и привязка сессии (`task_id`, `context_id`, `user_id`, `session_id`, `flow_config_version`, `branch_id`), лимиты (`flow_deadline_monotonic`, `flow_timeout_effective_seconds`), управление графом (`current_nodes`, `join_arrived_preds`), HITL (`interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`), аудит и отладка (`node_history`, `execution_exceptions`, `prompt_history`, `reasoning_history`, `pending_reasoning`, `breakpoints`, `breakpoint_hit`, `breakpoint_state`, `mock`, `triggers`, `scheduled_tasks`, `nested_states`, `user_groups`).
+Запрещено менять из CodeNode / inline tool (прямое присваивание, `merge_state`/`set_nested` с этими ключами, ключи в возвращаемом dict без `output_mapping`):
 
-Каноничный список: `core/state/mutation_policy.py` (`FROZEN_STATE_FIELDS`). Исключение: `FrozenStateFieldError` (`core.errors`).
+- Идентификаторы и сессия: `task_id`, `context_id`, `user_id`, `session_id`, `flow_config_version`, `branch_id`.
+- Лимиты: `flow_deadline_monotonic`, `flow_timeout_effective_seconds`.
+- Управление графом: `current_nodes`, `join_arrived_preds`.
+- HITL: `interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`.
+- Аудит/отладка: `node_history`, `execution_exceptions`, `prompt_history`, `reasoning_history`, `pending_reasoning`, `breakpoints`, `breakpoint_hit`, `breakpoint_state`, `mock`, `triggers`, `scheduled_tasks`, `nested_states`, `user_groups`.
 
-HITL для пользователя — через `ask_user` / `InterruptManager`, не через прямую запись в `interrupt`.
+Каноничный список — `core/state/mutation_policy.py::FROZEN_STATE_FIELDS`. Исключение — `FrozenStateFieldError` (`core.errors`).
+
+HITL для пользователя — через `ask_user` / `InterruptManager`, не прямой записью в `interrupt`.
 
 ## Merge при параллельном выполнении
 
-Когда tools/ноды выполняются параллельно:
+- `messages` → extend (все добавляются).
+- `tool_results` → merge (`dict.update`).
+- Из результатов **параллельных LLM-tools** в родительский state переносятся только разрешённые поля и extra без системных ключей (`USER_TOOL_PARALLEL_STATE_MERGE_FIELDS`, фильтр по `FROZEN_STATE_FIELDS` в `llm_runner`).
+- При merge параллельных **нод** во `Flow` системные поля из веток не перезаписывают значения в объединённом state (кроме специально обрабатываемых: `messages`, `nested_states`, `execution_exceptions`, `join_arrived_preds`).
+- Extra (`__pydantic_extra__`) → в Flow merge без ключей из `FROZEN_STATE_FIELDS`.
 
-- messages → extend (все добавляются)
-- tool_results → merge (dict.update)
-- из результатов **параллельных LLM-tools** в родительский state переносятся только разрешённые поля и extra без системных ключей (`USER_TOOL_PARALLEL_STATE_MERGE_FIELDS`, фильтр по `FROZEN_STATE_FIELDS` в `llm_runner`)
-- при merge параллельных **нод** во `Flow` системные поля из веток не перезаписывают значения в объединённом state (кроме специально обрабатываемых блоков: messages, `nested_states`, `execution_exceptions`, `join_arrived_preds`)
-- дополнительные поля (`__pydantic_extra__`) → в Flow merge без ключей из `FROZEN_STATE_FIELDS`
+## `current_nodes` при вложенных flow
 
-## current_nodes
+Для вложенного flow (skill/child) сбрасывается:
 
-Для вложенного вызова flow (skill / child) сбрасывается:
-
-    new_state.current_nodes = []  # вложенный flow начнёт со своего entry
-
-## Границы сериализации
-
-model_dump() / model_validate() только в:
-- Repository (БД)
-- TaskIQ tasks
-- API endpoints
-- Tracing
-
-Внутри кода - только нативный объект!
-
-## Работа в CodeNode
-
-    def execute(args, state):
-        # Чтение
-        user = state.user_id
-        query = state.content
-        prev = state.tool_results.get("prev_tool")
-        
-        # Запись
-        state.result = "computed"
-        state.response = "Done"
-        
-        return {'status': 'ok'}
+```python
+new_state.current_nodes = []
+```
 
 ## Файлы
 
-- core/state/__init__.py - ExecutionState
-- apps/flows/src/db/state_repository.py - сохранение в БД
+- `core/state/__init__.py` — `ExecutionState`.
+- `core/state/mutation_policy.py` — `FROZEN_STATE_FIELDS`.
+- `core/state/interrupt.py` — `InterruptData`, `InterruptSystemContext`.
+- `apps/flows/src/db/state_repository.py` — сохранение в БД.

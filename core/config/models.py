@@ -481,7 +481,13 @@ class TTSProvidersConfig(BaseModel):
 
 
 class VADProvidersConfig(BaseModel):
-    """Унифицированный конфиг VAD для voice/flows/eval."""
+    """Унифицированный конфиг VAD для voice/flows/eval.
+
+    Параметры streaming-VAD (`activation_threshold`, `deactivation_threshold`,
+    `min_speech_ms`, `min_silence_ms`, `prefix_padding_ms`) совпадают с
+    каноном LiveKit/Pipecat: гистерезис на вход/выход состояния SPEECH +
+    подтверждение длительностью + pre-roll буфер для STT.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -490,6 +496,52 @@ class VADProvidersConfig(BaseModel):
     default_sample_rate: int = Field(default=16000, gt=0)
     default_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     echo_compensation: float = Field(default=0.2, ge=0.0, le=1.0)
+
+    activation_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Порог prob для перехода SILENCE→SPEECH (LiveKit canon=0.5). "
+            "Срабатывает в паре с `min_speech_ms`."
+        ),
+    )
+    deactivation_threshold: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Порог prob ниже которого фрейм считается non-speech в state "
+            "SPEECH (гистерезис, LiveKit canon = max(activation-0.15, 0.01)). "
+            "Срабатывает в паре с `min_silence_ms`."
+        ),
+    )
+    min_speech_ms: int = Field(
+        default=50,
+        ge=0,
+        description=(
+            "Минимум подтверждённой речи (мс), чтобы открыть VAD-окно. "
+            "Защита от ложных стартов на щелчках/шумах."
+        ),
+    )
+    min_silence_ms: int = Field(
+        default=550,
+        ge=0,
+        description=(
+            "Длительность непрерывной тишины (мс) для закрытия VAD-окна и "
+            "финального flush в STT (LiveKit canon=550 мс)."
+        ),
+    )
+    prefix_padding_ms: int = Field(
+        default=500,
+        ge=0,
+        description=(
+            "Pre-roll buffer (мс) — последние N мс PCM до VAD-start, "
+            "которые при открытии VAD-окна доставляются в STT, чтобы не "
+            "потерять первый звук фразы (LiveKit canon=500 мс)."
+        ),
+    )
+
     litserve: LitserveSpeechBackendConfig = Field(
         default_factory=LitserveSpeechBackendConfig
     )

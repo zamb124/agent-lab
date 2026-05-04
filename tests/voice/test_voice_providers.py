@@ -162,36 +162,132 @@ async def test_streaming_tts_synthesize_rejects_empty_text(unique_id: str) -> No
 
 
 # === StreamingVADProvider ===
+#
+# MockVADClient.detect_speech_prob возвращает 1.0 для непустого PCM, 0.0 для
+# пустого. Этого достаточно для проверки гистерезиса/сглаживания/pre-roll.
+
+
+def _make_vad(
+    *,
+    min_speech_ms: int = 50,
+    min_silence_ms: int = 100,
+    prefix_padding_ms: int = 200,
+) -> StreamingVADProvider:
+    return StreamingVADProvider(
+        vad_client=MockVADClient(),
+        sample_rate=16000,
+        activation_threshold=0.5,
+        deactivation_threshold=0.35,
+        min_speech_ms=min_speech_ms,
+        min_silence_ms=min_silence_ms,
+        prefix_padding_ms=prefix_padding_ms,
+    )
 
 
 @pytest.mark.asyncio
-async def test_streaming_vad_returns_false_for_short_buffer(unique_id: str) -> None:
-    provider = StreamingVADProvider(
-        vad_client=MockVADClient(),
-        sample_rate=16000,
-        window_ms=200,
-    )
-    is_speech = await provider.detect_speech(b"\x00\x00" * 32, 16000)
-    assert is_speech is False
+async def test_streaming_vad_silence_until_min_speech_confirmed(
+    unique_id: str,
+) -> None:
+    """До накопления `min_speech_ms` непрерывной речи провайдер в SILENCE."""
+    provider = _make_vad(min_speech_ms=100)
+    frame_20ms = b"\x01\x00" * 320
+
+    is_speech_1 = await provider.detect_speech(frame_20ms, 16000)
+    assert is_speech_1 is False
+    assert provider.state == "silence"
+
+    is_speech_2 = await provider.detect_speech(frame_20ms, 16000)
+    assert is_speech_2 is False
+    assert provider.state == "silence"
 
 
 @pytest.mark.asyncio
-async def test_streaming_vad_detects_speech_after_window(unique_id: str) -> None:
-    provider = StreamingVADProvider(
-        vad_client=MockVADClient(),
-        sample_rate=16000,
-        window_ms=100,
-    )
-    pcm_window = b"\x01\x00" * 1600
-    is_speech = await provider.detect_speech(pcm_window, 16000)
-    assert is_speech is True
+async def test_streaming_vad_transitions_to_speech_after_min_speech_ms(
+    unique_id: str,
+) -> None:
+    """После ≥ `min_speech_ms` непрерывной речи провайдер переходит в SPEECH."""
+    provider = _make_vad(min_speech_ms=50, min_silence_ms=100)
+    frame_20ms = b"\x01\x00" * 320
+
+    for _ in range(20):
+        await provider.detect_speech(frame_20ms, 16000)
+
+    assert provider.state == "speech"
+
+
+@pytest.mark.asyncio
+async def test_streaming_vad_holds_speech_until_min_silence_ms(
+    unique_id: str,
+) -> None:
+    """SPEECH сохраняется, пока подряд не наберётся `min_silence_ms` тишины."""
+    provider = _make_vad(min_speech_ms=50, min_silence_ms=200)
+    speech_frame = b"\x01\x00" * 320
+    silence_frame = b"\x00\x00" * 320
+
+    for _ in range(20):
+        await provider.detect_speech(speech_frame, 16000)
+    assert provider.state == "speech"
+
+    for _ in range(15):
+        await provider.detect_speech(silence_frame, 16000)
+    assert provider.state == "silence"
+
+
+@pytest.mark.asyncio
+async def test_streaming_vad_consume_preroll_returns_recent_pcm(
+    unique_id: str,
+) -> None:
+    """consume_preroll отдаёт rolling-буфер последних `prefix_padding_ms` мс."""
+    provider = _make_vad(prefix_padding_ms=200)
+    frame_20ms = b"\x01\x00" * 320
+
+    for _ in range(15):
+        await provider.detect_speech(frame_20ms, 16000)
+
+    preroll = provider.consume_preroll()
+    expected_max = 16000 * 2 * 200 // 1000  # 6400 байт = 200 мс на 16 kHz
+    assert len(preroll) <= expected_max
+    assert len(preroll) > 0
+
+    after = provider.consume_preroll()
+    assert after == b"", "после первого consume rolling-буфер очищен"
+
+
+@pytest.mark.asyncio
+async def test_streaming_vad_reset_clears_state_and_buffer(
+    unique_id: str,
+) -> None:
+    provider = _make_vad()
+    frame_20ms = b"\x01\x00" * 320
+    for _ in range(20):
+        await provider.detect_speech(frame_20ms, 16000)
+    assert provider.state == "speech"
+
+    provider.reset_state()
+
+    assert provider.state == "silence"
+    assert provider.consume_preroll() == b""
 
 
 @pytest.mark.asyncio
 async def test_streaming_vad_raises_on_wrong_sample_rate(unique_id: str) -> None:
-    provider = StreamingVADProvider(
-        vad_client=MockVADClient(),
-        sample_rate=16000,
-    )
+    provider = _make_vad()
     with pytest.raises(ValueError, match="sample_rate"):
         await provider.detect_speech(b"\x00\x00" * 320, 8000)
+
+
+@pytest.mark.asyncio
+async def test_streaming_vad_rejects_non_streaming_client(unique_id: str) -> None:
+    """VAD-клиент без supports_streaming запрещён — невозможен real-time."""
+
+    class _NonStreamingVAD:
+        supports_streaming = False
+
+        async def detect_segments(self, **_kwargs):  # noqa: D401
+            return []
+
+    with pytest.raises(ValueError, match="supports_streaming"):
+        StreamingVADProvider(
+            vad_client=_NonStreamingVAD(),  # type: ignore[arg-type]
+            sample_rate=16000,
+        )

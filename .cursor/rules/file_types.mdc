@@ -1,75 +1,66 @@
 ---
-description: "Единый реестр типов файлов: расширения, MIME, категории, accept-строки"
+description: "Единый реестр типов файлов: расширения, MIME, accept-строки"
 alwaysApply: false
 ---
 # Единый реестр типов файлов
 
 ## Источник правды
 
-Единственный источник определений типов файлов — `core/files/types.py`:
+`core/files/types.py`:
 
-- `FileCategory` (StrEnum) — абстрактные категории (text, pdf, office_doc, spreadsheet, presentation, image, audio, video, archive, email, ebook)
-- `FILE_TYPE_REGISTRY` (tuple[FileTypeEntry, ...]) — полный реестр: расширение, MIME-типы, категория
-- `ALL_CATEGORIES` — кортеж всех категорий
+- `FileCategory` (StrEnum) — категории (`text`, `pdf`, `office_doc`, `spreadsheet`, `presentation`, `image`, `audio`, `video`, `archive`, `email`, `ebook`).
+- `FILE_TYPE_REGISTRY` — реестр `FileTypeEntry`: расширение, MIME, категория.
+- `ALL_CATEGORIES` — кортеж всех категорий.
 
-## Запрет хардкода
+**Хардкод списков расширений / MIME / accept-строк запрещён** (Python и JavaScript). Новый тип = одна правка `FILE_TYPE_REGISTRY`, остальное подхватывается автоматически.
 
-**Хардкод списков расширений, MIME-типов, accept-строк — запрещён** — и в Python, и в JavaScript. Новый тип файла добавляется **одной правкой** в `FILE_TYPE_REGISTRY` и автоматически подхватывается всей платформой.
+## Бэкенд
 
-## Бэкенд (Python)
+`core.files.types`:
 
-Используй хелперы из `core.files.types`:
+| Функция | Что |
+|---|---|
+| `extensions_for(*categories)` | `frozenset` расширений с точкой |
+| `mimes_for(*categories)` | `frozenset` MIME |
+| `ext_to_mime(ext)` | основной MIME по расширению |
+| `ext_to_category(ext)` | категория по расширению |
+| `mime_to_category(mime)` | категория по MIME |
+| `accept_string_for(*categories)` | accept для `<input type="file">` |
 
-| Функция | Назначение |
-|--|--|
-| `extensions_for(*categories)` | frozenset расширений с точкой |
-| `mimes_for(*categories)` | frozenset MIME-типов |
-| `ext_to_mime(ext)` | Основной MIME по расширению |
-| `ext_to_category(ext)` | Категория по расширению |
-| `mime_to_category(mime)` | Категория по MIME |
-| `accept_string_for(*categories)` | HTML accept-строка для `<input type="file">` |
+## UI
 
-## UI (JavaScript)
+Данные приходят из `GET /api/platform/file-types` и кладутся в core slice `state.fileTypes` событием `FILE_TYPES_EVENTS.LOADED` (`reducers/file-types.js` + `effects/file-types.effect.js`).
 
-Данные приходят через `GET /api/platform/file-types` и кладутся в core slice
-`state.fileTypes` событием `FILE_TYPES_EVENTS.LOADED`
-(`core/frontend/static/lib/events/reducers/file-types.js` +
-`core/frontend/static/lib/events/effects/file-types.effect.js`).
+Чтение — через `this.select(...)` с pure-helpers того же модуля:
 
-Чтение в компоненте — через `this.select(...)` с pure-helpers того же модуля:
-
-| Helper | Назначение |
-|--|--|
+| Helper | Что |
+|---|---|
 | `selectExtensionsFor(state, ...categories)` | массив расширений |
-| `selectMimesFor(state, ...categories)`      | массив MIME |
-| `selectAcceptStringFor(state, ...categories)` | HTML accept-строка |
-| `selectIsAllowedFile(state, file, ...categories)` | проверка `File` по MIME + расширению |
+| `selectMimesFor(state, ...categories)` | массив MIME |
+| `selectAcceptStringFor(state, ...categories)` | accept-строка |
+| `selectIsAllowedFile(state, file, ...categories)` | проверка `File` (MIME + расширение) |
 
-Пример:
-
-```javascript
+```js
 import { selectAcceptStringFor } from '@platform/lib/events/reducers/file-types.js';
 
 constructor() {
-    super();
-    this._accept = this.select((s) => selectAcceptStringFor(s, 'image', 'video'));
+  super();
+  this._accept = this.select((s) => selectAcceptStringFor(s, 'image', 'video'));
 }
-render() {
-    return html`<input type="file" accept=${this._accept.value}>`;
-}
+render() { return html`<input type="file" accept=${this._accept.value}>`; }
 ```
 
-Никаких `this.services.fileTypes` / `FileTypesService` — таких объектов нет.
+`this.services.fileTypes` / `FileTypesService` — таких объектов **нет**.
 
 ## Допустимые исключения
 
 Runtime-логика, не являющаяся whitelist допустимых типов:
 
-- OnlyOffice dtype-маппинг (`apps/office/services/document_type.py`) — маппинг расширений в dtype/ftype OnlyOffice
-- iOS audio transcode (`core/files/media/audio_transcode.py`) — перекодирование CAF
-- ffmpeg MIME-маппинг (`core/files/media/chunked_stt.py`) — маппинг MIME в формат ffmpeg
+- OnlyOffice dtype-маппинг (`apps/office/services/document_type.py`).
+- iOS audio transcode (`core/files/media/audio_transcode.py`).
+- ffmpeg MIME-маппинг (`core/files/media/chunked_stt.py`).
 
-## Добавление нового типа файла
+## Добавление нового типа
 
-1. Добавь `FileTypeEntry` в `FILE_TYPE_REGISTRY` (`core/files/types.py`)
-2. Всё. Бэкенд и UI подхватят автоматически.
+1. `FileTypeEntry` в `FILE_TYPE_REGISTRY` (`core/files/types.py`).
+2. Готово — бэкенд и UI подхватят автоматически.

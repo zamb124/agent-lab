@@ -17,6 +17,8 @@ description: "Voice gateway (apps/voice, порт 8015) и единый кано
 
 **Real-time pipeline:** WS клиент → `audio_receiver` → VAD → STT → `text_in_queue` → `llm_bridge` → `synthesis_queue` → TTS → `audio_sender` → WS клиент. Один runner LLM на сессию, `core.clients.llm.get_llm()` со streaming, `voice_chunker` режет ответ на синтаксические границы.
 
+**`StreamingVADProvider` (`apps/voice/providers/streaming_adapters.py`):** окно `window_ms` по умолчанию **40 мс** (=2 кадра по 20 мс). Минимум для silero — 32 мс / 512 сэмплов на 16 kHz, поэтому окно меньше 40 мс задавать нельзя. Между пересчётами окна провайдер возвращает **последнее решение** (`_last_decision`), а не `False`: иначе `stt_worker` пропускает большую часть речевых фреймов в STT-буфер и финальный сегмент рвётся в клочья (Whisper на огрызках возвращает либо пустоту, либо галлюцинации вроде «Спасибо.»). `reset_state()` обнуляет и буфер, и `_last_decision`.
+
 **Barge-in** (`apps/voice/services/voice_barge_in.py`): при `is_speech=True` во время `tts_active=True` — `audio_sender.cancel_playback()` + `synthesis_queue.clear()` + `llm_bridge.cancel_active()` + `stt_provider.reset()` + `vad_provider.reset_state()`. Сброс STT/VAD обязателен: PCM, накопленный к моменту прерывания, — это аудио уходящего ответа TTS, и без сброса финальный `flush_buffer` транскрибирует «свой собственный» голос как пользовательский запрос.
 
 **Partial transcripts (chunked-batch):** при открытом VAD-окне `stt_worker` каждые `voice.stt.partial_min_speech_frames` 20 ms-фреймов вызывает `stt_provider.peek_transcript(min_buffer_bytes=...)` (batch-распознавание текущего PCM **без** сброса буфера) и шлёт клиенту `transcript final=False`. Финальный transcript после паузы — обычный `flush_buffer` + `final=True`. Native streaming STT (litserve / cloud_ru / Whisper) не используется, потому что провайдеры не отдают delta-токены.
@@ -202,6 +204,10 @@ Per-process default — `settings.voice` (`SpeechProvidersConfig`), ENV-преф
 - `voice.diagnostics.uplink_dump_max_mb: int = 50` — лимит размера дампа.
 
 `voice` под планируется на `gpu-worker` (`values.yaml: voice.nodeName`) для co-location с `provider-litserve`. Дефолтные `api_model_id` для litserve — Helm: `litserve.{stt,tts,vad}DefaultApiModelId` → ENV `PROVIDER_LITSERVE__INFRA__*_DEFAULT_API_MODEL_ID`.
+
+**LitServe `LitAPI` (`apps/provider_litserve/stt|tts|vad/api.py`):** в `decode_request` нужен параметр `request: Request` (`from fastapi import Request`). В этом же файле **нельзя** `from __future__ import annotations`: при отложенных аннотациях `inspect.signature` видит строку `'Request'`, LitServe не совпадает с классом `Request`, тело не парсится через `await request.json()`, в multiprocessing-queue попадает сырой ASGI-`Request` → pickle падает (`Can't get local object 'FastAPI.setup.<locals>.openapi'`), клиент видит **500**.
+
+Локальный STT **GigaAM** (`ai-sage/GigaAM-v3`, `trust_remote_code`): modeling на HF тянет импорты `hydra`, `omegaconf`, `pyannote` — в проекте это группа **`rag`** в `pyproject.toml` (`hydra-core`, `omegaconf`, `pyannote-audio`). Без `uv sync` с этой группой `provider_litserve` падает при первом `from_pretrained` с `ImportError` → **500** на `/v1/audio/transcriptions`.
 
 ## Как добавить провайдера
 

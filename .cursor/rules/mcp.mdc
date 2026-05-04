@@ -1,28 +1,19 @@
 ---
-description: mcp tools mcp servers
+description: "MCP: подключение внешних JSON-RPC серверов к flows"
 alwaysApply: false
 ---
 # MCP (Model Context Protocol)
 
-MCP — протокол подключения внешних инструментов к LlmNode через JSON-RPC 2.0.
+Протокол подключения внешних инструментов к `llm_node` через JSON-RPC 2.0.
 
-**Ключевые принципы:**
-- Database-First: конфигурация MCP серверов хранится в БД
-- Мультитенантность: каждая компания имеет свои MCP серверы
-- MCP тулы создаются через единую `ToolFactory` как обычные ноды
-- State-aware: MCP тулы читают/пишут `ExecutionState`
+## Принципы
 
-**Интеграционные тесты:** фикстура `local_mcp_http_url` (`tests/fixtures/mcp_http_stub.py`) — session-scope HTTP-сервер с JSON-RPC `initialize` / `tools/list` / `tools/call`. В тестах не ходить во внешний интернет.
+- **Database-First**: конфигурация серверов хранится в БД (`MCPServerRepository`).
+- **Мультитенантность**: серверы изолированы по `company_id` (контекст).
+- **Единая фабрика**: MCP-тулы создаются через `ToolFactory` как обычные ноды/тулы.
+- **State-aware**: MCP-тулы читают/пишут `ExecutionState`.
 
-## Архитектура
-
-```
-LlmNode → ToolFactory → MCPHttpClient → MCP Server (JSON-RPC 2.0)
-```
-
-## Модели данных
-
-Файл: `apps/flows/src/models/mcp.py`
+## Модели
 
 ```python
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
@@ -37,76 +28,62 @@ server = MCPServerConfig(
 )
 ```
 
-## Repository
+`apps/flows/src/models/mcp.py`.
 
-Файл: `apps/flows/src/db/mcp_repository.py`
+## Repository
 
 ```python
 mcp_repo = get_container().mcp_server_repository
 
-server = await mcp_repo.get("context7")       # автоматически из контекста компании
+server = await mcp_repo.get("context7")
 await mcp_repo.set(server_config)
 active_servers = await mcp_repo.list_active()
 ```
 
-Запрещено использовать `Storage` напрямую для MCP серверов.
+`Storage` напрямую для MCP — запрещён.
 
 ## Синхронизация тулов
 
-Единая реализация: `apps/flows/src/services/mcp_sync.py` — `sync_mcp_server_tools(container=..., server_config=...)`.
+Единая реализация — `apps/flows/src/services/mcp_sync.py::sync_mcp_server_tools(container=..., server_config=...)`.
 
-- UI и интеграции: `POST /flows/api/v1/mcp/servers/{server_id}/sync` вызывает эту же функцию.
-- Инициализация компании (TaskIQ): `sync_auto_mcp_servers_for_company` — все активные серверы компании.
+- UI и интеграции: `POST /flows/api/v1/mcp/servers/{server_id}/sync` зовёт её же.
+- Инициализация компании (TaskIQ): `sync_auto_mcp_servers_for_company` синкает все активные серверы компании.
 
-Пишет `ToolReference` в `tool_repository`, обновляет `cached_tools` и `last_sync_at`, удаляет тулы, которых больше нет в ответе `tools/list`. Переменные для резолва `@var:` в headers загружаются только если в headers есть `@var:`.
+Пишет `ToolReference` в `tool_repository`, обновляет `cached_tools` и `last_sync_at`, удаляет тулы, которых больше нет в `tools/list`. Переменные для резолва `@var:` в headers загружаются только если они там есть.
 
-```python
-from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
+## Использование во flow
 
-tool_ids, tools = await sync_mcp_server_tools(container=container, server_config=server)
-```
-
-## Использование в конфиге flow (inline JSON)
-
-MCP нода как самостоятельная нода графа:
+MCP-нода:
 
 ```json
 {
-    "type": "mcp",
-    "server_id": "context7",
-    "tool_name": "resolve-library-id",
-    "input_mapping": {"libraryName": "@state:query"},
-    "output_mapping": {"result": "library_info"}
+  "type": "mcp",
+  "server_id": "context7",
+  "tool_name": "resolve-library-id",
+  "input_mapping": {"libraryName": "@state:query"},
+  "output_mapping": {"result": "library_info"}
 }
 ```
 
-MCP тул как инструмент в `llm_node`:
+MCP-тул в `llm_node`:
 
 ```json
-{
-    "tool_id": "resolve_lib",
-    "type": "mcp",
-    "server_id": "context7",
-    "tool_name": "resolve-library-id"
-}
+{"tool_id": "resolve_lib", "type": "mcp", "server_id": "context7", "tool_name": "resolve-library-id"}
 ```
 
-## HTTP клиент
+## HTTP-клиент
 
 ```python
 from apps.flows.src.clients.mcp_client import get_mcp_client
 
 client = await get_mcp_client("context7")
-
 tools = await client.list_tools()
 result = await client.call_tool("tool-name", {"param": "value"})
 ```
 
-Клиент автоматически: инициализирует сессию (JSON-RPC initialize), резолвит `@var:` в headers, кэшируется по `{company_id}:{server_id}`.
+Клиент сам инициализирует сессию (`initialize`), резолвит `@var:` в headers, кэшируется по `{company_id}:{server_id}`.
 
-## ToolFactory — создание MCP тулов
-
-MCP тулы создаются динамически через `@tool` декоратор:
+## ToolFactory — создание MCP-тулов
 
 ```python
 safe_tool_name = tool_name.replace("-", "_")
@@ -121,85 +98,64 @@ dynamic_mcp_func.__qualname__ = safe_tool_name
 mcp_tool = tool(description=description, args_schema=pydantic_model)(dynamic_mcp_func)
 ```
 
-**Запрещено:** `@tool(name="my_tool")` — LangChain `tool` не принимает параметр `name`. Установи `__name__` до декоратора.
+**Запрещено:** `@tool(name="my_tool")` — LangChain `tool` не принимает `name`. Имя — через `__name__`/`__qualname__` **до** декоратора.
 
 ## Переменные и секреты
 
-MCP серверы поддерживают `@var:` ссылки на переменные компании:
+`@var:` поддержан в headers; резолвится через `VariablesService` при создании клиента:
 
 ```json
-{
-    "headers": {
-        "Authorization": "@var:context7_api_key"
-    }
-}
+{"headers": {"Authorization": "@var:context7_api_key"}}
 ```
 
-При создании клиента ссылки резолвятся через `VariablesService`.
+## JSON-RPC 2.0
 
-## JSON-RPC 2.0 Протокол
-
-MCP использует JSON-RPC 2.0, **не REST**:
+MCP — **не REST**, JSON-RPC поверх HTTP:
 
 ```
 POST https://mcp.example.com/mcp
-Headers: Content-Type: application/json, Mcp-Session-Id: {uuid}
+Content-Type: application/json
+Mcp-Session-Id: {uuid}
 
-# Initialize
 {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", ...}}
-
-# List tools
 {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
-
-# Call tool
 {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "tool-name", "arguments": {...}}}
 ```
 
-## API Endpoints
+## API
 
 ```
-POST /flows/api/v1/mcp/servers              # Создать сервер
-GET  /flows/api/v1/mcp/servers/{server_id}  # Получить сервер
-POST /flows/api/v1/mcp/servers/{server_id}/sync  # Синхронизировать тулы
-POST /flows/api/v1/mcp/servers/{server_id}/test  # Проверить подключение
+POST /flows/api/v1/mcp/servers
+GET  /flows/api/v1/mcp/servers/{server_id}
+POST /flows/api/v1/mcp/servers/{server_id}/sync
+POST /flows/api/v1/mcp/servers/{server_id}/test
 ```
 
 ## Тестирование
 
+Фикстура `local_mcp_http_url` (`tests/fixtures/mcp_http_stub.py`) — session-scope HTTP-сервер с JSON-RPC `initialize` / `tools/list` / `tools/call`. **В тестах не ходить во внешний интернет.**
+
 ```python
-@pytest.mark.asyncio
 async def test_mcp_tool(local_mcp_http_url):
-    """local_mcp_http_url — stub JSON-RPC сервер (session scope)"""
-    server = MCPServerConfig(
-        server_id="test_server",
-        url=local_mcp_http_url,
-        transport_type=MCPTransportType.HTTP,
-    )
+    server = MCPServerConfig(server_id="test_server", url=local_mcp_http_url, transport_type=MCPTransportType.HTTP)
     await mcp_repo.set(server)
-    tools = await sync_mcp_server_tools("test_server")
+    tools = await sync_mcp_server_tools(container=container, server_config=server)
     assert len(tools) > 0
 ```
 
 ## Типичные ошибки
 
-**Вызов tool.coroutine напрямую** — минует `@tool` декоратор. Всегда вызывай через `tool.ainvoke(...)`.
-
-**Забыть про company_id** — MCP серверы не глобальные, `mcp_repo.get()` автоматически берёт company_id из контекста.
-
-**Установить `__name__` после `@tool`** — `@tool` фиксирует имя при создании, установи `func.__name__` до декоратора.
-
-## Известные MCP серверы
-
-- Context7 (документация): `https://mcp.context7.com/mcp`
-- Cloudflare Docs: `https://docs.mcp.cloudflare.com/mcp`
-- Cloudflare Radar: `https://radar.mcp.cloudflare.com/mcp`
-
-Спецификация: https://modelcontextprotocol.io
+- **Вызов `tool.coroutine` напрямую** — минует декоратор. Только `tool.ainvoke(...)`.
+- **Забыть про `company_id`** — серверы не глобальные, `mcp_repo.get()` берёт `company_id` из контекста автоматически.
+- **`__name__` после `@tool`** — `@tool` фиксирует имя при создании; `func.__name__` ставить **до** декоратора.
 
 ## Файлы
 
-- `apps/flows/src/models/mcp.py` — MCPServerConfig, MCPTransportType
-- `apps/flows/src/db/mcp_repository.py` — MCPServerRepository
-- `apps/flows/src/clients/mcp_client.py` — MCPHttpClient, get_mcp_client, sync_mcp_server_tools
-- `apps/flows/src/runtime/nodes.py` — MCPNode
-- `tests/fixtures/mcp_http_stub.py` — local_mcp_http_url фикстура
+- `apps/flows/src/models/mcp.py` — `MCPServerConfig`, `MCPTransportType`.
+- `apps/flows/src/db/mcp_repository.py` — `MCPServerRepository`.
+- `apps/flows/src/clients/mcp_client.py` — `MCPHttpClient`, `get_mcp_client`.
+- `apps/flows/src/services/mcp_sync.py` — `sync_mcp_server_tools`.
+- `apps/flows/src/runtime/nodes.py` — `MCPNode`.
+- `tests/fixtures/mcp_http_stub.py` — `local_mcp_http_url`.
+
+Спецификация: https://modelcontextprotocol.io

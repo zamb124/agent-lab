@@ -1,173 +1,144 @@
 ---
-description: "Eval sandbox: безопасное исполнение тулов, namespace whitelist, паттерн создания тулов"
+description: "Eval Sandbox: безопасное исполнение тулов, namespace whitelist, паттерн фасадов"
 alwaysApply: false
 ---
-# Eval Sandbox — безопасность и паттерны
+# Eval Sandbox
 
-## Модель безопасности
-
-Код тула = **публичный код**. Его может редактировать внешний разработчик через UI редактора flows. Поэтому:
+Код тула = **публичный код**: его редактирует внешний разработчик через UI редактора. Поэтому:
 
 - Тул исполняется в **sandbox** (`PythonNamespaceBuilder` → `exec` в ограниченном namespace).
-- Sandbox видит **только whitelist** имён. Всё остальное недоступно.
-- Платформенные сервисы (`core/`, `apps/`) = **защищённый внутренний код**, недоступный напрямую.
+- Sandbox видит **только whitelist** имён.
+- Платформенные сервисы (`core/`, `apps/`) — защищённый внутренний код, недоступный напрямую.
 
 Доступ из тула к платформе — **только через узкие фасады** (`platform_services.py`), зарегистрированные в namespace.
 
-**Принцип in-process sandbox:** по возможности **подмена безопасными объектами** (реестр `apps/flows/src/eval/shim_registry.py`: `httpx`, `llm` и т.д.) вместо запрета по имени, если семантика совместима. Полный CPython/произвольный `os`/`subprocess` в одном процессе с платформой **недоступны**; для этого нужна отдельная out-of-process песочница (другой эпик). Нормализация исходника (`удаление строк import apps|core*`) встроена в [`PythonCompiler`](apps/flows/src/eval/compiler.py) при `strip_platform_imports=True` (по умолчанию в [`PythonCodeRunner`](apps/flows/src/runners/python.py)).
+**In-process sandbox:** где возможно — подмена безопасными объектами (реестр `apps/flows/src/eval/shim_registry.py`: `httpx`, `llm`, …) вместо запрета по имени, если семантика совместима. Полный CPython / произвольный `os`/`subprocess` в одном процессе с платформой недоступны (для этого нужен out-of-process sandbox — отдельная задача). Нормализация исходника (удаление `import apps|core*`) встроена в `PythonCompiler` при `strip_platform_imports=True` (default в `PythonCodeRunner`).
 
-## АБСОЛЮТНЫЕ ЗАПРЕТЫ в пользовательском коде тулов
+## Абсолютные запреты в коде тулов
 
-1. **Прямой обход `platform_services` в новом/кастомном коде** (то, что пишет внешний разработчик в БД): не импортировать `get_container` и не ссылаться на внутренний DI. Используй фасады из `platform_services` + регистрация в `namespace`. В sandbox register для **codegen** лежит `get_code_runner` (без `FlowContainer`) — паритет `exec` со встроенным `sandbox_codegen`; не путать с «разрешено обходить фасады в своём кастомном туле».
-2. **Импорты `apps.*` / `core.*`** — при сохранении в БД строки вырезаются `strip_forbidden_platform_import_lines` ([`inline_tool_sanitize.py`](apps/flows/src/eval/inline_tool_sanitize.py)). Перед `validate`/`exec` тот же смысл встраивает [`PythonCompiler._prepare_source`](apps/flows/src/eval/compiler.py) (по умолчанию `strip_platform_imports=True` в раннере). Проверка на запрет без strip — только при явной настройке компилятора/тестах.
-3. **Импорты между модулями тулов** (`from apps.flows.tools.files import _find_file`) — вырезаются вместе с остальными `apps.*`. Хелпер не попадёт в namespace → `NameError` в рантайме.
+1. **Прямой обход `platform_services` в кастомном коде**: не импортировать `get_container`, не ссылаться на внутренний DI. Только фасады из `platform_services` + регистрация в `namespace`. В sandbox-register для **codegen** лежит `get_code_runner` (без `FlowContainer`) — паритет `exec` со встроенным `sandbox_codegen`; не путать с «можно обойти фасады в кастомном туле».
+2. **Импорты `apps.*` / `core.*`** — при сохранении в БД строки вырезаются `strip_forbidden_platform_import_lines` (`apps/flows/src/eval/inline_tool_sanitize.py`). Перед `validate`/`exec` — то же делает `PythonCompiler._prepare_source` (default `strip_platform_imports=True`).
+3. **Импорты между модулями тулов** (`from apps.flows.tools.files import _find_file`) — вырезаются вместе с `apps.*`. Хелпер не попадёт в namespace → `NameError` в рантайме.
 4. **Прямой `httpx.AsyncClient` к сервисам платформы** — только `ServiceClient` (уже в namespace).
 
-## Жизненный цикл кода тула
+## Жизненный цикл
 
 ```
-@tool(name="my_tool", ...)     ← Python-модуль в apps/flows/tools/
-        │
-        ▼
-load_tools_to_db               ← inspect.getsource → strip imports → tool_repository (БД)
-        │
-        ▼
-FlowsLoader._inline_single_tool ← код из БД инлайнится в flow config (поле code)
-        │
-        ▼
-ToolRegistry.materialize        ← видит code → CodeTool (sandbox exec)
-        │
-        ▼
-PythonNamespaceBuilder.build()  ← whitelist namespace
-        │
-        ▼
-exec(code, namespace)           ← код тула исполняется С ЭТИМ namespace
+@tool(name="my_tool") в apps/flows/tools/
+  ↓ load_tools_to_db (inspect.getsource → strip imports → tool_repository)
+  ↓ FlowsLoader._inline_single_tool (код инлайнится в flow config, поле code)
+  ↓ ToolRegistry.materialize (видит code → CodeTool)
+  ↓ PythonNamespaceBuilder.build() (whitelist namespace)
+  ↓ exec(code, namespace)
 ```
 
-**Следствие:** любая зависимость, которой нет в namespace, даст `NameError`. Импорты `apps.*`/`core.*` вырезаны. Тул должен быть **самодостаточен** в рамках namespace.
+Любая зависимость, которой нет в namespace, даст `NameError`. Тул должен быть **самодостаточен**.
 
-**Значения по умолчанию в сигнатуре** (`def f(x: T = NAME)`): имя `NAME` разрешается **в момент определения функции** при `exec` в sandbox. Допустимы только **литералы** или идентификаторы, уже присутствующие в `namespace` (например константа модуля верхнего уровня в **том же** фрагменте `code`, если он целиком попадает в БД). Ссылка на константу только из исходника в `apps/...` без включения в строку кода — даст `NameError` при предпросмотре `code/execute` или inline-копии.
+**Default-значения в сигнатуре** (`def f(x: T = NAME)`): `NAME` разрешается **в момент `exec`** в sandbox. Допустимы только литералы или идентификаторы, уже присутствующие в `namespace` (например константа модуля верхнего уровня в **том же** фрагменте `code`, если он целиком попадает в БД). Ссылка на константу только из исходника `apps/...` без включения в строку — `NameError` при предпросмотре `code/execute` или inline-копии.
 
-## Паттерн: как писать тул
+## Паттерны
 
-### Хелпер нужен ТОЛЬКО этому тулу
+### Хелпер для одного тула
 
-Определить **внутри тела функции** (как `_pick_file` в `read_file`):
+Внутри тела функции (как `_pick_file` в `read_file`):
 
 ```python
 @tool(name="my_tool", ...)
 async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
-    def _helper(x):
-        return x.strip().lower()
-
+    def _helper(x): return x.strip().lower()
     return {"result": _helper(arg)}
 ```
 
-### Хелпер нужен НЕСКОЛЬКИМ тулам
+### Хелпер для нескольких тулов
 
-1. Добавить в `apps/flows/src/eval/state_utils.py`
-2. Зарегистрировать в `apps/flows/src/eval/namespace.py` (`namespace["helper_name"] = helper_name`)
-3. Использовать в тулах как глобальное имя (оно уже в namespace при sandbox exec)
-4. Для FunctionTool-пути (прямой вызов builtin) — дополнительно определить inline-копию внутри функции
+1. Добавить в `apps/flows/src/eval/state_utils.py`.
+2. Зарегистрировать в `apps/flows/src/eval/namespace.py` (`namespace["helper_name"] = helper_name`).
+3. Использовать как глобальное имя.
+4. Для FunctionTool-пути (прямой вызов builtin) — дополнительно inline-копия внутри функции.
 
-Пример: `find_file` (поиск файла в `state.files`), `_extract_ids_from_state`, `_require_context_namespace`.
+Примеры: `find_file`, `_extract_ids_from_state`, `_require_context_namespace`.
 
 ### Доступ к платформенному сервису
 
-1. Добавить **фасад** в `apps/flows/src/eval/platform_services.py`
-2. Зарегистрировать в `namespace.py`
-3. Вызывать из тула по имени фасада
+1. Добавить **фасад** в `apps/flows/src/eval/platform_services.py`.
+2. Зарегистрировать в `namespace.py`.
+3. Вызывать из тула по имени фасада.
 
 Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`, `get_code_runner`, `transcribe_audio`, `synthesize_speech`.
 
-### Голос: `transcribe_audio` / `synthesize_speech` (tools)
+### Голос: `transcribe_audio` / `synthesize_speech`
 
-Пара фасадов поверх `core.clients.voice_resolver` (см. `speech_providers.mdc`).
-В namespace регистрируются именно как **tools** (вызываются из `llm_node` или
-inline `code`), а не как ноды графа. Канон выбора провайдера/модели —
-строго через `voice_resolver` (override-аргумент функции → запись в
-`company_voice_providers` для `ctx.company.company_id` → `settings.voice`):
+Пара фасадов поверх `core.clients.voice_resolver` (см. `voice.mdc`). В namespace регистрируются как **tools** (вызываются из `llm_node` или inline `code`), не как ноды графа. Канон выбора провайдера/модели — строго через `voice_resolver` (`override` аргумент → `company_voice_providers` для `ctx.company.company_id` → `settings.voice`).
 
 | Фасад | Назначение | Биллинг |
 |---|---|---|
-| `transcribe_audio(file_id, *, language=None, provider=None, model=None) -> str` | Скачать файл из S3 (`file_processor`), вызвать STT, вернуть распознанный текст | `record_stt_usage(provider=..., audio_seconds)` из длительности контейнера через ffprobe (`probe_audio_duration_seconds_from_upload`); при недоступности длительности запись usage пропускается с предупреждением в лог |
-| `synthesize_speech(text, *, voice=None, language=None, provider=None, model=None, response_format=None, file_name=None) -> str` | Синтезировать речь, сохранить в S3 как `file`, вернуть `file_id` | `record_tts_usage(provider=..., char_count=len(text))` |
+| `transcribe_audio(file_id, *, language=None, provider=None, model=None) -> str` | Скачать файл из S3 (`file_processor`), вызвать STT, вернуть текст | `record_stt_usage(provider, audio_seconds)` (длительность из ffprobe — `probe_audio_duration_seconds_from_upload`); при недоступности — usage пропускается с предупреждением |
+| `synthesize_speech(text, *, voice=None, language=None, provider=None, model=None, response_format=None, file_name=None) -> str` | Синтезировать речь, сохранить в S3 как `file`, вернуть `file_id` | `record_tts_usage(provider, char_count=len(text))` |
 
-Импорт `core.clients.voice_resolver` или специфических клиентов прямо в
-теле тула — запрещён (`speech_providers.mdc`); вместо этого вызывай фасад
-по имени, оно уже в namespace.
+Импорт `core.clients.voice_resolver` или специфических клиентов прямо в теле тула запрещён (`voice.mdc`); вызывай фасад по имени.
 
-Параллельно работает **авто-STT входящих audio-вложений** в `flows`
-(`apps/flows/src/files/audio_input.py`) для каналов A2A SDK/CLI, embed-chat
-и нашего чата: аудио-файлы транскрибируются один раз перед передачей
-сообщения в flow и подмешиваются в `content` блоком
-`[AUDIO_TRANSCRIPT name=<file>]…[/AUDIO_TRANSCRIPT]`. Тулу его уже не
-надо повторно транскрибировать — он получает текст в сообщении.
+Параллельно работает **авто-STT входящих audio-вложений** в flows (`apps/flows/src/files/audio_input.py`) для каналов A2A SDK/CLI, embed-chat и нашего чата: аудио-файлы транскрибируются один раз перед передачей сообщения и подмешиваются в `content` блоком `[AUDIO_TRANSCRIPT name=<file>]…[/AUDIO_TRANSCRIPT]`. Тулу не нужно повторно транскрибировать — текст уже в сообщении.
 
-## Состав namespace (SSOT, без дублирования в правилах)
+## Состав namespace (SSOT)
 
 | Что | Где смотреть |
-|-----|----------------|
-| Фактический набор имён + регистрация shims/тулов | [`apps/flows/src/eval/namespace.py`](apps/flows/src/eval/namespace.py) |
+|---|---|
+| Фактический набор имён + регистрация shims/тулов | `apps/flows/src/eval/namespace.py` |
 | Символы codegen / паритет `code/execute` | тот же файл, `register_sandbox_codegen_namespace` |
-| Whitelist `import` | [`core/inline_python_eval_policy.py`](core/inline_python_eval_policy.py) (`ALLOWED_IMPORT_ROOTS`); shims: [`shim_registry.py`](apps/flows/src/eval/shim_registry.py) |
-| Описания для редактора (globals) | [`core/docs/data/python/globals.py`](core/docs/data/python/globals.py) |
-| Контракты веб-поиска и описания страницы (`Search`, `Describe`; реализации в `web_snapshot`) | [`apps/flows/src/eval/web_snapshot.py`](apps/flows/src/eval/web_snapshot.py) |
-| Модули и методы в справке | [`core/docs/data/python/modules.py`](core/docs/data/python/modules.py) |
-| CI: модули и namespace покрыты докой | `make check-inline-docs` — [`tests/core/test_inline_docs_inventory.py`](tests/core/test_inline_docs_inventory.py) |
+| Whitelist `import` | `core/inline_python_eval_policy.py` (`ALLOWED_IMPORT_ROOTS`); shims — `apps/flows/src/eval/shim_registry.py` |
+| Описания globals для редактора | `core/docs/data/python/globals.py` |
+| Контракты веб-поиска и описания страницы (`Search`, `Describe`) | `apps/flows/src/eval/web_snapshot.py` |
+| Модули/методы в справке | `core/docs/data/python/modules.py` |
+| CI: модули и namespace покрыты докой | `make check-inline-docs` (`tests/core/test_inline_docs_inventory.py`) |
 
-### Чего нет в sandbox (кроме whitelist)
-`get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, произвольный `importlib` (кроме политики). **`get_code_runner` / `get_llm` / codegen-хелперы** могут присутствовать как платформенная регистрация — см. раздел о запретах выше; не путать с «можно в кастомном туле обойти фасады».
+**Чего нет в sandbox:** `get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, произвольный `importlib` (кроме политики). `get_code_runner`/`get_llm`/codegen-хелперы могут присутствовать как платформенная регистрация (паритет с встроенным `sandbox_codegen`); не путать с «можно в кастомном туле обойти фасады».
 
-### Валидация AST (`compiler._validate_code`)
-Запрещён доступ к атрибутам из `FORBIDDEN_INLINE_DUNDER_ATTRIBUTES` в `core/inline_python_eval_policy.py` (интроспекция: `__class__`, `__bases__`, `__subclasses__` и т.д.). Вызовы `super().__init__()`, `__enter__`/`__exit__` и прочие обычные dunder-методы **разрешены**. Имя типа исключения без обхода валидатора: `getattr(type(exc), "__name__", "")` (строковый литерал, не `ast.Attribute`).
+**Валидация AST (`compiler._validate_code`):** запрещён доступ к атрибутам из `FORBIDDEN_INLINE_DUNDER_ATTRIBUTES` в `core/inline_python_eval_policy.py` (интроспекция: `__class__`, `__bases__`, `__subclasses__`, …). `super().__init__()`, `__enter__`/`__exit__` и обычные dunder разрешены. Имя типа исключения без обхода валидатора — `getattr(type(exc), "__name__", "")` (литерал, не `ast.Attribute`).
 
-## ОБЯЗАТЕЛЬНО: актуализация документации внешнего разработчика
+## Документация внешнего разработчика — обязательно
 
-При **любом** изменении namespace, eval-окружения или добавлении тула — **сразу** актуализировать документацию в `core/docs/data/python/`:
+При **любом** изменении namespace, eval-окружения или добавлении тула — **сразу** актуализировать `core/docs/data/python/`:
 
-| Изменение | Что актуализировать |
-|-----------|-------------------|
-| Новая функция/объект в namespace | `globals.py` — добавить запись с `name`, `type`, `doc` |
-| Новый фасад в `platform_services.py` | `globals.py` — добавить запись |
-| Изменение сигнатуры существующего | `globals.py` — обновить `doc` |
-| Новый модуль в `ALLOWED_IMPORT_ROOTS` | `modules.py`: запись в `MODULE_METHODS` для каждого имени из `COMMON_MODULES`; иначе падает `make check-inline-docs` |
+| Изменение | Что |
+|---|---|
+| Новая функция/объект в namespace | `globals.py` — запись с `name`, `type`, `doc` |
+| Новый фасад в `platform_services.py` | `globals.py` — запись |
+| Изменение сигнатуры | `globals.py` — обновить `doc` |
+| Новый модуль в `ALLOWED_IMPORT_ROOTS` | `modules.py`: `MODULE_METHODS` для каждого имени из `COMMON_MODULES`; иначе `make check-inline-docs` падает |
 | Новый builtin | `core/inline_python_eval_policy.py` (подхватится автоматически) |
-| Новый паттерн использования | `templates.py` — добавить шаблон с примером кода |
+| Новый паттерн | `templates.py` — пример кода |
 
-Символ есть в `PythonNamespaceBuilder`, но ещё не добавлен в статический `GLOBALS`: для редактора и для промпта мета-тула `sandbox_codegen` доступна секция **доп. символы sandbox** — список строится в `apps/flows/src/services/runtime_namespace_doc.py` и передаётся в `DocumentationQuery.runtime_namespace_extras` (HTTP: `GET /flows/api/v1/code/documentation?include_runtime_namespace_extras=true`).
+Символ в `PythonNamespaceBuilder`, но ещё не в статическом `GLOBALS`: для редактора и промпта `sandbox_codegen` есть секция «доп. символы sandbox» — `apps/flows/src/services/runtime_namespace_doc.py` → `DocumentationQuery.runtime_namespace_extras` (HTTP: `GET /flows/api/v1/code/documentation?include_runtime_namespace_extras=true`).
 
-**Без актуализации `core/docs` изменение НЕ считается завершённым.** Внешний разработчик видит только то, что описано в `core/docs` — если функция есть в namespace, но нет в документации, для него она не существует.
+**Без актуализации `core/docs` изменение не считается завершённым.** Внешний разработчик видит только то, что описано в `core/docs` — если функция в namespace, но нет в документации, для него она не существует.
 
-Инварианты полноты: `tests/core/test_inline_docs_inventory.py` — каждый модуль whitelist имеет карточку в `MODULE_METHODS`; каждый ключ `PythonNamespaceBuilder.build()` покрыт `GLOBALS` или `runtime_namespace_extras`. Локально и в CI: `make check-inline-docs`.
+Инварианты полноты: `tests/core/test_inline_docs_inventory.py` — `COMMON_MODULES` ⊆ `MODULE_METHODS`; namespace ⊆ GLOBALS ∪ `runtime_namespace_extras`. CI: `make check-inline-docs`.
 
-## Чеклист: добавление нового тула
+## Чеклист добавления тула
 
-1. Модуль в `apps/flows/tools/` с декоратором `@tool`
-2. Pydantic `args_schema` с `Field(description=...)` — обязательно
-3. **Никаких импортов `apps.*` / `core.*` в теле функции** — они будут вырезаны
-4. Хелперы — **внутри тела функции** или через namespace (`state_utils.py`)
-5. Платформенные сервисы — **только через фасады** (`platform_services.py`)
-6. Имя в `apps/flows/tools/__init__.py` → `__all__`
-7. Регистрация в `ToolRegistry.register_builtin_tools`
-8. `mock_response` для тестового режима
-9. **Актуализировать `core/docs/data/python/globals.py`** — если тул добавляет глобалы в namespace
+1. Модуль в `apps/flows/tools/` с декоратором `@tool`.
+2. Pydantic `args_schema` с `Field(description=...)` — обязательно.
+3. Никаких импортов `apps.*`/`core.*` в теле функции — будут вырезаны.
+4. Хелперы — внутри тела или через namespace (`state_utils.py`).
+5. Платформенные сервисы — только через фасады (`platform_services.py`).
+6. Имя в `apps/flows/tools/__init__.py` → `__all__`.
+7. Регистрация в `ToolRegistry.register_builtin_tools`.
+8. `mock_response` для тестового режима.
+9. Актуализировать `core/docs/data/python/globals.py` (если тул добавляет глобалы в namespace).
 
 ## Ключевые файлы
 
 | Файл | Назначение |
-|------|-----------|
+|---|---|
 | `apps/flows/src/eval/namespace.py` | `PythonNamespaceBuilder` — whitelist namespace |
-| `apps/flows/src/eval/sandbox_codegen_namespace.py` | `register_sandbox_codegen_namespace` — символы для паритета `exec` / `sandbox_codegen` |
-| `apps/flows/src/eval/state_utils.py` | Утилиты для inline-кода (find_file, get_files, ask_user, ...) |
-| `apps/flows/src/eval/platform_services.py` | Узкие фасады к платформенным сервисам |
-| `apps/flows/src/eval/compiler.py` | Компиляция и валидация кода |
+| `apps/flows/src/eval/sandbox_codegen_namespace.py` | `register_sandbox_codegen_namespace` — паритет `exec`/`sandbox_codegen` |
+| `apps/flows/src/eval/state_utils.py` | Утилиты для inline-кода (`find_file`, `get_files`, `ask_user`, …) |
+| `apps/flows/src/eval/platform_services.py` | Узкие фасады |
+| `apps/flows/src/eval/compiler.py` | Компиляция и валидация |
 | `apps/flows/src/eval/import_policy.py` | Whitelist импортов (`safe_inline_import`) |
 | `apps/flows/src/eval/inline_tool_sanitize.py` | `strip_forbidden_platform_import_lines` |
-| `core/inline_python_eval_policy.py` | `ALLOWED_BUILTINS` |
-| `apps/flows/tools/` | Реализации тулов (публичный код) |
-| `apps/flows/tools/__init__.py` | `__all__` — экспорт имён в namespace |
-| `apps/flows/src/services/runtime_namespace_doc.py` | Имена sandbox вне статического `GLOBALS` для markdown/docs |
-| `apps/flows/tools/sandbox_codegen.py` | Мета-тул: схемы, промпт, LLM, цикл попыток, JSON-ответ; вызывает `run_codegen_stages` из `codegen_utils` |
-| `apps/flows/src/eval/codegen_utils.py` | Утилиты: markdown sandbox-доки, эвристики фидбэка, `run_codegen_stages` (validate/compile/execute) через `PythonCodeRunner` |
-| `tests/core/test_inline_docs_inventory.py` | Проверка: `COMMON_MODULES` ⊆ `MODULE_METHODS`; namespace ⊆ GLOBALS ∪ runtime extras |
+| `core/inline_python_eval_policy.py` | `ALLOWED_BUILTINS`, `FORBIDDEN_INLINE_DUNDER_ATTRIBUTES` |
+| `apps/flows/tools/__init__.py` | `__all__` экспортов |
+| `apps/flows/src/services/runtime_namespace_doc.py` | Sandbox-имена вне `GLOBALS` для markdown/docs |
+| `apps/flows/tools/sandbox_codegen.py` | Мета-тул: schemas, prompt, LLM, JSON-ответ; вызывает `run_codegen_stages` |
+| `apps/flows/src/eval/codegen_utils.py` | Markdown sandbox-доки, эвристики, `run_codegen_stages` через `PythonCodeRunner` |
