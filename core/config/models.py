@@ -811,6 +811,24 @@ class ProviderLitserveInfraConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_default_audio_api_model_keys(cls, data: Any) -> Any:
+        """DEPRECATED ключи вида ``default_*_api_model_id`` (дубль ENV на кластере)."""
+        if not isinstance(data, dict):
+            return data
+        for legacy, canonical in (
+            ("default_stt_api_model_id", "stt_default_api_model_id"),
+            ("default_tts_api_model_id", "tts_default_api_model_id"),
+            ("default_vad_api_model_id", "vad_default_api_model_id"),
+        ):
+            if legacy not in data:
+                continue
+            legacy_val = data.pop(legacy)
+            if canonical not in data:
+                data[canonical] = legacy_val
+        return data
+
     backend: Literal["placeholder", "flagllm"] = "placeholder"
     host: str = "0.0.0.0"
     gateway_port: int = 8014
@@ -860,10 +878,6 @@ class ProviderLitserveInfraConfig(BaseModel):
     )
     stt_default_api_model_id: str = Field(
         default="gigaam-v3-rnnt",
-        validation_alias=AliasChoices(
-            "stt_default_api_model_id",
-            "default_stt_api_model_id",
-        ),
         description="api id STT-модели по умолчанию (должен присутствовать в stt_models).",
     )
 
@@ -885,10 +899,6 @@ class ProviderLitserveInfraConfig(BaseModel):
     )
     tts_default_api_model_id: str = Field(
         default="kokoro-82m",
-        validation_alias=AliasChoices(
-            "tts_default_api_model_id",
-            "default_tts_api_model_id",
-        ),
         description="api id TTS-модели по умолчанию (должен присутствовать в tts_models).",
     )
 
@@ -909,10 +919,6 @@ class ProviderLitserveInfraConfig(BaseModel):
     )
     vad_default_api_model_id: str = Field(
         default="silero-vad",
-        validation_alias=AliasChoices(
-            "vad_default_api_model_id",
-            "default_vad_api_model_id",
-        ),
         description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
     )
 
