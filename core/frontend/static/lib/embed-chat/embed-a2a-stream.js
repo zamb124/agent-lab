@@ -16,6 +16,7 @@
  * @param {object|null} [options.metadata]
  * @param {() => Promise<Record<string, string>>} [options.getHeaders] - доп. заголовки (Authorization)
  * @param {RequestCredentials} [options.credentials='omit'] - 'include' если хост шлёт session cookie (origin или тот же hostname)
+ * @param {AbortSignal} [options.signal] - отменить стрим извне (например, voice-agent-bridge при barge-in)
  * @param {(ev: object) => void} onEvent
  */
 export async function streamEmbedA2A(options, onEvent) {
@@ -31,6 +32,7 @@ export async function streamEmbedA2A(options, onEvent) {
         metadata = null,
         getHeaders = async () => ({}),
         credentials = 'omit',
+        signal = undefined,
     } = options;
 
     if (!baseUrl) {
@@ -116,6 +118,7 @@ export async function streamEmbedA2A(options, onEvent) {
         headers,
         credentials,
         body: JSON.stringify(body),
+        signal,
     });
 
     if (!response.ok) {

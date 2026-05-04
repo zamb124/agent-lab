@@ -168,6 +168,14 @@
         "empty": "No log entries",
         "copy_aria": "Copy row JSON"
     },
+    "assistant_message_actions": {
+        "play": "Play",
+        "play_busy": "Playing…",
+        "copy": "Copy",
+        "toast_copied": "Copied",
+        "toast_copy_failed": "Copy failed",
+        "toast_play_failed": "Playback failed: {detail}"
+    },
     "timezone_picker": {
         "aria_list": "IANA time zones",
         "empty": "No matching time zones"

@@ -1,11 +1,13 @@
 """DI контейнер voice сервиса.
 
 Не держит singleton'ов клиентов речи — клиенты создаются per-session
-через `core.clients.voice_resolver` (tier-резолв
-override -> per-company -> deployment-default).
+через ``core.clients.voice_resolver`` (tier-резолв
+``SpeechOverride`` -> per-company -> deployment-default).
 
-Контейнер хранит только настройки и фабрики session-specific
-streaming-провайдеров (адаптеров над batch-клиентами).
+Контейнер хранит только настройки и фабрики session-specific VAD/STT
+провайдеров-адаптеров. Потоковый TTS для voice-сессии получается
+напрямую через ``voice_resolver.get_tts_streamer(...)`` и передаётся в
+``speak_worker``: отдельной обёртки сверх batch-клиента не нужно.
 """
 
 from __future__ import annotations
@@ -14,18 +16,15 @@ from typing import Optional
 
 from apps.voice.providers.base import (
     BaseSTTProvider,
-    BaseTTSProvider,
     BaseVADProvider,
 )
 from apps.voice.providers.streaming_adapters import (
     StreamingSTTProvider,
-    StreamingTTSProvider,
     StreamingVADProvider,
 )
 from core.clients.speech_override import SpeechOverride
 from core.clients.voice_resolver import (
     get_stt_client,
-    get_tts_client,
     get_vad_client,
 )
 from core.container.base import BaseContainer, lazy
@@ -38,9 +37,9 @@ logger = get_logger(__name__)
 class VoiceContainer(BaseContainer):
     """DI-контейнер voice сервиса.
 
-    `create_*_provider(*, company_id, override)` — единственный способ
-    получить streaming-провайдеры для одной voice сессии. Внутри они
-    дёргают `voice_resolver` и оборачивают batch-клиента в адаптер.
+    ``create_stt_provider`` / ``create_vad_provider`` — session-specific
+    фабрики streaming-адаптеров над batch-клиентами из ``voice_resolver``.
+    Для TTS в real-time сессии используйте ``get_tts_streamer`` напрямую.
     """
 
     @lazy
@@ -76,15 +75,6 @@ class VoiceContainer(BaseContainer):
             sample_rate=16000,
             language=cfg.default_language,
         )
-
-    async def create_tts_provider(
-        self,
-        *,
-        company_id: str,
-        override: Optional[SpeechOverride] = None,
-    ) -> BaseTTSProvider:
-        tts_client = await get_tts_client(company_id=company_id, override=override)
-        return StreamingTTSProvider(tts_client=tts_client)
 
 
 _voice_container: Optional[VoiceContainer] = None

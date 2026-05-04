@@ -1,4 +1,11 @@
-"""Health endpoint для voice сервиса."""
+"""Health endpoint voice-сервиса.
+
+Возвращает быстрый snapshot deployment-default провайдеров речи. Реальные
+клиенты создаются per-session через ``voice_resolver``, поэтому
+«готовность» в смысле HTTP-стартапа сводится к наличию валидной
+конфигурации в ``settings.voice`` — контейнер считает её зарезолвленной,
+если ``.settings`` успешно построился.
+"""
 
 from datetime import UTC, datetime
 
@@ -6,24 +13,34 @@ from fastapi import APIRouter
 
 from apps.voice.container import get_voice_container
 
+
 health_router = APIRouter(prefix="/health", tags=["voice"])
 
 
 @health_router.get(
     "/providers",
-    summary="Статус провайдеров voice",
+    summary="Deployment-default STT/TTS/VAD провайдеры",
 )
 async def health_providers() -> dict:
-    """Проверка работоспособности голосовых компонентов."""
     container = get_voice_container()
 
-    vad_status = "ready"
+    cfg_status = "ready"
+    stt_provider = ""
+    tts_provider = ""
+    vad_provider = ""
     try:
-        _ = container.vad_provider
+        settings = container.settings
+        stt_provider = settings.voice.stt.provider
+        tts_provider = settings.voice.tts.provider
+        vad_provider = settings.voice.vad.provider
     except Exception:
-        vad_status = "not_loaded"
+        cfg_status = "not_configured"
 
     return {
-        "vad": vad_status,
+        "status": cfg_status,
+        "vad": "ready" if cfg_status == "ready" else cfg_status,
+        "stt_provider": stt_provider,
+        "tts_provider": tts_provider,
+        "vad_provider": vad_provider,
         "checked_at": datetime.now(UTC).isoformat(),
     }

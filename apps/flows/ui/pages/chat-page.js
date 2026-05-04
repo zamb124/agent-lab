@@ -12,6 +12,8 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/page-header.js';
 import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
+import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
+import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -25,6 +27,8 @@ export class ChatPage extends PlatformPage {
         sessionId: { type: String, attribute: 'session-id' },
         _isMobile: { state: true },
         _overflowOpen: { state: true },
+        _voiceOn: { state: true },
+        _voiceStatus: { state: true },
     };
 
     static styles = [
@@ -153,6 +157,13 @@ export class ChatPage extends PlatformPage {
         this._cancel = this.useOp('flows/chat_cancel');
         this._sessionState = this.useOp('flows/session_state');
         this._flows = this.useResource('flows/flows');
+        this._activeCompanySel = this.select((s) => s.companies.active);
+        this._voiceOn = false;
+        this._voiceStatus = 'idle';
+        /** @type {VoiceMediaSession|null} */
+        this._voiceMedia = null;
+        /** @type {VoiceAgentBridge|null} */
+        this._voiceBridge = null;
     }
 
     connectedCallback() {
@@ -177,11 +188,101 @@ export class ChatPage extends PlatformPage {
     }
 
     disconnectedCallback() {
+        if (this._voiceOn) {
+            this._stopVoice();
+        }
         if (this._chatMql && this._onChatMobileMql) {
             this._chatMql.removeEventListener('change', this._onChatMobileMql);
         }
         document.removeEventListener('pointerdown', this._onDocPointer);
         super.disconnectedCallback();
+    }
+
+    async _startVoice() {
+        if (this._voiceOn) return;
+        if (!this.flowId) return;
+        const company = this._activeCompanySel.value;
+        const companyId = company && typeof company === 'object' && typeof company.company_id === 'string'
+            ? company.company_id
+            : '';
+        if (companyId === '') {
+            this._voiceStatus = 'no_company';
+            return;
+        }
+        const origin = typeof window !== 'undefined' && window.location
+            ? `${window.location.protocol}//${window.location.host}`
+            : '';
+        const voiceBaseUrl = `${origin}/voice`;
+        const a2aBaseUrl = `${origin}/flows`;
+        const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
+        const sessionId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const initialContextId = this._chat.state?.currentContextId || null;
+
+        const media = new VoiceMediaSession({
+            baseUrl: wsBase,
+            sessionId,
+            companyId,
+            autoRecord: true,
+        });
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl,
+            flowId: this.flowId,
+            branchId: this.branchId && this.branchId !== 'base' ? this.branchId : null,
+            credentials: 'include',
+            initialContextId,
+        });
+
+        media.addEventListener('vad', (e) => {
+            this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
+        });
+        media.addEventListener('ttsState', (e) => {
+            this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
+        });
+        media.addEventListener('error', () => {
+            this._voiceStatus = 'error';
+        });
+        media.addEventListener('closed', () => {
+            this._voiceOn = false;
+            this._voiceStatus = 'closed';
+        });
+
+        try {
+            await media.connect();
+        } catch (err) {
+            this._voiceStatus = 'error';
+            this.toast('flows:platform_chat.toast_voice_error', {
+                type: 'error',
+                vars: { detail: err && err.message ? err.message : String(err) },
+            });
+            return;
+        }
+        bridge.start();
+        this._voiceMedia = media;
+        this._voiceBridge = bridge;
+        this._voiceOn = true;
+        this._voiceStatus = 'idle';
+    }
+
+    _stopVoice() {
+        if (this._voiceBridge) {
+            try { this._voiceBridge.stop(); } catch { /* noop */ }
+            this._voiceBridge = null;
+        }
+        if (this._voiceMedia) {
+            try { this._voiceMedia.close(); } catch { /* noop */ }
+            this._voiceMedia = null;
+        }
+        this._voiceOn = false;
+        this._voiceStatus = 'idle';
+    }
+
+    _toggleVoice() {
+        if (this._voiceOn) {
+            this._stopVoice();
+        } else {
+            void this._startVoice();
+        }
     }
 
     updated(changed) {
@@ -397,6 +498,16 @@ export class ChatPage extends PlatformPage {
             <button
                 type="button"
                 class="action-btn"
+                title=${this._voiceOn ? this.t('platform_chat.btn_voice_off') : this.t('platform_chat.btn_voice_on')}
+                aria-label=${this._voiceOn ? this.t('platform_chat.btn_voice_off') : this.t('platform_chat.btn_voice_on')}
+                aria-pressed=${this._voiceOn ? 'true' : 'false'}
+                @click=${this._toggleVoice}
+            >
+                <platform-icon name=${this._voiceOn ? 'mic' : 'mic-off'} size="16"></platform-icon>
+            </button>
+            <button
+                type="button"
+                class="action-btn"
                 title=${this.t('editor_header.lara')}
                 aria-label=${this.t('editor_header.lara')}
                 @click=${this._openLara}
@@ -543,6 +654,9 @@ export class ChatPage extends PlatformPage {
                 </div>
             </page-header>
             ${this._isMobile ? html`<div class="chat-branch-hint">${branchLabel}</div>` : nothing}
+            ${this._voiceOn
+                ? html`<div class="chat-branch-hint">${this.t(`platform_chat.voice_status_${this._voiceStatus}`)}</div>`
+                : nothing}
             <div class="chat-body">
                 <chat-messages
                     .messages=${messages}

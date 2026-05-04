@@ -80,6 +80,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         _landingCardImageUrl: { state: true },
         _landingSortOrder: { state: true },
         _guestMaxUserMessages: { state: true },
+        _voiceEnabled: { state: true },
+        _voiceDefaultOn: { state: true },
     };
 
     constructor() {
@@ -102,6 +104,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
         this._guestMaxUserMessages = '';
+        this._voiceEnabled = false;
+        this._voiceDefaultOn = false;
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
         this._catalog = this.useOp('frontend/flows_catalog');
@@ -133,6 +137,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
         this._guestMaxUserMessages = '';
+        this._voiceEnabled = false;
+        this._voiceDefaultOn = false;
     }
 
     willUpdate(changed) {
@@ -178,6 +184,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             } else {
                 this._guestMaxUserMessages = '';
             }
+            this._voiceEnabled = c.voice_enabled === true;
+            this._voiceDefaultOn = c.voice_default_on === true;
         }
     }
 
@@ -265,6 +273,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             landing_card_image_url: landingOn ? this._landingCardImageUrl.trim() : null,
             landing_sort_order: landingOn ? this._landingSortOrder : 0,
             guest_max_user_messages,
+            voice_enabled: this._voiceEnabled,
+            voice_default_on: this._voiceEnabled && this._voiceDefaultOn,
         };
         if (isEdit) {
             this._configs.update(this.embedConfig.embed_id, payload);
@@ -507,6 +517,37 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             <span>${this.t('embed_create_modal.label_show_launcher')}</span>
                         </label>
                         <div class="hint">${this.t('embed_create_modal.show_launcher_hint')}</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="switch-row">
+                            <input
+                                type="checkbox"
+                                .checked=${this._voiceEnabled}
+                                @change=${(e) => {
+                                    this._voiceEnabled = e.target.checked;
+                                    if (!this._voiceEnabled) {
+                                        this._voiceDefaultOn = false;
+                                    }
+                                    this.isDirty = true;
+                                }}
+                            />
+                            <span>${this.t('embed_create_modal.label_voice_enabled')}</span>
+                        </label>
+                        <div class="hint">${this.t('embed_create_modal.voice_enabled_hint')}</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="switch-row">
+                            <input
+                                type="checkbox"
+                                ?disabled=${!this._voiceEnabled}
+                                .checked=${this._voiceDefaultOn}
+                                @change=${(e) => { this._voiceDefaultOn = e.target.checked; this.isDirty = true; }}
+                            />
+                            <span>${this.t('embed_create_modal.label_voice_default_on')}</span>
+                        </label>
+                        <div class="hint">${this.t('embed_create_modal.voice_default_on_hint')}</div>
                     </div>
                 </div>
             </form>

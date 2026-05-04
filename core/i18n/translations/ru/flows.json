@@ -342,7 +342,16 @@
     "btn_logs": "Логи",
     "btn_editor": "Открыть редактор",
     "btn_clear": "Очистить чат",
-    "overflow_aria": "Дополнительные действия"
+    "overflow_aria": "Дополнительные действия",
+    "btn_voice_on": "Включить голосовой режим",
+    "btn_voice_off": "Выключить голосовой режим",
+    "voice_status_idle": "Голосовой режим: ожидание",
+    "voice_status_listening": "Голосовой режим: слушаю",
+    "voice_status_speaking": "Голосовой режим: говорю",
+    "voice_status_error": "Голосовой режим: ошибка",
+    "voice_status_closed": "Голосовой режим: соединение закрыто",
+    "voice_status_no_company": "Голосовой режим: нет активной компании",
+    "toast_voice_error": "Ошибка голосового режима: {{detail}}"
   },
   "chat_messages": {
     "empty_title": "Начните диалог",

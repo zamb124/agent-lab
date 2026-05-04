@@ -52,6 +52,14 @@ def _validate_guest_max_user_messages(value: Optional[int]) -> None:
         )
 
 
+def _validate_voice_flags(*, voice_enabled: bool, voice_default_on: bool) -> None:
+    if voice_default_on and not voice_enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="voice_default_on можно включить только вместе с voice_enabled",
+        )
+
+
 def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
     return EmbedConfigResponse(
         embed_id=config.embed_id,
@@ -75,6 +83,8 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         landing_card_image_url=config.landing_card_image_url,
         landing_sort_order=config.landing_sort_order,
         guest_max_user_messages=config.guest_max_user_messages,
+        voice_enabled=config.voice_enabled,
+        voice_default_on=config.voice_default_on,
         usage_count=config.usage_count,
         last_used_at=config.last_used_at,
         created_at=config.created_at,
@@ -106,6 +116,14 @@ class CreateEmbedConfigRequest(BaseModel):
         default=None,
         description="Лимит пользовательских сообщений на диалог (embed-session); не задан — без лимита",
     )
+    voice_enabled: bool = Field(
+        default=False,
+        description="Разрешить голосовой режим в виджете",
+    )
+    voice_default_on: bool = Field(
+        default=False,
+        description="Автоматически включать голосовой режим при открытии виджета",
+    )
 
 class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
@@ -129,6 +147,8 @@ class UpdateEmbedConfigRequest(BaseModel):
     landing_card_image_url: Optional[str] = None
     landing_sort_order: Optional[int] = None
     guest_max_user_messages: Optional[int] = None
+    voice_enabled: Optional[bool] = None
+    voice_default_on: Optional[bool] = None
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -153,6 +173,8 @@ class EmbedConfigResponse(BaseModel):
     landing_card_image_url: Optional[str]
     landing_sort_order: int
     guest_max_user_messages: Optional[int]
+    voice_enabled: bool
+    voice_default_on: bool
     usage_count: int
     last_used_at: Optional[datetime]
     created_at: datetime
@@ -251,6 +273,10 @@ async def create_embed_config(
     )
 
     _validate_guest_max_user_messages(request_data.guest_max_user_messages)
+    _validate_voice_flags(
+        voice_enabled=request_data.voice_enabled,
+        voice_default_on=request_data.voice_default_on,
+    )
 
     # Создаем конфигурацию
     config = EmbedConfig(
@@ -275,6 +301,8 @@ async def create_embed_config(
         landing_card_image_url=card_url,
         landing_sort_order=request_data.landing_sort_order,
         guest_max_user_messages=request_data.guest_max_user_messages,
+        voice_enabled=request_data.voice_enabled,
+        voice_default_on=request_data.voice_default_on,
         created_by=user.user_id,
     )
     
@@ -376,6 +404,10 @@ async def update_embed_config(
         landing_visible=config.landing_visible,
         landing_card_image_url=config.landing_card_image_url,
         company_id=company_id,
+    )
+    _validate_voice_flags(
+        voice_enabled=config.voice_enabled,
+        voice_default_on=config.voice_default_on,
     )
 
     config.updated_at = datetime.now(timezone.utc)

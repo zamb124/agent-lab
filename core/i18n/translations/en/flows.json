@@ -342,7 +342,16 @@
     "btn_logs": "Logs",
     "btn_editor": "Open editor",
     "btn_clear": "Clear chat",
-    "overflow_aria": "More actions"
+    "overflow_aria": "More actions",
+    "btn_voice_on": "Turn voice mode on",
+    "btn_voice_off": "Turn voice mode off",
+    "voice_status_idle": "Voice mode: idle",
+    "voice_status_listening": "Voice mode: listening",
+    "voice_status_speaking": "Voice mode: speaking",
+    "voice_status_error": "Voice mode: error",
+    "voice_status_closed": "Voice mode: connection closed",
+    "voice_status_no_company": "Voice mode: no active company",
+    "toast_voice_error": "Voice mode failed: {{detail}}"
   },
   "chat_messages": {
     "empty_title": "Start a conversation",

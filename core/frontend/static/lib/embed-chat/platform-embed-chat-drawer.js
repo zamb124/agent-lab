@@ -3,6 +3,8 @@ import { embedChatLabelsForLang } from './embed-chat-default-labels.js';
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './embed-chat-url-params.js';
 import { resolveEmbedChatTheme } from './embed-chat-theme.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
+import { VoiceMediaSession } from '../voice/voice-media-session.js';
+import { VoiceAgentBridge } from '../voice/voice-agent-bridge.js';
 import './platform-embed-chat.js';
 
 /**
@@ -24,6 +26,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
         skillId: { type: String, attribute: 'skill-id' },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
+        voiceEnabled: { type: Boolean, attribute: 'voice-enabled' },
+        voiceDefaultOn: { type: Boolean, attribute: 'voice-default-on' },
+        voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
+        companyId: { type: String, attribute: 'company-id' },
+        _voiceOn: { state: true },
+        _voiceStatus: { state: true },
         /** ru | en | пусто — из document.documentElement.lang */
         locale: { type: String },
         open: { type: Boolean, reflect: true },
@@ -329,6 +337,16 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.skillId = '';
         this.useCredentials = false;
         this.enableVoice = true;
+        this.voiceEnabled = false;
+        this.voiceDefaultOn = false;
+        this.voiceBaseUrl = '';
+        this.companyId = '';
+        this._voiceOn = false;
+        this._voiceStatus = 'idle';
+        /** @type {VoiceMediaSession|null} */
+        this._voiceMedia = null;
+        /** @type {VoiceAgentBridge|null} */
+        this._voiceBridge = null;
         this.locale = '';
         this.open = false;
         this.theme = 'auto';
@@ -422,6 +440,9 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     disconnectedCallback() {
+        if (this._voiceOn) {
+            this._stopVoice();
+        }
         this._stopPanelDrag();
         if (this._onPopStateEmbedParams) {
             window.removeEventListener('popstate', this._onPopStateEmbedParams);
@@ -463,6 +484,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     detail: { open: this.open },
                 }),
             );
+            if (this.open && this.voiceEnabled && this.voiceDefaultOn && !this._voiceOn) {
+                this._startVoice().catch(() => { /* ошибки идут через toast/event */ });
+            }
+            if (!this.open && this._voiceOn) {
+                this._stopVoice();
+            }
         }
         const resolved = resolveEmbedChatTheme(this.theme);
         if (this.getAttribute('data-embed-theme') !== resolved) {
@@ -832,6 +859,108 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
     }
 
+    async _startVoice() {
+        if (this._voiceOn) return;
+        if (!this.voiceEnabled) return;
+        const voiceBaseUrl = String(this.voiceBaseUrl || '').replace(/\/$/, '');
+        if (voiceBaseUrl === '') {
+            this._voiceStatus = 'no_base_url';
+            return;
+        }
+        if (!this.embedId && !this.flowId) {
+            this._voiceStatus = 'no_embed';
+            return;
+        }
+        const companyId = String(this.companyId || '').trim();
+        if (companyId === '') {
+            this._voiceStatus = 'no_company';
+            return;
+        }
+        const a2aBaseUrl = String(this.flowsBaseUrl || '').replace(/\/$/, '');
+        if (a2aBaseUrl === '') {
+            this._voiceStatus = 'no_a2a';
+            return;
+        }
+        const sessionId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
+        const getHeaders = async () => {
+            if (typeof this.getAuthToken === 'function') {
+                return this.getAuthToken();
+            }
+            return {};
+        };
+        const media = new VoiceMediaSession({
+            baseUrl: wsBase,
+            sessionId,
+            companyId,
+            autoRecord: true,
+        });
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl,
+            flowId: this.flowId || undefined,
+            embedId: this.embedId || undefined,
+            branchId: (this.branchId || this.skillId || null) || null,
+            getHeaders,
+            credentials: this.useCredentials ? 'include' : 'omit',
+        });
+        media.addEventListener('error', (e) => {
+            this._voiceStatus = 'error';
+            this.dispatchEvent(new CustomEvent('humanitec-embed-voice-error', {
+                bubbles: true,
+                composed: true,
+                detail: e.detail,
+            }));
+        });
+        media.addEventListener('closed', () => {
+            this._voiceStatus = 'closed';
+            this._voiceOn = false;
+        });
+        media.addEventListener('vad', (e) => {
+            this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
+        });
+        media.addEventListener('ttsState', (e) => {
+            this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
+        });
+        try {
+            await media.connect();
+        } catch (err) {
+            this._voiceStatus = 'error';
+            this.dispatchEvent(new CustomEvent('humanitec-embed-voice-error', {
+                bubbles: true,
+                composed: true,
+                detail: { code: 'voice/connect_failed', detail: err && err.message ? err.message : String(err) },
+            }));
+            return;
+        }
+        bridge.start();
+        this._voiceMedia = media;
+        this._voiceBridge = bridge;
+        this._voiceOn = true;
+        this._voiceStatus = 'idle';
+    }
+
+    _stopVoice() {
+        if (this._voiceBridge) {
+            try { this._voiceBridge.stop(); } catch { /* noop */ }
+            this._voiceBridge = null;
+        }
+        if (this._voiceMedia) {
+            try { this._voiceMedia.close(); } catch { /* noop */ }
+            this._voiceMedia = null;
+        }
+        this._voiceOn = false;
+        this._voiceStatus = 'idle';
+    }
+
+    _toggleVoice() {
+        if (this._voiceOn) {
+            this._stopVoice();
+        } else {
+            this._startVoice().catch(() => { /* noop */ });
+        }
+    }
+
     render() {
         const L = this._resolvedLabels();
         const headTitle = this._panelAssistantHeadTitle(L);
@@ -902,6 +1031,44 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 <div class=${panelHeadClass} @pointerdown=${this._onPanelHeadPointerDown}>
                     <span class="panel-head-title">${headTitle}</span>
                     <div class="panel-head-actions">
+                        ${this.voiceEnabled
+                            ? html`<button
+                                  type="button"
+                                  class="close-btn"
+                                  title=${this._voiceOn ? L.voice_off : L.voice_on}
+                                  aria-label=${this._voiceOn ? L.voice_off : L.voice_on}
+                                  @click=${this._toggleVoice}
+                              >
+                                  ${this._voiceOn
+                                      ? html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                            <path
+                                                d="M12 14c1.66 0 3-1.34 3-3V6a3 3 0 1 0-6 0v5c0 1.66 1.34 3 3 3Z"
+                                                fill="currentColor"
+                                            />
+                                            <path
+                                                d="M19 11a7 7 0 1 1-14 0"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                            />
+                                        </svg>`
+                                      : html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                            <path
+                                                d="M12 14c1.66 0 3-1.34 3-3V6a3 3 0 1 0-6 0v5c0 1.66 1.34 3 3 3Z"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linejoin="round"
+                                            />
+                                            <path
+                                                d="M19 11a7 7 0 1 1-14 0"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                            />
+                                            <path d="M4 4l16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                                        </svg>`}
+                              </button>`
+                            : nothing}
                         <button
                             type="button"
                             class="close-btn"

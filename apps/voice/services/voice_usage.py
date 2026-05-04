@@ -11,10 +11,13 @@ Helpers для записи биллинга STT/TTS-вызовов voice gatewa
 Функции вызываются из:
 - `apps/voice/api/transcribe.py` после батч-STT (секунды из ffprobe;
   при ошибке probe — без `record_stt_usage`, см. лог);
-- `apps/voice/workers/stt_worker.py` после стриминговой STT-итерации;
-- `apps/voice/workers/tts_worker.py` после успешного синтеза;
+- `apps/voice/api/synthesize.py` после streaming-TTS-сессии;
 - `apps/flows/src/eval/platform_services.py` (`transcribe_audio`,
   `synthesize_speech`) — единый фасад для tools.
+
+Real-time длительность voice-сессии и поминутный учёт — в spans
+``platform_tracing`` (`category=voice`, `resource_name="session_minute"`),
+не через ``record_*_usage``.
 
 Никаких неявных дефолтов: provider, company, user обязательны.
 """

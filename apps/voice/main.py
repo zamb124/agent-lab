@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from apps.voice.api.health import health_router
 from apps.voice.api.session import router as voice_session_router
+from apps.voice.api.synthesize import synthesize_router
 from apps.voice.api.transcribe import transcribe_router
 from apps.voice.config import VoiceServiceSettings, get_voice_settings
 from apps.voice.container import get_voice_container
@@ -31,7 +32,12 @@ app = create_service_app(
     service_name="voice",
     settings_class=VoiceServiceSettings,
     get_container=get_voice_container,
-    pages_routers=[health_router, voice_session_router, transcribe_router],
+    pages_routers=[
+        health_router,
+        voice_session_router,
+        transcribe_router,
+        synthesize_router,
+    ],
     repository_names=[],
     on_startup=on_startup,
     cors_origins=["*"],

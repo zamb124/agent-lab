@@ -135,6 +135,22 @@ class EmbedConfig(BaseModel):
             "embed-session; не задано — без лимита"
         ),
     )
+    voice_enabled: bool = Field(
+        default=False,
+        title="Голосовой режим",
+        description=(
+            "Разрешить в виджете кнопку голосового режима (WS `/voice/api/ws/session/..` + "
+            "bridge к A2A). При False кнопка скрыта, voice_default_on игнорируется."
+        ),
+    )
+    voice_default_on: bool = Field(
+        default=False,
+        title="Включать голос по умолчанию",
+        description=(
+            "Запускать голосовой режим автоматически при открытии виджета. "
+            "Имеет силу только если voice_enabled=True."
+        ),
+    )
 
     # Статистика
     usage_count: int = Field(

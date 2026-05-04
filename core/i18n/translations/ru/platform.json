@@ -168,6 +168,14 @@
         "empty": "Нет записей логов",
         "copy_aria": "Копировать JSON строки"
     },
+    "assistant_message_actions": {
+        "play": "Озвучить",
+        "play_busy": "Озвучивание…",
+        "copy": "Копировать",
+        "toast_copied": "Скопировано",
+        "toast_copy_failed": "Не удалось скопировать",
+        "toast_play_failed": "Озвучивание не удалось: {detail}"
+    },
     "timezone_picker": {
         "aria_list": "Список IANA time zones",
         "empty": "Нет зон по фильтру"

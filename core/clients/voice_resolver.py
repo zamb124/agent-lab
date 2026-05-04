@@ -38,10 +38,12 @@ from core.clients.stt_client import (
     BaseSTTClient,
     STTClientFactory,
 )
+from core.clients.stt_streaming import BaseSTTStreamer, BufferedSTTStreamer
 from core.clients.tts_client import (
     BaseTTSClient,
     TTSClientFactory,
 )
+from core.clients.tts_streaming import BaseTTSStreamer, BatchBackedTTSStreamer
 from core.clients.vad_client import (
     BaseVADClient,
     VADClientFactory,
@@ -363,10 +365,98 @@ async def get_vad_client(
     )
 
 
+_TTS_MIME_BY_FORMAT: dict[str, str] = {
+    "wav": "audio/wav",
+    "mp3": "audio/mpeg",
+    "ogg": "audio/ogg",
+    "pcm": "audio/L16",
+    "lpcm": "audio/L16",
+}
+
+
+async def get_stt_streamer(
+    *,
+    company_id: str,
+    override: Optional[SpeechOverride] = None,
+    sample_rate: int = 16000,
+) -> BaseSTTStreamer:
+    """Получить streaming STT-клиента (tier-резолв как у ``get_stt_client``).
+
+    Возвращает ``BaseSTTStreamer``. Для провайдеров без native streaming
+    под капотом — ``BufferedSTTStreamer`` поверх batch-клиента.
+
+    ``sample_rate`` обязателен: PCM от источника должен быть на известной
+    частоте дискретизации (обычно 16000 для voice-сессии).
+    """
+    if sample_rate <= 0:
+        raise ValueError("voice_resolver.get_stt_streamer: sample_rate должен быть > 0.")
+
+    stt_client = await get_stt_client(company_id=company_id, override=override)
+    language = None
+    if override is not None and override.language:
+        language = override.language
+    else:
+        language = get_settings().voice.stt.default_language
+    return BufferedSTTStreamer(
+        stt_client=stt_client,
+        sample_rate=sample_rate,
+        language=language,
+    )
+
+
+async def get_tts_streamer(
+    *,
+    company_id: str,
+    override: Optional[SpeechOverride] = None,
+) -> BaseTTSStreamer:
+    """Получить streaming TTS-клиента (tier-резолв как у ``get_tts_client``).
+
+    Возвращает ``BaseTTSStreamer``. Для провайдеров без native streaming
+    — ``BatchBackedTTSStreamer`` поверх batch-клиента + ``VoiceChunker``.
+    """
+    _validate_company_id(company_id)
+    override = _validate_override(override)
+    cfg = get_settings().voice.tts
+    company_row = await _load_company_override(company_id=company_id, kind="tts")
+
+    provider_name = _resolve_str(
+        override_value=override.provider,
+        company_value=company_row.provider if company_row else None,
+        default_value=cfg.provider,
+    )
+    response_format = _resolve_str(
+        override_value=override.response_format,
+        company_value=company_row.response_format if company_row else None,
+        default_value=cfg.default_response_format,
+    )
+    sample_rate = _resolve_int(
+        override_value=override.sample_rate,
+        company_value=company_row.sample_rate if company_row else None,
+        default_value=cfg.default_sample_rate,
+    )
+    if response_format not in _TTS_MIME_BY_FORMAT:
+        raise ValueError(
+            f"voice_resolver.get_tts_streamer: неизвестный response_format={response_format!r} "
+            f"(допустимые: {sorted(_TTS_MIME_BY_FORMAT)})"
+        )
+    mime_type = _TTS_MIME_BY_FORMAT[response_format]
+
+    tts_client = await get_tts_client(company_id=company_id, override=override)
+    return BatchBackedTTSStreamer(
+        tts_client=tts_client,
+        response_format=response_format,
+        sample_rate=sample_rate,
+        provider_name=provider_name,
+        mime_type=mime_type,
+    )
+
+
 __all__ = [
     "get_stt_client",
     "get_tts_client",
     "get_vad_client",
+    "get_stt_streamer",
+    "get_tts_streamer",
     "invalidate_company_overrides_cache",
     "reset_voice_resolver_for_tests",
 ]
