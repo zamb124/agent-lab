@@ -37,6 +37,7 @@ import {
     asString,
     authActiveCompanyId,
     deriveRunPanelStatus,
+    isPlainObject,
 } from '../../_helpers/flows-resolvers.js';
 import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-id.js';
 import {
@@ -809,8 +810,19 @@ export class FlowsExecutionPanel extends PlatformElement {
             onTtsState: (e) => {
                 this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
             },
-            onMediaError: () => {
+            onMediaError: (e) => {
                 this._voiceStatus = 'error';
+                const d = isPlainObject(e.detail) ? e.detail : {};
+                const msg =
+                    typeof d.detail === 'string' && d.detail.trim() !== ''
+                        ? d.detail
+                        : typeof d.code === 'string'
+                          ? d.code
+                          : this.t('platform_chat.toast_voice_ws_hint');
+                this.toast('flows:platform_chat.toast_voice_error', {
+                    type: 'error',
+                    vars: { detail: msg },
+                });
             },
             onClosed: () => {
                 this._voiceMedia = null;

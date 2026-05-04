@@ -865,7 +865,7 @@ class ProviderLitserveInfraConfig(BaseModel):
     stt_models: list["ProviderLitserveSTTModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveSTTModelEntry(
-                api_model_id="gigaam-v3-rnnt",
+                api_model_id="gigaam-v3-rnnt-ru",
                 hf_model_id="ai-sage/GigaAM-v3",
                 revision="e2e_rnnt",
             ),
@@ -877,14 +877,14 @@ class ProviderLitserveInfraConfig(BaseModel):
         ),
     )
     stt_default_api_model_id: str = Field(
-        default="gigaam-v3-rnnt",
+        default="gigaam-v3-rnnt-ru",
         description="api id STT-модели по умолчанию (должен присутствовать в stt_models).",
     )
 
     tts_models: list["ProviderLitserveTTSModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveTTSModelEntry(
-                api_model_id="kokoro-82m",
+                api_model_id="kokoro-82m-ru",
                 hf_model_id="hexgrad/Kokoro-82M",
                 lang="ru",
                 voice="af",
@@ -898,14 +898,14 @@ class ProviderLitserveInfraConfig(BaseModel):
         ),
     )
     tts_default_api_model_id: str = Field(
-        default="kokoro-82m",
+        default="kokoro-82m-ru",
         description="api id TTS-модели по умолчанию (должен присутствовать в tts_models).",
     )
 
     vad_models: list["ProviderLitserveVADModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveVADModelEntry(
-                api_model_id="silero-vad",
+                api_model_id="silero-vad-v5",
                 hf_model_id="snakers4/silero-vad",
                 sample_rate=16000,
                 threshold=0.5,
@@ -918,7 +918,7 @@ class ProviderLitserveInfraConfig(BaseModel):
         ),
     )
     vad_default_api_model_id: str = Field(
-        default="silero-vad",
+        default="silero-vad-v5",
         description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
     )
 

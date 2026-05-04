@@ -4,8 +4,10 @@
  * Не знает про A2A, Flows, embed или чат-UI. Делает ровно три вещи:
  *
  *  1. Держит WS `/voice/api/ws/session/{id}` и автоматом отправляет
- *     PCM 16kHz mono 16-bit из микрофона через `ScriptProcessorNode` (общий путь для
- *     всех Origin: захват через AudioWorklet в ряде Chromium даёт только нули uplink).
+ *     PCM 16kHz mono 16-bit: при наличии — **`AudioWorklet`** (`voice-mic-capture`),
+ *     иначе устаревший **`ScriptProcessorNode`**, затем fallback `AnalyserNode` + pump. Флаг **`_recording`**
+ *     поднимают **до** сборки графа, иначе ранние `onaudioprocess` отрезаются.
+ *     Тихий oscillator; таймер **`~140 ms`** и **`onstatechange`** поднимают контекст из `suspended`/`interrupted`.
  *  2. Принимает от voice text-frames (`transcript`, `vad`, `tts_state`,
  *     `error`, `ping`, `media_config`) и диспатчит как DOM `CustomEvent`.
  *  3. Принимает от voice binary-кадры и воспроизводит их через
@@ -46,6 +48,13 @@ function isDevVoiceInsecureHost(hostname) {
 
 export const VOICE_CAPTURE_SAMPLE_RATE = 16000;
 
+/** Размер буфера ScriptProcessorNode (степень двойки в допустимом диапазоне). */
+const MIC_SCRIPT_PROCESSOR_BUFFER_SIZE = 4096;
+/** Интервал опроса AnalyserNode только в fallback-режиме. */
+const MIC_CAPTURE_PUMP_MS = 20;
+/** fftSize временной волны (fallback AnalyserNode). */
+const MIC_CAPTURE_FFT_SIZE = 2048;
+
 function floatSampleToInt16(sample) {
     const s = Math.max(-1, Math.min(1, sample));
     const v = s < 0 ? s * 0x8000 : s * 0x7fff;
@@ -53,37 +62,15 @@ function floatSampleToInt16(sample) {
 }
 
 /**
- * @param {AudioBuffer} ib
- * @returns {Float32Array|null}
+ * @param {Float32Array} channel
+ * @returns {ArrayBuffer}
  */
-function monoFloat32FromAudioBuffer(ib) {
-    const frameLen = ib.length;
-    const nCh = ib.numberOfChannels;
-    if (frameLen === 0 || nCh === 0) {
-        return null;
+function floatMonoToPcm16ArrayBufferDirect(channel) {
+    const pcm = new Int16Array(channel.length);
+    for (let i = 0; i < channel.length; i++) {
+        pcm[i] = floatSampleToInt16(channel[i]);
     }
-    const mono = new Float32Array(frameLen);
-    let contributors = 0;
-    for (let c = 0; c < nCh; c++) {
-        const data = ib.getChannelData(c);
-        if (!data || data.length < frameLen) {
-            continue;
-        }
-        contributors += 1;
-        for (let i = 0; i < frameLen; i++) {
-            mono[i] += data[i];
-        }
-    }
-    if (contributors === 0) {
-        return null;
-    }
-    if (contributors > 1) {
-        const inv = 1 / contributors;
-        for (let i = 0; i < frameLen; i++) {
-            mono[i] *= inv;
-        }
-    }
-    return mono;
+    return pcm.buffer;
 }
 
 /**
@@ -122,7 +109,7 @@ function resampleMonoToPcm16ArrayBuffer(channel, inRate, state) {
     if (keepFrom >= merged.length) {
         state.tail = new Float32Array(0);
     } else {
-        state.tail = merged.subarray(keepFrom);
+        state.tail = merged.slice(keepFrom);
     }
     const totalLen = pcmParts.length;
     if (totalLen === 0) {
@@ -184,12 +171,34 @@ export class VoiceMediaSession extends EventTarget {
         this._mediaStream = null;
         /** @type {AudioContext|null} */
         this._captureCtx = null;
+        /** @type {AnalyserNode|null} */
+        this._captureAnalyser = null;
+        /** @type {AudioWorkletNode|null} */
+        this._captureWorkletNode = null;
         /** @type {ScriptProcessorNode|null} */
-        this._scriptProcessor = null;
+        this._captureScriptProcessor = null;
+        /** @type {ReturnType<typeof setTimeout>|null} */
+        this._capturePumpTimer = null;
+        /** @type {ReturnType<typeof setTimeout>|null} */
+        this._mutedTrackDiagnosticTimer = null;
+        /** @type {ReturnType<typeof setInterval>|null} */
+        this._captureResumeWatchdog = null;
+        /** @type {(() => void)|null} */
+        this._captureVisibilityHandler = null;
+        /** @type {OscillatorNode|null} */
+        this._captureKeepAliveOsc = null;
+        /** @type {GainNode|null} */
+        this._captureKeepAliveGain = null;
         /** @type {{ tail: Float32Array, nextOutSampleIndex: number }|null} */
         this._captureResamplerState = null;
         /** @type {GainNode|null} — mute sink: тянуть граф к destination без эха на колонках */
         this._captureSinkGain = null;
+        /** @type {AbortController|null} */
+        this._mspAbort = null;
+        /** @type {ReadableStreamDefaultReader<AudioData>|null} */
+        this._mspReader = null;
+        /** @type {unknown} */
+        this._mspProcessor = null;
         this._recording = false;
 
         /** @type {AudioContext|null} */
@@ -198,7 +207,7 @@ export class VoiceMediaSession extends EventTarget {
 
         this._closed = false;
         this._openPromise = null;
-        /** Очередь PCM до OPEN (CONNECTING); иначе process() шлёт, onmessage делает return — байты не уходят. */
+        /** Очередь PCM до OPEN (CONNECTING); иначе pump шлёт, пока сокет не OPEN — теряются. */
         this._pcmOutboundQueue = [];
         this._pcmOutboundQueueCap = 200;
     }
@@ -292,6 +301,13 @@ export class VoiceMediaSession extends EventTarget {
             throw err;
         }
         this._flushPcmOutboundQueue();
+        if (this._autoRecord && this._captureCtx !== null && !this._closed) {
+            try {
+                await this._captureCtx.resume();
+            } catch {
+                /* второй resume после OPEN: не рвём сессию, см. pump */
+            }
+        }
     }
 
     _clearPcmOutboundQueue() {
@@ -376,59 +392,499 @@ export class VoiceMediaSession extends EventTarget {
                 'VoiceMediaSession: getUserMedia not available (нет navigator.mediaDevices; часто встроенный превью-браузер, нестандартный WebView или политика безопасности).',
             );
         }
-        this._mediaStream = await getUserMediaCompat({ audio: true, video: false });
-        await this._initCaptureScriptProcessor();
+        let stream;
+        try {
+            stream = await getUserMediaCompat({
+                audio: {
+                    channelCount: { ideal: 1 },
+                    echoCancellation: { ideal: true },
+                    noiseSuppression: { ideal: true },
+                    autoGainControl: { ideal: true },
+                },
+                video: false,
+            });
+        } catch {
+            stream = await getUserMediaCompat({ audio: true, video: false });
+        }
+        this._mediaStream = stream;
         this._recording = true;
+        try {
+            await this._initMicCaptureGraph();
+        } catch (err) {
+            this._recording = false;
+            this._teardownCapture();
+            throw err;
+        }
     }
 
     /**
-     * PCM uplink только через ScriptProcessorNode: канал ScriptProcessor задаётся по
-     * `MediaStreamAudioSourceNode.channelCount` (учёт stereo); без running AudioContext процесс не вызывается.
+     * PCM uplink: по возможности **AudioWorklet** (рендер-поток, без ScriptProcessor),
+     * иначе `ScriptProcessorNode`, иначе AnalyserNode + pump.
      */
-    async _initCaptureScriptProcessor() {
+    async _initMicCaptureGraph() {
+        const tracks = this._mediaStream.getAudioTracks();
+        const audioTrack =
+            tracks.length > 0 && tracks[0].kind === 'audio' ? tracks[0] : null;
+        if (audioTrack === null) {
+            throw new Error('VoiceMediaSession: в MediaStream нет audio-дорожки');
+        }
+
+        this._captureResamplerState = { tail: new Float32Array(0), nextOutSampleIndex: 0 };
+
+        if (this._tryAttachMediaStreamTrackProcessor(audioTrack)) {
+            this._scheduleMutedMicDiagnostics();
+            return;
+        }
+
         const Ctx = window.AudioContext || window.webkitAudioContext;
         if (typeof Ctx !== 'function') {
             throw new Error('VoiceMediaSession: AudioContext not available');
         }
         this._captureCtx = new Ctx({ latencyHint: 'interactive' });
-        this._captureResamplerState = { tail: new Float32Array(0), nextOutSampleIndex: 0 };
 
         const source = this._captureCtx.createMediaStreamSource(this._mediaStream);
-        /** @type {number} */
-        let inputChannels = 2;
-        const srcCh = source.channelCount;
-        if (typeof srcCh === 'number' && Number.isFinite(srcCh) && srcCh >= 1) {
-            /** Минимум 2: часть браузеров отдаёт «моно», но дорожки фактически стерео, речь только во втором канале. */
-            inputChannels = Math.min(32, Math.max(2, Math.floor(srcCh)));
-        }
-
-        const processor = this._captureCtx.createScriptProcessor(4096, inputChannels, 1);
-        this._scriptProcessor = processor;
-        processor.onaudioprocess = (e) => {
-            const mono = monoFloat32FromAudioBuffer(e.inputBuffer);
-            if (!mono || !this._captureResamplerState) {
-                return;
-            }
-            const inRate = this._captureCtx.sampleRate;
-            const buf = resampleMonoToPcm16ArrayBuffer(mono, inRate, this._captureResamplerState);
-            if (buf instanceof ArrayBuffer) {
-                this._sendPcmToWebSocket(buf);
-            }
-        };
-
-        source.connect(processor);
 
         const sinkGain = this._captureCtx.createGain();
         sinkGain.gain.value = 0;
-        processor.connect(sinkGain);
         sinkGain.connect(this._captureCtx.destination);
         this._captureSinkGain = sinkGain;
 
+        const keepOsc = this._captureCtx.createOscillator();
+        keepOsc.type = 'sine';
+        keepOsc.frequency.value = 24;
+        const keepGain = this._captureCtx.createGain();
+        keepGain.gain.value = 5e-4;
+        keepOsc.connect(keepGain);
+        keepGain.connect(this._captureCtx.destination);
+        keepOsc.start();
+        this._captureKeepAliveOsc = keepOsc;
+        this._captureKeepAliveGain = keepGain;
+
+        const ctx = this._captureCtx;
+        /** @type {boolean} */
+        let usedMicWorklet = false;
+        const hasAudioWorklet = typeof ctx.audioWorklet?.addModule === 'function';
+
+        if (hasAudioWorklet) {
+            try {
+                const workletUrl = new URL(
+                    './worklets/voice-mic-capture.processor.js',
+                    import.meta.url,
+                ).href;
+                await ctx.audioWorklet.addModule(workletUrl);
+                const wNode = new AudioWorkletNode(ctx, 'voice-mic-capture', {
+                    numberOfInputs: 1,
+                    numberOfOutputs: 1,
+                    channelCount: 1,
+                    outputChannelCount: [1],
+                });
+                this._captureWorkletNode = wNode;
+                wNode.port.onmessage = (event) => {
+                    this._onMicWorkletFrame(event.data);
+                };
+                source.connect(wNode);
+                wNode.connect(sinkGain);
+                usedMicWorklet = true;
+            } catch {
+                this._captureWorkletNode = null;
+                usedMicWorklet = false;
+            }
+        }
+
+        if (!usedMicWorklet && typeof ctx.createScriptProcessor === 'function') {
+            const processor = ctx.createScriptProcessor(MIC_SCRIPT_PROCESSOR_BUFFER_SIZE, 1, 1);
+            this._captureScriptProcessor = processor;
+            processor.onaudioprocess = (ev) => {
+                this._onMicScriptProcess(ev);
+            };
+            source.connect(processor);
+            processor.connect(sinkGain);
+        } else if (!usedMicWorklet) {
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = MIC_CAPTURE_FFT_SIZE;
+            analyser.smoothingTimeConstant = 0;
+            this._captureAnalyser = analyser;
+            source.connect(analyser);
+            analyser.connect(sinkGain);
+        }
+
         await this._ensureCaptureAudioContextRunning();
+
+        this._captureCtx.onstatechange = () => {
+            if (this._closed || !this._captureCtx) {
+                return;
+            }
+            if (
+                this._captureCtx.state === 'suspended'
+                || this._captureCtx.state === 'interrupted'
+            ) {
+                void this._captureCtx.resume().catch(() => {});
+            }
+        };
+
+        if (typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+            if (this._captureResumeWatchdog !== null) {
+                window.clearInterval(this._captureResumeWatchdog);
+            }
+            this._captureResumeWatchdog = window.setInterval(() => {
+                if (this._closed || !this._recording || !this._captureCtx) {
+                    return;
+                }
+                const c = this._captureCtx;
+                if (c.state === 'closed') {
+                    return;
+                }
+                if (c.state !== 'running') {
+                    void c.resume().catch(() => {});
+                }
+            }, 140);
+        }
+
+        const captureUsesAnalyserPump = !usedMicWorklet && this._captureScriptProcessor === null;
+        if (captureUsesAnalyserPump) {
+            this._startMicCapturePumpLoop();
+        }
+
+        this._scheduleMutedMicDiagnostics();
+
+        if (typeof document !== 'undefined') {
+            const onVis = () => {
+                if (document.visibilityState !== 'visible') {
+                    return;
+                }
+                if (!this._captureCtx || this._closed) {
+                    return;
+                }
+                if (
+                    this._captureCtx.state === 'suspended'
+                    || this._captureCtx.state === 'interrupted'
+                ) {
+                    void (async () => {
+                        try {
+                            await this._captureCtx.resume();
+                        } catch {
+                            /* noop */
+                        }
+                    })();
+                }
+            };
+            this._captureVisibilityHandler = onVis;
+            document.addEventListener('visibilitychange', onVis);
+        }
     }
 
     /**
-     * Без состояния `running` браузер не вызывает onaudioprocess — uplink будет пустым.
+     * @param {unknown} data — Float32Array с батчем сэмплов из AudioWorklet (transferable).
+     */
+    _onMicWorkletFrame(data) {
+        if (this._closed || !this._captureResamplerState || !this._captureCtx) {
+            return;
+        }
+        if (!(data instanceof Float32Array) || data.length === 0) {
+            return;
+        }
+        try {
+            const c = this._captureCtx;
+            if (c.state !== 'running') {
+                void c.resume();
+            }
+            const buf = this._encodeMonoFloatToOutboundPcm16(data, this._captureCtx.sampleRate);
+            if (buf instanceof ArrayBuffer) {
+                this._sendPcmToWebSocket(buf);
+            }
+        } catch (err) {
+            this._dispatch('error', {
+                code: 'voice/client/pcm_capture_failed',
+                detail: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+
+    /**
+     * @param {AudioProcessingEvent} ev
+     */
+    _onMicScriptProcess(ev) {
+        if (this._closed || !this._captureResamplerState || !this._captureCtx || !this._captureScriptProcessor) {
+            return;
+        }
+        try {
+            const c = this._captureCtx;
+            if (c.state !== 'running') {
+                void c.resume();
+            }
+            const output = ev.outputBuffer.getChannelData(0);
+            output.fill(0);
+            const input = ev.inputBuffer.getChannelData(0);
+            const copy = new Float32Array(input.length);
+            copy.set(input);
+            const buf = this._encodeMonoFloatToOutboundPcm16(copy, this._captureCtx.sampleRate);
+            if (buf instanceof ArrayBuffer) {
+                this._sendPcmToWebSocket(buf);
+            }
+        } catch (err) {
+            this._dispatch('error', {
+                code: 'voice/client/pcm_capture_failed',
+                detail: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+
+    /**
+     * @param {Float32Array} mono
+     * @param {number} inRate
+     * @returns {ArrayBuffer|null}
+     */
+    _encodeMonoFloatToOutboundPcm16(mono, inRate) {
+        if (!this._captureResamplerState) {
+            return null;
+        }
+        if (!(inRate > 0)) {
+            return null;
+        }
+        const chunk = new Float32Array(mono.length);
+        chunk.set(mono);
+        if (inRate === VOICE_CAPTURE_SAMPLE_RATE) {
+            return floatMonoToPcm16ArrayBufferDirect(chunk);
+        }
+        return resampleMonoToPcm16ArrayBuffer(chunk, inRate, this._captureResamplerState);
+    }
+
+    /**
+     * @param {MediaStreamTrack} track
+     * @returns {boolean}
+     */
+    _tryAttachMediaStreamTrackProcessor(track) {
+        if (
+            typeof window === 'undefined'
+            || typeof MediaStreamTrackProcessor !== 'function'
+        ) {
+            return false;
+        }
+        try {
+            const processor = new MediaStreamTrackProcessor({ track });
+            const readable = processor.readable;
+            if (
+                readable === null
+                || typeof readable !== 'object'
+                || typeof readable.getReader !== 'function'
+            ) {
+                return false;
+            }
+            const abortController = new AbortController();
+            const reader = readable.getReader();
+            this._mspAbort = abortController;
+            this._mspProcessor = processor;
+            this._mspReader = reader;
+            void this._runMediaStreamTrackProcessorPump(reader, abortController.signal);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * @param {AudioData} audioData
+     * @returns {{ mono: Float32Array, inRate: number, sampleCount: number }}
+     */
+    _mspExtractMonoFromAudioData(audioData) {
+        const n = audioData.numberOfFrames;
+        const ch = audioData.numberOfChannels;
+        const inRate = audioData.sampleRate;
+        if (n === 0) {
+            return { mono: new Float32Array(0), inRate, sampleCount: 0 };
+        }
+        try {
+            const interleaved = new Float32Array(n * ch);
+            audioData.copyTo(interleaved, { format: 'f32' });
+            if (ch === 1) {
+                return { mono: interleaved, inRate, sampleCount: n };
+            }
+            const mono = new Float32Array(n);
+            for (let i = 0; i < n; i++) {
+                let sum = 0;
+                for (let c = 0; c < ch; c++) {
+                    sum += interleaved[i * ch + c];
+                }
+                mono[i] = sum / ch;
+            }
+            return { mono, inRate, sampleCount: n };
+        } catch {
+            /* planar fallback */
+        }
+        if (ch === 1) {
+            const mono = new Float32Array(n);
+            audioData.copyTo(mono, { planeIndex: 0, format: 'f32-planar' });
+            return { mono, inRate, sampleCount: n };
+        }
+        if (ch === 2) {
+            const left = new Float32Array(n);
+            const right = new Float32Array(n);
+            audioData.copyTo(left, { planeIndex: 0, format: 'f32-planar' });
+            audioData.copyTo(right, { planeIndex: 1, format: 'f32-planar' });
+            const mono = new Float32Array(n);
+            for (let i = 0; i < n; i++) {
+                mono[i] = (left[i] + right[i]) * 0.5;
+            }
+            return { mono, inRate, sampleCount: n };
+        }
+        const mono = new Float32Array(n);
+        audioData.copyTo(mono, { planeIndex: 0, format: 'f32-planar' });
+        return { mono, inRate, sampleCount: n };
+    }
+
+    /**
+     * @param {ReadableStreamDefaultReader<AudioData>} reader
+     * @param {AbortSignal} signal
+     * @returns {Promise<void>}
+     */
+    async _runMediaStreamTrackProcessorPump(reader, signal) {
+        try {
+            while (!this._closed && !signal.aborted && this._recording) {
+                let readResult;
+                try {
+                    readResult = await reader.read();
+                } catch {
+                    break;
+                }
+                if (readResult.done) {
+                    break;
+                }
+                const audioData = readResult.value;
+                if (!(audioData instanceof AudioData)) {
+                    continue;
+                }
+                try {
+                    if (this._closed || !this._recording || !this._captureResamplerState) {
+                        continue;
+                    }
+                    const { mono, inRate, sampleCount } =
+                        this._mspExtractMonoFromAudioData(audioData);
+                    if (sampleCount === 0) {
+                        continue;
+                    }
+                    const buf = this._encodeMonoFloatToOutboundPcm16(mono, inRate);
+                    if (buf instanceof ArrayBuffer) {
+                        this._sendPcmToWebSocket(buf);
+                    }
+                } catch (err) {
+                    if (!this._closed) {
+                        this._dispatch('error', {
+                            code: 'voice/client/pcm_capture_failed',
+                            detail: err instanceof Error ? err.message : String(err),
+                        });
+                    }
+                } finally {
+                    try {
+                        audioData.close();
+                    } catch {
+                        /* noop */
+                    }
+                }
+            }
+        } finally {
+            if (this._mspReader === reader) {
+                this._mspReader = null;
+            }
+            try {
+                await reader.cancel();
+            } catch {
+                /* noop */
+            }
+            try {
+                reader.releaseLock();
+            } catch {
+                /* noop */
+            }
+            this._mspProcessor = null;
+        }
+    }
+
+    /** Если дорожка остаётся `muted`, сигнал до графа не доходит — показываем явную ошибку. */
+    _scheduleMutedMicDiagnostics() {
+        if (this._mediaStream === null) {
+            return;
+        }
+        const tracks = this._mediaStream.getAudioTracks();
+        const track = tracks.length > 0 ? tracks[0] : null;
+        if (
+            track === null
+            || typeof track !== 'object'
+            || typeof track.addEventListener !== 'function'
+        ) {
+            return;
+        }
+        this._mutedTrackDiagnosticTimer = window.setTimeout(() => {
+            this._mutedTrackDiagnosticTimer = null;
+            if (this._closed || !this._recording) {
+                return;
+            }
+            if (track.muted === true) {
+                this._dispatch('error', {
+                    code: 'voice/client/mic_track_muted',
+                    detail:
+                        'Микрофон в состоянии muted: браузер не отдаёт аудиокадры. Проверьте разрешения сайта, системный ввод по умолчанию и конфликты с другими приложениями.',
+                });
+            }
+        }, 1600);
+    }
+
+    _startMicCapturePumpLoop() {
+        const run = async () => {
+            if (this._closed) {
+                this._capturePumpTimer = null;
+                return;
+            }
+            try {
+                await this._micCapturePumpOne();
+            } catch (err) {
+                this._dispatch('error', {
+                    code: 'voice/client/pcm_capture_failed',
+                    detail: err instanceof Error ? err.message : String(err),
+                });
+            }
+            this._capturePumpTimer = window.setTimeout(() => {
+                void run();
+            }, MIC_CAPTURE_PUMP_MS);
+        };
+        this._capturePumpTimer = window.setTimeout(() => {
+            void run();
+        }, 0);
+    }
+
+    /**
+     * `AudioContext.resume()` асинхронен: после `void resume()` нельзя сразу проверять `state`.
+     * Иначе почти каждый тик выходим без send — в сокет уходит один «автоматический» кадр и тишина.
+     * @returns {Promise<void>}
+     */
+    async _micCapturePumpOne() {
+        if (this._closed) {
+            return;
+        }
+        if (!this._captureAnalyser || !this._captureResamplerState || !this._captureCtx) {
+            return;
+        }
+        const ctx = this._captureCtx;
+        if (ctx.state !== 'running') {
+            try {
+                await ctx.resume();
+            } catch {
+                /* noop */
+            }
+        }
+        if (ctx.state !== 'running') {
+            return;
+        }
+        const fft = this._captureAnalyser.fftSize;
+        const wave = new Float32Array(fft);
+        this._captureAnalyser.getFloatTimeDomainData(wave);
+        const buf = this._encodeMonoFloatToOutboundPcm16(wave, ctx.sampleRate);
+        if (buf instanceof ArrayBuffer) {
+            this._sendPcmToWebSocket(buf);
+        }
+    }
+
+    /**
+     * Без состояния `running` PCM не отправляется.
      * @returns {Promise<void>}
      */
     async _ensureCaptureAudioContextRunning() {
@@ -557,15 +1013,88 @@ export class VoiceMediaSession extends EventTarget {
 
     _teardownCapture() {
         this._recording = false;
+        if (this._mspAbort !== null) {
+            try {
+                this._mspAbort.abort();
+            } catch {
+                /* noop */
+            }
+            this._mspAbort = null;
+        }
+        const mspReader = this._mspReader;
+        if (mspReader !== null) {
+            this._mspReader = null;
+            try {
+                void mspReader.cancel();
+            } catch {
+                /* noop */
+            }
+            try {
+                mspReader.releaseLock();
+            } catch {
+                /* noop */
+            }
+        }
+        this._mspProcessor = null;
         this._captureResamplerState = null;
+        if (typeof document !== 'undefined' && this._captureVisibilityHandler !== null) {
+            document.removeEventListener('visibilitychange', this._captureVisibilityHandler);
+            this._captureVisibilityHandler = null;
+        }
+        if (this._capturePumpTimer !== null) {
+            window.clearTimeout(this._capturePumpTimer);
+            this._capturePumpTimer = null;
+        }
+        if (this._mutedTrackDiagnosticTimer !== null) {
+            window.clearTimeout(this._mutedTrackDiagnosticTimer);
+            this._mutedTrackDiagnosticTimer = null;
+        }
+        if (this._captureResumeWatchdog !== null) {
+            window.clearInterval(this._captureResumeWatchdog);
+            this._captureResumeWatchdog = null;
+        }
+        if (this._captureCtx !== null) {
+            this._captureCtx.onstatechange = null;
+        }
+        if (this._captureWorkletNode !== null) {
+            try {
+                this._captureWorkletNode.port.onmessage = null;
+                this._captureWorkletNode.port.close();
+            } catch {
+                /* noop */
+            }
+            try {
+                this._captureWorkletNode.disconnect();
+            } catch {
+                /* noop */
+            }
+            this._captureWorkletNode = null;
+        }
+        if (this._captureScriptProcessor) {
+            try {
+                this._captureScriptProcessor.onaudioprocess = null;
+                this._captureScriptProcessor.disconnect();
+            } catch {
+                /* noop */
+            }
+            this._captureScriptProcessor = null;
+        }
+        if (this._captureKeepAliveOsc) {
+            try { this._captureKeepAliveOsc.stop(); } catch { /* noop */ }
+            try { this._captureKeepAliveOsc.disconnect(); } catch { /* noop */ }
+            this._captureKeepAliveOsc = null;
+        }
+        if (this._captureKeepAliveGain) {
+            try { this._captureKeepAliveGain.disconnect(); } catch { /* noop */ }
+            this._captureKeepAliveGain = null;
+        }
+        if (this._captureAnalyser) {
+            try { this._captureAnalyser.disconnect(); } catch { /* noop */ }
+            this._captureAnalyser = null;
+        }
         if (this._captureSinkGain) {
             try { this._captureSinkGain.disconnect(); } catch { /* noop */ }
             this._captureSinkGain = null;
-        }
-        if (this._scriptProcessor) {
-            try { this._scriptProcessor.onaudioprocess = null; } catch { /* noop */ }
-            try { this._scriptProcessor.disconnect(); } catch { /* noop */ }
-            this._scriptProcessor = null;
         }
         if (this._captureCtx) {
             try { this._captureCtx.close(); } catch { /* noop */ }
