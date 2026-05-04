@@ -6,8 +6,8 @@
  *    отправляет `message/stream` в A2A через streamEmbedA2A;
  *  - speakable `TaskArtifactUpdateEvent` → `mediaSession.speak(text,...)`;
  *  - `TaskStatusUpdateEvent{final:true}` → `mediaSession.endUtterance()`;
- *  - `vad{state:"started"}` во время TTS → `mediaSession.stopPlayback()`
- *    + `AbortController.abort` над текущим A2A fetch + `tasks/cancel`.
+ *  - `vad{state:"started"}` с ≥ ~300 мс непрерывной речи (до `ended`) во время
+ *    активного A2A fetch и/или TTS → `mediaSession.stopPlayback()`, `abort`, `tasks/cancel`;
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -215,7 +215,14 @@ describe('VoiceAgentBridge: flows → voice', () => {
 });
 
 describe('VoiceAgentBridge: barge-in', () => {
-    it('vad started во время TTS → stopPlayback + abort + tasks/cancel', async () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('vad started во время TTS после порога речи → stopPlayback + abort + tasks/cancel', async () => {
         let abortedSignal = null;
         streamMock.mockImplementation(async (opts) => {
             abortedSignal = opts.signal;
@@ -242,7 +249,7 @@ describe('VoiceAgentBridge: barge-in', () => {
         bridge._currentTaskId = 'task-active-1';
         emitTts(media, 'playing');
         emitVad(media, 'started');
-        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(310);
         await Promise.resolve();
 
         expect(media.stopPlaybackCount).toBe(1);
@@ -256,7 +263,7 @@ describe('VoiceAgentBridge: barge-in', () => {
         expect(body.params).toEqual({ id: 'task-active-1' });
     });
 
-    it('vad started без активного TTS не триггерит barge-in', async () => {
+    it('vad started без активного TTS и без A2A не триггерит barge-in', async () => {
         streamMock.mockImplementation(async () => new Promise(() => {}));
         const media = new FakeMediaSession();
         const bridge = new VoiceAgentBridge({
@@ -266,9 +273,69 @@ describe('VoiceAgentBridge: barge-in', () => {
         });
         bridge.start();
         emitVad(media, 'started');
+        await vi.advanceTimersByTimeAsync(310);
         await Promise.resolve();
         expect(media.stopPlaybackCount).toBe(0);
         expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('vad ended до порога сбрасывает ожидание barge-in', async () => {
+        let abortedSignal = null;
+        streamMock.mockImplementation(async (opts) => {
+            abortedSignal = opts.signal;
+            await new Promise((_res, rej) => {
+                opts.signal.addEventListener('abort', () => {
+                    const err = new DOMException('aborted', 'AbortError');
+                    rej(err);
+                });
+            });
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+        emitTranscript(media, 'вопрос.', true);
+        await Promise.resolve();
+        emitTts(media, 'playing');
+        emitVad(media, 'started');
+        await vi.advanceTimersByTimeAsync(100);
+        emitVad(media, 'ended');
+        await vi.advanceTimersByTimeAsync(400);
+        await Promise.resolve();
+        expect(media.stopPlaybackCount).toBe(0);
+        expect(abortedSignal && abortedSignal.aborted).toBe(false);
+    });
+
+    it('vad started при активном A2A без TTS после порога → stopPlayback + abort', async () => {
+        let abortedSignal = null;
+        streamMock.mockImplementation(async (opts) => {
+            abortedSignal = opts.signal;
+            await new Promise((_res, rej) => {
+                opts.signal.addEventListener('abort', () => {
+                    const err = new DOMException('aborted', 'AbortError');
+                    rej(err);
+                });
+            });
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+        emitTranscript(media, 'вопрос.', true);
+        await Promise.resolve();
+        bridge._currentTaskId = 'task-active-1';
+        emitVad(media, 'started');
+        await vi.advanceTimersByTimeAsync(310);
+        await Promise.resolve();
+        expect(media.stopPlaybackCount).toBe(1);
+        expect(abortedSignal.aborted).toBe(true);
+        expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('stop() отменяет текущий fetch', async () => {

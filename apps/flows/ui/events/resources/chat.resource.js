@@ -869,6 +869,92 @@ async function _consumeA2aStream(req, ctx, contextId, causationId) {
     return { task_id: taskId, context_id: contextId };
 }
 
+/**
+ * Прокидывает кадр SSE (JSON-RPC из `data:`) голосового `message/stream` в тот же reducer,
+ * что и `flows/chat_send`, без второго HTTP-запроса. Состояние стрима мутабельное между кадрами.
+ *
+ * @param {{ dispatch: Function }} ctx
+ * @param {{ contextId: string|null, taskId: string|null, taskPrimed: boolean }} streamState
+ * @param {object} rpcFrame
+ * @param {string|null} causationId
+ */
+export function relayA2aVoiceStreamRpcFrame(ctx, streamState, rpcFrame, causationId) {
+    if (!ctx || typeof ctx.dispatch !== 'function') {
+        throw new Error('relayA2aVoiceStreamRpcFrame: ctx.dispatch required');
+    }
+    if (!streamState || typeof streamState !== 'object') {
+        throw new Error('relayA2aVoiceStreamRpcFrame: streamState required');
+    }
+    if (!rpcFrame || typeof rpcFrame !== 'object') return;
+    const metaBase =
+        causationId != null && typeof causationId === 'string' && causationId.length > 0
+            ? { causation_id: causationId, source: 'http' }
+            : { source: 'http' };
+
+    if (rpcFrame.error) {
+        const err = rpcFrame.error;
+        let errMsg = 'a2a stream error';
+        if (err && typeof err === 'object') {
+            if (typeof err.message === 'string' && err.message.length > 0) {
+                errMsg = err.message;
+            } else if (typeof err.code === 'string' && err.code.length > 0) {
+                errMsg = err.code;
+            }
+        }
+        const tid =
+            typeof streamState.taskId === 'string' && streamState.taskId.length > 0
+                ? streamState.taskId
+                : null;
+        const cid =
+            typeof streamState.contextId === 'string' && streamState.contextId.length > 0
+                ? streamState.contextId
+                : null;
+        if (tid) {
+            ctx.dispatch(
+                'flows/chat/failed',
+                { task_id: tid, context_id: cid, error: errMsg },
+                metaBase,
+            );
+        }
+        return;
+    }
+
+    const result = rpcFrame.result;
+    if (!result || typeof result !== 'object') return;
+
+    if (!streamState.taskPrimed) {
+        const primedTaskId = _resolveTaskId(result, streamState.taskId);
+        const primedCid = _resolveStreamContextId(result, streamState.contextId);
+        if (
+            typeof primedTaskId === 'string'
+            && primedTaskId.length > 0
+            && typeof primedCid === 'string'
+            && primedCid.length > 0
+        ) {
+            ctx.dispatch(
+                'flows/chat/task_started',
+                { task_id: primedTaskId, context_id: primedCid },
+                metaBase,
+            );
+            streamState.taskPrimed = true;
+        }
+    }
+    const nextTaskId = _dispatchA2aEvent(
+        ctx,
+        streamState.contextId,
+        streamState.taskId,
+        result,
+        causationId,
+    );
+    if (nextTaskId) {
+        streamState.taskId = nextTaskId;
+    }
+    const resolvedCid = _resolveStreamContextId(result, streamState.contextId);
+    if (typeof resolvedCid === 'string' && resolvedCid.length > 0) {
+        streamState.contextId = resolvedCid;
+    }
+}
+
 export const chatSendOp = createAsyncOp({
     name: 'flows/chat_send',
     transport: 'http',
@@ -967,6 +1053,7 @@ export const chatResource = createResourceCollection({
         SESSION_RESET: 'session_reset',
         USER_MESSAGE_ADDED: 'user_message_added',
         SESSION_LOADED: 'session_loaded',
+        A2A_INTERRUPTED: 'a2a_interrupted',
     },
     actions: {
         initSession: 'session_init',
@@ -1123,6 +1210,29 @@ export const chatResource = createResourceCollection({
         }
         if (type === 'flows/chat_send/failed') {
             return { ...state, streaming: false };
+        }
+
+        if (type === 'flows/chat/a2a_interrupted') {
+            const p = event.payload && typeof event.payload === 'object' ? event.payload : {};
+            const interruptedTaskId = typeof p.task_id === 'string' ? p.task_id : null;
+            let contextId = null;
+            if (typeof p.context_id === 'string' && p.context_id.length > 0) {
+                contextId = p.context_id;
+            } else if (typeof state.currentContextId === 'string' && state.currentContextId.length > 0) {
+                contextId = state.currentContextId;
+            }
+            let next = { ...state, streaming: false };
+            if (
+                interruptedTaskId
+                && typeof state.currentTaskId === 'string'
+                && state.currentTaskId === interruptedTaskId
+            ) {
+                next = { ...next, currentTaskId: null };
+            }
+            if (typeof contextId === 'string' && contextId.length > 0) {
+                next = _sweepOrphanStreamingInContext(next, contextId);
+            }
+            return next;
         }
 
         if (type === 'flows/chat/task_started') {

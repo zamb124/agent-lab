@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
+from typing import Optional
 
+from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -69,16 +70,31 @@ class BargeInController:
         self,
         session,
         clear_tts_queue: bool = True,
+        *,
+        stt_provider: Optional[BaseSTTProvider] = None,
+        vad_provider: Optional[BaseVADProvider] = None,
     ) -> None:
-        """Остановить TTS и очистить очереди синтеза + исходящего аудио."""
+        """Остановить TTS, очистить очереди синтеза/исходящего аудио и
+        сбросить внутреннее состояние STT/VAD-провайдеров.
+
+        Сброс STT/VAD обязателен: накопленный к моменту прерывания PCM —
+        это аудио уходящего ответа TTS, а не следующая фраза пользователя;
+        флэш этого буфера в финальный transcript даёт «чужие» слова.
+        """
         self._last_barge_in_ts = time.monotonic()
         session.mark_tts_active(False)
         if clear_tts_queue:
             removed = session.clear_synthesis_and_audio_out()
         else:
             removed = 0
+        if stt_provider is not None:
+            stt_provider.reset()
+        if vad_provider is not None:
+            vad_provider.reset_state()
         logger.info(
-            "barge-in executed: session_id=%s removed_queue_items=%d",
-            session.session_id,
-            removed,
+            "voice.barge_in.executed",
+            session_id=session.session_id,
+            removed_queue_items=removed,
+            stt_reset=stt_provider is not None,
+            vad_reset=vad_provider is not None,
         )

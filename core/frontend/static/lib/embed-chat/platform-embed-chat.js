@@ -439,6 +439,10 @@ export class PlatformEmbedChat extends LitElement {
         this._stickToBottom = true;
         /** После отправки пользователя ждём завершения стрима — для счётчика на FAB drawer. */
         this._pendingAssistantReplyNotify = false;
+        /** @type {string|null} */
+        this._voiceStreamAssistantId = null;
+        /** @type {Record<string, unknown>|null} */
+        this._voicePendingStreamMetadata = null;
         /** @type {Array<{provider:string, service:string}>} */
         this._credentials = [];
         this._credPopover = null;
@@ -873,6 +877,152 @@ export class PlatformEmbedChat extends LitElement {
         });
     }
 
+    async _mergeSendMetadataVariables() {
+        const langVars = crmA2aInterfaceLanguageVariables(this.interfaceLocale);
+        let extraVars = {};
+        if (typeof this.getExtraMetadataVariables === 'function') {
+            const raw = await this.getExtraMetadataVariables();
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                extraVars = raw;
+            }
+        }
+        let contextVars = {};
+        if (typeof this.getContextVariables === 'function') {
+            const raw = await this.getContextVariables();
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                contextVars = raw;
+            }
+        }
+        return { ...langVars, ...extraVars, ...contextVars };
+    }
+
+    /**
+     * Текущий A2A contextId (синхронизация с VoiceAgentBridge).
+     * @returns {string}
+     */
+    getA2aContextId() {
+        return this._contextId;
+    }
+
+    /**
+     * Metadata для очередного voice message/stream (после prepareVoiceUserTurn).
+     * @returns {Record<string, unknown>|null}
+     */
+    consumeVoiceStreamMetadata() {
+        const m = this._voicePendingStreamMetadata;
+        this._voicePendingStreamMetadata = null;
+        return m;
+    }
+
+    /**
+     * Подготовка UI и metadata перед голосовым A2A-стримом.
+     * @param {string} userText
+     */
+    async prepareVoiceUserTurn(userText) {
+        const message = typeof userText === 'string' ? userText.trim() : '';
+        if (message === '') {
+            throw new Error('platform-embed-chat: empty voice text');
+        }
+        if (this._sseOpen || this._loading) {
+            throw new Error('platform-embed-chat: stream active');
+        }
+        if (!this.flowsBaseUrl || (!this.flowId && !this.embedId)) {
+            throw new Error('platform-embed-chat: missing flows config');
+        }
+
+        this._messages = [
+            ...this._messages,
+            {
+                id: `u_${++mid}`,
+                role: 'user',
+                content: message,
+                filesMeta: [],
+            },
+        ];
+
+        const assistantMsg = {
+            id: `a_${++mid}`,
+            role: 'assistant',
+            content: '',
+            streaming: true,
+            reasoning: '',
+            operatorReply: '',
+            toolCalls: [],
+            toolResults: [],
+            blocks: [],
+            inputRequired: null,
+            breakpoint: null,
+        };
+        this._messages = [...this._messages, assistantMsg];
+        this._voiceStreamAssistantId = assistantMsg.id;
+        this._activeStreamMessageId = assistantMsg.id;
+        this._loading = true;
+        this._sseOpen = true;
+        this._pendingAssistantReplyNotify = true;
+        this._stickToBottom = true;
+        this.requestUpdate();
+
+        const variables = await this._mergeSendMetadataVariables();
+        this._voicePendingStreamMetadata = { variables };
+        this._emitAssistantEvent('context_requested', {
+            flow_id: this.flowId || null,
+            branch_id: this._embedBranchId() || null,
+            embed_id: this.embedId || null,
+            variables,
+        });
+    }
+
+    /**
+     * Проброс SSE события A2A в тот же рендер, что и текстовая отправка.
+     * @param {object} event
+     */
+    applyVoiceA2aStreamEvent(event) {
+        const id = this._voiceStreamAssistantId;
+        if (!id) {
+            return;
+        }
+        this._handleEvent(event, id);
+    }
+
+    /**
+     * Завершение голосового A2A (успех, abort или после ошибки с патчем).
+     */
+    finalizeVoiceA2aStream() {
+        const id = this._voiceStreamAssistantId;
+        if (id) {
+            const msg = this._findMessage(id);
+            if (msg && msg.streaming) {
+                this._patchMessage(id, { streaming: false });
+            }
+        }
+        this._voiceStreamAssistantId = null;
+        this._loading = false;
+        this._sseOpen = false;
+        if (this._pendingAssistantReplyNotify) {
+            this._pendingAssistantReplyNotify = false;
+            this.dispatchEvent(
+                new CustomEvent('humanitec-embed-chat-assistant-reply-completed', {
+                    bubbles: true,
+                    composed: true,
+                }),
+            );
+        }
+        this.requestUpdate();
+    }
+
+    /**
+     * Ошибка голосового стрима: текст ошибки в пузырь ассистента.
+     * @param {string} detail
+     */
+    failVoiceA2aStream(detail) {
+        const id = this._voiceStreamAssistantId;
+        if (id) {
+            const m = typeof detail === 'string' ? detail : String(detail || 'Error');
+            this._patchMessage(id, { content: m, streaming: false });
+        }
+        this.finalizeVoiceA2aStream();
+    }
+
     _fileToBase64Part(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -943,22 +1093,7 @@ export class PlatformEmbedChat extends LitElement {
             return h && typeof h === 'object' ? h : {};
         };
 
-        const langVars = crmA2aInterfaceLanguageVariables(this.interfaceLocale);
-        let extraVars = {};
-        if (typeof this.getExtraMetadataVariables === 'function') {
-            const raw = await this.getExtraMetadataVariables();
-            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-                extraVars = raw;
-            }
-        }
-        let contextVars = {};
-        if (typeof this.getContextVariables === 'function') {
-            const raw = await this.getContextVariables();
-            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-                contextVars = raw;
-            }
-        }
-        const variables = { ...langVars, ...extraVars, ...contextVars };
+        const variables = await this._mergeSendMetadataVariables();
         this._emitAssistantEvent('context_requested', {
             flow_id: this.flowId || null,
             branch_id: this._embedBranchId() || null,

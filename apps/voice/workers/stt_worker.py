@@ -6,8 +6,10 @@
   (первая речевая граница / окончание паузы);
 * ``on_final_transcription(session, text, language)`` — финальная фраза
   после тишины: возврат от ``stt_provider.flush_buffer()``;
+* ``on_partial_transcription(session, text, language)`` — промежуточная
+  транскрипция при открытом VAD-окне (chunked-batch ``peek_transcript``);
 * при ``tts_is_active=True`` и срабатывании ``BargeInController`` —
-  воркер сам вызывает ``execute_barge_in(session)``.
+  воркер сам вызывает ``execute_barge_in(session)`` со сбросом STT/VAD.
 
 Никакой бизнес-логики: ни LLM, ни маршрутизации сообщений. Только
 media-события, которые клиент (или универсальный ``VoiceClientChannel``)
@@ -23,11 +25,15 @@ from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import VoiceSession
+from core.config import get_settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 OnFinalTranscription = Optional[
+    Callable[[VoiceSession, str, Optional[str]], Awaitable[None]]
+]
+OnPartialTranscription = Optional[
     Callable[[VoiceSession, str, Optional[str]], Awaitable[None]]
 ]
 OnVadState = Optional[Callable[[VoiceSession, str], Awaitable[None]]]
@@ -43,6 +49,7 @@ async def run_stt_worker(
     *,
     on_final_transcription: OnFinalTranscription = None,
     on_vad_state: OnVadState = None,
+    on_partial_transcription: OnPartialTranscription = None,
     barge_in: Optional[BargeInController] = None,
     language: Optional[str] = None,
     channel: Optional[VoiceClientChannel] = None,
@@ -52,10 +59,23 @@ async def run_stt_worker(
     При первой речевой границе вызывается ``on_vad_state(session, "started")``,
     после ``_SILENCE_THRESHOLD`` тихих фреймов — ``on_vad_state(session,
     "ended")`` и, если буфер не пуст, ``flush_buffer`` + ``on_final_transcription``.
+
+    Если ``settings.voice.stt.partial_transcripts_enabled`` — каждые
+    ``partial_min_speech_frames`` 20 ms-фреймов речи воркер вызывает
+    ``stt_provider.peek_transcript(...)`` и (при непустом тексте)
+    ``on_partial_transcription``.
     """
+    stt_cfg = get_settings().voice.stt
+    partial_enabled = stt_cfg.partial_transcripts_enabled
+    partial_step = stt_cfg.partial_min_speech_frames
+    partial_min_buffer_bytes = (
+        16000 * 2 * stt_cfg.partial_min_buffer_ms // 1000
+    )
+
     speech_frames: int = 0
     silence_frames: int = 0
     vad_open: bool = False
+    last_partial_at_frame: int = 0
 
     while session.active:
         try:
@@ -75,6 +95,7 @@ async def run_stt_worker(
         if is_speech:
             if not vad_open:
                 vad_open = True
+                last_partial_at_frame = 0
                 if on_vad_state is not None:
                     await on_vad_state(session, "started")
             speech_frames += 1
@@ -90,7 +111,37 @@ async def run_stt_worker(
                     tts_is_active=True,
                 )
             ):
-                await barge_in.execute_barge_in(session)
+                await barge_in.execute_barge_in(
+                    session,
+                    stt_provider=stt_provider,
+                    vad_provider=vad_provider,
+                )
+                speech_frames = 0
+                silence_frames = 0
+                vad_open = False
+                last_partial_at_frame = 0
+                continue
+
+            if (
+                partial_enabled
+                and on_partial_transcription is not None
+                and speech_frames - last_partial_at_frame >= partial_step
+            ):
+                last_partial_at_frame = speech_frames
+                try:
+                    partial = await stt_provider.peek_transcript(
+                        min_buffer_bytes=partial_min_buffer_bytes,
+                    )
+                except Exception:
+                    logger.warning(
+                        "voice.stt_worker.partial_failed",
+                        session_id=session.session_id,
+                    )
+                    partial = None
+                if partial is not None and partial.text:
+                    await on_partial_transcription(
+                        session, partial.text, language
+                    )
         else:
             silence_frames += 1
 
@@ -99,6 +150,7 @@ async def run_stt_worker(
                 had_speech = speech_frames > 0
                 speech_frames = 0
                 silence_frames = 0
+                last_partial_at_frame = 0
 
                 if on_vad_state is not None:
                     await on_vad_state(session, "ended")
@@ -138,4 +190,9 @@ async def run_stt_worker(
                     await on_final_transcription(session, result.text, language)
 
 
-__all__ = ["run_stt_worker", "OnFinalTranscription", "OnVadState"]
+__all__ = [
+    "run_stt_worker",
+    "OnFinalTranscription",
+    "OnPartialTranscription",
+    "OnVadState",
+]

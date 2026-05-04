@@ -1,219 +1,65 @@
 ---
-alwaysApply: true
+description: "UI Kit core: PlatformElement, modals, user-chip, breadcrumbs, sidebar — единственная зона прямых dispatch CoreEvents"
+alwaysApply: false
 ---
-# UI Components — правила core UI Kit
+# UI Components — core UI Kit
 
-Все компоненты UI Kit живут в `core/frontend/static/lib/components/**` и
-наследуют `PlatformElement`. Это **единственная зона**, где допустимы прямые
-вызовы `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` и `new CustomEvent(...)`
-для slot-композиции — потому что тут эти helpers и реализуются.
+Все компоненты UI Kit живут в `core/frontend/static/lib/components/**` и наследуют `PlatformElement`. Это **единственная зона**, где допустимы прямые `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` и `new CustomEvent(...)` для slot-композиции — здесь эти helpers и реализуются.
 
-См. также: `frontend.mdc` (запреты в apps), `ui_factories.mdc` (контракт
-фабрик), `ui_events.mdc` (контракт событий).
+См. также: `frontend.mdc` (запреты в apps), `ui_factories.mdc` (контракт фабрик и событий).
 
 ## Категории
 
-1. **Presentational** (`glass-button`, `glass-input`, `glass-textarea`,
-   `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`,
-   `tag-input`, `platform-icon-picker`, `platform-help-hint`,
-   `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
+1. **Presentational** (`glass-button`, `glass-input`, `glass-textarea`, `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`, `tag-input`, `platform-icon-picker`, `platform-help-hint`, `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
    - Не читают state платформы (только `t()` для подписей).
    - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
-   - Локальные DOM-события `this.emit('change', detail)` для родителя
-     (у `platform-trace-viewer` — см. секцию ниже; у `platform-log-viewer` — `copy-request`).
+   - Локальные DOM-события `this.emit('change', detail)` для родителя.
 
-2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`,
-   `platform-user-info-modal`, `platform-notification-manager`,
-   `platform-deployment-version`, `pwa-install-banner`, `glass-modal` и
-   наследники, `platform-breadcrumbs`, `platform-audio-message-player`,
-   `platform-date-picker`, `platform-calendar-modal`, `auth-modal`,
-   `company-modal`, `file-text-preview-modal`,
-   `prompt-editor`, `app-loader`, `glass-toast`, `platform-modal-stack`,
-   `layout/platform-sidebar`, `layout/platform-service-sidebar`):
-   - Читают срез через `this.select(...)` (или ставят свой
-     `useResource`/`useOp`).
-   - Действия — через `this.dispatch(<CoreEvents.X>, payload)` (это и есть
-     реализация helpers `PlatformElement`).
-   - Никаких `this.services.*`, `BaseStore`, `ServiceRegistry`, `AppEvents`.
+2. **Container** (`platform-icon`, `platform-user`, `platform-user-chip`, `platform-user-info-modal`, `platform-notification-manager`, `platform-deployment-version`, `pwa-install-banner`, `glass-modal` и наследники, `platform-breadcrumbs`, `platform-audio-message-player`, `platform-date-picker`, `platform-calendar-modal`, `auth-modal`, `company-modal`, `file-text-preview-modal`, `prompt-editor`, `app-loader`, `glass-toast`, `platform-modal-stack`, `layout/platform-sidebar`, `layout/platform-service-sidebar`):
+   - Читают срез через `this.select(...)` (или ставят свой `useResource`/`useOp`).
+   - Действия — через `this.dispatch(<CoreEvents.X>, payload)` (реализация helpers `PlatformElement`).
+   - Запрещено: `this.services.*`, `BaseStore`, `ServiceRegistry`, `AppEvents`.
 
-**Apps (`apps/<svc>/ui/**` container-компоненты с create):** кнопка сабмита
-для `useResource` + `create` должна дизейблиться от
-`this._<resource>.createInFlight` (не от `loading`, если это только
-загрузка list). См. `ui_factories.mdc` — «Сериализованный create».
+В `apps/<svc>/ui/**` container с `create`: кнопка сабмита для `useResource` + `create` обязана дизейблиться от `this._<resource>.createInFlight`, не от `loading` (это только load list). См. `ui_factories.mdc` — «Сериализованный create».
 
 ## CoreEvents в core vs apps
 
 | Зона | Прямой `dispatch(CoreEvents.X)` | Импорт `CoreEvents` |
 |---|---|---|
-| `core/frontend/static/lib/components/**` | разрешён (это и есть реализация helpers) | разрешён |
-| `core/frontend/static/lib/base/**`        | разрешён (helpers `PlatformElement`)     | разрешён |
-| `apps/<svc>/ui/{pages,modals,components}/**` | **запрещён** для UI/AUTH/I18N/THEME/COMPANIES/ROUTER (используй helpers) | разрешён только для подписок `useEvent` на доменные события |
+| `core/frontend/static/lib/components/**` | разрешён (реализация helpers) | разрешён |
+| `core/frontend/static/lib/base/**` | разрешён (helpers `PlatformElement`) | разрешён |
+| `apps/<svc>/ui/{pages,modals,components}/**` | **запрещён** для UI/AUTH/I18N/THEME/COMPANIES/ROUTER (только helpers) | разрешён только для подписок `useEvent` на доменные события |
 
-## Запреты (CI)
+## Запреты (CI `scripts/check_ui_canon.sh`)
 
-- `extends LitElement` напрямую — только `PlatformElement` /
-  `PlatformPage` / `PlatformModal*`.
+- `extends LitElement` напрямую — только `PlatformElement` / `PlatformPage` / `PlatformModal*`.
 - `import` любого `*.service.js` или `services/` — таких файлов нет.
-- `import { ServiceRegistry }` / `BaseStore` / `BaseService` / `AppEvents` —
-  таких модулей нет.
-- `fetch(`, `axios` в компонентах — HTTP только в `request` функции
-  фабрики.
-- Прямое присваивание полю state — никогда. State приходит через
-  `select.value` или контроллер.
-- `||`/`??` фолбеки на чтение state — `selectController.value` всегда
-  возвращает то, что положил reducer фабрики (для core slices —
-  `initialSlice` redúcer'а core).
+- `import { ServiceRegistry }` / `BaseStore` / `BaseService` / `AppEvents` — модулей нет.
+- `fetch(`, `axios` в компонентах — HTTP только в `request` функции фабрики.
+- Прямое присваивание полю state — никогда. State — только через `select.value`.
+- `||`/`??` фолбеки на чтение state: `selectController.value` всегда возвращает то, что положил reducer (`initialSlice` core slices).
 
 ## Стили и токены
 
-CSS variables из `core/frontend/static/assets/css/tokens.css`:
-`--space-*`, `--text-*`, `--font-*`, `--glass-solid-*`, `--glass-border-*`,
-`--accent`, `--text-primary`, `--bg-gradient` и т.д. Тема — атрибут
-`[data-theme="dark|light"]`.
+CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `--text-*`, `--font-*`, `--glass-solid-*`, `--glass-border-*`, `--accent`, `--text-primary`, `--bg-gradient`, … Тема — `[data-theme="dark|light"]`.
 
 ## emit vs dispatch
 
-- `this.emit(name, detail)` — DOM event для slot-композиции (child→parent),
-  composed boundary. Имя короткое (`change`, `close`, `open`).
-- `this.dispatch(type, payload)` — bus-event. Имя — строгий формат
-  `<scope>/<entity>/<verb>`.
+- `this.emit(name, detail)` — DOM event для slot-композиции (child→parent), composed boundary. Имя короткое (`change`, `close`, `open`).
+- `this.dispatch(type, payload)` — bus-event. Имя — формат `<scope>/<entity>/<verb>`.
 
-## Подписки
-
-```javascript
-constructor() {
-    super();
-    this._toastsSel = this.select((s) => s.notify.toasts);
-}
-render() {
-    const toasts = this._toastsSel.value;
-    return html`...`;
-}
-```
-
-`this.select` возвращает `SelectController`. Чтение — `.value`. Любая смена
-state триггерит `requestUpdate`. `selectController.value` гарантированно
-определено — `initialSlice` reducer'а core всегда отдаёт нужную форму.
-
-## Platform Timezone Picker (IANA, поиск)
-
-**Файл:** `core/frontend/static/lib/components/platform-timezone-picker.js`. Список зон: `core/frontend/static/lib/utils/iana-timezones.js` — `getSortedIanaTimeZones()` (`Intl.supportedValuesOf('timeZone')` при наличии, иначе фиксированный fallback, `UTC` в наборе).
-
-**Назначение:** combobox выбора IANA time zone: фильтр по подстроке без учёта регистра, выбор кликом, значение не из полного списка (сохранённое ранее) остаётся в поле и подмешивается в варианты. События `input` и `change` с `detail.value` — как у `glass-input`. В bus не диспатчит. i18n: `platform`, ключи `timezone_picker.*` в `core/i18n/translations/{ru,en}/platform.json`.
-
-## Platform Cron Field (5 полей)
-
-**Файл:** `core/frontend/static/lib/components/platform-cron-field.js`. Пресеты и нормализация: `core/frontend/static/lib/utils/cron-field.js` (`findMatchingPresetId`, `normalizeCronString`, `validateCronFiveField`).
-
-**Назначение:** выбор расписания через список пресетов (частые сценарии) либо режим «Свой cron» с одной строкой 5 полей. Проп `value` — строка cron; при значении вне таблицы пресетов показывается свой ввод с сохранённым текстом. События `input` и `change` с `detail.value`. Без `dispatch` в bus. i18n: `cron_field.*` в `core/i18n/translations/{ru,en}/platform.json`.
-
-## Platform Palette Color Picker
-
-**Файл:** `core/frontend/static/lib/components/platform-palette-color-picker.js`. Палитра: `core/frontend/static/lib/utils/color-palette.js` — `COLOR_PALETTE`.
-
-**Назначение:** выбор цвета из платформенной палитры (круглые свотчи в одну строку; при нехватке ширины — горизонтальный скролл у полосы свотчей). Проп `allow-clear` — кнопка сброса слева, вне прокрутки. Значение вне палитры: при валидном hex — дополнительный активный свотч в той же прокручиваемой полосе; ключи палитры и hex из `COLOR_PALETTE` при чтении `value` подсвечивают тот же свотч. События `input` и `change` с `detail.value` — hex (`#rrggbb`) или пустая строка. i18n: `palette_color_picker.*` в `core/i18n/translations/{ru,en}/platform.json`. В bus не диспатчит.
-
-## Platform Trace Viewer (дерево / timeline spans)
-
-**Файлы:** `core/frontend/static/lib/components/platform-trace-viewer.js`,
-нормализация и модель отображения — `core/frontend/static/lib/utils/trace-view-model.js`.
-
-**Назначение:** единый просмотр **одного trace** — иерархия spans в режимах tree и
-timeline, локальный поиск, выбор span для детализации. Данные в форме ответа API
-после `build_span_tree`: массив корневых узлов с вложенным `children[]` и полями
-как у `_serialize_span` / списка traces (например `operation_name`, `start_time`,
-`duration_ms`, `status`, `attributes`).
-
-**Границы ответственности**
-
-- Компонент **не** грузит данные: нет `useOp` / `useResource` / `fetch` / bus dispatch
-  доменных событий.
-- Родитель (страница, модалка, панель): фабрика или `useOp`, затем
-  `.roots=${массивКорней}`.
-- Событие выбора: `this.emit('trace-span-select', { span })` — в `detail` объект
-  того же узла, что пришёл в `roots` (для открытия сервисной модалки деталей и т.д.).
-- i18n: `static i18nNamespace = 'platform'`; строки — секция `trace_viewer` в
-  `core/i18n/translations/{ru,en}/platform.json` (парность обязательна).
-
-**Обязательное применение**
-
-- Любой UI платформы, который показывает **дерево или временную шкалу spans одного
-  trace** (OpenTelemetry / `platform_tracing`, flows traces, админ tracing), **должен**
-  использовать `<platform-trace-viewer>` как единственный способ отображения этого
-  дерева.
-- **Запрещено** в `apps/<svc>/ui/**` добавлять отдельные компоненты уровня
-  «trace tree», «span waterfall», «вложенный список spans с отступами» для того же
-  контракта — только вложение `platform-trace-viewer` или его использование через
-  обёртку без дублирования разметки дерева.
-
-**Если возможностей не хватает**
-
-- Расширять **только в core**: `platform-trace-viewer.js` и при необходимости
-  `trace-view-model.js` (новые поля, режимы, фильтры, визуализация). Не переносить
-  ту же логику в сервис.
-- Отдельная **модалка или блок деталей одного span** может оставаться в сервисе
-  (специфика полей, JSON редактор) — но **список/дерево/trace timeline** остаётся
-  на platform-trace-viewer.
-
-**См. также:** `tracing.mdc` (запись spans, API чтения, админ-страница).
-
-## Platform Log Viewer (список записей логов)
-
-**Файл:** `core/frontend/static/lib/components/platform-log-viewer.js`.
-
-**Назначение:** единый **презентационный** список строк лога в форме записей из Loki-клиента (`timestamp`, `level`, `message`, `logger`, `service`, `trace_id`, `request_id`, `user_id`, `session_agent`, `raw`, …): уровень, время, сообщение; раскрытие строки для `raw`; копирование через `this.emit('copy-request', { text })` (родитель вызывает `copyToClipboard`, без bus из кита).
-
-**Границы ответственности**
-
-- Компонент **не** грузит данные: нет `useOp` / `useResource` / `fetch` / доменного `dispatch`.
-- Родитель передаёт `.entries`, `?loading`, опционально `.emptyLabel` (при пустой строке — подпись из `log_viewer.empty` в `platform.json`).
-- i18n: `static i18nNamespace = 'platform'`; секция `log_viewer` в `core/i18n/translations/{ru,en}/platform.json`.
-
-**Обязательное применение**
-
-- Любой UI платформы, который показывает **список записей логов** из ответа whitelist-API Loki, **должен** использовать `<platform-log-viewer>`.
-- **Запрещено** в `apps/<svc>/ui/**` добавлять отдельные компоненты уровня «таблица логов», «.log-entry список» для того же контракта — только вложение `platform-log-viewer` или тонкая обёртка без дублирования разметки списка.
-
-**Если возможностей не хватает**
-
-- Расширять **только в core**: `platform-log-viewer.js` (поля строки, фильтры, режимы отображения).
-
-**См. также:** `tracing.mdc` (связь trace/log, API Loki), `logging.mdc`.
-
-## Витрина сервисов (launcher + модалка)
-
-**Файлы:** `core/frontend/static/lib/utils/platform-services-catalog.js` (список
-продуктов, бренд, ключи `apps.*.name`), `core/frontend/static/lib/utils/build-service-entry-url.js`,
-`core/frontend/static/lib/components/platform-services-launcher.js`,
-`core/frontend/static/lib/components/platform-services-modal.js` (`modalKind: 'platform.services'`),
-`core/frontend/static/lib/base/platform-services-page.js` (страница маршрута
-`platform_services`).
-
-**Назначение:** единая сетка плиток для перехода между сервисами (localhost с портами
-как в `buildServiceEntryUrl`, иначе путь; в PWA/standalone — `location.href`).
-Список сервисов не дублировать в `apps/**` — только каталог в core. Метрики и health
-с эндпоинтов **консоли** (`frontend/*` фабрики) в core не вызывать: опционально
-прокидывать `healthByServiceId` / `includeServiceIds` в лаунчер с родителя (например
-`dashboard-services-grid`).
-
-**Открытие модалки:** `this.openModal('platform.services', {})` — из меню пользователя
-(пункт «Apps»), с дашборда, со страницы `platform_services` и **по клику на зону
-логотипа** в `platform-service-sidebar` (`logo-opens-services` → `platform-sidebar`
-оборачивает иконку + название сервиса в кнопку).
+Подписка через `this.select((s) => s.<slice>.<field>)`; `selectController.value` гарантированно определено (core slices обеспечивают `initialSlice`).
 
 ## Modal canon (registry + stack + dispatch)
 
 Все модалки — через события и реестр:
 
-- Открытие: `this.openModal(SomeModal, props)` (helper диспатчит
-  `CoreEvents.UI_MODAL_OPEN`).
+- Открытие: `this.openModal(SomeModal, props)` (helper диспатчит `CoreEvents.UI_MODAL_OPEN`).
 - Закрытие: `this.close()` внутри модалки (диспатчит `UI_MODAL_CLOSE`).
-- Стек живёт в `state.modals.stack`
-  (`core/frontend/static/lib/events/reducers/modals.js`).
-- Рендер — `<platform-modal-stack>`, монтируется один раз в
-  `PlatformApp.render()`.
+- Стек живёт в `state.modals.stack` (`core/frontend/static/lib/events/reducers/modals.js`).
+- Рендер — `<platform-modal-stack>`, монтируется один раз в `PlatformApp.render()`.
 
-### Регистрация модалки
+### Регистрация
 
 ```javascript
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
@@ -226,254 +72,144 @@ customElements.define('frontend-create-api-key-modal', FrontendCreateApiKeyModal
 registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-modal');
 ```
 
-`kind` — строго `<scope>.<entity>` (snake_case,
-`[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*`): `auth.login`, `frontend.embed_create`,
-`crm.entity_share`.
+`kind` строго `<scope>.<entity>` (snake_case, `[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*`).
 
-Ширина панели `glass-modal`: на корне модалки (`:host` в `static styles`
-наследника) можно задать `--modal-width` (например `min(1280px, calc(100vw - 24px))`).
-`max-width` панели — `var(--modal-width, <лимит по size>)` для классов
-`.sm` / `.md` / `.lg` / `.xl` и без класса. Без переменной поведение как раньше.
+Ширина панели `glass-modal`: на корне модалки (`:host` в `static styles` наследника) — `--modal-width` (например `min(1280px, calc(100vw - 24px))`). `max-width` — `var(--modal-width, <лимит по size>)` для `.sm`/`.md`/`.lg`/`.xl` и без класса.
 
 ### Закрытие из формы
 
-`PlatformFormModal.closeAfterSave()` сбрасывает `isDirty` и вызывает
-`super.close()`. `super.close()` диспатчит `UI_MODAL_CLOSE` с `_modalId` —
-стек убирает модалку из DOM. Прямое `this.open = false` запрещено.
+`PlatformFormModal.closeAfterSave()` сбрасывает `isDirty` и вызывает `super.close()` → `UI_MODAL_CLOSE` с `_modalId`. Прямое `this.open = false` запрещено.
 
-### Открытие из любого места
+### Запреты модалок
 
-```javascript
-this.openModal(SomeModal, { entityId: '...' });
-```
-
-`platform-modal-stack` создаст элемент по `kind`, проставит `props` и
-`_modalId`, поднимет `open`. `document.createElement('*-modal')` /
-`document.body.appendChild(...)` запрещены и проверяются
-`scripts/check_ui_canon.sh`.
-
-### Запреты
-
-- `extends LitElement` или `extends PlatformElement` для модалок — только
-  `PlatformModal` / `PlatformFormModal` (исключение — sync.call_incoming как overlay-баннер на PlatformElement).
+- `extends LitElement` или `extends PlatformElement` для модалок — только `PlatformModal` / `PlatformFormModal` (исключение — sync.call_incoming как overlay-баннер на `PlatformElement`).
 - `document.createElement('*-modal')`, `document.body.appendChild(modalEl)`.
 - `modal.open = true` / `this.open = false`.
-- Слушатели `CustomEvent('open-modal' / 'close')` для открытия/закрытия —
-  только `dispatch`/helper.
+- Слушатели `CustomEvent('open-modal' / 'close')` — только `dispatch`/helper.
 
-## Platform User Chip / Info Modal
+## `<platform-user-chip>` и `platform.user_info`
 
-Любое отображение пользователя по `user_id` в UI — **только** через
-core-компоненты `<platform-user-chip>` и core-модалку `platform.user_info`
-(`<platform-user-info-modal>`). Сырая строка `user_id` (или его обрезанный
-префикс) в pages/modals/components/таблицах/title'ах **запрещена**.
+Любое отображение пользователя по `user_id` в UI — **только** через core-компоненты `<platform-user-chip>` и core-модалку `platform.user_info` (`<platform-user-info-modal>`). Сырая строка `user_id` (или его обрезанный префикс) в pages/modals/components/таблицах/title запрещена.
 
-`platform.user_info` — **единственная** модалка для работы с профилем
-пользователя в платформе. Она же открывается из меню `platform-user`
-(пункты «Профиль» и «Настройки» оба ведут в неё) и из любого клика по
-`<platform-user-chip>`. Отдельных «модалки профиля» и «модалки
-редактирования участника команды» в `core/` и `apps/` быть не должно.
+`platform.user_info` — **единственная** модалка для работы с профилем пользователя. Открывается из меню `platform-user` («Профиль»/«Настройки» оба ведут в неё) и из любого клика по `<platform-user-chip>`. Отдельных «модалки профиля» и «модалки редактирования участника команды» в `core/` и `apps/` быть не должно.
 
 ### Источник данных
 
 `<platform-user-chip>` и `<platform-user-info-modal>` читают:
 
-- `state.team.members` — участники активной компании (бэкенд
-  `core/api/team.py`, эффект `createTeamEffect`,
-  GET `<svc>/api/team/members`, поля `user_id`, `name`, `email`, `roles`,
-  `joined_at`, `avatar_url`);
+- `state.team.members` — участники активной компании (бэкенд `core/api/team.py`, эффект `createTeamEffect`, `GET <svc>/api/team/members`; поля `user_id`, `name`, `email`, `roles`, `joined_at`, `avatar_url`);
 - `state.auth.user` — текущий пользователь (для режима «свой профиль»);
-- `state.companies.active` — активная компания (для проверки прав на
-  редактирование ролей: `owner`/`admin` в `user.raw.companies[*].roles`).
+- `state.companies.active` — активная компания (для проверки прав на редактирование ролей: `owner`/`admin` в `user.raw.companies[*].roles`).
 
-Загрузку списка участников триггерит сам chip/модалка при первом
-монтировании, если `state.team.members` пуст и `state.team.loading === false`.
-Отдельных опс/фабрик для этого добавлять не нужно — `createTeamEffect`
-зарегистрирован в `core/.../events/bootstrap.js` для каждого `PlatformApp`.
+Загрузку списка участников триггерит сам chip/модалка при первом монтировании, если `state.team.members` пуст и `state.team.loading === false`. `createTeamEffect` зарегистрирован в `core/.../events/bootstrap.js` для каждого `PlatformApp`.
 
-### Placeholder-аватары (alohe / CDN)
+### Placeholder-аватары
 
-Единый модуль: `@platform/lib/utils/placeholder-avatar.js` — `resolveAvatarImageSrc`,
-`getPlaceholderAvatarUrl`. Если нет `avatar_url`, нужен **непустой** `seed`
-(`user_id`, id канала и т.д.); иначе `throw` (zero-guess). Опция `collection`
-выбирает набор PNG в репозитории alohe (в т.ч. `memo`, `toon`, `3d`, `upstream`,
-…); для групповых каналов Sync задаётся `PLACEHOLDER_NON_PERSON_COLLECTION`, не
-`memo`; для каналов календарных встреч (`calendar_meeting`) — константа
-`PLACEHOLDER_MEETING_COLLECTION` (`upstream`). Базовый URL CDN и списки имён — только в модуле. При ошибке загрузки
-картинки — локальный `onerror` → пастельные инициалы (Sync).
+Единый модуль `@platform/lib/utils/placeholder-avatar.js`: `resolveAvatarImageSrc`, `getPlaceholderAvatarUrl`. Без `avatar_url` нужен **непустой** `seed` (`user_id`, id канала и т.д.), иначе `throw` (zero-guess). Опция `collection` выбирает набор PNG в репозитории alohe (`memo`, `toon`, `3d`, `upstream`, …); для групповых каналов Sync — `PLACEHOLDER_NON_PERSON_COLLECTION`; для `calendar_meeting` — `PLACEHOLDER_MEETING_COLLECTION` (`upstream`). Базовый URL CDN и списки имён только в модуле. При ошибке загрузки — локальный `onerror` → пастельные инициалы.
 
 ### Контракт `<platform-user-chip>`
 
 ```html
-<platform-user-chip user-id="user_..."></platform-user-chip>
-<platform-user-chip user-id="user_..." size="md"></platform-user-chip>
-<platform-user-chip user-id="user_..." ?interactive=${false}></platform-user-chip>
+<platform-user-chip user-id="user_..." size="sm|md" ?interactive=${false}></platform-user-chip>
 ```
 
 - `user-id` (обязателен, non-empty string) — отсутствие = `throw`.
-- `size` — `'sm'` (default, аватар 24×24, имя) или `'md'` (аватар 32×32,
-  имя + email).
+- `size` — `'sm'` (default, аватар 24×24, имя) или `'md'` (32×32, имя + email).
 - `interactive` — по умолчанию `true`. Клик открывает `platform.user_info`.
 
-Если member не найден (бывший участник, service-account, чужая компания) —
-chip рендерит сокращённый id и подпись `user_chip.unknown`, клик отключён.
+Если member не найден (бывший участник, service-account, чужая компания) — chip рендерит сокращённый id и подпись `user_chip.unknown`, клик отключён.
 
 ### Контракт `<platform-user-info-modal>`
 
-- modalKind: `platform.user_info`.
-- Базовый класс: `PlatformFormModal` (умеет dirty-tracking и
-  `closeAfterSave()` для редактирования).
-- props: `{ userId: string }`.
-- Режим определяется автоматически по `userId`:
-  - **own** (`userId === state.auth.user.user_id`) — форма
-    редактирования собственного профиля. Поля: `first_name`, `last_name`,
-    `name`, `email` (read-only), `bio`, `language`. Submit диспатчит
-    `auth/profile/update_requested` (effect `auth.effect.js` шлёт
-    PUT `<svc>/api/auth/me`, схема `UserUpdate`). В футере доп. кнопка
-    «Выйти из аккаунта» → `AUTH_LOGOUT_REQUESTED` + редирект на login.
-  - **other** (`userId !== state.auth.user.user_id`) — read-only карточка:
-    крупный аватар (96×96), имя, email, чипы ролей, `joined_at`. Если
-    текущий пользователь имеет роль `owner` или `admin` в активной
-    компании, ниже карточки отрисовывается **inline-секция
-    редактирования ролей**: чек-боксы (`owner` залочен у владельца),
-    кнопка «Сохранить роли» → `frontend/team_members.update`
-    (PATCH `/frontend/api/team/members/{user_id}`, схема
-    `TeamMemberUpdate`).
-- Read-only действия в other-режиме:
+- `modalKind: 'platform.user_info'`. Базовый класс — `PlatformFormModal`. Props — `{ userId: string }`.
+- Режим определяется автоматически:
+  - **own** (`userId === state.auth.user.user_id`) — форма редактирования. Поля `first_name`, `last_name`, `name`, `email` (read-only), `bio`, `language`. Submit диспатчит `auth/profile/update_requested` (effect → `PUT <svc>/api/auth/me`, `UserUpdate`). Доп.кнопка «Выйти из аккаунта» → `AUTH_LOGOUT_REQUESTED` + редирект.
+  - **other** — read-only карточка (аватар 96×96, имя, email, чипы ролей, `joined_at`). Если текущий — `owner`/`admin` активной компании, ниже — inline-секция редактирования ролей: чек-боксы (`owner` залочен у владельца), «Сохранить роли» → `frontend/team_members.update` (`PATCH /frontend/api/team/members/{user_id}`, `TeamMemberUpdate`).
+- Read-only действия в other:
   - «Написать в Sync» → `window.location.href = '/sync?direct=' + encodeURIComponent(userId)`;
   - «Открыть в Команде» → `window.location.href = '/frontend/team?focus=' + encodeURIComponent(userId)`;
-  - «Скопировать ID» — круглая кнопка с иконкой в шапке слева от Save (и для own/other/unknown): `this.copyToClipboard(userId, { success_i18n_key: 'platform:user_info_modal.toast_copied', error_i18n_key: 'platform:user_info_modal.toast_copy_failed' })`.
+  - «Скопировать ID» (own/other/unknown) — `this.copyToClipboard(userId, { success_i18n_key: 'platform:user_info_modal.toast_copied', error_i18n_key: 'platform:user_info_modal.toast_copy_failed' })`.
 
-Открывается **только** через helper
-`this.openModal('platform.user_info', { userId })`. `userId` обязателен —
-без него модалка падает.
+Открывается **только** через `this.openModal('platform.user_info', { userId })`. `userId` обязателен.
 
 ### i18n
 
-Ключи живут в `core/i18n/translations/{ru,en}/platform.json`,
-namespace `platform`, секции `user_chip` и `user_info_modal`.
+`core/i18n/translations/{ru,en}/platform.json`, namespace `platform`, секции `user_chip` и `user_info_modal`. Список ролей платформы — каноничный (`owner`, `admin`, `developer`, `viewer`); сервисные дубли в `frontend.json`/`crm.json` запрещены. Своя роль сервиса — отдельным ключом в свой namespace.
 
-`user_chip.*`: `unknown`, `you`.
+### Запреты user-chip / user_info
 
-`user_info_modal.*` (общие): `header`, `roles_label`, `joined_at`,
-`action_write_sync`, `action_open_team`, `action_copy_id`,
-`toast_copied`, `toast_copy_failed`.
+- ad-hoc `*-user-row`/`*-user-avatar`/`*-user-cell` в `apps/<svc>/ui/components/` для отображения чужого пользователя — заменить на `<platform-user-chip>`.
+- использование `apps/sync/ui/modals/user-info-modal.js` из других сервисов — он sync-only.
+- `dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED)` напрямую из pages/modals — chip/модалка триггерят загрузку при mount.
+- регистрация альтернативных модалок с `modalKind === 'platform.user_info'`, отдельной модалки «редактирование своего профиля» или «редактирование участника команды».
+- открытие `platform.user_info` без `userId`-prop'а.
+- прямой переход «Профиль/Настройки» из `platform-user` меню на `/<svc>/settings` — пункты меню обязаны открывать `platform.user_info`.
 
-`user_info_modal.*` (own-режим / форма профиля): `field_first_name`,
-`field_last_name`, `field_name`, `field_email`, `field_email_locked`,
-`field_bio`, `field_language`, `lang_ru`, `lang_en`, `action_save`,
-`action_cancel`, `action_logout`, `toast_profile_saved`,
-`error_name_required`.
+## Sidebar / breadcrumbs / namespace
 
-`user_info_modal.*` (other-режим / редактирование ролей):
-`section_roles`, `role_owner`, `role_admin`, `role_developer`,
-`role_viewer`, `role_owner_locked`, `action_save_roles`,
-`error_role_required`.
-
-Список ролей платформы — каноничный (`owner`, `admin`, `developer`,
-`viewer`); сервисные дубли в `frontend.json` / `crm.json` для тех же
-ролей запрещены. Если сервису нужна **своя** роль — добавляется
-отдельным ключом в свой namespace.
-
-### Запреты
-
-- ad-hoc «маленькие» компоненты вроде `*-user-row`/`*-user-avatar`/
-  `*-user-cell` в `apps/<svc>/ui/components/` для отображения чужого
-  пользователя — заменить на `<platform-user-chip>`.
-- использование `apps/sync/ui/modals/user-info-modal.js` из других
-  сервисов — он sync-only и переиспользуется только внутри sync.
-- `dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED)` напрямую из pages/modals
-  ради аватарок — chip/модалка сами триггерят загрузку при первом mount.
-- регистрация альтернативных модалок с `modalKind === 'platform.user_info'`,
-  отдельной модалки «редактирование своего профиля» или «редактирование
-  участника команды» — всё это покрывает `platform-user-info-modal`.
-- открытие `platform.user_info` без `userId`-prop'а; передача чужого
-  `userId` без явного `state.team.members` лоада запрещена логикой
-  модалки (она сама дёргает `createTeamEffect`).
-- прямой переход «Профиль/Настройки» из `platform-user` меню на
-  `/<svc>/settings` — пункты меню **обязаны** открывать
-  `platform.user_info`.
-
-## Sidebar / breadcrumbs / namespace canon
-
-Межкомпонентные команды слева/сверху едут через bus, **не** через
-`window.dispatchEvent` / `window.addEventListener`.
+Межкомпонентные команды слева/сверху едут через bus, **не** через `window.dispatchEvent`/`window.addEventListener`.
 
 ### Sidebar
 
-Все сервисные SPA используют одну оболочку
-`core/frontend/static/lib/components/layout/platform-service-sidebar.js`
-(слоты внутри `platform-sidebar`: collapse, mobile, преференс
-`shell-sidebar-preference`). Примитив
-`platform-sidebar-nav-tree` — **опциональное** наполнение default-слота,
-где нужна иерархия пунктов по `routeKey` и query; **не** обязательно для
-каждого приложения (у Sync и части экранов Flows левая колонка — продуктовый
-UX поверх данных, не дерево маршрутов).
+Все сервисные SPA используют одну оболочку `core/frontend/static/lib/components/layout/platform-service-sidebar.js` (слоты внутри `platform-sidebar`: collapse, mobile, преференс `shell-sidebar-preference`). Примитив `platform-sidebar-nav-tree` — **опциональное** наполнение default-слота для иерархии пунктов по `routeKey` и query.
 
 - Открыть мобильную раскладку: `dispatch(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, null)`.
 - Закрыть: `dispatch(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, null)`.
-- `platform-sidebar` сам диспатчит `UI_SIDEBAR_COLLAPSE_CHANGED` /
-  `UI_SIDEBAR_MOBILE_CHANGED`; читать состояние только селектором
-  `state.ui.sidebar`.
-- `page-header` мобильной кнопкой «меню» делает
-  `dispatch(UI_SIDEBAR_OPEN_REQUESTED)` и берёт `mobileOpen` из
-  `state.ui.sidebar.mobileOpen`.
+- `platform-sidebar` сам диспатчит `UI_SIDEBAR_COLLAPSE_CHANGED`/`UI_SIDEBAR_MOBILE_CHANGED`; читать состояние селектором `state.ui.sidebar`.
+- Мобильный `page-header` кнопкой «меню» делает `dispatch(UI_SIDEBAR_OPEN_REQUESTED)`, берёт `mobileOpen` из `state.ui.sidebar.mobileOpen`.
 
-### Platform Sidebar Nav Tree
+### `platform-sidebar-nav-tree`
 
-**Файл:** `core/frontend/static/lib/components/layout/platform-sidebar-nav-tree.js`.
+`core/frontend/static/lib/components/layout/platform-sidebar-nav-tree.js`. Доменно нейтрален: хост передаёт `nodes`, `active-item-id`, `active-path` (суффикс вида `tasks` или `notes?entity_type=note&entity_subtype=meeting`), `collapsed`, опционально `storage-scope`.
 
-**Назначение:** иерархическое меню в колонке shell-сайдбара (группы со сворачиванием, листья с иконкой). Доменно нейтрален: хост передаёт `nodes`, `active-item-id`, `active-path` (суффикс вида `tasks` или `notes?entity_type=note&entity_subtype=meeting`), `collapsed`, опционально **`storage-scope`**.
+При непустом `storage-scope` свёрнутые группы читаются/пишутся в `localStorage` через `core/frontend/static/lib/utils/sidebar-nav-tree-preference.js` (префикс `platform:sidebar-nav-tree-expanded:`; в JSON только пары `id -> false`). Битый JSON или значение `true` у ключа в storage — `throw` при чтении. Смена `storage-scope` перезагружает `_expanded`. Тоггл группы при `collapsed` (узкий сайдбар) запись не делает.
 
-**Персистентность:** при непустом `storage-scope` свёрнутые группы читаются/пишутся в `localStorage` через `core/frontend/static/lib/utils/sidebar-nav-tree-preference.js` (префикс ключа `platform:sidebar-nav-tree-expanded:`; в JSON только пары `id -> false`). Битый JSON или значение `true` у ключа в storage — `throw` при чтении. Смена `storage-scope` перезагружает `_expanded` из storage. При тоггле группы запись не делается, если `collapsed` (сайдбар в узком режиме).
-
-**Лист:** `id`, `label`, `icon?`, `routeKey`, `search` (строка query с ведущим `?`, может быть пустой).
-
-**Группа:** `id`, `label`, `icon?` (как у листа), `children[]` (без `routeKey`). Строка группы визуально совпадает с обычным пунктом (`nav-item` + иконка + `nav-item-label`); отличие только суффикс «+» / «–» у раскрытия.
-
-**Событие:** `this.emit('pick', { id, routeKey, search })` — хост вызывает `this.navigate(routeKey, {}, opts)` с `navigationOptions.search` при непустом `search`.
+Лист: `id`, `label`, `icon?`, `routeKey`, `search` (строка query с ведущим `?`, может быть пустой). Группа: `id`, `label`, `icon?`, `children[]` (без `routeKey`). Событие: `this.emit('pick', { id, routeKey, search })` — хост вызывает `this.navigate(routeKey, {}, { search })` при непустом `search`.
 
 ### Мобильный `page-header` (≤767px)
 
-Файл: `core/frontend/static/lib/components/layout/page-header.js`.
+`core/frontend/static/lib/components/layout/page-header.js`. Одна строка хедера: бургер, заголовок, `slot="actions"` без переноса; центрирование, у `.title` `ellipsis`. Атрибут `hide-mobile-menu` — не показывать бургер (вложенный экран). В режиме `title` `subtitle` на мобилке не показывается; пояснение — отдельный блок страницы (`page-subtitle-mobile`, `@media (max-width: 767px)`). `mobileToolbarMode`: `'title'` (default) или `'search'` (вместо заголовка слот `toolbar-search`). При переполнении actions допустим горизонтальный скролл. Рекомендуемый порядок actions слева направо: сводка, период/даты, создание (`+`), поиск.
 
-- Одна строка хедера: бургер, блок заголовка и `slot="actions"` без переноса действий на вторую строку; выравнивание по вертикали по центру; у бургера небольшой отступ слева; у `.title` без переноса строк (`ellipsis`).
-- Атрибут **`hide-mobile-menu`**: на мобилке не показывать кнопку бургера (вложенный экран под общим мобильным хедером родителя, например быстрый просмотр сущности внутри `/crm/entities`).
-- В режиме `title` на мобилке атрибут `subtitle` в липкой полосе **не показывается** (только на ширине >767px). Поясняющий текст выносят в тело страницы под хедер (например блок с классом вроде `page-subtitle-mobile`, видимый только в `@media (max-width: 767px)`).
-- Свойство `mobileToolbarMode`: `'title'` (по умолчанию) или `'search'`. В режиме `search` вместо заголовка показывается именованный слот `toolbar-search` (поле поиска и т.п.) между бургером и действиями.
-- При переполнении иконок в `actions` допустим горизонтальный скролл у контейнера действий.
-- Для списковых экранов с несколькими иконками рекомендуемый порядок в разметке слота `actions` слева направо: сводка, период/даты, создание (`+`), поиск.
-
-### Мобильная липкая полоса: единая высота (≤767px)
-
-- Токены: `core/frontend/static/assets/css/tokens.css` — `--platform-mobile-sticky-header-z-index`, `--platform-mobile-sticky-header-padding-top` / `-bottom` / `-right` / `-left`, `--platform-mobile-sticky-header-row-min-height` (одинаковый safe area и минимальная строка, что у `page-header`, что у мобильного `sync-chat-header`).
-- Общий CSS: `core/frontend/static/lib/styles/shared/mobile-sticky-header.styles.js` (импортируется в `page-header` и `sync-chat-header`).
+**Единая высота мобильной липкой полосы:** токены в `tokens.css` (`--platform-mobile-sticky-header-z-index`, `--platform-mobile-sticky-header-padding-{top,bottom,left,right}`, `--platform-mobile-sticky-header-row-min-height`). Общий CSS — `core/frontend/static/lib/styles/shared/mobile-sticky-header.styles.js` (импортируется в `page-header` и `sync-chat-header`).
 
 ### Breadcrumbs
 
-- `platform-breadcrumbs` слушает `CoreEvents.ROUTER_ROUTE_CHANGED` и читает
-  конфигурацию маршрутов из глобального `window.__PLATFORM_ROUTER__`
-  (config-only API, не side-effect диспатчер).
-- Клик по крошке = `dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey, params })`
-  (в core разрешено; в apps — `this.navigate(routeKey, params)`).
-- `CustomEvent('navigate', ...)` — запрещён.
+- `<platform-breadcrumbs>` слушает `CoreEvents.ROUTER_ROUTE_CHANGED` и читает конфигурацию из `window.__PLATFORM_ROUTER__` (config-only API).
+- Клик по крошке = `dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey, params })` (в core; в apps — `this.navigate(routeKey, params)`).
+- `CustomEvent('navigate', ...)` запрещён.
 
-### Namespace выбор
+### Namespace
 
-- `setPlatformNamespaceSelection(companyId, name)` диспатчит
-  `CoreEvents.UI_NAMESPACE_SELECT_REQUESTED`. `ui.effect.js` персистит
-  выбор в `localStorage` и эмитит `UI_NAMESPACE_CHANGED` +
-  `UI_DOCUMENTS_RELOAD_REQUESTED`.
-- Подписка на смену namespace / перезагрузку — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`,
-  не `window.addEventListener('office-documents-list-reload')`.
+- `setPlatformNamespaceSelection(companyId, name)` диспатчит `CoreEvents.UI_NAMESPACE_SELECT_REQUESTED`. `ui.effect.js` персистит выбор в `localStorage` и эмитит `UI_NAMESPACE_CHANGED` + `UI_DOCUMENTS_RELOAD_REQUESTED`.
+- Подписка — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`, не `window.addEventListener('office-documents-list-reload')`.
 
-### Запреты (apps + core/frontend/static, проверяет `scripts/check_ui_canon.sh`)
+### Запреты sidebar/breadcrumbs/namespace
 
 - `window.dispatchEvent(new CustomEvent('platform-sidebar-open' | 'platform-sidebar-mobile-change' | 'office-documents-list-reload'))`.
-- `window.addEventListener('platform-sidebar-open' | 'platform-sidebar-mobile-change' | 'office-documents-list-reload', ...)`.
+- `window.addEventListener(...)` тех же событий.
 - `new CustomEvent('navigate', ...)` для роутинга.
-- `this.calendarApi`, `this.companies`, `this.team` и подобные геттеры в
-  `core/frontend/static/lib/**` — только `dispatch(<SLICE_EVENTS>)` + `select`.
+- `this.calendarApi`, `this.companies`, `this.team` и подобные геттеры в `core/frontend/static/lib/**` — только `dispatch(<SLICE_EVENTS>)` + `select`.
 
-Исключение — `core/frontend/static/lib/embed-chat/**`: у встраиваемого
-виджета свой standalone bus и явный host-интерфейс через `postMessage`.
+Исключение — `core/frontend/static/lib/embed-chat/**`: у виджета свой standalone bus и host-интерфейс через `postMessage`.
+
+## Платформенные просмотрщики (`trace-viewer`, `log-viewer`)
+
+`<platform-trace-viewer>` (`platform-trace-viewer.js` + `utils/trace-view-model.js`) — единый просмотр **одного trace**: иерархия spans tree/timeline, поиск, выбор span. Контракт: родитель грузит данные (фабрика/`useOp`), `.roots=${...}`. Событие `this.emit('trace-span-select', { span })`. i18n `static i18nNamespace = 'platform'`, секция `trace_viewer` в `platform.json`.
+
+`<platform-log-viewer>` (`platform-log-viewer.js`) — единый презентационный список записей лога из Loki-клиента (`timestamp`, `level`, `message`, `logger`, `service`, `trace_id`, `request_id`, `user_id`, `session_agent`, `raw`, …): уровень, время, сообщение; раскрытие для `raw`; копирование через `this.emit('copy-request', { text })`. Родитель передаёт `.entries`, `?loading`, опционально `.emptyLabel` (по умолчанию `log_viewer.empty`). i18n секция `log_viewer`.
+
+**Обязательное применение:** любой UI, показывающий **дерево/timeline spans одного trace** или **список записей логов** — **только** через эти core-компоненты. В `apps/<svc>/ui/**` запрещены отдельные «trace tree», «span waterfall», «таблица логов», «.log-entry список». Расширения — только в core, не дублировать в сервисах.
+
+## Прочие core-компоненты ввода
+
+- `<platform-timezone-picker>` — combobox IANA time zone (фильтр по подстроке без учёта регистра, выбор кликом). Список: `utils/iana-timezones.js` (`getSortedIanaTimeZones()` через `Intl.supportedValuesOf('timeZone')` или fallback). События `input`/`change` с `detail.value`. i18n `timezone_picker.*` в `platform.json`.
+- `<platform-cron-field>` — выбор расписания: пресеты или «Свой cron» (5 полей). Помощники: `utils/cron-field.js` (`findMatchingPresetId`, `normalizeCronString`, `validateCronFiveField`). События `input`/`change` с `detail.value`. i18n `cron_field.*`.
+- `<platform-palette-color-picker>` — палитра (круглые свотчи в одну строку, при нехватке ширины — горизонтальный скролл). `allow-clear` — кнопка сброса. Значение вне палитры (валидный hex) — дополнительный активный свотч. События `input`/`change` с `detail.value` (hex или пустая строка). Палитра: `utils/color-palette.js` (`COLOR_PALETTE`). i18n `palette_color_picker.*`.
+
+## Витрина сервисов (launcher + модалка)
+
+Файлы: `utils/platform-services-catalog.js` (список продуктов, бренд, ключи `apps.*.name`), `utils/build-service-entry-url.js`, `components/platform-services-launcher.js`, `components/platform-services-modal.js` (`modalKind: 'platform.services'`), `base/platform-services-page.js` (страница `platform_services`).
+
+Единая сетка плиток: localhost с портами как в `buildServiceEntryUrl`, иначе путь; в PWA/standalone — `location.href`. Список сервисов не дублировать в `apps/**` — только каталог в core. Метрики/health с эндпоинтов **консоли** (`frontend/*` фабрики) в core не вызывать; опционально `healthByServiceId`/`includeServiceIds` в лаунчер с родителя (например `dashboard-services-grid`).
+
+Открытие: `this.openModal('platform.services', {})` — из меню пользователя («Apps»), с дашборда, со страницы `platform_services` и **по клику на зону логотипа** в `platform-service-sidebar` (`logo-opens-services` → `platform-sidebar` оборачивает иконку + название в кнопку).

@@ -84,6 +84,33 @@ class _CompanyOverrideRow:
     secrets: Optional[dict[str, str]]
 
 
+@dataclass(frozen=True)
+class ResolvedSttSettings:
+    """Финальный результат tier-резолва STT (`override → company → settings`).
+
+    Используется одновременно для создания `BaseSTTClient` (`get_stt_client`)
+    и для синхронизации `language` в `StreamingSTTProvider` (apps/voice).
+    """
+
+    provider: str
+    model: Optional[str]
+    language: str
+    source_provider: Literal["override", "company", "settings"]
+    source_language: Literal["override", "company", "settings"]
+
+
+def _value_source(
+    *,
+    override_value: Optional[str],
+    company_value: Optional[str],
+) -> Literal["override", "company", "settings"]:
+    if override_value is not None and override_value != "":
+        return "override"
+    if company_value is not None and company_value != "":
+        return "company"
+    return "settings"
+
+
 def _coerce_company_voice_secrets(raw: object | None) -> Optional[dict[str, str]]:
     """Нормализует JSONB `secrets`: только строковые ключи и значения."""
     if raw is None:
@@ -246,6 +273,57 @@ def _resolve_optional_float(
     return company_value
 
 
+async def resolve_stt_settings(
+    *,
+    company_id: str,
+    override: Optional[SpeechOverride] = None,
+) -> ResolvedSttSettings:
+    """Tier-резолв STT (`override → company → settings`) без создания клиента.
+
+    Используется в `apps/voice` для синхронизации `language` между
+    батч-клиентом (`get_stt_client`) и стриминговым адаптером
+    (`StreamingSTTProvider`), чтобы не было рассинхрона из-за
+    `cfg.default_language`.
+    """
+    _validate_company_id(company_id)
+    override = _validate_override(override)
+    settings_voice_stt = get_settings().voice.stt
+    company_row = await _load_company_override(company_id=company_id, kind="stt")
+
+    company_provider = company_row.provider if company_row else None
+    company_model = company_row.model if company_row else None
+    company_language = company_row.language if company_row else None
+
+    provider_name = _resolve_str(
+        override_value=override.provider,
+        company_value=company_provider,
+        default_value=settings_voice_stt.provider,
+    )
+    model = _resolve_optional_str(
+        override_value=override.model,
+        company_value=company_model,
+        default_value=settings_voice_stt.default_model,
+    )
+    if provider_name == "litserve":
+        model = _fallback_litserve_api_model_id(resolved=model, kind="stt")
+    language = _resolve_str(
+        override_value=override.language,
+        company_value=company_language,
+        default_value=settings_voice_stt.default_language,
+    )
+    return ResolvedSttSettings(
+        provider=provider_name,
+        model=model,
+        language=language,
+        source_provider=_value_source(
+            override_value=override.provider, company_value=company_provider
+        ),
+        source_language=_value_source(
+            override_value=override.language, company_value=company_language
+        ),
+    )
+
+
 async def get_stt_client(
     *,
     company_id: str,
@@ -258,36 +336,28 @@ async def get_stt_client(
     пусты. Если итоговый провайдер не реализован или ключи отсутствуют —
     `raise ValueError`/`NotImplementedError`.
     """
-    _validate_company_id(company_id)
-    override = _validate_override(override)
+    resolved = await resolve_stt_settings(company_id=company_id, override=override)
     settings_voice_stt = get_settings().voice.stt
+    override_obj = _validate_override(override)
     company_row = await _load_company_override(company_id=company_id, kind="stt")
-
-    provider_name = _resolve_str(
-        override_value=override.provider,
-        company_value=company_row.provider if company_row else None,
-        default_value=settings_voice_stt.provider,
-    )
-    model = _resolve_optional_str(
-        override_value=override.model,
-        company_value=company_row.model if company_row else None,
-        default_value=settings_voice_stt.default_model,
-    )
-    if provider_name == "litserve":
-        model = _fallback_litserve_api_model_id(resolved=model, kind="stt")
-    language = _resolve_str(
-        override_value=override.language,
-        company_value=company_row.language if company_row else None,
-        default_value=settings_voice_stt.default_language,
-    )
-    timeout_s = override.timeout_s
+    timeout_s = override_obj.timeout_s
     sec = company_row.secrets if company_row else None
+
+    logger.info(
+        "voice_resolver.stt_resolved",
+        company_id=company_id,
+        provider=resolved.provider,
+        model=resolved.model,
+        language=resolved.language,
+        source_provider=resolved.source_provider,
+        source_language=resolved.source_language,
+    )
 
     return STTClientFactory.create_for_voice(
         cfg=settings_voice_stt,
-        provider_name=provider_name,
-        model=model,
-        default_language=language,
+        provider_name=resolved.provider,
+        model=resolved.model,
+        default_language=resolved.language,
         timeout_s=timeout_s,
         secrets=sec,
     )
@@ -333,6 +403,20 @@ async def get_tts_client(
     )
     timeout_s = override.timeout_s
     sec = company_row.secrets if company_row else None
+
+    logger.info(
+        "voice_resolver.tts_resolved",
+        company_id=company_id,
+        provider=provider_name,
+        model=model,
+        voice=voice,
+        response_format=response_format,
+        sample_rate=sample_rate,
+        source_provider=_value_source(
+            override_value=override.provider,
+            company_value=company_row.provider if company_row else None,
+        ),
+    )
 
     return TTSClientFactory.create_for_voice(
         cfg=cfg,
@@ -381,6 +465,19 @@ async def get_vad_client(
     )
     timeout_s = override.timeout_s
     sec = company_row.secrets if company_row else None
+
+    logger.info(
+        "voice_resolver.vad_resolved",
+        company_id=company_id,
+        provider=provider_name,
+        model=model,
+        sample_rate=sample_rate,
+        threshold=threshold,
+        source_provider=_value_source(
+            override_value=override.provider,
+            company_value=company_row.provider if company_row else None,
+        ),
+    )
 
     return VADClientFactory.create_for_voice(
         cfg=cfg,
@@ -480,6 +577,8 @@ async def get_tts_streamer(
 
 
 __all__ = [
+    "ResolvedSttSettings",
+    "resolve_stt_settings",
     "get_stt_client",
     "get_tts_client",
     "get_vad_client",

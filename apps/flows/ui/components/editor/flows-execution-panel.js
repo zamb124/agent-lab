@@ -44,7 +44,9 @@ import {
     createFlowVoiceSession,
     disposeFlowVoiceSession,
     formatFlowVoiceConnectErrorDetail,
+    normalizeFlowVoiceSttLanguage,
 } from '../../_helpers/flow-voice-session.js';
+import { relayA2aVoiceStreamRpcFrame } from '../../_helpers/relay-voice-a2a-to-chat.js';
 
 const ACCEPT_FILE_TYPES = '*/*';
 const EMPTY_TRACE = Object.freeze([]);
@@ -440,7 +442,12 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._voiceMedia = null;
         /** @type {import('@platform/lib/voice/voice-agent-bridge.js').VoiceAgentBridge | null} */
         this._voiceBridge = null;
+        /** @type {(() => void) | null} */
+        this._voiceA2aSettledHandler = null;
+        /** @type {((e: Event) => void) | null} */
+        this._voiceA2aAbortedHandler = null;
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
+        this._localeSel = this.select((s) => s.i18n.locale);
     }
 
     disconnectedCallback() {
@@ -799,11 +806,83 @@ export class FlowsExecutionPanel extends PlatformElement {
             this._chat.state && typeof this._chat.state.currentContextId === 'string'
                 ? this._chat.state.currentContextId
                 : null;
+        const localeRaw = asString(this._localeSel.value);
+        const sttLanguage = normalizeFlowVoiceSttLanguage(localeRaw);
+        /** @type {{ contextId: string|null, taskId: string|null, taskPrimed: boolean }} */
+        const voiceStreamRelayState = {
+            contextId: null,
+            taskId: null,
+            taskPrimed: false,
+        };
         const { media, bridge } = createFlowVoiceSession({
             flowId: this.flowId,
             branchId: this.branchId,
             companyId,
+            sttLanguage,
             initialContextId,
+            getContextId: () => {
+                const st = this._chat.state;
+                const cid =
+                    st && typeof st.currentContextId === 'string' ? st.currentContextId : null;
+                return cid && cid.length > 0 ? cid : null;
+            },
+            getStreamMetadata: async () => {
+                const meta = {};
+                if (this.branchId && this.branchId !== 'base') {
+                    meta.branch = this.branchId;
+                }
+                const editorState = asObject(this._editor.state);
+                const preview = editorState.previewExecutionState;
+                const bps = preview && preview.breakpoints;
+                if (Array.isArray(bps) && bps.length > 0) {
+                    meta.breakpoints = bps;
+                }
+                const ui = this._ui.value;
+                if (ui && Array.isArray(ui.mockResponses) && ui.mockResponses.length > 0) {
+                    meta.mock = {
+                        enabled: true,
+                        llm: ui.mockResponses.map((m) => ({
+                            type: 'text',
+                            content: m.response,
+                            match: m.match,
+                        })),
+                    };
+                }
+                const keysCount = Object.keys(meta).length;
+                if (keysCount === 0) return {};
+                return meta;
+            },
+            beforeA2aStream: async (text) => {
+                const ctx = this._ensureContextId();
+                voiceStreamRelayState.contextId = ctx;
+                voiceStreamRelayState.taskId = null;
+                voiceStreamRelayState.taskPrimed = false;
+                const trimmed = typeof text === 'string' ? text.trim() : '';
+                if (trimmed.length === 0) {
+                    throw new Error('flows execution voice: пустой транскрипт');
+                }
+                const userMessage = {
+                    id: `user_${Date.now()}`,
+                    role: 'user',
+                    content: trimmed,
+                    timestamp: new Date().toISOString(),
+                    files: [],
+                };
+                this._chat.addUserMessage({ contextId: ctx, message: userMessage });
+                this.dispatch('flows/run/flow_started', {}, { source: 'http' });
+            },
+            onA2aStreamEvent: (frame) => {
+                relayA2aVoiceStreamRpcFrame(
+                    {
+                        dispatch: (t, p, m) => {
+                            this.dispatch(t, p, m);
+                        },
+                    },
+                    voiceStreamRelayState,
+                    frame,
+                    null,
+                );
+            },
             onVad: (e) => {
                 this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
             },
@@ -844,6 +923,29 @@ export class FlowsExecutionPanel extends PlatformElement {
             });
             return;
         }
+        const onVoiceA2aSettled = () => {
+            this.dispatch('flows/run/flow_done', {}, { source: 'http' });
+        };
+        const onVoiceA2aAborted = (ev) => {
+            const ce = /** @type {CustomEvent<Record<string, unknown>>} */ (ev);
+            const d =
+                ce.detail !== null && typeof ce.detail === 'object'
+                    ? /** @type {Record<string, unknown>} */ (ce.detail)
+                    : null;
+            const task_id =
+                d && typeof d.task_id === 'string' ? d.task_id : null;
+            const context_id =
+                d && typeof d.context_id === 'string' ? d.context_id : null;
+            this.dispatch(
+                'flows/chat/a2a_interrupted',
+                { task_id, context_id },
+                { source: 'local' },
+            );
+        };
+        this._voiceA2aSettledHandler = onVoiceA2aSettled;
+        this._voiceA2aAbortedHandler = onVoiceA2aAborted;
+        bridge.addEventListener('a2aSettled', onVoiceA2aSettled);
+        bridge.addEventListener('a2aAborted', onVoiceA2aAborted);
         bridge.start();
         this._voiceMedia = media;
         this._voiceBridge = bridge;
@@ -852,6 +954,14 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _stopExecPanelVoice() {
+        if (this._voiceBridge && this._voiceA2aSettledHandler) {
+            this._voiceBridge.removeEventListener('a2aSettled', this._voiceA2aSettledHandler);
+            this._voiceA2aSettledHandler = null;
+        }
+        if (this._voiceBridge && this._voiceA2aAbortedHandler) {
+            this._voiceBridge.removeEventListener('a2aAborted', this._voiceA2aAbortedHandler);
+            this._voiceA2aAbortedHandler = null;
+        }
         disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
         this._voiceMedia = null;
         this._voiceBridge = null;

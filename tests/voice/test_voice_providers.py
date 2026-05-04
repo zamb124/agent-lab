@@ -13,7 +13,8 @@ from apps.voice.providers.streaming_adapters import (
     StreamingTTSProvider,
     StreamingVADProvider,
 )
-from core.clients.stt_client import MockSTTClient
+from core.clients.stt_client import BaseSTTClient, MockSTTClient, STTTranscriptionResult
+from core.files.models import AudioTranscriptionStatus
 from core.clients.tts_client import MockTTSClient
 from core.clients.vad_client import MockVADClient
 
@@ -47,11 +48,89 @@ async def test_streaming_stt_flush_returns_transcription(unique_id: str) -> None
 
 
 @pytest.mark.asyncio
+async def test_streaming_stt_flush_posts_wav_to_batch_client(unique_id: str) -> None:
+    class CaptureSTT(BaseSTTClient):
+        def __init__(self) -> None:
+            self.calls: dict[str, object] = {}
+
+        async def transcribe_audio(
+            self,
+            *,
+            audio_bytes: bytes,
+            file_name: str,
+            mime_type: str,
+            language: str | None = None,
+        ) -> STTTranscriptionResult:
+            self.calls = {
+                "file_name": file_name,
+                "mime_type": mime_type,
+                "is_wav": audio_bytes.startswith(b"RIFF"),
+            }
+            return STTTranscriptionResult(
+                provider="capture",
+                status=AudioTranscriptionStatus.DONE,
+                text="ok",
+                language=language,
+            )
+
+    cap = CaptureSTT()
+    provider = StreamingSTTProvider(stt_client=cap)
+    await provider.push_audio(b"\x00\x00" * 160)
+    await provider.flush_buffer()
+    assert cap.calls["file_name"] == "voice_segment.wav"
+    assert cap.calls["mime_type"] == "audio/wav"
+    assert cap.calls["is_wav"] is True
+
+
+@pytest.mark.asyncio
 async def test_streaming_stt_reset_clears_buffer(unique_id: str) -> None:
     provider = StreamingSTTProvider(stt_client=MockSTTClient(transcript_text="ок"))
     await provider.push_audio(b"data")
     assert provider.has_buffered_audio()
     provider.reset()
+    assert not provider.has_buffered_audio()
+
+
+@pytest.mark.asyncio
+async def test_streaming_stt_peek_returns_text_without_clearing_buffer(
+    unique_id: str,
+) -> None:
+    """peek_transcript отдаёт результат и оставляет буфер для дальнейшего накопления."""
+    provider = StreamingSTTProvider(
+        stt_client=MockSTTClient(transcript_text=f"partial-{unique_id}")
+    )
+    await provider.push_audio(b"\x00\x00" * 16000)
+    result = await provider.peek_transcript(min_buffer_bytes=8000)
+    assert result is not None
+    assert result.text == f"partial-{unique_id}"
+    assert provider.has_buffered_audio()
+
+
+@pytest.mark.asyncio
+async def test_streaming_stt_peek_below_threshold_returns_none(unique_id: str) -> None:
+    """При буфере короче min_buffer_bytes — None, batch-провайдер не дёргается."""
+    provider = StreamingSTTProvider(
+        stt_client=MockSTTClient(transcript_text="x")
+    )
+    await provider.push_audio(b"\x00\x00" * 100)
+    result = await provider.peek_transcript(min_buffer_bytes=16000)
+    assert result is None
+    assert provider.has_buffered_audio()
+
+
+@pytest.mark.asyncio
+async def test_streaming_stt_peek_then_flush_returns_full_segment(
+    unique_id: str,
+) -> None:
+    """После peek можно дописать ещё PCM и flush_buffer вернёт всё."""
+    provider = StreamingSTTProvider(stt_client=MockSTTClient(transcript_text="full"))
+    await provider.push_audio(b"\x00\x00" * 8000)
+    peeked = await provider.peek_transcript(min_buffer_bytes=2000)
+    assert peeked is not None
+    await provider.push_audio(b"\x00\x00" * 8000)
+    flushed = await provider.flush_buffer()
+    assert flushed is not None
+    assert flushed.text == "full"
     assert not provider.has_buffered_audio()
 
 

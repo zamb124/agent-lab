@@ -375,6 +375,12 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         if (!_needsModel(kind, draft.provider)) return nothing;
         const opts = this._modelOptions(kind, draft.provider);
         if (!Array.isArray(opts) || opts.length === 0) return nothing;
+        const litserveHint =
+            draft.provider === 'litserve'
+                ? html`<div class="hint">
+                      ${this.t('company_voice_providers_page.model_default_litserve')}
+                  </div>`
+                : nothing;
         return html`
             <label>
                 ${this.t('company_voice_providers_page.field_model')}
@@ -387,6 +393,7 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                     </option>
                     ${opts.map((id) => html`<option value=${id}>${id}</option>`)}
                 </select>
+                ${litserveHint}
             </label>
         `;
     }

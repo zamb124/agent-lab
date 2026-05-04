@@ -1,20 +1,20 @@
 ---
-description: "Правила тестирования flows, фикстуры, UI Lit (Web Test Runner), Playwright E2E"
+description: "Тестирование: фикстуры, MockLLM, изоляция, параллельный запуск, Sync/UI/E2E"
 alwaysApply: false
 ---
-# Правила тестирования
+# Тестирование
 
-**Зона этого файла:** фикстуры и клиенты, команды запуска, timeout/cleanup, Sync/UI/E2E-инфра, MockLLM, примеры, структура `tests/`.
+**Зона:** фикстуры/клиенты, команды запуска, timeout/cleanup, Sync/UI/E2E-инфра, MockLLM, структура `tests/`.
 
-**Не дублируется здесь** (один источник — **`testing_invariants.mdc`**): инварианты контрактов, уровень теста «от потребителя», стиль ассертов, контракт vs реализация, DI/`patch`, чеклист стиля, **проверка записи в БД и согласованность с ответом API**, **изоляция по `company_id` / `namespace_id` и аналогам**, **чтение состояния через ORM/репозитории вместо сырого SQL**, смысл изоляции при параллельном прогоне (дополняет таблицу фикстур и `unique_id` ниже).
+**Не дублируется здесь** (один источник — `testing_invariants.mdc`): инварианты контрактов, уровень теста «от потребителя», стиль ассертов, контракт vs реализация, DI/`patch`, проверка записи в БД и согласованность с ответом API, изоляция по `company_id`/`namespace_id`, чтение состояния через ORM/репозитории вместо сырого SQL, чеклист стиля.
 
 ## Главные принципы
 
-1. **Никаких моков** — единственный обязательный мок это `MockLLM`. Реальный PostgreSQL, Redis, MinIO, TaskIQ.
-2. **RAG эмбеддинги:** по умолчанию `PgVectorProvider` ходит в реальный HTTP эмбеддер из конфигурации. **`PGVECTOR_TEST_MOCK_EMBEDDINGS=true`** — детерминированные вектора без внешнего API (имя не под префиксом `RAG__`, иначе ломается разбор `rag.embedding` в Pydantic); подмена методов `EmbeddingService` в конструкторе `PgVectorProvider` (не отдельный «тестовый» провайдер). В тестах: **`tests/fixtures/test_database_env.py`** (`TEST_DATABASE_ENV` → pytest и **`_COMMON_TEST_ENV`** в **`tests/fixtures/services.py`**); subprocess **`rag_worker`** — через **`**TEST_DATABASE_ENV`**. В **`docker-compose-test.yaml`** — для `tests-runner` и `rag-worker-test`.
-3. **Только готовые фикстуры** — запрещено создавать свои клиенты, сервисы, worker'ы.
-4. **Изоляция через `unique_id`** — обязателен в каждом тесте для всех ID.
-5. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, репозитории не мокаются.
+1. **Никаких моков** — единственный обязательный мок это `MockLLM`. Реальные PostgreSQL, Redis, MinIO, TaskIQ.
+2. **Только готовые фикстуры** — запрещено создавать свои клиенты, сервисы, worker'ы.
+3. **Изоляция через `unique_id`** — обязательна в каждом тесте для всех ID (`task_id`, `context_id`, `user_id`, `session_id`, …).
+4. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, репозитории не мокаются.
+5. **RAG эмбеддинги:** по умолчанию `PgVectorProvider` идёт в реальный HTTP эмбеддер. `PGVECTOR_TEST_MOCK_EMBEDDINGS=true` — детерминированные вектора без внешнего API (имя не под префиксом `RAG__`, иначе ломается разбор `rag.embedding` в Pydantic). Подмена методов `EmbeddingService` в конструкторе `PgVectorProvider` (не отдельный «тестовый» провайдер); прокинуть в subprocess `rag_worker` через `**TEST_DATABASE_ENV` (`tests/fixtures/test_database_env.py`).
 
 Запрещено мокать: `StateRepository`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
@@ -22,93 +22,51 @@ alwaysApply: false
 
 ### Глобальное состояние — только через фикстуры и `monkeypatch`
 
-- **`os.environ[...] = ...` в теле теста запрещена.** Только `monkeypatch.setenv` — автоматический откат после теста. Прямая запись отравляет env для параллельных тестов и последующих в том же процессе.
-- **Прямой сброс singleton запрещён** (`_settings_instance = None`, `_default_rag_provider = None`). Допустимо только в `conftest.py` (module-level setup до импорта приложения) или в фикстуре через `monkeypatch.setattr`.
-- **Присвоение модульных переменных** (`some_module.var = ...`) — только через `monkeypatch.setattr` (автооткат).
-- **`unittest.mock.patch` / `@patch` не использовать.** Только pytest `monkeypatch`. При исключении в `with patch(...)` патч может не откатиться; `monkeypatch` откатывается гарантированно в teardown.
+- `os.environ[...] = ...` в теле теста запрещено. Только `monkeypatch.setenv` (автооткат).
+- Прямой сброс singleton (`_settings_instance = None`, `_default_rag_provider = None`) запрещён. Допустимо в `conftest.py` (module-level setup до импорта приложения) или через `monkeypatch.setattr`.
+- Присвоение модульных переменных — только через `monkeypatch.setattr`.
+- `unittest.mock.patch` / `@patch` не использовать — только `monkeypatch`. При исключении в `with patch(...)` патч может не откатиться.
 
 ### Параллельная безопасность (pytest-xdist)
 
-Тесты запускаются с `-n N --dist=loadgroup`. Каждый gw-worker — отдельный процесс. БД, Redis, MinIO — общие.
+Запуск с `-n N --dist=loadgroup`. Каждый gw — отдельный процесс. БД, Redis, MinIO — общие.
 
-- Каждый тест **обязан** быть безопасен для параллельного выполнения с другими тестами на других gw-workers.
-- **Захардкоженные идентификаторы** (`task_id="my-task"`, `context_id="ctx-1"`, `flow_id="test_flow"`) в БД/Redis — **запрещены**. Все идентификаторы содержат `unique_id`.
-- **Захардкоженные порты, временные файлы, Redis-ключи** без `unique_id`/xdist-суффикса — **запрещены** (исключение: session-фикстуры с `FileLock`).
-- Тесты с эксклюзивным доступом к общему ресурсу — **обязаны** быть в `xdist_group` (маркер или `pytest_collection_modifyitems`).
-- Все с **`@pytest.mark.real_taskiq`** попадают в одну группу **`real_taskiq`** (`tests/conftest.py`): на одном gw они выполняются **по очереди**, без параллели с другими real_taskiq на соседнем gw (гребёнка на LiveKit, MinIO, CPU).
-- **`time.sleep` для ожидания асинхронного результата — не использовать.** Вместо: `asyncio.wait_for`, `asyncio.sleep` с поллингом, `await` результата с таймаутом.
+- Захардкоженные идентификаторы (`task_id="my-task"`, `flow_id="test_flow"`) запрещены — все ID содержат `unique_id`.
+- Захардкоженные порты, временные файлы, Redis-ключи без `unique_id`/xdist-суффикса запрещены (исключение: session-фикстуры с `FileLock`).
+- Тесты с эксклюзивным доступом к общему ресурсу — обязательно в `xdist_group` (маркер или `pytest_collection_modifyitems`).
+- `@pytest.mark.real_taskiq` → группа `real_taskiq` (`tests/conftest.py`): на одном gw выполняются по очереди, без параллели на соседнем gw (LiveKit, MinIO, CPU).
+- `time.sleep` для ожидания асинхронного результата запрещён — только `asyncio.wait_for`/`asyncio.sleep` с поллингом или `await` с таймаутом.
 
 ### Идемпотентность фикстур
 
-- **Session-фикстуры** при xdist выполняются **по разу на каждый gw-worker** (не глобально). Обязаны быть идемпотентны: повторные `create_bucket`, `run_migrations`, `load_flows_to_db` не должны падать.
-- **Teardown session-фикстур** не должен разрушать ресурсы, нужные другим gw-workers. Координация — через `FileLock` и ref-counting (`SessionWorkerManager`).
+- Session-фикстуры при xdist выполняются **по разу на gw-worker** (не глобально). Повторные `create_bucket`, `run_migrations`, `load_flows_to_db` не должны падать.
+- Teardown session-фикстур не должен разрушать ресурсы, нужные другим gw-workers. Координация — через `FileLock` и ref-counting (`SessionWorkerManager`).
 
 ### Чистота тестового тела
 
-- **`try/except` в теле теста запрещён.** Тест должен падать при ошибке. Единственное исключение — `pytest.raises` для проверки что код бросает исключение.
-- **`except: pass` в теле теста запрещён.** Проглоченные ошибки допустимы только в teardown фикстур для cleanup ресурсов.
-- **Создание своих `AsyncClient`, `httpx.Client`, сессий БД** — запрещено. Только готовые фикстуры (`flows_client`, `crm_client_http` и т.д.).
-- **`get_container()` в теле теста** — запрещено. Использовать фикстуру `container`.
-- **Cleanup данных** — в teardown фикстуры (`yield ... # cleanup`), не в теле теста.
+- `try/except` в теле теста запрещён. Тест должен падать при ошибке. Исключение — `pytest.raises`.
+- `except: pass` в теле теста запрещено. Проглоченные ошибки только в teardown фикстур.
+- Создание своих `AsyncClient`, `httpx.Client`, сессий БД запрещено — только готовые фикстуры.
+- `get_container()` в теле теста запрещён — только фикстура `container`.
+- Cleanup данных — в teardown фикстуры, не в теле теста.
 
 ### Изоляция данных
 
-- Тест **не должен мутировать чужие данные** (созданные другим тестом или session-фикстурой) без `unique_id`-изоляции.
-- Каждая сущность в БД/Redis, создаваемая тестом, содержит `unique_id` в идентификаторе. Коллизии между параллельными тестами — баг автора теста.
+Тест не должен мутировать чужие данные без `unique_id`-изоляции. Каждая сущность в БД/Redis с `unique_id` в идентификаторе.
 
----
+## Timeout и cleanup
 
-**Browser Runtime** (`tests/browser/`): unit-тесты без Playwright/CDP (`test_context_signature`, `test_config_runtime_view`, `test_exec_guard`, `test_lease_manager`) можно запускать без PostgreSQL/Redis: в начале **`tests/conftest.py`** при **`BROWSER_RUNTIME_SKIP_DB=1`** session-фикстуры подготовки БД и Redis-listener становятся no-op. Пример: **`BROWSER_RUNTIME_SKIP_DB=1 uv run pytest tests/browser/ -m "not integration and not slow"`**. Интеграция с реальным CDP (`@pytest.mark.integration`, переменная **`BROWSER__CDP_URL`**) и soak (`@pytest.mark.slow`) — только полноценный тестовый стек, **без** `BROWSER_RUNTIME_SKIP_DB`. E2E против Lightpanda (метрики wall_ms и размера JSON по шагам): **`BROWSER__E2E_LIGHTPANDA=1`**, **`BROWSER__E2E_LIGHTPANDA_CDP_URL`** или **`BROWSER__CDP_URL`**, тест **`tests/browser/test_e2e_lightpanda_scenarios.py`**; опционально **`BROWSER__E2E_CPROFILE=1`**, группа **`xdist_group("browser_cdp")`**.
+Жёсткий лимит — `pytest-timeout` (`timeout`, `timeout_method`, `timeout_func_only` в `pytest.ini`). По истечении тест прерывается (при `timeout_method=thread` через `os._exit`, teardown может не выполниться). `timeout_func_only=true` считает время **тела** теста (фаза call), не тяжёлых фикстур. Глобально 5 с; `@pytest.mark.real_taskiq` без своего `@pytest.mark.timeout` — 120 с (`pytest_collection_modifyitems`). Override — `@pytest.mark.timeout(300)`; отключить — `@pytest.mark.timeout(0)` или `PYTEST_TIMEOUT=0` / `pytest -o timeout=0`. Встроенный `faulthandler_timeout` отключён (только печатает стеки, не останавливает).
 
-**Documents / office:** **`tests/office/`** — BFF с реальной **`platform_office`** и MinIO (**`test_office_bff_integration.py`**), плюс **`@pytest.mark.integration`** healthcheck к Document Server (**`test_onlyoffice_document_server.py`**). В **`docker-compose-test.yaml`** сервис **`onlyoffice-documentserver`** (порт хоста **18088**), в **`tests_runner`** заданы **`OFFICE__*`**; **`make test-up`** поднимает тот же сервис. Фикстуры **`office_app`**, **`office_client`** — **`tests/fixtures/clients.py`**. См. **`office.mdc`**.
+**Redis / `notification_manager`:** при `TESTING=true` в `core/app/factory.py` shutdown **не** вызывает `notification_manager.stop_redis_listener()`, иначе следующий тест в том же gw получает `Redis client not initialized`. Сессионная фикстура `platform_notification_manager_redis` поднимает listener один раз на worker.
 
-**FileWriter / внешние картинки:** **`tests/core/files/test_file_writer_network.py`** — реальные HTTP GET к публичным URL (стабильные JPEG на **`picsum.photos`** по фиксированным id), маркеры **`integration`** и **`network`**, **`@pytest.mark.timeout(180, func_only=True)`**. Исключить из прогона: **`pytest -m "not network"`**. При прогоне тестов под **`tests/core/files/`** каталог **`tests/core/files/file_writer_output/`** сначала очищается (**`pytest_sessionstart`** в **`tests/core/files/conftest.py`**), затем **`test_file_writer.py`** и **`test_file_writer_network.py`** пишут артефакты (**`file_writer_artifacts.overwrite_artifact`**). Каталог в **`.gitignore`**.
+**Runtime vs тесты:** `make app` запускает сервисы через alias-модуль `apps.app_runtime_targets`, чтобы сигнатуры процессов не совпадали с тестовыми (`apps.<service>.main:app`, `apps.<worker>.worker:worker_app`). В test cleanup запрещены широкие паттерны `taskiq.*worker`; только точные сигнатуры (`taskiq.*apps.sync_worker.worker:worker_app`).
 
-**Тестовый WAV:** общая функция **`minimal_wav_silence`** в [`tests/fixtures/audio_bytes.py`](../../tests/fixtures/audio_bytes.py) — валидный PCM без ffmpeg-транскода при upload; используется в sync (голос/STT) и CRM e2e voice, не дублировать генератор в файлах тестов.
+**`PytestCollectionWarning`** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (`TestRunner`, `TestCaseConfig`) — `__test__ = False` (для Pydantic: `__test__: ClassVar[bool] = False`).
 
-**Sync Service** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker (для `messages.transcribe_*` и `sync_finalize_recording_task`). Нельзя подменять `op_*` функции из `apps/sync/realtime/operations.py`, репозитории или WebSocket через `unittest.mock` / `monkeypatch`. **Единственное явно разрешённое исключение** — `@patch("core.push.service.webpush")` в `tests/sync/test_sync_notification_delivery.py`: Web Push к Apple/FCM требует device tokens и VAPID-ключей, физически невозможно в CI. Подробности: `.cursor/rules/sync.mdc`, `tests/sync/README.md`. Изоляция тестов — через уникальный `company_id` и фикстуру `unique_id` для всех entity-id; фикстура `sync_db_clean` — **no-op** (БД между тестами не очищается, опираемся на уникальные id). Тесты под `tests/sync/` **без** `real_taskiq` автоматически в **`xdist_group("sync_db")`** — при `-n` и `--dist=loadgroup` выполняются **на одном gw последовательно**, без параллельной гонки за одной схемой. С **`real_taskiq`** — группа **`real_taskiq`** (см. выше), не `sync_db`. Календарные ссылки (`calendar_event_id`, канал `calendar_meeting`, `GET /sync/api/v1/calls/links/scheduled`, PATCH состава участников) — **`tests/sync/api/test_calendar_sync_call_links.py`**. Сквозной сценарий «frontend календарь, `kind=meeting`, реальный Sync HTTP» — **`tests/core/api/test_calendar_sync_meeting_integration.py`** (фикстура **`sync_service`**, порт **9005**; для join URL в тесте выставляется **`SERVER__PLATFORM_PUBLIC_BASE_URL`**).
+## Изоляция: `unique_id` обязателен
 
-### Зависание `make test` / pytest
-
-**Жёсткий лимит** — плагин **pytest-timeout** (`timeout`, `timeout_method`, `timeout_func_only` в `pytest.ini`): по истечении времени тест **прерывается** (при `timeout_method = thread` — через `os._exit`, teardown может не выполниться). **`timeout_func_only = true`** — считается время **тела** теста (фаза call), не длительность тяжёлых фикстур. Глобально по умолчанию **5 с**; у **`@pytest.mark.real_taskiq`** без своего `@pytest.mark.timeout` в коллекции выставляется **120 с** (см. `pytest_collection_modifyitems` в `tests/conftest.py`). Переопределение на тест: **`@pytest.mark.timeout(300)`**; отключить для теста: **`@pytest.mark.timeout(0)`**. Отключить глобально на прогон: **`PYTEST_TIMEOUT=0`** или **`pytest -o timeout=0`**.
-
-Встроенный **`faulthandler_timeout`** отключён (**`0`**): он только печатает стеки и не гарантирует остановку; дублировать смысла нет. Для **`real_taskiq`** в `tests/conftest.py` остаётся хук **`pytest_runtest_call`** (на случай снова включить `faulthandler_timeout` в конфиге).
-
-**Redis / `notification_manager`:** в одном процессе pytest поднимается несколько приложений (`create_service_app`). При **`TESTING=true`** в **`core/app/factory.py`** при shutdown **не** вызывается **`notification_manager.stop_redis_listener()`**, иначе следующий тест в том же gw-worker получает **`Redis client not initialized`**. Сессионная фикстура **`platform_notification_manager_redis`** в **`tests/conftest.py`** поднимает listener один раз на worker. Тесты, подписывающиеся на **`platform:notifications`**, не должны подменять **`notification_manager._redis_client`** и обнулять его в `finally`; при общем канале отбирать своё сообщение по уникальному полю в payload (например **`message_id`**), а не по одному `get_message`.
-
-Прервать прогон: **Ctrl+C** или `pkill -f "pytest.*tests/"`. Лог: `make test WORKERS=2 2>&1 | tee logs/make-test.log`.
-
-### Разделение runtime `make app` и тестовых cleanup
-
-- `make app` запускает сервисы/воркеры через alias-модуль `apps.app_runtime_targets`, чтобы сигнатуры процессов не совпадали с тестовыми (`apps.<service>.main:app`, `apps.<worker>.worker:worker_app`).
-- В test cleanup запрещены широкие паттерны вида `taskiq.*worker`; использовать только точные сигнатуры тестовых воркеров (например `taskiq.*apps.sync_worker.worker:worker_app`).
-- Цель: `make test` не должен убивать локальные процессы, поднятые через `make app`.
-
-**PytestCollectionWarning** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (например `TestRunner`, `TestCaseConfig`) не должны собираться как тесты — на классе задаётся **`__test__ = False`** (для Pydantic-моделей: **`__test__: ClassVar[bool] = False`**).
-
-**E2E UI (продукт):** сценарии **`tests/ui/e2e/`**, фикстуры и реестр — **`tests/ui/`** (pytest + Playwright, `tests/fixtures/services.py`, cookie `auth_token`, `ui_page_*`). Запуск: **`make test-ui`**. Не смешивать с компонентными JS-тестами. На всех контекстах из `tests/ui/conftest.py` вешается **`install_click_highlight_on_context`**: при каждом клике цель получает зелёную рамку (`outline`), чтобы на скриншотах `scenario.step` было видно, куда кликнули (см. **`tests/ui/click_highlight.py`**).
-
-**Только Playwright Sync:** `uv run pytest tests/ui/e2e/test_sync_*.py -m e2e` — фикстура **`sync_ui`** подключает реальный HTTP **`sync_service`** (порт из реестра, см. `tests/ui/apps.py`) и **`sync_worker`** для TaskIQ; оба объявлены в `tests/ui/conftest.py`.
-
-### Компонентные UI-тесты (Lit)
-
-| | |
-|---|---|
-| Раннер | **@web/test-runner** + **@web/test-runner-playwright** (Chromium), конфиг **[`web-test-runner.config.mjs`](../../web-test-runner.config.mjs)** |
-| Файлы | **`tests/ui_components/**/*.test.js`**, хелперы — **`tests/ui_components/helpers/`** (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture` / `html` / `expect` из `@open-wc/testing`) |
-| Импорты | Как в приложении: `lit` через **node-resolve**, префиксы **`@platform/lib/`**, **`@platform/services/`**, при необходимости **`@capacitor/app`**, **`@capacitor/core`**, **`@capacitor/splash-screen`**, **`@capacitor/push-notifications`** (vendor в `core/frontend/static/assets/js/vendor/@capacitor/`) — через import map в конфиге |
-| Запуск | **`npm ci`**, затем **`npm run test:ui-components`** или **`make test-ui-components`**. В **`make test`** / **`docker-compose` tests_runner** **не входит** — нужны Node.js и зависимости из [`package.json`](../../package.json). |
-| Изоляция фабрик и bus | Между тестами вызывать **`clearFactoryRegistry()`** ([`@platform/lib/events/factory-registry.js`](../../core/frontend/static/lib/events/factory-registry.js)), **`_resetResourceRegistryForTests()`** и **`resetPlatformBusForTests()`** ([`@platform/lib/events/index.js`](../../core/frontend/static/lib/events/index.js)). Не использовать в прод-коде. |
-| Логи | При `setupPlatformServices` возможны предупреждения PWA (404 для `sw.js`, если раннер не отдаёт статику) — ожидаемо. В **`create_service_app`** при **`TESTING=true`** маршруты PWA по умолчанию не регистрируются. |
-| PWA (HTTP) | **`tests/core/test_pwa_routes.py`**: отдача `/manifest.json`, `/sw.js`, `/offline.html`, опционально **`/.well-known/assetlinks.json`** и **`/.well-known/apple-app-site-association`**, контракт манифеста, `FileNotFoundError` без артефактов. Не дублирует проверку фабрики при `TESTING=true`; поведение Service Worker в браузере — вне scope (E2E/ручной). |
-
-**Граница:** `tests/ui_components` — изолированные Lit-компоненты (WTR); **`tests/ui/e2e`** — E2E с бэкендом; **`tests/ui`** — только движок (conftest, `AppUI`, реестр).
-
-**Регрессия архитектуры UI:** после правок в `apps/*/ui/index.html`, import map, базовых классах (`PlatformElement`, `PlatformModal`, `*App`) или массовой замене импортов — **`npm run test:ui-components`**; при затронутых shell или маршрутах SPA — **`pytest tests/ui/`** (Playwright), для чего нужен поднятый стек сервисов (см. [`tests/ui/harness.py`](../../tests/ui/harness.py)). Быстрый статический контроль канона в `apps/**/*.js`: **`make check-ui-canon`**.
-
----
-
-## Изоляция: unique_id обязателен
+Формат `session_id`: `{flow_id}:{context_id}`. Все `session_id`, `context_id`, `task_id`, `user_id` содержат `unique_id`.
 
 ```python
 @pytest.mark.asyncio
@@ -119,80 +77,43 @@ async def test_example(app, mock_llm_with_queue, unique_id):
         context_id=context_id,
         user_id=f"user-{unique_id}",
         session_id=f"example_react:{context_id}",
-        content="Test"
+        content="Test",
     )
     flow = await get_container().flow_factory.get_flow("example_react")
     result = await flow.run(state)
 ```
 
-Формат `session_id`: `{flow_id}:{context_id}`. Все `session_id`, `context_id`, `task_id`, `user_id` должны содержать `unique_id`. Коллизии при `-n auto`, глобальное состояние и согласование с `xdist_group` — см. **`testing_invariants.mdc`** (§ Параллельный запуск).
-
----
-
 ## Таблица фикстур
 
 | Фикстура | Scope | Назначение |
-|----------|-------|------------|
+|---|---|---|
 | `unique_id` | function | **ОБЯЗАТЕЛЕН** в каждом тесте |
 | `app` | session | FastAPI приложение `apps.flows` с lifespan |
-| `flows_client` | function | ASGI клиент для unit тестов flows API |
-| `rag_client` | function | ASGI клиент для unit тестов RAG API |
-| `crm_client` | function | ASGI клиент для unit тестов CRM API |
-| `frontend_client` | function | ASGI клиент для unit тестов Frontend API |
-| `voice_app` | function | ASGI приложение voice с mock-провайдерами (env `VOICE__STT__PROVIDER=mock`, `VOICE__TTS__PROVIDER=mock`, `VOICE__VAD__PROVIDER=mock`) |
-| `voice_client` | function | ASGI клиент для unit тестов voice API (`tests/fixtures/clients.py`) |
-| `flows_client_http` | function | HTTP клиент для E2E к flows (см. `tests/fixtures/clients.py`) |
-| `rag_client_http` | function | HTTP клиент для E2E тестов RAG |
-| `crm_client_http` | function | HTTP клиент для E2E тестов CRM |
-| `frontend_client_http` | function | HTTP клиент для E2E тестов Frontend |
+| `flows_client` / `rag_client` / `crm_client` / `frontend_client` / `voice_client` | function | ASGI клиенты для unit-тестов API соответствующего сервиса |
+| `voice_app` | function | ASGI приложение voice с mock-провайдерами (`VOICE__{STT,TTS,VAD}__PROVIDER=mock`) |
+| `flows_client_http` / `rag_client_http` / `crm_client_http` / `frontend_client_http` | function | HTTP клиенты для E2E (см. `tests/fixtures/clients.py`) |
 | `all_clients_http` | function | dict HTTP клиентов (`flows`, `rag`, `crm`, `frontend`) |
-| `flows_service` | session | Реальный HTTP сервер flows (`tests/fixtures/services.py`, порт 9001) |
-| `rag_service` | session | RAG HTTP сервер (порт 8004) |
-| `crm_service` | session | CRM HTTP сервер (порт 8003) |
-| `frontend_service` | session | Frontend HTTP сервер (порт 8001) |
+| `flows_service` / `rag_service` / `crm_service` / `frontend_service` | session | Реальные HTTP серверы (`tests/fixtures/services.py`, порты 9001–9005) |
 | `all_services` | session | Все сервисы + dict URL |
-| `mock_llm` | function | MockLLM с default_response |
-| `mock_llm_with_queue` | function | Фабрика очереди ответов (sync тесты) |
-| `mock_llm_redis` | function | Очередь ответов **MockLLM** в **реальном** Redis (ключ `mock_llm:responses`) для процессов worker / межпроцессной доставки; Redis не подменяется |
-| `state` | function | Пустой ExecutionState |
-| `state_with_content` | function | ExecutionState с content="test" |
-| `make_test_state` | function | Фабрика ExecutionState с произвольными полями |
-| `taskiq_worker` | session | TaskIQ worker subprocess |
-| `rag_worker` | session | RAG worker subprocess |
-| `crm_semantic_rag_stack` | function | `rag_service` + `rag_worker` (явная зависимость для семантики CRM; `tests/crm/conftest.py`) |
-| `taskiq_scheduler` | session | TaskIQ scheduler subprocess |
+| `mock_llm` / `mock_llm_with_queue` | function | MockLLM с default_response / фабрика очереди ответов |
+| `mock_llm_redis` | function | Очередь ответов MockLLM в реальном Redis (ключ `mock_llm:responses`) для worker / межпроцессной доставки |
+| `state` / `state_with_content` / `make_test_state` | function | ExecutionState (пустой / с content / фабрика) |
+| `taskiq_worker` / `rag_worker` / `taskiq_scheduler` | session | Subprocess воркеров и scheduler |
+| `crm_semantic_rag_stack` | function | `rag_service` + `rag_worker` (семантика CRM) |
 | `inline_tools` | function | Словарь inline tools |
-| `auth_headers_system` | function | Заголовки: system компания, owner |
-| `auth_headers_system_user2` | function | Заголовки: system компания, member |
-| `auth_headers_company2` | function | Заголовки: company2, owner (cross-company тесты) |
-| `auth_headers_company2_user2` | function | Заголовки: company2, member |
+| `auth_headers_system` / `_system_user2` / `_company2` / `_company2_user2` | function | Заголовки для cross-company тестов |
 | `local_mcp_http_url` | session | Stub MCP HTTP сервер (JSON-RPC) |
-| `test_context` | function (autouse) | Устанавливает тестовый Context |
-| `reset_mock_llm` | function (autouse) | Сброс MockLLM после теста |
-| `sync_tools` | function (autouse) | Патчит `.kiq` задач на in-process вызов; **Redis Pub/Sub не патчится** — стриминг через реальный Redis контейнера (отключается `@pytest.mark.real_taskiq`) |
+| `test_context` | function autouse | Устанавливает тестовый Context |
+| `reset_mock_llm` | function autouse | Сброс MockLLM после теста |
+| `sync_tools` | function autouse | Патчит `.kiq` задач на in-process; Redis Pub/Sub не патчится; отключается `@pytest.mark.real_taskiq` |
 
----
+## Выбор клиента
 
-## Как выбрать клиент
-
-Почему чаще начинать с HTTP/ASGI к приложению — см. уровни теста в **`testing_invariants.mdc`**.
-
-**Unit тест (один сервис, без межсервисных вызовов)** → ASGI клиент (`rag_client`, `crm_client`)
-
-**E2E тест (с межсервисными вызовами или WebSocket)** → HTTP клиент (`rag_client_http`, `crm_client_http`)
-
-```
-Нужен HTTP?
-├─ Нет → ASGI: flows_client / rag_client / crm_client / frontend_client
-└─ Да → HTTP: flows_client_http / rag_client_http / crm_client_http / frontend_client_http
-   └─ Вся платформа → all_clients_http
-```
-
----
+Unit (один сервис, без межсервисных вызовов) → ASGI (`*_client`). E2E (межсервисные вызовы или WS) → HTTP (`*_client_http`); вся платформа → `all_clients_http`. Уровень теста «от потребителя» и согласование — `testing_invariants.mdc`.
 
 ## MockLLM
 
-### Очередь ответов (unit тесты)
+Очередь ответов (unit):
 
 ```python
 def test_with_queue(mock_llm_with_queue, unique_id):
@@ -203,72 +124,63 @@ def test_with_queue(mock_llm_with_queue, unique_id):
     ])
 ```
 
-**Стрим с tool_calls:** `MockLLM.stream` повторяет контракт `LLMClient.stream`: после статуса с `metadata.tool_calls` идёт второй `TaskStatusUpdateEvent` (часто сообщение только с `usage`, без `tool_calls`). Иначе тесты не воспроизводят поведение провайдера и не ловят регрессии в агрегации событий в `LlmNodeRunner`.
+`MockLLM.stream` повторяет контракт `LLMClient.stream`: после статуса с `metadata.tool_calls` идёт второй `TaskStatusUpdateEvent` (часто только с `usage`). Иначе тесты не воспроизводят поведение провайдера в `LlmNodeRunner`.
 
-### MockLLM: очередь ответов в реальном Redis (интеграционные тесты с worker)
+Очередь в реальном Redis (worker / межпроцесс):
 
 ```python
 @pytest.mark.real_taskiq
 async def test_integration(mock_llm_redis, flows_client, unique_id):
     await mock_llm_redis([{"type": "text", "content": "Ответ"}])
-    # ... вызов API
 ```
 
 `@pytest.mark.real_taskiq` отключает `sync_tools` — tools идут через реальный worker и Redis pub/sub.
 
-**Полный E2E flows (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP):** маркер `real_taskiq` здесь не использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis — в `apps/flows/main.py` при `TESTING=true` вызываются `get_llm("mock-gpt-4")` и `configure_mock_llm_redis(container.redis_client)` (та же схема, что в `apps/flows_worker/worker.py`). Иначе глобальный `MockLLM` в процессе uvicorn не привязан к Redis, а отдельный platform worker не разделяет с тестом ту же настройку экземпляра.
+**Полный E2E flows** (webhook → `process_flow_task` → LLM из `mock_llm:responses` → channel HTTP): маркер `real_taskiq` **не** использовать. Оставляем `sync_tools`: `process_flow_task.kiq` выполняется in-process, очередь mock читается из Redis — в `apps/flows/main.py` при `TESTING=true` вызываются `get_llm("mock-gpt-4")` и `configure_mock_llm_redis(container.redis_client)` (та же схема, что в `apps/flows_worker/worker.py`).
 
-**Platform TaskIQ в тестах:** в `tests/fixtures/workers.py` worker запускается с **`-w 1`**, чтобы не было гонок за одним ключом `mock_llm:responses` при нескольких consumer-процессах.
+В `tests/fixtures/workers.py` worker запускается с **`-w 1`**, чтобы не было гонок за одним ключом `mock_llm:responses`.
 
----
+## Sync / Browser / Office / FileWriter / Audio
 
-## E2E UI (единый движок)
+- **Sync** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker (для `messages.transcribe_*` и `sync_finalize_recording_task`). Запрещено подменять `op_*` из `apps/sync/realtime/operations.py`, репозитории или WS через `monkeypatch`/`unittest.mock`. Единственное явное исключение — `@patch("core.push.service.webpush")` в `tests/sync/test_sync_notification_delivery.py` (Web Push требует device tokens и VAPID-ключей, физически невозможно в CI). `sync_db_clean` — no-op (БД между тестами не очищается; полагаемся на уникальные id). Тесты `tests/sync/` без `real_taskiq` автоматически в `xdist_group("sync_db")`.
+- **Browser Runtime** (`tests/browser/`): unit без Playwright/CDP — `BROWSER_RUNTIME_SKIP_DB=1` отключает session-фикстуры БД и Redis-listener. Интеграция (`@pytest.mark.integration`, `BROWSER__CDP_URL`) и soak (`@pytest.mark.slow`) — полноценный стек, без `BROWSER_RUNTIME_SKIP_DB`. E2E против Lightpanda — `BROWSER__E2E_LIGHTPANDA=1`, `BROWSER__E2E_LIGHTPANDA_CDP_URL` или `BROWSER__CDP_URL`, `xdist_group("browser_cdp")`.
+- **Office** (`tests/office/`): BFF с реальной `platform_office` и MinIO; healthcheck к Document Server (`@pytest.mark.integration`). В `docker-compose-test.yaml` сервис `onlyoffice-documentserver` на порте хоста 18088. Фикстуры `office_app`, `office_client`. См. `office.mdc`.
+- **FileWriter** (`tests/core/files/test_file_writer_network.py`): реальные HTTP GET к `picsum.photos`, маркеры `integration` и `network`, `@pytest.mark.timeout(180, func_only=True)`. Исключить из прогона: `pytest -m "not network"`. Каталог `tests/core/files/file_writer_output/` очищается в `pytest_sessionstart` (`tests/core/files/conftest.py`); в `.gitignore`.
+- **Тестовый WAV:** `minimal_wav_silence` в `tests/fixtures/audio_bytes.py` — валидный PCM без ffmpeg-транскода; используется в sync (голос/STT) и CRM e2e voice. Не дублировать.
 
-- **Инфраструктура:** `make test-ui` = `test-up` + `pytest tests/ui/e2e`; браузер: `uv run playwright install chromium`. После прогона сценариев, чтобы обновить статический сайт из записанных `docs/scenarios/**/README*.md`, выполните **`make doc`** или цепочку **`make test-ui-doc`** (`test-ui` затем `make doc`). Описание дерева исходников: **[`doc-sources.md`](../../doc-sources.md)**.
-- **Реестр SPA:** `tests/ui/apps.py` (`AppUI`, порты 9001–9005); обёртка: `tests/ui/harness.py`.
-- **Персоны (те же сущности, что `tests/fixtures/auth.py`):** сессионно создаются четыре пользователя (две компании). В тесте подключаешь нужную страницу:
-  - `ui_page_system` — system, owner/admin
-  - `ui_page_system_member` — system, member
-  - `ui_page_company2` — company2, owner/admin
-  - `ui_page_company2_member` — company2, member
-  - `page` или `ui_page_anonymous` — без `auth_token` (редирект на логин для защищённых SPA)
-- **Метаданные для assert:** `ui_user_system`, `ui_user_system_member`, `ui_user_company2`, `ui_user_company2_member`, `ui_user_anonymous` (`UiTestUser` из `tests/ui/personas.py`).
-- **Инструкции для пользователей (Markdown + скриншоты):** фикстура `scenario` (`tests/ui/scenario_doc.py`). Обязательно `@pytest.mark.scenario(service="sync"|"flows"|...)`; опционально `tag="..."` (по умолчанию `general`). Путь в репозитории: **`docs/scenarios/<service>/<tag>/<slug>/`**. В статической документации (`make doc`) тег **`general` не даёт отдельного уровня в URL**: сценарий оказывается под **`/documentation/scenarios/<service>/<slug>/`**. Сегмент **`slug`**: при **`doc_slug="crm-settings-hub"`** (латиница/цифры/`_`/`-`, как `service`/`tag`) он задаёт имя каталога на диске и короткий сегмент меню; иначе **`slug`** строится из `nodeid` pytest. Имя **`doc_slug` не должно совпадать с именем другого тега** того же `service` (иначе коллизия при схлопывании `general`). Заголовок страницы — `title`/`description` в маркере или docstring теста. Шаги: `await scenario.step("Подпись", page)` (скриншот) или без `page`. Отключить запись: `UI_SCENARIO_DOCS=0`.
-- **Локализация:** ручные страницы EN — **`docs/en/guides/`**. E2E по-прежнему может писать **`README.en.md`** рядом с **`README.md`** при паре **`title_en`**/**`description_en`** в маркере; у каждого **`await scenario.step(...)`** тогда нужен **`label_en="..."`** — иначе `ValueError` при сборке сценария. Для RU-сайта **`index.md`** сценариев генерируется из **`README.md`** в **`build/documentation-ru/`**; для EN — из **`README.en.md`** в **`build/documentation-en/scenarios/`** (`scripts/docs_prepare.py`).
-- **Подготовка доков:** `scripts/docs_prepare.py` перед двумя **`zensical build`** — заглушки `README.md` для новых `service`/`tag` под `docs/scenarios/`, отдельные входные деревья для RU и EN. Сборка: **`make doc`** (`docs_prepare` + **`zensical build --config-file zensical.ru.toml`** + **`zensical build --config-file zensical.en.toml`**, копирование EN в **`documentation-dist/en/`**).
-- **Sync UI:** сценарии в `tests/ui/e2e/test_sync_*.py`; хелперы `tests/ui/e2e/sync_e2e_helpers.py` (локаторы сайдбара без коллизии с шапкой чата, при необходимости вызовы Sync REST через `httpx` с cookie `auth_token`). Теги сценариев см. `sync.mdc` (раздел «Тестирование»). Упоминания и карточка профиля: `test_sync_mentions.py` (клик по `.msg-mention--interactive`, core-модалка `platform.user_info` через `<platform-user-info-modal>`, общие каналы, выбор канала из сетки); профиль из аватарки чужого сообщения — `test_sync_settings_and_profile.py`.
+## E2E UI
 
-## UI компоненты и страница `/{service}/test`
+- **Инфраструктура:** `make test-ui` = `test-up` + `pytest tests/ui/e2e`; браузер: `uv run playwright install chromium`. Чтобы обновить статический сайт из записанных `docs/scenarios/**/README*.md`: `make doc` или `make test-ui-doc`. Описание дерева исходников: `doc-sources.md`.
+- **Реестр SPA:** `tests/ui/apps.py` (`AppUI`, порты 9001–9005); обёртка `tests/ui/harness.py`.
+- **Персоны:** четыре сессионных пользователя (две компании). Страницы: `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `page` / `ui_page_anonymous`. Метаданные для assert: `ui_user_*` (`UiTestUser` из `tests/ui/personas.py`).
+- **Click highlight:** `install_click_highlight_on_context` в `tests/ui/conftest.py` рисует зелёную рамку (`outline`) вокруг цели каждого клика — видно на скриншотах `scenario.step` (`tests/ui/click_highlight.py`).
+- **Sync UI:** `tests/ui/e2e/test_sync_*.py`; хелперы `tests/ui/e2e/sync_e2e_helpers.py` (локаторы сайдбара без коллизии с шапкой чата, опционально вызовы Sync REST с cookie `auth_token`). Теги — `sync.mdc` («Тестирование»).
+- **Только Playwright Sync:** `uv run pytest tests/ui/e2e/test_sync_*.py -m e2e` — фикстура `sync_ui` подключает реальный HTTP `sync_service` (порт из `tests/ui/apps.py`) и `sync_worker` для TaskIQ.
 
-Изолированные компоненты и страница `/{service}/test` — пустая HTML при `TESTING=true`.
+### Сценарии и документация
 
-```python
-@pytest_asyncio.fixture
-async def page_with_component(crm_page):
-    await crm_page.goto("http://localhost:9003/crm/test", wait_until="load")
-    await crm_page.evaluate("""
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.src = '/static/core/lib/components/platform-notification-manager.js';
-        document.head.appendChild(script);
-        script.onload = () => {
-            const manager = document.createElement('platform-notification-manager');
-            document.getElementById('test-root').appendChild(manager);
-        };
-    """)
-    await asyncio.sleep(3.0)
-    yield crm_page
-```
+Фикстура `scenario` (`tests/ui/scenario_doc.py`). Маркер `@pytest.mark.scenario(service="sync"|"flows"|...)`; опционально `tag="..."` (по умолчанию `general`). Путь: `docs/scenarios/<service>/<tag>/<slug>/`. В статической документации тег `general` не даёт уровня — сценарий в `/documentation/scenarios/<service>/<slug>/`. Сегмент `slug` — из `doc_slug` (латиница/цифры/`_`/`-`) или `nodeid` pytest. `doc_slug` не должен совпадать с именем другого тега того же `service` (коллизия при схлопывании `general`). Заголовок — `title`/`description` маркера или docstring. Шаги: `await scenario.step("Подпись", page)` (со скриншотом) или без `page`. Отключить: `UI_SCENARIO_DOCS=0`.
 
-Фикстуры Playwright (если объявлены в проекте): см. `tests/fixtures/` и маркеры UI-тестов.
+**Локализация:** ручные EN-страницы — `docs/en/guides/`. E2E может писать `README.en.md` рядом с `README.md` при паре `title_en`/`description_en` в маркере; у каждого `await scenario.step(...)` тогда нужен `label_en="..."` (иначе `ValueError`). RU-сайт `index.md` — из `README.md` в `build/documentation-ru/`; EN — из `README.en.md` в `build/documentation-en/scenarios/` (`scripts/docs_prepare.py`). Сборка: `make doc`.
 
-**Запрещено:** создавать тестовые HTML страницы в production-коде, монтировать `tests/` в production, использовать `set_content()` вместо `goto()`, хардкодить WebSocket URL.
+### Компонентные UI-тесты (Lit)
 
----
+| | |
+|---|---|
+| Раннер | `@web/test-runner` + `@web/test-runner-playwright` (Chromium), `web-test-runner.config.mjs` |
+| Файлы | `tests/ui_components/**/*.test.js`, хелперы — `tests/ui_components/helpers/` (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture`/`html`/`expect` из `@open-wc/testing`) |
+| Импорты | Как в приложении: `lit` через node-resolve, префиксы `@platform/lib/`, `@platform/services/`, `@capacitor/*` (vendor) — через import map в конфиге |
+| Запуск | `npm ci`, затем `npm run test:ui-components` или `make test-ui-components`. В `make test` / `tests_runner` **не входит** — нужны Node.js и `package.json`. |
+| Изоляция | Между тестами — `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()` (`@platform/lib/events/...`). Не использовать в прод-коде. |
+| PWA (HTTP) | `tests/core/test_pwa_routes.py`: отдача `/manifest.json`, `/sw.js`, `/offline.html`, опционально `/.well-known/assetlinks.json` и `/.well-known/apple-app-site-association`. При `TESTING=true` маршруты PWA по умолчанию не регистрируются. |
 
-## Создание worker фикстур
+**Граница:** `tests/ui_components` — изолированные Lit-компоненты (WTR); `tests/ui/e2e` — E2E с бэкендом; `tests/ui` — только движок (conftest, `AppUI`, реестр).
 
-Для новых worker'ов используй `SessionWorkerManager` из `tests/fixtures/workers.py`:
+**Регрессия архитектуры UI:** после правок в `apps/*/ui/index.html`, import map, базовых классах (`PlatformElement`, `PlatformModal`, `*App`) или массовой замене импортов — `npm run test:ui-components`; при затронутых shell или маршрутах SPA — `pytest tests/ui/`. Быстрый статический контроль — `make check-ui-canon`.
+
+## Worker фикстуры
+
+Для новых воркеров — `SessionWorkerManager` из `tests/fixtures/workers.py` (reference counting для xdist, FileLock, автоматическая остановка):
 
 ```python
 @pytest.fixture(scope="session")
@@ -286,133 +198,40 @@ def my_worker():
         yield process
 ```
 
-`SessionWorkerManager` обеспечивает reference counting для pytest-xdist, filelock и автоматическую остановку.
-
----
-
-## Примеры тестов
-
-### Unit тест flow
-
-```python
-@pytest.mark.asyncio
-async def test_flow_run(app, mock_llm_with_queue, unique_id):
-    mock_llm_with_queue(["Response"])
-    flow = await get_container().flow_factory.get_flow("example_react")
-    context_id = f"test-{unique_id}"
-    state = ExecutionState.create(
-        task_id=f"task-{unique_id}", context_id=context_id,
-        user_id=f"user-{unique_id}",         session_id=f"example_react:{context_id}",
-        content="Test"
-    )
-    result = await flow.run(state)
-    assert result.response == "Response"
-```
-
-### A2A API тест
-
-```python
-@pytest.mark.asyncio
-async def test_message_send(flows_client, mock_llm_with_queue, unique_id):
-    mock_llm_with_queue(["Hello!"])
-    response = await flows_client.post(
-        "/flows/example_react",
-        json={
-            "jsonrpc": "2.0", "id": "1", "method": "message/send",
-            "params": {"message": {
-                "messageId": f"msg-{unique_id}", "role": "user",
-                "parts": [{"kind": "text", "text": "Hi"}],
-                "contextId": f"ctx-{unique_id}"
-            }}
-        }
-    )
-    assert response.status_code == 200
-    assert response.json()["result"]["status"]["state"] == "completed"
-```
-
-### Interrupt/resume
-
-```python
-@pytest.mark.asyncio
-async def test_interrupt_resume(flows_client, mock_llm_with_queue, unique_id):
-    mock_llm_with_queue([
-        {"type": "tool_call", "tool": "ask_user", "args": {"question": "Какой склад?"}}
-    ])
-    context_id = f"ctx-{unique_id}"
-    r1 = await flows_client.post("/flows/example_react", json={
-        "jsonrpc": "2.0", "method": "message/send",
-        "params": {"message": {"messageId": f"m1-{unique_id}", "role": "user",
-            "parts": [{"kind": "text", "text": "Start"}], "contextId": context_id}}
-    })
-    assert r1.json()["result"]["status"]["state"] == "input-required"
-
-    mock_llm_with_queue(["Продолжаю"])
-    r2 = await flows_client.post("/flows/example_react", json={
-        "jsonrpc": "2.0", "method": "message/send",
-        "params": {"message": {"messageId": f"m2-{unique_id}", "role": "user",
-            "parts": [{"kind": "text", "text": "Склад Большие"}], "contextId": context_id}}
-    })
-    assert r2.json()["result"]["status"]["state"] == "completed"
-```
-
----
-
-## Структура тестов
+## Структура `tests/`
 
 ```
 tests/
-├── conftest.py          # Общие фикстуры (импортирует все из fixtures/)
-├── fixtures/
-│   ├── auth.py          # auth_headers_*
-│   ├── clients.py       # ASGI и HTTP клиенты
-│   ├── services.py      # HTTP сервисы (flows_service, rag_service, ...)
-│   ├── workers.py       # SessionWorkerManager, taskiq_worker, rag_worker
-│   ├── playwright.py    # authenticated_browser_context, *_page
-│   └── mcp_http_stub.py # local_mcp_http_url
-├── flows/               # unit/ integration/ api/ streaming/; core/llm_nodes/ — LlmNode, тулы, промпты
-├── crm/
-├── rag/
-├── sync/
-├── frontend/
-└── core/
+├── conftest.py             # Импортирует все из fixtures/
+├── fixtures/{auth,clients,services,workers,playwright,mcp_http_stub}.py
+├── flows/{unit,integration,api,streaming}; core/llm_nodes/
+├── crm/, rag/, sync/, frontend/, core/, ui/, ui_components/, browser/, office/
 ```
 
----
-
-## Команды запуска
+## Команды
 
 ```bash
 docker compose -f docker-compose-test.yaml up -d
-
 uv run pytest tests/
 uv run pytest tests/ --cov=apps/flows/src --cov-report=term
-uv run pytest tests/flows/api/test_a2a.py -v
 uv run pytest tests/flows/api/test_a2a.py::TestA2A::test_message_send -v -s
-uv run pytest tests/flows/api/test_reload_flow_from_bundle.py -v
+make test                 # автоматический lifecycle compose-test
+make test WORKERS=2 2>&1 | tee logs/make-test.log
 ```
 
----
+## Внешние зависимости и автомиграции
+
+- Фикстура `setup_database_before_tests` (session, `tests/conftest.py`) сравнивает Alembic head (файлы) с current (БД) для каждого сервиса из `migrations/services.json`. Расхождение → `upgrade head` для отстающих. Нет `alembic_version` → полный дроп + upgrade всех. Никаких ручных проверок таблиц — новая миграция подхватывается автоматически.
+- **CRM E2E (`tests/crm/e2e`):** `DATABASE__CRM_URL` из `tests/fixtures/test_database_env.py` (PostgreSQL 54322, БД `platform_crm`). После новых миграций — `uv run python -m scripts.db_migrate upgrade --service crm`.
+- `test_a2a_sample` — URL тестового A2A sample; `docker-compose-test.yaml` сервис `test-a2a-agent` на порте хоста **18052**.
+- `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push-тестов.
+- Реальные вызовы LLM API в `test_llm_providers.py` пропускаются (`skip`) при 401/403 в CI.
 
 ## Чеклист перед коммитом
 
-- [ ] Прогон тестов зелёный: `uv run pytest tests/` (или целевой набор)
-- [ ] Стиль проверок, инварианты, `unique_id` во всех внешних ключах — **`testing_invariants.mdc`**
-- [ ] Нет собственных фикстур для сервисов/клиентов/worker'ов
+- [ ] `uv run pytest tests/` или целевой набор зелёный
+- [ ] Стиль/инварианты, `unique_id` во всех ключах — см. `testing_invariants.mdc`
+- [ ] Нет своих фикстур для сервисов/клиентов/воркеров
 - [ ] Нет моков внутренних компонентов (кроме MockLLM)
-- [ ] Интеграционные тесты с worker — `@pytest.mark.real_taskiq` и `mock_llm_redis`
-- [ ] Новые worker фикстуры — `SessionWorkerManager`, файл `tests/fixtures/workers.py`
-
----
-
-## Автоматическое применение миграций
-
-Фикстура `setup_database_before_tests` (session-scoped, `tests/conftest.py`) **автоматически сравнивает Alembic head (файлы) с current (БД)** для каждого сервиса из `migrations/services.json`. Если ревизии расходятся — `upgrade head` для отстающих сервисов. Если `alembic_version` вообще нет — полный дроп + upgrade всех. Никаких ручных проверок конкретных таблиц/колонок: добавление новой миграции автоматически подхватывается при следующем прогоне тестов.
-
-## Внешние зависимости тестового окружения
-
-- **CRM E2E (`tests/crm/e2e`):** pytest подставляет `DATABASE__CRM_URL` из [`tests/fixtures/test_database_env.py`](../../tests/fixtures/test_database_env.py) (PostgreSQL порт **54322**, БД `platform_crm`). После новых миграций в `migrations/crm/` применить их к этой БД, например:  
-  `DATABASE__CRM_URL="postgresql+asyncpg://platform_user:admin@localhost:54322/platform_crm" uv run python -m scripts.db_migrate upgrade --service crm`
-- **Компонентные UI-тесты (`npm run test:ui-components`):** образ **[`Dockerfile.test`](../../Dockerfile.test)** и контейнер **tests_runner** содержат только Python/uv. Прогон WTR — **отдельным job** с Node.js. **E2E `tests/ui/e2e`** — pytest + Playwright из uv (`uv run playwright install chromium`).
-- Фикстура `test_a2a_sample` — URL тестового A2A sample; в `docker-compose-test.yaml` сервис `test-a2a-agent` проброшен на порт **18052**.
-- `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push тестов.
-- Реальные вызовы LLM API в `test_llm_providers.py` пропускаются (`skip`) при 401/403 от внешнего API в CI.
+- [ ] Интеграция с worker — `@pytest.mark.real_taskiq` + `mock_llm_redis`
+- [ ] Новые worker фикстуры — `SessionWorkerManager`

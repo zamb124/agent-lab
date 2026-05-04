@@ -16,11 +16,13 @@ import {
     createFlowVoiceSession,
     disposeFlowVoiceSession,
     formatFlowVoiceConnectErrorDetail,
+    normalizeFlowVoiceSttLanguage,
 } from '../_helpers/flow-voice-session.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject, authActiveCompanyId } from '../_helpers/flows-resolvers.js';
 import { a2aStateMessagesToChatMessages } from '../_helpers/chat-session-messages.js';
+import { relayA2aVoiceStreamRpcFrame } from '../_helpers/relay-voice-a2a-to-chat.js';
 import { resolveFlowsChatTaskId } from '../_helpers/resolve-flows-chat-task-id.js';
 
 export class ChatPage extends PlatformPage {
@@ -161,12 +163,17 @@ export class ChatPage extends PlatformPage {
         this._sessionState = this.useOp('flows/session_state');
         this._flows = this.useResource('flows/flows');
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
+        this._localeSel = this.select((s) => s.i18n.locale);
         this._voiceOn = false;
         this._voiceStatus = 'idle';
         /** @type {VoiceMediaSession|null} */
         this._voiceMedia = null;
         /** @type {VoiceAgentBridge|null} */
         this._voiceBridge = null;
+        /** @type {(() => void) | null} */
+        this._voiceA2aSettledHandler = null;
+        /** @type {((e: Event) => void) | null} */
+        this._voiceA2aAbortedHandler = null;
     }
 
     connectedCallback() {
@@ -210,12 +217,63 @@ export class ChatPage extends PlatformPage {
             this.toast('flows:platform_chat.toast_voice_no_company', { type: 'warning' });
             return;
         }
+        const chatCtx = this._chat.state?.currentContextId;
+        if (typeof chatCtx !== 'string' || chatCtx.length === 0) {
+            this._chat.initSession({ flowId: this.flowId });
+        }
         const initialContextId = this._chat.state?.currentContextId || null;
+        const localeRaw = asString(this._localeSel.value);
+        const sttLanguage = normalizeFlowVoiceSttLanguage(localeRaw);
+        /** @type {{ contextId: string|null, taskId: string|null, taskPrimed: boolean }} */
+        const voiceStreamRelayState = {
+            contextId: null,
+            taskId: null,
+            taskPrimed: false,
+        };
         const { media, bridge } = createFlowVoiceSession({
             flowId: this.flowId,
             branchId: this.branchId,
             companyId,
+            sttLanguage,
             initialContextId,
+            getContextId: () => {
+                const cid = this._chat.state?.currentContextId;
+                return typeof cid === 'string' && cid.length > 0 ? cid : null;
+            },
+            beforeA2aStream: async (text) => {
+                const ctx = this._chat.state?.currentContextId;
+                if (typeof ctx !== 'string' || ctx.length === 0) {
+                    throw new Error('flows chat voice: отсутствует currentContextId');
+                }
+                voiceStreamRelayState.contextId = ctx;
+                voiceStreamRelayState.taskId = null;
+                voiceStreamRelayState.taskPrimed = false;
+                const trimmed = typeof text === 'string' ? text.trim() : '';
+                if (trimmed.length === 0) {
+                    throw new Error('flows chat voice: пустой транскрипт');
+                }
+                const userMessage = {
+                    id: `user_${Date.now()}`,
+                    role: 'user',
+                    content: trimmed,
+                    timestamp: new Date().toISOString(),
+                    files: [],
+                };
+                this._chat.addUserMessage({ contextId: ctx, message: userMessage });
+                this.dispatch('flows/run/flow_started', {}, { source: 'http' });
+            },
+            onA2aStreamEvent: (frame) => {
+                relayA2aVoiceStreamRpcFrame(
+                    {
+                        dispatch: (t, p, m) => {
+                            this.dispatch(t, p, m);
+                        },
+                    },
+                    voiceStreamRelayState,
+                    frame,
+                    null,
+                );
+            },
             onVad: (e) => {
                 this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
             },
@@ -257,6 +315,29 @@ export class ChatPage extends PlatformPage {
             });
             return;
         }
+        const onVoiceA2aSettled = () => {
+            this.dispatch('flows/run/flow_done', {}, { source: 'http' });
+        };
+        const onVoiceA2aAborted = (ev) => {
+            const ce = /** @type {CustomEvent<Record<string, unknown>>} */ (ev);
+            const d =
+                ce.detail !== null && typeof ce.detail === 'object'
+                    ? /** @type {Record<string, unknown>} */ (ce.detail)
+                    : null;
+            const task_id =
+                d && typeof d.task_id === 'string' ? d.task_id : null;
+            const context_id =
+                d && typeof d.context_id === 'string' ? d.context_id : null;
+            this.dispatch(
+                'flows/chat/a2a_interrupted',
+                { task_id, context_id },
+                { source: 'local' },
+            );
+        };
+        this._voiceA2aSettledHandler = onVoiceA2aSettled;
+        this._voiceA2aAbortedHandler = onVoiceA2aAborted;
+        bridge.addEventListener('a2aSettled', onVoiceA2aSettled);
+        bridge.addEventListener('a2aAborted', onVoiceA2aAborted);
         bridge.start();
         this._voiceMedia = media;
         this._voiceBridge = bridge;
@@ -265,6 +346,14 @@ export class ChatPage extends PlatformPage {
     }
 
     _stopVoice() {
+        if (this._voiceBridge && this._voiceA2aSettledHandler) {
+            this._voiceBridge.removeEventListener('a2aSettled', this._voiceA2aSettledHandler);
+            this._voiceA2aSettledHandler = null;
+        }
+        if (this._voiceBridge && this._voiceA2aAbortedHandler) {
+            this._voiceBridge.removeEventListener('a2aAborted', this._voiceA2aAbortedHandler);
+            this._voiceA2aAbortedHandler = null;
+        }
         disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
         this._voiceMedia = null;
         this._voiceBridge = null;

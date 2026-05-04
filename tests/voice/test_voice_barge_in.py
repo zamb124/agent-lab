@@ -104,3 +104,35 @@ async def test_barge_in_execute_updates_timestamp(unique_id: str) -> None:
     after = time.monotonic()
 
     assert before <= controller._last_barge_in_ts <= after
+
+
+async def test_barge_in_execute_resets_stt_and_vad(unique_id: str) -> None:
+    """При прерывании сбрасываем STT-буфер и VAD-историю — иначе финальный
+    ``flush_buffer`` транскрибирует аудио ответа TTS как пользовательский запрос."""
+    controller = BargeInController(enabled=True)
+    session = MagicMock()
+    session.session_id = f"sess-{unique_id}"
+    session.mark_tts_active = MagicMock()
+    session.clear_synthesis_and_audio_out = MagicMock(return_value=3)
+
+    stt_provider = MagicMock()
+    stt_provider.reset = MagicMock()
+    vad_provider = MagicMock()
+    vad_provider.reset_state = MagicMock()
+
+    await controller.execute_barge_in(
+        session, stt_provider=stt_provider, vad_provider=vad_provider
+    )
+
+    stt_provider.reset.assert_called_once_with()
+    vad_provider.reset_state.assert_called_once_with()
+
+
+async def test_barge_in_execute_without_providers_does_not_call_reset(
+    unique_id: str,
+) -> None:
+    controller = BargeInController(enabled=True)
+    session = MagicMock()
+    session.session_id = f"sess-{unique_id}"
+    await controller.execute_barge_in(session)
+    assert session.mark_tts_active.called

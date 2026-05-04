@@ -155,6 +155,16 @@ async def voice_session(
         )
         await channel.send_transcript(text=text, final=True, language=lang)
 
+    async def _on_partial_transcription(
+        sess: VoiceSession, text: str, lang: str | None
+    ) -> None:
+        logger.debug(
+            "voice.session.transcription_partial",
+            session_id=sess.session_id,
+            text_length=len(text),
+        )
+        await channel.send_transcript(text=text, final=False, language=lang)
+
     async def _on_vad_state(sess: VoiceSession, state: str) -> None:
         if state not in ("started", "ended"):
             return
@@ -180,6 +190,7 @@ async def voice_session(
                 vad_provider,
                 stt_provider,
                 on_final_transcription=_on_final_transcription,
+                on_partial_transcription=_on_partial_transcription,
                 on_vad_state=_on_vad_state,
                 barge_in=barge_in,
                 language=language,

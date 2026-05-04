@@ -146,7 +146,8 @@ def _validate_provider(kind: VoiceKind, provider: str) -> None:
 def _validate_model_for_voice(
     *, kind: VoiceKind, provider: str, model_value: Optional[str], voice_value: Optional[str]
 ) -> None:
-    """Пустой model недопустим для litserve; для него соответствие каталогу provider_litserve."""
+    """Если model задан — должен быть из каталога провайдера; пустое значение допустимо
+    для всех провайдеров (резолвер `voice_resolver` подставит default из настроек)."""
     if provider != "litserve":
         if provider == "cloud_ru" and kind != "vad":
             if model_value is None or model_value == "":
@@ -178,6 +179,9 @@ def _validate_model_for_voice(
             return
         return
 
+    if model_value is None or model_value == "":
+        return
+
     cfg = get_settings().provider_litserve
     if kind == "stt":
         allowed = frozenset(m.api_model_id for m in cfg.stt_models)
@@ -186,14 +190,8 @@ def _validate_model_for_voice(
     else:
         allowed = frozenset(m.api_model_id for m in cfg.vad_models)
 
-    chosen = model_value
-    if chosen is None or chosen == "":
-        raise HTTPException(
-            status_code=400,
-            detail="litserve: нужно указать поле model (id из каталога provider_litserve).",
-        )
-    if chosen not in allowed:
-        raise HTTPException(status_code=400, detail=f"Неизвестная litserve модель: {chosen!r}")
+    if model_value not in allowed:
+        raise HTTPException(status_code=400, detail=f"Неизвестная litserve модель: {model_value!r}")
 
 
 def _row_to_item(row: object) -> CompanyVoiceProviderItem:

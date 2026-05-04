@@ -46,6 +46,18 @@ class BaseSTTProvider(ABC):
     def reset(self) -> None:
         """Сбросить буфер без распознавания (при barge-in)."""
 
+    async def peek_transcript(
+        self, *, min_buffer_bytes: int = 16000
+    ) -> Optional[STTTranscriptionResult]:
+        """Получить промежуточный transcript без сброса буфера (chunked-batch).
+
+        По умолчанию провайдер не поддерживает partial — возвращает ``None``,
+        и ``stt_worker`` не пытается слать ``transcript final=False``.
+        Реализация в ``StreamingSTTProvider`` запускает batch-распознавание
+        текущего PCM, не очищая буфер.
+        """
+        return None
+
     async def close(self) -> None:
         """Освободить ресурсы. По умолчанию — ничего не делает."""
 

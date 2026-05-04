@@ -903,6 +903,50 @@ export class PlatformEmbedChatDrawer extends LitElement {
             branchId: (this.branchId || this.skillId || null) || null,
             getHeaders,
             credentials: this.useCredentials ? 'include' : 'omit',
+            getContextId: () => {
+                const el = this.renderRoot?.querySelector('platform-embed-chat');
+                if (el && typeof el.getA2aContextId === 'function') {
+                    const id = el.getA2aContextId();
+                    return typeof id === 'string' && id.trim() !== '' ? id.trim() : null;
+                }
+                return null;
+            },
+            getStreamMetadata: async () => {
+                const el = this.renderRoot?.querySelector('platform-embed-chat');
+                if (el && typeof el.consumeVoiceStreamMetadata === 'function') {
+                    return el.consumeVoiceStreamMetadata();
+                }
+                return null;
+            },
+            beforeA2aStream: async (text) => {
+                const el = this.renderRoot?.querySelector('platform-embed-chat');
+                if (!el || typeof el.prepareVoiceUserTurn !== 'function') {
+                    throw new Error('platform-embed-chat-drawer: embed chat not ready');
+                }
+                await el.prepareVoiceUserTurn(text);
+            },
+            onA2aStreamEvent: (ev) => {
+                const el = this.renderRoot?.querySelector('platform-embed-chat');
+                if (el && typeof el.applyVoiceA2aStreamEvent === 'function') {
+                    el.applyVoiceA2aStreamEvent(ev);
+                }
+            },
+        });
+        bridge.addEventListener('a2aSettled', () => {
+            const el = this.renderRoot?.querySelector('platform-embed-chat');
+            if (el && typeof el.finalizeVoiceA2aStream === 'function') {
+                el.finalizeVoiceA2aStream();
+            }
+        });
+        bridge.addEventListener('error', (e) => {
+            const raw =
+                e.detail && typeof e.detail.detail === 'string'
+                    ? e.detail.detail
+                    : '';
+            const el = this.renderRoot?.querySelector('platform-embed-chat');
+            if (el && typeof el.failVoiceA2aStream === 'function') {
+                el.failVoiceA2aStream(raw !== '' ? raw : 'voice bridge error');
+            }
         });
         media.addEventListener('error', (e) => {
             this._voiceStatus = 'error';

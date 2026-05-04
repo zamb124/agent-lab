@@ -425,6 +425,30 @@ class STTProvidersConfig(BaseModel):
     )
     default_language: str = "ru"
     mock_transcript_text: str = "Тестовая транскрипция"
+    partial_transcripts_enabled: bool = Field(
+        default=True,
+        description=(
+            "Слать клиенту WS-фреймы `transcript final=False` пока пользователь "
+            "ещё говорит (chunked-batch peek_transcript). Выключение даст только "
+            "финальный transcript после паузы."
+        ),
+    )
+    partial_min_speech_frames: int = Field(
+        default=50,
+        ge=1,
+        description=(
+            "Минимум 20 ms-фреймов речи между двумя partial-вызовами "
+            "`peek_transcript` (50 = ≈ 1 секунда речи)."
+        ),
+    )
+    partial_min_buffer_ms: int = Field(
+        default=500,
+        ge=100,
+        description=(
+            "Минимальная длина PCM в буфере (ms), при которой имеет смысл "
+            "запускать batch-распознавание для partial."
+        ),
+    )
     litserve: LitserveSpeechBackendConfig = Field(
         default_factory=LitserveSpeechBackendConfig
     )
@@ -474,6 +498,35 @@ class VADProvidersConfig(BaseModel):
     )
 
 
+class VoiceDiagnosticsConfig(BaseModel):
+    """Dev-only диагностика voice gateway.
+
+    По умолчанию выключено: без явного пути в `uplink_dump_dir` ws_receiver
+    не сохраняет аудио. Включать только в dev / staging для разбора жалоб
+    «STT неверно распознал мои слова» — записывается тот же PCM, который
+    уходит в STT-провайдер, после resampling и FIR-фильтра.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    uplink_dump_dir: Optional[str] = Field(
+        default=None,
+        description=(
+            "Директория для дампа сырого uplink PCM как WAV. None — выкл. "
+            "Файлы `voice_uplink_<session_id>_<ts>.wav` создаются на закрытии "
+            "WS-сессии."
+        ),
+    )
+    uplink_dump_max_mb: int = Field(
+        default=50,
+        ge=1,
+        description=(
+            "Жёсткий лимит размера одного дампа (MB); записи поверх лимита "
+            "обрезаются."
+        ),
+    )
+
+
 class SpeechProvidersConfig(BaseModel):
     """Единый конфиг провайдеров речи (STT/TTS/VAD).
 
@@ -488,6 +541,7 @@ class SpeechProvidersConfig(BaseModel):
     stt: STTProvidersConfig = Field(default_factory=STTProvidersConfig)
     tts: TTSProvidersConfig = Field(default_factory=TTSProvidersConfig)
     vad: VADProvidersConfig = Field(default_factory=VADProvidersConfig)
+    diagnostics: VoiceDiagnosticsConfig = Field(default_factory=VoiceDiagnosticsConfig)
 
 
 class TelegramConfig(BaseModel):

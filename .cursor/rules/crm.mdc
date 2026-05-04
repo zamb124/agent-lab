@@ -1,602 +1,253 @@
 ---
 alwaysApply: false
-description: "CRM NetWorkle система управления сущностями: entities, relationships, graph, pgvector, PostgreSQL, access control, grants, entity types, relationship types, namespace, semantic search, влияние, граф связей, бизнес сущности, записная книжка, встречи, контакты, заметки, задачи, сделки, звонки"
+description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI analyze, гранты, импорт знаний, шаблоны пространств"
 ---
+# CRM Service
 
-# CRM Service — Правила
+`NetWorkle/CRM` — универсальный движок рабочих пространств компании. Пространства (`namespace`) задаются под предметную область через шаблоны (sales/dev/HR/…). **Каждая сущность жёстко принадлежит одному `namespace` внутри `company_id`.** Префикс REST: `/crm/api/v1/`. Структура: `apps/crm/{api,services,db,integrations,ui}` + `apps/crm/system_templates.py` (системные типы и seeds).
 
-## UI: специфические детали фронтенда
+## Терминология
 
-- **Канон фронтенда:** UI CRM строится по канону **`frontend.mdc`** + **`ui_factories.mdc`** + **`ui_events.mdc`** + **`ui_components.mdc`**. Все доменные операции — через фабрики `apps/crm/ui/events/resources/*.resource.js` и helpers `PlatformElement` (`this.useResource('crm/<entity>')`, `this.useOp('crm/<entity>_<verb>')`). Никаких `services/`, `store/`, `features/`, `*.service.js`, `*.store.js`, `BaseStore`, `CRMStore`, `ServiceRegistry`, прямых `fetch`/`httpRequest`, прямых `dispatch(CoreEvents.UI_*|AUTH_*|...)` — только helpers.
-- **Primary `platform-button` в CRM:** в **`apps/crm/ui/index.html`** на **`body.platform-shell`** заданы **`--platform-btn-primary-*`** из **`--crm-button-primary-*`**, т.к. **`glass-modal`** порталятся в **`document.body`** и иначе брали бы зелёный фолбэк.
-- **Доска задач** (`tasks-page`): смена колонки — оптимистичный статус + `document.startViewTransition` + `view-transition-name` на карточке; `_boardBusy` + оверлей `glass-spinner` без `_loading` на всю доску.
-- **Auth в `<crm-app>`:** проверка сессии — через `this.useEvent(CoreAuthEvents.AUTH_LOADED, ...)` и срез `state.auth.user`. Прямого `this.auth.validateToken()` не существует — это делает core auth-эффект.
-- **`entity-card`:** `_isOwner` пересчитывается в `_syncOwnershipAndAccessUI()` при изменении среза `state.crm.entity_<id>` и при `useEvent(CoreAuthEvents.AUTH_COMPANY_SWITCHED, ...)`.
-- **Мобильный хедер CRM** (`< 768px`): единая строка `crm-mobile-app-header` — заголовок или поле поиска для notes/entities/tasks. Кнопка чата шлёт `humanitec-embed-chat-toggle`.
-- **Встраиваемый чат в CRM:** `flow-id="lara"`, `skill-id="crm"`, заголовок `X-Platform-Namespace` = выбранный namespace. `getExtraMetadataVariables` → `GET /workspace/lara-summary?namespace=` (кэш ~45 с) → `metadata.variables` (`crm_lara_summary`, `crm_lara_summary_json`, счётчики импортов и черновиков). Lara skill CRM — `apps/flows/bundles/lara/`, реестр `apps/flows/registry.yaml`.
-- **Lara skill CRM:** после `crm_create_note` — спрашивать через `ask_user` об анализе; `crm_analyze_note_text` без согласия не вызывать. Тул принимает опциональный `namespace`.
-- **Daily notes период:** срез `state.crm.daily_notes.range` — текущая календарная неделя (пн–вс, local); `dailyNotesRangePersistVersion === 2`.
-- **Чипы сводки:** если имя из ответа API совпадает с `name` entity из `related_entities` периода → кнопка → `navigate('entity', { itemId })` с `?edit=1`; иначе нередактируемый `span`.
-- **История импорта** (`namespace-imports-page`): при `running/pending` — `_loadImports({ silent: true })`; кнопка отмены — inline SVG, не `platform-icon`.
-- i18n: `this.t('группа.ключ')`, namespace `crm` через `static i18nNamespace = 'crm';` или `defaultI18nNamespace='crm'` в `<crm-app>`; файлы `core/i18n/translations/{ru,en}/crm.json`, проверка — `make check-i18n`, `make check-i18n-keys`. Сканер: `uv run python scripts/report_ui_i18n_gaps.py --app crm`.
-- **Namespace в localStorage:** UI хранит последний выбранный namespace по `company_id`; если пропал из списка — сброс на «Все» (не подстановка другого). При первом `authenticated` для компании `CRMApp` диспатчит `UI_NAMESPACE_CHANGED` из того же ключа, что читает сайдбар (`getPlatformNamespaceSidebarSelection`), если в `state.ui.namespace.selectionByCompany` ещё нет записи — иначе после F5 сайдбар показывает сохранённое пространство, а ленты/фильтры ведут себя как «Все».
-- **Фильтр пространства в UI:** срез для API (`null` = все пространства) — **`selectCrmApiNamespace`** в **`apps/crm/ui/utils/crm-namespace-select.js`**; опциональный query/payload `namespace` — **`crmNamespaceForOptionalQuery`**. Страницы лент/графа/заметок/задач с фильтром сайдбара наследуют **`CRMNamespacePage`** (**`apps/crm/ui/base/crm-namespace-page.js`**) вместо дублирующего `this.select(getEffectiveCrmNamespaceApiFilter …)`. Локальный UI, где при «всех» нужна строка — **`selectCrmSidebarOrDefaultNamespace`** (например **`note-card-view`**).
-- **Graph workspace (единый маршрут и два вида канваса):** пользовательский путь **`/crm/graph`** с query **`?view=3d`** или **`?view=mindmap`**, опционально **`root`**, **`depth`**, **`q`**. Компонент **`crm-graph-workspace`** координирует тулбар, поиск, таймлайн, легенду и оба движка (**`crm-graph-canvas`** / **`crm-mindmap-canvas`**). Срез **`crm/graph_view`** (фабрика **`graphViewSlice`**) хранит **`viewMode`**, глубины, выбор, **`searchInput`**; персист через **`crm-persist.effect.js`** (ключ **`crm.graph_view.state`**, без **`selection`**). Устаревшие URL **`/crm/mindmap`** и **`/crm/mindmap/:id`** обрабатывает **`createCrmGraphLegacyRoutesEffect`** (редирект на **`graph`** с **`replace: true`**). Компактный предпросмотр на карточке сущности и в заметке — **`crm-mini-graph`** (prop **`viewMode`**, один запрос **`crm/influence_graph`** на **`max_depth=5`**, изменение «уровня» только на клиенте). Модалка **`note-graph-modal`** задаёт **`viewMode=\"3d\"`**. Панели overlay — по-прежнему **`crm/graph_ui`**. В меню пространства группа **`grp-graph`** с двумя листьями (`?view=3d`, `?view=mindmap`); в режиме «Все пространства» пункт **`graph`** ведёт на **`?view=mindmap`**.
-- **Модалка заметки:** мини-граф открывается в отдельной `note-graph-modal`, чтобы WebGL не конфликтовал со скроллом.
+- **Тип сущности (`EntityType` / `entity_type`)** — запись в каталоге компании: поля, иерархия (`parent_type_id`), обязательная колонка `namespace`. Уникальный ключ `(company_id, namespace, type_id)`.
+- **Activity (узкий CRM-смысл)** — `CRMEntity` с `entity_type=task` и подтипами от `task` (to-do с дедлайном/исполнителями).
+- **Объект воронки (deal/lead)** — обычная `CRMEntity` соответствующего типа. «Воронка» и стадии — отдельная модель в `NamespaceCRMSettings.pipeline_stage_presets`, не сводятся к одной строке `status`.
 
-## Назначение сервиса
+## Доска задач (канбан + `attributes.status`)
 
-`NetWorkle/CRM` — универсальный движок рабочих пространств компании.
+- **Источник стадий:** `NamespaceCRMSettings.pipeline_stage_presets: dict[board_key, TaskBoardPreset]`. `BoardStage = {id (стабильный, в attributes.status), label, color?}` (`core/models/identity_models.py`).
+- **`board_key`:** единственная реализация — `apps/crm/services/task_board_presets.py::task_board_key(entity_type, entity_subtype)` → `"task"` или `"task:<entity_subtype>"` при `entity_type=task` с парентом `task`.
+- **Резолвер:** `resolve_task_board_stages(crm_settings, board_key)` — упорядоченный список; нет ключа в пресетах → `default_task_board_stages()` только на бэке. Валидация `attributes.status` при create/update — `EntityService` через `resolve_allowed_task_status_ids` (неверный id → 422).
+- **API:** `GET .../namespaces/{name}/task-board-stages` (q `entity_subtype`), `GET .../namespaces/{name}/task-board-editor-state`. Сохранение пресетов — `PUT .../namespaces/{name}` с `crm_settings.pipeline_stage_presets` (частичный merge `crm_settings`).
+- **Запрет в UI:** `tasks-page` и редактор в `space-detail-page` не содержат каноничных списков стадий и не дублируют `board_key`/дефолты — только из API/фабрик (`crm/task_board_stages`, `crm/task_board_editor_state`).
 
-- Пространства (`namespace`) создаются под любую предметную область через шаблоны (продажи, разработка, HR).
-- Набор типов сущностей в каждом пространстве задаётся бизнес-задачей.
-- **Каждая сущность жёстко принадлежит одному `namespace` внутри `company_id`.**
+## Автоматизация
 
-## Терминология и продуктовая модель
+`NamespaceCRMSettings`: `default_flow_by_entity_type`, `automation_rules: list[NamespaceAutomationRule(entity_type, trigger, action, flow_id?)]`, `pipeline_stage_presets`. Исполнение команд (запуск flow, уведомления, смена полей) согласуется с `flows`/TaskIQ и правами доступа.
 
-- **Тип сущности (`EntityType` / `entity_type`)** — запись в каталоге компании: поля, иерархия подтипов (`parent_type_id`), обязательная колонка **`namespace`** (одна строка типа = одно пространство; уникальный ключ **`(company_id, namespace, type_id)`**).
-- **Задача в узком CRM-смысле (activity)** — to-do с дедлайном и исполнителями; в платформе это по-прежнему **запись `CRMEntity`**, часто с `entity_type=task` и подтипами от `task`.
-- **Объект воронки (deal/lead и т.д.)** — тоже **сущность** с соответствующим типом; «воронка» и стадии описываются отдельно от слова «задача» как activity, чтобы не смешивать канбан сделок и список поручений.
-- **Стадии / pipeline** — не сводятся к одной строке `status` на сущности; расширяемая модель задаётся в настройках пространства (`NamespaceCRMSettings.pipeline_stage_presets` и связанные правила). События переходов стадий — контракт для триггеров автоматизации.
+## Сайдбар namespace
 
-## Навигация сайдбара и настройки пространства
-
-- Дерево основного меню CRM для выбранного `namespace` хранится в **`NamespaceCRMSettings.sidebar_navigation`** (список `SidebarNavEntry`). Значение **`null`** означает: клиент строит меню из разрешённых в пространстве типов (автоветка).
-- Лист задаёт **`route_key`** CRM (`notes`, `entities`, `tasks`, `graph`) и опционально **`search`** (query с `?`) для фильтров `entity_type` / `entity_subtype` на целевых страницах.
-- Редактирование состава меню выполняется **только в карточке пространства** (`space-detail-page`): снимок текущего автодерева или сброс на автоматический режим через **`PUT /crm/api/v1/namespaces/{name}`** с частичным `crm_settings`.
-
-## Доска задач (колонки канбана и `attributes.status`)
-
-- **Источник стадий:** `NamespaceCRMSettings.pipeline_stage_presets` — словарь **`TaskBoardPreset`** по ключу доски (строка). Схема стадии — **`BoardStage`**: `id` (стабильный, в `attributes.status`), `label`, опционально `color`. Типы описаны в **`core/models/identity_models.py`**.
-- **Ключ доски (`board_key`):** единственная реализация — **`apps/crm/services/task_board_presets.task_board_key(entity_type, entity_subtype)`**. Значение: `"task"` или `"task:<entity_subtype>"` при `entity_type=task` и подтипе с родителем `task`. Пресеты в JSON namespace должны использовать те же строки ключей.
-- **Резолвер:** **`resolve_task_board_stages(crm_settings, board_key)`** возвращает упорядоченный список стадий; если ключа нет в `pipeline_stage_presets`, подставляется **`default_task_board_stages()`** только на бэкенде. Валидация **`attributes.status`** при создании/обновлении сущности-задачи выполняется тем же контуром (**`EntityService`**, допустимые id — **`resolve_allowed_task_status_ids`**); неверный id → **422**.
-- **API:** **`GET .../namespaces/{name}/task-board-stages`** (query `entity_subtype`) — стадии для канбана; **`GET .../namespaces/{name}/task-board-editor-state`** — список досок для UI настроек пространства. Сохранение пресетов — **`PUT .../namespaces/{name}`** с `crm_settings.pipeline_stage_presets` (частичный merge полей `crm_settings`, см. **`apps/crm/api/namespaces.py`**).
-- **Фронтенд:** канбан **`tasks-page`** и редактор в **`space-detail-page`** не содержат каноничных списков стадий и не дублируют алгоритм `board_key` / дефолтных колонок; данные — только из ответов API / фабрик (`crm/task_board_stages`, `crm/task_board_editor_state`).
-
-## Автоматизация и привязка flow (контракт хранения)
-
-- Поля **`default_flow_by_entity_type`**, **`automation_rules`** (`NamespaceAutomationRule`: `entity_type`, `trigger`, `action`, опционально `flow_id`) и **`pipeline_stage_presets`** в `NamespaceCRMSettings` задают конфигурацию уровня пространства. Исполнение команд (запуск flow, уведомления, смена полей) согласуется с **`flows`** / **TaskIQ** и правами доступа; отдельный рантайм-триггер в CRM подключается при реализации сценариев.
+Дерево меню — `NamespaceCRMSettings.sidebar_navigation: list[SidebarNavEntry]?`. `null` = клиент строит автоветку из разрешённых типов. Лист задаёт `route_key` (`notes|entities|tasks|graph`) и опционально `search` (query с `?`). Редактирование — только в `space-detail-page` через `PUT .../namespaces/{name}` с частичным `crm_settings`.
 
 ## Модель данных
 
-### CRMEntity (`apps/crm/db/models.py`)
+### `CRMEntity` (`apps/crm/db/models.py`)
 
-| Поле | Тип | Описание |
-|------|-----|---------|
-| `entity_id` | str PK | UUID строки |
-| `company_id` | str | Владелец, изоляция |
-| `namespace` | str | Рабочее пространство (default=`"default"`) |
-| `entity_type` | str | `type_id` из каталога типов |
-| `entity_subtype` | str? | Подтип; для подтипов заметки (`meeting`, `call`) хранится здесь, `entity_type=note` |
-| `name` | str | Отображаемое имя |
-| `description` | str? | Текстовое описание / тело заметки |
-| `status` | str | `active` (default) |
-| `tags` | list[str] | PostgreSQL ARRAY |
-| `attributes` | dict | JSONB; произвольные поля по схеме типа |
-| `priority` | str? | |
-| `due_date` | date? | Срок |
-| `note_date` | date? | Дата заметки; у заметок-чанков импорта = UTC сегодня |
-| `assignees` | list[str] | Исполнители |
-| `attachment_ids` | list[str] | Список file_id вложений |
-| `user_id` | str | Автор записи в платформе; при **импорте AmoCRM** — platform `user_id` пользователя, сопоставленного с `created_by` и email из `GET /api/v4/users` (не пользователь, запустивший синк). При отсутствии email у пользователя Amo или `created_by` импорт падает с ошибкой. Pre-provision: `IntegrationExternalAuthorService` + ключи `integration_ext_author:*` в shared storage; при первом OAuth с тем же email провайдер привязывается к существующему пользователю (`AuthService._get_or_create_user`). |
-| `source_entity_id` | str? | Заполняется при копировании через access request |
-| `source_company_id` | str? | Компания-источник при копировании |
-| `relevance` | float | Default 1.0 |
-| `search_vector` | TSVECTOR? | FTS-индекс |
-| `created_at` / `updated_at` | datetime | timezone-aware |
-| `full_type` | str (computed) | `entity_type:entity_subtype` или `entity_type` |
+Ключевые колонки: `entity_id` (UUID PK), `company_id`, `namespace` (default `"default"`), `entity_type`, `entity_subtype?`, `name`, `description?`, `status` (default `"active"`), `tags: list[str]` (PG ARRAY), `attributes: dict` (JSONB), `priority?`, `due_date?`, `note_date?` (у заметок-чанков импорта = UTC сегодня), `assignees: list[str]`, `attachment_ids: list[str]`, `user_id` (автор; при импорте AmoCRM — platform `user_id`, сопоставленный с `created_by` через email из `GET /api/v4/users`; pre-provision — `IntegrationExternalAuthorService`), `source_entity_id?` / `source_company_id?` (при копировании через access request), `relevance: float` (default 1.0), `search_vector` (TSVECTOR), `created_at`/`updated_at`. `full_type` — computed `entity_type:entity_subtype` или `entity_type`.
 
-### EntityType
+### `EntityType`
 
-```python
-EntityType(
-    type_id="meeting",                             # стабильный id в пределах (company_id, namespace)
-    company_id="acme",
-    namespace="sales",                             # пространство строки; совпадает с CRMEntity.namespace
-    parent_type_id="note",
-    name="Встреча",
-    prompt="Инструкции для AI при извлечении...",  # None у member/company/namespace
-    required_fields={"field": {"type": "string", "label": "..."}},
-    optional_fields={"location": {"type": "string", "label": "Место"}},
-    # типы полей: string, text, number, integer, boolean, date, datetime, enum, array, object
-    # для enum добавляется "values": [...]
-    is_system=True,
-    is_event=True,
-    is_voice_target=False,
-    is_context_anchor=False,
-    extractable=True,
-    check_duplicates=True,
-    public_fields=["name", "entity_type"],
-    weight_coefficient=1.0,
-)
-```
+`type_id` (стабильный в `(company_id, namespace)`), `parent_type_id?`, `name`, `prompt?` (≥120 символов у `extractable=True`), `required_fields`/`optional_fields` (типы: `string|text|number|integer|boolean|date|datetime|enum|array|object`; для `enum` — `values`), `is_system`, `is_event`, `is_voice_target`, `is_context_anchor`, `extractable`, `check_duplicates`, `public_fields`, `weight_coefficient`.
 
-**API типов:** `GET /entity-types` принимает опциональный query **`namespace`** (фильтр страницы). **`GET /entity-types/{type_id}`** требует **`namespace`**. `POST /entity-types` задаёт `namespace` в теле (дефолт `"default"`). `PUT /entity-types/{type_id}` и `PUT .../public-fields` требуют `?namespace=`. Список типов пространства: **`GET /entity-types/by-namespace/{ns}`**. Материализация из шаблона namespace — **вставка** отдельной строки `EntityType` на каждую пару `(целевой namespace, type_id)`; общая на компанию строка без `namespace` не используется.
+**API типов:** `GET /entity-types?namespace=...`, `POST /entity-types` (тело с `namespace`, дефолт `"default"`), `GET/PUT /entity-types/{type_id}?namespace=...`, `PUT .../public-fields?namespace=...`, `GET /entity-types/by-namespace/{ns}`. Материализация шаблонов namespace — отдельная строка `EntityType` на пару `(целевой namespace, type_id)`. Общая на компанию строка без `namespace` не используется.
 
-**Шаблоны (`NamespaceTemplateType`):** по-прежнему могут содержать поле **`namespace_ids`** (какие пространства пресета покрывает определение в каталоге шаблона); это не поле строки `EntityType` в CRM.
+**Системные типы** (`SYSTEM_ENTITY_TYPE_TEMPLATES`) при инициализации компании создаются в `namespace="default"`: `note`, `meeting` (`parent=note`), `call` (`parent=note`), `task`, `contact`, `member`, `company`, `namespace`. Для других пространств клонируются через `ensure_namespace_ready`.
 
-**Системные типы** (`SYSTEM_ENTITY_TYPE_TEMPLATES`) при инициализации компании создаются в **`namespace="default"`** (в т.ч. `member`, `company`, `namespace`). Для других пространств строки клонируются при создании namespace из шаблона / `ensure_namespace_ready`, если их ещё нет.
+`member`/`contact`/`company` имеют `optional_fields.aliases` (`array`) — для @-обогащения.
 
-| type_id | parent | is_event | is_voice_target | extractable | namespace (старт) |
-|---------|--------|---------|----------------|------------|-------------------|
-| `note` | — | ✓ | — | ✓ | `default` |
-| `meeting` | note | ✓ | — | ✓ | `default` |
-| `call` | note | ✓ | — | ✓ | `default` |
-| `task` | — | — | — | ✓ | `default` |
-| `contact` | — | — | ✓ | ✓ | `default` |
-| `member` | — | — | ✓ | — | `default` |
-| `company` | — | — | — | — | `default` |
-| `namespace` | — | — | — | — | `default` |
+**Подтипы заметки** (`meeting`/`call` из AI-черновика): `entity_type=note`, `entity_subtype=meeting|call` — попадают в `/crm/notes`.
 
-`member`, `contact`, `company` имеют `optional_fields.aliases = {"type": "array", "label": "Псевдонимы"}` — используется при обогащении текста заметки @-токенами.
+**Якоря контекста** (`COMMON_NAMESPACE_ANCHOR_TYPES`, `is_context_anchor=True`): `topic`, `organization`, `project`.
 
-**Подтипы заметки:** при создании из AI-черновика `meeting`/`call` сохраняются как `entity_type=note`, `entity_subtype=meeting|call` — тогда они попадают в выборку `/crm/notes` (`entity_type=note`).
+**Канон системного шаблона** (`apps/crm/system_templates.py`): у каждого типа `description ≥ 30`; у `extractable=True` `prompt ≥ 120` (формат «что извлекать → 2-3 примера → что НЕ извлекать»); для каждого поля — `type`, `label`, `description ≥ 10`; для `enum` — `values` непустой и каждое значение в `description` (формат `id — пояснение`); для `RelationshipType` с непустым `prompt` — `≥ 150` («когда использовать → примеры → когда НЕ»). Заметки/встречи/звонки — не якоря (`is_context_anchor=False`); `member`/`contact` — `is_voice_target=True`. Инварианты: `tests/crm/test_system_templates_invariants.py` и соседние.
 
-**Общие типы-якоря** (`COMMON_NAMESPACE_ANCHOR_TYPES`, `is_context_anchor=True`):
+**Шаблоны пространств** (`NAMESPACE_TEMPLATE_SEEDS`): `sales`, `agile_project`, `development`, `hr`, `marketing`, `support`, `product_management`, `recruiting`, `real_estate`, `legal`, `finance`, `education`. В каждый seed дотягиваются `note` + `task` (`REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS`), `COMMON_NAMESPACE_ANCHOR_TYPES`, и парент-типы по транзитивным `parent_type_id`. `crm_settings` сидов содержит `pipeline_stage_presets` + дефолты голоса (`default_note_voice="self"`, `show_note_voice_ui=true`).
 
-| type_id | Расширенные поля |
-|---------|------------------|
-| `topic` | `title`, `scope`, `status` (active / paused / archived) |
-| `organization` | `name`, `legal_name`, `domain`, `industry`, `size` (solo … enterprise_1000_plus), `country` |
-| `project` | `title`, `objective`, `status` (discovery / in_progress / blocked / done / cancelled), `health` (green / yellow / red), `start_date`, `end_date` |
+**Reseed на рестарте:** `CompanyInitService._init_namespace_templates` обновляет только системные строки и шаблоны+типы пространства `default`. Уже созданные пользователями копии шаблона **не обновляются автоматически**.
 
-**Канон системного шаблона** (см. `apps/crm/system_templates.py`):
+### Интеграции — канон `attributes.external_refs`
 
-- У каждого типа сущности — `name` и `description ≥ 30 символов` («что это, чем отличается»).
-- У каждого `extractable=True` типа — `prompt ≥ 120 символов` по схеме «что извлекать → 2–3 примера → что НЕ извлекать»; используется AI в bundle `crm/analyze`.
-- Для каждого поля `required_fields` / `optional_fields` обязательны `type` ∈ {string, text, number, integer, boolean, date, datetime, enum, array, object}, `label`, `description ≥ 10 символов`.
-- Для `enum`-полей `values` непустой и в `description` поля упомянуты все значения в формате `id — пояснение` (так LLM видит расшифровку каждого варианта в `analyze.md`).
-- Для типов связи (`SYSTEM_RELATIONSHIP_TYPE_TEMPLATES`) с непустым `prompt` действует формат «когда использовать → примеры → когда НЕ использовать», ≥ 150 символов.
-- Семантические флаги: заметки/встречи/звонки — не якоря (`is_context_anchor=False`), `member` и `contact` — `is_voice_target=True`, person-сущности обязаны иметь `optional_fields.aliases` (`array`) для @-обогащения.
-- Инварианты проверяет `tests/crm/test_system_templates_invariants.py`, `tests/crm/test_relationship_type_templates_invariants.py`, `tests/crm/test_namespace_template_seeds_invariants.py`.
+- Канонический `entity_type` задаётся каталогом типов компании. Интеграции **не** вводят префиксные типы (`amo_*`/`crm_*` запрещены): коллекции внешнего API → продуктовые типы (`lead`, `contact`, `organization`, …).
+- Идемпотентность: `(company_id, namespace, entity_type, source_id, record_id)`. `source_id` = `provider_id` из `apps/crm/integrations/registry.py`; `record_id` — стабильный id записи у провайдера.
+- В `attributes.external_refs: dict[source_id, ExternalRef]` (`apps/crm/integrations/external_ref.py`: `record_id`, `account_key?`, `last_seen_at?`, `raw_version?`). Коннектор обновляет только свой ключ; чужие не затирает. Токены/секреты в `attributes` не помещаются.
+- Поиск: `EntityRepository.find_by_external_ref`. Upsert: `apps/crm/integrations/entity_upsert.py::upsert_canonical_by_external_ref`. Маппинг провайдера: `apps/crm/integrations/<provider>/mapping.py`.
+- **Иконка интеграции:** для каждого `provider_id` обязателен `apps/crm/ui/assets/integrations/<provider_id>.svg`. Регистрация коннектора без файла — фейл при старте. URL: `/crm/ui/static/assets/integrations/<provider_id>.svg`.
+- Подключение к **любому** namespace через `namespaces/{name}/integrations/...`. После сохранения credential коннектор обязан вызвать `ensure_namespace_ready` (`NamespaceIntegrationConnector`, `apps/crm/integrations/protocol.py`): обеспечить строки `EntityType` для всех `type_id` импорта (клонирование из `default`), при необходимости — `EntityTypeRepository.merge_optional_fields_if_absent`. Нет нужного типа даже в `default` → явная ошибка с подсказкой.
+- **AmoCRM:** `client_id` = UUID интеграции Amo (`uuid`); `client_secret` — только из кабинета Amo. Прочее в `auth.providers.amocrm` — `configuration.mdc`.
+- **Тяжёлый импорт** (если у коннектора `*_runs_in_worker() = true`): TaskIQ `run_namespace_integration_job`, `crm_tasks.task_type = namespace_integration_job`, `data: {provider_id, job: 'entities'|'custom_fields'}`. `POST .../namespaces/{ns}/integrations/{provider}/sync` отвечает 202 + `TaskResponse`. Параллельная активная задача (тот же `provider_id`+`job` в namespace) → 409, `detail.code=active_task_exists`. У inline-коннектора (`*_runs_in_worker=false`) — 200 + `SyncStatsResponse`.
 
-**Шаблоны пространств** (`NAMESPACE_TEMPLATE_SEEDS`):
+### `RelationshipType` — системные
 
-| `template_id` | Доменные типы (помимо общих якорей и core note/task) | Доски `pipeline_stage_presets` |
-|---------------|------------------------------------------------------|---------------------------------|
-| `sales` | `lead` (task), `account`, `deal` (task), `quote`, `contact` (BANT/MEDDIC: `decision_role`) | `task`, `task:lead`, `task:deal` |
-| `agile_project` | `epic`, `sprint`, `release`, `persona`, `user_story` (task), `bug` (task), `impediment`, `spike` (task) | `task`, `task:user_story`, `task:bug`, `task:spike` |
-| `development` | `incident` (task, SEV1–4), `decision` (ADR), `post_mortem`, `runbook`, `feature` (task), `technical_debt` (task) | `task`, `task:incident`, `task:feature` |
-| `hr` | `position`, `candidate` (task), `interview` (meeting), `offer`, `employee`, `performance_review`, `one_on_one` (meeting) | `task`, `task:candidate` |
-| `marketing` | `campaign` (task), `channel`, `content` (task), `audience_segment`, `lead_source`, `asset` | `task`, `task:campaign`, `task:content` |
-| `support` | `ticket` (task), `incident` (task), `customer`, `knowledge_article` (task), `faq` | `task`, `task:ticket`, `task:incident`, `task:knowledge_article` |
-| `product_management` | `initiative` (task), `opportunity`, `hypothesis`, `experiment` (task), `feature` (task), `okr_objective`, `key_result` | `task`, `task:initiative`, `task:experiment`, `task:feature` |
-| `recruiting` | `client_company`, `position`, `candidate` (task), `submission` (task), `placement` | `task`, `task:candidate`, `task:submission` |
-| `real_estate` | `property` (task), `lead` (task), `viewing` (meeting), `owner`, `agent` | `task`, `task:property`, `task:lead` |
-| `legal` | `matter` (task), `contract` (task), `party`, `clause`, `deadline` (task) | `task`, `task:matter`, `task:contract` |
-| `finance` | `invoice` (task), `expense` (task), `vendor`, `budget`, `transaction` | `task`, `task:invoice`, `task:expense` |
-| `education` | `course` (task), `lesson` (meeting), `assignment` (task), `student`, `instructor`, `cohort`, `enrollment` | `task`, `task:assignment` |
+Типы с `prompt != None` (используются AI): `mentions` (0.5), `related_to` (0.7), `parent_of` (1.0), `assigned_to` (0.8), `belongs_to` (0.8), `follows_up` (0.6), `blocks` (0.9), `reports_to` (0.9), `owner_of` (0.85). Типы без `prompt` (системные / inverse): `linked` (1.0), `child_of`, `blocked_by`, `manages`, `duplicates` (0.3), `attended` (0.7), **`note_voice`** (1.0), **`in_context`** (1.0).
 
-В каждый seed автоматически дотягиваются: типы `note` и `task` (`REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS`), `COMMON_NAMESPACE_ANCHOR_TYPES`, и все парент-типы по транзитивным `parent_type_id` (например `meeting` — для seeds `hr` / `real_estate` / `education`).
-
-`crm_settings` сидов содержит, помимо `pipeline_stage_presets`, дефолты голоса (`default_note_voice = "self"`, `show_note_voice_ui = true`).
-
-**Reseed на рестарте:** `CompanyInitService._init_namespace_templates` обновляет только системные строки в БД — `is_system=True` шаблоны и типы пространства `default`. **Уже созданные пользователями пространства** (копии шаблона) **не обновляются автоматически**: после reseed правка `system_templates.py` не доезжает до `acme.sales_old_clone`. Пересоздание пользовательского пространства из шаблона делает только сам пользователь через UI.
-
-### Интеграции: канонический тип и `attributes.external_refs`
-
-- Канонический `entity_type` (`type_id`) задаётся шаблоном пространства и каталогом типов компании. Интеграции **не** вводят отдельные префиксные типы (`amo_*`, `crm_*` и т.п.): коллекции внешнего API маппятся на **те же** продуктовые типы (`lead`, `contact`, `organization`, `member`, …).
-- Идемпотентность импорта: `(company_id, namespace, entity_type, source_id, record_id)`, где `source_id` — `provider_id` коннектора из реестра (`apps/crm/integrations/registry.py`), `record_id` — стабильный id записи у провайдера (строка).
-- В `attributes` используется `external_refs: dict[str, dict]`: ключ верхнего уровня = `source_id`; значение — поля модели `ExternalRef` в `apps/crm/integrations/external_ref.py` (`record_id`, опционально `account_key`, `last_seen_at`, `raw_version`).
-- Коннектор при синхронизации обновляет только свой ключ `external_refs[source_id]`; записи других источников в том же объекте не затираются. Токены и секреты в `attributes` не помещаются.
-- Поиск: `EntityRepository.find_by_external_ref`. Общий upsert: `apps/crm/integrations/entity_upsert.py` (`upsert_canonical_by_external_ref`).
-- Отображение «коллекция/сущность API провайдера → `type_id`» хранится рядом с коннектором (например `apps/crm/integrations/amocrm/mapping.py`).
-- **Иконка интеграции в UI:** для каждого `provider_id` из `IntegrationRegistry` обязателен файл **`apps/crm/ui/assets/integrations/<provider_id>.svg`** (круглая подложка и обрезка — в CSS карточек). Регистрация коннектора без файла падает при старте контейнера. Статический URL в CRM: `/crm/ui/static/assets/integrations/<provider_id>.svg`.
-- Интеграция подключается к **любому** существующему namespace: OAuth и синк идут по `namespaces/{namespace_name}/integrations/...`. После сохранения credential коннектор обязан вызвать `ensure_namespace_ready` (протокол `NamespaceIntegrationConnector`, `apps/crm/integrations/protocol.py`): обеспечить в целевом `namespace` строки `EntityType` для всех `type_id`, которые импорт пишет в граф (клонирование схемы из `default` при отсутствии), и при необходимости дополнить `optional_fields` без затирания ключей (`EntityTypeRepository.merge_optional_fields_if_absent`). Если нужного типа в компании нет даже в `default` — явная ошибка с подсказкой создать шаблон/тип.
-- **AmoCRM OAuth:** в `conf.json` поле **`client_id`** = UUID интеграции Amo (**`uuid`**); **`client_secret`** — только из кабинета Amo (или после перевыпуска секрета). Формула redirect URI и остальные поля **`auth.providers.amocrm`** — в **`configuration.mdc`**.
-- **Импорт сущностей AmoCRM** (`AmoCRMIntegrationService.sync_entities`, `apps/crm/integrations/amocrm/service.py`): фазы **contacts** (`GET /api/v4/contacts?limit=250&with=companies`) → **companies** → **leads** (`with=contacts%2Ccompanies`) → **users** → **tasks** (`GET /api/v4/tasks?limit=250`, пагинация `_links.next`). Коллекции Amo v4 маппятся на типы из `mapping.py`: `leads`→`lead`, `contacts`→`contact`, `companies`→`organization`, пользователи API→`member`. После upsert каждой сущности строятся рёбра в `relationships`: у лида из `_embedded.contacts` / `_embedded.companies` — исходящие **`related_to`** к уже существующим `contact` / `organization` (поиск канонического `entity_id` через `find_by_external_ref`); у контакта из `_embedded.companies` — **`belongs_to`** к `organization`. Повторный синк не создаёт дубликат ребра (уникальность `(company_id, namespace, source_entity_id, target_entity_id, relationship_type)`). В объекте статистики синка поле **`relationships`** — число рёбер, **впервые** созданных за этот прогон; поле **`notes`** — число примечаний Amo с извлекаемым текстом, импортированных (или обновлённых) как `entity_type=note` за прогон; **`tasks`** / **`tasks_skipped_no_parent`** — импортированные задачи и пропуски без разрешённого родителя в графе.
-- **Задачи AmoCRM → `entity_type=task`:** идемпотентность `upsert_canonical_by_external_ref` с `source_id=amocrm`, `record_id=id` задачи. Поля: имя — первая строка `text` (или запасной ярлык); `description` — полный `text` и при наличии `result.text`; `due_date` — из `complete_till` (unix timestamp), если валиден; `attributes.status` — **`done`** при `is_completed=true`, иначе **`todo`** (промежуточный `in_progress` из Amo не приходит). `task_type_id` → `attributes.amo_task_type_id`; для стандартных типов 1 и 2 дополнительно `attributes.amo_task_type_name` («Звонок», «Встреча»), иначе только число без выдуманного названия; при наличии текста результата — `attributes.amo_result_text`; `attributes.amo_is_completed` — копия флага Amo. Родитель: `entity_type`/`entity_id` Amo → канонический тип (`leads`/`contacts`/`companies` → `lead`/`contact`/`organization`) и поиск по `find_by_external_ref`; типы вроде **`customers`** и неизвестные коллекции не маппятся — задача **не** создаётся, учёт в **`tasks_skipped_no_parent`**. Связи: от задачи к родителю — **`related_to`**; при разрешённом `responsible_user_id` в `member` — **`assigned_to`** к этому `member`, иначе без ребра назначения.
-- **Примечания AmoCRM → заметки NetWorkle:** после upsert каждого `lead` / `contact` / `organization` запрашиваются **`GET /api/v4/{leads|contacts|companies}/{id}/notes`** (пагинация `_links.next`). Импортируются элементы с непустым текстом (`text` или `params.text`). Идемпотентность: `upsert_canonical_by_external_ref` с `entity_type=note`, `source_id=amocrm`, `record_id=id` примечания Amo; в `description` — строка **`[@Имя родителя](entity:канонический_id)`** (имя экранируется для токена) и тело примечания; `note_date` — дата из `created_at` Amo. Далее **`EntityService.apply_imported_note_graph_links`**: **`linked`** по токенам (`_sync_note_mention_links`), **`note_voice`** / **`in_context`** как при ручной заметке (`in_context` → родительская сущность Amo). Поведение совпадает с ручным @ в заметке; analyze опирается на тот же резолвер сущностей заметки.
-- **Тяжёлый импорт по интеграции** (если у коннектора `entities_sync_runs_in_worker()` / `custom_fields_sync_runs_in_worker()` = true, см. `NamespaceIntegrationConnector`): TaskIQ `run_namespace_integration_job`, тип задачи `crm_tasks.task_type` = `namespace_integration_job`, в `data` — `provider_id` и `job` (`entities` | `custom_fields`). Соответствующие `POST /crm/api/v1/namespaces/{ns}/integrations/{provider}/sync` и `.../custom_fields/sync` отвечают **202** с `TaskResponse`. Параллельная активная задача с теми же `provider_id`+`job` в том же namespace — **409**, `detail.code=active_task_exists`, в `detail.dedup` — ключи дедупликации. Счётчики — в `task.data.stats` после `completed`. У коннектора с inline-синком эти флаги false — тот же маршрут отвечает **200** и `SyncStatsResponse`.
-
-### RelationshipType — системные типы
-
-| type_id | Направление | has_prompt | inverse | weight | Назначение |
-|---------|------------|-----------|--------|--------|-----------|
-| `mentions` | directed | ✓ | — | 0.5 | AI-упоминание в тексте |
-| `linked` | directed | — | — | 1.0 | явная @-ссылка в тексте |
-| `related_to` | undirected | ✓ | — | 0.7 | общая ассоциация |
-| `parent_of` | directed | ✓ | `child_of` | 1.0 | иерархия родитель→дочь |
-| `child_of` | directed | — | `parent_of` | 1.0 | обратная к parent_of |
-| `assigned_to` | directed | ✓ | — | 0.8 | назначено на (разовая работа) |
-| `belongs_to` | directed | ✓ | — | 0.8 | принадлежность |
-| `follows_up` | directed | ✓ | — | 0.6 | продолжение цепочки |
-| `blocks` | directed | ✓ | `blocked_by` | 0.9 | блокирует выполнение |
-| `blocked_by` | directed | — | `blocks` | 0.9 | заблокировано |
-| `duplicates` | undirected | — | — | 0.3 | дубликат |
-| `reports_to` | directed | ✓ | `manages` | 0.9 | подчинение в орг. иерархии |
-| `manages` | directed | — | `reports_to` | 0.9 | обратная к reports_to |
-| `owner_of` | directed | ✓ | — | 0.85 | долговременный владелец объекта работы |
-| `attended` | directed | — | — | 0.7 | участник присутствовал на встрече (сервисная) |
-| **`note_voice`** | directed | — | — | 1.0 | заметка → автор (голос) |
-| **`in_context`** | directed | — | — | 1.0 | заметка → якорь контекста |
-
-AI использует только типы с `prompt != None` (`mentions`, `related_to`, `parent_of`, `assigned_to`, `belongs_to`, `follows_up`, `blocks`, `reports_to`, `owner_of`).
 `POST /relationships` валидирует `relationship_type` — несуществующий → 422.
 
-Константы в `apps/crm/constants_graph.py`: `NOTE_ROOT_ENTITY_TYPE_ID`, `TASK_ROOT_ENTITY_TYPE_ID`, `MEETING_ENTITY_TYPE_ID`, `CALL_ENTITY_TYPE_ID`, `NOTE_FAMILY_ENTITY_TYPE_IDS`, `NOTE_VOICE_RELATIONSHIP_TYPE`, `IN_CONTEXT_RELATIONSHIP_TYPE`, `BELONGS_TO_RELATIONSHIP_TYPE`, `PLATFORM_USER_ID_ATTR`, `PLATFORM_COMPANY_ID_ATTR`, `PLATFORM_NAMESPACE_ATTR`. На фронте CRM корни типов: `apps/crm/ui/constants/entity-type-ids.js`.
+Константы графа — `apps/crm/constants_graph.py`: `NOTE_ROOT_ENTITY_TYPE_ID`, `TASK_ROOT_ENTITY_TYPE_ID`, `MEETING_ENTITY_TYPE_ID`, `CALL_ENTITY_TYPE_ID`, `NOTE_FAMILY_ENTITY_TYPE_IDS`, `NOTE_VOICE_RELATIONSHIP_TYPE`, `IN_CONTEXT_RELATIONSHIP_TYPE`, `BELONGS_TO_RELATIONSHIP_TYPE`, `PLATFORM_USER_ID_ATTR`, `PLATFORM_COMPANY_ID_ATTR`, `PLATFORM_NAMESPACE_ATTR`. Фронт: `apps/crm/ui/constants/entity-type-ids.js`.
 
 ## Namespace и пространства
 
-- `namespace` = строковый идентификатор области данных внутри компании; дефолт `"default"`.
-- Резолв определения типа для сущности: **`EntityTypeRepository.get_by_type_id(type_id, namespace=entity.namespace)`** (и `company_id` из контекста). Дубликат `type_id` в другом пространстве — отдельная строка с тем же техническим именем.
-- Корневой тип `NOTE_ROOT_ENTITY_TYPE_ID` при создании сущности **без** `entity_subtype` ослабленно проверяется в `EntityService._ensure_entity_type_allowed_in_namespace`. Подтипы заметок и прочие типы — по правилам `allowed_type_ids` namespace. В `resolve_filter_field_types` локальное исключение только для корня заметки. При `PUT /namespaces/{name}` к `allowed_type_ids` добавляются `NOTE_ROOT_ENTITY_TYPE_ID` и `TASK_ROOT_ENTITY_TYPE_ID`, чтобы их нельзя было снять через API; подтипы task и семейства заметок в это ядро не входят.
+- Дефолт `"default"`. Резолв определения типа: `EntityTypeRepository.get_by_type_id(type_id, namespace=entity.namespace)` + `company_id` из контекста. `type_id` в другом пространстве — отдельная строка.
+- Корневой `NOTE_ROOT_ENTITY_TYPE_ID` без `entity_subtype` ослабленно проверяется в `EntityService._ensure_entity_type_allowed_in_namespace`. Подтипы заметок и прочие — по `allowed_type_ids` namespace. `PUT /namespaces/{name}` к `allowed_type_ids` всегда добавляет `NOTE_ROOT_ENTITY_TYPE_ID` и `TASK_ROOT_ENTITY_TYPE_ID` (нельзя снять).
 - `vector_documents` фильтруется по `namespace_id = "{company_id}_{namespace}"`.
-- Модалка создания пространства (`namespace-modal`): имя + описание + `template_id` (список из БД, дефолт `'sales'`). `POST /namespaces` требует `template_id`.
-- `spaces-page`: редактирование описания, разрешённых типов, CRM-настроек, грантов. Добавление типов — всегда; удаление — только если нет сущностей (`locked_type_ids`).
-- Поля голоса заметки из `NamespaceCRMSettings` (`show_note_voice_ui`, `default_note_voice`) редактируются общим блоком `apps/crm/ui/components/namespace-note-defaults-fields.js`; парсинг значений из ответа API — `apps/crm/ui/utils/namespace-crm-note-defaults.js`; i18n секция `namespace_note_defaults` в `crm.json`; страницы `space-detail-page` и `templates-page` (метаданные шаблона сохраняют тем же телом через `crm_settings`).
-- `NamespaceCRMSettings` (в `core/models/identity_models.py`): `show_note_voice_ui`, `default_note_voice: "self"|"none"|"last"`, `default_context_entity_id`.
+- `POST /namespaces` требует `template_id` (default `'sales'`). `spaces-page`: редактирование описания, `allowed_type_ids`, `crm_settings`, грантов. Удаление типа — только если нет сущностей (`locked_type_ids`).
 
-### note_voice и in_context
+### `note_voice` и `in_context`
 
-- **`note_voice`** (заметка → сущность-голос): «от чьего имени» написана заметка. Цель должна иметь `is_voice_target=True`. Синхронизация при create/update через `_sync_note_graph_edges` (удаляет старые, создаёт новые).
-- Режимы `default_note_voice`:
-  - `self` → персональная сущность пользователя (`get_or_create_person_entity_id`)
-  - `none` → голос не подставляется
-  - `last` → последний выбранный в namespace; fallback на `self`
-- `GET /entities/person-entity/self` — CRM-сущность «Я» текущего пользователя.
-- **`in_context`** (заметка → якорь контекста): объект работы, к которому относится заметка. Цель должна иметь `is_context_anchor=True`. Якоря: `topic`, `organization`, `project`; доменные (`lead`, `deal`, `epic`, `sprint`, `decision`). **Нельзя** использовать как якорь: `note`/`meeting`/`call`, атомарный `contact`/`task`.
+- **`note_voice`** (заметка → автор): «от чьего имени» написана заметка. Цель — `is_voice_target=True`. Sync через `_sync_note_graph_edges` (delete old → create new).
+- Режимы `default_note_voice`: `self` → персональная сущность пользователя (`get_or_create_person_entity_id`); `none` → не подставлять; `last` → последний выбранный в namespace, fallback на `self`. `GET /entities/person-entity/self` — сущность «Я».
+- **`in_context`** (заметка → якорь): объект работы. Цель — `is_context_anchor=True`: `topic`/`organization`/`project` + доменные (`lead`/`deal`/`epic`/`sprint`/`decision`). **Нельзя:** `note`/`meeting`/`call`, атомарный `contact`/`task`.
 
-## AI анализ: конвейер analyze → apply
+### Системные рёбра заметок
 
-Единый конвейер — `NoteProcessingService` (`apps/crm/services/note_processing_service.py`).
+Связи `note_voice`, `in_context`, `linked`, `mentions`, создаваемые сервисом — с `weight=1.0` и `confidence=1.0` (правило «системная связь — полная уверенность», не вывод модели). Колонка `confidence` у legacy-строк после миграции — `1.0` (NOT NULL + default).
 
-### analyze
+## AI: analyze → apply (`NoteProcessingService`)
 
-```
-resolve_note_text(description + attachments)
-  → analyze_text_with_ai(request, note_id)
-      1. known_entities = [member_entity, company_entity] (текущего пользователя)
-         + при переданном `note_id`: сущности из **`resolved_entity_ids_for_note`**
-         (id из токенов `[@…](entity:…)` в `description` заметки ∪ исходящие от заметки
-         **`linked`**, **`mentions`**, **`in_context`**, **`note_voice`**)
-         → отправляются в промпт skill analyze (bundle crm):
-           AI НЕ создаёт новых записей для них, может создавать связи К ним
-      2. _call_ai_agent → A2A flows bundle crm, skill=analyze
-         → structured output: {note, entities, relationships, metadata}
-      3. _inject_mentioned_entities_into_analyze_state
-         (только `mentioned_entity_ids` из тела запроса / конфига задачи, если заданы)
-      4. _deduplicate_entities (если check_duplicates=True):
-         RAG-поиск → similarity > 0.95: auto merge; 0.7-0.95: LLM batch; < 0.7: create new
-      5. _inject_known_entities_into_analyze_state (ПОСЛЕ dedup):
-         добавляет member/company и (при `note_id`) сущности из `resolved_entity_ids_for_note`
-         в state.entities с dedup_action="merge" + dedup_existing_id
-         → key_index включает их → AI-связи к автору и к якорям заметки НЕ дропаются
-      6. _assign_draft_ids_to_note_and_entities
-      7. _build_relationship_drafts_from_extracted:
-         key_index = {(type, normalized_name) → draft_entity_id}
-         связи без совпадений в key_index → лог warning, пропускаются
-      8. _persist_analysis_draft_to_note:
-         → attributes.ai_analysis_draft = AIAnalysisDraftStored(draft_version, note, entities, relationships)
-         → attributes.ai_summary = note.description (из LLM)
-         → attributes.ai_summary_entities = список имён (до 8)
-```
+`apps/crm/services/note_processing_service.py`. Скил A2A flows — bundle `crm`, skill `analyze`/`apply`.
 
-### apply
+**analyze:**
+1. `known_entities = [member_entity, company_entity]` пользователя + (при `note_id`) `resolved_entity_ids_for_note` (id из токенов `[@…](entity:…)` ∪ исходящие `linked`/`mentions`/`in_context`/`note_voice`). AI **не** создаёт записи для known, может создавать связи к ним.
+2. A2A flow → structured output `{note, entities, relationships, metadata}`.
+3. `_inject_mentioned_entities_into_analyze_state` (если в запросе/конфиге заданы `mentioned_entity_ids`).
+4. `_deduplicate_entities` (если `check_duplicates=True`): RAG-поиск (параллельность `dedup_rag_max_concurrent_searches`) → `similarity > 0.95` auto merge; `0.7..0.95` LLM batch (`deduplicate_batch` через `run_chunked_map`); `< 0.7` create new.
+5. `_inject_known_entities_into_analyze_state` ПОСЛЕ dedup (`dedup_action="merge"` + `dedup_existing_id`) → `key_index` включает их → AI-связи к автору и якорям не дропаются.
+6. `_assign_draft_ids_to_note_and_entities`.
+7. `_build_relationship_drafts_from_extracted` (`key_index = {(type, normalized_name) → draft_entity_id}`); связи без совпадения → лог warning, пропуск.
+8. `_persist_analysis_draft_to_note`: `attributes.ai_analysis_draft = AIAnalysisDraftStored(draft_version, note, entities, relationships)`, `attributes.ai_summary` (из LLM), `attributes.ai_summary_entities` (имена до 8).
 
-```
-apply_analysis_draft(note_id):
-  1. load draft from note.attributes.ai_analysis_draft
-  2. _apply_analysis_draft_entity_rows_with_retries (parallel gather, ANALYSIS_DRAFT_APPLY_MAX_ROUNDS)
-     каждая строка → _persist_analysis_draft_entity_row:
-       dedup_action="merge" → update_entity (merge attrs) → updated_entity_ids
-       dedup_action=None/"create" → _create_entity_from_draft_row → created_entity_ids
-     при ошибках после всех раундов → компенсация (удаление created) + ApplyAnalysisDraftEntityFailuresError
-  3. create relationships (gather по draft_relationships, find_exact → skip if exists)
-  4. удаляет ai_analysis_draft, пишет ai_analysis_applied_at
-  → AIAnalysisDraftApplyResult(created_entity_ids, updated_entity_ids, created_relationship_ids)
+**apply (`apply_analysis_draft`):**
+1. Загрузка `ai_analysis_draft`.
+2. `_apply_analysis_draft_entity_rows_with_retries` (parallel gather, `ANALYSIS_DRAFT_APPLY_MAX_ROUNDS`): `dedup_action="merge"` → `update_entity` (merge attrs) → `updated_entity_ids`; `None`/`"create"` → `_create_entity_from_draft_row` → `created_entity_ids`. Ошибки после раундов → компенсация (удаление created) + `ApplyAnalysisDraftEntityFailuresError`.
+3. Создание relationships (gather, `find_exact` → skip).
+4. Удаление `ai_analysis_draft`, запись `ai_analysis_applied_at` → `AIAnalysisDraftApplyResult`.
+5. `note_voice_id → sync_entity_ids` (mentions к автору).
+6. `sync_note_mentions_from_applied_entities(note_id, sync_entity_ids)` → `mentions` от заметки ко всем найденным.
+7. `enrich_note_description_with_mention_tokens(note_id)`.
 
-NoteProcessingService.apply дополнительно:
-  5. note_voice_id → sync_entity_ids (гарантирует mentions к автору)
-  6. sync_note_mentions_from_applied_entities(note_id, sync_entity_ids)
-     → создаёт relationship type=mentions от заметки ко всем найденным entity
-  7. enrich_note_description_with_mention_tokens(note_id)
-```
+`AIExtractedEntity` имеет `draft_entity_id` (UUID, стабильный), `dedup_action`, `dedup_existing_id`. `ValidationError` в воркере → `ValueError` с префиксом `TASKIQ_ANALYZE_*` → 422.
 
-### enrich: @-mentions в тексте заметки
+**@-токены в тексте заметки:** `[@Имя](entity:UUID)`; UI рендер — `<span class="note-entity-mention" contenteditable=false>@Имя</span>`. `enrich_note_description_with_mention_tokens` смотрит `linked`/`mentions`/`note_voice` от заметки → собирает `attributes.aliases` (для всех типов) + `first_name`/`last_name` (для `member`) → exact match (case-insensitive) → вставка токена в plain-текст.
 
-`enrich_note_description_with_mention_tokens` смотрит связи типа `linked`, `mentions`, `note_voice` от заметки → для каждой целевой сущности:
-- собирает `entity.attributes["aliases"]` (массив строк) — для любого типа
-- для `member`: дополнительно `first_name`, `last_name` из attributes
-- `_enrich_description_with_entity_mentions`: exact match (case-insensitive) по именам + aliases → вставляет `[@canonical_name](entity:id)` в plain-текст (не в уже токенизированные части)
+**Индексация в RAG для CRM:** `AttachmentService` и `EntityRepository`/провайдер всегда передают `metadata.ttl_seconds: 0` (retention RAG не удаляет CRM-индекс).
 
-**Формат @-токена:** `[@Имя](entity:UUID)` — в UI рендерится как `<span class="note-entity-mention" contenteditable=false>@Имя</span>`.
+## Daily Summary (SWR)
 
-### Дедупликация
+Redis hot cache + locks + S3 долговечные снимки.
 
-`EntityService._deduplicate_entities`:
-- RAG-поиск по `name` + `description` в том же namespace, параллельность `dedup_rag_max_concurrent_searches`
-- similarity > 0.95 → auto merge (dedup_action="merge")
-- 0.7–0.95 → LLM-уточнение (`deduplicate` / `deduplicate_batch` через `run_chunked_map`)
-- < 0.7 → create new entity
-- Настройки: `dedup_rag_search_limit`, `dedup_batch_max_pairs_per_request` (1–5), `dedup_llm_max_concurrent_batch_requests`
-
-### Индексация RAG для CRM
-
-- При загрузке вложений в RAG (`AttachmentService`) и при индексации текста сущности (`EntityRepository` → провайдер) в metadata всегда задаётся `ttl_seconds: 0`, чтобы retention RAG по умолчанию не удалял индекс CRM.
-
-### ai_analysis_draft в attributes
-
-```python
-AIAnalysisDraftStored(
-    draft_version=int,      # инкрементируется при каждом patch
-    updated_at=str,         # ISO datetime
-    note=AIExtractedEntity,  # резюме самой заметки (description = ai_summary)
-    entities=list[AIExtractedEntity],
-    relationships=list[AIAnalysisRelationshipDraft],
-)
-```
-
-Каждая `AIExtractedEntity` имеет `draft_entity_id` (UUID, стабильный ID черновика), `dedup_action`, `dedup_existing_id`.
-`ValidationError` в воркере кодируется в `ValueError` с префиксом `TASKIQ_ANALYZE_*` → HTTP разбирает и отдаёт 422.
-Подмешивание упомянутых / привязанных к заметке сущностей в analyze: если у сущности в БД короткое `description`, для инжекта в черновик используется **синтетическое описание** (`name`, `entity_type`, выбранные поля `attributes`, при необходимости суффикс `id=…`), чтобы резолв связей не требовал длинного текста (в т.ч. лиды только с именем после импорта).
-
-## Daily Summary
-
-SWR-паттерн: Redis (hot cache + locks) + S3 (долговечные снимки).
-
-- `POST /crm/api/v1/entities/daily-summary` → возвращает cached `summary`; если устарел — ставит фоновую задачу + `revalidating=true`.
-- Только заметки с `attributes.ai_analysis_applied_at` участвуют в сводке.
-- `source_version` = `{notes_count, max_updated_at}` дня.
-- Алгоритм: `map_reduce_tree` (chunked_async) → leaves = note cards → `map_batch=summarize_chunk`, `merge_batch=summarize_merge` (A2A skill в bundle crm).
-- Пустой день (нет заметок): детерминированный текст без LLM → Redis + S3.
-- **Period summary** (`POST /daily-summary` с `date_from`/`date_to`): merge готовых дневных сводок; лимит `period_summary_max_days` — усечение с начала (оставляет последние N дней до `date_to`), в ответе `period_truncated`.
-- **WebSocket push:** после rebuild → `crm_daily_summary_updated` → `daily-notes-page` обновляет список и сводку.
-- **Заметки:** при create/update/delete → `crm_note_updated` с `event`, `note_id`, `note_date`, `action`; `daily-notes-page` перезагружает при совпадении namespace + date в диапазоне.
+- `POST /entities/daily-summary` → cached `summary`; устарел → ставит фоновую задачу + `revalidating=true`.
+- В сводке участвуют **только** заметки с `attributes.ai_analysis_applied_at`.
+- `source_version = {notes_count, max_updated_at}` дня.
+- Алгоритм — `map_reduce_tree` (`core/utils/chunked_async.py`): `leaves = note cards` → `map_batch=summarize_chunk` → `merge_batch=summarize_merge` (A2A skill в bundle `crm`).
+- Пустой день → детерминированный текст без LLM → Redis + S3.
+- **Period summary** (`POST /entities/period-summary` или `daily-summary` с `date_from`/`date_to`): merge готовых дневных. Лимит `period_summary_max_days` — усечение с начала; `period_truncated` в ответе.
+- **Push:** rebuild → `crm_daily_summary_updated`; create/update/delete note → `crm_note_updated` (`event`/`note_id`/`note_date`/`action`); смена `note_date` → push для обеих дат.
 - Redis ключи: `crm:daily_summary:v1:{company}:{namespace_or_all}:{date}:state` (`:lock`, `:revalidating`).
-- TaskIQ задачи: `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`.
-- Триггеры пересчёта: create/update/delete note; при смене `note_date` — обе даты (старая и новая).
-
-### Chunked async (`core/utils/chunked_async.py`)
-
-| Функция | Назначение |
-|---------|-----------|
-| `chunk_sequence(items, n)` | Нарезка на чанки |
-| `run_chunked_map(items, n, fn, max_concurrent)` | Параллельный map по чанкам |
-| `map_reduce_tree(leaves, n, map_batch, merge_batch, max_concurrent)` | Дерево слияния |
-
-`map_reduce_tree`: если `len(leaves) ≤ n` → `map_batch(leaves)`; иначе run_chunked_map → пока `len(current) > n` → merge_batch → финальный merge.
+- TaskIQ: `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`.
 
 ## Graph
 
-- **Influence graph** (BFS от entity): `GET /entities/{id}/influence-graph`
-- **Overview graph** (из набора seed entity_ids): `POST /entities/overview-graph`
-- **Related entities** (1-hop): `GET /entities/{id}/related`
-- **Shortest path** (bidirectional weighted Dijkstra): `GET /relationships/path/`
-- **Стоимость ребра на кратчайшем пути:** в алгоритмах кратчайшего пути участвует только поле **`Relationship.weight`**. Поле **`confidence`** на длину пути и на обход не влияет; оно отражает достоверность извлечения связи (AI) или заданную политику при создании ребра.
-- **Cross-company traversal:** `get_by_entity_for_graph(cross_company=True)` — только в graph алгоритмах, access control на уровне nodes (placeholders для недоступных).
-- **3D visualization:** `3d-force-graph` + `three.js`; размер узла = сумма весов инцидентных рёбер (`aggregateIncidentWeightsByNode`); направленные рёбра по `is_directed`.
-- **`graph-page.js` режимы:** `influence`, `related`, `path`; фильтры: timeline, тип связи, глубина. Порог **min score** по узлам: применяется только к узлам, у которых в данных графа есть числовой **score** (результат поиска по смыслу); узлы без score порогом не отсекаются.
-
-## Системные рёбра заметок
-
-- Связи **`note_voice`**, **`in_context`**, **`linked`**, **`mentions`**, создаваемые сервисом при синхронизации текста заметки, записываются с **`weight=1.0`** и **`confidence=1.0`**: это осознанное правило «системная связь полная уверенность», а не вывод модели из текста.
-
-## Legacy `relationships.confidence`
-
-- Колонка **`confidence`** у существующих строк после миграции получает значение **1.0** (NOT NULL + default в БД). Это нейтральный backfill для старых рёбер; семантика «модель так уверена» к таким строкам не приписывается, пока ребро не пересоздадут или не обновят явно.
+- **Influence** (BFS от entity): `GET /entities/{id}/influence-graph`.
+- **Overview** (по seed entity_ids): `POST /entities/overview-graph`.
+- **Related** (1-hop): `GET /entities/{id}/related`.
+- **Shortest path** (bidirectional weighted Dijkstra): `GET /relationships/path/`. **Стоимость ребра — только `Relationship.weight`**; `confidence` на длину пути не влияет.
+- **Cross-company traversal:** `get_by_entity_for_graph(cross_company=True)` — только в graph-алгоритмах; access control на уровне nodes (placeholders для недоступных).
+- **3D viz:** `3d-force-graph` + `three.js`; размер узла = сумма весов инцидентных рёбер (`aggregateIncidentWeightsByNode`); направленность по `is_directed`.
+- **`/crm/graph?view=3d|mindmap`** — единый маршрут, два движка (`crm-graph-canvas` / `crm-mindmap-canvas`); координатор `crm-graph-workspace`. Срез `crm/graph_view`. Устаревшие `/crm/mindmap[/...]` → редирект на `graph` (`createCrmGraphLegacyRoutesEffect`). Mini-graph на карточке/в заметке — `crm-mini-graph` (один запрос `crm/influence_graph` `max_depth=5`, изменение «уровня» только на клиенте). Note → `note-graph-modal` с `viewMode="3d"`.
+- **min score** по узлам: применяется только к узлам, у которых в данных есть числовой `score` (результат поиска по смыслу); без score — не отсекаются.
 
 ## Поиск
 
-- **Ранжирование и граф:** порядок результатов **поиска сущностей** (`GET /entities/search`, POST поиск с DSL) строится только из **текста и эмбеддингов** (и RRF между каналами в режиме `hybrid`). Поля **`Relationship.weight`** и **`Relationship.confidence`** в эту формулу **не входят** и не меняют ранк списка.
+- **Ранжирование**: только текст и эмбеддинги (RRF между каналами в `hybrid`). `Relationship.weight`/`confidence` в формулу **не входят**, ранк не меняют.
 - `GET /entities` — список с фильтрами, `search` = ILIKE по `name`/`description` (без векторов).
-- `GET /entities/search?query=...` — с параметром `search_mode`:
-  - `text` — FTS (`ts_rank` по `search_vector`)
-  - `semantic` — pgvector (`search_with_similarity` через JOIN с `vector_documents`)
-  - `hybrid` — RRF (Reciprocal Rank Fusion) по FTS + pgvector, возвращает `match_type`
-- **Поля ответа сущности при поиске:** в `EntityResponse` поле **`score`** (если заполнено) — релевантность из пайплайна поиска (similarity / RRF и т.д.). Поле **`relevance`** в той же модели — атрибут **сущности в БД** (`CRMEntity.relevance`), с поисковым скором **не смешивается** при ранжировании ответа API.
-- Лимит: default 100, max 1000. Дополнительные фильтры: `entity_type`, `entity_subtype`, `namespace`, `status`, `priority`, `tags`, `user_id`, диапазоны `note_date` и `created_at`.
-- UI `CRMStore`: непустой `entities.filters.search` → `searchEntities` → `/entities/search`; иначе `getEntities` → `/entities`.
-- `POST /entities/search/mentions` — кандидаты для @-упоминания при вводе `@` в редакторе.
+- `GET /entities/search?search_mode={text|semantic|hybrid}`: `text` — FTS по `search_vector`; `semantic` — pgvector (`search_with_similarity` JOIN `vector_documents`); `hybrid` — RRF по FTS+pgvector, `match_type` в ответе.
+- **`EntityResponse.score`** — релевантность из пайплайна поиска. **`EntityResponse.relevance`** — атрибут сущности в БД (`CRMEntity.relevance`); со скором не смешивается.
+- Лимит default 100, max 1000. Фильтры: `entity_type`, `entity_subtype`, `namespace`, `status`, `priority`, `tags`, `user_id`, диапазоны `note_date`/`created_at`.
+- UI: непустой `entities.filters.search` → `searchEntities` → `/entities/search`; иначе `/entities`.
+- `POST /entities/search/mentions` — кандидаты для @-упоминания.
 
-## Access Control и гранты
+## Access Control
 
-### AccessGrant
+### `AccessGrant`
 
-```python
-AccessGrant(
-    resource_type="entity"|"namespace",
-    resource_id="...",
-    grant_type="public"|"user"|"company",
-    target_user_id="...",      # для grant_type=user
-    target_company_id="...",   # для grant_type=company
-    role="viewer"|"editor"|"admin",
-)
-```
+`resource_type ∈ {entity,namespace}`, `resource_id`, `grant_type ∈ {public,user,company}`, `target_user_id?`/`target_company_id?`, `role ∈ {viewer,editor,admin}`.
 
-- **Public grant:** все видят entity, но только `public_fields` из `EntityType`.
-- **User grant:** полный доступ конкретному `user_id` другой компании.
-- **Company grant:** полный доступ всем пользователям компании; для `namespace` — весь namespace.
-- **Гранты НЕ копируют данные** — real-time доступ к оригиналу.
-- `can_read_entity`: owner → same company+namespace → entity grants (user/company) → namespace grants (user/company); public-грант на namespace **не** даёт доступ к entity внутри.
+- **public:** все видят, но только `public_fields` из `EntityType`.
+- **user:** полный доступ конкретному `user_id` другой компании.
+- **company:** полный доступ всем пользователям компании; для `namespace` — весь namespace.
+- **Грант не копирует данные** — real-time доступ к оригиналу.
+- `can_read_entity`: owner → same company+namespace → entity grants → namespace grants. **Public-грант на namespace не даёт доступ к entity внутри.**
 - `filter_fields`: при отсутствии полного доступа урезает до `public_fields`.
 
-## Access Requests (Copy)
+### Access Requests (Copy)
 
-**Отличие от Grants:** Access Request **копирует** entity в другую компанию. Копия заполняет `source_entity_id` / `source_company_id`.
+В отличие от грантов — **копируют** entity в другую компанию (`source_entity_id`/`source_company_id`). **Shallow** — entity, relationships как текст в `external_relationships`. **Deep** — entity + связанные рекурсивно до `max_depth`, новые relationships между копиями.
 
-- **Shallow Copy:** копирует entity; relationships — текстовое описание в `external_relationships`.
-- **Deep Copy:** копирует entity + связанные рекурсивно (до `max_depth`), создаёт новые relationships между копиями.
+## Merge
 
-## Слияние сущностей (merge)
+`POST /entities/merge` (`EntityMergeRequest: survivor_entity_id, source_entity_id, scalar_choices, attribute_choices`). Survivor сохраняет `entity_id`/`entity_type`/`entity_subtype`. Source удаляется.
 
-- `POST /crm/api/v1/entities/merge` (`EntityMergeRequest`: `survivor_entity_id`, `source_entity_id`, `scalar_choices`, `attribute_choices`).
-- **Survivor** сохраняет `entity_id`, `entity_type`, `entity_subtype`. **Source** удаляется.
-- Связи: `RelationshipRepository.rewrite_entity_id` → дедуп по `(namespace, source, target, type)` → удаление петель.
-- Конфликтующие скаляры (`name`, `description`, `status`, `entity_subtype`, `priority`, `note_date`, `due_date`) → `scalar_choices`; конфликты в `attributes` → `attribute_choices`; лишние ключи → 422.
-- `tags`/`assignees` — merge с дедупом; `attachment_ids` — merge; вложения у source очищаются до удаления.
-- Дополнительно: `rewrite_source_entity_id_references`, `remap_entity_resource_id` (гранты + access requests).
+- Связи: `RelationshipRepository.rewrite_entity_id` → дедуп `(namespace, source, target, type)` → удаление петель.
+- Конфликты `name`/`description`/`status`/`entity_subtype`/`priority`/`note_date`/`due_date` → `scalar_choices`. `attributes` → `attribute_choices`. Лишние ключи → 422.
+- `tags`/`assignees` — merge с дедупом; `attachment_ids` — merge; вложения source очищаются до удаления.
+- `rewrite_source_entity_id_references` + `remap_entity_resource_id` (гранты + access requests).
 - **Ограничения:** одна компания + один namespace; `note`+`note` нельзя; `contact` с `platform_user_id` нельзя.
-- **UI:** DnD с `drag-handle` или Shift+клик → `entity-merge-modal`.
+- UI: DnD с `drag-handle` или Shift+клик → `entity-merge-modal`.
 
-## Импорт знаний (Knowledge Import)
+## Knowledge Import
 
-- **Источники:** `source_text` (до 100k симв.) или `source_file_ids` (до 80 файлов) или оба вместе. Итог после чтения файлов — до 10М символов (`MAX_IMPORT_TEXT_CHARS`).
-- **Нарезка:** `chunk_max_chars` в [2000, 500000], default 50000; опция `split_by_headings`.
-- **Режимы:**
-  - `notes_only` — создаёт только `note`-сущности (chunks как тела)
-  - `graph` — для каждого chunk: note → `analyze_text_with_ai` → `apply_analysis_draft`
-- **Inline-текст в Redis:** `crm:knowledge_import:text:{import_id}`, TTL 7 дней.
-- **Заметки-чанки:** `note_date` = UTC сегодня → попадают в daily notes.
-- **Откат:** удаляет `created_relationship_ids`, затем `created_entity_ids`; merge-цели не трогает.
-- **Review:** после завершения — `ai-analysis-modal`; строки с `draft_entity_id` = `ki:{entity_id}`; `POST /{id}/review-complete` для закрытия.
-- **Portal-стили** `glass-modal` не в shadow-DOM страницы → `ensureKnowledgeImportPortalStyles()`.
-- **API:** `POST/GET /tasks/knowledge-import`, `GET /tasks/{id}`, `GET /tasks/{id}/created-entities`, `POST /tasks/{id}/review-complete|cancel|rollback|retry`.
+- Источники: `source_text` (≤100k симв.) и/или `source_file_ids` (≤80 файлов). После чтения файлов — до `MAX_IMPORT_TEXT_CHARS = 10M`.
+- `chunk_max_chars ∈ [2000, 500000]`, default 50000; опция `split_by_headings`.
+- Режимы: `notes_only` — только `note`-сущности; `graph` — note → `analyze_text_with_ai` → `apply_analysis_draft` для каждого chunk.
+- Inline-текст в Redis: `crm:knowledge_import:text:{import_id}`, TTL 7 дней.
+- Заметки-чанки: `note_date = UTC сегодня` → попадают в daily notes.
+- Откат: удаляет `created_relationship_ids` → `created_entity_ids`; merge-цели не трогает.
+- Review после завершения — `ai-analysis-modal`; строки с `draft_entity_id = ki:{entity_id}`; `POST /tasks/{id}/review-complete`.
+- API: `POST/GET /tasks/knowledge-import`, `GET /tasks/{id}`, `GET /tasks/{id}/created-entities`, `POST /tasks/{id}/{review-complete|cancel|rollback|retry}`.
 
 ## Инициализация компании
 
-`CompanyInitService.initialize_company(company_id)` — вызывается:
-1. При старте CRM (`main.py` lifespan) для компании `"system"`.
-2. При первом запросе каждой компании в процессе (`dependencies.py`, in-memory set).
+`CompanyInitService.initialize_company(company_id)` — при старте CRM (lifespan для `"system"`) и при первом запросе каждой компании в процессе (`dependencies.py`, in-memory set).
 
-Что делает:
-- `_init_entity_types`: **создаёт** новые или `update_metadata` существующих системных типов (перезаписывает `optional_fields`, `prompt` и т.д. из шаблонов) → изменения в `system_templates.py` применяются ко всем компаниям при рестарте.
+- `_init_entity_types`: создаёт новые / `update_metadata` существующих системных (перезаписывает `optional_fields`/`prompt` из шаблонов).
 - `_init_relationship_types`, `_init_namespace_templates`.
 - `_ensure_company_entity` / `_ensure_namespace_entity("default")` (идемпотентно).
 
-## Worker crm_worker и TaskIQ
+## `crm_worker` и TaskIQ
 
-- Очередь: `crm` (`apps.crm_worker`).
-- TaskIQ задачи:
-  - `process_note_task` (mode: `analyze`|`apply`|`process`) — запускается из `POST /tasks/note-analyze`, ждёт результат через `wait_result` (timeout `CRMSettings.taskiq_sync_timeout_seconds`, default 300 с).
-  - `run_knowledge_import_task` — из `POST /tasks/knowledge-import`.
-  - `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`.
-- Контекст в воркере восстанавливается через `_set_crm_context(company_id, namespace, auth_token, user_id, interface_language)`.
-- При старте воркера: `set_billing_service(container.billing_service)` + `initialize_default_processors(container.file_repository)`.
-- **Язык ответов LLM:** `EntityService` мержит `interface_language_code`/`interface_language_name` в `metadata.variables`; фоновые задачи без языка → RU.
+Очередь `crm` (`apps.crm_worker`). Задачи:
+- `process_note_task` (mode: `analyze`|`apply`|`process`) — из `POST /tasks/note-analyze`, `wait_result` (timeout `CRMSettings.taskiq_sync_timeout_seconds`, default 300с).
+- `run_knowledge_import_task` — из `POST /tasks/knowledge-import`.
+- `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`.
+- `run_namespace_integration_job`.
 
-## API Endpoints (base: `/crm/api/v1`)
+Контекст в воркере — `_set_crm_context(company_id, namespace, auth_token, user_id, interface_language)`. При старте: `set_billing_service(container.billing_service)` + `initialize_default_processors(container.file_repository)` (без них — RAG и файловый импорт упадут). Язык ответов LLM: `EntityService` мержит `interface_language_*` в `metadata.variables`; фоновые задачи без языка → RU.
 
-### `/entities` (роутеры entities.py + graph.py)
+## API Endpoints (`/crm/api/v1/`)
 
-| Метод + путь | Описание |
-|-------------|---------|
-| `GET /entities` | Список с фильтрами (ILIKE) |
-| `POST /entities` | Создать entity |
-| `GET /entities/search` | Семантический/гибридный/текстовый поиск |
-| `GET /entities/{id}` | Получить (+ access control) |
-| `PUT /entities/{id}` | Обновить |
-| `DELETE /entities/{id}` | Удалить (cascade saga) |
-| `GET /entities/{id}/card` | Карточка: entity + relationships + related_entities + attachments |
-| `GET /entities/{id}/relationships` | Связи entity |
-| `GET /entities/{id}/influence-graph` | Граф влияния (BFS) |
-| `GET /entities/{id}/related` | Соседи (1-hop) |
-| `POST /entities/bulk` | Bulk create |
-| `PUT /entities/bulk` | Bulk update |
-| `POST /entities/bulk-delete` | Bulk delete |
-| `POST /entities/merge` | Слияние двух сущностей |
-| `GET /entities/aggregate` | Агрегация |
-| `GET /entities/export` | Экспорт |
-| `GET /entities/timeline/bounds` | Границы timeline |
-| `PATCH /entities/notes/{note_id}/analysis-draft` | Правка строк черновика |
-| `POST /entities/daily-summary` | Дневная сводка (SWR) |
-| `POST /entities/period-summary` | Сводка за период (SWR) |
-| `POST /entities/cards/bulk` | Bulk карточки |
-| `POST /entities/voice-input` | Голосовой ввод |
-| `POST /entities/search/mentions` | Кандидаты для @-упоминания |
-| `GET /entities/person-entity/self` | Сущность «Я» текущего пользователя |
-| `POST /entities/overview-graph` | Обзорный граф по seed entities |
-
-### `/entity-types`
-
-`GET ""` (query `namespace?`), `POST ""` (тело с `namespace`), `GET /by-namespace/{ns}`, `GET /{type_id}` (`namespace` query обязателен), `PUT /{type_id}` (`namespace` query), `PUT /{type_id}/public-fields` (`namespace` query)
-
-### `/relationships`
-
-`GET ""`, `POST ""`, `GET /{id}`, `DELETE /{id}`, `GET /types/`, `POST /types/`, `GET /path/` (shortest path)
-
-### `/namespaces`
-
-`GET ""`, `POST ""` (требует `template_id`), `GET /{ns}/editability`, `PUT /{ns}`,
-`GET /templates`, `POST /templates`, `GET /templates/schema/options`, `GET /templates/{id}`, `PUT /templates/{id}`, `DELETE /templates/{id}`, `POST /templates/{id}/types`, `DELETE /templates/{id}/types/{type_id}`
-
-### `/tasks`
-
-`POST /knowledge-import` (202), `POST /note-analyze` (202, sync wait),
-`GET ""`, `GET /{id}`, `GET /{id}/created-entities`, `POST /{id}/review-complete`, `POST /{id}/cancel`, `POST /{id}/rollback`, `POST /{id}/retry`,
-`POST /daily-summary` (202), `POST /period-summary` (202)
-
-### Прочие роутеры
-
-- `/entities/{id}/attachments`: `POST`, `GET`, `DELETE /{attachment_id}`
-- `/entities/{id}/grants`: `GET ""`, `POST /public`, `POST /user`, `POST /company`
-- `/namespaces/{ns}/grants`: `GET ""`, `POST /public`, `POST /user`, `POST /company`
-- `/grants`: `GET /{grant_id}`, `DELETE /{grant_id}`
-- `/access-requests`: `POST ""`, `GET ""`, `GET /{id}`, `PUT /{id}`
-- `/workspace/lara-summary`: `GET`
+Полный список — `apps/crm/api/`. Группы префиксов: `/entities`, `/entity-types`, `/relationships`, `/namespaces`, `/tasks`, `/entities/{id}/{attachments,grants,influence-graph,related,card,relationships}`, `/namespaces/{ns}/grants`, `/grants`, `/access-requests`, `/workspace/lara-summary`. Knowledge import + analyze: `POST /tasks/knowledge-import` (202), `POST /tasks/note-analyze` (202, sync wait). Daily/period: `POST /entities/{daily-summary,period-summary}`, TaskIQ варианты: `POST /tasks/{daily-summary,period-summary}` (202).
 
 ## UI
 
-### Страницы и маршруты (`/crm/...`)
+Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Все доменные операции — фабрики `apps/crm/ui/events/resources/*.resource.js` через helpers `PlatformElement`. Запрещены: `services/`, `store/`, `features/`, `*.{service,store}.js`, `BaseStore`, `CRMStore`, `ServiceRegistry`, прямые `fetch`/`httpRequest`, прямой `dispatch(CoreEvents.UI_*|AUTH_*|...)`.
 
-| Маршрут | Страница | Назначение |
-|---------|---------|-----------|
-| `/crm/notes` | `daily-notes-page` | Ежедневные заметки + сводка |
-| `/crm/entities` | `entities-page` | Список сущностей; merge через DnD или Shift+клик |
-| `/crm/graph` | `graph-page` | Граф связей (influence/related/path) |
-| `/crm/tasks` | `tasks-page` | Доска задач |
-| `/crm/settings` | `settings-hub-page` | Хаб настроек |
-| `/crm/templates` | `templates-page` | CRUD шаблонов пространств |
-| `/crm/spaces` | `spaces-page` | Управление namespace, типами, грантами |
-| `/crm/namespace_imports` | `namespace-tasks-page` | История импортов знаний |
-| `/crm/relationship_types` | `relationship-types-page` | Типы связей |
+Маршруты `/crm/...`: `notes` (`daily-notes-page`), `entities`, `graph` (`?view=3d|mindmap`), `tasks`, `settings` (`settings-hub-page`), `templates`, `spaces`, `namespace_imports`, `relationship_types`.
 
-### Note editor (`note-content.js`)
+**Особенности:**
+- `body.platform-shell` (`apps/crm/ui/index.html`) задаёт `--platform-btn-primary-*` из `--crm-button-primary-*` (модалки портятся в `document.body` и иначе берут зелёный fallback).
+- `tasks-page`: смена колонки — оптимистичный `attributes.status` + `document.startViewTransition` + `view-transition-name` на карточке; `_boardBusy` + оверлей `glass-spinner` без `_loading` на всю доску.
+- Auth в `<crm-app>` — `useEvent(CoreAuthEvents.AUTH_LOADED, ...)` + срез `state.auth.user`. `this.auth.validateToken()` не существует — этим занимается core auth-эффект.
+- `entity-card._isOwner` пересчёт в `_syncOwnershipAndAccessUI()` при `state.crm.entity_<id>` и `useEvent(CoreAuthEvents.AUTH_COMPANY_SWITCHED, ...)`.
+- Embed-чат CRM: `flow-id="lara"`, `skill-id="crm"`, заголовок `X-Platform-Namespace`. `getExtraMetadataVariables` → `GET /workspace/lara-summary?namespace=` (кэш ~45с) → `metadata.variables` (`crm_lara_summary`, `crm_lara_summary_json`, счётчики).
+- Lara skill CRM: после `crm_create_note` спрашивает `ask_user` об анализе; `crm_analyze_note_text` без согласия не вызывать. Тул принимает опциональный `namespace`.
+- Daily notes период: срез `state.crm.daily_notes.range` — текущая неделя (пн-вс local); `dailyNotesRangePersistVersion === 2`.
+- Namespace в localStorage: последний выбранный по `company_id`; пропал из списка → сброс на «Все» (не подстановка). При первом `authenticated` для компании `CRMApp` диспатчит `UI_NAMESPACE_CHANGED` если в `state.ui.namespace.selectionByCompany` нет записи. API-фильтр — `selectCrmApiNamespace` (`null` = все); опциональный query — `crmNamespaceForOptionalQuery`. Страницы лент — `CRMNamespacePage` (`apps/crm/ui/base/crm-namespace-page.js`).
+- Note editor: `contenteditable` div, токен `[@Имя](entity:UUID)`; `@` → `searchEntities` → `_insertMention` → span; обратная сериализация span → `[@name](entity:id)`.
 
-- **contenteditable div**; токен: `[@Имя](entity:UUID)`.
-- `@` при вводе → `searchEntities` → выбор → `_insertMention` → `<span class="note-entity-mention" contenteditable=false>`.
-- Обратная сериализация: span → `[@name](entity:id)`.
+## Принципы и частые ошибки
 
-### CRM Store (`crm.store.js`)
+1. **Company-изоляция:** `company_id` всегда из контекста; репозитории фильтруют автоматически. Системные типы — `is_system=True` с `company_id` компании. Исключение: graph traversal `cross_company=True` для granted entities.
+2. **Grants ≠ Copy.** Гранты дают доступ к оригиналу.
+3. **Cascade удаление (saga):** `crm_entities` + `vector_documents` → `Relationship` (source/target) → `AccessGrant`.
+4. **Namespace-изоляция:** SQL-фильтр по `company_id` + `namespace`.
+5. **AI behavior — из `EntityType.prompt`.**
 
-- Фильтры entities: `namespace`, `entity_type`, `entity_subtype`, `status`, `priority`, `date_from/to`, `tags`, `search`, `search_mode` (default `hybrid`), `user_id`.
-- Непустой `search` → `searchEntities` → `/entities/search`; иначе `getEntities` → `/entities`.
+**Частые ошибки:**
+- Передача `company_id` в репозиторий вручную — берётся из контекста.
+- Копировать entity при гранте — грант даёт доступ к оригиналу.
+- `get_by_entity()` для графов вместо `get_by_entity_for_graph(cross_company=True)`.
+- Забывать `public_fields` при public-грантах.
+- Anchor для `in_context` — только `is_context_anchor=True`; note/meeting/call/contact/task — не якоря.
+- При старте `crm_worker` пропустить `set_billing_service` или `initialize_default_processors`.
 
 ## Тестирование
 
-- **Без моков** — реальные PostgreSQL (+ pgvector), Redis, HTTP (`crm_client`).
-- Фикстуры: `crm_client`, `auth_headers_system`, `unique_id`, `unique_namespace_name`.
-- E2E тесты: `tests/crm/e2e/`.
-- **Cross-company тесты (graph):** использовать отдельный namespace на тест (например `g_{unique_id}`) — иначе namespace-grant на `default` ломает `can_read_entity` для всех entity в этом namespace.
-
-## Архитектура, изоляция, принципы
-
-```
-┌──────────────────────────────────────────────────┐
-│  crm_entities (CRM DB)    │  PostgreSQL (types)  │
-│  CRMEntity (JSONB attrs)  │  EntityType          │
-│  + vector_documents       │  RelationshipType    │
-│    (pgvector, shared DB)  │  Relationship        │
-│  Hybrid search (SQL+vec)  │  AccessGrant         │
-│  company_id изоляция      │  NamespaceTemplate   │
-└──────────────────────────────────────────────────┘
-```
-
-**Строгая изоляция по `company_id`:** каждая запись — с `company_id`; репозитории ВСЕГДА фильтруют из контекста. Системные типы: `is_system=True`, но с `company_id` компании.
-
-**Исключение:** graph traversal с `cross_company=True` для granted entities.
-
-### Cascade удаление (Saga)
-
-1. Удаление из `crm_entities` + `vector_documents`.
-2. Все `Relationship` где entity участвует (source/target).
-3. Все `AccessGrant` для этой entity.
-
-### Ключевые принципы
-
-1. **Company изоляция** — ВСЕГДА фильтр по `company_id` из контекста.
-2. **Grants ≠ Copy** — grants дают доступ, не копируют данные.
-3. **Graph cross-company** — только через grants, placeholders для недоступных nodes.
-4. **Types определяют behavior** — AI использует `prompt` из `EntityType`.
-5. **Cascade всё** — удаление entity → связи + гранты.
-6. **Namespace изоляция** — SQL фильтрация по `company_id` + `namespace`.
-7. **Sync на рестарте** — `company_init_service` обновляет `optional_fields` системных типов при каждом перезапуске.
-
-### Частые ошибки
-
-- `company_id` в методы репозиториев не передаётся — берётся из контекста.
-- Копировать entity при grant — grant даёт доступ к оригиналу, не копирует.
-- Использовать `get_by_entity()` для графов — нужен `get_by_entity_for_graph(cross_company=True)`.
-- Забывать `public_fields` при public grants.
-- Anchor для `in_context` — только типы с `is_context_anchor=True`; note/meeting/call/contact/task не являются якорями.
-- При старте `crm_worker` пропустить `set_billing_service` или `initialize_default_processors` — RAG и файловый импорт упадут.
+Реальные PostgreSQL (+ pgvector), Redis, HTTP (`crm_client`). Фикстуры: `crm_client`, `auth_headers_system`, `unique_id`, `unique_namespace_name`. E2E: `tests/crm/e2e/`. Cross-company graph-тесты — на отдельном namespace на тест (например `g_{unique_id}`).

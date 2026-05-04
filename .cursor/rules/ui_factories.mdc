@@ -1,466 +1,287 @@
 ---
-alwaysApply: true
+description: UI Factories + Events. Любое доменное состояние сервиса в UI — это фабрика из @platform/lib/events. Любое действие, HTTP/WS/timer/router — это Event в общем bus. State меняется ТОЛЬКО reducer'ами фабрик, side-effects — только в effects фабрик. Pages/modals/components получают фабрики по имени через helpers PlatformElement; ZERO-IMPORT, ZERO-FALLBACK.
+alwaysApply: false
 ---
+# UI Factories и Events: единый канон фронтенда
 
-# UI Factories: единственный способ описать домен в UI
+ZERO-IMPORT (фабрики только по имени), ZERO-FALLBACK (`||`/`??`/тихий `catch` запрещены), ZERO-GUESS (нет опции — `throw` на старте).
 
-Любое доменное состояние сервиса в UI описывается **фабрикой** из
-`@platform/lib/events/index.js`. Никаких ручных reducers, ad-hoc effects,
-ad-hoc HTTP-клиентов, BaseStore/Zustand или сервисов в компонентах. Pages,
-modals и components получают фабрики **по строковому имени** через helpers
-`PlatformElement` — никаких прямых импортов resource-объектов.
-
-НИКАКИХ ОТКЛОНЕНИЙ. ZERO-IMPORT, ZERO-FALLBACK.
-
-## Один поток, единственный путь
+## Поток
 
 ```
-[click/HTTP/WS/timer/router]
+[click | HTTP | WS | timer | router]
   -> EventBus.dispatch(event)
-       -> EventLog (append-only)
-       -> Reducer (slice фабрики, чистая функция)         -> State -> Selectors -> Lit re-render
-       -> Effect (фабрика: HTTP/WS/storage/timer)         -> dispatch новых событий фабрики
+       -> Reducer slice фабрики (pure)  -> State -> SelectController -> Lit
+       -> Effect фабрики (HTTP/WS/storage) -> dispatch новых событий
 ```
 
-Состояние домена живёт **только** внутри `slice` фабрики. Доступ из компонента
-— только через контроллер, который выдаёт фабрика.
+Других каналов состояния нет. Состояние домена — только в `slice` фабрики; доступ из компонента — только через её контроллер.
 
-## Шесть видов фабрик
+## Контракт события
 
-Все фабрики имеют общий контракт `kind`, `name`, `sliceKey`, `events`,
-`reducer`, `slice`, `selectors`. У всех, кроме `createSlice`, есть `effect`,
-`transport`, `restMirror`. Различаются назначением и формой данных:
+```js
+{
+  id:    string,                        // e_<ts36>_<seq36>_<rnd36>
+  type:  '<scope>/<entity>/<verb>',     // lowercase, snake_case, >=3 сегмента
+  payload: unknown,
+  meta: { ts, source, causation_id, correlation_id, trace_id },
+}
+```
+
+Источники в `meta.source`: `local|ws|http|router|storage|timer|system`. Валидация — `assertEventType` в `@platform/lib/events/contract.js`.
+
+**WS-команды (фрейм клиент → сервер) обязаны заканчиваться `_requested`** (`sync/calls/invite_requested`). `core.websocket.command_router` бросает на регистрации handler'а без этого суффикса. Reply-типы выводятся механически: `<type без _requested>_succeeded` / `_failed`.
+
+## Шесть фабрик
 
 | Фабрика | Назначение | Контроллер | helper |
 |---|---|---|---|
-| `createAsyncOp` | одиночная операция (load/save/run) | `OpController` | `this.useOp(name)` |
-| `createResourceCollection` | CRUD-коллекция (list/get/create/update/remove) | `ResourceController` | `this.useResource(name, opts?)` |
-| `createCursorList` | cursor-paginated лента + фильтры | `CursorListController` | `this.useCursorList(name, opts?)` |
-| `createFacets` | typeahead-подсказки по фасетам | `FacetsController` | `this.useFacets(name)` |
+| `createAsyncOp` | одиночная операция | `OpController` | `this.useOp(name)` |
+| `createResourceCollection` | CRUD-коллекция | `ResourceController` | `this.useResource(name, opts?)` |
+| `createCursorList` | cursor-paginated лента | `CursorListController` | `this.useCursorList(name, opts?)` |
+| `createFacets` | typeahead по фасетам | `FacetsController` | `this.useFacets(name)` |
 | `createForm` | форма (draft/errors/submit) | `FormController` | `this.useForm(name)` |
-| `createSlice` | UI-only state без HTTP/WS (push-only / overlay-state) | `SliceController` | `this.useSlice(name)` |
+| `createSlice` | UI-only state без HTTP/WS | `SliceController` | `this.useSlice(name)` |
 
-Других фабрик нет и не будет. Если ваш кейс не укладывается в эти шесть — не
-добавляйте «свою» фабрику; уточняйте контракт существующих или соберите
-эффект из нескольких фабрик (например, `form.submitEvent` указывает в
-`asyncOp.events.REQUESTED`).
+Других фабрик не будет. Не подходит — комбинация из имеющихся (например, `form.submitEvent` указывает в `asyncOp.events.REQUESTED`).
 
-### `createSlice` — slice-only фабрика
+`createSlice` — только для UI-only / push-only / overlay-state. Запрещены `transport`, `request`, `restMirror`, `wsTimeoutMs`, `effect`. Обязательны `name`, `extraInitial`, `extraReducer`.
 
-Чистый slice без транспорта. Используется для:
+## Имена
 
-- UI-only state (`activeCall`, `incomingCall`, `recordingStatus`,
-  `overlayMinimized` — `sync/call_ui`).
-- Push-only сущностей (`presenceByUserId`, `typingByChannel` —
-  `sync/presence` реагирует на push `sync/channel/typing` и
-  `sync/presence/changed`).
-- Локальных UI-actions без сети (overlay open/close, sidebar select).
+- `name`: `'<svc>/<entity>'` — lowercase snake_case, ровно 2 сегмента. `<svc>` ∈ зарегистрированному списку (`frontend|crm|flows|rag|sync|office|voice`). Уникален на процесс — повтор `registerFactory` = `throw`.
+- `sliceKey` выводится автоматически из `name` (`scopeEntity` lowerCamel). Перекрывать вручную нельзя нигде, кроме `createSlice` (только при веских причинах).
+- События фабрики: `'<name>/<verb>'`, ≥3 сегмента (`assertEventType`).
 
-Контракт:
+## Транспорт: `transport` + `restMirror` + `wsTimeoutMs`
 
-- `name: '<svc>/<entity>'` — обязателен.
-- `extraInitial: { ... }` — обязателен, минимум один ключ; задаёт каноничную форму slice.
-- `extraReducer(state, event, events) -> state` — обязателен, pure.
-- `extraEvents: { KEY: 'verb' }` — опционально (генерирует `<name>/<verb>`).
-- `actions: { methodName: 'verb' }` — опционально (методы `SliceController.<methodName>(payload)`).
-- Запрещены: `transport`, `request`, `restMirror`, `wsTimeoutMs`, `effect`.
+REST и WS — два транспорта **тождественной** операции: имя события, payload, поведение reducer'а одинаковы; отличается только канал доставки.
 
-`SliceController.value` — frozen slice (read-only). Изменения только через
-actions / dispatch на bus. Глобальная регистрация — через
-`PlatformApp.static factories = [...]`.
+| Поле | createAsyncOp | createResourceCollection | createCursorList | createFacets |
+|---|---|---|---|---|
+| `transport` | `'http'` (default) / `'ws'` | то же | то же | всегда `'http'` |
+| `wsTimeoutMs` | обязателен при `'ws'` | то же | то же | — |
+| `restMirror` | `{method,path}` обязателен при `'ws'`; для `'http'` опционален | `{list?, get?, create?, update?, remove?}` (auto из `baseUrl`+`idField`) | `{method:'GET', path}` (auto из `baseUrl`) | auto per facet key |
 
-### `commandType` — переопределение WS-типа фрейма
+### Контракт «WS = REST»
 
-Опция `createAsyncOp` для случая, когда имя фабрики (`sync/calls_invite`)
-не совпадает с каноничным backend-именем команды
-(`sync/calls/invite_requested`):
+| Слой | Команда | Успех | Ошибка |
+|---|---|---|---|
+| Bus | `<svc>/<entity>/<verb>_requested` | `_succeeded` | `_failed` |
+| WS | `{request_id, type, payload}` | то же | `payload: {error_code, error_detail}` |
+| REST | `<METHOD> <restMirror.path>` body=payload | HTTP 2xx, body = payload `_succeeded` | HTTP 4xx/5xx, body = `{error_code, error_detail}` |
+| Push | — | `<svc>/<entity>/<verb>` (без `_requested`) через `platform:ui_events` | — |
+
+Push-события — **server-initiated broadcast**. Приходят только по WS. **REST-зеркала у push-событий запрещены.**
+
+### Запреты транспорта
+
+- WS-фабрика без `restMirror` — `throw` на старте.
+- `restMirror` с путём, которого нет в FastAPI route — CI `scripts/check_command_rest_mirror.py` падает.
+- Push-событие с именем, совпадающим с командой (без суффикса). Используй разные `entity`: `sync/messages/send_requested` vs `sync/message/created`.
+- **Fallback с WS на HTTP в коде запрещён.** WS оборвался / timeout — `*_failed` с `error_code: 'ws_disconnected'|'ws_timeout'`. Никаких retry через HTTP.
+
+### `commandType` (опция `createAsyncOp`)
+
+Когда имя фабрики не совпадает с каноничным backend-типом WS-команды:
 
 ```js
 createAsyncOp({
-  name: 'sync/calls_invite',           // уникальное имя slice/registry
+  name: 'sync/calls_invite',
   transport: 'ws',
-  wsTimeoutMs: 8_000,
+  wsTimeoutMs: 8000,
   silent: true,
-  commandType: 'sync/calls/invite_requested',  // тип WS-фрейма
+  commandType: 'sync/calls/invite_requested',
   restMirror: { method: 'POST', path: '/sync/api/v1/calls/:call_id/invite' },
 });
 ```
 
-- `commandType` обязан заканчиваться на `_requested` и проходить
-  `assertEventType` (`<scope>/<entity>/<verb>_requested`, ≥3 сегмента).
-- Допустим только при `transport: 'ws'`.
-- Reply-типы выводятся автоматически:
-  `<commandType без _requested>_succeeded` / `_failed`.
-- Локальные events фабрики (`events.SUCCEEDED` / `FAILED`) остаются
-  стандартными (`<name>/<verb>`) и используются reducer'ом slice.
-- Backend-handler регистрируется на каноничном `commandType` через
-  `core.websocket.register_ws_command_handler(commandType, handler)`.
+`commandType` обязан заканчиваться на `_requested`. Допустим только при `transport: 'ws'`. В `createResourceCollection` `commandType` per-operation **не предусмотрен** — кастомные операции на коллекцию оформляются отдельной `createAsyncOp`.
 
-**`commandType` и `createResourceCollection`:** опция `commandType` per-operation
-**не предусмотрена**. CRUD-операции (`list_requested`, `item_requested`,
-`create_requested`, `update_requested`, `remove_requested`) автоматически
-выводятся из `name` фабрики. Если для коллекции нужно отдельное имя на
-backend (например, кастомная операция `mark_read` для канала), это
-оформляется отдельной `createAsyncOp` с уникальным `name` и явным
-`commandType`. Slice такой op'ы — отдельный (по канону уникальности
-`name` / `sliceKey`).
+## Обязательные опции
 
-## Транспорт: `transport` + `restMirror` (платформенный инвариант)
+### `createAsyncOp`
+- `name`.
+- `request({payload, ctx, event}) -> Promise` — обязателен для `'http'`. Для `'ws'` опционален (фабрика сама шлёт `wsRequest` и ждёт reply).
+- Ровно одно: `silent: true` **либо** оба `successToastKey`+`errorToastKey` (формат `'<ns>:<key>'`). Смешивание = `throw`.
+- Для `'ws'`: `wsTimeoutMs` (>0) + `restMirror`.
 
-Каждая фабрика декларирует **транспорт** (`'http'` или `'ws'`) и
-**restMirror** (HTTP method+path REST-зеркала команды). REST и WS — это
-разные транспорты для **тождественной** операции: имя события, payload и
-поведение reducer'а одинаковы, отличается только кто доставляет результат.
+### `createResourceCollection`
+- `name`, `baseUrl` (без `/`), `idField`.
+- `operations: ['list','get','create','update','remove']` — непустой; default `['list']`. Любая mutating требует `toastKeys[op]`.
+- Для `'ws'`: `wsTimeoutMs` (один транспорт на всю фабрику).
+- `restMirror` — auto: `list/create -> baseUrl`, `get/update/remove -> baseUrl/:idField`. Перекрывается под нестандартные пути.
 
-| Поле | createAsyncOp | createResourceCollection | createCursorList | createFacets | createForm |
-|---|---|---|---|---|---|
-| `transport` | `'http'` (default) / `'ws'` | то же | то же | всегда `'http'` | — |
-| `wsTimeoutMs` | обязателен при `'ws'` | то же | то же | — | — |
-| `restMirror` | `{ method, path }` обязателен при `'ws'`; для `'http'` опционален (URL уже в `request`) | `{ list?, get?, create?, update?, remove? }` (auto-deriv по `baseUrl`+`idField`, можно перекрыть) | `{ method:'GET', path }` (auto = `baseUrl`) | auto: `{ [facetKey]: { method:'GET', path: <baseUrl>/<segment> } }` | — |
+### `createCursorList`
+- `name`, `baseUrl`, `buildQuery(filters) -> query`, `pageSize` (>0).
+- Для `'ws'`: `wsTimeoutMs`. `restMirror` — только `GET`.
+- Опционально: `statusMap: {403:'forbidden', 503:'unavailable', ...}` (каждый код → терминальное событие `'<name>/<key>'`).
 
-### Контракт «WS = REST»
+### `createFacets`
+- `name`, `baseUrl`, `facets: {[key]: 'url-segment'}` (непустой), `debounceMs` (≥0), `minQueryLength` (≥0).
 
-| Слой | Команда (client → server) | Успех | Ошибка |
-|---|---|---|---|
-| Bus event | `'<svc>/<entity>/<verb>_requested'` | `'<svc>/<entity>/<verb>_succeeded'` | `'<svc>/<entity>/<verb>_failed'` |
-| WS-фрейм | `{ request_id, type, payload }` | `{ request_id, type, payload }` | `{ request_id, type, payload: { error_code, error_detail } }` |
-| REST | `<METHOD> <restMirror.path>` body=payload | HTTP 200, body = payload `_succeeded` | HTTP 4xx/5xx, body = `{ error_code, error_detail }` |
-| Push (другие пользователи) | — | `'<svc>/<entity>/<verb>'` через `platform:ui_events` | — |
+### `createForm`
+- `name`, `schema`, `initial` (ключ для каждого поля схемы — иначе `throw`).
+- `submitEvent: '<scope>/<entity>/<verb>'` (обычно `someAsyncOp.events.REQUESTED` или `someResource.events.CREATE_REQUESTED`).
 
-Push-события (`'<svc>/<entity>/<verb>'` без `_requested`) — это
-**server-initiated broadcast** (новое сообщение, изменение статуса,
-typing). Они приходят только по WebSocket (`platform:ui_events` ->
-`/<svc>/api/ws/notifications`). REST-зеркала у push-событий **запрещены**.
+`request` бросает `HttpError`/`WsTransportError` для транспортных ошибок (→ `FAILED`); реальные баги — выше (не глотать).
 
-### Запреты транспорта
+## Сериализованный create (UI-идемпотентность)
 
-- Запрещено WS-фабрика без `restMirror` — фабрика бросает на старте.
-- Запрещено `restMirror` указывать на путь, которого нет в FastAPI route
-  (CI: `scripts/check_command_rest_mirror.py`).
-- Запрещено публиковать push-событие, чьё имя совпадает с именем команды
-  (без суффикса `_requested`/`_succeeded`/`_failed`). Используй разные
-  entity-имена: `sync/messages/send_requested` (команда) vs
-  `sync/message/created` (push).
-- Запрещён fallback с WS на HTTP в коде. Если WS недоступен и фабрика с
-  `transport: 'ws'` — операция падает в `*_failed` с
-  `error_code: 'ws_disconnected'`. Никаких retry через HTTP.
+Для `createResourceCollection` с операцией `create`. Slice держит `createInFlight: boolean` и `createLockEventId: string|null`.
 
-## Имена
+| Слой | Поведение |
+|---|---|
+| Reducer | первый `.../create_requested` → `createInFlight=true`, `createLockEventId=event.id`. Дубликат не меняет lock. `CREATED`/`create_failed` сбрасывают. |
+| Effect | перед `POST`/WS читает `createLockEventId`; если задан и ≠ `event.id` — выход без HTTP. |
+| Controller | `create()` при `createInFlight` — `return` (второй `_requested` не диспатчится). |
 
-- `name`: `'<svc>/<entity>'` — lowercase snake_case, ровно два сегмента
-  (`apps/_internal.js::assertResourceName`). `<svc>` — короткое имя сервиса
-  (`frontend`, `crm`, `flows`, `rag`, `sync`, `office`, `voice`).
-- Сервис **обязан** быть в списке зарегистрированных. Имя уникально на весь
-  процесс — повторная регистрация = `throw` (см. ниже).
-- `sliceKey` выводится автоматически из `name` (`scopeEntity` lowerCamel).
-  Перекрывать вручную нельзя для `createAsyncOp` / `createResourceCollection` /
-  `createCursorList` / `createFacets` / `createForm` — единственный источник
-  правды slice key должен быть фабрика. Исключение: `createSlice` принимает
-  опциональный `sliceKey` для случаев, когда slice доменно-нейтральный и
-  имя `<svc>/<entity>` не описывает sliceKey естественно (например, миграция
-  с историческим именем slice). Использовать только при веских причинах.
-- События фабрики строятся как `'<name>/<verb>'` и проходят
-  `assertEventType` (≥3 сегмента).
+`loading` slice — **только** для list. Кнопку «создать» блокируй через `this._resource.createInFlight`. Серверный idempotency (Redis/header) — отдельный слой, не заменяет UI-lock.
 
-## factory-registry — единственная точка lookup
+## factory-registry
 
 ```js
-// core/frontend/static/lib/events/factory-registry.js
-registerFactory(factory)        // добавить в реестр; коллизия имени → throw
-getFactory(name, expectedKind?) // достать; нет имени или неверный kind → throw
-hasFactory(name)                // true/false
-clearFactoryRegistry()          // только для тестов (fixture teardown)
+registerFactory(factory)        // коллизия имени → throw
+getFactory(name, expectedKind?) // нет имени или неверный kind → throw
+hasFactory(name)
+clearFactoryRegistry()          // только тесты
 ```
 
-Регистрация происходит **один раз** при boot'е приложения — `PlatformApp`
-обходит `static factories = [...]`, для каждой фабрики делает
-`registerFactory(f)`, затем `collectFactories(...)` мерджит slices/effects в
-bus. Любая коллизия `sliceKey` или повторная регистрация — `throw` сразу
-при старте.
+Регистрация — один раз при boot'е через `PlatformApp.static factories = [...]`. Любая коллизия `sliceKey` или повторная регистрация = `throw` сразу.
 
-## PlatformApp: декларативная регистрация
+## PlatformApp
 
 ```js
-// apps/<svc>/ui/app/<svc>-app.js
-import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
-import { apiKeysResource } from '../events/resources/api-keys.resource.js';
-import { embedConfigsResource } from '../events/resources/embed.resource.js';
-import { teamMembersResource, teamInviteOp } from '../events/resources/team.resource.js';
-
 export class FrontendApp extends PlatformApp {
     static defaultI18nNamespace = 'frontend';
-    static factories = [
-        apiKeysResource,
-        embedConfigsResource,
-        teamMembersResource,
-        teamInviteOp,
-        // ...
-    ];
+    static factories = [apiKeysResource, embedConfigsResource, /* ... */];
     getBaseUrl() { return '/frontend/api'; }
     getRoutes()  { return CONSOLE_ROUTES; }
-    renderRoute(routeKey, params) { /* ... */ }
 }
 customElements.define('frontend-app', FrontendApp);
 ```
 
-Никаких `getServiceSlices()` для slice-ов, у которых уже есть фабрика.
+`getServiceSlices()` для slice-ов с фабрикой — запрещён. `getServiceEffects()` — только для core-effects (`createRouterEffect`, ws/storage/i18n/theme/auth) и **bridge-effects**.
 
-`getServiceEffects()` — только для платформенных core-effects (`createRouterEffect`,
-core ws/storage/i18n/theme/auth) и **bridge-effects** сервиса.
+**Bridge-effect** допустим только как тонкая связка domain-events с core-events (`STORAGE_*`/`ROUTER_*`/`WS_*`/`AUTH_*`). Запрещено: HTTP/WS-запросы (это `request` фабрики), мутация slice (это reducer), бизнес-логика (это backend).
 
-### Bridge-effects (исключение)
+## CoreEvents — helpers базы
 
-Domain-effect в `getServiceEffects()` допустим **только** как тонкая
-связка domain-events сервиса с платформенными core-events
-(`STORAGE_*` / `ROUTER_*` / `WS_*` / `AUTH_*`). Пример: `sync-persist.effect.js`
-подписывается на `sync/spaces/space_selected`, `sync/channels/channel_selected`,
-`sync/spaces/filter_toggled` и переводит их в `STORAGE_PERSIST_REQUESTED`
-(а на `AUTH_USER_LOADED` — диспатчит `STORAGE_LOAD_REQUESTED` для гидратации).
+Прямой `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*)` в `apps/<svc>/ui/{pages,modals,components}/**` запрещён (`scripts/check_ui_canon.sh`). Используй helper:
 
-Запрещены domain-effects, которые:
-- делают HTTP/WS-запросы (это контракт `createAsyncOp` / `createResourceCollection` / `createCursorList`);
-- мутируют доменный slice (это контракт reducer-а фабрики);
-- содержат бизнес-логику (это backend, а не frontend).
-
-### Нормализация форм данных в фабриках (zero-fallback)
-
-В pages/modals/components запрещены `||`/`??`-фолбеки и тихий `catch`.
-Гарантия формы данных делается **в одном месте — фабрике**:
-
-- `mapItem: (raw) => normalized` для `createResourceCollection` /
-  `createCursorList` приводит item к каноничной форме (массивы → `[]`,
-  объекты-словари → `{}`, строки → `''`, числа → `0`).
-- Для `createAsyncOp` нормализатор живёт в `request` (для HTTP) или в
-  `extraReducer` для WS reply через приватные helpers `_normalize*`
-  (`_normalizeMessage`, `_normalizeChannel`).
-- `extraReducer` нормализует payload push-событий теми же `_normalize*`
-  helpers; вход без обязательных строковых ключей игнорируется через
-  явные `typeof`-проверки (`typeof p.id !== 'string' return state`).
-- `extraInitial` всегда задаёт каноничную форму slice (массивы — `[]`
-  через `Object.freeze([])`, словари — `Object.freeze({})`).
-- Helper `_get<Entity>Data(state, id)` возвращает гарантированно полную
-  форму вложенной сущности (например, `_getChannelData` для
-  `byChannelId` в `messages.resource.js`).
-
-Выбор-источника отображения (например, `space.space_id` vs `space.id`,
-`member.name` vs `member.user_id`, `channel.peer.display_name` vs
-`channel.name`) — только через helpers сервиса
-(`apps/<svc>/ui/_helpers/<svc>-id-resolvers.js`). Прямой `a || b` для
-выбора-источника в pages/modals/components запрещён.
-
-## Обязательные опции каждой фабрики
-
-Опции, без которых фабрика **обязана** падать в момент создания (zero-guess,
-никаких неявных дефолтов):
-
-### `createAsyncOp`
-
-- `name: '<svc>/<op>'`
-- `request({ payload, ctx, event }) -> Promise<result>` — обязателен для
- `transport: 'http'`. Для `transport: 'ws'` опционален: если опущен,
- фабрика автоматически шлёт `wsRequest({ type: REQUESTED, payload, ... })`
- и ждёт `*_succeeded` / `*_failed` reply.
-- Ровно одно из: `silent: true` **либо** оба `successToastKey` + `errorToastKey`
- (i18n keys в формате `'<ns>:<key>'`). Смешивание = `throw`.
-- `transport: 'http'` (default) | `'ws'`. Для `'ws'` обязателен `wsTimeoutMs`
- (положительное число) и `restMirror: { method, path }`.
-- `restMirror: { method, path }` — обязателен для `transport: 'ws'`. Для
- `transport: 'http'` опционален (URL уже в `request`). CI читает это поле
- для верификации против FastAPI route.
-- Опционально: `extraInitial`, `extraReducer(state, event, events)`,
- `extraEvents: { KEY: 'verb' }`, `actions: { methodName: 'verb' }`,
- `onSuccess(ctx, result, event)`, `onFailure(ctx, err, event)`.
-
-`request` должен бросать `HttpError` для HTTP-ошибок и реальные `Error` для
-багов. `HttpError` или `WsTransportError` → `FAILED` событие; всё остальное
-— пробрасывается выше (не глотаем).
-
-### `createResourceCollection`
-
-- `name`, `baseUrl` (без trailing slash), `idField` (имя поля id в модели).
-- `operations: ['list', 'get', 'create', 'update', 'remove']` — обязательно
- непустой, по умолчанию `['list']`. Любая mutating операция требует
- `toastKeys[op]` (`create|update|remove`); опциональные
- `toastKeys[`<op>_error`]`.
-- `transport: 'http'` (default) | `'ws'`. Для `'ws'` обязателен `wsTimeoutMs`.
- Все operations внутри одной фабрики используют один и тот же транспорт
- (нельзя смешивать).
-- `restMirror: { list?, get?, create?, update?, remove? }` — auto-derived
- по `baseUrl` + `idField` (`list/create` -> `baseUrl`, `get/update/remove`
- -> `baseUrl/:idField`). Можно перекрыть для нестандартных путей; CI
- верифицирует против FastAPI routes.
-- Опционально: `listQuery(payload) -> query`, `mapItem(item) -> item`,
- `buildItemUrl(id) -> url`, `itemPathTemplate: '/foo/:idField'`,
- `reloadAfterMutation` (default `true`), `extraInitial`, `extraReducer`,
- `extraEvents`, `actions`.
-
-#### Сериализованный create (идемпотентность в UI, не в HTTP)
-
-Платформенный ответ на повторные клики / повторные вызовы `create` при одном
-запросе, незавершённом до `CREATED` / `create_failed`, в рамках event-driven
-модели (`ui_events.mdc`): state только через **reducer**, сеть — только
-**effect** после dispatch.
-
-| Слой | Поведение |
+| Helper | Событие |
 |---|---|
-| **Reducer** | Первый `.../create_requested` (если в `operations` есть `create`): `createInFlight: true`, `createLockEventId: event.id`. Второй `create_requested` при уже `createInFlight` **не** меняет lock (дубликат в логе не получает владельца effect). `CREATED` и `create_failed` сбрасывают lock. Если `create` нет в `operations` — `createInFlight` не трогается. |
-| **Effect** | Перед `POST` (или WS) читает `ctx.getState()[sliceKey]`: если `createLockEventId` задан и **не** равен `event.id` — выход **без** HTTP (второй параллельный effect-запуск не бьёт API). |
-| **ResourceController** | После первого `dispatch` reducer обновил slice в **том же** тике; `create()` снова: если `createInFlight` — **return** (второй `.../create_requested` **не** создаётся). |
+| `this.toast(key, opts)` | `UI_TOAST_SHOW` |
+| `this.openModal(kind, props)` / `this.closeModal(kind?)` | `UI_MODAL_OPEN` / `_CLOSE` |
+| `this.openSidebar()` / `this.closeSidebar()` | `UI_SIDEBAR_OPEN_REQUESTED` / `_CLOSE_` |
+| `this.navigate(routeKey, params?)` | `ROUTER_NAVIGATE_REQUESTED` |
+| `this.copyToClipboard(text, opts)` | `UI_CLIPBOARD_COPY_REQUESTED` |
+| `this.setLocale(locale)` | `I18N_LOCALE_REQUESTED` |
+| `this.setTheme(name)` | `THEME_SET_REQUESTED` |
+| `this.switchCompany(companyId)` | `AUTH_COMPANY_SWITCH_REQUESTED` |
+| `this.startOAuth(provider, opts)` | `auth/oauth/start_requested` |
 
-Инвентарь slice (помимо `items`, `byId`, `loading` для list): `createInFlight:
-boolean`, `createLockEventId: string | null`. Селектор: `selectors.createInFlight`.
-Поле `loading` **только** для `list` — кнопку «создать» блокируй через
-`this._resource.createInFlight` (из `useResource`), не через `loading`.
-
-**Границы:** одна незавершённая `create` на **всю** коллекцию с данным
-`name` (например `crm/entities`); параллельные create разных сущностей
-через тот же ресурс в один момент не допускаются. **Серверный** idempotency
-(заголовок, Redis) — отдельный слой, не заменяет UI-lock.
-
-**Канон тестов (Vitest, unit):** `tests/frontend_core/unit/factories/resource-collection.spec.js`
-(reducer, effect, селектор) и
-`tests/frontend_core/unit/factories/resource-controller-create-idempotency.spec.js`
-(`ResourceController.create` + bus).
-
-### `createCursorList`
-
-- `name`, `baseUrl`, `buildQuery(filters) -> query` (чистая функция),
- `pageSize` (положительное число — обязательно).
-- `transport: 'http'` (default) | `'ws'`. Для `'ws'` обязателен
- `wsTimeoutMs`.
-- `restMirror: { method: 'GET', path }` — auto-derived из `baseUrl`. Метод
- может быть только `GET` (cursor lists read-only).
-- Опционально: `statusMap: { 403: 'forbidden', 503: 'unavailable', ... }` —
- каждый код → терминальное событие `'<name>/<key>'`; `errorToastKey` (если
- задан — toast при FAILED, иначе только slice.error); `initialFilters`.
-
-### `createFacets`
-
-- `name`, `baseUrl`, `facets: { [key]: 'url-segment' }` (непустой объект).
-- `debounceMs` (>= 0, обязательно), `minQueryLength` (>= 0, обязательно).
-- Опционально: `pageSize` (default 20).
-
-### `createForm`
-
-- `name`, `schema: { [field]: { required?, minLength?, maxLength?, pattern?,
-  validate?(value, draft), errorKey? } }` — непустая.
-- `initial: { ... }` — обязательно содержит ключ для каждого поля схемы;
-  отсутствие — `throw`.
-- `submitEvent: '<scope>/<entity>/<verb>'` — куда диспатчим draft при
-  валидном submit. Обычно — `someAsyncOp.events.REQUESTED` или
-  `someResource.events.CREATE_REQUESTED`.
-- Опционально: `buildPayload(draft) -> payload` (default — копия draft).
+Подписка на CoreEvents (`useEvent('AUTH_COMPANY_SWITCHED', ...)`) — допустима. Запрет именно на исходящий dispatch UI-семейств.
 
 ## Контроллер — единственное API в компоненте
 
 ```js
-// pages/api-keys-page.js
-import { html } from 'lit';
-import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-
 export class ApiKeysPage extends PlatformPage {
     constructor() {
         super();
         this._keys = this.useResource('frontend/api_keys', { autoload: true });
         this._create = this.useOp('frontend/api_key_create');
     }
-
-    render() {
-        return html`
-            <button ?disabled=${this._create.busy}
-                    @click=${() => this.openModal('frontend.api_key_create')}>
-                ${this.t('api_keys_page.create')}
-            </button>
-            ${this._keys.loading
-                ? html`<glass-spinner></glass-spinner>`
-                : this._keys.items.map((k) => html`
-                    <api-key-row .item=${k}
-                                 ?busy=${this._keys.isBusy(k.key_id)}
-                                 @remove=${() => this._keys.remove(k.key_id)}>
-                    </api-key-row>
-                `)}
-        `;
-    }
+    render() { /* this._keys.items, this._create.busy, this.openModal(...) */ }
 }
 ```
 
-В компоненте **никаких**: импортов resource-объектов; `new XController`;
-прямых dispatch UI-событий; `httpRequest`/`fetch`; `||`/`??`/тихих try.
-Подробности — в `frontend.mdc` («zero-import canon»).
+Запрещено в pages/modals/components: импорты `events/resources/*.resource.js`, `events/controllers/*`; `new XController`; прямой `dispatch` UI-семейств; `httpRequest`/`fetch`; `||`/`??`/тихий `catch`.
 
-## Запрет фолбеков (everywhere strict)
+## Запрет фолбеков (strict)
 
-Дефолт ровно один — `initialSlice` фабрики. Запрещено:
+Дефолт ровно один — `initialSlice` фабрики. Запрещено везде в `pages/**`, `modals/**`, `components/**`, `events/resources/**`:
 
-- `state[sliceKey] || initialSlice` в селекторах: slice всегда есть, потому
-  что фабрика регистрирует его в bus reducer.
-- `event.payload || {}`, `(event.payload && event.payload.items) || []`,
-  `payload || null` в reducers/effects: payload приходит **типизированным**
-  через узкие нормализаторы (`_normalizeListPayload`, `_normalizeItemPayload`,
-  ...), которые `throw new Error(...)` при отсутствии обязательных полей.
-- `this.state.items || []` в контроллерах: контроллер читает из
-  гарантированного slice; пустой список — это `initialSlice.items` (`[]`),
-  а не fallback.
-- `q || ''`, `context || null`, `draft || {}` в публичных методах
-  контроллеров: вызывающий обязан передать явный аргумент.
-- `try { ... } catch { return null }` или `catch { return [] }` в effects:
-  допустимо ловить **только** конкретные исключения (`HttpError`, `SyntaxError`
-  в `JSON.parse`, `DOMException` для `localStorage`/clipboard), и каждое
-  поглощённое исключение **обязано** диспатчить `<X>_FAILED` событие.
-- `meta || { source: 'local' }` и аналогичные «защитные» дефолты в
-  `PlatformElement`: вызывающий обязан передать явные аргументы.
+- `state[sliceKey] || initialSlice` (slice всегда есть).
+- `event.payload || {}`, `(event.payload && ...) || []`. Payload приходит через узкие нормализаторы (`_normalizeListPayload`, `_normalizeItemPayload`), которые `throw` при отсутствии обязательных полей.
+- `this.state.items || []` в контроллерах (пустой = `initialSlice.items`, не fallback).
+- `q || ''`, `draft || {}` в публичных методах контроллеров.
+- `try { ... } catch { return null }`. Ловить только конкретные исключения (`HttpError`, `SyntaxError` `JSON.parse`, `DOMException` clipboard/storage); каждое поглощённое — обязано диспатчить `<X>_FAILED`.
 
-Если значение действительно опционально — это явное поле фабрики
-(`extraInitial.lastSecret = null` и т.п.), а не `||`-замена в месте чтения.
+Опциональное значение — явное поле фабрики (`extraInitial.lastSecret = null`), не `||`-замена в месте чтения.
 
-## Парность i18n-ключей
+**Нормализация форм данных** — только в фабрике (`mapItem` для `createResourceCollection`/`createCursorList`; `_normalize*` helpers в `extraReducer`/`request`). `extraInitial` задаёт каноничную форму (`Object.freeze([])` / `Object.freeze({})`).
 
-Каждый `successToastKey`/`errorToastKey`/`toastKeys.<op>`/`toastKeys.<op>_error`/
-`errorToastKey` фабрики **обязан** существовать одновременно в
-`core/i18n/translations/ru/<ns>.json` и `core/i18n/translations/en/<ns>.json`.
-Парность валидируется `make check-i18n` и `scripts/check_ui_factories.py`.
+**Выбор источника** (`a.b || a.c`) — только через helpers сервиса в `apps/<svc>/ui/_helpers/<svc>-id-resolvers.js`, не в pages/modals/components.
 
-Динамические ключи (`'frontend:foo.' + status`) запрещены. Если статус
-конечен (forbidden/unavailable) — это разные ключи в схеме и разные ветки
-кода, не конкатенация.
+## Backend → UI
 
-## Тестирование фабрик
+«Кнопка из бэка» = бэк публикует событие, UI подписывается. Никаких отдельных RPC.
 
-- **Reducer** — `(state, event) => state`, чистая функция, unit-тест без mocks
-  и без bus.
-- **Effect** — фейковый `ctx = { dispatch, getState }`; реальный
-  `httpRequest` с моком `fetch` через `msw`/`undici` (см. `testing.mdc`).
-- **Controller** — Web Test Runner: создаём фабрику, регистрируем через
-  `clearFactoryRegistry()` + `registerFactory(f)`, рендерим компонент,
-  проверяем срез state по dispatch'ам.
-- Глобальный `_resetResourceRegistryForTests()` (`factories/_internal.js`)
-  и `clearFactoryRegistry()` обнуляют реестры между тестами.
+```python
+from core.ui_events import publish_ui_event_to_user
+
+await publish_ui_event_to_user(
+    user_id=ctx.user.user_id,
+    type="crm/note/updated",
+    payload={"note_id": note.id},
+    correlation_id=trace_id,
+)
+```
+
+```js
+this.useEvent('crm/note/updated', () => this._notes.load());
+```
+
+Backend контракт: `core/ui_events/contract.py` (Pydantic `UIEvent`/`UIEventMeta`/`UIEventTarget`), `core/ui_events/dispatcher.py` (`publish_ui_event[_to_user|_to_company|_broadcast]`, канал `platform:ui_events`). WS-форвард: `core/websocket/manager.py` слушает канал и форвардит по `target`.
+
+## i18n-ключи фабрик
+
+Каждый `successToastKey`/`errorToastKey`/`toastKeys.<op>`/`toastKeys.<op>_error` обязан существовать в `core/i18n/translations/ru/<ns>.json` **и** `en/<ns>.json`. Парность: `make check-i18n` + `scripts/check_ui_factories.py`. Динамические ключи (`'frontend:foo.' + status`) запрещены — конечные статусы = разные ключи и разные ветки кода.
+
+## Структура `apps/<svc>/ui`
+
+```
+apps/<svc>/ui/
+  index.js                  # bootstrap
+  app/<svc>-app.js          # extends PlatformApp
+  events/resources/         # все фабрики сервиса
+  components/               # PlatformElement
+  pages/                    # PlatformPage
+  modals/                   # PlatformModal / PlatformFormModal
+  styles/<svc>.css
+```
+
+Папок `services/`, `store/`, `features/`, файлов `*.service.js`, `*.store.js`, `events/effects/`, `events/reducers/` в сервисе быть не должно. Любая core-effect/reducer — в `core/frontend/static/lib/events/`.
+
+## Жёсткие запреты (для всех мигрированных сервисов)
+
+1. Не наследоваться от `LitElement` напрямую — только `PlatformElement`/`PlatformPage`/`PlatformApp`/`PlatformModal`.
+2. Никаких `this.services.*`, `this.notify`, `ServiceRegistry`, `BaseStore`, `Zustand`, `BaseService`, `AppEvents` — таких модулей нет.
+3. `new CustomEvent` для cross-component — нельзя; только `this.dispatch(...)`. `this.emit(name, detail)` — только slot-композиция внутри одного компонента.
+4. `setState` / прямое присваивание `state.x =` — нельзя. Только reducers фабрик.
+5. `fetch`/`httpRequest` в `pages/`, `modals/`, `components/` — нельзя. HTTP — только в `request` фабрики.
+6. Имена событий — `<scope>/<entity>/<verb>` lowercase snake_case ≥3 сегмента; имена фабрик — `<svc>/<entity>` ровно 2 сегмента.
 
 ## CI
 
-- `scripts/check_ui_canon.sh` — для каждого мигрированного сервиса:
-  - запрет прямых импортов `events/resources/*.resource.js`,
-    `events/controllers/*`, `utils/i18n-namespace.js` в `pages/**` и
-    `modals/**`;
-  - запрет `new (Resource|Op|Form|CursorList|Facets)Controller`;
-  - запрет `dispatch(CoreEvents.<UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*>)`
-    в `pages/**`, `modals/**`, `components/**` (только helpers базы);
-  - запрет папок `services/`, `store/`, `features/`, файлов `*.service.js`,
-    `*.store.js`;
-  - запрет `httpRequest`/`fetch` вне `events/resources/`;
-  - запрет фолбеков `|| {}`, `|| []`, `?? '—'`, `?? 'default'` в
-    `pages/**`, `modals/**`, `components/**`, `events/resources/**`.
-- `scripts/check_ui_factories.py` — sanity по всем `events/resources/*.resource.js`:
-  - уникальность `name` глобально;
-  - валидный формат `'<svc>/<entity>'`, `<svc>` ∈ списку;
-  - все toast-ключи фабрики существуют в `ru` **и** `en`;
-  - `baseUrl` соответствует существующему FastAPI route в `apps/<svc>/api/**`;
-  - `idField` соответствует полю модели (по OpenAPI / pydantic schema).
+- `scripts/check_ui_canon.sh` — для каждого сервиса в `FACTORY_CANON_SERVICES`: zero-import canon, запрет `new XController`/прямого dispatch UI-семейств/папок `services|store|features`/`*.service.js`/`fetch` вне resources/`||`-фолбеков.
+- `scripts/check_ui_factories.py` — уникальность `name`, формат `<svc>/<entity>`, парность toast-ключей в ru+en, `baseUrl` соответствует FastAPI route, `idField` соответствует pydantic schema.
+- `scripts/check_command_rest_mirror.py` — каждая factory operation имеет `restMirror`, FastAPI route существует, push-имя ≠ имени команды.
 
-Сборная цель: `make check-events-canon`. Любая ошибка = exit 1.
+Сборная цель: `make check-events-canon`. Любая ошибка — exit 1.
+
+## Тестирование
+
+- **Reducer** — unit без mocks/без bus, `(state, event) => state`.
+- **Effect** — фейковый `ctx = {dispatch, getState}`; реальный `httpRequest` с mock `fetch` (msw/undici).
+- **Controller** — Web Test Runner: `clearFactoryRegistry()` + `registerFactory(f)`, рендер компонента, проверка по dispatch'ам.
+- Между тестами: `clearFactoryRegistry()`, `_resetResourceRegistryForTests()` (`factories/_internal.js`), `resetPlatformBusForTests()`.
+
+Канон тестов сериализованного `create`: `tests/frontend_core/unit/factories/resource-collection.spec.js` и `resource-controller-create-idempotency.spec.js`.
 
 ## См. также
 
-- `ui_events.mdc` — слои bus/reducer/effect, контракт события, backend → UI.
-- `frontend.mdc` — структура `apps/<svc>/ui/`, base helpers, zero-import canon.
-- `ui_components.mdc` — правила core UI Kit (`core/.../components/**`).
+- `frontend.mdc` — структура `apps/<svc>/ui/`, base helpers.
+- `ui_components.mdc` — core UI Kit.
+- `architecture.mdc` — REST-зеркало команд, WS request-reply, JSON ошибок.

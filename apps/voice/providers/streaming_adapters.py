@@ -24,6 +24,7 @@ from apps.voice.providers.base import (
 from core.clients.stt_client import BaseSTTClient, STTTranscriptionResult
 from core.clients.tts_client import BaseTTSClient
 from core.clients.vad_client import BaseVADClient
+from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
 
 
@@ -37,7 +38,8 @@ class StreamingSTTProvider(BaseSTTProvider):
     """Streaming STT через любой `BaseSTTClient`.
 
     Аккумулирует PCM-фреймы в буфере (`push_audio`); при `flush_buffer`
-    отправляет накопленное в batch-клиент и возвращает результат.
+    упаковывает накопленное в WAV (mono s16le) и отправляет в batch-клиент.
+    Сырой `audio/pcm` без заголовков Cloud.ru Whisper и ряд других эндпоинтов не принимают (`Format not recognised`).
     """
 
     def __init__(
@@ -65,12 +67,43 @@ class StreamingSTTProvider(BaseSTTProvider):
     async def flush_buffer(self) -> Optional[STTTranscriptionResult]:
         if not self._audio_buffer:
             return None
-        data = bytes(self._audio_buffer)
+        pcm = bytes(self._audio_buffer)
         self._audio_buffer = bytearray()
+        wav = pcm_s16le_mono_to_wav(pcm, sample_rate=self._sample_rate)
         return await self._stt_client.transcribe_audio(
-            audio_bytes=data,
-            file_name=f"voice_stream_{self._sample_rate}.pcm",
-            mime_type="audio/pcm",
+            audio_bytes=wav,
+            file_name="voice_segment.wav",
+            mime_type="audio/wav",
+            language=self._language,
+        )
+
+    async def peek_transcript(
+        self, *, min_buffer_bytes: int = 16000
+    ) -> Optional[STTTranscriptionResult]:
+        """Прочитать текущий буфер без его сброса (chunked-batch partial).
+
+        Используется `stt_worker` для периодической отправки промежуточных
+        транскриптов (`final=False`) во время открытого VAD-окна. В отличие
+        от ``flush_buffer`` буфер не очищается — продолжаем накапливать тот
+        же самый сегмент, и финальный ``flush_buffer`` после паузы вернёт
+        полный текст.
+
+        ``min_buffer_bytes`` по умолчанию = 16000 байт = 0.5 s @ 16 kHz s16le mono.
+        Если PCM меньше — возвращает ``None`` (батч-провайдеры на коротких
+        фрагментах часто отдают пустую строку).
+        """
+        if min_buffer_bytes <= 0:
+            raise ValueError(
+                "StreamingSTTProvider.peek_transcript: min_buffer_bytes должен быть > 0"
+            )
+        if len(self._audio_buffer) < min_buffer_bytes:
+            return None
+        pcm = bytes(self._audio_buffer)
+        wav = pcm_s16le_mono_to_wav(pcm, sample_rate=self._sample_rate)
+        return await self._stt_client.transcribe_audio(
+            audio_bytes=wav,
+            file_name="voice_segment_partial.wav",
+            mime_type="audio/wav",
             language=self._language,
         )
 

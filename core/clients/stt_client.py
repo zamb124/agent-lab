@@ -96,6 +96,33 @@ def _short_json(value: object, *, limit: int = 1200) -> str:
     return serialized[:limit] + "...(truncated)"
 
 
+def _raise_if_cloud_ru_error_body(body_json: object) -> None:
+    """Ответ Whisper/OpenAI-совместимого API в JSON может быть 2xx с `error`."""
+    if not isinstance(body_json, dict):
+        return
+    err_raw = body_json.get("error")
+    if err_raw is None:
+        return
+    if isinstance(err_raw, str):
+        msg = err_raw.strip()
+        if msg != "":
+            raise ValueError(f"STT cloud_ru вернул ошибку API: {msg}")
+        return
+    if isinstance(err_raw, dict):
+        parts: list[str] = []
+        message = err_raw.get("message")
+        if isinstance(message, str) and message.strip() != "":
+            parts.append(message.strip())
+        typ = err_raw.get("type")
+        if isinstance(typ, str) and typ.strip() != "":
+            parts.append(f"type={typ.strip()}")
+        code = err_raw.get("code")
+        if code is not None and str(code).strip() != "":
+            parts.append(f"code={code}")
+        if parts:
+            raise ValueError("STT cloud_ru вернул ошибку API: " + "; ".join(parts))
+
+
 def _looks_like_stt_error_text(text: str) -> bool:
     normalized = text.strip().lower()
     if normalized == "":
@@ -225,6 +252,7 @@ class CloudRuSTTClient(BaseSTTClient):
         body_text = response.text.strip()
         if "application/json" in content_type:
             body_json = response.json()
+            _raise_if_cloud_ru_error_body(body_json)
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
                 raise ValueError(
@@ -240,6 +268,7 @@ class CloudRuSTTClient(BaseSTTClient):
 
         if body_text.startswith("{") and body_text.endswith("}"):
             body_json = json.loads(body_text)
+            _raise_if_cloud_ru_error_body(body_json)
             transcript = _extract_transcript_from_json_payload(body_json)
             if transcript is None:
                 raise ValueError(

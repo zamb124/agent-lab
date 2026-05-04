@@ -5,147 +5,75 @@ alwaysApply: true
 
 ## REST-зеркало команд (платформенный инвариант)
 
-Применяется ко **всем** сервисам: frontend, crm, rag, office, sync, flows,
-scheduler, voice — текущим и будущим.
-
-### Правило
-
 | Тип события | REST-зеркало | WS-доступность | Источник правды |
 |---|---|---|---|
-| **Команда** (`<svc>/<entity>/<verb>_requested`) — инициирует клиент | **Обязательно** HTTP-эндпоинт в `apps/<svc>/api/**` с тем же method+path+payload+response, что и WS reply | Опционально (через `transport: 'ws'` фабрики) | Один и тот же handler / бизнес-логика в `apps/<svc>/services/` |
-| **Success/Failure** (`<...>_succeeded` / `<...>_failed`) — ack автору | Body HTTP-ответа = payload event-а | Reply-фрейм с тем же `request_id` | — |
-| **Push** (`<svc>/<entity>/<verb>` без `_requested`) — server-initiated broadcast | **Запрещено** REST-зеркало (REST не делает push) | Только через `publish_ui_event_*` → `platform:ui_events` → `/<svc>/api/ws/notifications` | `core/ui_events/dispatcher.py` |
+| **Команда** `<svc>/<entity>/<verb>_requested` | **Обязательно** HTTP в `apps/<svc>/api/**` (тот же method+path+payload+response, что WS reply) | Опционально (`transport: 'ws'` фабрики) | Один handler в `apps/<svc>/services/` |
+| **Success/Failure** `<...>_succeeded`/`_failed` | Body HTTP-ответа = payload event'а | Reply-фрейм с тем же `request_id` | — |
+| **Push** `<svc>/<entity>/<verb>` (без `_requested`) | **Запрещено** (REST не делает push) | Только `publish_ui_event_*` → `platform:ui_events` → `/<svc>/api/ws/notifications` | `core/ui_events/dispatcher.py` |
 
-### Зачем
+Зачем REST-зеркало: SDK/CLI/интеграции без WS, гостевые/pre-WS-connect сценарии (call-join, lead form, embed), API-тесты без WS, отладка `curl`'ом.
 
-- **SDK / CLI / интеграции**: внешний клиент без WS-стенда дёргает REST.
-  Полная функциональность платформы доступна через HTTP.
-- **Гостевые / pre-WS-connect** сценарии (call-join, lead form, embed):
-  работают без подключения WS.
-- **Тесты API**: можно покрывать без WS-инфры.
-- **Отладка**: `curl` против любой команды — полный аналог WS-вызова.
+### Эталон: Sync (100% WS+REST симметрия)
 
-### Sync = 100% WS+REST симметрия (эталонная реализация)
+- Реестр операций — `apps/sync/realtime/command_router.py::SYNC_OPERATIONS` (`{canonical_type → Operation(payload_model, fn)}`). Один handler — оба транспорта.
+- Бизнес-функции — `apps/sync/realtime/operations.py` (`async def op_<entity>_<verb>(payload, *, user, container) -> Result`).
+- WS-обвязка — `_make_ws_handler(op)` валидирует payload Pydantic'ом, зовёт `op.fn`. `WsCommandError` → `*_failed`-фрейм.
+- REST-обвязка — каждый route в `apps/sync/api/**` собирает Pydantic payload и зовёт ту же `op.fn`. `WsCommandError` маппится в `HTTPException` через `@app.exception_handler` в `apps/sync/main.py`.
+- TaskIQ оставлен **только** для `messages.transcribe_{audio,video,call}` (heavy STT). Остальные mutating-команды — in-process.
 
-Sync реализует канон полностью:
+### Контракт `restMirror` фабрики
 
-- **Один реестр операций** — `apps/sync/realtime/command_router.py::SYNC_OPERATIONS`
-  (`{canonical_type → Operation(payload_model, fn)}`). Один handler — оба
-  транспорта.
-- **Бизнес-функции** — `apps/sync/realtime/operations.py` (`async def
-  op_<entity>_<verb>(payload, *, user, container) -> Result`). Используют
-  helpers из `apps/sync/realtime/handlers.py` (чистые функции уровня
-  репозитория).
-- **WS-обвязка** — `_make_ws_handler(op)` валидирует payload через Pydantic
-  и зовёт `op.fn(...)`. `WsCommandError` → `*_failed`-фрейм.
-- **REST-обвязка** — каждый route в `apps/sync/api/**` собирает Pydantic
-  payload и зовёт ту же `op.fn(...)`. `WsCommandError` маппится в
-  `HTTPException` через единый `@app.exception_handler` в
-  `apps/sync/main.py`.
-- **TaskIQ** оставлен ТОЛЬКО для `messages.transcribe_audio/video/call`
-  (heavy STT-задачи). Все остальные mutating-команды — in-process через
-  `op_*`.
-- Удалены: `apps/sync/realtime/command_dispatch.py`,
-  `apps/sync/realtime/read_handlers.py`, `CommandEnvelope`,
-  `execute_command`, `handle_command.kiq`, `_normalize_command_payload` /
-  `_slug_from_name` workarounds.
+- `createAsyncOp`: `{method, path}` обязателен при `transport: 'ws'`; для `'http'` опционален.
+- `createResourceCollection`: `{list?, get?, create?, update?, remove?}` auto из `baseUrl`+`idField`, перекрывается под нестандартные пути.
+- `createCursorList`: `{method:'GET', path}` auto из `baseUrl`. Только `GET`.
+- `createFacets`: auto per facet key из `baseUrl`+`facets[key]`.
 
-### Контракт `restMirror` у фабрики
-
-Каждая фабрика (`createAsyncOp` / `createResourceCollection` /
-`createCursorList`) объявляет **`restMirror`**:
-
-- `createAsyncOp`: `restMirror: { method, path }` — обязателен при
-  `transport: 'ws'` (URL не выводится из `request`); опционален при
-  `transport: 'http'` (URL уже в `request`).
-- `createResourceCollection`: `restMirror: { list?, get?, create?,
-  update?, remove? }` — auto-derived из `baseUrl` + `idField`. Можно
-  перекрыть для нестандартных путей.
-- `createCursorList`: `restMirror: { method: 'GET', path }` — auto-derived
-  из `baseUrl`. Метод только `GET`.
-- `createFacets`: `restMirror` auto-derived per facet key из `baseUrl` +
-  `facets[key]`.
-
-CI (`scripts/check_command_rest_mirror.py`, в `make check-events-canon`)
-проверяет:
-
+CI `scripts/check_command_rest_mirror.py` (`make check-events-canon`):
 1. Каждая factory operation имеет `restMirror` (явный или auto).
-2. Соответствующий FastAPI route существует в `apps/<svc>/api/**`.
-3. Имя push-события (`publish_ui_event_*`) НЕ совпадает с именем команды.
+2. FastAPI route существует.
+3. Имя push-события ≠ имени команды.
 
 ### WebSocket request-reply
 
-Один сокет `/<svc>/api/ws/notifications` (`core.websocket.router`) несёт два
-потока: push (из `platform:ui_events`) и RPC request-reply (point-to-point
-команды). Сервис регистрирует command-handlers через
-`register_ws_command_handler(command_type, handler)` из
-`core.websocket.command_router`. Reply-тип выводится механически:
-`*_requested` → `*_succeeded` / `*_failed`.
+Один сокет `/<svc>/api/ws/notifications` (`core.websocket.router`) несёт push (из `platform:ui_events`) и RPC request-reply. Сервис регистрирует handlers через `register_ws_command_handler(command_type, handler)` (`core.websocket.command_router`). Reply-тип механически: `*_requested` → `*_succeeded`/`*_failed`.
 
-Frontend-эффект `core/.../events/effects/ws.effect.js` отправляет фрейм
-`{ request_id, type, payload }`, ждёт reply с тем же `request_id`.
-Таймаут — обязательное поле `wsTimeoutMs` фабрики. No-fallback: если WS
-оборвался или истёк timeout — операция падает в `*_failed` с
-`error_code: 'ws_disconnected' | 'ws_timeout'`. Никакого retry через HTTP.
+Frontend `core/.../events/effects/ws.effect.js` шлёт `{request_id, type, payload}`, ждёт reply. `wsTimeoutMs` обязателен у фабрики. **No-fallback:** WS оборвался / timeout — `*_failed` с `error_code: 'ws_disconnected'|'ws_timeout'`. Никакого retry через HTTP.
 
 ### Запреты
 
 - WS-команда без REST-зеркала — фабрика падает на старте.
-- REST-эндпоинт делает что-то, чего нет в WS command-router (для сервисов
-  с `transport: 'ws'`). Если operation не нужна по WS — `transport: 'http'`,
-  и REST-зеркало = реальный путь.
-- Push-событие с именем, конфликтующим с командой (без суффикса).
-  Пример: `sync/messages/send_requested` (команда) и `sync/message/created`
-  (push) — разные entity-имена (`messages` vs `message`).
-- Fallback с WS на HTTP в коде. Транспорт выбирается в фабрике один раз
-  через поле `transport`.
+- REST-эндпоинт делает что-то, чего нет в WS command-router (для `transport: 'ws'`).
+- Push-имя совпадает с именем команды без суффикса. Различай `entity`: `sync/messages/send_requested` (команда) vs `sync/message/created` (push).
+- Fallback с WS на HTTP в коде. Транспорт — один раз в фабрике.
 
-### JSON ошибок REST и payload WS `*_failed`
+### JSON ошибок REST и WS `*_failed`
 
-Платформа добавляет к JSON-сообщениям об ошибках (HTTP статус ≥ 400 с
-`application/json`) поля **`request_id`**, **`trace_id`**, **`service`** —
-сквозная корреляция с заголовками `X-Request-Id` / `X-Trace-Id`.
+К JSON-ошибкам HTTP (`status >= 400`, `application/json`) добавляются `request_id`/`trace_id`/`service` — корреляция с `X-Request-Id`/`X-Trace-Id`. Если `request.state.company.company_id == "system"` и в `LoggingConfig` заданы `grafana_public_url`+`grafana_loki_datasource_uid` — добавляется `observability.logs_explore_url` (Grafana Explore + whitelist LogQL, `core.clients.loki_client`). Реализация — `PlatformHttpErrorEnvelopeMiddleware` (`core/middleware/platform_error_envelope.py`), последний middleware до CORS в `create_service_app`.
 
-Если `request.state.company.company_id == "system"` и в `LoggingConfig`
-заданы **`grafana_public_url`** и **`grafana_loki_datasource_uid`**, в объект
-ответа добавляется **`observability.logs_explore_url`** — ссылка на Grafana
-Explore с whitelist LogQL (как контур Loki в `core.clients.loki_client`).
-Реализовано через **`PlatformHttpErrorEnvelopeMiddleware`**
-(`core/middleware/platform_error_envelope.py`), в стеке `create_service_app`
-(последний до CORS).
+WS `*_failed`: те же поля мерджатся в `payload` рядом с `error_code`/`error_detail` (`core/websocket/router.py`). Frontend HTTP-ошибка — `core/frontend/static/lib/events/http.js::HttpError` (`request_id`, `trace_id`, `service`, `observability`).
 
-Для WebSocket **`*_failed`** те же добавочные поля мерджатся в объект
-`payload` рядом с `error_code` / `error_detail` (`core/websocket/router.py`).
+Детали — **`logging.mdc`**.
 
-Фронтовый класс ошибки HTTP — **`core/frontend/static/lib/events/http.js`**
-(`HttpError`: `request_id`, `trace_id`, `service`, `observability`).
+## Субдомен Host и сессия (JWT)
 
-Детали конфигурации — **`logging.mdc`**.
+`Host` — тенант запроса. `auth_token` — активная компания в payload.
 
-## Субдомен Host и сессия (JWT): одна активная компания
+- Тенант `Host` ≠ `token.company_id`, токен `SESSION`, в `Host` субдомен компании, пользователь состоит в этой компании: **тенант Host главнее** — `AuthMiddleware` зовёт `rebind_session_to_company` (`core/utils/auth_session_rebind.py`). В БД обновляется `user.active_company_id`, выпускается новый JWT, ставится `Set-Cookie auth_token`. Без 307-редиректа.
+- Пользователь не состоит в компании тенанта — **403**.
+- В JWT компания, в которой пользователь больше не состоит, но `Host` — его компания: тот же rebind на `Host`-компанию.
+- Контексты правила: `context_type` `frontend` и `api` (SPA + `/frontend/api/auth/me`).
 
-`Host` с субдоменом задаёт **тенант** запроса. `auth_token` (session JWT) задаёт **активную компанию** в payload.
+После accept invite ответ `AcceptInviteResponse.subdomain` — клиент делает полную навигацию на subdomain dashboard. Перевыпуск JWT — тот же `rebind_session_to_company`.
 
-- Если тенант из `Host` и `token.company_id` различаются, токен — `TokenType.SESSION`, в `Host` есть субдомен компании и пользователь **состоит** в компании этого тенанта: **тенант Host главнее сессии** — в `AuthMiddleware` вызывается `rebind_session_to_company` ([`core/utils/auth_session_rebind.py`](core/utils/auth_session_rebind.py)): в БД обновляется `user.active_company_id`, выпускается новый session JWT, в ответ добавляется **`Set-Cookie` `auth_token`** (тот же механизм установки cookie, что при `POST .../invites/accept`). Редиректа **307** нет.
-- Если пользователь **не** состоит в компании тенанта `Host`: **403** (нет доступа к этому субдомену).
-- Если в JWT указана компания, в которой пользователь больше **не** состоит, но тенант `Host` — его компания из `user.companies`, применяется тот же **rebind** на компанию из `Host`.
-- Контексты правила: `context_type` **`frontend`** и **`api`**, чтобы совпадали SPA и запросы вида `/frontend/api/auth/me`.
+Редирект `/dashboard` → last-visited не-console сервис (`replaceLocationToLastVisitedNonFrontendService`) — только при query `post_login=1` (добавляется после OAuth callback и `POST /api/auth/login/demo`). Ручной переход на Console — без query, дашборд не покидается.
 
-После приёма инвайта ответ `AcceptInviteResponse` включает **`subdomain`** приглашённой компании; клиент делает полную навигацию на dashboard этого субдомена, чтобы cookie и `Host` совпали; перевыпуск JWT на бэке делает тот же `rebind_session_to_company`, что и при первом запросе на субдомен с «чужой» сессией.
-
-Редирект с `/dashboard` в **last-visited** не-console сервис (`replaceLocationToLastVisitedNonFrontendService`) выполняется только при query **`post_login=1`**, который добавляется к URL в redirect после **OAuth callback** и **POST /api/auth/login/demo**. Ручной переход на Console (лаунчер, сайдбар) открывает `/dashboard` без этого query — дашборд не покидается.
-
-## Dependency Injection (единый стандарт)
+## Dependency Injection
 
 ### Контейнер и `@lazy`
 
-DI строится на `BaseContainer` (`core/container/base.py`) с декоратором `@lazy` — property с кешированием на экземпляре. Каждый сервис наследует `BaseContainer` и добавляет свои `@lazy` для репозиториев и сервисов.
+`BaseContainer` (`core/container/base.py`) с декоратором `@lazy` — кешированный property. Каждый сервис наследует и добавляет свои `@lazy`. Singleton — `get_<svc>_container()` на процесс; при старте `create_service_app` кладёт его в `app.state.container`.
 
-Singleton контейнера — модульная переменная `get_*_container()` на процесс; при старте HTTP-сервиса `create_service_app` кладёт тот же объект в `app.state.container`.
-
-### `dependencies.py` + `ContainerDep` (ОБЯЗАТЕЛЬНО для каждого сервиса)
-
-Каждый сервис **обязан** иметь `dependencies.py` с единственным каноничным способом получения контейнера в HTTP-слое:
+### `dependencies.py` + `ContainerDep` (обязательно)
 
 ```python
 # apps/<service>/dependencies.py
@@ -159,145 +87,93 @@ def get_container() -> <Service>Container:
 ContainerDep = Annotated[<Service>Container, Depends(get_container)]
 ```
 
-Каждый HTTP-хендлер **обязан** получать контейнер ТОЛЬКО через `ContainerDep`:
-
 ```python
-from apps.<service>.dependencies import ContainerDep
-
 @router.get("/items")
 async def list_items(container: ContainerDep):
     return await container.some_service.list()
 ```
 
-### Имя параметра
-
-Строго `container` — не `c`, не `cont`, не `svc`. Единое имя упрощает grep и автодополнение.
-
-### ContainerDep обязателен для ВСЕХ HTTP-хендлеров
-
-Включая utility-эндпоинты (health, metadata, certificate и т.д.). Если хендлер не использует контейнер: `_ = container` в теле. Цель — единообразие сигнатур и возможность добавить зависимость без рефакторинга.
-
-### Никаких гранулярных get_*_service() фабрик
-
-Запрещены обёртки типа `get_entity_service()`, `get_graph_service()` в `dependencies.py`. Один хендлер — один `container: ContainerDep`, доступ через `container.entity_service`, `container.graph_service`.
+Имя параметра — строго `container`. Для всех HTTP-хендлеров (включая health/metadata): не используешь — `_ = container` в теле.
 
 ### Запрещено в HTTP-слое
 
-- Прямой вызов `get_*_container()` в теле хендлера
-- Локальное определение `get_container_dep()` в файлах роутеров
-- Импорт контейнера другого сервиса (`from apps.X.container import get_X_container`)
-- Создание репозиториев/сервисов в обход контейнера (`SomeRepository(db_url=...)`)
-- Смешанный стиль: `Depends(get_service)` + `get_container()` в одном хендлере
+- Прямой `get_<svc>_container()` в теле хендлера.
+- Локальный `get_container_dep()` в роутерах.
+- Импорт контейнера другого сервиса.
+- `SomeRepository(db_url=...)` в обход контейнера.
+- Гранулярные `get_entity_service()`/`get_graph_service()` в `dependencies.py` — только `ContainerDep` + `container.entity_service`.
+- Смешение `Depends(get_service)` + `get_container()` в одном хендлере.
 
 ### Допустимые исключения
 
-- В `core/api/*.py` — `request.app.state.container` (core не знает конкретный тип контейнера)
-- В TaskIQ задачах — `get_*_container()` напрямую (нет FastAPI request scope)
-- В каналах/триггерах flows — `get_container()` (не HTTP-контекст)
-- `core/push/delivery.py` — `PushSubscriptionRepository(db_url=...)` (вызывается из HTTP, WebSocket, workers — единый контейнер недоступен)
-- `apps/frontend/api/embed_configs.py` — допустимо использует flows container напрямую (монолит, все сервисы в одном процессе)
-- WebSocket-эндпоинты (`core.websocket.router.notifications_endpoint`) — FastAPI `Depends()` не работает с WebSocket route handlers в том же виде, контейнер берётся через `get_*_container()` внутри handler'ов команд (`apps/<svc>/realtime/command_router.py`).
+- `core/api/*.py` — `request.app.state.container` (core не знает тип).
+- TaskIQ задачи — `get_<svc>_container()` напрямую (нет request scope).
+- Каналы/триггеры flows — `get_container()`.
+- `core/push/delivery.py` — `PushSubscriptionRepository(db_url=...)` (вызывается из HTTP/WS/workers).
+- `apps/frontend/api/embed_configs.py` — flows container напрямую (монолит).
+- WebSocket route handlers — контейнер через `get_<svc>_container()` внутри handler'ов команд (FastAPI `Depends()` ограничен на WS).
 
-### Известные нарушения `core/ → apps/` (требуют архитектурной проработки)
+### Известные нарушения `core/ → apps/`
 
-- `core/scheduler/scheduler.py` — импортирует брокеры всех воркеров (`apps.*_worker`)
-- `core/api/integrations.py` — `_resume_flow` импортирует `process_flow_task` из flows
-- `core/clients/llm/factory.py` — `get_mock_for_llm` из flows (тестовый путь)
+Требуют архитектурной проработки: `core/scheduler/scheduler.py` (импорт `apps.*_worker` брокеров), `core/api/integrations.py::_resume_flow` (импорт `process_flow_task` из flows), `core/clients/llm/factory.py::get_mock_for_llm` (тестовый путь).
+
+## Межсервисный доступ к данным
+
+- **Репозиторий приоритетнее.** Если у процесса есть доступ к БД peer-домена (`database.mdc`, `configuration.mdc`) — данные через репозиторий (`core/`, `apps/<service>/db/`, DI `@lazy`). Не дублировать те же операции через REST к peer-сервису.
+- **`ServiceClient`** (`core/clients/service_client.py`) — только когда контракт намеренно REST или БД недоступна. Передаёт `X-Trace-Id`/`Authorization`/`X-Company-Id`/`X-User-Id`/`X-Request-Id` из контекста.
+- Прямой `httpx.AsyncClient` между сервисами **запрещён** (`integrations.mdc`).
+- Самодельные HTTP-клиенты к peer за теми же таблицами; «тонкий» прокси без причины — запрещены.
 
 ## Database-First
 
-Вся конфигурация flows и tools хранится в БД. Код определяет только поведение, но не структуру.
+Вся конфигурация flows/tools — в БД. Код задаёт поведение, не структуру.
 
-- `Storage` — низкоуровневый key-value доступ
-- `Repository` — CRUD для конкретных моделей
-- `Factory` — создание объектов со всеми зависимостями из БД
+- `Storage` — приватный key-value слой.
+- `Repository` — CRUD по моделям.
+- `Factory` — сборка объектов со всеми зависимостями из БД.
 
 ```python
-from apps.flows.src.container import get_container
-
-# Через фабрику
 flow = await get_container().flow_factory.get_flow(flow_id)
-
-# Через репозиторий
 config = await get_container().flow_repository.get(flow_id)
 ```
 
-Запрещено хардкодить конфигурацию в Python-коде — бизнес-логика живёт в JSON конфигах flows в БД.
+Хардкодить конфигурацию в Python — запрещено: бизнес-логика живёт в JSON-конфигах flows в БД.
 
 ## Graph-based execution
 
-Выполнение — граф нод. Класс `Flow` (`apps/flows/src/runtime/flow.py`) обходит граф по рёбрам.
-Для прерывания выполнения и запроса данных у пользователя используй `FlowInterrupt`.
-Персистентность состояния между запросами — через `StateManager` (`apps/flows/src/state/persistence.py`).
+Выполнение — граф нод. `apps/flows/src/runtime/flow.py::Flow` обходит граф по рёбрам. Прерывание и запрос данных у пользователя — `FlowInterrupt`. Персистентность между запросами — `apps/flows/src/state/persistence.py::StateManager`. Детали — **`flows_logic.mdc`**, **`execution_state.mdc`**.
 
-## LLM
+## LLM, мультимодал, NanoBanana
 
-Только через `core/clients/llm/factory.py`:
+LLM — только через `core/clients/llm/factory.py::get_llm()`. Прямые импорты LangChain/OpenAI моделей — запрещены.
 
 ```python
 from core.clients.llm import get_llm
-
 llm = get_llm()
 llm = get_llm("anthropic/claude-sonnet-4.5")
 ```
 
-Запрещены прямые импорты LangChain/OpenAI моделей.
+`ChatOpenAIWithBilling` обрабатывает файлы от LLM: изображения/аудио/файлы → `file_processor`/`audio_processor` → S3 (с STT для аудио).
 
-## Multimodal Output
-
-`ChatOpenAIWithBilling` автоматически обрабатывает файлы от LLM:
-- Изображения → `file_processor` → S3
-- Аудио → `audio_processor` → S3 с распознаванием речи
-- Файлы → `file_processor` → S3
-
-## NanoBanana
-
-Для генерации изображений:
-
-```python
-from core.clients.nano_banana import NanoBananaClient, NanoBananaClientFactory
-
-client = await NanoBananaClientFactory.create()
-file_ids = await client.generate_images(prompt="Beautiful sunset", num_images=1)
-
-# С референсом
-file_ids = await client.generate_images(
-    prompt="Make it darker",
-    reference_file_ids=["file_abc123"],
-    num_images=1
-)
-```
-
-NanoBanana работает через OpenRouter.
+Генерация изображений — `core/clients/nano_banana/NanoBananaClientFactory.create()` (через OpenRouter): `client.generate_images(prompt, num_images, reference_file_ids?)`.
 
 ## Контекст выполнения
 
-`get_context()` для доступа к текущему пользователю, компании, trace_id:
-
 ```python
 from core.context import get_context
-
-context = get_context()
-user = context.user
-company_id = context.active_company.id
-trace_id = context.trace_id
+ctx = get_context()  # ctx.user, ctx.active_company.id, ctx.trace_id
 ```
 
 Репозитории берут `company_id` из контекста автоматически.
-Межсервисный доступ к данным: приоритет репозитория при общей БД; `ServiceClient` — для намеренного HTTP API (`repository_inter_service.mdc`).
-`ServiceClient` передаёт `X-Trace-Id`, `Authorization`, `X-Company-Id`, `X-User-Id` из контекста.
 
-## Хлебные крошки (Breadcrumbs)
+## Breadcrumbs (обязательно)
 
-**ОБЯЗАТЕЛЬНЫЙ core-компонент на всех неглавных страницах всех сервисов** (кроме sync, у которого свой UX).
+`platform-breadcrumbs` (`core/frontend/static/lib/components/platform-breadcrumbs.js`) — на всех неглавных страницах всех сервисов кроме `sync` (свой UX).
 
-- Компонент: `platform-breadcrumbs` в `core/frontend/static/lib/components/platform-breadcrumbs.js`.
-- Источник правды — slice `state.router`:
-  - `routes` — массив `{ key, path, parent? }`, регистрируется автоматически в `createRouterEffect` через событие `CoreEvents.ROUTER_ROUTES_REGISTERED` при первом тике.
-  - `routeKey` / `params` — заполняются `ROUTER_ROUTE_CHANGED`.
-- Цепочка строится поднятием по `parent` от текущего `routeKey` к корню. Для каждого узла подпись резолвится через `this.t('routes.<routeKey>')` (`defaultI18nNamespace` сервиса).
+- Источник — slice `state.router`: `routes` (`{key, path, parent?}`, регистрация автоматическая в `createRouterEffect` через `CoreEvents.ROUTER_ROUTES_REGISTERED`); `routeKey`/`params` (`ROUTER_ROUTE_CHANGED`).
+- Цепочка — поднятие по `parent` от текущего `routeKey` к корню. Подпись — `this.t('routes.<routeKey>')` (`defaultI18nNamespace`).
 - Импорт: `import '@platform/lib/components/platform-breadcrumbs.js'`.
-- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента страницы. Динамический хвост (имя сущности/документа) — атрибут `current-label="..."` или property `.currentLabel=${...}`.
-- Клик по неактивной крошке диспатчит `CoreEvents.ROUTER_NAVIGATE_REQUESTED` с `params` текущего маршрута (если совпадает routeKey) или `{}`.
-- i18n: каждый сервисный бандл обязан содержать секцию `"routes": { "<routeKey>": "<подпись>" }` в RU и EN — для всех ключей из массива `routes` `createRouterEffect`.
-- Никаких глобальных переменных (`window.__PLATFORM_ROUTER__`) и никакого `setupRouter()`: всё через bus + select.
+- Использование: `<platform-breadcrumbs></platform-breadcrumbs>` в начале контента; динамический хвост — `current-label="..."` или `.currentLabel=${...}`.
+- Клик неактивной крошки → `CoreEvents.ROUTER_NAVIGATE_REQUESTED` с `params` текущего маршрута или `{}`.
+- i18n: каждый сервисный бандл обязан содержать секцию `"routes": {"<routeKey>": "<подпись>"}` в RU+EN.
+- Запрещено: `window.__PLATFORM_ROUTER__`, `setupRouter()`. Только bus + select.

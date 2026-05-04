@@ -26,6 +26,7 @@ from core.clients.speech_override import SpeechOverride
 from core.clients.voice_resolver import (
     get_stt_client,
     get_vad_client,
+    resolve_stt_settings,
 )
 from core.container.base import BaseContainer, lazy
 from core.logging import get_logger
@@ -68,12 +69,12 @@ class VoiceContainer(BaseContainer):
         company_id: str,
         override: Optional[SpeechOverride] = None,
     ) -> BaseSTTProvider:
+        resolved = await resolve_stt_settings(company_id=company_id, override=override)
         stt_client = await get_stt_client(company_id=company_id, override=override)
-        cfg = self.settings.voice.stt
         return StreamingSTTProvider(
             stt_client=stt_client,
             sample_rate=16000,
-            language=cfg.default_language,
+            language=resolved.language,
         )
 
 

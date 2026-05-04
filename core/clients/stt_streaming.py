@@ -32,6 +32,7 @@ from abc import ABC, abstractmethod
 from typing import AsyncIterator, Optional
 
 from core.clients.stt_client import BaseSTTClient, STTTranscriptionResult
+from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
 
 
@@ -105,12 +106,13 @@ class BufferedSTTStreamer(BaseSTTStreamer):
     async def flush(self) -> Optional[STTTranscriptionResult]:
         if not self._buffer:
             return None
-        data = bytes(self._buffer)
+        pcm = bytes(self._buffer)
         self._buffer = bytearray()
+        wav = pcm_s16le_mono_to_wav(pcm, sample_rate=self._sample_rate)
         return await self._stt_client.transcribe_audio(
-            audio_bytes=data,
-            file_name=f"voice_stream_{self._sample_rate}.pcm",
-            mime_type="audio/pcm",
+            audio_bytes=wav,
+            file_name="voice_segment.wav",
+            mime_type="audio/wav",
             language=self._language,
         )
 

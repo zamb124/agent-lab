@@ -39,7 +39,7 @@ class VoiceMicCaptureProcessor extends AudioWorkletProcessor {
             if (this._filled >= VOICE_MIC_CAPTURE_BATCH_SAMPLES) {
                 const pkt = new Float32Array(VOICE_MIC_CAPTURE_BATCH_SAMPLES);
                 pkt.set(this._pending);
-                this.port.postMessage(pkt, [pkt.buffer]);
+                this.port.postMessage(pkt);
                 this._filled = 0;
             }
         }

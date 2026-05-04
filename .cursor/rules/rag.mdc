@@ -1,5 +1,5 @@
 ---
-description: "RAG система - провайдеры, namespaces, документы, pgvector"
+description: "RAG: провайдеры, namespaces, документы, pgvector, TTL, reembed"
 alwaysApply: false
 globs:
   - "core/rag/**/*"
@@ -10,709 +10,97 @@ globs:
 ---
 # RAG (Retrieval-Augmented Generation)
 
-## Обзор
+Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — единый `core/files/reader/FileReader` (`FileReadResult`); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт OpenRouter (`rag.embedding.base_url`).
 
-RAG Service - микросервис для управления документами и семантического поиска с поддержкой множественных провайдеров (pgvector, Agentset).
+Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,services,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services}`.
 
-**Ключевые особенности:**
-- Поддержка нескольких провайдеров (pgvector, Agentset)
-- Изоляция данных через namespaces
-- Асинхронная обработка документов через TaskIQ
-- Хранение оригиналов файлов в S3/MinIO
-- Парсинг файлов для pgvector через **`core.files.reader.FileReader`** (схема **`FileReadResult`**); отдельного парсера в `core/rag` нет
-- Embeddings: OpenAI-compatible API; по умолчанию OpenRouter (`rag.embedding.base_url`)
-- REST API с префиксом `/rag/api/v1/`
-- Micro-frontend UI на Lit 3 + EventBus + фабрики (см. `frontend.mdc`, `ui_factories.mdc`, `ui_events.mdc`, `ui_components.mdc`)
+## Контракт
+
+- `core/rag/base_provider.py::BaseRAGProvider` — namespaces (`create/delete/list/get`), documents (`add/delete/list/get`), `search(query, namespace?, top_k, filters)`. Реализации: `core/rag/providers/{pgvector,agentset}_provider.py`.
+- Модели: `RAGDocument`, `RAGSearchResult`, `RAGNamespace` (Pydantic) + `VectorDocument`, `DocumentProcessingStatus` (SQLAlchemy в БД процесса RAG, `database.rag_url`).
+
+## Правила (обязательно)
+
+1. **Префикс** `/rag/api/v1/` — всегда. Без префикса — запрещено.
+2. **При отправке файла НЕ передавать `Content-Type: application/json`** — `ServiceClient`/`RagClient` сами выставят `multipart`. `data={"metadata": json.dumps(...)}` — единственный канон. `json={...}` рядом с `files=` запрещено.
+3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
+4. **Async-индексация** — все mutating-операции через TaskIQ `process_document_task` (`apps/rag_worker/tasks/indexing_tasks.py`). Синхронный `parse_document` в API — запрещён.
+5. **Доступ к namespace** — для `ingest-text` и `search` обязательна проверка `namespace_repository.get(id)` + совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` проверка для каждого `namespace_ids[i]`.
+6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `search`, `global_search`. Не плодить `ServiceClient(...)` напрямую в peer-сервисе.
 
 ## TTL документов и retention
 
-- Клиент задаёт необязательный ключ ``ttl_seconds`` в **metadata** при загрузке файла / ``ingest-text``. Целое неотрицательное число секунд; ``0`` — индекс не удаляется фоновой очисткой.
-- Если ``ttl_seconds`` не передан, подставляется ``rag.ttl.default_ttl_seconds`` из конфигурации (шаблон: 864000 с = 10 суток).
-- В ``document_processing_status`` хранится колонка ``ttl_seconds`` (пайплайн с очередью и статусом); в каждом чанке ``vector_documents.metadata`` дублируется тот же каноничный ключ.
-- Периодическая задача ``rag_cleanup_expired_documents_tick`` (очередь ``rag``) планируется сервисом ``scheduler`` по ``rag.ttl.cleanup_cron``; один тик обрабатывает не более ``rag.ttl.cleanup_batch_size`` документов. Отключение: ``rag.ttl.cleanup_enabled: false``.
-- Контракт нормализации (валидация и дефолт): ``core/rag/ttl.py``.
-- CRM при индексации в RAG всегда передаёт ``ttl_seconds: 0`` (вложения и текст сущностей), чтобы retention не удалял данные CRM.
+- `metadata.ttl_seconds` (необяз.) при загрузке файла / `ingest-text`. Целое неотрицательное; `0` — индекс не удаляется фоновой очисткой.
+- Не передан — подставляется `rag.ttl.default_ttl_seconds` (шаблон 864000 = 10 суток).
+- Хранится в `document_processing_status.ttl_seconds` и дублируется в `vector_documents.metadata` каждого чанка.
+- Очистка — TaskIQ `rag_cleanup_expired_documents_tick` (очередь `rag`), планируется `scheduler` по `rag.ttl.cleanup_cron`; за тик не более `rag.ttl.cleanup_batch_size`. Отключение: `rag.ttl.cleanup_enabled: false`.
+- Контракт нормализации (валидация и дефолт) — `core/rag/ttl.py`.
+- **CRM при индексации в RAG всегда передаёт `ttl_seconds: 0`** (вложения и текст сущностей).
 
-## Перевекторизация устаревших документов (reembed)
+## Перевекторизация (reembed)
 
-При смене модели эмбеддинга (например c ``bge-m3`` 1024 на ``qwen3-embedding-8b`` 4096) миграция обнуляет колонку ``embedding`` через ``ALTER COLUMN embedding TYPE vector(4096) USING NULL``. Старые чанки теряют вектор и становятся недоступны для семантического поиска (``embedding_model IS NULL``).
+При смене модели эмбеддинга миграция обнуляет `embedding` (`ALTER COLUMN embedding TYPE vector(N) USING NULL`). Старые чанки временно недоступны (`embedding_model IS NULL`).
 
-Для восстановления старых документов без полной переиндексации используется фоновая перевекторизация:
-
-- **Метод ``PgVectorProvider.reembed_stale_documents(batch_size, target_embedding_model) -> int``** в [core/rag/providers/pgvector_provider.py](core/rag/providers/pgvector_provider.py): выбирает чанки с ``embedding_model IS NULL`` (или не совпадающие с целевой моделью), генерирует для их ``content`` новый embedding и записывает ``embedding`` + ``embedding_model`` обратно в БД.
-- **Две TaskIQ задачи**, планируемые сервисом ``scheduler``:
-  - ``rag_reembed_stale_documents_tick`` (очередь ``rag``) — RAG БД (``DATABASE__RAG_URL``)
-  - ``crm_reembed_stale_documents_tick`` (очередь ``crm``) — CRM БД (``DATABASE__CRM_URL``)
-- Конфигурация: поля в ``rag.ttl`` (``RagTtlConfig``):
-  - ``reembed_enabled`` (bool, default ``true``) — включение/отключение
-  - ``reembed_cron`` (str, default ``"*/5 * * * *"``) — cron (UTC) для тика
-  - ``reembed_batch_size`` (int, default ``50``, 1..2000) — максимум чанков за один тик
-- ENV-переменные (nested delimiter ``__``): ``RAG__TTL__REEMBED_ENABLED``, ``RAG__TTL__REEMBED_CRON``, ``RAG__TTL__REEMBED_BATCH_SIZE``.
-- Реиндексация работает батчами, не блокируя штатный поиск. После завершения старые чанки снова участвуют в поиске наравне с новыми.
-
-## Архитектура
-
-```
-apps/rag/
-├── main.py                  # FastAPI приложение
-├── config.py                # Настройки сервиса (RAGSettings)
-├── container.py             # DI контейнер (RAGContainer)
-├── dependencies.py          # FastAPI dependencies
-├── conf.json                # Конфигурация провайдеров
-├── api/                     # REST API endpoints
-│   ├── providers.py         # Управление провайдерами
-│   ├── namespaces.py        # Управление namespaces
-│   ├── namespace_access.py # Проверка namespace ↔ компания, лимиты metadata/text
-│   ├── documents.py         # Управление документами
-│   └── search.py            # Семантический поиск
-├── services/
-│   └── rag_worker_client.py # Клиент для TaskIQ workers
-└── ui/                      # Micro-frontend (Lit 3 + EventBus + factories)
-    ├── index.html
-    ├── index.js              # bootstrap: импорт rag-app
-    ├── app/
-    │   └── rag-app.js        # extends PlatformApp; static factories, defaultI18nNamespace='rag', router
-    ├── components/
-    │   ├── rag-sidebar.js
-    │   ├── namespace-card.js
-    │   ├── provider-badge.js          # бейдж активного провайдера в sidebar
-    │   └── provider-selector.js       # сетка выбора провайдера на /rag/settings
-    ├── pages/
-    │   ├── namespaces-page.js         # /rag
-    │   ├── namespace-page.js          # /rag/namespaces/:namespaceId
-    │   ├── search-page.js             # /rag/search
-    │   └── settings-page.js           # /rag/settings
-    ├── modals/
-    │   └── namespace-create-modal.js  # PlatformFormModal, modalKind='rag.namespace_create'
-    └── events/
-        └── resources/                  # фабрики: 'rag/<entity>'
-            ├── providers.resource.js          # createAsyncOp 'rag/providers' + 'rag/provider_switch'
-            ├── namespaces.resource.js         # createResourceCollection 'rag/namespaces' + createForm 'rag/namespace_create_form'
-            ├── documents.resource.js          # createAsyncOp 'rag/documents' + 'rag/document_upload' + 'rag/document_remove' + 'rag/document_ingest_text'
-            ├── document-status.resource.js    # createAsyncOp 'rag/document_status' (поллинг статуса индексации)
-            └── search.resource.js             # createAsyncOp 'rag/search'
-
-core/rag/
-├── base_provider.py         # Абстрактный BaseRAGProvider
-├── factory.py               # Фабрика провайдеров
-├── models.py                # Pydantic модели
-├── namespace_manager.py     # Менеджер namespaces
-├── repository.py            # Репозиторий для DocumentProcessingStatus
-├── providers/
-│   ├── pgvector_provider.py # pgvector провайдер (PostgreSQL)
-│   └── agentset_provider.py # Agentset провайдер
-└── services/
-    └── embedding_service.py  # Embeddings (OpenAI-compatible, дефолт OpenRouter)
-
-core/files/reader/
-└── FileReader + FileReadResult  # Единый разбор файлов для RAG ingest (pgvector) и flows
-
-core/db/models.py
-├── VectorDocument             # SQLAlchemy модель для vector_documents
-└── DocumentProcessingStatus   # SQLAlchemy модель статуса обработки
-```
-
-## API Endpoints
-
-### Префикс: `/rag/api/v1/`
-
-**Providers:**
-```
-GET    /rag/api/v1/providers
-POST   /rag/api/v1/providers/switch
-```
-
-**Namespaces:**
-```
-GET    /rag/api/v1/namespaces?provider={name}
-POST   /rag/api/v1/namespaces?provider={name}
-DELETE /rag/api/v1/namespaces/{id}?provider={name}
-```
-
-**Documents:**
-```
-GET    /rag/api/v1/namespaces/{id}/documents?provider={name}
-POST   /rag/api/v1/namespaces/{id}/documents?provider={name}
-       (multipart/form-data: file, metadata JSON)
-POST   /rag/api/v1/namespaces/{id}/ingest-text?provider={name}
-       (JSON: text, document_name?, metadata?, document_id? — синхронная индексация текста;
-       namespace должен быть зарегистрирован для текущей компании в репозитории namespaces)
-DELETE /rag/api/v1/namespaces/{id}/documents/{document_id}?provider={name}
-```
-
-**Доступ к namespace:** для `ingest-text` и `POST .../namespaces/{id}/search` перед вызовом провайдера выполняется проверка `namespace_repository.get(id)` и совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` та же проверка для каждого элемента `namespace_ids`.
-
-**Межсервисный клиент:** `core/clients/rag_client.py` — `RagClient` поверх `ServiceClient` к сервису `rag` (`create_namespace`, `ingest_text`, `search`, `global_search`).
-
-**Search:**
-```
-POST   /rag/api/v1/namespaces/{id}/search?provider={name}
-POST   /rag/api/v1/search?provider={name}
-```
-
-## Модели данных
-
-### RAGDocument
-```python
-class RAGDocument(BaseModel):
-    document_id: str
-    name: str
-    namespace: str
-    content: Optional[str] = None
-    metadata: Dict[str, Any] = {}
-    status: str = "processing"
-    created_at: Optional[str] = None
-```
-
-### RAGSearchResult
-```python
-class RAGSearchResult(BaseModel):
-    content: str
-    score: float
-    document_id: str
-    document_name: str
-    metadata: Dict[str, Any] = {}
-    namespace: str
-```
-
-### RAGNamespace
-```python
-class RAGNamespace(BaseModel):
-    namespace_id: str
-    name: str
-    description: Optional[str] = None
-    document_count: int = 0
-    created_at: Optional[str] = None
-    metadata: Dict[str, Any] = {}
-```
-
-### VectorDocument (SQLAlchemy)
-```python
-class VectorDocument(Base):
-    __tablename__ = "vector_documents"
-    id: Mapped[str]
-    namespace_id: Mapped[str]
-    company_id: Mapped[Optional[str]]
-    document_id: Mapped[str]
-    document_name: Mapped[Optional[str]]
-    content: Mapped[str]
-    embedding = mapped_column(Vector(1024))
-    chunk_index: Mapped[int]
-    total_chunks: Mapped[int]
-    metadata_: Mapped[Dict[str, Any]]
-    created_at: Mapped[datetime]
-    updated_at: Mapped[datetime]
-```
-
-### DocumentProcessingStatus (SQLAlchemy)
-```python
-class DocumentProcessingStatus(Base):
-    document_id: str
-    task_id: str
-    namespace_id: str
-    document_name: str
-    status: Literal["pending", "processing", "completed", "failed"]
-    error_message: Optional[str] = None
-    s3_key: Optional[str] = None
-    s3_bucket: Optional[str] = None
-    file_size: Optional[int] = None
-    chunks_count: Optional[int] = None
-    created_at: datetime
-    updated_at: datetime
-    completed_at: Optional[datetime] = None
-    extra_metadata: Optional[Dict[str, Any]] = None
-    ttl_seconds: int = 864000
-```
-
-Таблица в базе процесса RAG (`database.rag_url`), см. `database.mdc`.
+- `PgVectorProvider.reembed_stale_documents(batch_size, target_embedding_model) -> int` (`core/rag/providers/pgvector_provider.py`): берёт чанки `embedding_model IS NULL` или ≠ целевой, регенерирует embedding и записывает обратно (с `embedding_model`).
+- TaskIQ задачи (планируются `scheduler`): `rag_reembed_stale_documents_tick` (очередь `rag`, `DATABASE__RAG_URL`), `crm_reembed_stale_documents_tick` (очередь `crm`, `DATABASE__CRM_URL`).
+- Конфиг `rag.ttl` (`RagTtlConfig`): `reembed_enabled` (default `true`), `reembed_cron` (default `"*/5 * * * *"`), `reembed_batch_size` (default 50, 1..2000). ENV: `RAG__TTL__REEMBED_*`.
+- Батчи не блокируют поиск.
 
 ## Провайдеры
 
-### BaseRAGProvider API
+**Два уровня:**
+- `rag.default_provider` — где хранится и ищется вектор: `pgvector` | `agentset`.
+- HTTP-эмбеддер (только pgvector) — `EmbeddingService` (`core/rag/services/embedding_service.py`): один OpenAI-compatible HTTP-клиент. Модель и размерность — `rag.embedding`; ключ — `rag.providers.pgvector.embedding_api_key`. Плейсхолдеры `YOUR_*_API_KEY` не используются. Если ключа нет/плейсхолдер и `llm.provider = openrouter` — берётся `llm.openrouter.api_key` (`PgVectorProvider._resolve_pgvector_embedding_api_key`). По умолчанию URL — OpenRouter, иначе `rag.embedding.base_url`. ENV: `RAG__EMBEDDING__BASE_URL`, `RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY`, `LLM__OPENROUTER__API_KEY`.
 
-Все провайдеры реализуют `BaseRAGProvider`:
+### `pgvector`
 
-```python
-class BaseRAGProvider(ABC):
-    # Namespaces
-    @abstractmethod
-    async def create_namespace(self, namespace: str, metadata: Dict = None) -> RAGNamespace
-    
-    @abstractmethod
-    async def delete_namespace(self, namespace: str) -> bool
-    
-    @abstractmethod
-    async def list_namespaces(self) -> List[RAGNamespace]
-    
-    @abstractmethod
-    async def get_namespace(self, namespace: str) -> Optional[RAGNamespace]
-    
-    # Documents
-    @abstractmethod
-    async def add_document(
-        self,
-        namespace: str,
-        document_id: str,
-        document_name: str,
-        content: str,
-        metadata: Dict = None,
-    ) -> RAGDocument
-    
-    @abstractmethod
-    async def delete_document(self, namespace: str, document_id: str) -> bool
-    
-    @abstractmethod
-    async def list_documents(self, namespace: str) -> List[RAGDocument]
-    
-    @abstractmethod
-    async def get_document(self, namespace: str, document_id: str) -> Optional[RAGDocument]
-    
-    # Search
-    @abstractmethod
-    async def search(
-        self,
-        query: str,
-        namespace: Optional[str] = None,
-        top_k: int = 5,
-        filters: Dict = None,
-    ) -> List[RAGSearchResult]
-```
+- PostgreSQL + pgvector. Чанкинг — `_chunks_from_file_read_result` (tiktoken внутри страниц `FileReadResult`).
+- Колонка `embedding_model` на чанке = активной модели; векторы разных моделей не смешиваются.
+- При размерности > 2000 (HNSW лимит на кортеж) индекс по `embedding` не используется — поиск без ANN (например `vector(4096)` Qwen3-Embedding-8B). `SET hnsw.iterative_scan` применяется только там, где есть HNSW.
+- **Гибридный поиск:** semantic + FTS по `content_tsv` (если в параметрах включены `semantic` и `lexical`) — два списка через RRF; полные строки — по id.
+- `rag.embedding.api.mrl_output_dimension`: префикс длины N → L2-нормализация → дополнение нулями до `dimension` (совместимость с `vector(dimension)`).
+- Ключи `conf.json`: `rag.enabled`, `rag.default_provider`, `rag.embedding.{model,dimension,base_url}`, `rag.providers.pgvector.{enabled,embedding_api_key,chunk_size,chunk_overlap,timeout}`.
 
-### pgvector Provider
+### `agentset`
 
-**Особенности:**
-- Работает через PostgreSQL с расширением pgvector
-- Embeddings: OpenAI-compatible API; по умолчанию OpenRouter (`rag.embedding.base_url`)
-- Разбор файлов через `FileReader` → чанкинг по `FileReadResult.pages`
-- Асинхронная обработка через TaskIQ workers
-- Автоматическое удаление старых чанков при перезаписи документа
-- Хранение оригиналов в S3/MinIO
-- При размерности ``vector`` выше лимита pgvector для HNSW (2000 float-компонент на кортеж индекса) индекс по ``embedding`` не используется — семантический поиск идёт по колонке без ANN-индекса (например ``vector(4096)`` для Qwen3-Embedding-8B). Параметр сессии ``SET hnsw.iterative_scan`` задаётся перед запросом и учитывается только там, где есть HNSW.
-- Колонка ``embedding_model`` на чанке совпадает с активной моделью эмбеддинга; семантический поиск и запись чанков фильтруют/ставят эту модель. Векторы разных моделей не смешиваются; при смене модели или размерности миграции обнуляют ``embedding`` под новый ``vector(N)``.
-- Гибридный поиск (семантика + FTS по ``content_tsv``), если в параметрах поиска включены каналы ``semantic`` и ``lexical``: два упорядоченных списка id объединяются через RRF; выдача упорядочена по RRF-скору, полные строки подгружаются по id.
-- Опционально ``rag.embedding.api.mrl_output_dimension``: из ответа эмбеддера берётся префикс длины N, L2-нормализуется, затем дополняется нулями до ``dimension`` для совместимости с типом ``vector(dimension)`` в БД.
+Внешний SaaS (`https://api.agentset.ai`), API-key. Конфиг: `rag.providers.agentset.{enabled,api_key,base_url}`.
 
-**Два уровня провайдеров:**
-- **`rag.default_provider`** — где хранится и ищется вектор: `pgvector` | `agentset` (разные реализации `BaseRAGProvider`).
-- **HTTP-эмбеддер (только pgvector)** — `EmbeddingService`: OpenAI-compatible `POST .../embeddings`. Модель и размерность — **`rag.embedding`**, ключ — **`rag.providers.pgvector.embedding_api_key`**. Плейсхолдеры `YOUR_EMBEDDING_API_KEY` / `YOUR_OPENROUTER_API_KEY` не используются; если ключа нет или он плейсхолдер и **`llm.provider` = `openrouter`**, берётся **`llm.openrouter.api_key`** (`PgVectorProvider._resolve_pgvector_embedding_api_key`). По умолчанию URL — **OpenRouter**; иначе **`rag.embedding.base_url`**. ENV: `RAG__EMBEDDING__BASE_URL`, `RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY`, `LLM__OPENROUTER__API_KEY`.
+## Workflow загрузки
 
-**Конфигурация (conf.json), pgvector:**
-```json
-{
-  "rag": {
-    "enabled": true,
-    "default_provider": "pgvector",
-    "embedding": {
-      "model": "baai/bge-m3",
-      "dimension": 1024,
-      "base_url": null
-    },
-    "providers": {
-      "pgvector": {
-        "enabled": true,
-        "embedding_api_key": "sk-or-...",
-        "chunk_size": 1000,
-        "chunk_overlap": 100,
-        "timeout": 60
-      }
-    }
-  }
-}
-```
+1. `POST /rag/api/v1/namespaces/{id}/documents` (multipart `file` + `data.metadata`).
+2. Файл → S3/MinIO (`{namespace_id}/{document_id}/{filename}` в bucket из конфига).
+3. `DocumentProcessingStatus.create(status="pending")`.
+4. TaskIQ `process_document_task.kiq(namespace_id, document_id, document_name, s3_key, s3_bucket, metadata)`.
+5. Worker: `FileReader.read` → чанкинг → embeddings → `vector_documents` → `status="completed"` (или `"failed"` с `error_message`).
 
-**Workflow загрузки документа:**
-1. API принимает файл через `/rag/api/v1/namespaces/{id}/documents`
-2. Файл сохраняется в S3/MinIO
-3. Создается запись `DocumentProcessingStatus` со статусом `pending`
-4. TaskIQ задача `process_document_task` отправляется в очередь
-5. Worker обрабатывает документ:
-   - Читает через `FileReader` (`FileReadResult`)
-   - Разбивает на чанки по страницам/тексту
-   - Генерирует embeddings (`EmbeddingService`, URL из `rag.embedding.base_url` или OpenRouter)
-   - Индексирует в vector_documents (PostgreSQL + pgvector)
-   - Обновляет статус на `completed`
+Поллинг статуса: `GET /rag/api/v1/documents/{document_id}/status` (фабрика UI `rag/document_status` сама перезапускает себя до терминального статуса).
 
-### Agentset Provider
+## Inter-service
 
-**Особенности:**
-- Внешний SaaS провайдер (https://api.agentset.ai)
-- Не требует локальных ресурсов
-- API key авторизация
+`core/clients/rag_client.py::RagClient` — единственный канон обращения к RAG из других сервисов (`crm`/`flows`). Поверх `ServiceClient`. CRM `apps/crm/services/attachment_service.py` индексирует attachments через `RagClient`, ссылку (`document_id`) сохраняет в `entity.metadata.attachments[]`.
 
-**Конфигурация:**
-```json
-{
-  "rag": {
-    "providers": {
-      "agentset": {
-        "enabled": true,
-        "api_key": "as-...",
-        "base_url": "https://api.agentset.ai"
-      }
-    }
-  }
-}
-```
+## UI
 
-## Асинхронная обработка документов
+Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Сервис включён в `FACTORY_CANON_SERVICES`. Все доменное состояние — фабрики `apps/rag/ui/events/resources/*.resource.js`; в pages/modals/components — только helpers (`useOp`/`useResource`/`useForm`/`openModal`/`navigate`/`toast`). Прямые импорты resource-объектов / `new XController` / `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` — запрещены (CI).
 
-### TaskIQ Workers
-
-**Файл:** `apps/rag_worker/tasks/indexing_tasks.py`
-
-**Задачи:**
-- `process_document_task` - обработка загруженного документа
-
-**Workflow:**
-```python
-@broker.task
-async def process_document_task(
-    namespace_id: str,
-    document_id: str,
-    document_name: str,
-    s3_key: str,
-    s3_bucket: str,
-    metadata: Dict[str, Any],
-):
-    # 1. Скачать файл из S3
-    # 2. FileReader.read → FileReadResult
-    # 3. Разбить на чанки
-    # 4. Генерировать embeddings
-    # 5. Индексировать в vector_documents (pgvector)
-    # 6. Обновить статус в БД
-```
-
-**Репозиторий статусов:**
-```python
-class DocumentProcessingStatusRepository:
-    async def create(self, status: DocumentProcessingStatus) -> DocumentProcessingStatus
-    async def get_by_document_id(self, document_id: str) -> Optional[DocumentProcessingStatus]
-    async def update_status(self, document_id: str, status: str, **kwargs) -> bool
-```
-
-## S3/MinIO Integration
-
-**Хранение файлов:**
-- Все загруженные документы сохраняются в S3/MinIO
-- Bucket: из конфигурации (обычно `rag-documents`)
-- Key format: `{namespace_id}/{document_id}/{filename}`
-
-**Использование:**
-```python
-from core.clients.s3_client import S3Client
-
-s3_client = S3Client(bucket_name="rag-documents")
-await s3_client.upload_file(file_content, s3_key, metadata)
-await s3_client.download_file(s3_key)
-```
-
-## Namespace Management
-
-**NamespaceManager** (`core/rag/namespace_manager.py`):
-```python
-class NamespaceManager:
-    async def resolve_namespace(
-        self,
-        scope: Literal["flow", "company", "session"],
-        context_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-    ) -> str:
-        """
-        Преобразует scope в конкретный namespace_id.
-        
-        Examples:
-        - scope="company", context_id="acme_corp" -> "company:acme_corp"
-        - scope="flow", context_id="support_agent" -> "flow:support_agent"
-        - scope="session", session_id="user123:chat456" -> "session:user123:chat456"
-        """
-```
-
-**Использование из сервиса flows:**
-```python
-# В конфигурации flow
-"rag_config": {
-    "enabled": true,
-    "namespace_scope": "flow",  # company | flow | session
-    "search_scopes": ["flow", "company"]
-}
-
-# В коде
-namespace_id = await namespace_manager.resolve_namespace(
-    scope=rag_config.namespace_scope,
-    context_id=context.company_id,
-)
-```
-
-## Inter-service Communication
-
-RAG Service используется другими сервисами (CRM, flows) через `ServiceClient`:
-
-```python
-from core.clients.service_client import ServiceClient
-
-rag_client = ServiceClient(base_url="http://localhost:9002", service_name="rag")
-
-# Загрузка документа
-response = await rag_client.request(
-    method="POST",
-    endpoint=f"/rag/api/v1/namespaces/{namespace_id}/documents",
-    files={"file": file_content},
-    data={"metadata": json.dumps(metadata)},
-)
-
-# Поиск
-response = await rag_client.request(
-    method="POST",
-    endpoint=f"/rag/api/v1/namespaces/{namespace_id}/search",
-    json={"query": "search text", "top_k": 5},
-)
-```
-
-**ВАЖНО:** При отправке файлов НЕ добавляй `Content-Type: application/json` - это сделает ServiceClient автоматически.
-
-## Testing
-
-### Структура тестов
-
-```
-tests/rag/
-├── README.md
-├── test_documents_api.py
-├── test_namespaces_api.py
-├── test_providers_api.py
-└── test_search_api.py
-```
-
-### Фикстуры
-
-```python
-# tests/conftest.py
-
-@pytest_asyncio.fixture
-async def rag_client(httpx_client_factory) -> AsyncClient:
-    """HTTP клиент для RAG service"""
-    return await httpx_client_factory("http://localhost:9002")
-```
-
-### Docker Compose для тестов
-
-```yaml
-# docker-compose-test.yaml
-services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    ports:
-      - "5433:5432"
-  
-  minio:
-    image: minio/minio:latest
-    ports:
-      - "9010:9000"
-    command: server /data
-```
-
-**ВАЖНО:** MinIO в тестах использует порт `9010`, чтобы не конфликтовать с RAG service на `9002`.
-
-### Типичные тесты
-
-```python
-@pytest.mark.asyncio
-async def test_upload_document(rag_client, test_namespace_id):
-    """Тест загрузки документа"""
-    with open("test.pdf", "rb") as f:
-        response = await rag_client.post(
-            f"/rag/api/v1/namespaces/{test_namespace_id}/documents",
-            files={"file": ("test.pdf", f, "application/pdf")},
-            data={"metadata": json.dumps({"type": "test"})},
-        )
-    assert response.status_code == 200
-    doc = response.json()
-    assert "document_id" in doc
-    assert doc["status"] == "processing"
-
-@pytest.mark.asyncio
-async def test_search_documents(rag_client, test_namespace_id):
-    """Тест семантического поиска"""
-    response = await rag_client.post(
-        f"/rag/api/v1/namespaces/{test_namespace_id}/search",
-        json={"query": "test query", "top_k": 5},
-    )
-    assert response.status_code == 200
-    results = response.json()
-    assert "results" in results
-```
-
-## Embedding Service
-
-**Файл:** `core/rag/services/embedding_service.py` — один HTTP-клиент для любого OpenAI-compatible embeddings API; `base_url` из **`rag.embedding.base_url`** (pgvector), иначе дефолт OpenRouter.
-
-```python
-class EmbeddingService:
-    def __init__(
-        self,
-        api_key: str,
-        models: Optional[List[str]] = None,
-        base_url: Optional[str] = None,
-        ...
-    ):
-        """
-        base_url: кастомный .../v1 или полный .../embeddings; иначе OpenRouter.
-        """
-```
-
-## FileReader и ingest (pgvector)
-
-Индексация из файла (S3 / локальный путь): **`PgVectorProvider`** вызывает **`FileReader.read`** → **`FileReadResult`**, затем **`_chunks_from_file_read_result`** (tiktoken-чанки внутри каждой страницы). В **`core/rag`** не держать отдельный Unstructured/pdf/vision-парсер.
-
-## Правила работы с RAG
-
-### 1. ВСЕГДА используй префикс `/rag/api/v1/`
-
-```python
-# ПРАВИЛЬНО
-response = await client.post("/rag/api/v1/namespaces/...")
-
-# НЕПРАВИЛЬНО
-response = await client.post("/namespaces/...")
-```
-
-### 2. НЕ добавляй Content-Type при отправке файлов
-
-```python
-# ПРАВИЛЬНО
-response = await service_client.request(
-    method="POST",
-    endpoint="/rag/api/v1/namespaces/{id}/documents",
-    files={"file": file_content},
-    data={"metadata": json.dumps(metadata)},
-)
-
-# НЕПРАВИЛЬНО
-response = await service_client.request(
-    method="POST",
-    endpoint="/rag/api/v1/namespaces/{id}/documents",
-    files={"file": file_content},
-    json={"metadata": metadata},  # НЕТ! Это добавит Content-Type: application/json
-)
-```
-
-### 3. Используй NamespaceManager для scope resolution
-
-```python
-# ПРАВИЛЬНО
-namespace_id = await namespace_manager.resolve_namespace(
-    scope="flow",
-    context_id=context.company_id,
-)
-
-# НЕПРАВИЛЬНО
-namespace_id = f"flow:{context.company_id}"  # Хардкод формата
-```
-
-### 4. Проверяй статус обработки документа
-
-```python
-# После загрузки документ в статусе "processing"
-doc = await rag_provider.add_document(...)
-assert doc.status == "processing"
-
-# Через некоторое время проверяем статус
-status = await status_repository.get_by_document_id(doc.document_id)
-assert status.status == "completed"
-```
-
-### 5. Используй асинхронную обработку
-
-```python
-# ПРАВИЛЬНО - TaskIQ worker обрабатывает документ асинхронно
-await process_document_task.kiq(
-    namespace_id=namespace_id,
-    document_id=document_id,
-    document_name=filename,
-    s3_key=s3_key,
-    s3_bucket=bucket,
-    metadata=metadata,
-)
-
-# НЕПРАВИЛЬНО - синхронная обработка блокирует API
-content = parse_document(file_path)
-await provider.add_document(namespace_id, document_id, content)
-```
-
-## Интеграция с CRM
-
-CRM Service использует RAG для хранения attachments:
-
-```python
-# apps/crm/services/attachment_service.py
-
-class AttachmentService:
-    async def add_attachment(
-        self,
-        entity_id: str,
-        file_content: bytes,
-        filename: str,
-        content_type: str,
-        metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        # 1. Отправляем файл в RAG
-        response = await self.rag_client.request(
-            method="POST",
-            endpoint=f"/rag/api/v1/namespaces/{namespace_id}/documents",
-            files={"file": (filename, file_content, content_type)},
-            data={"metadata": json.dumps(metadata)},
-        )
-        
-        # 2. Сохраняем ссылку в entity
-        entity = await self.entity_service.get_entity(entity_id)
-        entity.metadata["attachments"].append({
-            "document_id": response["document_id"],
-            "filename": filename,
-            "content_type": content_type,
-        })
-        await self.entity_service.update_entity(entity_id, entity)
-```
-
-## UI (Lit 3 + EventBus + factories)
-
-UI работает по канону **`frontend.mdc`** + **`ui_factories.mdc`** +
-**`ui_events.mdc`** + **`ui_components.mdc`**. Сервис включён в
-`FACTORY_CANON_SERVICES` обоих CI-скриптов
-(`scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py`).
-
-Состояние домена — только в фабриках `apps/rag/ui/events/resources/*.resource.js`.
-Компоненты, страницы и модалки получают доступ к ним по строковому имени
-через helpers `PlatformElement` (`useResource`, `useOp`, `useForm`,
-`openModal`, `navigate`, `toast`). Прямые импорты resource-объектов,
-`new XController`, `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` в
-pages/modals/components — запрещены (CI-проверка).
-
-### Реестр фабрик (регистрируются в `RagApp.static factories`)
+### Реестр фабрик (`RagApp.static factories`)
 
 | Имя | Тип | Эндпоинт |
 |---|---|---|
-| `rag/providers` | `createAsyncOp` | GET `/rag/api/v1/providers` |
-| `rag/provider_switch` | `createAsyncOp` | POST `/rag/api/v1/providers/switch` |
-| `rag/namespaces` | `createResourceCollection` (`list`/`create`/`remove`, idField=`name`) | `/rag/api/v1/namespaces` |
+| `rag/providers` | `createAsyncOp` | `GET /rag/api/v1/providers` |
+| `rag/provider_switch` | `createAsyncOp` | `POST /rag/api/v1/providers/switch` |
+| `rag/namespaces` | `createResourceCollection` (list/create/remove, idField=`name`) | `/rag/api/v1/namespaces` |
 | `rag/namespace_create_form` | `createForm` | submit → `rag/namespaces` CREATE_REQUESTED |
-| `rag/documents` | `createAsyncOp` | GET `/rag/api/v1/namespaces/:namespace_id/documents` |
-| `rag/document_upload` | `createAsyncOp` (multipart) | POST `/rag/api/v1/namespaces/:namespace_id/documents` |
-| `rag/document_remove` | `createAsyncOp` | DELETE `/rag/api/v1/namespaces/:namespace_id/documents/:document_id` |
-| `rag/document_ingest_text` | `createAsyncOp` | POST `/rag/api/v1/namespaces/:namespace_id/ingest-text` |
-| `rag/document_status` | `createAsyncOp` (self-rescheduling poll) | GET `/rag/api/v1/documents/:document_id/status` |
-| `rag/search` | `createAsyncOp` | POST `/rag/api/v1/namespaces/:namespace_id/search` |
+| `rag/documents` | `createAsyncOp` | `GET /rag/api/v1/namespaces/:namespace_id/documents` |
+| `rag/document_upload` | `createAsyncOp` (multipart) | `POST /rag/api/v1/namespaces/:namespace_id/documents` |
+| `rag/document_remove` | `createAsyncOp` | `DELETE /rag/api/v1/namespaces/:namespace_id/documents/:document_id` |
+| `rag/document_ingest_text` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/ingest-text` |
+| `rag/document_status` | `createAsyncOp` (self-rescheduling poll) | `GET /rag/api/v1/documents/:document_id/status` |
+| `rag/search` | `createAsyncOp` | `POST /rag/api/v1/namespaces/:namespace_id/search` |
 
-`rag/document_upload.onSuccess` запускает `rag/document_status.REQUESTED`
-для поллинга статуса индексации; `rag/document_status` сам перезапускает
-себя через `setTimeout` пока статус `pending`/`processing`, на
-`completed`/`failed` диспатчит `UI_TOAST_SHOW`. Страница
-`namespace-page` подписана на `'rag/document_status/succeeded'` через
-`useEvent` и перезагружает список документов.
+`rag/document_upload.onSuccess` стартует `rag/document_status.REQUESTED`; `rag/document_status` ребут через `setTimeout` пока статус `pending`/`processing`. На `completed`/`failed` — `UI_TOAST_SHOW`. `namespace-page` через `useEvent('rag/document_status/succeeded')` перезагружает список документов.
 
-### Маршруты
-
-Регистрируются через `createRouterEffect({ baseUrl: '/rag', routes })`
-в `RagApp.getServiceEffects()`:
+### Маршруты (`createRouterEffect({ baseUrl: '/rag', routes })`)
 
 | `routeKey` | path |
 |---|---|
@@ -721,39 +109,20 @@ pages/modals/components — запрещены (CI-проверка).
 | `search` | `/rag/search` |
 | `settings` | `/rag/settings` |
 
-Переход — `this.navigate('<routeKey>', params?)`. Sidebar читает
-активный routeKey через `this.select((s) => s.router.routeKey)`.
-Хеш-роутинг (`#/...`) и `CustomEvent('navigate', ...)` запрещены.
+Переход — `this.navigate(routeKey, params?)`. Хеш-роутинг (`#/...`) и `CustomEvent('navigate')` запрещены.
 
-### Modal kinds
+### Модалки
 
 | `modalKind` | Файл | База |
 |---|---|---|
 | `rag.namespace_create` | `modals/namespace-create-modal.js` | `PlatformFormModal` |
 
-Открытие — `this.openModal('rag.namespace_create')`; закрытие после
-успешного сабмита — `closeAfterSave()` (после события
-`namespacesResource.events.CREATED`).
-
-### Components
-
-Все компоненты — `PlatformElement` (`static i18nNamespace = 'rag';`):
-
-- `<rag-app>` — корень (`PlatformApp`, `static factories`, `defaultI18nNamespace='rag'`)
-- `<rag-sidebar>` — навигация (`useOp('rag/providers')` для autoload), активный
-  пункт по `state.router.routeKey`
-- `<namespace-card>` — карточка namespace, клик → `navigate('namespace_detail', { namespaceId })`
-- `<provider-badge>` — бейдж активного провайдера (читает
-  `useOp('rag/providers').state.current`)
-- `<provider-selector>` — сетка провайдеров на `/rag/settings`,
-  `useOp('rag/provider_switch')` для переключения
+Открытие — `this.openModal('rag.namespace_create')`; закрытие — `closeAfterSave()` после `namespacesResource.events.CREATED`.
 
 ### i18n
 
-Бандл — `core/i18n/translations/{ru,en}/rag.json` (одинаковый набор
-ключей в обоих файлах). Секции: `sidebar`, `namespace_list`,
-`namespace_detail`, `search_view`, `settings_view`,
-`namespace_create_modal`, `form`, `toast`. Все toast-ключи фабрик
-(`toast.namespace_*`, `toast.document_*`, `toast.text_*`,
-`toast.search_failed`, `toast.provider_*`) парны (`make check-i18n`,
-`make check-i18n-keys --mode missing --strict --app rag`).
+Бандл — `core/i18n/translations/{ru,en}/rag.json`. Секции: `sidebar`, `namespace_list`, `namespace_detail`, `search_view`, `settings_view`, `namespace_create_modal`, `form`, `toast`. Toast-ключи фабрик (`toast.namespace_*`, `toast.document_*`, `toast.text_*`, `toast.search_failed`, `toast.provider_*`) парны: `make check-i18n` + `make check-i18n-keys --mode missing --strict --app rag`.
+
+## Тестирование
+
+`tests/rag/{test_documents_api,test_namespaces_api,test_providers_api,test_search_api}.py`. Реальная инфраструктура (PostgreSQL+pgvector, MinIO), `unique_id` для тестовых id. Фикстуры — `tests/conftest.py`. Подробности — `tests/rag/README.md`, `testing.mdc`.

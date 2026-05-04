@@ -14,15 +14,17 @@
  *    `TaskArtifactUpdateEvent` с speakable-артефактом
  *    (см. `speakable.js`) вызывает `voice.speak(text,...)`. На
  *    `TaskStatusUpdateEvent{final:true}` — `voice.endUtterance()`.
- *  - Barge-in: `vad{state:"started"}` во время TTS → отменяет
- *    текущий A2A fetch (`AbortController.abort`) и шлёт
- *    `voice.stopPlayback()`. Если в A2A задача уже получила
- *    `taskId`, отправляется ещё и `tasks/cancel` на тот же URL.
+ *  - Barge-in: `vad` с непрерывной речью ≥ ~0,3 s (как порог на шлюзе)
+ *    во время TTS **или** пока живёт A2A fetch (фаза SSE до первого TTS) →
+ *    `voice.stopPlayback()`, `AbortController.abort`, при наличии `taskId` —
+ *    `tasks/cancel`. DOM `a2aAborted`: при оборванном SSE — из `catch (AbortError)`
+ *    после установки `_pendingA2aAbortDetail`; если fetch уже закрыт (например, только TTS) —
+ *    сразу из `_cancelCurrentTask`. Payload: `task_id`/`context_id` для сброса `flows/chat`.
  *
  * Инкапсуляция: bridge не знает ни про конкретный UI-компонент, ни
  * про state-store; он общается только через DOM-события
  * `VoiceMediaSession` и публичные DOM-события самого bridge
- * (`userMessage`, `agentText`, `taskFinal`, `bargeIn`, `error`) —
+ * (`userMessage`, `agentText`, `taskFinal`, `bargeIn`, `a2aAborted`, `a2aSettled`, `error`) —
  * чтобы UI мог показывать live transcript/индикаторы без костылей
  * в модулях friend'ах.
  */
@@ -30,6 +32,9 @@
 import { streamEmbedA2A } from '../embed-chat/embed-a2a-stream.js';
 import { extractSpeakableText } from './speakable.js';
 import { isVoiceClientDebugEnabled } from './voice-media-session.js';
+
+/** Минимальная длительность сегмента речи (VAD open) до client barge-in, мс — как `vad_speech_seconds < 0.3` в `BargeInController`. */
+const CLIENT_BARGE_MIN_SPEECH_MS = 300;
 
 /**
  * @typedef {object} VoiceAgentBridgeOptions
@@ -41,6 +46,10 @@ import { isVoiceClientDebugEnabled } from './voice-media-session.js';
  * @property {() => Promise<Record<string,string>>} [getHeaders]
  * @property {RequestCredentials} [credentials='omit']
  * @property {string|null} [initialContextId]
+ * @property {() => string|null|undefined} [getContextId] — перед каждым message/stream подставляется актуальный contextId из UI (например embed-chat).
+ * @property {() => Promise<Record<string, unknown>|null|undefined>} [getStreamMetadata] — metadata для A2A (как у текстовой отправки: variables и т.д.).
+ * @property {(text: string) => Promise<void>} [beforeA2aStream] — перед fetch (например добавить user/assistant пузыри в чат).
+ * @property {(event: object) => void} [onA2aStreamEvent] — каждое SSE-событие для отображения в том же UI, что и текстовый стрим.
  */
 
 export class VoiceAgentBridge extends EventTarget {
@@ -69,6 +78,12 @@ export class VoiceAgentBridge extends EventTarget {
         this._getHeaders = typeof options.getHeaders === 'function' ? options.getHeaders : async () => ({});
         this._credentials = options.credentials === 'include' ? 'include' : 'omit';
         this._contextId = typeof options.initialContextId === 'string' ? options.initialContextId : null;
+        this._getContextId = typeof options.getContextId === 'function' ? options.getContextId : null;
+        this._getStreamMetadata =
+            typeof options.getStreamMetadata === 'function' ? options.getStreamMetadata : null;
+        this._beforeA2aStream = typeof options.beforeA2aStream === 'function' ? options.beforeA2aStream : null;
+        this._onA2aStreamEvent =
+            typeof options.onA2aStreamEvent === 'function' ? options.onA2aStreamEvent : null;
 
         /** @type {AbortController|null} */
         this._currentAbort = null;
@@ -76,6 +91,15 @@ export class VoiceAgentBridge extends EventTarget {
         this._currentTaskId = null;
         /** @type {boolean} */
         this._ttsActive = false;
+        /** @type {ReturnType<typeof setTimeout>|null} */
+        this._clientBargeTimer = null;
+        /** @type {boolean} */
+        this._vadSpeechSegmentOpen = false;
+        /**
+         * Перед `abort` сохраняем метаданные; в `catch (AbortError)` шлём `a2aAborted` один раз.
+         * @type {{ task_id: string | null; context_id: string | null } | null}
+         */
+        this._pendingA2aAbortDetail = null;
         this._started = false;
 
         this._onTranscript = this._onTranscript.bind(this);
@@ -122,7 +146,45 @@ export class VoiceAgentBridge extends EventTarget {
         this._media.removeEventListener('vad', this._onVad);
         this._media.removeEventListener('ttsState', this._onTtsState);
         this._media.removeEventListener('diagnostic', this._onVoiceDiagnostic);
+        if (this._currentAbort !== null) {
+            const tid = this._currentTaskId;
+            this._pendingA2aAbortDetail = {
+                task_id: typeof tid === 'string' && tid !== '' ? tid : null,
+                context_id:
+                    typeof this._contextId === 'string' && this._contextId !== ''
+                        ? this._contextId
+                        : null,
+            };
+        }
+        this._clearClientBargeDebounce();
         this._abortCurrent();
+    }
+
+    _clearClientBargeDebounce() {
+        if (this._clientBargeTimer !== null) {
+            clearTimeout(this._clientBargeTimer);
+            this._clientBargeTimer = null;
+        }
+        this._vadSpeechSegmentOpen = false;
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    _isClientBargeInScope() {
+        return this._ttsActive === true || this._currentAbort !== null;
+    }
+
+    /**
+     * Срабатывание после дебаунса по длительности речи (см. `CLIENT_BARGE_MIN_SPEECH_MS`).
+     */
+    _executeClientBargeIn() {
+        this._clientBargeTimer = null;
+        if (!this._vadSpeechSegmentOpen) return;
+        if (!this._isClientBargeInScope()) return;
+        this._dispatch('bargeIn', {});
+        this._media.stopPlayback();
+        void this._cancelCurrentTask();
     }
 
     /**
@@ -142,12 +204,18 @@ export class VoiceAgentBridge extends EventTarget {
      */
     _onVad(event) {
         const detail = /** @type {CustomEvent<{state:'started'|'ended'}>} */ (event).detail;
-        if (!detail) return;
+        if (!detail || typeof detail.state !== 'string') return;
+        if (detail.state === 'ended') {
+            this._clearClientBargeDebounce();
+            return;
+        }
         if (detail.state !== 'started') return;
-        if (!this._ttsActive) return;
-        this._dispatch('bargeIn', {});
-        this._media.stopPlayback();
-        this._cancelCurrentTask();
+        if (!this._isClientBargeInScope()) return;
+        this._clearClientBargeDebounce();
+        this._vadSpeechSegmentOpen = true;
+        this._clientBargeTimer = setTimeout(() => {
+            this._executeClientBargeIn();
+        }, CLIENT_BARGE_MIN_SPEECH_MS);
     }
 
     /**
@@ -171,11 +239,49 @@ export class VoiceAgentBridge extends EventTarget {
      * @param {string} text
      */
     async _sendUserMessage(text) {
+        if (this._getContextId) {
+            const cid = this._getContextId();
+            if (typeof cid === 'string' && cid.trim() !== '') {
+                this._contextId = cid.trim();
+            }
+        }
+
         this._abortCurrent();
         const ac = new AbortController();
         this._currentAbort = ac;
-        const onEvent = (ev) => this._handleA2AEvent(ev);
+
+        const onEvent = (ev) => {
+            this._handleA2AEvent(ev);
+            if (this._onA2aStreamEvent) {
+                try {
+                    this._onA2aStreamEvent(ev);
+                } catch (relayErr) {
+                    console.error('[voice-agent-bridge] onA2aStreamEvent', relayErr);
+                }
+            }
+        };
+
         try {
+            if (this._beforeA2aStream) {
+                try {
+                    await this._beforeA2aStream(text);
+                } catch (prepErr) {
+                    const e = new Error(prepErr && prepErr.message ? prepErr.message : String(prepErr));
+                    throw Object.assign(e, { code: 'voice/bridge/ui_prepare_failed' });
+                }
+            }
+            let metadata = null;
+            if (this._getStreamMetadata) {
+                try {
+                    const raw = await this._getStreamMetadata();
+                    if (raw && typeof raw === 'object') {
+                        metadata = raw;
+                    }
+                } catch (metaErr) {
+                    const e = new Error(metaErr && metaErr.message ? metaErr.message : String(metaErr));
+                    throw Object.assign(e, { code: 'voice/bridge/metadata_failed' });
+                }
+            }
             await streamEmbedA2A(
                 {
                     baseUrl: this._a2aBaseUrl,
@@ -184,6 +290,7 @@ export class VoiceAgentBridge extends EventTarget {
                     message: text,
                     contextId: this._contextId,
                     branchId: this._branchId,
+                    metadata,
                     getHeaders: this._getHeaders,
                     credentials: this._credentials,
                     signal: ac.signal,
@@ -192,16 +299,26 @@ export class VoiceAgentBridge extends EventTarget {
             );
         } catch (err) {
             if (err && err.name === 'AbortError') {
-                return;
+                if (this._pendingA2aAbortDetail) {
+                    this._dispatch('a2aAborted', this._pendingA2aAbortDetail);
+                    this._pendingA2aAbortDetail = null;
+                }
+            } else {
+                const code =
+                    err && typeof err.code === 'string'
+                        ? err.code
+                        : 'voice/bridge/a2a_failed';
+                this._dispatch('error', {
+                    code,
+                    detail: err && err.message ? err.message : String(err),
+                });
             }
-            this._dispatch('error', {
-                code: 'voice/bridge/a2a_failed',
-                detail: err && err.message ? err.message : String(err),
-            });
         } finally {
             if (this._currentAbort === ac) {
                 this._currentAbort = null;
             }
+            this._pendingA2aAbortDetail = null;
+            this._dispatch('a2aSettled', {});
         }
     }
 
@@ -254,7 +371,19 @@ export class VoiceAgentBridge extends EventTarget {
 
     async _cancelCurrentTask() {
         const taskId = this._currentTaskId;
+        const detail = {
+            task_id: typeof taskId === 'string' && taskId !== '' ? taskId : null,
+            context_id:
+                typeof this._contextId === 'string' && this._contextId !== '' ? this._contextId : null,
+        };
+        const hadIncomingFetch = this._currentAbort !== null;
+        if (hadIncomingFetch) {
+            this._pendingA2aAbortDetail = detail;
+        }
         this._abortCurrent();
+        if (!hadIncomingFetch) {
+            this._dispatch('a2aAborted', detail);
+        }
         if (typeof taskId !== 'string' || taskId === '') return;
 
         const url = this._embedId

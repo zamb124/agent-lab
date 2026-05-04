@@ -143,12 +143,93 @@ _scheduleVoiceDebugBootstrapNotice();
 
 export const VOICE_CAPTURE_SAMPLE_RATE = 16000;
 
+/** WS-кадр uplink: PCM s16le mono, 320 сэмплов = 640 байт = 20 ms @ 16 kHz.
+ *  Совпадает с серверным `_FRAME_DURATION_S = 0.02` в `apps/voice/workers/stt_worker.py`. */
+export const VOICE_OUTBOUND_FRAME_SAMPLES = 320;
+
+/** Длина FIR low-pass перед децимацией (нечётная, 31 даёт ~1.9 ms задержки
+ *  при 16 kHz). Подавляет диапазон выше 7.5 kHz, чтобы при downsample 48→16 kHz
+ *  не появлялись alias-шумы, искажающие распознавание STT (свистящие согласные). */
+const VOICE_FIR_TAPS = 31;
+/** Cutoff в Hz: 7.5 kHz < Nyquist 8 kHz (16 kHz / 2). */
+const VOICE_FIR_CUTOFF_HZ = 7500;
+
 /** Размер буфера ScriptProcessorNode (степень двойки в допустимом диапазоне). */
 const MIC_SCRIPT_PROCESSOR_BUFFER_SIZE = 4096;
 /** Интервал опроса AnalyserNode (если доступен только analyser-путь захвата). */
 const MIC_CAPTURE_PUMP_MS = 20;
 /** fftSize временной волны (AnalyserNode). */
 const MIC_CAPTURE_FFT_SIZE = 2048;
+
+/**
+ * Спроектировать FIR low-pass (Hamming-windowed sinc) с DC gain = 1.
+ *
+ * @param {number} numTaps — нечётное, типично 31
+ * @param {number} fcNorm — cutoff / sampleRate, диапазон (0, 0.5)
+ * @returns {Float32Array}
+ */
+export function designFirLowpassHamming(numTaps, fcNorm) {
+    if (!Number.isInteger(numTaps) || numTaps <= 1 || numTaps % 2 === 0) {
+        throw new Error('designFirLowpassHamming: numTaps должно быть нечётным >= 3');
+    }
+    if (!(fcNorm > 0) || !(fcNorm < 0.5)) {
+        throw new Error('designFirLowpassHamming: fcNorm должно быть в (0, 0.5)');
+    }
+    const N = numTaps;
+    const M = N - 1;
+    const taps = new Float32Array(N);
+    for (let n = 0; n < N; n++) {
+        const m = n - M / 2;
+        let h;
+        if (m === 0) {
+            h = 2 * fcNorm;
+        } else {
+            h = Math.sin(2 * Math.PI * fcNorm * m) / (Math.PI * m);
+        }
+        const w = 0.54 - 0.46 * Math.cos((2 * Math.PI * n) / M);
+        taps[n] = h * w;
+    }
+    let sum = 0;
+    for (let i = 0; i < N; i++) sum += taps[i];
+    if (sum !== 0) {
+        const inv = 1 / sum;
+        for (let i = 0; i < N; i++) taps[i] *= inv;
+    }
+    return taps;
+}
+
+/**
+ * Применить FIR-фильтр к чанку Float32 семплов с непрерывной историей предыдущих
+ * вызовов (для гладкости на границах батчей). `firHistory` обновляется in-place.
+ *
+ * @param {Float32Array} chunk
+ * @param {Float32Array} firTaps
+ * @param {Float32Array} firHistory — длина `firTaps.length - 1`
+ * @returns {Float32Array} отфильтрованный чанк той же длины
+ */
+export function applyFirToFloat(chunk, firTaps, firHistory) {
+    const M = firTaps.length;
+    if (firHistory.length !== M - 1) {
+        throw new Error(
+            `applyFirToFloat: firHistory.length=${firHistory.length} ожидалось ${M - 1}`,
+        );
+    }
+    const N = chunk.length;
+    const out = new Float32Array(N);
+    const ext = new Float32Array(M - 1 + N);
+    ext.set(firHistory);
+    ext.set(chunk, M - 1);
+    for (let i = 0; i < N; i++) {
+        let acc = 0;
+        const base = i + (M - 1);
+        for (let k = 0; k < M; k++) {
+            acc += firTaps[k] * ext[base - k];
+        }
+        out[i] = acc;
+    }
+    firHistory.set(ext.subarray(N));
+    return out;
+}
 
 function floatSampleToInt16(sample) {
     const s = Math.max(-1, Math.min(1, sample));
@@ -169,42 +250,133 @@ function floatMonoToPcm16ArrayBufferDirect(channel) {
 }
 
 /**
+ * Накопить новый PCM-чанк к остатку и вернуть массив целых outbound-кадров
+ * (`VOICE_OUTBOUND_FRAME_SAMPLES = 320` int16 → 640 байт = 20 ms @ 16 kHz),
+ * сохранив остаток в `tailState.tail` для следующего вызова.
+ *
+ * Серверный `stt_worker` ожидает фреймы 20 ms (`_FRAME_DURATION_S`); большие
+ * пакеты (например 256 ms батч worklet'а) ломают VAD-детекцию и приводят к
+ * рассинхрону окна STT и фактической паузы пользователя.
+ *
+ * @param {ArrayBuffer} chunkBuffer — int16 PCM mono 16 kHz
+ * @param {{ tail: Int16Array }} tailState
+ * @returns {ArrayBuffer[]}
+ */
+export function spliceIntoOutboundFrames(chunkBuffer, tailState) {
+    if (!(chunkBuffer instanceof ArrayBuffer)) {
+        throw new Error('spliceIntoOutboundFrames: chunkBuffer должен быть ArrayBuffer');
+    }
+    if (!(tailState.tail instanceof Int16Array)) {
+        throw new Error('spliceIntoOutboundFrames: tailState.tail должен быть Int16Array');
+    }
+    const incoming = new Int16Array(chunkBuffer);
+    if (incoming.length === 0 && tailState.tail.length === 0) {
+        return [];
+    }
+    const total = tailState.tail.length + incoming.length;
+    if (total < VOICE_OUTBOUND_FRAME_SAMPLES) {
+        const merged = new Int16Array(total);
+        merged.set(tailState.tail);
+        merged.set(incoming, tailState.tail.length);
+        tailState.tail = merged;
+        return [];
+    }
+    const merged = new Int16Array(total);
+    merged.set(tailState.tail);
+    merged.set(incoming, tailState.tail.length);
+    const fullFrames = Math.floor(total / VOICE_OUTBOUND_FRAME_SAMPLES);
+    /** @type {ArrayBuffer[]} */
+    const frames = [];
+    for (let i = 0; i < fullFrames; i++) {
+        const start = i * VOICE_OUTBOUND_FRAME_SAMPLES;
+        const slice = merged.slice(start, start + VOICE_OUTBOUND_FRAME_SAMPLES);
+        frames.push(slice.buffer);
+    }
+    const remaining = total - fullFrames * VOICE_OUTBOUND_FRAME_SAMPLES;
+    if (remaining > 0) {
+        tailState.tail = merged.slice(fullFrames * VOICE_OUTBOUND_FRAME_SAMPLES);
+    } else {
+        tailState.tail = new Int16Array(0);
+    }
+    return frames;
+}
+
+/**
+ * Downsample входного потока (например 48→16 kHz) с линейной интерполяцией между сэмплами.
+ *
+ * Перед децимацией к каждому новому чанку применяется FIR low-pass
+ * (`designFirLowpassHamming(31, 7500/inRate)`), чтобы подавить компоненты выше
+ * 7.5 kHz и не получить alias-шумы после downsample. Состояние FIR (`firTaps`,
+ * `firHistory`) хранится в `state` и пересчитывается, если меняется `inRate`.
+ *
+ * После каждого вызова `merged = tail concat filtered_chunk`, при этом `merged[0]`
+ * соответствует входному сэмплу с глобальным индексом **`state.inputBase`**.
+ * Выходной счётчик **`nextOutSampleIndex`** задаёт время в шкале частоты 16 kHz.
+ *
+ * Без **`inputBase`** индекс `floor(nextOutSampleIndex * ratio)` ошибочно читают как оффсет
+ * в `merged`: после первого чанка `merged` короче очередной глобальной позиции — цикл даёт `totalLen===0`,
+ * uplink PCM обрывается после первого пакета.
+ *
  * @param {Float32Array} channel
  * @param {number} inRate
- * @param {{ tail: Float32Array, nextOutSampleIndex: number }} state
+ * @param {{ tail: Float32Array, nextOutSampleIndex: number, inputBase: number,
+ *          firTaps?: Float32Array, firHistory?: Float32Array, firInputRate?: number }} state
  * @returns {ArrayBuffer|null}
  */
-function resampleMonoToPcm16ArrayBuffer(channel, inRate, state) {
+export function resampleMonoToPcm16ArrayBuffer(channel, inRate, state) {
     if (!channel || channel.length === 0) {
         return null;
     }
     if (!(inRate > 0)) {
         return null;
     }
-    const mergedLen = state.tail.length + channel.length;
+
+    let working = channel;
+    if (inRate > VOICE_CAPTURE_SAMPLE_RATE) {
+        if (
+            state.firTaps === undefined
+            || state.firHistory === undefined
+            || state.firInputRate !== inRate
+        ) {
+            const fcNorm = VOICE_FIR_CUTOFF_HZ / inRate;
+            state.firTaps = designFirLowpassHamming(VOICE_FIR_TAPS, fcNorm);
+            state.firHistory = new Float32Array(VOICE_FIR_TAPS - 1);
+            state.firInputRate = inRate;
+        }
+        working = applyFirToFloat(channel, state.firTaps, state.firHistory);
+    }
+
+    const mergedLen = state.tail.length + working.length;
     const merged = new Float32Array(mergedLen);
     merged.set(state.tail);
-    merged.set(channel, state.tail.length);
+    merged.set(working, state.tail.length);
     const ratio = inRate / VOICE_CAPTURE_SAMPLE_RATE;
     const pcmParts = [];
     while (true) {
-        const inPos = state.nextOutSampleIndex * ratio;
-        const i0 = Math.floor(inPos);
+        const inPosGlobal = state.nextOutSampleIndex * ratio;
+        const fp = inPosGlobal - state.inputBase;
+        const i0 = Math.floor(fp);
         const i1 = i0 + 1;
         if (i1 >= merged.length) {
             break;
         }
-        const frac = inPos - i0;
+        const frac = fp - i0;
         const s = merged[i0] * (1 - frac) + merged[i1] * frac;
         pcmParts.push(floatSampleToInt16(s));
         state.nextOutSampleIndex += 1;
     }
     const keepFloat = Math.floor(state.nextOutSampleIndex * ratio);
-    const keepFrom = keepFloat > 0 ? keepFloat - 1 : 0;
-    if (keepFrom >= merged.length) {
+    const keepTailGlobal = keepFloat > 0 ? keepFloat - 1 : 0;
+    const sliceStart = keepTailGlobal - state.inputBase;
+    if (sliceStart >= merged.length) {
         state.tail = new Float32Array(0);
+        state.inputBase += merged.length;
     } else {
-        state.tail = merged.slice(keepFrom);
+        const keepFromIdx = sliceStart <= 0 ? 0 : sliceStart;
+        state.tail = merged.slice(keepFromIdx);
+        if (keepFromIdx > 0) {
+            state.inputBase = keepTailGlobal;
+        }
     }
     const totalLen = pcmParts.length;
     if (totalLen === 0) {
@@ -284,8 +456,11 @@ export class VoiceMediaSession extends EventTarget {
         this._captureKeepAliveOsc = null;
         /** @type {GainNode|null} */
         this._captureKeepAliveGain = null;
-        /** @type {{ tail: Float32Array, nextOutSampleIndex: number }|null} */
+        /** @type {{ tail: Float32Array, nextOutSampleIndex: number, inputBase: number,
+         *           firTaps?: Float32Array, firHistory?: Float32Array, firInputRate?: number }|null} */
         this._captureResamplerState = null;
+        /** Хранит остаток < 320 семплов между ресемплами для построения 20 ms-кадров. */
+        this._outboundFrameTail = { tail: new Int16Array(0) };
         /** @type {GainNode|null} — mute sink: тянуть граф к destination без эха на колонках */
         this._captureSinkGain = null;
         this._recording = false;
@@ -302,6 +477,10 @@ export class VoiceMediaSession extends EventTarget {
         /** Живой путь uplink (только диагностика). */
         this._voiceUplinkPath = /** @type {'none'|'ac_worklet'|'ac_script'|'ac_analyser'} */ ('none');
         this._pcmUplinkDebugCount = 0;
+        /** @type {number} только voice_debug — сколько раз worklet прислал полный Float32-батч. */
+        this._captureWorkletBatchRecv = 0;
+        /** @type {number} voice_debug — encode вернул не ArrayBuffer после worklet-батча. */
+        this._pcmEncodeMissCount = 0;
         this._wsJsonDebugSeq = 0;
         this._wsInBinaryDebugSeq = 0;
     }
@@ -455,16 +634,33 @@ export class VoiceMediaSession extends EventTarget {
     }
 
     /**
+     * Накопить ресемплированный/нативный PCM, разбить на 20 ms-кадры и отправить.
+     * Куски короче 320 сэмплов (≈ окраинные части воркер-батча) аккумулируются
+     * в `_outboundFrameTail` до ближайшего полного кадра.
+     *
      * @param {ArrayBuffer} buffer
      */
     _sendPcmToWebSocket(buffer) {
         if (this._ws === null) {
             return;
         }
+        const frames = spliceIntoOutboundFrames(buffer, this._outboundFrameTail);
+        for (const frame of frames) {
+            this._enqueueOrSendOutboundFrame(frame);
+        }
+    }
+
+    /**
+     * @param {ArrayBuffer} frame
+     */
+    _enqueueOrSendOutboundFrame(frame) {
+        if (this._ws === null) {
+            return;
+        }
         if (this._ws.readyState === WebSocket.OPEN) {
             try {
-                this._ws.send(buffer);
-                this._debugAfterPcmSent(buffer);
+                this._ws.send(frame);
+                this._debugAfterPcmSent(frame);
             } catch (err) {
                 this._dispatch('error', {
                     code: 'voice/client/ws_send_failed',
@@ -477,7 +673,7 @@ export class VoiceMediaSession extends EventTarget {
             while (this._pcmOutboundQueue.length >= this._pcmOutboundQueueCap) {
                 this._pcmOutboundQueue.shift();
             }
-            this._pcmOutboundQueue.push(buffer.slice(0));
+            this._pcmOutboundQueue.push(frame.slice(0));
             return;
         }
     }
@@ -534,19 +730,44 @@ export class VoiceMediaSession extends EventTarget {
                 'VoiceMediaSession: getUserMedia not available (нет navigator.mediaDevices; часто встроенный превью-браузер, нестандартный WebView или политика безопасности).',
             );
         }
+        /** Сначала ужесточаем acoustic echo / noise suppression / AGC до `exact` —
+         *  без AEC=exact браузер часто оставляет лёгкий duplex-tap, и аудио ответа TTS
+         *  возвращается обратно через микрофон → STT транскрибирует «свой собственный»
+         *  голос как пользовательский запрос. На WebView/iOS Safari `exact` иногда
+         *  не поддержан — fallback к `ideal`, затем к голому `audio: true`. */
         let stream;
         try {
             stream = await getUserMediaCompat({
                 audio: {
-                    channelCount: { ideal: 1 },
-                    echoCancellation: { ideal: true },
-                    noiseSuppression: { ideal: true },
-                    autoGainControl: { ideal: true },
+                    channelCount: { exact: 1 },
+                    sampleRate: { ideal: VOICE_CAPTURE_SAMPLE_RATE },
+                    echoCancellation: { exact: true },
+                    noiseSuppression: { exact: true },
+                    autoGainControl: { exact: true },
                 },
                 video: false,
             });
-        } catch {
-            stream = await getUserMediaCompat({ audio: true, video: false });
+            _voiceClientDebug('mic_constraints_applied', { mode: 'exact' });
+        } catch (errExact) {
+            _voiceClientDebug('mic_constraints_exact_failed', {
+                detail: errExact instanceof Error ? errExact.message : String(errExact),
+            });
+            try {
+                stream = await getUserMediaCompat({
+                    audio: {
+                        channelCount: { ideal: 1 },
+                        sampleRate: { ideal: VOICE_CAPTURE_SAMPLE_RATE },
+                        echoCancellation: { ideal: true },
+                        noiseSuppression: { ideal: true },
+                        autoGainControl: { ideal: true },
+                    },
+                    video: false,
+                });
+                _voiceClientDebug('mic_constraints_applied', { mode: 'ideal' });
+            } catch {
+                stream = await getUserMediaCompat({ audio: true, video: false });
+                _voiceClientDebug('mic_constraints_applied', { mode: 'fallback_audio_true' });
+            }
         }
         this._mediaStream = stream;
         this._recording = true;
@@ -570,7 +791,12 @@ export class VoiceMediaSession extends EventTarget {
             throw new Error('VoiceMediaSession: в MediaStream нет audio-дорожки');
         }
 
-        this._captureResamplerState = { tail: new Float32Array(0), nextOutSampleIndex: 0 };
+        this._captureResamplerState = {
+            tail: new Float32Array(0),
+            nextOutSampleIndex: 0,
+            inputBase: 0,
+        };
+        this._outboundFrameTail = { tail: new Int16Array(0) };
 
         await this._initAudioContextMicCaptureFromMediaStream();
     }
@@ -587,7 +813,30 @@ export class VoiceMediaSession extends EventTarget {
         if (typeof Ctx !== 'function') {
             throw new Error('VoiceMediaSession: AudioContext not available');
         }
-        this._captureCtx = new Ctx({ latencyHint: 'interactive' });
+        /** Пробуем сразу 16 kHz: тогда нативный graph совпадает с целевой частотой
+         *  WS, ресемплер работает «1:1» (FIR не активируется, линейная интерполяция
+         *  не нужна). Часть браузеров (Safari ≤16) фиксирует sampleRate AudioContext
+         *  на устройстве — в этом случае ловим DOMException и создаём дефолтный. */
+        let captureCtx;
+        try {
+            captureCtx = new Ctx({
+                latencyHint: 'interactive',
+                sampleRate: VOICE_CAPTURE_SAMPLE_RATE,
+            });
+            _voiceClientDebug('capture_ctx_sample_rate', {
+                requested: VOICE_CAPTURE_SAMPLE_RATE,
+                actual: captureCtx.sampleRate,
+            });
+        } catch (errCtxRate) {
+            _voiceClientDebug('capture_ctx_explicit_rate_failed', {
+                detail:
+                    errCtxRate instanceof Error
+                        ? errCtxRate.message
+                        : String(errCtxRate),
+            });
+            captureCtx = new Ctx({ latencyHint: 'interactive' });
+        }
+        this._captureCtx = captureCtx;
 
         const source = this._captureCtx.createMediaStreamSource(this._mediaStream);
 
@@ -627,7 +876,7 @@ export class VoiceMediaSession extends EventTarget {
                 });
                 this._captureWorkletNode = wNode;
                 wNode.port.onmessage = (event) => {
-                    this._onMicWorkletFrame(event.data);
+                    void this._handleMicWorkletFrameAsync(event.data);
                 };
                 source.connect(wNode);
                 wNode.connect(sinkGain);
@@ -669,7 +918,13 @@ export class VoiceMediaSession extends EventTarget {
                 this._captureCtx.state === 'suspended'
                 || this._captureCtx.state === 'interrupted'
             ) {
-                void this._captureCtx.resume().catch(() => {});
+                void (async () => {
+                    try {
+                        await this._captureCtx.resume();
+                    } catch {
+                        /* noop */
+                    }
+                })();
             }
         };
 
@@ -685,9 +940,7 @@ export class VoiceMediaSession extends EventTarget {
                 if (c.state === 'closed') {
                     return;
                 }
-                if (c.state !== 'running') {
-                    void c.resume().catch(() => {});
-                }
+                void c.resume().catch(() => {});
             }, 140);
         }
 
@@ -737,24 +990,63 @@ export class VoiceMediaSession extends EventTarget {
     }
 
     /**
-     * @param {unknown} data — Float32Array с батчем сэмплов из AudioWorklet (transferable).
+     * Обработка батча из AudioWorklet. `resume()` выполняется с await: иначе Chromium часто остаётся
+     * в `suspended` после первого кванта, и `process()` перестаёт вызываться.
+     * @param {unknown} data
+     * @returns {Promise<void>}
      */
-    _onMicWorkletFrame(data) {
+    async _handleMicWorkletFrameAsync(data) {
         if (this._closed || !this._captureResamplerState || !this._captureCtx) {
             return;
         }
         if (!(data instanceof Float32Array) || data.length === 0) {
             return;
         }
+        if (isVoiceClientDebugEnabled()) {
+            this._captureWorkletBatchRecv += 1;
+            const r = this._captureWorkletBatchRecv;
+            if (r <= 8 || r % 25 === 0) {
+                _voiceClientDebug('worklet_batch_recv', {
+                    batch_n: r,
+                    floats: data.length,
+                    ctx_state_before: this._captureCtx.state,
+                });
+            }
+        }
         try {
             const c = this._captureCtx;
             if (c.state !== 'running') {
-                void c.resume();
+                try {
+                    await c.resume();
+                } catch {
+                    /* noop */
+                }
             }
-            const buf = this._encodeMonoFloatToOutboundPcm16(data, this._captureCtx.sampleRate);
-            if (buf instanceof ArrayBuffer) {
-                this._sendPcmToWebSocket(buf);
+            if (c.state !== 'running') {
+                if (isVoiceClientDebugEnabled()) {
+                    _voiceClientDebug('worklet_capture_ctx_not_running', {
+                        batch_n: this._captureWorkletBatchRecv,
+                        state: c.state,
+                    });
+                }
+                return;
             }
+            const buf = this._encodeMonoFloatToOutboundPcm16(data, c.sampleRate);
+            if (!(buf instanceof ArrayBuffer)) {
+                if (isVoiceClientDebugEnabled()) {
+                    this._pcmEncodeMissCount += 1;
+                    const m = this._pcmEncodeMissCount;
+                    if (m <= 8 || m % 40 === 0) {
+                        _voiceClientDebug('pcm_encode_skipped_after_worklet', {
+                            miss_seq: m,
+                            floats_in: data.length,
+                            sr: c.sampleRate,
+                        });
+                    }
+                }
+                return;
+            }
+            this._sendPcmToWebSocket(buf);
         } catch (err) {
             this._dispatch('error', {
                 code: 'voice/client/pcm_capture_failed',
@@ -1051,6 +1343,7 @@ export class VoiceMediaSession extends EventTarget {
     _teardownCapture() {
         this._recording = false;
         this._captureResamplerState = null;
+        this._outboundFrameTail = { tail: new Int16Array(0) };
         if (typeof document !== 'undefined' && this._captureVisibilityHandler !== null) {
             document.removeEventListener('visibilitychange', this._captureVisibilityHandler);
             this._captureVisibilityHandler = null;

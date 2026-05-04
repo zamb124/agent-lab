@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+import os
+import time
+from typing import Any, Optional
 
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -34,10 +36,94 @@ from apps.voice.services.speak_worker import (
 )
 from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import VoiceSession
+from core.config import get_settings
+from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+_UPLINK_DUMP_SAMPLE_RATE = 16000
+
+
+def _safe_session_id_for_filename(session_id: str) -> str:
+    """Оставить только safe-символы (`a-zA-Z0-9_.-`); остальное — на ``_``."""
+    out = []
+    for ch in session_id:
+        if ch.isalnum() or ch in ("_", ".", "-"):
+            out.append(ch)
+        else:
+            out.append("_")
+    return "".join(out) or "session"
+
+
+class _UplinkDump:
+    """Накапливает сырой PCM от клиента и на закрытии WS пишет WAV-файл.
+
+    Включается заданием ``settings.voice.diagnostics.uplink_dump_dir``;
+    лимит по размеру — ``uplink_dump_max_mb``. Используется только в dev
+    для диагностики проблем STT (расхождение слышимого vs распознанного).
+    """
+
+    def __init__(self, *, dump_dir: str, max_bytes: int, session_id: str) -> None:
+        if dump_dir == "":
+            raise ValueError("_UplinkDump: dump_dir не может быть пустым.")
+        if max_bytes <= 0:
+            raise ValueError("_UplinkDump: max_bytes должен быть > 0.")
+        self._dump_dir = dump_dir
+        self._max_bytes = max_bytes
+        self._session_id = session_id
+        self._buffer = bytearray()
+        self._truncated = False
+
+    def append(self, pcm_chunk: bytes) -> None:
+        if not pcm_chunk or self._truncated:
+            return
+        remaining = self._max_bytes - len(self._buffer)
+        if remaining <= 0:
+            self._truncated = True
+            return
+        if len(pcm_chunk) <= remaining:
+            self._buffer.extend(pcm_chunk)
+        else:
+            self._buffer.extend(pcm_chunk[:remaining])
+            self._truncated = True
+
+    def finalize(self) -> Optional[str]:
+        if not self._buffer:
+            return None
+        os.makedirs(self._dump_dir, exist_ok=True)
+        ts = int(time.time())
+        name = (
+            f"voice_uplink_{_safe_session_id_for_filename(self._session_id)}_"
+            f"{ts}.wav"
+        )
+        path = os.path.join(self._dump_dir, name)
+        wav = pcm_s16le_mono_to_wav(
+            bytes(self._buffer), sample_rate=_UPLINK_DUMP_SAMPLE_RATE
+        )
+        with open(path, "wb") as fp:
+            fp.write(wav)
+        logger.info(
+            "voice.ws_receiver.uplink_dump_saved",
+            session_id=self._session_id,
+            path=path,
+            bytes=len(self._buffer),
+            truncated=self._truncated,
+        )
+        return path
+
+
+def _build_uplink_dump(session_id: str) -> Optional[_UplinkDump]:
+    cfg = get_settings().voice.diagnostics
+    if cfg.uplink_dump_dir is None or cfg.uplink_dump_dir == "":
+        return None
+    return _UplinkDump(
+        dump_dir=cfg.uplink_dump_dir,
+        max_bytes=cfg.uplink_dump_max_mb * 1024 * 1024,
+        session_id=session_id,
+    )
 
 
 async def run_ws_receiver(
@@ -48,8 +134,11 @@ async def run_ws_receiver(
     """Читать WS-фреймы и раздавать их по назначению.
 
     Завершается при ``WebSocketDisconnect`` или когда ``session.active``
-    становится False (cancel).
+    становится False (cancel). При включённой диагностике
+    (``voice.diagnostics.uplink_dump_dir``) сохраняет полученный PCM в
+    WAV на закрытии.
     """
+    dump = _build_uplink_dump(session.session_id)
     try:
         while session.active:
             message = await websocket.receive()
@@ -75,6 +164,8 @@ async def run_ws_receiver(
                     continue
                 chunk_seq = session.record_pcm_chunk_from_client(ln)
                 await session.audio_in_queue.put(bytes_data)
+                if dump is not None:
+                    dump.append(bytes_data)
                 if chunk_seq == 1 or chunk_seq % 128 == 0:
                     logger.info(
                         "voice.ws_receiver.pcm_received",
@@ -106,6 +197,15 @@ async def run_ws_receiver(
             "voice.ws_receiver.error",
             session_id=session.session_id,
         )
+    finally:
+        if dump is not None:
+            try:
+                dump.finalize()
+            except Exception:
+                logger.exception(
+                    "voice.ws_receiver.uplink_dump_failed",
+                    session_id=session.session_id,
+                )
 
 
 async def _handle_text_frame(
