@@ -125,7 +125,7 @@ kubectl exec -n platform redis-0 -- redis-cli info
 kubectl exec -n platform deployment/provider-litserve -- nvidia-smi
 # Audio эндпоинты provider-litserve (in-cluster, без выхода через ingress)
 kubectl exec -n platform deployment/provider-litserve -- \
-  wget -qO- http://127.0.0.1:8014/v1/models | head -c 400
+  curl -sS http://127.0.0.1:8014/v1/models | head -c 400
 kubectl get certificate -n platform
 kubectl describe certificate platform-tls -n platform
 kubectl get events -n platform --sort-by='.lastTimestamp' | tail -30

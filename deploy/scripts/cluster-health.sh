@@ -199,11 +199,12 @@ if [ -z "$LITSERVE_POD" ]; then
   log_warn "под provider-litserve не найден — секция пропущена"
 else
   for endpoint in "/v1/models" "/v1/audio/transcriptions" "/v1/audio/speech" "/v1/audio/vad"; do
+    # Образ full (provider-litserve) ставит curl, wget в slim-слое не гарантирован — см. Dockerfile base-with-core.
     check_step \
-      "litserve GET $endpoint returns HTTP status line (in-cluster)" \
+      "litserve GET $endpoint returns HTTP status (in-cluster)" \
       "$K exec -n $PLATFORM_NS $LITSERVE_POD -- \
-        sh -c \"wget -q -S -O /dev/null http://127.0.0.1:8014$endpoint 2>&1 \
-          | grep -qE 'HTTP/[0-9.]+ [0-9]{3}'\""
+        curl -sS --max-time 15 -o /dev/null -w '%{http_code}' http://127.0.0.1:8014$endpoint \
+        | grep -qE '^[0-9]{3}$'"
   done
 fi
 
