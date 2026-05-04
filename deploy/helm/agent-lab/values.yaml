@@ -280,13 +280,11 @@ litserve:
   modelCacheSize: 100Gi
   modelId: BAAI/bge-reranker-v2-gemma
   embeddingModelId: BAAI/bge-m3
-  # API id-ы дефолтных моделей. Соответствуют записям в provider_litserve.infra
-  # (см. core/config/models.py: STT/TTS/VAD model entries). Полный список
-  # моделей задаётся через ENV PROVIDER_LITSERVE__INFRA__STT_MODELS_JSON и
-  # т.д. (тут — только дефолтные id и упрощённый whitelist).
-  defaultSttApiModelId: gigaam-v3-rnnt-ru
-  defaultTtsApiModelId: kokoro-82m-ru
-  defaultVadApiModelId: silero-vad-v5
+  # API id дефолтных моделей (поля stt_default_api_model_id и т.д. в
+  # ProviderLitserveInfraConfig). ENV: PROVIDER_LITSERVE__INFRA__STT_DEFAULT_API_MODEL_ID и т.д.
+  sttDefaultApiModelId: gigaam-v3-rnnt-ru
+  ttsDefaultApiModelId: kokoro-82m-ru
+  vadDefaultApiModelId: silero-vad-v5
   resources:
     # Память: GigaAM v3 (~2.5 Gi RSS), Kokoro (~1.2 Gi), Silero VAD (~120 Mi),
     # bge-m3 + reranker (~3 Gi). При CPU-режиме требуется ~ 8 Gi steady-state,

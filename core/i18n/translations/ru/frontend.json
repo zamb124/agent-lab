@@ -442,6 +442,7 @@
         "locale_ru": "Русский",
         "locale_en": "English",
         "interface_locale_hint": "Язык UI embed-чата для внешнего сайта",
+        "section_voice": "Голосовой с ассистентом (эфир)",
         "label_allowed_origins": "Допустимые домены (CORS)",
         "placeholder_allowed_origins": "https://example.com\nhttps://www.example.com",
         "allowed_origins_hint": "По одному origin на строку. Пусто = без ограничения по origin.",

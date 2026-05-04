@@ -489,12 +489,47 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "setMetadataHooks: setEmbedMetadataHooks" in html_code
     assert "setAuthProvider: setEmbedAuthProvider" in html_code
     assert data["token_endpoint"].endswith(f"/frontend/api/embed/configs/{embed_id}/session-token")
+    assert "assistant.voiceEnabled = false" in html_code
+    assert "assistant.voiceDefaultOn = false" in html_code
+    assert "assistant.voiceBaseUrl" in html_code
+    assert "assistant.companyId" in html_code
+    assert company_id in html_code
     
     # Cleanup
     await frontend_client.delete(
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers
     )
+
+
+@pytest.mark.asyncio
+async def test_get_embed_code_voice_enabled_wires_assistant(frontend_client: AsyncClient, test_auth_with_agent):
+    auth_headers, _, company_id = test_auth_with_agent
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Voice Embed Code",
+            "flow_id": "test_agent",
+            "voice_enabled": True,
+            "voice_default_on": True,
+        },
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+
+    response = await frontend_client.get(
+        f"/frontend/api/embed/configs/{embed_id}/code",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    html_code = response.json()["html_code"]
+    assert "assistant.voiceEnabled = true" in html_code
+    assert "assistant.voiceDefaultOn = true" in html_code
+    assert "assistant.voiceBaseUrl" in html_code
+    assert company_id in html_code
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
 
 @pytest.mark.asyncio

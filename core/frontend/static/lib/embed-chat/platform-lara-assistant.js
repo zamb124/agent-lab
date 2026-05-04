@@ -23,6 +23,10 @@ export class PlatformLaraAssistant extends LitElement {
         getExtraMetadataVariables: { type: Object },
         getContextVariables: { type: Object },
         actionHandlers: { type: Object },
+        voiceEnabled: { type: Boolean, attribute: 'voice-enabled' },
+        voiceDefaultOn: { type: Boolean, attribute: 'voice-default-on' },
+        voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
+        companyId: { type: String, attribute: 'company-id' },
     };
 
     createRenderRoot() {
@@ -47,6 +51,10 @@ export class PlatformLaraAssistant extends LitElement {
         this.getExtraMetadataVariables = undefined;
         this.getContextVariables = undefined;
         this.actionHandlers = {};
+        this.voiceEnabled = false;
+        this.voiceDefaultOn = false;
+        this.voiceBaseUrl = '';
+        this.companyId = '';
     }
 
     render() {
@@ -70,6 +78,10 @@ export class PlatformLaraAssistant extends LitElement {
                 .actionHandlers=${this.actionHandlers && typeof this.actionHandlers === 'object'
                     ? this.actionHandlers
                     : {}}
+                ?voice-enabled=${this.voiceEnabled}
+                ?voice-default-on=${this.voiceDefaultOn}
+                voice-base-url=${this.voiceBaseUrl || ''}
+                company-id=${this.companyId || ''}
             ></platform-embed-chat-drawer>
         `;
     }

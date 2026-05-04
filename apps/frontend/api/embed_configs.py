@@ -469,7 +469,15 @@ async def get_embed_code(
     
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
-    
+
+    user = request.state.user
+    company_id = getattr(user, "active_company_id", None) or ""
+    if config.voice_enabled and not company_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Для кода виджета с голосом выберите активную компанию",
+        )
+
     # Определяем base URL
     from core.config import get_settings
     settings = get_settings()
@@ -492,6 +500,10 @@ async def get_embed_code(
     assistant_title_js = json.dumps(assistant_title, ensure_ascii=False)
     locale_js = json.dumps(config.interface_locale, ensure_ascii=False)
     flows_base_url_js = json.dumps(f"{base_url}/flows", ensure_ascii=False)
+    voice_base_url_js = json.dumps(f"{base_url}/voice", ensure_ascii=False)
+    voice_enabled_js = json.dumps(config.voice_enabled)
+    voice_default_on_js = json.dumps(config.voice_enabled and config.voice_default_on)
+    company_id_js = json.dumps(company_id, ensure_ascii=False)
 
     html_code = f'''<!-- Humanitec Platform Embed Chat -->
 <script type="module" src="{script_url}"></script>
@@ -525,6 +537,10 @@ async def get_embed_code(
   assistant.setAttribute('locale', {locale_js});
   assistant.showLauncher = {show_launcher_js};
   assistant.flowsBaseUrl = {flows_base_url_js};
+  assistant.voiceEnabled = {voice_enabled_js};
+  assistant.voiceDefaultOn = {voice_default_on_js};
+  assistant.voiceBaseUrl = {voice_base_url_js};
+  assistant.companyId = {company_id_js};
   assistant.getAuthToken = getEmbedToken;
   assistant.getExtraMetadataVariables = async () => {{
     return {{

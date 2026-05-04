@@ -8,7 +8,7 @@
  * (apps/frontend/api/embed_configs.py): name, flow_id, branch_id,
  * allowed_origins, theme, position, show_launcher, primary_color,
  * greeting_message, assistant_title, interface_locale, placeholder, branding,
- * guest_max_user_messages.
+ * guest_max_user_messages, voice_enabled, voice_default_on.
  *
  * Skill заблокирован для external flows и flows без skills (бэк подставит default).
  */
@@ -472,6 +472,38 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                     </div>
 
                     <div class="form-group full">
+                        <label class="form-label">${this.t('embed_create_modal.section_voice')}</label>
+                        <label class="switch-row">
+                            <input
+                                type="checkbox"
+                                .checked=${this._voiceEnabled}
+                                @change=${(e) => {
+                                    this._voiceEnabled = e.target.checked;
+                                    if (!this._voiceEnabled) {
+                                        this._voiceDefaultOn = false;
+                                    }
+                                    this.isDirty = true;
+                                }}
+                            />
+                            <span>${this.t('embed_create_modal.label_voice_enabled')}</span>
+                        </label>
+                        <div class="hint">${this.t('embed_create_modal.voice_enabled_hint')}</div>
+                    </div>
+
+                    <div class="form-group full">
+                        <label class="switch-row">
+                            <input
+                                type="checkbox"
+                                ?disabled=${!this._voiceEnabled}
+                                .checked=${this._voiceDefaultOn}
+                                @change=${(e) => { this._voiceDefaultOn = e.target.checked; this.isDirty = true; }}
+                            />
+                            <span>${this.t('embed_create_modal.label_voice_default_on')}</span>
+                        </label>
+                        <div class="hint">${this.t('embed_create_modal.voice_default_on_hint')}</div>
+                    </div>
+
+                    <div class="form-group full">
                         <label class="form-label">${this.t('embed_create_modal.label_allowed_origins')}</label>
                         <textarea
                             class="form-input"
@@ -517,37 +549,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             <span>${this.t('embed_create_modal.label_show_launcher')}</span>
                         </label>
                         <div class="hint">${this.t('embed_create_modal.show_launcher_hint')}</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="switch-row">
-                            <input
-                                type="checkbox"
-                                .checked=${this._voiceEnabled}
-                                @change=${(e) => {
-                                    this._voiceEnabled = e.target.checked;
-                                    if (!this._voiceEnabled) {
-                                        this._voiceDefaultOn = false;
-                                    }
-                                    this.isDirty = true;
-                                }}
-                            />
-                            <span>${this.t('embed_create_modal.label_voice_enabled')}</span>
-                        </label>
-                        <div class="hint">${this.t('embed_create_modal.voice_enabled_hint')}</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="switch-row">
-                            <input
-                                type="checkbox"
-                                ?disabled=${!this._voiceEnabled}
-                                .checked=${this._voiceDefaultOn}
-                                @change=${(e) => { this._voiceDefaultOn = e.target.checked; this.isDirty = true; }}
-                            />
-                            <span>${this.t('embed_create_modal.label_voice_default_on')}</span>
-                        </label>
-                        <div class="hint">${this.t('embed_create_modal.voice_default_on_hint')}</div>
                     </div>
                 </div>
             </form>

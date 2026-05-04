@@ -17,6 +17,7 @@ pytest_plugins = [
     "tests.fixtures.mcp_http_stub",
 ]
 
+import asyncio
 import json
 import os
 import signal
@@ -534,6 +535,18 @@ async def platform_notification_manager_redis(setup_database_before_tests):
     redis_url = os.environ.get("DATABASE__REDIS_URL", "redis://localhost:63792/0")
     await notification_manager.start_redis_listener(redis_url)
     yield
+    # Иначе фоновая задача pub/sub и соединение redis.asyncio удерживают процесс pytest
+    # после «2 passed» — терминал не возвращается, пока не Ctrl+C.
+    # Отдельный shutdown приложения в `create_service_app` при TESTING=true listener не
+    # останавливает (см. core/app/factory.py); остановка только здесь, в конце сессии worker'а.
+    try:
+        await asyncio.wait_for(notification_manager.stop_redis_listener(), timeout=30.0)
+    except asyncio.TimeoutError:
+        from core.logging import get_logger
+
+        get_logger(__name__).warning(
+            "platform_notification_manager_redis.stop_redis_listener_timed_out"
+        )
 
 
 # Синхронизация session-scoped fixtures для pytest-xdist

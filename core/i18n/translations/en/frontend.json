@@ -442,6 +442,7 @@
         "locale_ru": "Russian",
         "locale_en": "English",
         "interface_locale_hint": "UI language of the embed chat on external websites",
+        "section_voice": "Assistant voice (live duplex)",
         "label_allowed_origins": "Allowed origins (CORS)",
         "placeholder_allowed_origins": "https://example.com\nhttps://www.example.com",
         "allowed_origins_hint": "One origin per line. Empty means no origin restriction.",
