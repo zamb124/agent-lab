@@ -860,6 +860,10 @@ class ProviderLitserveInfraConfig(BaseModel):
     )
     stt_default_api_model_id: str = Field(
         default="gigaam-v3-rnnt",
+        validation_alias=AliasChoices(
+            "stt_default_api_model_id",
+            "default_stt_api_model_id",
+        ),
         description="api id STT-модели по умолчанию (должен присутствовать в stt_models).",
     )
 
@@ -881,6 +885,10 @@ class ProviderLitserveInfraConfig(BaseModel):
     )
     tts_default_api_model_id: str = Field(
         default="kokoro-82m",
+        validation_alias=AliasChoices(
+            "tts_default_api_model_id",
+            "default_tts_api_model_id",
+        ),
         description="api id TTS-модели по умолчанию (должен присутствовать в tts_models).",
     )
 
@@ -901,6 +909,10 @@ class ProviderLitserveInfraConfig(BaseModel):
     )
     vad_default_api_model_id: str = Field(
         default="silero-vad",
+        validation_alias=AliasChoices(
+            "vad_default_api_model_id",
+            "default_vad_api_model_id",
+        ),
         description="api id VAD-модели по умолчанию (должен присутствовать в vad_models).",
     )
 
