@@ -3,11 +3,11 @@
  *
  * Не знает про A2A, Flows, embed или чат-UI. Делает ровно три вещи:
  *
- *  1. Держит WS `/voice/api/ws/session/{id}` и автоматом отправляет
- *     PCM 16kHz mono 16-bit: при наличии — **`MediaStreamTrackProcessor`**
- *     (`AudioData`); при прежнем окончании readable / ошибке `read()` — fallback на **`AudioContext`**
- *     и **`AudioWorklet`** (`voice-mic-capture`), иначе **`ScriptProcessorNode`**, затем **`AnalyserNode`** + pump.
- *     Флаг **`_recording`** поднимают **до** сборки графа, иначе ранние `onaudioprocess` отрезаются.
+ *  1. Держит WS `/voice/api/ws/session/{id}` и отправляет PCM 16 kHz mono s16le
+ *     через один граф **Web Audio** (`MediaStream` → **AudioWorklet** `voice-mic-capture` →
+ *     при недоступном worklet — **ScriptProcessorNode**, иначе **AnalyserNode** + pump).
+ *     Тот же порядок фиксируется **один раз** при `startRecording`; альтернативного тракта захвата
+ *     во время сессии нет. Флаг **`_recording`** до сборки графа.
  *     Тихий oscillator; таймер **`~140 ms`** и **`onstatechange`** поднимают контекст из `suspended`/`interrupted`.
  *  2. Принимает от voice text-frames (`transcript`, `vad`, `tts_state`,
  *     `error`, `ping`, `media_config`) и диспатчит как DOM `CustomEvent`.
@@ -47,13 +47,107 @@ function isDevVoiceInsecureHost(hostname) {
     return false;
 }
 
+/**
+ * Query-фрагменты из `location.search` и из `location.hash` (после `?`), если SPA
+ * держит параметры в hash.
+ *
+ * @returns {string[]}
+ */
+function voiceClientUrlQuerySlices() {
+    if (typeof window === 'undefined') {
+        return [];
+    }
+    /** @type {string[]} */
+    const out = [];
+    const search = window.location.search;
+    if (typeof search === 'string' && search.length > 0) {
+        out.push(search);
+    }
+    const hash = window.location.hash;
+    if (typeof hash === 'string' && hash.includes('?')) {
+        const i = hash.indexOf('?');
+        out.push(hash.slice(i));
+    }
+    return out;
+}
+
+/**
+ * Диагностика в консоли: **`?voice_debug=1`** или **`?voice_debug=true`** в URL
+ * (в т.ч. в части hash после `?`), либо **`sessionStorage.setItem('voice_debug','1')`**,
+ * затем перезагрузите вкладку. Сообщения `[voice-media]` после **`connect()`** —
+ * включите голосовой ввод (микрофон на чате flows).
+ *
+ * @returns {boolean}
+ */
+export function isVoiceClientDebugEnabled() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    try {
+        for (const qs of voiceClientUrlQuerySlices()) {
+            if (/[?&]voice_debug=(?:1|true)(?:&|$)/i.test(qs)) {
+                return true;
+            }
+        }
+        if (typeof window.sessionStorage?.getItem === 'function') {
+            const v = window.sessionStorage.getItem('voice_debug');
+            if (v === '1' || (typeof v === 'string' && v.toLowerCase() === 'true')) {
+                return true;
+            }
+        }
+    } catch {
+        /* storage / доступ к location */
+    }
+    return false;
+}
+
+/**
+ * @param {string} message
+ * @param {Record<string, unknown>} [payload]
+ */
+function _voiceClientDebug(message, payload) {
+    if (!isVoiceClientDebugEnabled()) {
+        return;
+    }
+    if (payload !== undefined) {
+        console.info('[voice-media]', message, payload);
+        return;
+    }
+    console.info('[voice-media]', message);
+}
+
+/**
+ * Одноразовое сообщение при загрузке модуля: иначе кажется, что флаг не работает
+ * (WS/PCM-логи идут только после `connect()` / кнопки микрофона).
+ */
+function _scheduleVoiceDebugBootstrapNotice() {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    const run = () => {
+        if (!isVoiceClientDebugEnabled()) {
+            return;
+        }
+        console.info('[voice-media]', 'voice_debug_active', {
+            query_slices: voiceClientUrlQuerySlices(),
+            next: 'Включите голосовой ввод на чате (микрофон); затем появятся ws_connecting, ws_open, pcm_uplink_tick, …',
+        });
+    };
+    if (typeof queueMicrotask === 'function') {
+        queueMicrotask(run);
+    } else {
+        window.setTimeout(run, 0);
+    }
+}
+_scheduleVoiceDebugBootstrapNotice();
+
 export const VOICE_CAPTURE_SAMPLE_RATE = 16000;
 
 /** Размер буфера ScriptProcessorNode (степень двойки в допустимом диапазоне). */
 const MIC_SCRIPT_PROCESSOR_BUFFER_SIZE = 4096;
-/** Интервал опроса AnalyserNode только в fallback-режиме. */
+/** Интервал опроса AnalyserNode (если доступен только analyser-путь захвата). */
 const MIC_CAPTURE_PUMP_MS = 20;
-/** fftSize временной волны (fallback AnalyserNode). */
+/** fftSize временной волны (AnalyserNode). */
 const MIC_CAPTURE_FFT_SIZE = 2048;
 
 function floatSampleToInt16(sample) {
@@ -194,16 +288,6 @@ export class VoiceMediaSession extends EventTarget {
         this._captureResamplerState = null;
         /** @type {GainNode|null} — mute sink: тянуть граф к destination без эха на колонках */
         this._captureSinkGain = null;
-        /** @type {AbortController|null} */
-        this._mspAbort = null;
-        /** @type {ReadableStreamDefaultReader<AudioData>|null} */
-        this._mspReader = null;
-        /** @type {unknown} */
-        this._mspProcessor = null;
-        /** Дорожка, с которой подняли MSP (для fallback при прежнем окончании readable). */
-        this._mspCaptureTrackRef = null;
-        /** После сбоя MSP не пробовать MSTP до следующего полного цикла сессии. */
-        this._mspCapturePermanentDisable = false;
         this._recording = false;
 
         /** @type {AudioContext|null} */
@@ -215,6 +299,11 @@ export class VoiceMediaSession extends EventTarget {
         /** Очередь PCM до OPEN (CONNECTING); иначе pump шлёт, пока сокет не OPEN — теряются. */
         this._pcmOutboundQueue = [];
         this._pcmOutboundQueueCap = 200;
+        /** Живой путь uplink (только диагностика). */
+        this._voiceUplinkPath = /** @type {'none'|'ac_worklet'|'ac_script'|'ac_analyser'} */ ('none');
+        this._pcmUplinkDebugCount = 0;
+        this._wsJsonDebugSeq = 0;
+        this._wsInBinaryDebugSeq = 0;
     }
 
     /** @returns {string} */
@@ -249,6 +338,7 @@ export class VoiceMediaSession extends EventTarget {
 
     async _doConnect() {
         const url = this._buildWsUrl();
+        _voiceClientDebug('ws_connecting', { session_id: this._sessionId, url });
         const ws = new WebSocket(url);
         ws.binaryType = 'arraybuffer';
         this._ws = ws;
@@ -306,6 +396,14 @@ export class VoiceMediaSession extends EventTarget {
             throw err;
         }
         this._flushPcmOutboundQueue();
+        _voiceClientDebug('ws_open', {
+            session_id: this._sessionId,
+            uplink_path: this._voiceUplinkPath,
+            capture_ac_state:
+                this._captureCtx !== null && typeof this._captureCtx.state === 'string'
+                    ? this._captureCtx.state
+                    : 'none',
+        });
         if (this._autoRecord && this._captureCtx !== null && !this._closed) {
             try {
                 await this._captureCtx.resume();
@@ -320,6 +418,43 @@ export class VoiceMediaSession extends EventTarget {
     }
 
     /**
+     * После фактической отправки PCM по WS (диагностика: `voice_debug`).
+     * @param {ArrayBuffer} buffer
+     */
+    _debugAfterPcmSent(buffer) {
+        if (!isVoiceClientDebugEnabled()) {
+            return;
+        }
+        this._pcmUplinkDebugCount += 1;
+        const n = this._pcmUplinkDebugCount;
+        if (n !== 1 && n % 35 !== 0) {
+            return;
+        }
+        const path = this._voiceUplinkPath;
+        const bytes = buffer.byteLength;
+        let rmsApprox = 0;
+        if (bytes >= 2) {
+            const dv = new DataView(buffer);
+            const stride = Math.max(2, Math.floor(bytes / 600) * 2);
+            let sumSq = 0;
+            let cnt = 0;
+            for (let o = 0; o <= bytes - 2; o += stride) {
+                const s = dv.getInt16(o, true);
+                sumSq += s * s;
+                cnt += 1;
+            }
+            rmsApprox = cnt > 0 ? Math.round(Math.sqrt(sumSq / cnt)) : 0;
+        }
+        _voiceClientDebug('pcm_uplink_tick', {
+            session_id: this._sessionId,
+            chunk_seq: n,
+            path,
+            bytes,
+            rms_i16_approx: rmsApprox,
+        });
+    }
+
+    /**
      * @param {ArrayBuffer} buffer
      */
     _sendPcmToWebSocket(buffer) {
@@ -329,6 +464,7 @@ export class VoiceMediaSession extends EventTarget {
         if (this._ws.readyState === WebSocket.OPEN) {
             try {
                 this._ws.send(buffer);
+                this._debugAfterPcmSent(buffer);
             } catch (err) {
                 this._dispatch('error', {
                     code: 'voice/client/ws_send_failed',
@@ -354,6 +490,7 @@ export class VoiceMediaSession extends EventTarget {
             const b = this._pcmOutboundQueue.shift();
             try {
                 this._ws.send(b);
+                this._debugAfterPcmSent(b);
             } catch (err) {
                 this._dispatch('error', {
                     code: 'voice/client/ws_send_failed',
@@ -423,8 +560,7 @@ export class VoiceMediaSession extends EventTarget {
     }
 
     /**
-     * PCM uplink: по возможности **AudioWorklet** (рендер-поток, без ScriptProcessor),
-     * иначе `ScriptProcessorNode`, иначе AnalyserNode + pump.
+     * PCM uplink через Web Audio (`MediaStream` → worklet / ScriptProcessor / Analyser — один раз при сборке).
      */
     async _initMicCaptureGraph() {
         const tracks = this._mediaStream.getAudioTracks();
@@ -436,17 +572,11 @@ export class VoiceMediaSession extends EventTarget {
 
         this._captureResamplerState = { tail: new Float32Array(0), nextOutSampleIndex: 0 };
 
-        if (!this._mspCapturePermanentDisable && this._tryAttachMediaStreamTrackProcessor(audioTrack)) {
-            this._scheduleMutedMicDiagnostics();
-            return;
-        }
-
         await this._initAudioContextMicCaptureFromMediaStream();
     }
 
     /**
      * Захват uplink через Web Audio (MediaStream → worklet / ScriptProcessor / Analyser).
-     * Вызывается при отказе MSTP или после прежнего завершения MSP pump.
      * @returns {Promise<void>}
      */
     async _initAudioContextMicCaptureFromMediaStream() {
@@ -531,6 +661,10 @@ export class VoiceMediaSession extends EventTarget {
             if (this._closed || !this._captureCtx) {
                 return;
             }
+            _voiceClientDebug('capture_ctx_state', {
+                state: this._captureCtx.state,
+                uplink_path: this._voiceUplinkPath,
+            });
             if (
                 this._captureCtx.state === 'suspended'
                 || this._captureCtx.state === 'interrupted'
@@ -558,6 +692,18 @@ export class VoiceMediaSession extends EventTarget {
         }
 
         const captureUsesAnalyserPump = !usedMicWorklet && this._captureScriptProcessor === null;
+        if (captureUsesAnalyserPump) {
+            this._voiceUplinkPath = 'ac_analyser';
+        } else if (this._captureScriptProcessor !== null) {
+            this._voiceUplinkPath = 'ac_script';
+        } else {
+            this._voiceUplinkPath = 'ac_worklet';
+        }
+        _voiceClientDebug('ac_capture_ready', {
+            path: this._voiceUplinkPath,
+            sample_rate: ctx.sampleRate,
+            state: ctx.state,
+        });
         if (captureUsesAnalyserPump) {
             this._startMicCapturePumpLoop();
         }
@@ -664,218 +810,6 @@ export class VoiceMediaSession extends EventTarget {
             return floatMonoToPcm16ArrayBufferDirect(chunk);
         }
         return resampleMonoToPcm16ArrayBuffer(chunk, inRate, this._captureResamplerState);
-    }
-
-    /**
-     * @param {MediaStreamTrack} track
-     * @returns {boolean}
-     */
-    _tryAttachMediaStreamTrackProcessor(track) {
-        if (this._mspCapturePermanentDisable) {
-            return false;
-        }
-        if (
-            typeof window === 'undefined'
-            || typeof MediaStreamTrackProcessor !== 'function'
-        ) {
-            return false;
-        }
-        try {
-            const processor = new MediaStreamTrackProcessor({ track });
-            const readable = processor.readable;
-            if (
-                readable === null
-                || typeof readable !== 'object'
-                || typeof readable.getReader !== 'function'
-            ) {
-                return false;
-            }
-            const abortController = new AbortController();
-            const reader = readable.getReader();
-            this._mspAbort = abortController;
-            this._mspProcessor = processor;
-            this._mspReader = reader;
-            this._mspCaptureTrackRef = track;
-            void this._runMediaStreamTrackProcessorPump(reader, abortController.signal);
-            return true;
-        } catch {
-            this._mspCaptureTrackRef = null;
-            return false;
-        }
-    }
-
-    /**
-     * @param {AudioData} audioData
-     * @returns {{ mono: Float32Array, inRate: number, sampleCount: number }}
-     */
-    _mspExtractMonoFromAudioData(audioData) {
-        const n = audioData.numberOfFrames;
-        const ch = audioData.numberOfChannels;
-        const inRate = audioData.sampleRate;
-        if (n === 0) {
-            return { mono: new Float32Array(0), inRate, sampleCount: 0 };
-        }
-        try {
-            const interleaved = new Float32Array(n * ch);
-            audioData.copyTo(interleaved, { format: 'f32' });
-            if (ch === 1) {
-                return { mono: interleaved, inRate, sampleCount: n };
-            }
-            const mono = new Float32Array(n);
-            for (let i = 0; i < n; i++) {
-                let sum = 0;
-                for (let c = 0; c < ch; c++) {
-                    sum += interleaved[i * ch + c];
-                }
-                mono[i] = sum / ch;
-            }
-            return { mono, inRate, sampleCount: n };
-        } catch {
-            /* planar fallback */
-        }
-        if (ch === 1) {
-            const mono = new Float32Array(n);
-            audioData.copyTo(mono, { planeIndex: 0, format: 'f32-planar' });
-            return { mono, inRate, sampleCount: n };
-        }
-        if (ch === 2) {
-            const left = new Float32Array(n);
-            const right = new Float32Array(n);
-            audioData.copyTo(left, { planeIndex: 0, format: 'f32-planar' });
-            audioData.copyTo(right, { planeIndex: 1, format: 'f32-planar' });
-            const mono = new Float32Array(n);
-            for (let i = 0; i < n; i++) {
-                mono[i] = (left[i] + right[i]) * 0.5;
-            }
-            return { mono, inRate, sampleCount: n };
-        }
-        const mono = new Float32Array(n);
-        audioData.copyTo(mono, { planeIndex: 0, format: 'f32-planar' });
-        return { mono, inRate, sampleCount: n };
-    }
-
-    /**
-     * @param {ReadableStreamDefaultReader<AudioData>} reader
-     * @param {AbortSignal} signal
-     * @returns {Promise<void>}
-     */
-    async _runMediaStreamTrackProcessorPump(reader, signal) {
-        try {
-            while (!this._closed && !signal.aborted && this._recording) {
-                let readResult;
-                try {
-                    readResult = await reader.read();
-                } catch {
-                    if (!signal.aborted && !this._closed && this._recording) {
-                        this._mspCapturePermanentDisable = true;
-                    }
-                    break;
-                }
-                if (readResult.done) {
-                    const tr = this._mspCaptureTrackRef;
-                    const live =
-                        tr !== null
-                        && typeof tr === 'object'
-                        && typeof tr.readyState === 'string'
-                        && tr.readyState === 'live';
-                    if (
-                        live
-                        && !signal.aborted
-                        && !this._closed
-                        && this._recording
-                    ) {
-                        this._mspCapturePermanentDisable = true;
-                    }
-                    break;
-                }
-                const audioData = readResult.value;
-                if (!(audioData instanceof AudioData)) {
-                    continue;
-                }
-                try {
-                    if (this._closed || !this._recording || !this._captureResamplerState) {
-                        continue;
-                    }
-                    const { mono, inRate, sampleCount } =
-                        this._mspExtractMonoFromAudioData(audioData);
-                    if (sampleCount === 0) {
-                        continue;
-                    }
-                    const buf = this._encodeMonoFloatToOutboundPcm16(mono, inRate);
-                    if (buf instanceof ArrayBuffer) {
-                        this._sendPcmToWebSocket(buf);
-                    }
-                } catch (err) {
-                    if (!this._closed) {
-                        this._dispatch('error', {
-                            code: 'voice/client/pcm_capture_failed',
-                            detail: err instanceof Error ? err.message : String(err),
-                        });
-                    }
-                } finally {
-                    try {
-                        audioData.close();
-                    } catch {
-                        /* noop */
-                    }
-                }
-            }
-        } finally {
-            if (this._mspReader === reader) {
-                this._mspReader = null;
-            }
-            try {
-                await reader.cancel();
-            } catch {
-                /* noop */
-            }
-            try {
-                reader.releaseLock();
-            } catch {
-                /* noop */
-            }
-            this._mspProcessor = null;
-        }
-
-        if (
-            this._mspCapturePermanentDisable
-            && !this._closed
-            && this._recording
-            && this._captureCtx === null
-            && this._mediaStream !== null
-        ) {
-            this._captureResamplerState = {
-                tail: new Float32Array(0),
-                nextOutSampleIndex: 0,
-            };
-            try {
-                await this._initAudioContextMicCaptureFromMediaStream();
-                if (
-                    !this._closed
-                    && this._captureCtx !== null
-                    && this._recording
-                    && this._ws !== null
-                    && this._ws.readyState === WebSocket.OPEN
-                ) {
-                    try {
-                        await this._captureCtx.resume();
-                    } catch {
-                        /* noop */
-                    }
-                }
-            } catch (err) {
-                this._recording = false;
-                this._dispatch('error', {
-                    code: 'voice/client/pcm_capture_failed',
-                    detail: err instanceof Error ? err.message : String(err),
-                });
-                try {
-                    this._teardownCapture();
-                } catch {
-                    /* noop */
-                }
-            }
-        }
     }
 
     /** Если дорожка остаётся `muted`, сигнал до графа не доходит — показываем явную ошибку. */
@@ -1024,6 +958,15 @@ export class VoiceMediaSession extends EventTarget {
      */
     _handleWsMessage(event) {
         if (event.data instanceof ArrayBuffer) {
+            if (isVoiceClientDebugEnabled()) {
+                this._wsInBinaryDebugSeq += 1;
+                if (this._wsInBinaryDebugSeq <= 12) {
+                    _voiceClientDebug('ws_in_binary', {
+                        seq: this._wsInBinaryDebugSeq,
+                        bytes: event.data.byteLength,
+                    });
+                }
+            }
             this._playAudioChunk(event.data);
             return;
         }
@@ -1037,6 +980,13 @@ export class VoiceMediaSession extends EventTarget {
             return;
         }
         if (!payload || typeof payload !== 'object') return;
+        if (isVoiceClientDebugEnabled()) {
+            const t = typeof payload.type === 'string' ? payload.type : '?';
+            this._wsJsonDebugSeq += 1;
+            if (this._wsJsonDebugSeq <= 60) {
+                _voiceClientDebug('ws_in_json', { seq: this._wsJsonDebugSeq, type: t });
+            }
+        }
         switch (payload.type) {
             case 'transcript':
                 this._dispatch('transcript', {
@@ -1080,8 +1030,16 @@ export class VoiceMediaSession extends EventTarget {
      * @param {CloseEvent} event
      */
     _handleWsClose(event) {
+        const codeVal = typeof event.code === 'number' ? event.code : 1006;
+        _voiceClientDebug('ws_closed', {
+            session_id: this._sessionId,
+            code: codeVal,
+            reason: typeof event.reason === 'string' ? event.reason : '',
+            pcm_uplink_chunks_logged: this._pcmUplinkDebugCount,
+            uplink_path: this._voiceUplinkPath,
+        });
         this._dispatch('closed', {
-            code: typeof event.code === 'number' ? event.code : 1006,
+            code: codeVal,
             reason: typeof event.reason === 'string' ? event.reason : '',
         });
         this._closed = true;
@@ -1092,30 +1050,6 @@ export class VoiceMediaSession extends EventTarget {
 
     _teardownCapture() {
         this._recording = false;
-        if (this._mspAbort !== null) {
-            try {
-                this._mspAbort.abort();
-            } catch {
-                /* noop */
-            }
-            this._mspAbort = null;
-        }
-        const mspReader = this._mspReader;
-        if (mspReader !== null) {
-            this._mspReader = null;
-            try {
-                void mspReader.cancel();
-            } catch {
-                /* noop */
-            }
-            try {
-                mspReader.releaseLock();
-            } catch {
-                /* noop */
-            }
-        }
-        this._mspProcessor = null;
-        this._mspCaptureTrackRef = null;
         this._captureResamplerState = null;
         if (typeof document !== 'undefined' && this._captureVisibilityHandler !== null) {
             document.removeEventListener('visibilitychange', this._captureVisibilityHandler);

@@ -29,6 +29,7 @@
 
 import { streamEmbedA2A } from '../embed-chat/embed-a2a-stream.js';
 import { extractSpeakableText } from './speakable.js';
+import { isVoiceClientDebugEnabled } from './voice-media-session.js';
 
 /**
  * @typedef {object} VoiceAgentBridgeOptions
@@ -80,6 +81,7 @@ export class VoiceAgentBridge extends EventTarget {
         this._onTranscript = this._onTranscript.bind(this);
         this._onVad = this._onVad.bind(this);
         this._onTtsState = this._onTtsState.bind(this);
+        this._onVoiceDiagnostic = this._onVoiceDiagnostic.bind(this);
     }
 
     /** @returns {string|null} */
@@ -94,6 +96,20 @@ export class VoiceAgentBridge extends EventTarget {
         this._media.addEventListener('transcript', this._onTranscript);
         this._media.addEventListener('vad', this._onVad);
         this._media.addEventListener('ttsState', this._onTtsState);
+        this._media.addEventListener('diagnostic', this._onVoiceDiagnostic);
+    }
+
+    /**
+     * @param {Event} event
+     */
+    _onVoiceDiagnostic(event) {
+        if (!isVoiceClientDebugEnabled()) {
+            return;
+        }
+        const ev = /** @type {CustomEvent<Record<string, unknown>>} */ (event);
+        const detail =
+            ev.detail !== null && typeof ev.detail === 'object' ? ev.detail : {};
+        console.info('[voice-agent-bridge]', 'diagnostic', detail);
     }
 
     /**
@@ -105,6 +121,7 @@ export class VoiceAgentBridge extends EventTarget {
         this._media.removeEventListener('transcript', this._onTranscript);
         this._media.removeEventListener('vad', this._onVad);
         this._media.removeEventListener('ttsState', this._onTtsState);
+        this._media.removeEventListener('diagnostic', this._onVoiceDiagnostic);
         this._abortCurrent();
     }
 

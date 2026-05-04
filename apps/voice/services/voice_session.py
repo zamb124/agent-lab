@@ -40,6 +40,7 @@ class VoiceSession:
         self._tasks: list[asyncio.Task] = []
         self._bytes_sent: int = 0
         self._bytes_received: int = 0
+        self._pcm_chunk_count: int = 0
         self._is_tts_active: bool = False
 
     def mark_tts_active(self, active: bool) -> None:
@@ -59,6 +60,18 @@ class VoiceSession:
 
     def add_bytes_received(self, count: int) -> None:
         self._bytes_received += count
+
+    def record_pcm_chunk_from_client(self, byte_len: int) -> int:
+        """Учесть один бинарный PCM-кадр uplink; возвращает порядковый номер chunk."""
+        if byte_len <= 0:
+            raise ValueError("VoiceSession.record_pcm_chunk_from_client: byte_len должен быть > 0.")
+        self.add_bytes_received(byte_len)
+        self._pcm_chunk_count += 1
+        return self._pcm_chunk_count
+
+    @property
+    def pcm_chunk_count(self) -> int:
+        return self._pcm_chunk_count
 
     def record_bytes_sent(self, count: int) -> None:
         self._bytes_sent += count

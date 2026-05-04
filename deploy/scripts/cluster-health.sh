@@ -69,12 +69,12 @@ else
   log_info "LitServe на ноде '${LITSERVE_HOST:-auto}' (не $GPU_NODE_NAME) — проверка GPU пропущена"
 fi
 
-# 3. Поды Running/Completed
+# 3. Поды Running / Completed / Terminating (старое поколение при rollout — не сбой)
 log_section "3) Поды в namespace $PLATFORM_NS"
 NOT_OK=$($K get pods -n "$PLATFORM_NS" --no-headers 2>/dev/null \
-  | awk '$3 != "Running" && $3 != "Completed" {print $1, $3}')
+  | awk '$3 != "Running" && $3 != "Completed" && $3 != "Terminating" {print $1, $3}')
 if [ -z "$NOT_OK" ]; then
-  log_ok "все поды Running/Completed"
+  log_ok "все поды Running/Completed или Terminating (drain после rollout)"
 else
   log_error "не Running:"
   printf '%s\n' "$NOT_OK" | sed 's/^/    /'

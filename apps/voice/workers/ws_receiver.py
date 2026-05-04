@@ -66,7 +66,23 @@ async def run_ws_receiver(
             if bytes_data is not None:
                 if not session.active:
                     return
+                ln = len(bytes_data)
+                if ln == 0:
+                    logger.warning(
+                        "voice.ws_receiver.empty_pcm_frame",
+                        session_id=session.session_id,
+                    )
+                    continue
+                chunk_seq = session.record_pcm_chunk_from_client(ln)
                 await session.audio_in_queue.put(bytes_data)
+                if chunk_seq == 1 or chunk_seq % 128 == 0:
+                    logger.info(
+                        "voice.ws_receiver.pcm_received",
+                        session_id=session.session_id,
+                        chunk_seq=chunk_seq,
+                        byte_len=ln,
+                        bytes_received_total=session.bytes_received,
+                    )
                 continue
 
             if text_data is not None:
