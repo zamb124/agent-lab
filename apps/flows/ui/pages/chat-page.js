@@ -12,8 +12,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/layout/page-header.js';
 import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
-import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
-import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
+import { createFlowVoiceSession, disposeFlowVoiceSession } from '../_helpers/flow-voice-session.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -202,54 +201,41 @@ export class ChatPage extends PlatformPage {
         if (this._voiceOn) return;
         if (!this.flowId) return;
         const company = this._activeCompanySel.value;
-        const companyId = company && typeof company === 'object' && typeof company.company_id === 'string'
-            ? company.company_id
-            : '';
+        const companyId =
+            company && typeof company === 'object' && typeof company.company_id === 'string'
+                ? company.company_id
+                : '';
         if (companyId === '') {
             this._voiceStatus = 'no_company';
             return;
         }
-        const origin = typeof window !== 'undefined' && window.location
-            ? `${window.location.protocol}//${window.location.host}`
-            : '';
-        const voiceBaseUrl = `${origin}/voice`;
-        const a2aBaseUrl = `${origin}/flows`;
-        const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
-        const sessionId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         const initialContextId = this._chat.state?.currentContextId || null;
-
-        const media = new VoiceMediaSession({
-            baseUrl: wsBase,
-            sessionId,
-            companyId,
-            autoRecord: true,
-        });
-        const bridge = new VoiceAgentBridge({
-            mediaSession: media,
-            a2aBaseUrl,
+        const { media, bridge } = createFlowVoiceSession({
             flowId: this.flowId,
-            branchId: this.branchId && this.branchId !== 'base' ? this.branchId : null,
-            credentials: 'include',
+            branchId: this.branchId,
+            companyId,
             initialContextId,
-        });
-
-        media.addEventListener('vad', (e) => {
-            this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
-        });
-        media.addEventListener('ttsState', (e) => {
-            this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
-        });
-        media.addEventListener('error', () => {
-            this._voiceStatus = 'error';
-        });
-        media.addEventListener('closed', () => {
-            this._voiceOn = false;
-            this._voiceStatus = 'closed';
+            onVad: (e) => {
+                this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
+            },
+            onTtsState: (e) => {
+                this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
+            },
+            onMediaError: () => {
+                this._voiceStatus = 'error';
+            },
+            onClosed: () => {
+                this._voiceMedia = null;
+                this._voiceBridge = null;
+                this._voiceOn = false;
+                this._voiceStatus = 'closed';
+            },
         });
 
         try {
             await media.connect();
         } catch (err) {
+            disposeFlowVoiceSession(media, bridge);
             this._voiceStatus = 'error';
             this.toast('flows:platform_chat.toast_voice_error', {
                 type: 'error',
@@ -265,14 +251,9 @@ export class ChatPage extends PlatformPage {
     }
 
     _stopVoice() {
-        if (this._voiceBridge) {
-            try { this._voiceBridge.stop(); } catch { /* noop */ }
-            this._voiceBridge = null;
-        }
-        if (this._voiceMedia) {
-            try { this._voiceMedia.close(); } catch { /* noop */ }
-            this._voiceMedia = null;
-        }
+        disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
+        this._voiceMedia = null;
+        this._voiceBridge = null;
         this._voiceOn = false;
         this._voiceStatus = 'idle';
     }
@@ -288,6 +269,9 @@ export class ChatPage extends PlatformPage {
     updated(changed) {
         if (super.updated) {
             super.updated(changed);
+        }
+        if ((changed.has('flowId') || changed.has('branchId')) && this._voiceOn) {
+            this._stopVoice();
         }
         if (changed.has('flowId') || changed.has('sessionId') || changed.has('branchId')) {
             this._initOrLoadSession();
@@ -498,16 +482,6 @@ export class ChatPage extends PlatformPage {
             <button
                 type="button"
                 class="action-btn"
-                title=${this._voiceOn ? this.t('platform_chat.btn_voice_off') : this.t('platform_chat.btn_voice_on')}
-                aria-label=${this._voiceOn ? this.t('platform_chat.btn_voice_off') : this.t('platform_chat.btn_voice_on')}
-                aria-pressed=${this._voiceOn ? 'true' : 'false'}
-                @click=${this._toggleVoice}
-            >
-                <platform-icon name=${this._voiceOn ? 'mic' : 'mic-off'} size="16"></platform-icon>
-            </button>
-            <button
-                type="button"
-                class="action-btn"
                 title=${this.t('editor_header.lara')}
                 aria-label=${this.t('editor_header.lara')}
                 @click=${this._openLara}
@@ -654,9 +628,6 @@ export class ChatPage extends PlatformPage {
                 </div>
             </page-header>
             ${this._isMobile ? html`<div class="chat-branch-hint">${branchLabel}</div>` : nothing}
-            ${this._voiceOn
-                ? html`<div class="chat-branch-hint">${this.t(`platform_chat.voice_status_${this._voiceStatus}`)}</div>`
-                : nothing}
             <div class="chat-body">
                 <chat-messages
                     .messages=${messages}
@@ -665,9 +636,13 @@ export class ChatPage extends PlatformPage {
                     @show-tracing=${this._onChatShowTracing}
                 ></chat-messages>
                 <chat-input
+                    ?show-voice=${hasFlow}
+                    ?voice-active=${this._voiceOn}
+                    voice-status=${this._voiceStatus}
                     ?streaming=${streaming}
                     @send=${this._onSendMessage}
                     @stop=${this._onStop}
+                    @voice-toggle=${this._toggleVoice}
                 ></chat-input>
             </div>
         `;

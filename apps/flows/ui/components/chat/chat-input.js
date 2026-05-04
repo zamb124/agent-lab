@@ -4,9 +4,11 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class ChatInput extends PlatformElement {
+    static i18nNamespace = 'flows';
     static styles = [
         PlatformElement.styles,
         css`
@@ -84,7 +86,52 @@ export class ChatInput extends PlatformElement {
                 color: var(--text-primary);
                 background: var(--glass-solid-strong);
             }
-            
+
+            .voice-button {
+                flex-shrink: 0;
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-tertiary);
+                background: transparent;
+                border: none;
+                border-radius: var(--radius-lg);
+                transition: all var(--duration-fast) var(--easing-default);
+            }
+
+            .voice-button:hover:not(:disabled) {
+                color: var(--text-primary);
+                background: var(--glass-solid-strong);
+            }
+
+            .voice-button:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
+            .voice-button.active {
+                color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 18%, var(--glass-solid-strong));
+            }
+
+            .voice-status-hint {
+                max-width: 900px;
+                margin: 0 auto var(--space-2);
+                padding: 0 var(--space-6);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.35;
+            }
+
+            @media (max-width: 768px) {
+                .voice-status-hint {
+                    padding: 0 var(--space-4);
+                    max-width: none;
+                }
+            }
+
             .input-wrapper {
                 flex: 1;
                 position: relative;
@@ -230,6 +277,9 @@ export class ChatInput extends PlatformElement {
         placeholder: { type: String },
         maxLength: { type: Number },
         maxFileSize: { type: Number },
+        showVoice: { type: Boolean, attribute: 'show-voice' },
+        voiceActive: { type: Boolean, attribute: 'voice-active' },
+        voiceStatus: { type: String, attribute: 'voice-status' },
         _value: { state: true },
         _selectedFiles: { state: true },
     };
@@ -241,6 +291,9 @@ export class ChatInput extends PlatformElement {
         this.placeholder = 'Send a message';
         this.maxLength = 10000;
         this.maxFileSize = 10 * 1024 * 1024; // 10MB
+        this.showVoice = false;
+        this.voiceActive = false;
+        this.voiceStatus = 'idle';
         this._value = '';
         this._selectedFiles = [];
     }
@@ -358,6 +411,10 @@ export class ChatInput extends PlatformElement {
         this.emit('stop');
     }
 
+    _onVoiceClick() {
+        this.emit('voice-toggle');
+    }
+
     render() {
         const canSend = (this._value.trim().length > 0 || this._selectedFiles.length > 0) && !this.disabled && !this.loading;
 
@@ -367,6 +424,13 @@ export class ChatInput extends PlatformElement {
                     ${this._selectedFiles.map((file, index) => this._renderFilePreview(file, index))}
                 </div>
             ` : ''}
+            ${this.showVoice && this.voiceActive
+                ? html`
+                      <div class="voice-status-hint">
+                          ${this.t(`platform_chat.voice_status_${this.voiceStatus}`)}
+                      </div>
+                  `
+                : ''}
             
             <div class="input-container">
                 <input
@@ -396,6 +460,29 @@ export class ChatInput extends PlatformElement {
                         rows="1"
                     ></textarea>
                 </div>
+
+                ${this.showVoice
+                    ? html`
+                          <button
+                              type="button"
+                              class="voice-button ${this.voiceActive ? 'active' : ''}"
+                              title=${this.voiceActive
+                                  ? this.t('platform_chat.btn_voice_off')
+                                  : this.t('platform_chat.btn_voice_on')}
+                              aria-label=${this.voiceActive
+                                  ? this.t('platform_chat.btn_voice_off')
+                                  : this.t('platform_chat.btn_voice_on')}
+                              aria-pressed=${this.voiceActive ? 'true' : 'false'}
+                              ?disabled=${this.disabled || this.loading}
+                              @click=${this._onVoiceClick}
+                          >
+                              <platform-icon
+                                  name=${this.voiceActive ? 'mic' : 'mic-off'}
+                                  size="20"
+                              ></platform-icon>
+                          </button>
+                      `
+                    : ''}
                 
                 ${this.loading ? html`
                     <button 

@@ -19,3 +19,9 @@ observability:
     storage: 100Gi
   tempo:
     storage: 50Gi
+
+# Совпадает с существующим PVC litserve-model-cache (helm patch size требует
+# allowVolumeExpansion у StorageClass; microk8s-hostpath без него). Увеличение
+# кеша — через migrate-pvc / новый PVC и перенос данных, затем обновить это значение.
+litserve:
+  modelCacheSize: 50Gi

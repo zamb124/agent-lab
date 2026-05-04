@@ -17,6 +17,8 @@
  * `flows.mocks`. «Сбросить чат» вызывает `flows/chat` `resetSession` (и `tasks/cancel` при
  * активном стриме). Mocks редактируются модалкой через slice — их payload идёт
  * в `params.metadata.mock` команды `flows/chat_send`.
+ * Голосовой режим (микрофон у поля ввода): та же связка voice WS + A2A, что на странице чата,
+ * через `apps/flows/ui/_helpers/flow-voice-session.js`.
  */
 
 import { html, css, nothing } from 'lit';
@@ -36,6 +38,7 @@ import {
     deriveRunPanelStatus,
 } from '../../_helpers/flows-resolvers.js';
 import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-id.js';
+import { createFlowVoiceSession, disposeFlowVoiceSession } from '../../_helpers/flow-voice-session.js';
 
 const ACCEPT_FILE_TYPES = '*/*';
 const EMPTY_TRACE = Object.freeze([]);
@@ -66,6 +69,8 @@ export class FlowsExecutionPanel extends PlatformElement {
         branchId: { type: String },
         _panelTab: { type: String, state: true },
         _layoutExpanded: { type: Boolean, state: true },
+        _voiceOn: { type: Boolean, state: true },
+        _voiceStatus: { type: String, state: true },
     };
 
     static styles = [
@@ -315,7 +320,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                 resize: none;
                 margin: 0;
                 padding: var(--space-3) var(--space-4);
-                padding-right: calc(36px + var(--space-2) + 36px + var(--space-3));
+                padding-right: calc(3 * 36px + 2 * var(--space-2) + var(--space-3));
                 padding-bottom: calc(36px + var(--space-3));
                 background: transparent;
                 border: none;
@@ -339,8 +344,16 @@ export class FlowsExecutionPanel extends PlatformElement {
                 gap: var(--space-2);
                 pointer-events: none;
             }
-            .compose-actions glass-button {
-                pointer-events: auto;
+            .compose-actions glass-button[data-voice-active] {
+                box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+            }
+            .exec-voice-hint {
+                flex-shrink: 0;
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                line-height: 1.35;
+                margin: 0 0 var(--space-1);
+                padding: 0 2px;
             }
             .file-input-hidden {
                 position: absolute;
@@ -411,9 +424,29 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._lastChatCtx = '';
         this._lastChatLen = 0;
         this._layoutExpanded = false;
+        this._voiceOn = false;
+        this._voiceStatus = 'idle';
+        /** @type {import('@platform/lib/voice/voice-media-session.js').VoiceMediaSession | null} */
+        this._voiceMedia = null;
+        /** @type {import('@platform/lib/voice/voice-agent-bridge.js').VoiceAgentBridge | null} */
+        this._voiceBridge = null;
+        this._activeCompanySel = this.select((s) => s.companies.active);
     }
 
+    disconnectedCallback() {
+        if (this._voiceOn) {
+            this._stopExecPanelVoice();
+        }
+        super.disconnectedCallback();
+    }
     updated(changedProperties) {
+        const editorStateForVoice = asObject(this._editor.state);
+        if (!editorStateForVoice.executionPanelOpen && this._voiceOn) {
+            this._stopExecPanelVoice();
+        }
+        if (changedProperties.has('flowId') && this._voiceOn) {
+            this._stopExecPanelVoice();
+        }
         super.updated(changedProperties);
         if (this._panelTab !== 'chat') {
             return;
@@ -742,6 +775,78 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._ui.clear({});
     }
 
+    async _startExecPanelVoice() {
+        if (this._voiceOn) return;
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) return;
+        const company = this._activeCompanySel.value;
+        const companyId =
+            company && typeof company === 'object' && typeof company.company_id === 'string'
+                ? company.company_id
+                : '';
+        if (companyId === '') {
+            this._voiceStatus = 'no_company';
+            return;
+        }
+        this._ensureContextId();
+        const initialContextId =
+            this._chat.state && typeof this._chat.state.currentContextId === 'string'
+                ? this._chat.state.currentContextId
+                : null;
+        const { media, bridge } = createFlowVoiceSession({
+            flowId: this.flowId,
+            branchId: this.branchId,
+            companyId,
+            initialContextId,
+            onVad: (e) => {
+                this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
+            },
+            onTtsState: (e) => {
+                this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
+            },
+            onMediaError: () => {
+                this._voiceStatus = 'error';
+            },
+            onClosed: () => {
+                this._voiceMedia = null;
+                this._voiceBridge = null;
+                this._voiceOn = false;
+                this._voiceStatus = 'closed';
+            },
+        });
+        try {
+            await media.connect();
+        } catch (err) {
+            disposeFlowVoiceSession(media, bridge);
+            this._voiceStatus = 'error';
+            this.toast('flows:platform_chat.toast_voice_error', {
+                type: 'error',
+                vars: { detail: err && err.message ? err.message : String(err) },
+            });
+            return;
+        }
+        bridge.start();
+        this._voiceMedia = media;
+        this._voiceBridge = bridge;
+        this._voiceOn = true;
+        this._voiceStatus = 'idle';
+    }
+
+    _stopExecPanelVoice() {
+        disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
+        this._voiceMedia = null;
+        this._voiceBridge = null;
+        this._voiceOn = false;
+        this._voiceStatus = 'idle';
+    }
+
+    _toggleExecPanelVoice() {
+        if (this._voiceOn) {
+            this._stopExecPanelVoice();
+        } else {
+            void this._startExecPanelVoice();
+        }
+    }
+
     _setPanelTab(tab) {
         if (tab !== 'chat' && tab !== 'trace' && tab !== 'state') {
             throw new Error('flows-execution-panel: invalid tab');
@@ -949,6 +1054,13 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     )}
                                 </div>
                             ` : nothing}
+                            ${this._voiceOn
+                                ? html`
+                                      <div class="exec-voice-hint">
+                                          ${this.t(`platform_chat.voice_status_${this._voiceStatus}`)}
+                                      </div>
+                                  `
+                                : nothing}
                             <div class="compose">
                                 <input
                                     id="flows-exec-file-input"
@@ -975,6 +1087,26 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     >
                                         <platform-icon name="paperclip" size="16"></platform-icon>
                                     </glass-button>
+                                    ${typeof this.flowId === 'string' && this.flowId.length > 0
+                                        ? html`
+                                              <glass-button
+                                                  variant="secondary"
+                                                  size="sm"
+                                                  iconOnly
+                                                  type="button"
+                                                  ?data-voice-active=${this._voiceOn}
+                                                  title=${this._voiceOn
+                                                      ? this.t('platform_chat.btn_voice_off')
+                                                      : this.t('platform_chat.btn_voice_on')}
+                                                  @click=${this._toggleExecPanelVoice}
+                                              >
+                                                  <platform-icon
+                                                      name=${this._voiceOn ? 'mic' : 'mic-off'}
+                                                      size="16"
+                                                  ></platform-icon>
+                                              </glass-button>
+                                          `
+                                        : nothing}
                                     ${runInFlight ? html`
                                         <glass-button
                                             variant="danger"
