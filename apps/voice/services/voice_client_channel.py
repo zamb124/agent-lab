@@ -14,7 +14,9 @@
 
 Контракт фреймов (`voice.mdc`):
 
-* binary — PCM ``audio/L16`` 16kHz mono 16-bit (TTS).
+* binary downlink — чанки TTS в формате из первого ``media_config`` (часто
+    WAV по ``mime`` / ``sample_rate`` текущего TTS-провайдера);
+* binary uplink от клиента — только PCM **s16le mono 16000 Hz** см. поле ``uplink`` в ``media_config``.
 * text JSON:
     - ``{"type":"transcript","text":"...","final":true|false,"language":"ru"}``
     - ``{"type":"vad","state":"started"|"ended"}``
@@ -79,10 +81,13 @@ class VoiceClientChannel:
         sample_rate: int,
         channels: int = 1,
     ) -> None:
-        """Сообщить клиенту параметры исходящего аудио-потока.
+        """Сообщить клиенту параметры исходящего аудио (TTS) и зафиксировать uplink PCM.
 
-        Отправляется один раз сразу после принятия WS, чтобы клиент знал,
-        как декодировать бинарные фреймы (PCM/WAV/OGG, Hz, mono/stereo).
+        Поля ``mime`` / ``sample_rate`` / ``channels`` относятся только к **бинарному
+        потоку от сервера** (синтез речи). Микрофон клиента всегда шлётся отдельным
+        бинарным PCM по полю ``uplink`` (контракт см. ``ws_receiver``).
+
+        Отправляется один раз сразу после принятия WS.
         """
         if mime_type == "":
             raise ValueError("VoiceClientChannel.send_media_config: mime_type обязателен.")
@@ -96,6 +101,11 @@ class VoiceClientChannel:
                 "mime": mime_type,
                 "sample_rate": sample_rate,
                 "channels": channels,
+                "uplink": {
+                    "encoding": "pcm_s16le",
+                    "sample_rate": 16_000,
+                    "channels": 1,
+                },
             }
         )
 

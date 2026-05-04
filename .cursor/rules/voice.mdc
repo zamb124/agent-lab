@@ -24,6 +24,13 @@ description: "Voice gateway: real-time STT/TTS/VAD для AI-агентов, bat
 **barge-in**: при детекции речи во время воспроизведения TTS — синхронная
 отмена playback и очистка очередей синтеза.
 
+## Кадр `media_config`
+
+Сразу после `accept` сервер отправляет один JSON `{"type":"media_config", ...}`:
+
+- **`mime`, `sample_rate`, `channels`** — формат **исходящего** с сервера звука (TTS), например `audio/wav` и `24000`. Это не описание микрофона.
+- **`uplink`** — обязательное описание потока **на сервер**: PCM **s16le**, **16000** Hz, **mono** (бинарные WebSocket-фреймы). Пока клиент не отправляет такие кадры, STT/VAD не получают сигнал и исходящих **`transcript` / `vad`** нет. Периодически сервер шлёт **`ping`**.
+
 **Batch-транскрипция:** `multipart/form-data` с `file`, ответ
 `{ text: str, provider: str }`. Используется CRM (заметки) и любым сервисом
 через `ServiceClient`.
@@ -39,7 +46,7 @@ description: "Voice gateway: real-time STT/TTS/VAD для AI-агентов, bat
 
 Атрибут `enable-voice` на `platform-embed-chat` / `embed-chat-input` включает **кнопку диктовки** (Web Speech API), а не автоматически режим `VoiceMediaSession`. Полный голос в drawer включается отдельно: `voice-enabled`, `voice-base-url`, `companyId`, `flowsBaseUrl`, `flowId` или `embedId`, плюс `getAuthToken` при необходимости. При встроенном сценарии через `platform-lara-assistant` эти поля выставляет сам компонент; фрагмент из `GET /frontend/api/embed/configs/{embed_id}/code` (при `voice_enabled` в конфиге) задаёт `voiceEnabled`, `voiceBaseUrl` (`<тот же api host>/voice`), `voiceDefaultOn` и `companyId` активной компании на момент генерации кода.
 
-Для `VoiceMediaSession.connect()` → `startRecording()` действуют ограничения **secure context** в Chromium (как у flows): `getUserMedia` и AudioWorklet на HTTP недоступны для хостов вне `localhost` / `127.0.0.1` / `*.localhost` — это политика браузера, не отдельное правило embed.
+Для `VoiceMediaSession.connect()` → `startRecording()` uplink PCM всегда через **`ScriptProcessorNode`** (не AudioWorklet): децимация до 16 kHz mono в main thread, каналов у процессора столько, сколько **`MediaStreamAudioSourceNode.channelCount`**. Без **`AudioContext`** в состоянии **`running`** браузер не вызывает обработчик — тогда сессия падает с явной ошибкой (нужен пользовательский жест до/в момент старта). На HTTP вне dev-хостов `getUserMedia` может быть недоступен (правило браузера). Для локальной отладки удобны **`https://`**, **`http://127.0.0.1`**, **`http://localhost`**.
 
 ## Структура
 

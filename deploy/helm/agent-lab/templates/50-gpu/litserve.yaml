@@ -59,7 +59,12 @@ spec:
       containers:
         - name: litserve
           image: {{ include "agentlab.image" . }}
+          {{- $tag := .Values.image.tag | default "latest" }}
+          {{- if eq $tag "latest" }}
+          imagePullPolicy: Always
+          {{- else }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- end }}
           command: ["python", "-m", "apps.provider_litserve.main"]
           env:
             - name: PROVIDER_LITSERVE__INFRA__BACKEND

@@ -75,6 +75,10 @@ def test_voice_ws_full_text_frame_contract(voice_app, unique_id: str) -> None:
                 and media_cfg["sample_rate"] > 0
             )
             assert media_cfg.get("channels", 1) >= 1
+            uplink = media_cfg["uplink"]
+            assert uplink["encoding"] == "pcm_s16le"
+            assert uplink["sample_rate"] == 16000
+            assert uplink["channels"] == 1
 
             ws.send_text(json.dumps({"type": "this_is_not_a_real_command"}))
             unknown_err = _find_text_frame(

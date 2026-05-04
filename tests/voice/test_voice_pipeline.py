@@ -19,7 +19,6 @@ from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_chunker import VoiceChunker
 from apps.voice.services.voice_session import VoiceSession
 from apps.voice.workers.stt_worker import run_stt_worker
-from apps.voice.workers.tts_worker import run_tts_worker
 
 SPEECH_FRAME = b"\x01\x00" * 320   # ненулевые байты → VAD=True
 SILENCE_FRAME = b"\x00\x00" * 320  # нулевые байты → VAD=False
@@ -51,12 +50,12 @@ async def test_stt_worker_produces_transcription(unique_id: str) -> None:
     done = asyncio.Event()
     transcribed: list[str] = []
 
-    async def on_transcription(sess: VoiceSession, text: str) -> None:
+    async def on_transcription(sess: VoiceSession, text: str, _lang: str | None) -> None:
         transcribed.append(text)
         done.set()
 
     worker_task = asyncio.create_task(
-        run_stt_worker(session, vad, stt, on_full_transcription=on_transcription)
+        run_stt_worker(session, vad, stt, on_final_transcription=on_transcription)
     )
 
     await _feed_utterance(session)
@@ -81,11 +80,11 @@ async def test_stt_worker_no_transcription_on_silence_only(unique_id: str) -> No
 
     transcribed: list[str] = []
 
-    async def on_transcription(sess: VoiceSession, text: str) -> None:
+    async def on_transcription(sess: VoiceSession, text: str, _lang: str | None) -> None:
         transcribed.append(text)
 
     worker_task = asyncio.create_task(
-        run_stt_worker(session, vad, stt, on_full_transcription=on_transcription)
+        run_stt_worker(session, vad, stt, on_final_transcription=on_transcription)
     )
 
     # Только тишина
@@ -111,13 +110,13 @@ async def test_stt_worker_multiple_utterances(unique_id: str) -> None:
     utterances: list[str] = []
     done = asyncio.Event()
 
-    async def on_transcription(sess: VoiceSession, text: str) -> None:
+    async def on_transcription(sess: VoiceSession, text: str, _lang: str | None) -> None:
         utterances.append(text)
         if len(utterances) >= 2:
             done.set()
 
     worker_task = asyncio.create_task(
-        run_stt_worker(session, vad, stt, on_full_transcription=on_transcription)
+        run_stt_worker(session, vad, stt, on_final_transcription=on_transcription)
     )
 
     await _feed_utterance(session)
@@ -137,6 +136,7 @@ async def test_stt_worker_multiple_utterances(unique_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(reason="tts_worker удалён; озвучивание в run_speak_worker + VoiceClientChannel — тесты нужно переписать")
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_tts_worker_synthesizes_text(unique_id: str) -> None:
@@ -158,6 +158,7 @@ async def test_tts_worker_synthesizes_text(unique_id: str) -> None:
     assert len(tts.synthesized_texts) > 0
 
 
+@pytest.mark.skip(reason="tts_worker удалён; см. run_speak_worker")
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_tts_worker_marks_tts_active(unique_id: str) -> None:
@@ -187,6 +188,7 @@ async def test_tts_worker_marks_tts_active(unique_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(reason="tts_worker удалён; см. run_speak_worker и speak_worker-тесты")
 @pytest.mark.asyncio
 @pytest.mark.timeout(15)
 async def test_full_pipeline_stt_to_tts(unique_id: str) -> None:
@@ -236,13 +238,9 @@ async def test_voice_session_cancel_stops_workers(unique_id: str) -> None:
     session = VoiceSession(session_id=f"sess-{unique_id}")
     vad = MockVADProvider(always_speech=False)
     stt = MockSTTProvider(text="test")
-    tts = MockTTSProvider()
-    chunker = VoiceChunker()
 
     stt_task = asyncio.create_task(run_stt_worker(session, vad, stt))
-    tts_task = asyncio.create_task(run_tts_worker(session, tts, chunker))
     session.add_task(stt_task)
-    session.add_task(tts_task)
 
     assert session.active
 
@@ -250,13 +248,12 @@ async def test_voice_session_cancel_stops_workers(unique_id: str) -> None:
 
     # После cancel задачи должны завершиться
     await asyncio.wait_for(
-        asyncio.gather(stt_task, tts_task, return_exceptions=True),
+        asyncio.gather(stt_task, return_exceptions=True),
         timeout=3.0,
     )
 
     assert not session.active
     assert stt_task.done()
-    assert tts_task.done()
 
 
 @pytest.mark.asyncio

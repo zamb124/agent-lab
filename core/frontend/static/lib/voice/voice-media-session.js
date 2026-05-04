@@ -4,7 +4,8 @@
  * Не знает про A2A, Flows, embed или чат-UI. Делает ровно три вещи:
  *
  *  1. Держит WS `/voice/api/ws/session/{id}` и автоматом отправляет
- *     PCM 16kHz mono 16-bit из микрофона (через `AudioWorklet`).
+ *     PCM 16kHz mono 16-bit из микрофона через `ScriptProcessorNode` (общий путь для
+ *     всех Origin: захват через AudioWorklet в ряде Chromium даёт только нули uplink).
  *  2. Принимает от voice text-frames (`transcript`, `vad`, `tts_state`,
  *     `error`, `ping`, `media_config`) и диспатчит как DOM `CustomEvent`.
  *  3. Принимает от voice binary-кадры и воспроизводит их через
@@ -19,81 +20,120 @@
 
 import { getUserMediaCompat, hasGetUserMediaApi } from '../utils/voice-recording.js';
 
-const PCM_CAPTURE_WORKLET_NAME = 'pcm-capture';
+/**
+ * Hostname'ы dev-оригина, где пробуем mic/WebAudio при HTTP (isSecureContext=false):
+ * поддомены lvh.me, localhost, 127.0.0.1. Иначе Chromium не отдаёт getUserMedia — см. startRecording.
+ *
+ * @param {string} hostname
+ * @returns {boolean}
+ */
+function isDevVoiceInsecureHost(hostname) {
+    if (typeof hostname !== 'string' || hostname === '') {
+        return false;
+    }
+    const h = hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === 'lvh.me') {
+        return true;
+    }
+    if (h.endsWith('.localhost')) {
+        return true;
+    }
+    if (h.endsWith('.lvh.me')) {
+        return true;
+    }
+    return false;
+}
 
-const PCM_CAPTURE_WORKLET_SOURCE = `
-const OUT_SAMPLE_RATE = 16000;
+export const VOICE_CAPTURE_SAMPLE_RATE = 16000;
 
-function floatToInt16(sample) {
+function floatSampleToInt16(sample) {
     const s = Math.max(-1, Math.min(1, sample));
     const v = s < 0 ? s * 0x8000 : s * 0x7fff;
     return v | 0;
 }
 
-class PCMCaptureProcessor extends AudioWorkletProcessor {
-    constructor() {
-        super();
-        this._tail = new Float32Array(0);
-        this._nextOutSampleIndex = 0;
+/**
+ * @param {AudioBuffer} ib
+ * @returns {Float32Array|null}
+ */
+function monoFloat32FromAudioBuffer(ib) {
+    const frameLen = ib.length;
+    const nCh = ib.numberOfChannels;
+    if (frameLen === 0 || nCh === 0) {
+        return null;
     }
-
-    process(inputs) {
-        const input = inputs[0];
-        if (!input || input.length === 0) {
-            return true;
+    const mono = new Float32Array(frameLen);
+    let contributors = 0;
+    for (let c = 0; c < nCh; c++) {
+        const data = ib.getChannelData(c);
+        if (!data || data.length < frameLen) {
+            continue;
         }
-        const channel = input[0];
-        if (!channel || channel.length === 0) {
-            return true;
+        contributors += 1;
+        for (let i = 0; i < frameLen; i++) {
+            mono[i] += data[i];
         }
-        const inRate = sampleRate;
-        if (inRate <= 0) {
-            return true;
-        }
-        const mergedLen = this._tail.length + channel.length;
-        const merged = new Float32Array(mergedLen);
-        merged.set(this._tail);
-        merged.set(channel, this._tail.length);
-
-        const ratio = inRate / OUT_SAMPLE_RATE;
-        const pcmParts = [];
-
-        while (true) {
-            const inPos = this._nextOutSampleIndex * ratio;
-            const i0 = Math.floor(inPos);
-            const i1 = i0 + 1;
-            if (i1 >= merged.length) {
-                break;
-            }
-            const frac = inPos - i0;
-            const s = merged[i0] * (1 - frac) + merged[i1] * frac;
-            pcmParts.push(floatToInt16(s));
-            this._nextOutSampleIndex += 1;
-        }
-
-        const keepFloat = Math.floor(this._nextOutSampleIndex * ratio);
-        const keepFrom = keepFloat > 0 ? keepFloat - 1 : 0;
-        if (keepFrom >= merged.length) {
-            this._tail = new Float32Array(0);
-        } else {
-            this._tail = merged.subarray(keepFrom);
-        }
-
-        const totalLen = pcmParts.length;
-        if (totalLen > 0) {
-            const pcm = new Int16Array(totalLen);
-            for (let i = 0; i < totalLen; i++) {
-                pcm[i] = pcmParts[i];
-            }
-            this.port.postMessage(pcm.buffer, [pcm.buffer]);
-        }
-        return true;
     }
+    if (contributors === 0) {
+        return null;
+    }
+    if (contributors > 1) {
+        const inv = 1 / contributors;
+        for (let i = 0; i < frameLen; i++) {
+            mono[i] *= inv;
+        }
+    }
+    return mono;
 }
-registerProcessor('${PCM_CAPTURE_WORKLET_NAME}', PCMCaptureProcessor);
-`;
 
-export const VOICE_CAPTURE_SAMPLE_RATE = 16000;
+/**
+ * @param {Float32Array} channel
+ * @param {number} inRate
+ * @param {{ tail: Float32Array, nextOutSampleIndex: number }} state
+ * @returns {ArrayBuffer|null}
+ */
+function resampleMonoToPcm16ArrayBuffer(channel, inRate, state) {
+    if (!channel || channel.length === 0) {
+        return null;
+    }
+    if (!(inRate > 0)) {
+        return null;
+    }
+    const mergedLen = state.tail.length + channel.length;
+    const merged = new Float32Array(mergedLen);
+    merged.set(state.tail);
+    merged.set(channel, state.tail.length);
+    const ratio = inRate / VOICE_CAPTURE_SAMPLE_RATE;
+    const pcmParts = [];
+    while (true) {
+        const inPos = state.nextOutSampleIndex * ratio;
+        const i0 = Math.floor(inPos);
+        const i1 = i0 + 1;
+        if (i1 >= merged.length) {
+            break;
+        }
+        const frac = inPos - i0;
+        const s = merged[i0] * (1 - frac) + merged[i1] * frac;
+        pcmParts.push(floatSampleToInt16(s));
+        state.nextOutSampleIndex += 1;
+    }
+    const keepFloat = Math.floor(state.nextOutSampleIndex * ratio);
+    const keepFrom = keepFloat > 0 ? keepFloat - 1 : 0;
+    if (keepFrom >= merged.length) {
+        state.tail = new Float32Array(0);
+    } else {
+        state.tail = merged.subarray(keepFrom);
+    }
+    const totalLen = pcmParts.length;
+    if (totalLen === 0) {
+        return null;
+    }
+    const pcm = new Int16Array(totalLen);
+    for (let i = 0; i < totalLen; i++) {
+        pcm[i] = pcmParts[i];
+    }
+    return pcm.buffer;
+}
 
 /**
  * @typedef {object} VoiceMediaSessionOptions
@@ -144,9 +184,12 @@ export class VoiceMediaSession extends EventTarget {
         this._mediaStream = null;
         /** @type {AudioContext|null} */
         this._captureCtx = null;
-        /** @type {AudioWorkletNode|null} */
-        this._captureNode = null;
-        this._workletReady = false;
+        /** @type {ScriptProcessorNode|null} */
+        this._scriptProcessor = null;
+        /** @type {{ tail: Float32Array, nextOutSampleIndex: number }|null} */
+        this._captureResamplerState = null;
+        /** @type {GainNode|null} — mute sink: тянуть граф к destination без эха на колонках */
+        this._captureSinkGain = null;
         this._recording = false;
 
         /** @type {AudioContext|null} */
@@ -155,6 +198,9 @@ export class VoiceMediaSession extends EventTarget {
 
         this._closed = false;
         this._openPromise = null;
+        /** Очередь PCM до OPEN (CONNECTING); иначе process() шлёт, onmessage делает return — байты не уходят. */
+        this._pcmOutboundQueue = [];
+        this._pcmOutboundQueueCap = 200;
     }
 
     /** @returns {string} */
@@ -193,23 +239,106 @@ export class VoiceMediaSession extends EventTarget {
         ws.binaryType = 'arraybuffer';
         this._ws = ws;
 
-        await new Promise((resolve, reject) => {
-            ws.addEventListener('open', () => resolve(), { once: true });
+        ws.addEventListener('message', (event) => this._handleWsMessage(event));
+        ws.addEventListener('close', (event) => this._handleWsClose(event));
+        ws.addEventListener('open', () => {
+            this._flushPcmOutboundQueue();
+        });
+
+        const openPromise = new Promise((resolve, reject) => {
+            ws.addEventListener('open', () => resolve(undefined), { once: true });
             ws.addEventListener('error', (e) => reject(e), { once: true });
         });
 
-        ws.addEventListener('message', (event) => this._handleWsMessage(event));
-        ws.addEventListener('close', (event) => this._handleWsClose(event));
-
+        /** Сначала mic+AudioContext (ближе к user gesture), затем ждём OPEN. Иначе PCM приходит, пока сокет CONNECTING — кадры терялись. */
         if (this._autoRecord) {
             try {
                 await this.startRecording();
             } catch (err) {
+                const detail =
+                    err instanceof Error
+                        ? err.message
+                        : typeof err === 'string'
+                          ? err
+                          : String(err);
+                const isWsBrowserError = typeof Event !== 'undefined' && err instanceof Event;
+                if (!isWsBrowserError) {
+                    this._dispatch('error', {
+                        code: 'voice/client/microphone_denied',
+                        detail,
+                    });
+                }
+                try { ws.close(); } catch { /* noop */ }
+                this._ws = null;
+                throw err;
+            }
+        }
+        try {
+            await openPromise;
+        } catch (err) {
+            const detail =
+                err instanceof Error
+                    ? err.message
+                    : typeof err === 'string'
+                      ? err
+                      : String(err);
+            const isWsBrowserError = typeof Event !== 'undefined' && err instanceof Event;
+            if (!isWsBrowserError && this._autoRecord) {
                 this._dispatch('error', {
                     code: 'voice/client/microphone_denied',
-                    detail: err && err.message ? err.message : String(err),
+                    detail,
                 });
-                throw err;
+            }
+            throw err;
+        }
+        this._flushPcmOutboundQueue();
+    }
+
+    _clearPcmOutboundQueue() {
+        this._pcmOutboundQueue.length = 0;
+    }
+
+    /**
+     * @param {ArrayBuffer} buffer
+     */
+    _sendPcmToWebSocket(buffer) {
+        if (this._ws === null) {
+            return;
+        }
+        if (this._ws.readyState === WebSocket.OPEN) {
+            try {
+                this._ws.send(buffer);
+            } catch (err) {
+                this._dispatch('error', {
+                    code: 'voice/client/ws_send_failed',
+                    detail: err instanceof Error ? err.message : String(err),
+                });
+            }
+            return;
+        }
+        if (this._ws.readyState === WebSocket.CONNECTING) {
+            while (this._pcmOutboundQueue.length >= this._pcmOutboundQueueCap) {
+                this._pcmOutboundQueue.shift();
+            }
+            this._pcmOutboundQueue.push(buffer.slice(0));
+            return;
+        }
+    }
+
+    _flushPcmOutboundQueue() {
+        if (this._ws === null || this._ws.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        while (this._pcmOutboundQueue.length > 0) {
+            const b = this._pcmOutboundQueue.shift();
+            try {
+                this._ws.send(b);
+            } catch (err) {
+                this._dispatch('error', {
+                    code: 'voice/client/ws_send_failed',
+                    detail: err instanceof Error ? err.message : String(err),
+                });
+                break;
             }
         }
     }
@@ -234,55 +363,86 @@ export class VoiceMediaSession extends EventTarget {
             const loc = window.location;
             const portPart = loc.port ? `:${loc.port}` : '';
             const localhostUrl = `http://127.0.0.1${portPart}${loc.pathname}${loc.search}`;
-            throw new Error(
-                'Микрофон: Chromium не отдаёт getUserMedia для HTTP на этом хосте (нет secure context) — это правило браузера, не «запрет dev» в платформе. ' +
-                    `Откройте тот же путь через loopback, например: ${localhostUrl} , либо HTTPS / флаг Chrome «Insecure origins treated as secure» для dev.`,
-            );
+            if (!isDevVoiceInsecureHost(loc.hostname)) {
+                throw new Error(
+                    'Микрофон: Chromium не отдаёт getUserMedia для HTTP на этом хосте (нет secure context) — это правило браузера, не «запрет dev» в платформе. ' +
+                        `Откройте тот же путь через loopback, например: ${localhostUrl} , либо HTTPS / флаг Chrome «Insecure origins treated as secure» для dev.`,
+                );
+            }
+            // system.lvh.me и т.п.: isSecureContext=false, но в dev через lvh пробуем mic; если браузер всё же отказал — упадём в общий catch connect().
         }
         if (!hasGetUserMediaApi()) {
             throw new Error(
                 'VoiceMediaSession: getUserMedia not available (нет navigator.mediaDevices; часто встроенный превью-браузер, нестандартный WebView или политика безопасности).',
             );
         }
-        this._mediaStream = await getUserMediaCompat({
-            audio: {
-                channelCount: 1,
-                sampleRate: VOICE_CAPTURE_SAMPLE_RATE,
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-            },
-            video: false,
-        });
-        await this._initCaptureWorklet();
+        this._mediaStream = await getUserMediaCompat({ audio: true, video: false });
+        await this._initCaptureScriptProcessor();
         this._recording = true;
     }
 
-    async _initCaptureWorklet() {
+    /**
+     * PCM uplink только через ScriptProcessorNode: канал ScriptProcessor задаётся по
+     * `MediaStreamAudioSourceNode.channelCount` (учёт stereo); без running AudioContext процесс не вызывается.
+     */
+    async _initCaptureScriptProcessor() {
         const Ctx = window.AudioContext || window.webkitAudioContext;
         if (typeof Ctx !== 'function') {
             throw new Error('VoiceMediaSession: AudioContext not available');
         }
-        /** Реальный sampleRate часто 44100/48000 (браузер игнорирует hint); ресемплинг в worklet → 16kHz. */
-        this._captureCtx = new Ctx();
-        const blob = new Blob([PCM_CAPTURE_WORKLET_SOURCE], { type: 'application/javascript' });
-        const url = URL.createObjectURL(blob);
-        try {
-            await this._captureCtx.audioWorklet.addModule(url);
-        } finally {
-            URL.revokeObjectURL(url);
-        }
+        this._captureCtx = new Ctx({ latencyHint: 'interactive' });
+        this._captureResamplerState = { tail: new Float32Array(0), nextOutSampleIndex: 0 };
+
         const source = this._captureCtx.createMediaStreamSource(this._mediaStream);
-        this._captureNode = new AudioWorkletNode(this._captureCtx, PCM_CAPTURE_WORKLET_NAME);
-        this._captureNode.port.onmessage = (event) => {
-            if (this._ws === null || this._ws.readyState !== WebSocket.OPEN) {
+        /** @type {number} */
+        let inputChannels = 2;
+        const srcCh = source.channelCount;
+        if (typeof srcCh === 'number' && Number.isFinite(srcCh) && srcCh >= 1) {
+            /** Минимум 2: часть браузеров отдаёт «моно», но дорожки фактически стерео, речь только во втором канале. */
+            inputChannels = Math.min(32, Math.max(2, Math.floor(srcCh)));
+        }
+
+        const processor = this._captureCtx.createScriptProcessor(4096, inputChannels, 1);
+        this._scriptProcessor = processor;
+        processor.onaudioprocess = (e) => {
+            const mono = monoFloat32FromAudioBuffer(e.inputBuffer);
+            if (!mono || !this._captureResamplerState) {
                 return;
             }
-            this._ws.send(event.data);
+            const inRate = this._captureCtx.sampleRate;
+            const buf = resampleMonoToPcm16ArrayBuffer(mono, inRate, this._captureResamplerState);
+            if (buf instanceof ArrayBuffer) {
+                this._sendPcmToWebSocket(buf);
+            }
         };
-        source.connect(this._captureNode);
-        // Нельзя подключать к destination — тогда слышно себя через колонки.
-        this._workletReady = true;
+
+        source.connect(processor);
+
+        const sinkGain = this._captureCtx.createGain();
+        sinkGain.gain.value = 0;
+        processor.connect(sinkGain);
+        sinkGain.connect(this._captureCtx.destination);
+        this._captureSinkGain = sinkGain;
+
+        await this._ensureCaptureAudioContextRunning();
+    }
+
+    /**
+     * Без состояния `running` браузер не вызывает onaudioprocess — uplink будет пустым.
+     * @returns {Promise<void>}
+     */
+    async _ensureCaptureAudioContextRunning() {
+        if (!this._captureCtx) {
+            throw new Error('VoiceMediaSession: capture AudioContext missing');
+        }
+        if (this._captureCtx.state === 'suspended') {
+            await this._captureCtx.resume();
+        }
+        if (this._captureCtx.state !== 'running') {
+            throw new Error(
+                `VoiceMediaSession: AudioContext не running (state=${this._captureCtx.state}); для микрофона часто нужен явный жест — нажмите кнопку включения голоса ещё раз или откройте страницу по http://127.0.0.1 вместо HTTP с кастомным хостом.`,
+            );
+        }
     }
 
     /**
@@ -390,15 +550,22 @@ export class VoiceMediaSession extends EventTarget {
             reason: typeof event.reason === 'string' ? event.reason : '',
         });
         this._closed = true;
+        this._clearPcmOutboundQueue();
+        this._ws = null;
         this._teardownCapture();
     }
 
     _teardownCapture() {
         this._recording = false;
-        if (this._captureNode) {
-            try { this._captureNode.port.onmessage = null; } catch { /* noop */ }
-            try { this._captureNode.disconnect(); } catch { /* noop */ }
-            this._captureNode = null;
+        this._captureResamplerState = null;
+        if (this._captureSinkGain) {
+            try { this._captureSinkGain.disconnect(); } catch { /* noop */ }
+            this._captureSinkGain = null;
+        }
+        if (this._scriptProcessor) {
+            try { this._scriptProcessor.onaudioprocess = null; } catch { /* noop */ }
+            try { this._scriptProcessor.disconnect(); } catch { /* noop */ }
+            this._scriptProcessor = null;
         }
         if (this._captureCtx) {
             try { this._captureCtx.close(); } catch { /* noop */ }
@@ -499,6 +666,7 @@ export class VoiceMediaSession extends EventTarget {
     close() {
         if (this._closed) return;
         this._closed = true;
+        this._clearPcmOutboundQueue();
         this._teardownCapture();
         this._resetPlayback();
         if (this._ws !== null) {

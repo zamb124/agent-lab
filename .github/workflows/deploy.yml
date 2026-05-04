@@ -316,11 +316,13 @@ jobs:
           NODE_SETS=$(bash deploy/scripts/build_helm_node_sets.sh)
           echo "Node scheduling overrides: ${NODE_SETS:-(none, using defaults)}"
 
+          echo "helm_precheck_install_secret_conflict (Orphan Secret / первый install)..."
           HELM_WILL_CREATE_PLATFORM_SECRET=1 \
             HELM_RELEASE="$K8S_RELEASE" \
             HELM_NAMESPACE="$K8S_NAMESPACE" \
             bash deploy/scripts/helm_precheck_install_secret_conflict.sh
 
+          echo "helm upgrade --install --wait (до 60m почти без вывода; смотри параллельно kubectl get pods -n ${K8S_NAMESPACE} -w)..."
           # shellcheck disable=SC2086
           helm upgrade --install "$K8S_RELEASE" "$HELM_CHART" \
             --namespace "$K8S_NAMESPACE" \
