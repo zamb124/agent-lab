@@ -62,7 +62,7 @@ async def test_browser_duckduckgo_links_run_returns_urls() -> None:
 
     with patch("apps.flows.src.eval.web_snapshot.call_mcp_tool", side_effect=fake_call_mcp_tool):
         out = await browser_duckduckgo_links.run(
-            {"query": "q tool", "server_id": "user-browser", "per_query_limit": 5},
+            {"query": "q tool", "server_id": "browser", "per_query_limit": 5},
             state,
         )
 
@@ -101,7 +101,7 @@ async def test_browser_page_markdown_run_uses_describe() -> None:
 
     mock_cls.assert_called_once()
     _call_kw = mock_cls.call_args.kwargs
-    assert _call_kw["server_id"] == "user-browser"
+    assert _call_kw["server_id"] == "browser"
     assert _call_kw["navigation_timeout_ms"] == 30000
     assert _call_kw["ingest_source"] == "simple_crawler"
     instance.page_markdown.assert_awaited_once()

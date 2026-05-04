@@ -4,12 +4,10 @@ version = "0.1.0"
 description = "Agent Platform - платформа агентских систем"
 requires-python = ">=3.13"
 dependencies = [
-    "cairosvg>=2.8.2",
     "google-auth>=2.43.0",
     "greenlet",
     "pywebpush>=2.1.2",
     "reportlab>=4.4.7",
-    "svglib>=1.6.0",
     "xlrd>=2.0.1",
 ]
 [tool.uv]

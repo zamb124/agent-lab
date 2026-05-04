@@ -1,7 +1,7 @@
 """
 Платформенные тулы браузера для ReAct: DuckDuckGo-поиск ссылок и снимок страницы в markdown.
 
-Реализации совпадают с `apps.flows.src.eval.web_snapshot` (MCP `user-browser`, FileReader).
+Реализации совпадают с `apps.flows.src.eval.web_snapshot` (MCP `browser`, FileReader).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 _BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION = """
-Поиск HTTP(S) URL по текстовому запросу через DuckDuckGo в браузере (MCP `user-browser`).
+Поиск HTTP(S) URL по текстовому запросу через DuckDuckGo в браузере (MCP `browser`).
 
 Поведение совпадает с `DuckDuckGoBrowserSearch.links` / нодой simple_crawler `search_duckduckgo_batch`.
 
@@ -27,7 +27,7 @@ _BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION = """
 
 Параметры:
 - `query` (строка): поисковая фраза.
-- `server_id` (строка, по умолчанию `user-browser`): id MCP-сервера браузера из конфигурации компании.
+- `server_id` (строка, по умолчанию `browser`): id MCP-сервера браузера из конфигурации компании.
 - `per_query_limit` (целое, по умолчанию 5, 1–50): максимум ссылок на один запрос.
 
 Когда вызывать: нужно получить набор ссылок из веб-поиска перед обходом страниц.
@@ -58,7 +58,7 @@ _BROWSER_PAGE_MARKDOWN_DESCRIPTION = """
 
 Параметры:
 - `url` (строка): HTTP(S) адрес страницы.
-- `server_id` (строка, по умолчанию `user-browser`).
+- `server_id` (строка, по умолчанию `browser`).
 - `navigation_timeout_ms` (целое, по умолчанию 30000, ≥1): таймаут навигации.
 - `ingest_source` (строка, по умолчанию `simple_crawler`): метаданные `source` для загрузки в S3.
 
@@ -83,7 +83,7 @@ class BrowserDuckduckgoLinksArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     query: str = Field(..., min_length=1, description="Поисковая фраза.")
-    server_id: str = Field("user-browser", min_length=1, description="Id MCP-сервера браузера.")
+    server_id: str = Field("browser", min_length=1, description="Id MCP-сервера браузера.")
     per_query_limit: int = Field(5, ge=1, le=50, description="Максимум URL на запрос.")
 
 
@@ -95,7 +95,7 @@ class BrowserDuckduckgoLinksBatchArgs(BaseModel):
         min_length=1,
         description="Список поисковых фраз; хотя бы одна непустая после нормализации.",
     )
-    server_id: str = Field("user-browser", min_length=1)
+    server_id: str = Field("browser", min_length=1)
     per_query_limit: int = Field(5, ge=1, le=50)
 
     @field_validator("queries", mode="before")
@@ -117,7 +117,7 @@ class BrowserPageMarkdownArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     url: str = Field(..., min_length=1, description="HTTP(S) URL страницы.")
-    server_id: str = Field("user-browser", min_length=1)
+    server_id: str = Field("browser", min_length=1)
     navigation_timeout_ms: int = Field(30000, ge=1)
     ingest_source: str = Field("simple_crawler", min_length=1)
 
@@ -126,13 +126,9 @@ class BrowserPageSnapshotArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     url: str = Field(..., min_length=1)
-    server_id: str = Field("user-browser", min_length=1)
+    server_id: str = Field("browser", min_length=1)
     navigation_timeout_ms: int = Field(30000, ge=1)
     ingest_source: str = Field("simple_crawler", min_length=1)
-
-
-def _tool_error(exc: BaseException) -> dict[str, Any]:
-    return {"success": False, "error": str(exc)}
 
 
 @tool(
@@ -143,7 +139,7 @@ def _tool_error(exc: BaseException) -> dict[str, Any]:
 )
 async def browser_duckduckgo_links(
     query: str,
-    server_id: str = "user-browser",
+    server_id: str = "browser",
     per_query_limit: int = 5,
     *,
     state: "ExecutionState",
@@ -153,7 +149,7 @@ async def browser_duckduckgo_links(
         urls = await search.links(state, query)
         return {"success": True, "urls": urls}
     except Exception as exc:
-        return _tool_error(exc)
+        return {"success": False, "error": str(exc)}
 
 
 @tool(
@@ -164,7 +160,7 @@ async def browser_duckduckgo_links(
 )
 async def browser_duckduckgo_links_batch(
     queries: list[str],
-    server_id: str = "user-browser",
+    server_id: str = "browser",
     per_query_limit: int = 5,
     *,
     state: "ExecutionState",
@@ -174,7 +170,7 @@ async def browser_duckduckgo_links_batch(
         urls = await search.links_many(state, queries)
         return {"success": True, "urls": urls}
     except Exception as exc:
-        return _tool_error(exc)
+        return {"success": False, "error": str(exc)}
 
 
 @tool(
@@ -185,7 +181,7 @@ async def browser_duckduckgo_links_batch(
 )
 async def browser_page_markdown(
     url: str,
-    server_id: str = "user-browser",
+    server_id: str = "browser",
     navigation_timeout_ms: int = 30000,
     ingest_source: str = "simple_crawler",
     *,
@@ -200,7 +196,7 @@ async def browser_page_markdown(
         markdown = await describe.page_markdown(state, url)
         return {"success": True, "markdown": markdown}
     except Exception as exc:
-        return _tool_error(exc)
+        return {"success": False, "error": str(exc)}
 
 
 @tool(
@@ -211,7 +207,7 @@ async def browser_page_markdown(
 )
 async def browser_page_snapshot(
     url: str,
-    server_id: str = "user-browser",
+    server_id: str = "browser",
     navigation_timeout_ms: int = 30000,
     ingest_source: str = "simple_crawler",
     *,
@@ -226,4 +222,4 @@ async def browser_page_snapshot(
         snap = await describe.page_snapshot(state, url)
         return {"success": True, **snap}
     except Exception as exc:
-        return _tool_error(exc)
+        return {"success": False, "error": str(exc)}

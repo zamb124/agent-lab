@@ -36,12 +36,22 @@ export class SelectCompanyPage extends PlatformPage {
             .empty {
                 flex: 1 1 auto;
                 display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
                 color: var(--text-secondary);
                 text-align: center;
                 margin: 0;
                 max-width: 28rem;
+                gap: var(--space-5);
+            }
+            .empty-text {
+                margin: 0;
+            }
+            .empty-actions {
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
             .grid-main {
                 flex: 1 1 auto;
@@ -168,6 +178,10 @@ export class SelectCompanyPage extends PlatformPage {
         this.switchCompany(companyId);
     }
 
+    _createCompany() {
+        this.openModal('platform.company_create', null);
+    }
+
     render() {
         const companies = this._companiesSel.value;
         const user = this._authSel.value;
@@ -186,7 +200,16 @@ export class SelectCompanyPage extends PlatformPage {
         return html`
             <h1 class="page-title">${this.t('select_company.title')}</h1>
             ${companies.length === 0
-                ? html`<p class="empty">${this.t('select_company.empty_text')}</p>`
+                ? html`
+                    <div class="empty">
+                        <p class="empty-text">${this.t('select_company.empty_text')}</p>
+                        <div class="empty-actions">
+                            <button type="button" class="btn btn-primary" @click=${this._createCompany}>
+                                ${this.t('select_company.create_action')}
+                            </button>
+                        </div>
+                    </div>
+                `
                 : html`
                     <div class="grid-main">
                         <div class="grid" role="list">

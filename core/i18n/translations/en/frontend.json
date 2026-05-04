@@ -196,7 +196,8 @@
     },
     "select_company": {
         "title": "Choose a company",
-        "empty_text": "Create your first company to get started"
+        "empty_text": "Create your first company to get started",
+        "create_action": "Create company"
     },
     "team_page": {
         "title": "Team",

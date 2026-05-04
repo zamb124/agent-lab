@@ -372,7 +372,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "tags": ["mcp", "tools", "platform"],
         "code": '''async def run(state):
     """Вызов MCP tool из function/code ноды."""
-    server_id = state.get("mcp_server_id", "user-browser")
+    server_id = state.get("mcp_server_id", "browser")
     tool_name = state.get("mcp_tool_name", "browser_observe")
     arguments = state.get("mcp_arguments", {})
 
@@ -393,7 +393,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "name": "Поиск ссылок (DuckDuckGo, браузер)",
         "description": (
             "`DuckDuckGoBrowserSearch` + `state['search_query']`; результат в `state['search_urls']`. "
-            "Нужен MCP `user-browser`."
+            "Нужен MCP `browser`."
         ),
         "category": "http",
         "node_type": "function",
@@ -413,7 +413,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "name": "Страница в markdown (браузер)",
         "description": (
             "`BrowserSnapshotDescribe` + `state['page_url']`; результат в `state['page_markdown']`. "
-            "Нужен MCP `user-browser` и FileReader."
+            "Нужен MCP `browser` и FileReader."
         ),
         "category": "http",
         "node_type": "function",

@@ -1,7 +1,7 @@
 """
 Контракты поиска ссылок и описания страницы в markdown для inline eval.
 
-Реализации по умолчанию совпадают с бандлом simple_crawler (MCP user-browser, FileReader).
+Реализации по умолчанию совпадают с бандлом simple_crawler (MCP browser, FileReader).
 """
 
 from __future__ import annotations
@@ -133,7 +133,7 @@ class Describe(ABC):
 
 class DuckDuckGoBrowserSearch(Search):
     """
-    Поиск ссылок через DuckDuckGo в браузере (MCP user-browser).
+    Поиск ссылок через DuckDuckGo в браузере (MCP browser).
 
     Поведение совпадает с нодой search_duckduckgo_batch в simple_crawler.
     """
@@ -141,7 +141,7 @@ class DuckDuckGoBrowserSearch(Search):
     def __init__(
         self,
         *,
-        server_id: str = "user-browser",
+        server_id: str = "browser",
         per_query_limit: int = 5,
         blocked_hosts: tuple[str, ...] = ("duckduckgo.com",),
     ) -> None:
@@ -277,7 +277,7 @@ class DuckDuckGoBrowserSearch(Search):
 
 class BrowserSnapshotDescribe(Describe):
     """
-    Снимок HTML в S3 и чтение markdown через FileReader (MCP user-browser).
+    Снимок HTML в S3 и чтение markdown через FileReader (MCP browser).
 
     Поведение совпадает с цепочкой crawl_pages_recursive + html_to_markdown_batch в simple_crawler.
     """
@@ -285,7 +285,7 @@ class BrowserSnapshotDescribe(Describe):
     def __init__(
         self,
         *,
-        server_id: str = "user-browser",
+        server_id: str = "browser",
         navigation_timeout_ms: int = 30000,
         ingest_source: str = "simple_crawler",
         file_reader: FileReader | None = None,

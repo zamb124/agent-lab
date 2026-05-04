@@ -443,7 +443,7 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "DuckDuckGoBrowserSearch",
         "type": "class",
         "doc": (
-            "`Search` через DuckDuckGo и MCP `user-browser` (как simple_crawler).\n"
+            "`Search` через DuckDuckGo и MCP `browser` (как simple_crawler).\n"
             "`search = DuckDuckGoBrowserSearch()` или с параметрами `server_id`, `per_query_limit`, `blocked_hosts`.\n"
             "`urls = await search.links(state, 'запрос')`; несколько запросов: `await search.links_many(state, ['a','b'])`."
         ),
