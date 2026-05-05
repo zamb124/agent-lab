@@ -1,8 +1,9 @@
 """
 API per-company override провайдеров речи (`company_voice_providers`).
 
-Контракт REST-зеркала команд: список и upsert/delete для трёх kind-ов
-(`stt`, `tts`, `vad`). Менять может только участник целевой компании c
+Контракт REST-зеркала команд: список и upsert/delete для kind-ов
+(`stt`, `tts`). VAD настраивается только на уровне развёртывания.
+Менять может только участник целевой компании c
 ролью `owner`/`admin`. Чтение — любой участник этой же компании.
 
 PUT: если поле `secrets` отсутствует в теле JSON — сохранённые ключи в JSONB
@@ -28,7 +29,7 @@ from apps.frontend.api.voice_providers_catalog_helpers import (
     secrets_dict_to_meta,
 )
 from apps.frontend.dependencies import ContainerDep
-from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VAD_PROVIDER_IDS
+from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS
 from core.clients.voice_resolver import invalidate_company_overrides_cache
 from core.config import get_settings
 from core.db.company_voice_provider_secrets import merge_secrets
@@ -43,7 +44,7 @@ router = APIRouter(
     tags=["frontend", "voice"],
 )
 
-_VOICE_KINDS: tuple[VoiceKind, ...] = ("stt", "tts", "vad")
+_VOICE_KINDS: tuple[VoiceKind, ...] = ("stt", "tts")
 
 _YANDEX_SPEECH_MODELS = ("general",)
 _SBER_SPEECH_MODELS = ("general",)
@@ -54,7 +55,7 @@ class CompanyVoiceProviderItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["stt", "tts", "vad"] = Field(description="Тип провайдера речи.")
+    kind: Literal["stt", "tts"] = Field(description="Тип провайдера речи.")
     provider: str = Field(description="Имя провайдера.")
     model: Optional[str] = Field(default=None)
     voice: Optional[str] = Field(default=None)
@@ -68,7 +69,7 @@ class CompanyVoiceProviderItem(BaseModel):
 
 
 class CompanyVoiceProvidersResponse(BaseModel):
-    """Список настроек речи компании по всем kind-ам."""
+    """Список настроек речи компании (stt/tts)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -122,6 +123,14 @@ def _ensure_user_can_manage_company(user: User, company_id: str) -> None:
         )
 
 
+def _reject_vad_path_kind(kind: str) -> None:
+    if kind == "vad":
+        raise HTTPException(
+            status_code=410,
+            detail="VAD настраивается на уровне развёртывания; per-company override удалён.",
+        )
+
+
 def _validate_kind(kind: str) -> VoiceKind:
     if kind not in _VOICE_KINDS:
         raise HTTPException(
@@ -132,7 +141,7 @@ def _validate_kind(kind: str) -> VoiceKind:
 
 
 def _validate_provider(kind: VoiceKind, provider: str) -> None:
-    allowed = VAD_PROVIDER_IDS if kind == "vad" else STT_TTS_PROVIDER_IDS
+    allowed = STT_TTS_PROVIDER_IDS
     if provider not in allowed:
         raise HTTPException(
             status_code=400,
@@ -149,7 +158,7 @@ def _validate_model_for_voice(
     """Если model задан — должен быть из каталога провайдера; пустое значение допустимо
     для всех провайдеров (резолвер `voice_resolver` подставит default из настроек)."""
     if provider != "litserve":
-        if provider == "cloud_ru" and kind != "vad":
+        if provider == "cloud_ru":
             if model_value is None or model_value == "":
                 return
             allowed = cloud_ru_stt_model_ids() if kind == "stt" else cloud_ru_tts_model_ids()
@@ -185,10 +194,8 @@ def _validate_model_for_voice(
     cfg = get_settings().provider_litserve
     if kind == "stt":
         allowed = frozenset(m.api_model_id for m in cfg.stt_models)
-    elif kind == "tts":
-        allowed = frozenset(m.api_model_id for m in cfg.tts_models)
     else:
-        allowed = frozenset(m.api_model_id for m in cfg.vad_models)
+        allowed = frozenset(m.api_model_id for m in cfg.tts_models)
 
     if model_value not in allowed:
         raise HTTPException(status_code=400, detail=f"Неизвестная litserve модель: {model_value!r}")
@@ -225,15 +232,16 @@ async def list_company_voice_providers(
     request: Request,
     container: ContainerDep,
 ) -> CompanyVoiceProvidersResponse:
-    """Список per-company override-ов провайдеров речи (stt/tts/vad)."""
+    """Список per-company override-ов провайдеров речи (stt/tts)."""
     user = _require_authenticated_user(request)
     _ensure_user_can_read_company(user, company_id)
     rows = await container.company_voice_provider_repository.list_by_company(
         company_id=company_id
     )
+    items = [_row_to_item(row) for row in rows if row.kind != "vad"]
     return CompanyVoiceProvidersResponse(
         company_id=company_id,
-        items=[_row_to_item(row) for row in rows],
+        items=items,
     )
 
 
@@ -248,6 +256,7 @@ async def upsert_company_voice_provider(
     """Создать/обновить override для конкретного kind-а."""
     user = _require_authenticated_user(request)
     _ensure_user_can_manage_company(user, company_id)
+    _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
     _validate_provider(voice_kind, payload.provider)
 
@@ -262,7 +271,7 @@ async def upsert_company_voice_provider(
             model_value=effective_model,
             voice_value=payload.voice,
         )
-    elif payload.provider == "cloud_ru" and voice_kind != "vad":
+    elif payload.provider == "cloud_ru":
         _validate_model_for_voice(
             kind=voice_kind,
             provider=payload.provider,
@@ -335,6 +344,7 @@ async def delete_company_voice_provider(
     """Снять per-company override (вернуть kind на deployment-default)."""
     user = _require_authenticated_user(request)
     _ensure_user_can_manage_company(user, company_id)
+    _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
     deleted = await container.company_voice_provider_repository.delete(
         company_id=company_id, kind=voice_kind

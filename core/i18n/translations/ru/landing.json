@@ -285,7 +285,8 @@
         "cta_try": "Попробовать",
         "cta_hire": "Нанять",
         "session_error": "Не удалось выдать сессию: {{detail}}",
-        "session_error_generic": "Не удалось выдать сессию для чата."
+        "session_error_generic": "Не удалось выдать сессию для чата.",
+        "embed_voice_message": "{{detail}}"
     },
     "footer": {
         "docs": "Документация",

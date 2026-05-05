@@ -160,6 +160,38 @@ describe('VoiceAgentBridge: flows → voice', () => {
         ]);
     });
 
+    it('getTtsOutputEnabled:false — speakable artifact не вызывает speak', async () => {
+        let capturedOnEvent = () => {};
+        streamMock.mockImplementation(async (_opts, onEvent) => {
+            capturedOnEvent = onEvent;
+            await new Promise(() => {});
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+            getTtsOutputEnabled: () => false,
+        });
+        bridge.start();
+        emitTranscript(media, 'вопрос.', true);
+        await Promise.resolve();
+
+        capturedOnEvent({
+            result: {
+                kind: 'artifact-update',
+                taskId: 'task-1',
+                artifact: {
+                    name: 'response',
+                    parts: [{ root: { kind: 'text', text: 'Ответ агента.' } }],
+                },
+                lastChunk: false,
+            },
+        });
+
+        expect(media.spoken).toEqual([]);
+    });
+
     it('status-update final:true → mediaSession.endUtterance', async () => {
         let capturedOnEvent = () => {};
         streamMock.mockImplementation(async (_opts, onEvent) => {

@@ -21,9 +21,9 @@ globs:
 
 ```
 REST POST /sync/api/v1/...                   ──┐
-                                                ├──> op_<entity>_<verb> (apps/sync/realtime/operations.py)
-                                                │     ├──> helpers (handlers.py) → repo + publish_realtime_events
-                                                │     └──> для transcribe_* — kiq в TaskIQ (queue: sync)
+                              ├──> op_<entity>_<verb> (apps/sync/realtime/operations.py)
+                              │     ├──> helpers (handlers.py) → repo + publish_realtime_events
+                              │     └──> для transcribe_* — kiq в TaskIQ (queue: sync)
 WebSocket /sync/api/ws/notifications           ──┘  (single command_router → тот же op_*)
 ```
 

@@ -345,6 +345,8 @@
     "overflow_aria": "More actions",
     "btn_voice_on": "Turn voice mode on",
     "btn_voice_off": "Turn voice mode off",
+    "tts_output_enable": "Enable spoken responses",
+    "tts_output_disable": "Disable spoken responses",
     "voice_status_idle": "Voice mode: idle",
     "voice_status_listening": "Voice mode: listening",
     "voice_status_speaking": "Voice mode: speaking",

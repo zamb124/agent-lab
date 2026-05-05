@@ -50,6 +50,7 @@ import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMe
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
 import { asObject, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
@@ -225,6 +226,11 @@ export class FlowsApp extends PlatformApp {
         });
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._laraActiveCompanySel = this.select((s) => s.auth.activeCompanyId);
+        this._laraVoiceBaseUrl =
+            typeof window !== 'undefined' && typeof window.location !== 'undefined'
+                ? resolveVoiceHttpOrigin()
+                : '';
         this._flowsMql = null;
         this._onFlowsMobileMql = null;
         this._flowsMobile =
@@ -354,6 +360,10 @@ export class FlowsApp extends PlatformApp {
     }
 
     _renderLara() {
+        const companyRaw = this._laraActiveCompanySel.value;
+        const companyId = typeof companyRaw === 'string' && companyRaw.trim() !== '' ? companyRaw.trim() : '';
+        const voiceBase = typeof this._laraVoiceBaseUrl === 'string' ? this._laraVoiceBaseUrl.trim() : '';
+        const duplex = companyId !== '' && voiceBase !== '';
         return html`
             <platform-lara-assistant
                 toggle-event-name="flows-lara-open"
@@ -363,6 +373,9 @@ export class FlowsApp extends PlatformApp {
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
                 .assistantTitle=${'Lara'}
+                ?voice-enabled=${duplex}
+                voice-base-url=${voiceBase}
+                company-id=${companyId}
                 .getExtraMetadataVariables=${this._laraEmbedContextVariables}
                 .getContextVariables=${this._laraEmbedContextVariables}
             ></platform-lara-assistant>

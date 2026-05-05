@@ -345,6 +345,8 @@
     "overflow_aria": "Дополнительные действия",
     "btn_voice_on": "Включить голосовой режим",
     "btn_voice_off": "Выключить голосовой режим",
+    "tts_output_enable": "Включить озвучку ответов",
+    "tts_output_disable": "Отключить озвучку ответов",
     "voice_status_idle": "Голосовой режим: ожидание",
     "voice_status_listening": "Голосовой режим: слушаю",
     "voice_status_speaking": "Голосовой режим: говорю",

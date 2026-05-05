@@ -2,9 +2,8 @@
  * Flows-catalog op — каталог flows и tools для выбора в embed/scheduler модалках.
  *
  * Один загрузочный вызов читает /flows/api/v1/flows/ и /flows/api/v1/tools/
- * параллельно и кладёт обе коллекции в lastResult = { flows, tools }. Тулзы и
- * флоу нужны вместе при настройке виджета: пользователь выбирает flow_id и
- * branch_id, поэтому хранение их в одном слайсе оправдано.
+ * параллельно и кладёт обе коллекции в lastResult = { flows, tools }. У каждого
+ * LOCAL flow в items есть branches (ветки/skill); embed-модалка выбирает branch_id.
  *
  * Без toast'ов: операция идёт в фоне модалки.
  */

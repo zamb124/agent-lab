@@ -8,7 +8,7 @@
  *   GET    /frontend/api/voice-providers/catalog                       → VoiceProvidersCatalogDTO
  *
  * Slice (`frontend/companyVoiceProviders`):
- *   { byKind: { stt|tts|vad: item | null }, loading, error, savingKind, removingKind }
+ *   { byKind: { stt|tts: item | null }, loading, error, savingKind, removingKind }
  *
  * Источник правды для UI настроек речи компании. Без фолбеков: дефолты
  * показываются как «не задано (используется deployment-default)».
@@ -17,10 +17,10 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
-const VOICE_KINDS = ['stt', 'tts', 'vad'];
+const VOICE_KINDS = ['stt', 'tts'];
 
 function _emptyByKind() {
-    return { stt: null, tts: null, vad: null };
+    return { stt: null, tts: null };
 }
 
 function _normalizeSecretsMetaField(raw) {
@@ -133,13 +133,11 @@ function _normalizeCatalog(raw) {
     }
     return Object.freeze({
         stt_tts_provider_ids: _normalizeStringList(raw.stt_tts_provider_ids, 'stt_tts_provider_ids'),
-        vad_provider_ids: _normalizeStringList(raw.vad_provider_ids, 'vad_provider_ids'),
         response_format_ids: _normalizeStringList(raw.response_format_ids, 'response_format_ids'),
         credential_field_groups: _normalizeCredentialGroups(raw.credential_field_groups),
         stt_litserve_models: _normalizeStringList(raw.stt_litserve_models, 'stt_litserve_models'),
         tts_litserve_models: _normalizeStringList(raw.tts_litserve_models, 'tts_litserve_models'),
         tts_litserve_voice_hints: Object.freeze(hints),
-        vad_litserve_models: _normalizeStringList(raw.vad_litserve_models, 'vad_litserve_models'),
         cloud_ru_stt_models: _normalizeStringList(raw.cloud_ru_stt_models, 'cloud_ru_stt_models'),
         cloud_ru_tts_models: _normalizeStringList(raw.cloud_ru_tts_models, 'cloud_ru_tts_models'),
         yandex_speech_models: _normalizeStringList(raw.yandex_speech_models, 'yandex_speech_models'),

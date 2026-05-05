@@ -1,5 +1,5 @@
 /**
- * Per-company override провайдеров речи: stt / tts / vad.
+ * Per-company override провайдеров речи: stt / tts.
  *
  * Данные: `frontend/company_voice_providers_load`, каталог
  * `frontend/voice_providers_catalog_load`. Списки провайдеров без `mock`
@@ -13,14 +13,9 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/layout/page-header.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 
-const KINDS = ['stt', 'tts', 'vad'];
+const KINDS = ['stt', 'tts'];
 const STT_TTS_UI = ['litserve', 'cloud_ru', 'yandex', 'sber'];
-const VAD_UI = ['litserve', 'silero_local'];
 const RESPONSE_FORMATS = ['', 'wav', 'mp3', 'ogg', 'pcm', 'lpcm'];
-
-function _providersFor(kind) {
-    return kind === 'vad' ? VAD_UI : STT_TTS_UI;
-}
 
 function _emptySecretsDraft() {
     return {
@@ -50,9 +45,8 @@ function _trimOrEmpty(v) {
     return v.trim();
 }
 
-function _needsModel(kind, provider) {
+function _needsModel(provider) {
     if (provider === '') return false;
-    if (provider === 'silero_local' && kind === 'vad') return false;
     return (
         provider === 'litserve' ||
         provider === 'cloud_ru' ||
@@ -159,8 +153,8 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         this._upsert = this.useOp('frontend/company_voice_providers_upsert');
         this._remove = this.useOp('frontend/company_voice_providers_remove');
         this._auth = this.select((s) => s.auth);
-        this._drafts = { stt: _emptyDraft(), tts: _emptyDraft(), vad: _emptyDraft() };
-        this._credEditedByKind = { stt: false, tts: false, vad: false };
+        this._drafts = { stt: _emptyDraft(), tts: _emptyDraft() };
+        this._credEditedByKind = { stt: false, tts: false };
     }
 
     connectedCallback() {
@@ -188,7 +182,6 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
             const drafts = {
                 stt: _emptyDraft(),
                 tts: _emptyDraft(),
-                vad: _emptyDraft(),
             };
             for (const item of result.items) {
                 if (typeof item.kind === 'string') {
@@ -197,7 +190,7 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
             }
             this._drafts = drafts;
         }
-        this._credEditedByKind = { stt: false, tts: false, vad: false };
+        this._credEditedByKind = { stt: false, tts: false };
     }
 
     _secretsMetaForKind(kind) {
@@ -254,7 +247,7 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         if (provider === 'litserve') {
             if (kind === 'stt') return [...catalog.stt_litserve_models];
             if (kind === 'tts') return [...catalog.tts_litserve_models];
-            return [...catalog.vad_litserve_models];
+            return [];
         }
         if (provider === 'cloud_ru') {
             if (kind === 'stt') return [...catalog.cloud_ru_stt_models];
@@ -372,7 +365,7 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     }
 
     _renderModelRow(kind, draft) {
-        if (!_needsModel(kind, draft.provider)) return nothing;
+        if (!_needsModel(draft.provider)) return nothing;
         const opts = this._modelOptions(kind, draft.provider);
         if (!Array.isArray(opts) || opts.length === 0) return nothing;
         const litserveHint =
@@ -509,7 +502,7 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     _renderCard(kind) {
         const draft = this._drafts[kind];
         const secretsMeta = this._secretsMetaForKind(kind);
-        const providers = _providersFor(kind);
+        const providers = STT_TTS_UI;
         const busy = this._upsert.busy || this._remove.busy;
         return html`
             <div class="card">
@@ -564,25 +557,15 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                           </label>
                       `
                     : nothing}
-                ${kind !== 'vad'
-                    ? html`
-                          <label>
-                              ${this.t(
-                                  'company_voice_providers_page.field_language',
-                              )}
-                              <glass-input
-                                  .value=${draft.language}
-                                  placeholder="ru-RU"
-                                  @input=${(e) =>
-                                      this._setField(
-                                          kind,
-                                          'language',
-                                          e.detail.value,
-                                      )}
-                              ></glass-input>
-                          </label>
-                      `
-                    : nothing}
+                <label>
+                    ${this.t('company_voice_providers_page.field_language')}
+                    <glass-input
+                        .value=${draft.language}
+                        placeholder="ru-RU"
+                        @input=${(e) =>
+                            this._setField(kind, 'language', e.detail.value)}
+                    ></glass-input>
+                </label>
                 <label>
                     ${this.t('company_voice_providers_page.field_sample_rate')}
                     <glass-input
@@ -592,25 +575,6 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                             this._setField(kind, 'sample_rate', e.detail.value)}
                     ></glass-input>
                 </label>
-                ${kind === 'vad'
-                    ? html`
-                          <label>
-                              ${this.t(
-                                  'company_voice_providers_page.field_threshold',
-                              )}
-                              <glass-input
-                                  .value=${draft.threshold}
-                                  placeholder="0.5"
-                                  @input=${(e) =>
-                                      this._setField(
-                                          kind,
-                                          'threshold',
-                                          e.detail.value,
-                                      )}
-                              ></glass-input>
-                          </label>
-                      `
-                    : nothing}
                 ${this._renderCredentials(kind, draft, secretsMeta)}
                 <div class="row">
                     <glass-button

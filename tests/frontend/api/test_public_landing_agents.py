@@ -161,6 +161,77 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
 
 
 @pytest.mark.asyncio
+async def test_public_landing_agents_exposes_voice_flags(
+    frontend_client: AsyncClient,
+    frontend_container,
+    unique_id,
+):
+    company = await frontend_container.company_repository.get(SYSTEM_COMPANY_ID)
+    assert company is not None
+    admin_user = await frontend_container.user_repository.get(
+        "user_zambas124_yandex_ru_001",
+    )
+    user_for_ctx = (
+        admin_user
+        if admin_user
+        else User(
+            user_id="test_voice_flags_user",
+            name="System Test",
+            email="voice@test.com",
+            companies={SYSTEM_COMPANY_ID: ["admin"]},
+            active_company_id=SYSTEM_COMPANY_ID,
+        )
+    )
+    set_context(
+        Context(
+            user=user_for_ctx,
+            active_company=company,
+            session_id="test_voice_flags",
+            channel="test",
+        )
+    )
+    embed_id = f"embed_landing_voice_{unique_id}"
+    config = EmbedConfig(
+        embed_id=embed_id,
+        name="Voice demo",
+        flow_id="lawyer",
+        branch_id="default",
+        allowed_origins=[],
+        status=EmbedStatus.ACTIVE,
+        landing_visible=True,
+        landing_card_image_url="https://example.com/v.png",
+        landing_sort_order=1,
+        created_by="test",
+        voice_enabled=True,
+        voice_default_on=True,
+    )
+    await frontend_container.embed_config_repository.set(config)
+    await frontend_container.embed_mapping_repository.set(
+        EmbedMapping(embed_id=embed_id, company_id=SYSTEM_COMPANY_ID)
+    )
+    clear_context()
+
+    r = await frontend_client.get("/frontend/api/public/landing-agents")
+    assert r.status_code == 200
+    hit = next((x for x in r.json()["items"] if x["embed_id"] == embed_id), None)
+    assert hit is not None
+    assert hit["voice_enabled"] is True
+    assert hit["voice_default_on"] is True
+
+    set_context(
+        Context(
+            user=user_for_ctx,
+            active_company=company,
+            session_id="test_voice_flags",
+            channel="test",
+        )
+    )
+    await frontend_container.embed_config_repository.delete(embed_id)
+    await frontend_container.embed_mapping_repository.delete_by_embed_id(embed_id)
+    clear_context()
+
+
+@pytest.mark.asyncio
 async def test_public_landing_agents_lists_visible_only(
     frontend_client: AsyncClient,
     system_landing_embed,
@@ -177,6 +248,8 @@ async def test_public_landing_agents_lists_visible_only(
     hit = next(x for x in body["items"] if x["embed_id"] == embed_id)
     assert hit["flow_id"] == "universal_agent"
     assert hit["landing_card_image_url"] == "https://example.com/card.png"
+    assert hit["voice_enabled"] is False
+    assert hit["voice_default_on"] is False
 
 
 @pytest.mark.asyncio

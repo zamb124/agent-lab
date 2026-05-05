@@ -285,7 +285,8 @@
         "cta_try": "Try",
         "cta_hire": "Hire",
         "session_error": "Could not start a session: {{detail}}",
-        "session_error_generic": "Could not start a chat session."
+        "session_error_generic": "Could not start a chat session.",
+        "embed_voice_message": "{{detail}}"
     },
     "footer": {
         "docs": "Documentation",

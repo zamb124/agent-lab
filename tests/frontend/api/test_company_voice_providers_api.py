@@ -106,3 +106,39 @@ async def test_company_voice_providers_delete_clears_override(
     items = list_resp.json()["items"]
     tts_items = [it for it in items if it["kind"] == "tts"]
     assert tts_items == []
+
+
+@pytest.mark.asyncio
+async def test_company_voice_providers_put_vad_rejected(
+    frontend_client: AsyncClient,
+    auth_headers_system,
+) -> None:
+    """PUT для kind=vad — 410, per-company VAD отключён."""
+    response = await frontend_client.put(
+        "/frontend/api/companies/system/voice-providers/vad",
+        headers=auth_headers_system,
+        json={
+            "provider": "litserve",
+            "model": None,
+            "voice": None,
+            "language": None,
+            "sample_rate": None,
+            "threshold": None,
+            "response_format": None,
+        },
+    )
+    assert response.status_code == 410
+    assert "развёртывания" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_company_voice_providers_delete_vad_rejected(
+    frontend_client: AsyncClient,
+    auth_headers_system,
+) -> None:
+    response = await frontend_client.delete(
+        "/frontend/api/companies/system/voice-providers/vad",
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 410
+    assert "развёртывания" in response.json()["detail"]

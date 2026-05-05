@@ -18,6 +18,7 @@ from core.clients.voice_resolver import (
     _CompanyOverrideRow,
     _company_cache,
     get_stt_client,
+    get_vad_client,
     reset_voice_resolver_for_tests,
     resolve_stt_settings,
 )
@@ -133,3 +134,35 @@ async def test_get_stt_client_logs_resolved_fields(
     assert getattr(rec, "language", None) == "en"
     assert getattr(rec, "source_provider", None) == "override"
     assert getattr(rec, "source_language", None) == "override"
+
+
+@pytest.mark.asyncio
+async def test_get_vad_client_ignores_company_vad_row_in_cache(
+    unique_id: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Устаревший кэш по kind=vad не влияет: VAD только override + deployment."""
+    cid = f"company_{unique_id}"
+    _stub_company_cache(
+        cid,
+        kind="vad",
+        row=_CompanyOverrideRow(
+            provider="cloud_ru",
+            model="openai/whisper-large-v3",
+            voice=None,
+            language="en",
+            sample_rate=None,
+            threshold=None,
+            response_format=None,
+            secrets=None,
+        ),
+    )
+
+    caplog.set_level("INFO", logger="core.clients.voice_resolver")
+    await get_vad_client(company_id=cid)
+
+    rec = next(
+        (r for r in caplog.records if r.message == "voice_resolver.vad_resolved"),
+        None,
+    )
+    assert rec is not None
+    assert getattr(rec, "source_provider", None) == "settings"

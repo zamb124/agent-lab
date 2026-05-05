@@ -20,6 +20,13 @@ import {
 import { toolCallIconName } from '@platform/lib/utils/tool-call-icon.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-assistant-message-actions.js';
+import {
+    readTtsOutputEnabled,
+    TTS_OUTPUT_CHANGED_EVENT,
+    TTS_OUTPUT_STORAGE_KEY,
+} from '@platform/lib/voice/tts-output-pref.js';
+import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import './embed-block-renderer.js';
 import './embed-chat-input.js';
 
@@ -60,6 +67,9 @@ export class PlatformEmbedChat extends LitElement {
         labels: { type: Object },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
+        voiceDuplex: { type: Boolean, attribute: 'voice-duplex' },
+        voiceComposerActive: { type: Boolean, attribute: 'voice-composer-active' },
+        voiceComposerStatus: { type: String, attribute: 'voice-composer-status' },
         embedTheme: { type: String, attribute: 'embed-theme' },
         interfaceLocale: { type: String, attribute: 'interface-locale' },
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
@@ -146,6 +156,9 @@ export class PlatformEmbedChat extends LitElement {
             align-self: flex-start;
             background: var(--embed-chat-surface);
             border: 1px solid var(--embed-chat-border);
+        }
+        .embed-assistant-actions {
+            margin-top: 10px;
         }
         .meta {
             font-size: 11px;
@@ -417,6 +430,9 @@ export class PlatformEmbedChat extends LitElement {
         this.labels = {};
         this.useCredentials = false;
         this.enableVoice = true;
+        this.voiceDuplex = false;
+        this.voiceComposerActive = false;
+        this.voiceComposerStatus = 'idle';
         this.embedTheme = 'dark';
         this.interfaceLocale = 'auto';
         this.showLocaleControl = false;
@@ -454,6 +470,15 @@ export class PlatformEmbedChat extends LitElement {
         this._ackEventName = null;
         this._nackEventName = null;
         this._onCredClickOutside = this._onCredClickOutside.bind(this);
+        this._onTtsPrefForEmbed = () => this.requestUpdate();
+        this._onTtsStorageForEmbed = (e) => {
+            if (
+                e.storageArea === window.localStorage
+                && e.key === TTS_OUTPUT_STORAGE_KEY
+            ) {
+                this.requestUpdate();
+            }
+        };
         registerBuiltinEmbedBlocks();
     }
 
@@ -524,12 +549,20 @@ export class PlatformEmbedChat extends LitElement {
         this.addEventListener('embed-block-action', this._onBlockAction);
         document.addEventListener('click', this._onCredClickOutside);
         this._bindAckListeners();
+        if (typeof window !== 'undefined') {
+            window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefForEmbed);
+            window.addEventListener('storage', this._onTtsStorageForEmbed);
+        }
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this.removeEventListener('embed-block-action', this._onBlockAction);
         document.removeEventListener('click', this._onCredClickOutside);
+        if (typeof window !== 'undefined') {
+            window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefForEmbed);
+            window.removeEventListener('storage', this._onTtsStorageForEmbed);
+        }
         this._unbindAckListeners();
         this._pendingEventAcks.forEach((pending) => {
             if (pending.timer) {
@@ -1347,6 +1380,9 @@ export class PlatformEmbedChat extends LitElement {
                     placeholder=${this._lb('placeholder', 'Message...')}
                     .labels=${this._mergedLabels()}
                     ?enable-voice=${this.enableVoice}
+                    ?voice-duplex=${this.voiceDuplex}
+                    ?voice-active=${this.voiceComposerActive}
+                    voice-composer-status=${this.voiceComposerStatus || 'idle'}
                     ?show-locale-control=${this.showLocaleControl}
                     interface-locale=${this.interfaceLocale || 'auto'}
                     @embed-locale-change=${this._onEmbedLocaleChange}
@@ -1476,6 +1512,19 @@ export class PlatformEmbedChat extends LitElement {
                       </div>
                   `
                 : nothing;
+        const assistantActions =
+            !m.streaming && typeof m.content === 'string' && m.content.trim() !== ''
+                ? html`
+                      <div class="embed-assistant-actions">
+                          <platform-assistant-message-actions
+                              .text=${String(m.content).trim()}
+                              voice-base-url=${readTtsOutputEnabled() ? resolveVoiceHttpOrigin() : ''}
+                              credentials=${this.useCredentials ? 'include' : 'omit'}
+                              .getHeaders=${typeof this.getAuthToken === 'function' ? this.getAuthToken : null}
+                          ></platform-assistant-message-actions>
+                      </div>
+                  `
+                : nothing;
         return html`
             <div class="msg assistant">
                 <div class="embed-msg-md">${unsafeHTML(bodyHtml)}</div>
@@ -1484,6 +1533,7 @@ export class PlatformEmbedChat extends LitElement {
                 ${operatorReplyHtml}
                 ${blocks}
                 ${toolStack}
+                ${assistantActions}
             </div>
         `;
     }

@@ -122,6 +122,29 @@ export class LandingHomeDemoAgents extends PlatformElement {
             throw new Error('landing_home_demo_agents: window.location.origin required');
         }
         this._flowsBaseUrl = new URL('/flows', window.location.origin).href;
+        this._voiceBaseUrl = new URL('/voice', window.location.origin).href;
+    }
+
+    /** Публичные демо-виджеты: guest JWT с company_id `system`. */
+    static embedDemoCompanyId = 'system';
+
+    _onEmbedDrawerToast(e) {
+        const detail = e && typeof e.detail === 'object' ? e.detail : null;
+        const msg = typeof detail?.message === 'string' ? detail.message.trim() : '';
+        if (msg === '') {
+            return;
+        }
+        this.toast('digital_workers.embed_voice_message', { type: 'warning', vars: { detail: msg } });
+    }
+
+    _drawerVoiceEnabled() {
+        const s = this._drawerSpec;
+        return s !== null && s.voice_enabled === true;
+    }
+
+    _drawerVoiceDefaultOn() {
+        const s = this._drawerSpec;
+        return s !== null && s.voice_enabled === true && s.voice_default_on === true;
     }
 
     connectedCallback() {
@@ -177,6 +200,12 @@ export class LandingHomeDemoAgents extends PlatformElement {
         const theme = card.theme === 'light' || card.theme === 'dark' || card.theme === 'auto' ? card.theme : 'dark';
         const locale =
             card.interface_locale === 'ru' || card.interface_locale === 'en' ? card.interface_locale : 'auto';
+        if (typeof card.voice_enabled !== 'boolean') {
+            throw new Error('landing_home_demo_agents: card.voice_enabled must be boolean');
+        }
+        if (typeof card.voice_default_on !== 'boolean') {
+            throw new Error('landing_home_demo_agents: card.voice_default_on must be boolean');
+        }
         this._drawerSpec = {
             embed_id: card.embed_id,
             flow_id: card.flow_id,
@@ -184,6 +213,8 @@ export class LandingHomeDemoAgents extends PlatformElement {
             assistant_title: title,
             theme,
             interface_locale: locale,
+            voice_enabled: card.voice_enabled,
+            voice_default_on: card.voice_default_on === true,
         };
         this._drawerOpen = true;
         this.requestUpdate();
@@ -314,8 +345,13 @@ export class LandingHomeDemoAgents extends PlatformElement {
                 ?show-launcher=${false}
                 ?use-credentials=${false}
                 .open=${this._drawerOpen}
+                voice-base-url=${this._voiceBaseUrl}
+                company-id=${LandingHomeDemoAgents.embedDemoCompanyId}
+                ?voice-enabled=${this._drawerVoiceEnabled()}
+                ?voice-default-on=${this._drawerVoiceDefaultOn()}
                 .getAuthToken=${this._getDemoAuthHeaders}
                 @humanitec-embed-drawer-open-changed=${this._onDrawerOpenChanged}
+                @embed-toast=${this._onEmbedDrawerToast}
             ></platform-embed-chat-drawer>
         `;
     }

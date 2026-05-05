@@ -5,6 +5,12 @@ import { resolveEmbedChatTheme } from './embed-chat-theme.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { VoiceMediaSession } from '../voice/voice-media-session.js';
 import { VoiceAgentBridge } from '../voice/voice-agent-bridge.js';
+import {
+    readTtsOutputEnabled,
+    toggleTtsOutputEnabled,
+    TTS_OUTPUT_CHANGED_EVENT,
+    TTS_OUTPUT_STORAGE_KEY,
+} from '../voice/tts-output-pref.js';
 import './platform-embed-chat.js';
 
 /**
@@ -382,6 +388,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._onPanelDragPointerMove = this._onPanelDragPointerMove.bind(this);
         this._onPanelDragPointerUp = this._onPanelDragPointerUp.bind(this);
         this._onViewportResize = this._onViewportResize.bind(this);
+        this._onTtsDrawerPref = () => this.requestUpdate();
+        this._onTtsDrawerStorage = (e) => {
+            if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
+                this.requestUpdate();
+            }
+        };
     }
 
     _applyEmbedUrlParams() {
@@ -410,6 +422,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._onPopStateEmbedParams = () => this._applyEmbedUrlParams();
         window.addEventListener('popstate', this._onPopStateEmbedParams);
         window.addEventListener('resize', this._onViewportResize);
+        window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsDrawerPref);
+        window.addEventListener('storage', this._onTtsDrawerStorage);
         this._onPlatformThemeChange = () => {
             if ((this.theme || 'auto').toLowerCase() === 'auto') {
                 this.requestUpdate();
@@ -444,6 +458,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
             this._stopVoice();
         }
         this._stopPanelDrag();
+        window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsDrawerPref);
+        window.removeEventListener('storage', this._onTtsDrawerStorage);
         if (this._onPopStateEmbedParams) {
             window.removeEventListener('popstate', this._onPopStateEmbedParams);
             this._onPopStateEmbedParams = null;
@@ -469,6 +485,9 @@ export class PlatformEmbedChatDrawer extends LitElement {
     updated(changed) {
         if (changed.has('toggleEventName')) {
             this._bindToggleListener();
+        }
+        if (changed.has('voiceEnabled') && this.voiceEnabled !== true && this._voiceOn) {
+            this._stopVoice();
         }
         if ((changed.has('open') && !this.open) || (changed.has('panelMaximized') && this.panelMaximized)) {
             this._stopPanelDrag();
@@ -579,6 +598,42 @@ export class PlatformEmbedChatDrawer extends LitElement {
         const raw = typeof this.eventNamespace === 'string' ? this.eventNamespace.trim() : '';
         const ns = raw || 'assistant';
         return `${ns}:event`;
+    }
+
+    /** @param {'no_base_url'|'no_embed'|'no_company'|'no_a2a'} kind */
+    _toastVoicePrepFailure(kind) {
+        const L = this._resolvedLabels();
+        const key =
+            kind === 'no_base_url'
+                ? 'voice_err_no_base_url'
+                : kind === 'no_embed'
+                  ? 'voice_err_no_embed'
+                  : kind === 'no_company'
+                    ? 'voice_err_no_company'
+                    : kind === 'no_a2a'
+                      ? 'voice_err_no_flows'
+                      : '';
+        if (key === '') {
+            throw new Error(`platform-embed-chat-drawer: unknown voice prep kind ${kind}`);
+        }
+        const msg = L[key];
+        if (typeof msg !== 'string' || msg.trim() === '') {
+            throw new Error(`platform-embed-chat-drawer: missing label ${key}`);
+        }
+        this.dispatchEvent(
+            new CustomEvent('embed-toast', {
+                bubbles: true,
+                composed: true,
+                detail: { message: msg.trim() },
+            }),
+        );
+    }
+
+    _onComposerVoiceToggle() {
+        if (this.voiceEnabled !== true) {
+            return;
+        }
+        this._toggleVoice();
     }
 
     onAssistantEvent(handler) {
@@ -864,21 +919,21 @@ export class PlatformEmbedChatDrawer extends LitElement {
         if (!this.voiceEnabled) return;
         const voiceBaseUrl = String(this.voiceBaseUrl || '').replace(/\/$/, '');
         if (voiceBaseUrl === '') {
-            this._voiceStatus = 'no_base_url';
+            this._toastVoicePrepFailure('no_base_url');
             return;
         }
         if (!this.embedId && !this.flowId) {
-            this._voiceStatus = 'no_embed';
+            this._toastVoicePrepFailure('no_embed');
             return;
         }
         const companyId = String(this.companyId || '').trim();
         if (companyId === '') {
-            this._voiceStatus = 'no_company';
+            this._toastVoicePrepFailure('no_company');
             return;
         }
         const a2aBaseUrl = String(this.flowsBaseUrl || '').replace(/\/$/, '');
         if (a2aBaseUrl === '') {
-            this._voiceStatus = 'no_a2a';
+            this._toastVoicePrepFailure('no_a2a');
             return;
         }
         const sessionId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -931,6 +986,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     el.applyVoiceA2aStreamEvent(ev);
                 }
             },
+            getTtsOutputEnabled: () => readTtsOutputEnabled(),
         });
         bridge.addEventListener('a2aSettled', () => {
             const el = this.renderRoot?.querySelector('platform-embed-chat');
@@ -1005,6 +1061,11 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
     }
 
+    _toggleTtsOutputDrawer() {
+        toggleTtsOutputEnabled();
+        this.requestUpdate();
+    }
+
     render() {
         const L = this._resolvedLabels();
         const headTitle = this._panelAssistantHeadTitle(L);
@@ -1075,44 +1136,27 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 <div class=${panelHeadClass} @pointerdown=${this._onPanelHeadPointerDown}>
                     <span class="panel-head-title">${headTitle}</span>
                     <div class="panel-head-actions">
-                        ${this.voiceEnabled
-                            ? html`<button
-                                  type="button"
-                                  class="close-btn"
-                                  title=${this._voiceOn ? L.voice_off : L.voice_on}
-                                  aria-label=${this._voiceOn ? L.voice_off : L.voice_on}
-                                  @click=${this._toggleVoice}
-                              >
-                                  ${this._voiceOn
-                                      ? html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                            <path
-                                                d="M12 14c1.66 0 3-1.34 3-3V6a3 3 0 1 0-6 0v5c0 1.66 1.34 3 3 3Z"
-                                                fill="currentColor"
-                                            />
-                                            <path
-                                                d="M19 11a7 7 0 1 1-14 0"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                                stroke-linecap="round"
-                                            />
-                                        </svg>`
-                                      : html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                            <path
-                                                d="M12 14c1.66 0 3-1.34 3-3V6a3 3 0 1 0-6 0v5c0 1.66 1.34 3 3 3Z"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                                stroke-linejoin="round"
-                                            />
-                                            <path
-                                                d="M19 11a7 7 0 1 1-14 0"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                                stroke-linecap="round"
-                                            />
-                                            <path d="M4 4l16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                                        </svg>`}
-                              </button>`
-                            : nothing}
+                        <button
+                            type="button"
+                            class="close-btn"
+                            title=${readTtsOutputEnabled() ? L.tts_output_disable : L.tts_output_enable}
+                            aria-label=${readTtsOutputEnabled() ? L.tts_output_disable : L.tts_output_enable}
+                            @click=${this._toggleTtsOutputDrawer}
+                        >
+                            ${readTtsOutputEnabled()
+                                ? html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                      <path
+                                          d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+                                          fill="currentColor"
+                                      />
+                                  </svg>`
+                                : html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                      <path
+                                          d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 9.27 8l-5-5zM12 4l-1.41 1.41L12 8.18V4z"
+                                          fill="currentColor"
+                                      />
+                                  </svg>`}
+                        </button>
                         <button
                             type="button"
                             class="close-btn"
@@ -1176,6 +1220,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 </div>
                 <platform-embed-chat
                     @humanitec-embed-chat-assistant-reply-completed=${this._onEmbedAssistantReplyCompleted}
+                    @voice-toggle=${this._onComposerVoiceToggle}
                     ?hide-header=${true}
                     ?visible=${this.open}
                     embed-theme=${embedTheme}
@@ -1190,7 +1235,10 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     .title=${headTitle}
                     .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}
                     ?use-credentials=${this.useCredentials}
-                    ?enable-voice=${this.enableVoice}
+                    ?enable-voice=${this.enableVoice === true && this.voiceEnabled !== true}
+                    ?voice-duplex=${this.voiceEnabled === true}
+                    ?voice-composer-active=${this._voiceOn}
+                    voice-composer-status=${this._voiceStatus || 'idle'}
                     .getAuthToken=${this.getAuthToken}
                     .getExtraMetadataVariables=${this.getExtraMetadataVariables}
                     .getContextVariables=${this.getContextVariables}

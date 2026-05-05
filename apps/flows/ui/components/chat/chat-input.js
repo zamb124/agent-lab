@@ -282,6 +282,7 @@ export class ChatInput extends PlatformElement {
         showVoice: { type: Boolean, attribute: 'show-voice' },
         voiceActive: { type: Boolean, attribute: 'voice-active' },
         voiceStatus: { type: String, attribute: 'voice-status' },
+        ttsOutputEnabled: { type: Boolean, attribute: 'tts-output-enabled' },
         _value: { state: true },
         _selectedFiles: { state: true },
     };
@@ -297,6 +298,7 @@ export class ChatInput extends PlatformElement {
         this.showVoice = false;
         this.voiceActive = false;
         this.voiceStatus = 'idle';
+        this.ttsOutputEnabled = true;
         this._value = '';
         this._selectedFiles = [];
     }
@@ -425,6 +427,10 @@ export class ChatInput extends PlatformElement {
         this.emit('voice-toggle');
     }
 
+    _onTtsOutputClick() {
+        this.emit('tts-output-toggle');
+    }
+
     render() {
         const canSend = (this._value.trim().length > 0 || this._selectedFiles.length > 0) && !this.disabled && !this.loading;
 
@@ -475,6 +481,24 @@ export class ChatInput extends PlatformElement {
 
                 ${this.showVoice
                     ? html`
+                          <button
+                              type="button"
+                              class="voice-button ${this.ttsOutputEnabled ? 'active' : ''}"
+                              title=${this.ttsOutputEnabled
+                                  ? this.t('platform_chat.tts_output_disable')
+                                  : this.t('platform_chat.tts_output_enable')}
+                              aria-label=${this.ttsOutputEnabled
+                                  ? this.t('platform_chat.tts_output_disable')
+                                  : this.t('platform_chat.tts_output_enable')}
+                              aria-pressed=${this.ttsOutputEnabled ? 'true' : 'false'}
+                              ?disabled=${this.disabled}
+                              @click=${this._onTtsOutputClick}
+                          >
+                              <platform-icon
+                                  name=${this.ttsOutputEnabled ? 'volume-up' : 'volume-off'}
+                                  size="20"
+                              ></platform-icon>
+                          </button>
                           <button
                               type="button"
                               class="voice-button ${this.voiceActive ? 'active' : ''}"

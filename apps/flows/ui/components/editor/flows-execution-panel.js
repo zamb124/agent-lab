@@ -47,6 +47,12 @@ import {
     normalizeFlowVoiceSttLanguage,
 } from '../../_helpers/flow-voice-session.js';
 import { relayA2aVoiceStreamRpcFrame } from '../../_helpers/relay-voice-a2a-to-chat.js';
+import {
+    readTtsOutputEnabled,
+    toggleTtsOutputEnabled,
+    TTS_OUTPUT_CHANGED_EVENT,
+    TTS_OUTPUT_STORAGE_KEY,
+} from '@platform/lib/voice/tts-output-pref.js';
 
 const ACCEPT_FILE_TYPES = '*/*';
 const EMPTY_TRACE = Object.freeze([]);
@@ -448,11 +454,29 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._voiceA2aAbortedHandler = null;
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
         this._localeSel = this.select((s) => s.i18n.locale);
+        this._onTtsExecPref = () => this.requestUpdate();
+        this._onTtsExecStorage = (e) => {
+            if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
+                this.requestUpdate();
+            }
+        };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof window !== 'undefined') {
+            window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsExecPref);
+            window.addEventListener('storage', this._onTtsExecStorage);
+        }
     }
 
     disconnectedCallback() {
         if (this._voiceOn) {
             this._stopExecPanelVoice();
+        }
+        if (typeof window !== 'undefined') {
+            window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsExecPref);
+            window.removeEventListener('storage', this._onTtsExecStorage);
         }
         super.disconnectedCallback();
     }
@@ -977,6 +1001,11 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
     }
 
+    _toggleExecTtsOutput() {
+        toggleTtsOutputEnabled();
+        this.requestUpdate();
+    }
+
     _setPanelTab(tab) {
         if (tab !== 'chat' && tab !== 'trace' && tab !== 'state') {
             throw new Error('flows-execution-panel: invalid tab');
@@ -1219,6 +1248,21 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     </glass-button>
                                     ${typeof this.flowId === 'string' && this.flowId.length > 0
                                         ? html`
+                                              <glass-button
+                                                  variant="secondary"
+                                                  size="sm"
+                                                  iconOnly
+                                                  type="button"
+                                                  title=${readTtsOutputEnabled()
+                                                      ? this.t('platform_chat.tts_output_disable')
+                                                      : this.t('platform_chat.tts_output_enable')}
+                                                  @click=${this._toggleExecTtsOutput}
+                                              >
+                                                  <platform-icon
+                                                      name=${readTtsOutputEnabled() ? 'volume-up' : 'volume-off'}
+                                                      size="16"
+                                                  ></platform-icon>
+                                              </glass-button>
                                               <glass-button
                                                   variant="secondary"
                                                   size="sm"

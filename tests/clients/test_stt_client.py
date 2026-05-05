@@ -73,10 +73,10 @@ async def test_litserve_stt_client_returns_transcript(
 
 
 @pytest.mark.asyncio
-async def test_litserve_stt_client_raises_on_empty_payload(
+async def test_litserve_stt_client_empty_text_means_no_speech(
     fake_speech_server: FakeSpeechServer, unique_id: str
 ) -> None:
-    """Пустая транскрипция → ValueError (Zero-Guess: не возвращаем '')."""
+    """Ответ {text: \"\"} — валидный кейс (нет речи в сегменте), voice worker пропускает."""
 
     async def _handler(_: web.Request) -> web.StreamResponse:
         return web.json_response({"text": ""})
@@ -89,12 +89,13 @@ async def test_litserve_stt_client_raises_on_empty_payload(
         default_language="ru",
         timeout=10.0,
     )
-    with pytest.raises(ValueError, match="пустую транскрипцию"):
-        await client.transcribe_audio(
-            audio_bytes=b"\x00",
-            file_name=f"audio-{unique_id}.wav",
-            mime_type="audio/wav",
-        )
+    result = await client.transcribe_audio(
+        audio_bytes=b"\x00",
+        file_name=f"audio-{unique_id}.wav",
+        mime_type="audio/wav",
+    )
+    assert result.text == ""
+    assert result.provider == "litserve"
 
 
 @pytest.mark.asyncio

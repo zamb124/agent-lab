@@ -7,7 +7,14 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-assistant-message-actions.js';
 import { asArray, asString, isPlainObject, toolCallIconName } from '../../_helpers/flows-resolvers.js';
+import { resolveFlowVoiceHttpOrigin } from '../../_helpers/flow-voice-session.js';
+import {
+    readTtsOutputEnabled,
+    TTS_OUTPUT_CHANGED_EVENT,
+    TTS_OUTPUT_STORAGE_KEY,
+} from '@platform/lib/voice/tts-output-pref.js';
 import './flows-chat-run-trace.js';
 
 export class ChatMessage extends PlatformElement {
@@ -294,6 +301,10 @@ export class ChatMessage extends PlatformElement {
                 }
             }
             
+            .assistant-actions {
+                margin-top: var(--space-3);
+            }
+
             .activity-line {
                 display: flex;
                 align-items: flex-start;
@@ -605,6 +616,40 @@ export class ChatMessage extends PlatformElement {
         this.traceTaskId = '';
         this._runTracePanelOpen = false;
         this._i18nLocale = this.select((s) => s.i18n.locale);
+        /** @type {(() => void) | null} */
+        this._onTtsPrefBound = null;
+        /** @type {((e: StorageEvent) => void) | null} */
+        this._onTtsStorageBound = null;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._onTtsPrefBound = () => {
+            this.requestUpdate();
+        };
+        this._onTtsStorageBound = (e) => {
+            if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
+                this.requestUpdate();
+            }
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefBound);
+            window.addEventListener('storage', this._onTtsStorageBound);
+        }
+    }
+
+    disconnectedCallback() {
+        if (typeof window !== 'undefined') {
+            if (this._onTtsPrefBound) {
+                window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefBound);
+                this._onTtsPrefBound = null;
+            }
+            if (this._onTtsStorageBound) {
+                window.removeEventListener('storage', this._onTtsStorageBound);
+                this._onTtsStorageBound = null;
+            }
+        }
+        super.disconnectedCallback();
     }
 
     _formatMessageTimestamp(iso) {
@@ -970,6 +1015,36 @@ export class ChatMessage extends PlatformElement {
         `;
     }
 
+    _voiceBaseUrlForAssistantPlay() {
+        if (!readTtsOutputEnabled()) {
+            return '';
+        }
+        return resolveFlowVoiceHttpOrigin();
+    }
+
+    _renderAssistantActions() {
+        if (this.role !== 'assistant') {
+            return nothing;
+        }
+        if (this.streaming) {
+            return nothing;
+        }
+        const text = asString(this.content).trim();
+        if (text.length === 0) {
+            return nothing;
+        }
+        const base = this._voiceBaseUrlForAssistantPlay();
+        return html`
+            <div class="assistant-actions">
+                <platform-assistant-message-actions
+                    .text=${text}
+                    voice-base-url=${base}
+                    credentials="include"
+                ></platform-assistant-message-actions>
+            </div>
+        `;
+    }
+
     _continueBreakpoint() {
         this.emit('continue-breakpoint', { breakpoint: this.breakpoint });
     }
@@ -1162,6 +1237,7 @@ export class ChatMessage extends PlatformElement {
                         ${this._renderInputRequired()}
                         ${this._renderOperatorReply()}
                         ${this._renderBreakpoint()}
+                        ${this._renderAssistantActions()}
                     </div>
                 </div>
             </div>

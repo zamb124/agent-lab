@@ -5,12 +5,10 @@
  * Без него — режим создания (POST /configs).
  *
  * Поля соответствуют CreateEmbedConfigRequest/UpdateEmbedConfigRequest
- * (apps/frontend/api/embed_configs.py): name, flow_id, branch_id,
- * allowed_origins, theme, position, show_launcher, primary_color,
- * greeting_message, assistant_title, interface_locale, placeholder, branding,
- * guest_max_user_messages, voice_enabled, voice_default_on.
+ * (apps/frontend/api/embed_configs.py): в т.ч. greeting_message, placeholder.
  *
- * Skill заблокирован для external flows и flows без skills (бэк подставит default).
+ * Skill (branch_id): список из flow.branches в ответе GET /flows/api/v1/flows/.
+ * Заблокирован для external и для LOCAL без веток (бэк подставит default).
  */
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
@@ -132,13 +130,13 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._primaryColor = '#6366f1';
         this._assistantTitle = '';
         this._greetingMessage = '';
-        this._placeholder = '';
         this._landingVisible = false;
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
         this._guestMaxUserMessages = '';
         this._voiceEnabled = false;
         this._voiceDefaultOn = false;
+        this._placeholder = this.t('embed_create_modal.default_message_placeholder');
     }
 
     willUpdate(changed) {
@@ -175,7 +173,11 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             if (typeof c.primary_color === 'string') this._primaryColor = c.primary_color;
             if (typeof c.assistant_title === 'string') this._assistantTitle = c.assistant_title;
             if (typeof c.greeting_message === 'string') this._greetingMessage = c.greeting_message;
-            if (typeof c.placeholder === 'string') this._placeholder = c.placeholder;
+            if (typeof c.placeholder === 'string' && c.placeholder.trim() !== '') {
+                this._placeholder = c.placeholder;
+            } else {
+                this._placeholder = this.t('embed_create_modal.default_message_placeholder');
+            }
             if (typeof c.landing_visible === 'boolean') this._landingVisible = c.landing_visible;
             if (typeof c.landing_card_image_url === 'string') this._landingCardImageUrl = c.landing_card_image_url;
             if (typeof c.landing_sort_order === 'number') this._landingSortOrder = c.landing_sort_order;
@@ -200,16 +202,55 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         return found ? found : null;
     }
 
-    _flowSkills() {
-        const flow = this._selectedFlow();
+    /**
+     * Ветки flow в API: `branches: { [branch_id]: { name, ... } }`.
+     * Поле `skills` в каталоге не используется — оставлено только для совместимости.
+     */
+    _skillEntriesFromFlow(flow) {
         if (!flow) return [];
+        const branches = flow.branches;
+        if (branches && typeof branches === 'object' && !Array.isArray(branches)) {
+            const raw = Object.entries(branches);
+            if (raw.length > 0) {
+                const mapped = raw.map(([id, v]) => ({
+                    id,
+                    name:
+                        v && typeof v === 'object' && typeof v.name === 'string' && v.name !== ''
+                            ? v.name
+                            : id,
+                }));
+                mapped.sort((a, b) => {
+                    if (a.id === 'default') return -1;
+                    if (b.id === 'default') return 1;
+                    return a.id.localeCompare(b.id);
+                });
+                return mapped;
+            }
+        }
         const skills = flow.skills;
         if (Array.isArray(skills)) return skills.map((s) => ({ id: s, name: s }));
-        if (!skills || typeof skills !== 'object') return [];
-        return Object.entries(skills).map(([id, v]) => ({
-            id,
-            name: (v && typeof v.name === 'string' && v.name !== '') ? v.name : id,
-        }));
+        if (skills && typeof skills === 'object' && !Array.isArray(skills)) {
+            return Object.entries(skills).map(([id, v]) => ({
+                id,
+                name:
+                    v && typeof v === 'object' && typeof v.name === 'string' && v.name !== ''
+                        ? v.name
+                        : id,
+            }));
+        }
+        return [];
+    }
+
+    _flowSkills() {
+        return this._skillEntriesFromFlow(this._selectedFlow());
+    }
+
+    _initialSkillIdForFlow(flow) {
+        const entries = this._skillEntriesFromFlow(flow);
+        if (entries.length === 0) return 'default';
+        const ids = entries.map((e) => e.id);
+        if (ids.includes('default')) return 'default';
+        return entries[0].id;
     }
 
     _skillSelectorEnabled() {
@@ -232,6 +273,17 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                 errors.guest_max_user_messages = this.t('embed_create_modal.err_guest_max_user_messages');
             }
         }
+        if (!this._placeholder.trim()) {
+            errors.placeholder = this.t('embed_create_modal.err_message_placeholder');
+        }
+        if (
+            this._flowId
+            && !this._catalog.busy
+            && this._flows().length > 0
+            && !this._flows().some((f) => f.flow_id === this._flowId)
+        ) {
+            errors.flow_id = this.t('embed_create_modal.err_flow_stale');
+        }
         return errors;
     }
 
@@ -240,6 +292,67 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             .split('\n')
             .map((s) => s.trim())
             .filter(Boolean);
+    }
+
+    /**
+     * Ожидает завершения create/update коллекции по causation_id (без закрытия модалки при ошибке).
+     * @returns {Promise<{ ok: true } | { ok: false, message: string }>}
+     */
+    _awaitEmbedWrite(isEdit, payload) {
+        const ev = this._configs.resource.events;
+        const bus = this.bus;
+        if (isEdit) {
+            const requested = this._configs.update(this.embedConfig.embed_id, payload);
+            if (!requested || typeof requested.id !== 'string') {
+                return Promise.resolve({ ok: false, message: this.t('embed_create_modal.err_save_dispatch') });
+            }
+            const rid = requested.id;
+            return new Promise((resolve) => {
+                let offOk = null;
+                let offFail = null;
+                const done = (out) => {
+                    if (typeof offOk === 'function') offOk();
+                    if (typeof offFail === 'function') offFail();
+                    resolve(out);
+                };
+                offOk = bus.subscribeType(ev.UPDATED, (e) => {
+                    if (!e.meta || e.meta.causation_id !== rid) return;
+                    done({ ok: true });
+                });
+                offFail = bus.subscribeType(ev.UPDATE_FAILED, (e) => {
+                    if (!e.meta || e.meta.causation_id !== rid) return;
+                    const msg = e.payload && typeof e.payload.message === 'string' && e.payload.message !== ''
+                        ? e.payload.message
+                        : this.t('embed_create_modal.err_save_generic');
+                    done({ ok: false, message: msg });
+                });
+            });
+        }
+        const requested = this._configs.create(payload);
+        if (!requested || typeof requested.id !== 'string') {
+            return Promise.resolve({ ok: false, message: this.t('embed_create_modal.err_save_concurrent') });
+        }
+        const rid = requested.id;
+        return new Promise((resolve) => {
+            let offOk = null;
+            let offFail = null;
+            const done = (out) => {
+                if (typeof offOk === 'function') offOk();
+                if (typeof offFail === 'function') offFail();
+                resolve(out);
+            };
+            offOk = bus.subscribeType(ev.CREATED, (e) => {
+                if (!e.meta || e.meta.causation_id !== rid) return;
+                done({ ok: true });
+            });
+            offFail = bus.subscribeType(ev.CREATE_FAILED, (e) => {
+                if (!e.meta || e.meta.causation_id !== rid) return;
+                const msg = e.payload && typeof e.payload.message === 'string' && e.payload.message !== ''
+                    ? e.payload.message
+                    : this.t('embed_create_modal.err_save_generic');
+                done({ ok: false, message: msg });
+            });
+        });
     }
 
     async handleSubmit() {
@@ -268,7 +381,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             assistant_title: this._assistantTitle.trim() || null,
             greeting_message: this._greetingMessage.trim() || null,
             interface_locale: this._interfaceLocale,
-            placeholder: this._placeholder.trim() || null,
+            placeholder: this._placeholder.trim(),
             landing_visible: landingOn,
             landing_card_image_url: landingOn ? this._landingCardImageUrl.trim() : null,
             landing_sort_order: landingOn ? this._landingSortOrder : 0,
@@ -276,10 +389,14 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             voice_enabled: this._voiceEnabled,
             voice_default_on: this._voiceEnabled && this._voiceDefaultOn,
         };
-        if (isEdit) {
-            this._configs.update(this.embedConfig.embed_id, payload);
-        } else {
-            this._configs.create(payload);
+        const result = await this._awaitEmbedWrite(isEdit, payload);
+        if (!result.ok) {
+            this.formErrors = { submit: result.message };
+            this.toast('embed_create_modal.toast_save_failed', {
+                type: 'error',
+                vars: { detail: result.message },
+            });
+            return;
         }
         this.closeAfterSave();
     }
@@ -309,6 +426,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         return html`
             <form @submit=${this._onSubmit}>
                 <div class="form-grid">
+                    ${this.renderFieldError('submit')}
                     <div class="form-group full">
                         <label class="form-label">${this.t('embed_create_modal.label_name')}</label>
                         <input
@@ -331,7 +449,11 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                 <select
                                     class="form-select"
                                     .value=${this._flowId}
-                                    @change=${(e) => { this._flowId = e.target.value; this._skillId = 'default'; this.isDirty = true; }}
+                                    @change=${(e) => {
+                                        this._flowId = e.target.value;
+                                        this._skillId = this._initialSkillIdForFlow(this._selectedFlow());
+                                        this.isDirty = true;
+                                    }}
                                 >
                                     <option value="">${this.t('embed_create_modal.flow_placeholder')}</option>
                                     ${flows.map((f) => html`
@@ -342,6 +464,9 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                 </select>
                             `}
                         <div class="hint">${this.t('embed_create_modal.flow_hint')}</div>
+                        ${this._flowId
+                            ? html`<div class="hint">${this.t('embed_create_modal.flow_id_technical')}: ${this._flowId}</div>`
+                            : ''}
                         ${this.renderFieldError('flow_id')}
                     </div>
 
@@ -453,6 +578,29 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             @input=${(e) => { this._assistantTitle = e.target.value; this.isDirty = true; }}
                         />
                         <div class="hint">${this.t('embed_create_modal.assistant_title_hint')}</div>
+                    </div>
+
+                    <div class="form-group full">
+                        <label class="form-label">${this.t('embed_create_modal.label_greeting_message')}</label>
+                        <textarea
+                            class="form-input"
+                            .value=${this._greetingMessage}
+                            placeholder=${this.t('embed_create_modal.placeholder_greeting_message')}
+                            @input=${(e) => { this._greetingMessage = e.target.value; this.isDirty = true; }}
+                        ></textarea>
+                        <div class="hint">${this.t('embed_create_modal.greeting_message_hint')}</div>
+                    </div>
+
+                    <div class="form-group full">
+                        <label class="form-label">${this.t('embed_create_modal.label_message_placeholder')}</label>
+                        <input
+                            class="form-input"
+                            .value=${this._placeholder}
+                            placeholder=${this.t('embed_create_modal.default_message_placeholder')}
+                            @input=${(e) => { this._placeholder = e.target.value; this.isDirty = true; }}
+                        />
+                        <div class="hint">${this.t('embed_create_modal.message_placeholder_hint')}</div>
+                        ${this.renderFieldError('placeholder')}
                     </div>
 
                     <div class="form-group">

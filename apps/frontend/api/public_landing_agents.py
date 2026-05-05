@@ -41,6 +41,8 @@ class PublicLandingAgentCard(BaseModel):
     show_tool_calls: bool
     branding: bool
     landing_sort_order: int
+    voice_enabled: bool
+    voice_default_on: bool
 
 
 class PublicLandingAgentsResponse(BaseModel):
@@ -108,6 +110,8 @@ async def _collect_landing_cards(
                 show_tool_calls=c.show_tool_calls,
                 branding=c.branding,
                 landing_sort_order=c.landing_sort_order,
+                voice_enabled=c.voice_enabled,
+                voice_default_on=c.voice_default_on,
             )
         )
     cards.sort(key=lambda x: (x.landing_sort_order, x.name))

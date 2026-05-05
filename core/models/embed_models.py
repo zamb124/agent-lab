@@ -14,6 +14,9 @@ class EmbedStatus(str, Enum):
     DISABLED = "disabled"
 
 
+DEFAULT_EMBED_INPUT_PLACEHOLDER = "Введите сообщение..."
+
+
 class EmbedConfig(BaseModel):
     """
     Конфигурация встраиваемого виджета чата.
@@ -103,7 +106,7 @@ class EmbedConfig(BaseModel):
         description="Язык интерфейса embed-чата (auto, ru, en)",
     )
     placeholder: str = Field(
-        default="Введите сообщение...",
+        default=DEFAULT_EMBED_INPUT_PLACEHOLDER,
         title="Placeholder",
         description="Текст placeholder в поле ввода",
     )

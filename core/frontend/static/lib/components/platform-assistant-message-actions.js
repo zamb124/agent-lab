@@ -120,12 +120,24 @@ export class PlatformAssistantMessageActions extends PlatformElement {
                 throw new Error(`synthesize failed: HTTP ${resp.status}`);
             }
             const blob = await resp.blob();
-            this._audio = new Audio(URL.createObjectURL(blob));
-            await new Promise((resolve, reject) => {
-                this._audio.onended = () => resolve();
-                this._audio.onerror = (e) => reject(e);
-                this._audio.play().catch(reject);
-            });
+            if (!(blob instanceof Blob) || blob.size === 0) {
+                throw new Error('synthesize returned empty audio');
+            }
+            const objectUrl = URL.createObjectURL(blob);
+            const audioEl = new Audio(objectUrl);
+            try {
+                this._audio = audioEl;
+                await new Promise((resolve, reject) => {
+                    audioEl.onended = () => resolve();
+                    audioEl.onerror = () => reject(new Error('audio playback failed'));
+                    audioEl.play().catch(reject);
+                });
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+                if (this._audio === audioEl) {
+                    this._audio = null;
+                }
+            }
         } catch (err) {
             this.toast('platform:assistant_message_actions.toast_play_failed', {
                 type: 'error',

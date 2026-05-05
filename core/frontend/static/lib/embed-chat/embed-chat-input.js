@@ -5,6 +5,9 @@ export class EmbedChatInput extends LitElement {
         loading: { type: Boolean },
         placeholder: { type: String },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
+        voiceDuplex: { type: Boolean, attribute: 'voice-duplex' },
+        voiceActive: { type: Boolean, attribute: 'voice-active' },
+        voiceStatus: { type: String, attribute: 'voice-status' },
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         interfaceLocale: { type: String, attribute: 'interface-locale' },
         labels: { type: Object },
@@ -182,6 +185,13 @@ export class EmbedChatInput extends LitElement {
         svg {
             display: block;
         }
+        .voice-status-hint {
+            margin: 0 0 8px;
+            padding: 0 4px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: var(--embed-chat-muted, rgba(255, 255, 255, 0.52));
+        }
     `;
 
     constructor() {
@@ -189,6 +199,9 @@ export class EmbedChatInput extends LitElement {
         this.loading = false;
         this.placeholder = '';
         this.enableVoice = true;
+        this.voiceDuplex = false;
+        this.voiceActive = false;
+        this.voiceStatus = 'idle';
         this.showLocaleControl = false;
         this.interfaceLocale = 'auto';
         this.labels = {};
@@ -324,7 +337,52 @@ export class EmbedChatInput extends LitElement {
         this.requestUpdate();
     }
 
-    _toggleVoice() {
+    _composerMicVisible() {
+        return this.voiceDuplex === true || this.enableVoice === true;
+    }
+
+    _composerMicDuplexIdleOff() {
+        return (
+            this.voiceDuplex === true &&
+            this.voiceActive !== true &&
+            (this.voiceStatus === 'idle' || this.voiceStatus === 'closed')
+        );
+    }
+
+    _voiceStatusHintVisible() {
+        if (this.voiceDuplex !== true) {
+            return false;
+        }
+        return (
+            this.voiceActive === true ||
+            (this.voiceStatus !== 'idle' && this.voiceStatus !== 'closed')
+        );
+    }
+
+    _voiceStatusHintText() {
+        const vs = typeof this.voiceStatus === 'string' ? this.voiceStatus : 'idle';
+        const key = `voice_status_${vs}`;
+        const L = this.labels && typeof this.labels === 'object' ? this.labels : {};
+        if (typeof L[key] === 'string' && L[key].trim() !== '') {
+            return L[key];
+        }
+        return this._label('voice_status_idle', 'Voice mode: idle');
+    }
+
+    _onComposerMicClick() {
+        if (this.voiceDuplex === true) {
+            this.dispatchEvent(
+                new CustomEvent('voice-toggle', {
+                    bubbles: true,
+                    composed: true,
+                }),
+            );
+            return;
+        }
+        this._toggleSpeechDictation();
+    }
+
+    _toggleSpeechDictation() {
         const SR = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
         if (!SR) {
             this.dispatchEvent(
@@ -378,6 +436,66 @@ export class EmbedChatInput extends LitElement {
     render() {
         const canSend = this._canSend();
         const locVal = this.interfaceLocale || 'auto';
+        const LOff = this._label('voice_off', 'Disable voice');
+        const LOn = this._label('voice_on', 'Enable voice');
+        const voiceHintRow =
+            this._voiceStatusHintVisible() === true
+                ? html`<div class="voice-status-hint">${this._voiceStatusHintText()}</div>`
+                : '';
+        const micActive =
+            this.voiceDuplex === true
+                ? this.voiceActive === true ||
+                  this.voiceStatus === 'listening' ||
+                  this.voiceStatus === 'speaking' ||
+                  this.voiceStatus === 'error'
+                : this._listening === true;
+        const duplexIdleOffVisible = this._composerMicDuplexIdleOff() === true;
+        const ariaMic = this.voiceDuplex === true ? (this.voiceActive === true ? LOff : LOn) : this._label('voice_title', 'Voice');
+        const duplexMicSvgIdle = html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                      d="M12 14c1.66 0 3-1.34 3-3V6a3 3 0 1 0-6 0v5c0 1.66 1.34 3 3 3Z"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linejoin="round"
+                  />
+                  <path
+                      d="M19 11a7 7 0 1 1-14 0"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                  />
+                  <path d="M4 4l16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>`;
+        const duplexMicSvgOn = html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                      d="M12 14c1.66 0 3-1.34 3-3V6a3 3 0 1 0-6 0v5c0 1.66 1.34 3 3 3Z"
+                      fill="currentColor"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linejoin="round"
+                  />
+                  <path
+                      d="M19 11a7 7 0 1 1-14 0"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                  />
+              </svg>`;
+        const duplexMicSvg = duplexIdleOffVisible === true ? duplexMicSvgIdle : duplexMicSvgOn;
+        const speechMicSvg = html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+                d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linejoin="round"
+            />
+            <path
+                d="M8 11v1a4 4 0 0 0 8 0v-1M12 18v3M9 21h6"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+            />
+        </svg>`;
         const chips =
             this._files.length > 0
                 ? html`
@@ -412,6 +530,7 @@ export class EmbedChatInput extends LitElement {
                   `
                 : '';
         return html`
+            ${voiceHintRow}
             ${chips}
             <div class="composer">
                 <input type="file" multiple @change=${this._onPickFiles} />
@@ -451,29 +570,18 @@ export class EmbedChatInput extends LitElement {
                           </div>
                       `
                     : ''}
-                ${this.enableVoice
+                ${this._composerMicVisible() === true
                     ? html`
                           <button
                               type="button"
-                              class="circle-btn ${this._listening ? 'active' : ''}"
+                              class="circle-btn ${micActive ? 'active' : ''}"
                               ?disabled=${this.loading}
-                              @click=${this._toggleVoice}
-                              title=${this._label('voice_title', 'Voice')}
+                              @click=${this._onComposerMicClick}
+                              title=${ariaMic}
+                              aria-label=${ariaMic}
+                              aria-pressed=${this.voiceDuplex === true && this.voiceActive === true ? 'true' : 'false'}
                           >
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                  <path
-                                      d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z"
-                                      stroke="currentColor"
-                                      stroke-width="2"
-                                      stroke-linejoin="round"
-                                  />
-                                  <path
-                                      d="M8 11v1a4 4 0 0 0 8 0v-1M12 18v3M9 21h6"
-                                      stroke="currentColor"
-                                      stroke-width="2"
-                                      stroke-linecap="round"
-                                  />
-                              </svg>
+                              ${this.voiceDuplex === true ? duplexMicSvg : speechMicSvg}
                           </button>
                       `
                     : ''}

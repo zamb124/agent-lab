@@ -409,6 +409,17 @@ class LitserveSTTClient(BaseSTTClient):
         response.raise_for_status()
 
         body_json = response.json()
+        if isinstance(body_json, dict):
+            _raise_if_cloud_ru_error_body(body_json)
+            raw_text = body_json.get("text")
+            if raw_text == "":
+                return STTTranscriptionResult(
+                    provider="litserve",
+                    status=AudioTranscriptionStatus.DONE,
+                    text="",
+                    language=selected_language,
+                )
+
         transcript = _extract_transcript_from_json_payload(body_json)
         if transcript is None:
             raise ValueError(

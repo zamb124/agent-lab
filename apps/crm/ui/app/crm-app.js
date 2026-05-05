@@ -144,6 +144,7 @@ import { graphViewSlice } from '../events/resources/graph-view.resource.js';
 import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
 import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
 import { createCrmGraphLegacyRoutesEffect } from '../events/crm-graph-legacy-routes.effect.js';
+import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
 import { getPlatformBus } from '@platform/lib/events/bus-singleton.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
@@ -201,6 +202,11 @@ export class CRMApp extends PlatformApp {
         super();
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._laraActiveCompanySel = this.select((s) => s.auth.activeCompanyId);
+        this._laraVoiceBaseUrl =
+            typeof window !== 'undefined' && typeof window.location !== 'undefined'
+                ? resolveVoiceHttpOrigin()
+                : '';
         this._crmMql = null;
         this._onCrmMobileMql = null;
         this._crmMobile =
@@ -434,6 +440,11 @@ export class CRMApp extends PlatformApp {
             typeof routeKey === 'string'
             && CRM_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
             && this._crmMobile;
+        const companyRaw = this._laraActiveCompanySel.value;
+        const companyId = typeof companyRaw === 'string' && companyRaw.trim() !== '' ? companyRaw.trim() : '';
+        const voiceBase =
+            typeof this._laraVoiceBaseUrl === 'string' ? this._laraVoiceBaseUrl.trim() : '';
+        const laraDuplex = companyId !== '' && voiceBase !== '';
         return html`
             <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">
@@ -455,6 +466,9 @@ export class CRMApp extends PlatformApp {
                 ?use-credentials=${true}
                 .showLauncher=${true}
                 .assistantTitle=${'Lara'}
+                ?voice-enabled=${laraDuplex}
+                voice-base-url=${voiceBase}
+                company-id=${companyId}
             ></platform-lara-assistant>
         `;
     }

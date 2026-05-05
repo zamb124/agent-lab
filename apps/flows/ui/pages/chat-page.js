@@ -24,6 +24,12 @@ import { asArray, asString, isPlainObject, authActiveCompanyId } from '../_helpe
 import { a2aStateMessagesToChatMessages } from '../_helpers/chat-session-messages.js';
 import { relayA2aVoiceStreamRpcFrame } from '../_helpers/relay-voice-a2a-to-chat.js';
 import { resolveFlowsChatTaskId } from '../_helpers/resolve-flows-chat-task-id.js';
+import {
+    readTtsOutputEnabled,
+    toggleTtsOutputEnabled,
+    TTS_OUTPUT_CHANGED_EVENT,
+    TTS_OUTPUT_STORAGE_KEY,
+} from '@platform/lib/voice/tts-output-pref.js';
 
 export class ChatPage extends PlatformPage {
     static properties = {
@@ -174,6 +180,10 @@ export class ChatPage extends PlatformPage {
         this._voiceA2aSettledHandler = null;
         /** @type {((e: Event) => void) | null} */
         this._voiceA2aAbortedHandler = null;
+        /** @type {(() => void) | null} */
+        this._onTtsOutputPref = null;
+        /** @type {((e: StorageEvent) => void) | null} */
+        this._onTtsOutputStorage = null;
     }
 
     connectedCallback() {
@@ -195,6 +205,18 @@ export class ChatPage extends PlatformPage {
             this._isMobile = next;
         }
         document.addEventListener('pointerdown', this._onDocPointer);
+        this._onTtsOutputPref = () => {
+            this.requestUpdate();
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsOutputPref);
+            this._onTtsOutputStorage = (e) => {
+                if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
+                    this.requestUpdate();
+                }
+            };
+            window.addEventListener('storage', this._onTtsOutputStorage);
+        }
     }
 
     disconnectedCallback() {
@@ -205,6 +227,14 @@ export class ChatPage extends PlatformPage {
             this._chatMql.removeEventListener('change', this._onChatMobileMql);
         }
         document.removeEventListener('pointerdown', this._onDocPointer);
+        if (typeof window !== 'undefined' && this._onTtsOutputPref) {
+            window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsOutputPref);
+            this._onTtsOutputPref = null;
+        }
+        if (typeof window !== 'undefined' && this._onTtsOutputStorage) {
+            window.removeEventListener('storage', this._onTtsOutputStorage);
+            this._onTtsOutputStorage = null;
+        }
         super.disconnectedCallback();
     }
 
@@ -367,6 +397,11 @@ export class ChatPage extends PlatformPage {
         } else {
             void this._startVoice();
         }
+    }
+
+    _onTtsOutputToggle() {
+        toggleTtsOutputEnabled();
+        this.requestUpdate();
     }
 
     updated(changed) {
@@ -742,10 +777,12 @@ export class ChatPage extends PlatformPage {
                     ?show-voice=${hasFlow}
                     ?voice-active=${this._voiceOn}
                     voice-status=${this._voiceStatus}
+                    ?tts-output-enabled=${readTtsOutputEnabled()}
                     ?streaming=${streaming}
                     @send=${this._onSendMessage}
                     @stop=${this._onStop}
                     @voice-toggle=${this._toggleVoice}
+                    @tts-output-toggle=${this._onTtsOutputToggle}
                 ></chat-input>
             </div>
         `;

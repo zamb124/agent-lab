@@ -12,7 +12,7 @@ CI (`scripts/check_voice_resolver_usage.py`).
 побеждает):
 
 1. **Per-call/per-process** — поле из `SpeechOverride`, переданного в вызов.
-2. **Per-company** — запись в таблице `company_voice_providers`.
+2. **Per-company** — запись в таблице `company_voice_providers` (только `stt` / `tts`).
 3. **Deployment-default** — `settings.voice.<kind>` (`STTProvidersConfig`,
    `TTSProvidersConfig`, `VADProvidersConfig`).
 
@@ -142,7 +142,7 @@ def _get_repo() -> CompanyVoiceProviderRepository:
 
 
 async def _load_company_override(
-    *, company_id: str, kind: VoiceKind
+    *, company_id: str, kind: Literal["stt", "tts"]
 ) -> Optional[_CompanyOverrideRow]:
     """Прочитать запись `company_voice_providers` с TTL-кэшем."""
     cache_key = (company_id, kind)
@@ -172,10 +172,10 @@ async def _load_company_override(
 
 
 def invalidate_company_overrides_cache(company_id: str) -> None:
-    """Снять in-memory-кэш для всех видов (stt/tts/vad) одной компании."""
+    """Снять in-memory-кэш для stt/tts одной компании (VAD — только deployment)."""
     if company_id == "":
         raise ValueError("company_id не может быть пустым.")
-    for kind in ("stt", "tts", "vad"):
+    for kind in ("stt", "tts"):
         _company_cache.pop((company_id, kind), None)  # type: ignore[arg-type]
 
 
@@ -435,36 +435,36 @@ async def get_vad_client(
     company_id: str,
     override: Optional[SpeechOverride] = None,
 ) -> BaseVADClient:
-    """Получить VAD-клиента с применённым tier-резолвом."""
+    """Получить VAD-клиента. Per-company override для VAD не используется — только
+    `SpeechOverride` (per-call) и `settings.voice.vad`.
+    """
     _validate_company_id(company_id)
     override = _validate_override(override)
     cfg = get_settings().voice.vad
-    company_row = await _load_company_override(company_id=company_id, kind="vad")
 
     provider_name = _resolve_str(
         override_value=override.provider,
-        company_value=company_row.provider if company_row else None,
+        company_value=None,
         default_value=cfg.provider,
     )
     model = _resolve_optional_str(
         override_value=override.model,
-        company_value=company_row.model if company_row else None,
+        company_value=None,
         default_value=cfg.default_model,
     )
     if provider_name == "litserve":
         model = _fallback_litserve_api_model_id(resolved=model, kind="vad")
     sample_rate = _resolve_int(
         override_value=override.sample_rate,
-        company_value=company_row.sample_rate if company_row else None,
+        company_value=None,
         default_value=cfg.default_sample_rate,
     )
     threshold = _resolve_float(
         override_value=override.threshold,
-        company_value=company_row.threshold if company_row else None,
+        company_value=None,
         default_value=cfg.default_threshold,
     )
     timeout_s = override.timeout_s
-    sec = company_row.secrets if company_row else None
 
     logger.info(
         "voice_resolver.vad_resolved",
@@ -475,7 +475,7 @@ async def get_vad_client(
         threshold=threshold,
         source_provider=_value_source(
             override_value=override.provider,
-            company_value=company_row.provider if company_row else None,
+            company_value=None,
         ),
     )
 
@@ -486,7 +486,7 @@ async def get_vad_client(
         sample_rate=sample_rate,
         threshold=threshold,
         timeout_s=timeout_s,
-        secrets=sec,
+        secrets=None,
     )
 
 

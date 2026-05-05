@@ -3,6 +3,8 @@
  */
 import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
 import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
+import { readTtsOutputEnabled } from '@platform/lib/voice/tts-output-pref.js';
+import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 
 /**
  * Нормализует локаль UI для query `language=` voice WebSocket (ISO 639-1 / префикс BCP-47).
@@ -40,22 +42,7 @@ export function normalizeFlowVoiceSttLanguage(locale) {
  * @returns {string}
  */
 export function resolveFlowVoiceHttpOrigin() {
-    if (typeof document !== 'undefined') {
-        const el = document.querySelector('meta[name="platform-voice-origin"]');
-        if (el) {
-            const raw = el.getAttribute('content');
-            if (typeof raw === 'string') {
-                const trimmed = raw.trim();
-                if (trimmed !== '') {
-                    return trimmed.replace(/\/$/, '');
-                }
-            }
-        }
-    }
-    if (typeof window !== 'undefined' && window.location) {
-        return `${window.location.protocol}//${window.location.host}/voice`;
-    }
-    return '';
+    return resolveVoiceHttpOrigin();
 }
 
 /**
@@ -101,6 +88,7 @@ export function formatFlowVoiceConnectErrorDetail(err, tFlows) {
  * @param {(e: CustomEvent) => void} [p.onMediaError]
  * @param {() => void} [p.onClosed]
  * @param {string} [p.sttLanguage] — для query `language=` (STT), из `state.i18n.locale`
+ * @param {() => boolean} [p.getTtsOutputEnabled] — по умолчанию `readTtsOutputEnabled` из localStorage
  * @returns {FlowVoiceSessionHandles}
  */
 export function createFlowVoiceSession(p) {
@@ -130,6 +118,8 @@ export function createFlowVoiceSession(p) {
         Object.assign(mediaOpts, { query: wsQuery });
     }
     const media = new VoiceMediaSession(mediaOpts);
+    const getTts =
+        typeof p.getTtsOutputEnabled === 'function' ? p.getTtsOutputEnabled : () => readTtsOutputEnabled();
     const bridge = new VoiceAgentBridge({
         mediaSession: media,
         a2aBaseUrl,
@@ -141,6 +131,7 @@ export function createFlowVoiceSession(p) {
         getStreamMetadata: typeof p.getStreamMetadata === 'function' ? p.getStreamMetadata : undefined,
         beforeA2aStream: typeof p.beforeA2aStream === 'function' ? p.beforeA2aStream : undefined,
         onA2aStreamEvent: typeof p.onA2aStreamEvent === 'function' ? p.onA2aStreamEvent : undefined,
+        getTtsOutputEnabled: getTts,
     });
 
     if (typeof p.onVad === 'function') {

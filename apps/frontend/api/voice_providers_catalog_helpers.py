@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.clients.speech_provider_catalog import (
     STT_TTS_PROVIDER_IDS,
-    VAD_PROVIDER_IDS,
     VOICE_RESPONSE_FORMAT_IDS,
 )
 
@@ -38,9 +37,8 @@ def allowed_secret_keys(kind: str, provider: str) -> FrozenSet[str]:
 
 
 def needs_model_dropdown(kind: str, provider: str) -> bool:
+    _ = kind
     if provider in ("silero_local", "mock"):
-        return False
-    if kind == "vad" and provider == "silero_local":
         return False
     return provider in {"litserve", "cloud_ru", "yandex", "sber"}
 
@@ -60,13 +58,11 @@ class VoiceProvidersCatalogDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stt_tts_provider_ids: list[str] = Field(default_factory=list)
-    vad_provider_ids: list[str] = Field(default_factory=list)
     response_format_ids: list[str] = Field(default_factory=list)
     credential_field_groups: dict[str, list[list[str]]] = Field(default_factory=dict)
     stt_litserve_models: list[str] = Field(default_factory=list)
     tts_litserve_models: list[str] = Field(default_factory=list)
     tts_litserve_voice_hints: list[TtsLitserveVoiceHint] = Field(default_factory=list)
-    vad_litserve_models: list[str] = Field(default_factory=list)
     cloud_ru_stt_models: list[str] = Field(default_factory=list)
     cloud_ru_tts_models: list[str] = Field(default_factory=list)
     yandex_speech_models: list[str] = Field(default_factory=list)
@@ -156,7 +152,6 @@ def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCat
     pls_any = pls_settings
     stt_models = getattr(pls_any, "stt_models", [])
     tts_models = getattr(pls_any, "tts_models", [])
-    vad_models = getattr(pls_any, "vad_models", [])
     voice_hints = [
         TtsLitserveVoiceHint(
             api_model_id=str(tts.api_model_id),
@@ -167,13 +162,11 @@ def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCat
 
     return VoiceProvidersCatalogDTO(
         stt_tts_provider_ids=sorted(STT_TTS_PROVIDER_IDS),
-        vad_provider_ids=sorted(VAD_PROVIDER_IDS),
         response_format_ids=sorted(VOICE_RESPONSE_FORMAT_IDS),
         credential_field_groups=credential_field_groups,
         stt_litserve_models=_pull_ids(stt_models),
         tts_litserve_models=_pull_ids(tts_models),
         tts_litserve_voice_hints=voice_hints,
-        vad_litserve_models=_pull_ids(vad_models),
         cloud_ru_stt_models=cloud_ru_stt_model_ids(),
         cloud_ru_tts_models=cloud_ru_tts_model_ids(),
         yandex_speech_models=catalog_yandex_speech_models(),

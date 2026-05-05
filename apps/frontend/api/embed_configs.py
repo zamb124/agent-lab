@@ -11,7 +11,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from core.pagination import OffsetPage
-from core.models.embed_models import EmbedConfig, EmbedStatus, EmbedMapping
+from core.models.embed_models import (
+    DEFAULT_EMBED_INPUT_PLACEHOLDER,
+    EmbedConfig,
+    EmbedMapping,
+    EmbedStatus,
+)
 from core.utils.tokens import get_token_service
 from apps.frontend.dependencies import ContainerDep
 from core.clients.service_client import ServiceClientError
@@ -107,7 +112,10 @@ class CreateEmbedConfigRequest(BaseModel):
     greeting_message: Optional[str] = Field(default=None, description="Приветственное сообщение")
     assistant_title: Optional[str] = Field(default=None, description="Имя ассистента в шапке")
     interface_locale: str = Field(default="auto", description="Язык интерфейса embed-чата (auto, ru, en)")
-    placeholder: str = Field(default="Введите сообщение...", description="Placeholder")
+    placeholder: str = Field(
+        default=DEFAULT_EMBED_INPUT_PLACEHOLDER,
+        description="Текст placeholder в поле ввода виджета",
+    )
     branding: bool = Field(default=True, description="Показывать брендинг")
     landing_visible: bool = Field(default=False, description="Показ в публичном каталоге лендинга (только company system)")
     landing_card_image_url: Optional[str] = Field(default=None, description="Картинка карточки на лендинге")
@@ -233,7 +241,13 @@ async def create_embed_config(
         )
     except ServiceClientError as e:
         if "404" in str(e):
-            raise HTTPException(status_code=404, detail=f"Агент {request_data.flow_id} не найден")
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Агент {request_data.flow_id} не найден в flows для текущей компании "
+                    "(проверьте flow_id в редакторе flows и совпадение компании)."
+                ),
+            )
         raise HTTPException(status_code=500, detail=f"Ошибка обращения к flows: {str(e)}")
 
     branch_id = request_data.branch_id
