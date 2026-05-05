@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
-from core.logging import get_logger
+from apps.voice.services.voice_transport_interrupt import (
+    VoiceTransportInterruptKind,
+    execute_voice_transport_interrupt,
+)
 
-logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from apps.voice.services.voice_client_channel import VoiceClientChannel
 
 
 class BargeInController:
@@ -66,6 +71,10 @@ class BargeInController:
 
         return False
 
+    def mark_barge_in_executed(self) -> None:
+        """Обновить время последнего barge-in (cooldown в `is_barge_in`)."""
+        self._last_barge_in_ts = time.monotonic()
+
     async def execute_barge_in(
         self,
         session,
@@ -73,6 +82,9 @@ class BargeInController:
         *,
         stt_provider: Optional[BaseSTTProvider] = None,
         vad_provider: Optional[BaseVADProvider] = None,
+        channel: Optional["VoiceClientChannel"] = None,
+        language: Optional[str] = None,
+        peek_min_buffer_bytes: Optional[int] = None,
     ) -> None:
         """Остановить TTS, очистить очереди синтеза/исходящего аудио и
         сбросить внутреннее состояние STT/VAD-провайдеров.
@@ -80,21 +92,20 @@ class BargeInController:
         Сброс STT/VAD обязателен: накопленный к моменту прерывания PCM —
         это аудио уходящего ответа TTS, а не следующая фраза пользователя;
         флэш этого буфера в финальный transcript даёт «чужие» слова.
+        Перед сбросом — один ``peek_transcript`` и при непустом тексте
+        `transcript` на клиент (`voice_transport_interrupt`).
         """
-        self._last_barge_in_ts = time.monotonic()
-        session.mark_tts_active(False)
-        if clear_tts_queue:
-            removed = session.clear_synthesis_and_audio_out()
-        else:
-            removed = 0
-        if stt_provider is not None:
-            stt_provider.reset()
-        if vad_provider is not None:
-            vad_provider.reset_state()
-        logger.info(
-            "voice.barge_in.executed",
-            session_id=session.session_id,
-            removed_queue_items=removed,
-            stt_reset=stt_provider is not None,
-            vad_reset=vad_provider is not None,
+        await execute_voice_transport_interrupt(
+            session=session,
+            kind=VoiceTransportInterruptKind.BARGE_IN,
+            clear_tts_queues=clear_tts_queue,
+            reset_stt_vad=True,
+            channel=channel,
+            stt_provider=stt_provider,
+            vad_provider=vad_provider,
+            language=language,
+            peek_min_buffer_bytes=peek_min_buffer_bytes,
+            on_barge_in_timestamp=self.mark_barge_in_executed,
         )
+
+

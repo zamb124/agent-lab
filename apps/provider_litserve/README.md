@@ -35,20 +35,20 @@
   },
   "infra": {
     "gateway_port": 8014,
-    "backend": "placeholder",
-    "model_id": "BAAI/bge-reranker-v2-gemma",
-    "embedding_model_id": "BAAI/bge-m3",
-    "embedding_openai_model_id": "baai/bge-m3",
-    "rerank_openai_model_id": "baai/bge-reranker-v2-gemma",
+    "backend": "flagllm",
+    "model_id": "Qwen/Qwen3-Reranker-8B",
+    "embedding_model_id": "Qwen/Qwen3-Embedding-8B",
+    "embedding_openai_model_id": "qwen/qwen3-embedding-8b",
+    "rerank_openai_model_id": "qwen/qwen3-reranker-8b",
     "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
-    "embedding_model_ids": ["text-embedding-3-small"],
+    "embedding_model_ids": [],
     "rerank_model_ids": [],
     "llm_model_ids": ["Qwen/Qwen2.5-1.5B-Instruct"]
   }
 }
 ```
 
-**`embedding_model_id`** — HuggingFace id весов; **`embedding_openai_model_id`** (и аналог **`rerank_openai_model_id`**) — имя поля `model` в OpenAI-совместимых запросах. Для одной пары весов не дублируйте в **`embedding_model_ids`** / **`rerank_model_ids`** тот же id в другом регистре: каждая уникальная строка `api_model_id` при первом сиде реестра ([`model_registry.py`](model_registry.py), SQLite `infra.sqlite_path`) даёт **отдельную** строку в UI «Model registry»; лишние алиасные строки = лишние карточки. Дополнительные модели — отдельные строки в списках (как `text-embedding-3-small` в примере).
+**`embedding_model_id`** — HuggingFace id весов; **`embedding_openai_model_id`** (и аналог **`rerank_openai_model_id`**) — имя поля `model` в OpenAI-совместимых запросах. Для одной пары весов не дублируйте в **`embedding_model_ids`** / **`rerank_model_ids`** тот же id в другом регистре: каждая уникальная строка `api_model_id` при первом сиде реестра ([`model_registry.py`](model_registry.py), SQLite `infra.sqlite_path`) даёт **отдельную** строку в UI «Model registry»; лишние алиасные строки = лишние карточки. Дополнительные модели — отдельные строки в списках.
 
 Запросы **POST /v1/embeddings** и **POST /v1/rerank** принимают `model` без учёта регистра: значение сопоставляется с зарегистрированными идентификаторами (реестр + дефолты из конфига, пока каталог в памяти не загружен из БД).
 

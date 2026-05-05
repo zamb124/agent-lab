@@ -15,6 +15,7 @@ import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-ch
 import {
     createFlowVoiceSession,
     disposeFlowVoiceSession,
+    flowsVoiceAuxiliaryHttpHeadersStub,
     formatFlowVoiceConnectErrorDetail,
     normalizeFlowVoiceSttLanguage,
 } from '../_helpers/flow-voice-session.js';
@@ -221,7 +222,7 @@ export class ChatPage extends PlatformPage {
 
     disconnectedCallback() {
         if (this._voiceOn) {
-            this._stopVoice();
+            void this._stopVoice();
         }
         if (this._chatMql && this._onChatMobileMql) {
             this._chatMql.removeEventListener('change', this._onChatMobileMql);
@@ -266,6 +267,7 @@ export class ChatPage extends PlatformPage {
             companyId,
             sttLanguage,
             initialContextId,
+            getHeaders: flowsVoiceAuxiliaryHttpHeadersStub,
             getContextId: () => {
                 const cid = this._chat.state?.currentContextId;
                 return typeof cid === 'string' && cid.length > 0 ? cid : null;
@@ -335,7 +337,7 @@ export class ChatPage extends PlatformPage {
         try {
             await media.connect();
         } catch (err) {
-            disposeFlowVoiceSession(media, bridge);
+            await disposeFlowVoiceSession(media, bridge);
             this._voiceStatus = 'error';
             this.toast('flows:platform_chat.toast_voice_error', {
                 type: 'error',
@@ -375,7 +377,7 @@ export class ChatPage extends PlatformPage {
         this._voiceStatus = 'idle';
     }
 
-    _stopVoice() {
+    async _stopVoice() {
         if (this._voiceBridge && this._voiceA2aSettledHandler) {
             this._voiceBridge.removeEventListener('a2aSettled', this._voiceA2aSettledHandler);
             this._voiceA2aSettledHandler = null;
@@ -384,7 +386,7 @@ export class ChatPage extends PlatformPage {
             this._voiceBridge.removeEventListener('a2aAborted', this._voiceA2aAbortedHandler);
             this._voiceA2aAbortedHandler = null;
         }
-        disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
+        await disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
         this._voiceMedia = null;
         this._voiceBridge = null;
         this._voiceOn = false;
@@ -393,7 +395,7 @@ export class ChatPage extends PlatformPage {
 
     _toggleVoice() {
         if (this._voiceOn) {
-            this._stopVoice();
+            void this._stopVoice();
         } else {
             void this._startVoice();
         }
@@ -409,7 +411,7 @@ export class ChatPage extends PlatformPage {
             super.updated(changed);
         }
         if ((changed.has('flowId') || changed.has('branchId')) && this._voiceOn) {
-            this._stopVoice();
+            void this._stopVoice();
         }
         if (changed.has('flowId') || changed.has('sessionId') || changed.has('branchId')) {
             this._initOrLoadSession();
@@ -533,6 +535,7 @@ export class ChatPage extends PlatformPage {
     }
 
     _onStop() {
+        if (this._cancel.busy) return;
         const state = this._chat.state;
         const taskId = state?.currentTaskId;
         if (!taskId) return;
@@ -771,6 +774,7 @@ export class ChatPage extends PlatformPage {
                     .messages=${messages}
                     .runTrace=${runTrace}
                     .currentTaskId=${currentTaskId}
+                    .voicePlayGetHeaders=${flowsVoiceAuxiliaryHttpHeadersStub}
                     @show-tracing=${this._onChatShowTracing}
                 ></chat-messages>
                 <chat-input
@@ -779,6 +783,7 @@ export class ChatPage extends PlatformPage {
                     voice-status=${this._voiceStatus}
                     ?tts-output-enabled=${readTtsOutputEnabled()}
                     ?streaming=${streaming}
+                    .cancelBusy=${this._cancel.busy}
                     @send=${this._onSendMessage}
                     @stop=${this._onStop}
                     @voice-toggle=${this._toggleVoice}

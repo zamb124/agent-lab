@@ -35,10 +35,14 @@ def build_assistant_message(
     tool_calls: Optional[List[Dict[str, Any]]] = None,
     context_id: Optional[str] = None,
     task_id: Optional[str] = None,
+    *,
+    interrupted: bool = False,
 ) -> Message:
     meta: Dict[str, Any] = {"node_id": source_node_id}
     if tool_calls:
         meta["tool_calls"] = tool_calls
+    if interrupted:
+        meta["interrupted"] = True
     return Message(
         message_id=str(uuid.uuid4()),
         role=Role.agent,

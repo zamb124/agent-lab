@@ -9,7 +9,13 @@
  *  - `voice → flows`: на каждое финальное распознавание
  *    (`transcript{final:true}`) отправляет `message/stream` в A2A
  *    (`embed/{embed_id}` или `flow/{flow_id}`). Тело A2A сообщения —
- *    текст пользователя; `voice` в A2A не участвует.
+ *    текст пользователя; `voice` в A2A не участвует. Нефинальный
+ *    текст (`final:false`) копится последним куском; при `stop()` моста
+ *    (выключение микрофона) без последующего финала тот же путь отправки
+ *    вызывается один раз для коммита в чат. Если финальный transcript уже
+ *    запустил `message/stream`, пустой `stop()` после снятия эфира **не**
+ *    вызывает `AbortController.abort` на этом fetch (иначе UI успевает показать
+ *    сообщение пользователя из `beforeA2aStream`, а ответ гаснет).
  *  - `flows → voice`: читает SSE, для каждого
  *    `TaskArtifactUpdateEvent` с speakable-артефактом
  *    (см. `speakable.js`) вызывает `voice.speak(text,...)`. На
@@ -105,6 +111,9 @@ export class VoiceAgentBridge extends EventTarget {
         this._pendingA2aAbortDetail = null;
         this._started = false;
 
+        /** @type {string} — последний нефинальный STT-текст; при `stop()` без финала уходит в A2A один раз */
+        this._pendingPartialTranscript = '';
+
         this._onTranscript = this._onTranscript.bind(this);
         this._onVad = this._onVad.bind(this);
         this._onTtsState = this._onTtsState.bind(this);
@@ -140,27 +149,38 @@ export class VoiceAgentBridge extends EventTarget {
     }
 
     /**
-     * Отписаться и отменить текущий A2A-стрим.
+     * Отписаться от событий voice и при наличии — отправить последний partial.
+     * Активный fetch `message/stream`, уже запущенный после `transcript{final:true}`,
+     * не отменять: отмена — через barge-in / `tasks/cancel`.
      */
     stop() {
         if (!this._started) return;
+        const flushOnStop =
+            typeof this._pendingPartialTranscript === 'string'
+                ? this._pendingPartialTranscript.trim()
+                : '';
+        this._pendingPartialTranscript = '';
+
         this._started = false;
         this._media.removeEventListener('transcript', this._onTranscript);
         this._media.removeEventListener('vad', this._onVad);
         this._media.removeEventListener('ttsState', this._onTtsState);
         this._media.removeEventListener('diagnostic', this._onVoiceDiagnostic);
-        if (this._currentAbort !== null) {
-            const tid = this._currentTaskId;
-            this._pendingA2aAbortDetail = {
-                task_id: typeof tid === 'string' && tid !== '' ? tid : null,
-                context_id:
-                    typeof this._contextId === 'string' && this._contextId !== ''
-                        ? this._contextId
-                        : null,
-            };
-        }
         this._clearClientBargeDebounce();
-        this._abortCurrent();
+        if (flushOnStop !== '') {
+            if (this._currentAbort !== null) {
+                const tid = this._currentTaskId;
+                this._pendingA2aAbortDetail = {
+                    task_id: typeof tid === 'string' && tid !== '' ? tid : null,
+                    context_id:
+                        typeof this._contextId === 'string' && this._contextId !== ''
+                            ? this._contextId
+                            : null,
+                };
+            }
+            void this._sendUserMessage(flushOnStop);
+            return;
+        }
     }
 
     _clearClientBargeDebounce() {
@@ -194,12 +214,19 @@ export class VoiceAgentBridge extends EventTarget {
      * @param {Event} event
      */
     _onTranscript(event) {
-        const detail = /** @type {CustomEvent<{text:string, final:boolean}>} */ (event).detail;
-        if (!detail || detail.final !== true) return;
+        const detail =
+            /** @type {CustomEvent<{text:string, final:boolean, interrupted?:boolean}>} */ (event).detail;
+        if (!detail) return;
         const text = typeof detail.text === 'string' ? detail.text.trim() : '';
-        if (text === '') return;
-        this._dispatch('userMessage', { text });
-        this._sendUserMessage(text);
+        if (detail.final === true) {
+            this._pendingPartialTranscript = '';
+            if (text === '') return;
+            void this._sendUserMessage(text);
+            return;
+        }
+        if (text !== '') {
+            this._pendingPartialTranscript = text;
+        }
     }
 
     /**
@@ -252,6 +279,7 @@ export class VoiceAgentBridge extends EventTarget {
         this._abortCurrent();
         const ac = new AbortController();
         this._currentAbort = ac;
+        this._dispatch('userMessage', { text });
 
         const onEvent = (ev) => {
             this._handleA2AEvent(ev);

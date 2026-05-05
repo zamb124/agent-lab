@@ -85,8 +85,16 @@ class StateManager:
     async def delete_state(self, session_id: str) -> bool:
         """Удаляет state сессии."""
         return await self._repository.delete(session_id)
-    
-    def get_messages(self, state: ExecutionState) -> List[Message]:
+
+    async def resolve_session_id_by_flow_and_identifier(
+        self, flow_id: str, lookup_id: str
+    ) -> Optional[str]:
+        """Находит ``session_id`` (`flow_id:context_id`) по ``task_id`` или ``context_id``."""
+        return await self._repository.resolve_session_id_by_flow_and_identifier(
+            flow_id, lookup_id
+        )
+
+    async def get_messages(self, state: ExecutionState) -> List[Message]:
         """Получает историю сообщений из ExecutionState."""
         return list(state.messages)
     

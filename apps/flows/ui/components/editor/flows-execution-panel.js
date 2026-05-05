@@ -43,6 +43,7 @@ import { resolveFlowsChatTaskId } from '../../_helpers/resolve-flows-chat-task-i
 import {
     createFlowVoiceSession,
     disposeFlowVoiceSession,
+    flowsVoiceAuxiliaryHttpHeadersStub,
     formatFlowVoiceConnectErrorDetail,
     normalizeFlowVoiceSttLanguage,
 } from '../../_helpers/flow-voice-session.js';
@@ -365,14 +366,6 @@ export class FlowsExecutionPanel extends PlatformElement {
             .compose-actions glass-button[data-voice-active] {
                 box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
             }
-            .exec-voice-hint {
-                flex-shrink: 0;
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                line-height: 1.35;
-                margin: 0 0 var(--space-1);
-                padding: 0 2px;
-            }
             .file-input-hidden {
                 position: absolute;
                 width: 1px;
@@ -472,7 +465,13 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     disconnectedCallback() {
         if (this._voiceOn) {
-            this._stopExecPanelVoice();
+            const m = this._voiceMedia;
+            const b = this._voiceBridge;
+            this._voiceMedia = null;
+            this._voiceBridge = null;
+            this._voiceOn = false;
+            this._voiceStatus = 'idle';
+            void disposeFlowVoiceSession(m, b);
         }
         if (typeof window !== 'undefined') {
             window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsExecPref);
@@ -483,10 +482,10 @@ export class FlowsExecutionPanel extends PlatformElement {
     updated(changedProperties) {
         const editorStateForVoice = asObject(this._editor.state);
         if (!editorStateForVoice.executionPanelOpen && this._voiceOn) {
-            this._stopExecPanelVoice();
+            void this._stopExecPanelVoice();
         }
         if (changedProperties.has('flowId') && this._voiceOn) {
-            this._stopExecPanelVoice();
+            void this._stopExecPanelVoice();
         }
         super.updated(changedProperties);
         if (this._panelTab !== 'chat') {
@@ -751,6 +750,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     _onStop() {
+        if (this._cancel.busy) return;
         const chatState = this._chat.state;
         const taskId = chatState && chatState.currentTaskId;
         if (typeof taskId !== 'string' || taskId.length === 0) return;
@@ -844,6 +844,7 @@ export class FlowsExecutionPanel extends PlatformElement {
             companyId,
             sttLanguage,
             initialContextId,
+            getHeaders: flowsVoiceAuxiliaryHttpHeadersStub,
             getContextId: () => {
                 const st = this._chat.state;
                 const cid =
@@ -937,7 +938,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         try {
             await media.connect();
         } catch (err) {
-            disposeFlowVoiceSession(media, bridge);
+            await disposeFlowVoiceSession(media, bridge);
             this._voiceStatus = 'error';
             this.toast('flows:platform_chat.toast_voice_error', {
                 type: 'error',
@@ -977,7 +978,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._voiceStatus = 'idle';
     }
 
-    _stopExecPanelVoice() {
+    async _stopExecPanelVoice() {
         if (this._voiceBridge && this._voiceA2aSettledHandler) {
             this._voiceBridge.removeEventListener('a2aSettled', this._voiceA2aSettledHandler);
             this._voiceA2aSettledHandler = null;
@@ -986,16 +987,26 @@ export class FlowsExecutionPanel extends PlatformElement {
             this._voiceBridge.removeEventListener('a2aAborted', this._voiceA2aAbortedHandler);
             this._voiceA2aAbortedHandler = null;
         }
-        disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
+        await disposeFlowVoiceSession(this._voiceMedia, this._voiceBridge);
         this._voiceMedia = null;
         this._voiceBridge = null;
         this._voiceOn = false;
         this._voiceStatus = 'idle';
     }
 
+    _execVoiceMicTitle() {
+        if (!this._voiceOn) {
+            return this.t('platform_chat.btn_voice_on');
+        }
+        const vs = typeof this._voiceStatus === 'string' ? this._voiceStatus : 'idle';
+        const primary = this.t('platform_chat.btn_voice_off');
+        const statusHint = this.t(`platform_chat.voice_status_${vs}`);
+        return `${primary}. ${statusHint}`;
+    }
+
     _toggleExecPanelVoice() {
         if (this._voiceOn) {
-            this._stopExecPanelVoice();
+            void this._stopExecPanelVoice();
         } else {
             void this._startExecPanelVoice();
         }
@@ -1208,18 +1219,12 @@ export class FlowsExecutionPanel extends PlatformElement {
                                                 .errorI18nKey=${message.errorI18nKey != null && typeof message.errorI18nKey === 'string'
                                                     ? message.errorI18nKey
                                                     : null}
+                                                .voicePlayGetHeaders=${flowsVoiceAuxiliaryHttpHeadersStub}
                                             ></chat-message>
                                         `,
                                     )}
                                 </div>
                             ` : nothing}
-                            ${this._voiceOn
-                                ? html`
-                                      <div class="exec-voice-hint">
-                                          ${this.t(`platform_chat.voice_status_${this._voiceStatus}`)}
-                                      </div>
-                                  `
-                                : nothing}
                             <div class="compose">
                                 <input
                                     id="flows-exec-file-input"
@@ -1269,9 +1274,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                                                   iconOnly
                                                   type="button"
                                                   ?data-voice-active=${this._voiceOn}
-                                                  title=${this._voiceOn
-                                                      ? this.t('platform_chat.btn_voice_off')
-                                                      : this.t('platform_chat.btn_voice_on')}
+                                                  title=${this._execVoiceMicTitle()}
                                                   @click=${this._toggleExecPanelVoice}
                                               >
                                                   <platform-icon
@@ -1287,10 +1290,16 @@ export class FlowsExecutionPanel extends PlatformElement {
                                             size="sm"
                                             iconOnly
                                             type="button"
-                                            title=${this.t('execution_panel.stop')}
+                                            ?disabled=${this._cancel.busy}
+                                            title=${this._cancel.busy
+                                                ? this.t('execution_panel.stop_pending')
+                                                : this.t('execution_panel.stop')}
                                             @click=${this._onStop}
                                         >
-                                            <platform-icon name="stop" size="16"></platform-icon>
+                                            <platform-icon
+                                                name=${this._cancel.busy ? 'hourglass-top' : 'stop'}
+                                                size="16"
+                                            ></platform-icon>
                                         </glass-button>
                                     ` : html`
                                         <glass-button

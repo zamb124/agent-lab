@@ -121,7 +121,7 @@ PWA-маршруты (`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known
 LitServe — единственный под на GPU-ноде через `nodeSelector: accelerator=nvidia-gpu` + `tolerations: nvidia.com/gpu`. Манифест: `templates/50-gpu/litserve.yaml`.
 
 - Образ: тот же `ghcr.io/zamb124/agent-lab:latest`, command `python -m apps.provider_litserve.main`.
-- ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=BAAI/bge-reranker-v2-gemma`, `EMBEDDING_MODEL_ID=BAAI/bge-m3`, `HF_TOKEN` из `platform-secrets`.
+- ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=Qwen/Qwen3-Reranker-8B`, `EMBEDDING_MODEL_ID=Qwen/Qwen3-Embedding-8B`, `HF_TOKEN` из `platform-secrets`.
 - Ресурсы: `nvidia.com/gpu: 1` (request + limit).
 - Кэш моделей: PVC `litserve-model-cache` (50Gi).
 - Доступ к Postgres/Redis: ClusterIP `postgres:5432` / `redis:6379`.

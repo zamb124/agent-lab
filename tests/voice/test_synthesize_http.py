@@ -7,6 +7,7 @@ Streaming chunked TTS: клиент шлёт текст, получает пот
 
 * ``POST /voice/api/v1/synthesize`` с текстом отдаёт ``200`` и непустое
   аудио (через mock TTS провайдера из fixture ``voice_app``);
+* если потоковый TTS не отдал ни одного чанка — ``502``, без ``200`` с пустым телом;
 * валидация: пустой ``text`` → ``422``;
 * заголовок ``X-Voice-Provider`` проставляется;
 * ``voice_client`` без авторизации → запрос отвергается (``401``), если
@@ -18,8 +19,12 @@ Streaming chunked TTS: клиент шлёт текст, получает пот
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import pytest
 from httpx import AsyncClient
+
+from core.clients.tts_streaming import BaseTTSStreamer
 
 
 @pytest.mark.asyncio
@@ -70,3 +75,53 @@ async def test_synthesize_supports_response_format_override(
     assert response.status_code == 200
     assert response.headers.get("content-type", "").startswith("audio/")
     assert len(response.content) > 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(15)
+async def test_synthesize_zero_audio_returns_502(
+    voice_client: AsyncClient,
+    auth_headers_system: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """При отсутствии ненулевых аудио-чанков — 502, не «успешный» пустой ответ."""
+
+    class _SilentStreamer(BaseTTSStreamer):
+        @property
+        def provider(self) -> str:
+            return "silent_test"
+
+        @property
+        def mime_type(self) -> str:
+            return "audio/wav"
+
+        @property
+        def sample_rate(self) -> int:
+            return 8000
+
+        async def synthesize_chunk(self, text: str) -> bytes:
+            raise RuntimeError("_SilentStreamer does not use synthesize_chunk")
+
+        async def astream(self, text_stream: AsyncIterator[str]) -> AsyncIterator[bytes]:
+            async for _ in text_stream:
+                pass
+            if False:
+                yield b""
+
+    async def _fake_get_tts_streamer(*_a: object, **_k: object) -> _SilentStreamer:
+        return _SilentStreamer()
+
+    monkeypatch.setattr(
+        "apps.voice.api.synthesize.get_tts_streamer",
+        _fake_get_tts_streamer,
+    )
+
+    response = await voice_client.post(
+        "/voice/api/v1/synthesize",
+        json={"text": "Текст без аудио в этом тесте."},
+        headers=auth_headers_system,
+    )
+
+    assert response.status_code == 502, response.text
+    body = response.text
+    assert "0 байт" in body or "audio" in body.lower(), body

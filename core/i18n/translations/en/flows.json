@@ -363,7 +363,9 @@
   },
   "chat_input": {
     "title_attach": "Attach file",
-    "title_remove_file": "Remove file"
+    "title_remove_file": "Remove file",
+    "title_stop": "Stop response",
+    "title_stop_pending": "Stopping response…"
   },
   "bottom_toolbar": {
     "title_select": "Select (V)",
@@ -1041,6 +1043,7 @@
     "collapse_panel": "Restore panel size",
     "attach_files": "Attach files",
     "stop": "Stop",
+    "stop_pending": "Stopping…",
     "run_running": "Running…",
     "run_start": "Run",
     "close": "Close",

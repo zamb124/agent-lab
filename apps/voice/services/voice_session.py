@@ -4,12 +4,27 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Union
 
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+MicAudioInItem = Union[bytes, "MicFinalizeRequest"]
+
+
+@dataclass(slots=True)
+class MicFinalizeRequest:
+    """Помещается в ``audio_in_queue`` по WS-команде ``end_recording``.
+
+    После синхронного flush очередной фразы (если VAD считает сегмент открытым)
+    stt_worker сигнализирует ``complete``: ws_receiver может дождаться и ответить
+    клиенту текстом ``finalize_done`` до закрытия сокета.
+    """
+
+    complete: asyncio.Future[None]
 
 
 class VoiceSession:
@@ -31,7 +46,9 @@ class VoiceSession:
         self.session_id = session_id
         self.created_at = time.monotonic()
 
-        self.audio_in_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=audio_in_size)
+        self.audio_in_queue: asyncio.Queue[MicAudioInItem] = asyncio.Queue(
+            maxsize=audio_in_size
+        )
         self.audio_out_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=audio_out_size)
         self.text_in_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=text_size)
         self.synthesis_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=synthesis_size)
@@ -87,6 +104,17 @@ class VoiceSession:
     def add_task(self, task: asyncio.Task) -> None:
         self._tasks.append(task)
 
+    async def enqueue_mic_finalize(self, req: MicFinalizeRequest) -> None:
+        """Поставить в очередь обработки uplink запрос на немедленный flush STT-буфера."""
+        if req.complete.done():
+            raise ValueError("MicFinalizeRequest.complete уже завершён.")
+        if not self._active:
+            req.complete.set_exception(
+                RuntimeError("VoiceSession: сессия уже не активна.")
+            )
+            return
+        await self.audio_in_queue.put(req)
+
     async def cancel(self) -> None:
         """Остановить все воркеры сессии."""
         self._active = False
@@ -100,25 +128,39 @@ class VoiceSession:
         logger.info("voice session cancelled: session_id=%s", self.session_id)
 
     def _clear_queues(self) -> None:
+        self._drain_audio_in_queue(self.audio_in_queue)
         for q in (
-            self.audio_in_queue,
             self.audio_out_queue,
             self.text_in_queue,
             self.synthesis_queue,
         ):
-            self._drain_queue(q)
+            self._drain_simple_queue(q)
 
     def clear_synthesis_and_audio_out(self) -> int:
         """Сбросить очереди синтеза и исходящего аудио (для barge-in).
 
         Возвращает суммарное количество удалённых элементов.
         """
-        return self._drain_queue(self.synthesis_queue) + self._drain_queue(
+        return self._drain_simple_queue(self.synthesis_queue) + self._drain_simple_queue(
             self.audio_out_queue
         )
 
     @staticmethod
-    def _drain_queue(q: "asyncio.Queue") -> int:
+    def _drain_audio_in_queue(q: asyncio.Queue[MicAudioInItem]) -> int:
+        removed = 0
+        while not q.empty():
+            try:
+                item = q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            removed += 1
+            if isinstance(item, MicFinalizeRequest):
+                if not item.complete.done():
+                    item.complete.cancel()
+        return removed
+
+    @staticmethod
+    def _drain_simple_queue(q: asyncio.Queue) -> int:
         removed = 0
         while not q.empty():
             try:
@@ -131,3 +173,10 @@ class VoiceSession:
     @property
     def active(self) -> bool:
         return self._active
+
+
+__all__ = [
+    "MicAudioInItem",
+    "MicFinalizeRequest",
+    "VoiceSession",
+]

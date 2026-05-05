@@ -5,6 +5,7 @@ import { resolveEmbedChatTheme } from './embed-chat-theme.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { VoiceMediaSession } from '../voice/voice-media-session.js';
 import { VoiceAgentBridge } from '../voice/voice-agent-bridge.js';
+import { disposeVoiceMediaThenBridge } from '../voice/dispose-voice-session.js';
 import {
     readTtsOutputEnabled,
     toggleTtsOutputEnabled,
@@ -455,7 +456,13 @@ export class PlatformEmbedChatDrawer extends LitElement {
 
     disconnectedCallback() {
         if (this._voiceOn) {
-            this._stopVoice();
+            const m = this._voiceMedia;
+            const b = this._voiceBridge;
+            this._voiceMedia = null;
+            this._voiceBridge = null;
+            this._voiceOn = false;
+            this._voiceStatus = 'idle';
+            void disposeVoiceMediaThenBridge(m, b);
         }
         this._stopPanelDrag();
         window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsDrawerPref);
@@ -487,7 +494,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             this._bindToggleListener();
         }
         if (changed.has('voiceEnabled') && this.voiceEnabled !== true && this._voiceOn) {
-            this._stopVoice();
+            void this._stopVoice();
         }
         if ((changed.has('open') && !this.open) || (changed.has('panelMaximized') && this.panelMaximized)) {
             this._stopPanelDrag();
@@ -507,7 +514,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 this._startVoice().catch(() => { /* ошибки идут через toast/event */ });
             }
             if (!this.open && this._voiceOn) {
-                this._stopVoice();
+                void this._stopVoice();
             }
         }
         const resolved = resolveEmbedChatTheme(this.theme);
@@ -1040,22 +1047,19 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._voiceStatus = 'idle';
     }
 
-    _stopVoice() {
-        if (this._voiceBridge) {
-            try { this._voiceBridge.stop(); } catch { /* noop */ }
-            this._voiceBridge = null;
-        }
-        if (this._voiceMedia) {
-            try { this._voiceMedia.close(); } catch { /* noop */ }
-            this._voiceMedia = null;
-        }
+    async _stopVoice() {
+        const m = this._voiceMedia;
+        const b = this._voiceBridge;
+        await disposeVoiceMediaThenBridge(m, b);
+        this._voiceBridge = null;
+        this._voiceMedia = null;
         this._voiceOn = false;
         this._voiceStatus = 'idle';
     }
 
     _toggleVoice() {
         if (this._voiceOn) {
-            this._stopVoice();
+            void this._stopVoice();
         } else {
             this._startVoice().catch(() => { /* noop */ });
         }

@@ -10,14 +10,39 @@ import pytest
 from pydantic import ValidationError
 
 from core.config.models import (
-    ProviderLitserveInfraConfig,
+    EmbeddingConfig,
     ProviderLitserveSTTModelEntry,
     ProviderLitserveTTSModelEntry,
     ProviderLitserveVADModelEntry,
+    RerankerRuntimeConfig,
 )
 
 
 pytestmark = pytest.mark.timeout(15)
+
+
+def test_default_litserve_infra_uses_qwen_embedding_and_rerank(unique_id):
+    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
+    assert cfg.model_id == "Qwen/Qwen3-Reranker-8B"
+    assert cfg.embedding_model_id == "Qwen/Qwen3-Embedding-8B"
+    assert cfg.embedding_openai_model_id == "qwen/qwen3-embedding-8b"
+    assert cfg.rerank_openai_model_id == "qwen/qwen3-reranker-8b"
+    assert cfg.backend == "flagllm"
+    assert cfg.max_length == 8192
+    assert cfg.model_batch_size == 4
+
+
+def test_rag_embedding_config_defaults_litserve_qwen() -> None:
+    emb = EmbeddingConfig()
+    assert emb.provider == "provider_litserve"
+    assert emb.api.model == "qwen/qwen3-embedding-8b"
+    assert emb.api.dimension == 4096
+
+
+def test_rag_reranker_runtime_defaults_provider_litserve() -> None:
+    rr = RerankerRuntimeConfig()
+    assert rr.provider == "provider_litserve"
+    assert rr.api is not None
 
 
 def test_default_stt_entry_has_gigaam_backend_and_revision(unique_id):
@@ -38,8 +63,8 @@ def test_default_tts_entry_has_kokoro_lang_voice_sample_rate(unique_id):
     )
     assert default.backend == "kokoro"
     assert default.hf_model_id == "hexgrad/Kokoro-82M"
-    assert default.lang == "ru"
-    assert default.voice == "af"
+    assert default.lang == "a"
+    assert default.voice == "af_heart"
     assert default.sample_rate == 24000
 
 
@@ -101,10 +126,32 @@ def test_tts_sample_rate_out_of_range_raises_validation_error(unique_id):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
             hf_model_id="x/y",
-            lang="ru",
-            voice="af",
+            lang="a",
+            voice="af_heart",
             sample_rate=999,
         )
+
+
+def test_kokoro_tts_iso_lang_ru_raises_validation_error(unique_id):
+    with pytest.raises(ValidationError, match="недопустим"):
+        ProviderLitserveTTSModelEntry(
+            api_model_id=f"t-{unique_id}",
+            hf_model_id="hexgrad/Kokoro-82M",
+            lang="ru",
+            voice="af_heart",
+            sample_rate=24000,
+        )
+
+
+def test_kokoro_tts_lang_whitespace_normalized(unique_id):
+    entry = ProviderLitserveTTSModelEntry(
+        api_model_id=f"t-{unique_id}",
+        hf_model_id="hexgrad/Kokoro-82M",
+        lang=" A ",
+        voice="af_heart",
+        sample_rate=24000,
+    )
+    assert entry.lang == "a"
 
 
 def test_extra_field_in_entry_is_forbidden(unique_id):

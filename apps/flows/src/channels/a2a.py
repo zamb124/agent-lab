@@ -693,8 +693,8 @@ class A2AChannel(BaseChannel):
 
         if task:
             await send_task_update.kiq(
-                task_id=params.id,
-                context_id=params.id,
+                task_id=task.id,
+                context_id=task.context_id,
                 state="canceled",
                 message="Task cancelled",
                 is_final=True,

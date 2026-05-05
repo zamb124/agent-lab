@@ -101,7 +101,7 @@ describe('VoiceAgentBridge: voice → flows', () => {
         expect(opts.signal).toBeInstanceOf(AbortSignal);
     });
 
-    it('игнорирует transcript{final:false} и пустые', async () => {
+    it('transcript{final:false} без stop не отправляет stream', async () => {
         streamMock.mockResolvedValue(undefined);
         const media = new FakeMediaSession();
         const bridge = new VoiceAgentBridge({
@@ -115,6 +115,30 @@ describe('VoiceAgentBridge: voice → flows', () => {
         emitTranscript(media, '   ', true);
         await Promise.resolve();
         expect(streamMock).not.toHaveBeenCalled();
+    });
+
+    it('stop после transcript{final:false} отправляет накопленный текст', async () => {
+        streamMock.mockResolvedValue(undefined);
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+
+        const userMsgs = [];
+        bridge.addEventListener('userMessage', (e) => userMsgs.push(e.detail));
+
+        emitTranscript(media, '  сказано до выключения микрофона  ', false);
+        bridge.stop();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(userMsgs).toEqual([{ text: 'сказано до выключения микрофона' }]);
+        expect(streamMock).toHaveBeenCalledTimes(1);
+        const [opts] = streamMock.mock.calls[0];
+        expect(opts.message).toBe('сказано до выключения микрофона');
     });
 });
 
@@ -158,6 +182,38 @@ describe('VoiceAgentBridge: flows → voice', () => {
         expect(media.spoken).toEqual([
             { text: 'Ответ агента.', opts: { final: false } },
         ]);
+    });
+
+    it('reasoning artifact-update → mediaSession.speak', async () => {
+        /** @type {(ev:any)=>void} */
+        let capturedOnEvent = () => {};
+        streamMock.mockImplementation(async (_opts, onEvent) => {
+            capturedOnEvent = onEvent;
+            await new Promise(() => {});
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+        emitTranscript(media, 'вопрос.', true);
+        await Promise.resolve();
+
+        capturedOnEvent({
+            result: {
+                kind: 'artifact-update',
+                taskId: 'task-1',
+                artifact: {
+                    name: 'reasoning',
+                    parts: [{ root: { kind: 'text', text: 'Шаг размышления.' } }],
+                },
+                lastChunk: false,
+            },
+        });
+
+        expect(media.spoken).toEqual([{ text: 'Шаг размышления.', opts: { final: false } }]);
     });
 
     it('getTtsOutputEnabled:false — speakable artifact не вызывает speak', async () => {
@@ -370,7 +426,7 @@ describe('VoiceAgentBridge: barge-in', () => {
         expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
-    it('stop() отменяет текущий fetch', async () => {
+    it('stop() после финального transcript не абортит активный fetch (снятие эфира)', async () => {
         let signal = null;
         streamMock.mockImplementation(async (opts) => {
             signal = opts.signal;
@@ -392,6 +448,39 @@ describe('VoiceAgentBridge: barge-in', () => {
         expect(signal).toBeTruthy();
         expect(signal.aborted).toBe(false);
         bridge.stop();
-        expect(signal.aborted).toBe(true);
+        expect(signal.aborted).toBe(false);
+    });
+
+    it('stop() с частичным transcript прерывает предыдущий fetch через _sendUserMessage', async () => {
+        /** @type {AbortSignal[]} */
+        const signals = [];
+        streamMock.mockImplementation(async (opts) => {
+            signals.push(opts.signal);
+            await new Promise((_res, rej) => {
+                opts.signal.addEventListener('abort', () =>
+                    rej(new DOMException('aborted', 'AbortError'))
+                );
+            });
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+        emitTranscript(media, 'первый.', true);
+        await Promise.resolve();
+        expect(signals.length).toBe(1);
+        expect(signals[0].aborted).toBe(false);
+
+        emitTranscript(media, 'коммит при stop', false);
+        bridge.stop();
+        await Promise.resolve();
+
+        expect(signals.length).toBe(2);
+        expect(signals[0].aborted).toBe(true);
+        expect(signals[1].aborted).toBe(false);
+        expect(streamMock.mock.calls[1][0].message).toBe('коммит при stop');
     });
 });

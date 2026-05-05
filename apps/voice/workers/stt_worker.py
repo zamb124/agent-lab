@@ -28,7 +28,7 @@ from typing import Awaitable, Callable, Optional
 from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_client_channel import VoiceClientChannel
-from apps.voice.services.voice_session import VoiceSession
+from apps.voice.services.voice_session import MicFinalizeRequest, VoiceSession
 from core.config import get_settings
 from core.logging import get_logger
 
@@ -43,6 +43,91 @@ OnPartialTranscription = Optional[
 OnVadState = Optional[Callable[[VoiceSession, str], Awaitable[None]]]
 
 _FRAME_DURATION_S = 0.02
+
+
+async def _process_mic_finalize_request(
+    *,
+    session: VoiceSession,
+    mic_req: MicFinalizeRequest,
+    vad_open_before: bool,
+    speech_frames_in_window: int,
+    last_partial_at_frame: int,
+    last_partial_preview: str,
+    stt_provider: BaseSTTProvider,
+    on_final_transcription: OnFinalTranscription,
+    on_vad_state: OnVadState,
+    channel: Optional[VoiceClientChannel],
+    language: Optional[str],
+) -> tuple[bool, int, int, str]:
+    """Закрыть открытый сегмент речи немедленно (как пауза VAD без ожидания тишины)."""
+    flush_exc: Optional[Exception] = None
+    speech_out = speech_frames_in_window
+    lp_frame = last_partial_at_frame
+    lp_preview = last_partial_preview
+
+    try:
+        if vad_open_before:
+            speech_out = 0
+            lp_frame = 0
+            lp_preview = ""
+
+            if on_vad_state is not None:
+                await on_vad_state(session, "ended")
+
+            try:
+                result = await stt_provider.flush_buffer()
+            except Exception as exc:
+                flush_exc = exc
+                logger.exception(
+                    "voice.stt_worker.mic_finalize_flush_failed",
+                    session_id=session.session_id,
+                )
+                if channel is not None and channel.is_open:
+                    try:
+                        await channel.send_error(
+                            code="voice/stt/flush_failed",
+                            detail=str(exc),
+                        )
+                    except Exception:
+                        logger.warning(
+                            "voice.stt_worker.error_notify_failed",
+                            session_id=session.session_id,
+                        )
+            else:
+                if (
+                    result is not None
+                    and result.text
+                    and on_final_transcription is not None
+                ):
+                    try:
+                        logger.info(
+                            "voice.stt_worker.mic_finalize_transcription",
+                            session_id=session.session_id,
+                            text_length=len(result.text),
+                        )
+                        await on_final_transcription(session, result.text, language)
+                    except Exception as exc:
+                        flush_exc = exc
+                        logger.exception(
+                            "voice.stt_worker.mic_finalize_callback_failed",
+                            session_id=session.session_id,
+                        )
+    finally:
+        if channel is not None and channel.is_open:
+            try:
+                await channel.send_recording_finalized()
+            except Exception:
+                logger.warning(
+                    "voice.stt_worker.finalize_done_send_failed",
+                    session_id=session.session_id,
+                )
+        if not mic_req.complete.done():
+            if flush_exc is not None:
+                mic_req.complete.set_exception(flush_exc)
+            else:
+                mic_req.complete.set_result(None)
+
+    return False, speech_out, lp_frame, lp_preview
 
 
 async def run_stt_worker(
@@ -68,12 +153,37 @@ async def run_stt_worker(
     vad_open: bool = False
     speech_frames_in_window: int = 0
     last_partial_at_frame: int = 0
+    last_partial_preview: str = ""
 
     while session.active:
         try:
-            audio_frame = await session.audio_in_queue.get()
+            raw_in = await session.audio_in_queue.get()
         except asyncio.CancelledError:
             raise
+
+        if isinstance(raw_in, MicFinalizeRequest):
+            vad_open, speech_frames_in_window, last_partial_at_frame, last_partial_preview = (
+                await _process_mic_finalize_request(
+                    session=session,
+                    mic_req=raw_in,
+                    vad_open_before=vad_open,
+                    speech_frames_in_window=speech_frames_in_window,
+                    last_partial_at_frame=last_partial_at_frame,
+                    last_partial_preview=last_partial_preview,
+                    stt_provider=stt_provider,
+                    on_final_transcription=on_final_transcription,
+                    on_vad_state=on_vad_state,
+                    channel=channel,
+                    language=language,
+                )
+            )
+            continue
+
+        audio_frame = raw_in
+        if not isinstance(audio_frame, bytes):
+            raise TypeError(
+                "stt_worker: элемент audio_in_queue должен быть bytes или MicFinalizeRequest."
+            )
 
         try:
             is_speech = await vad_provider.detect_speech(audio_frame, sample_rate=16000)
@@ -88,6 +198,7 @@ async def run_stt_worker(
             vad_open = True
             speech_frames_in_window = 0
             last_partial_at_frame = 0
+            last_partial_preview = ""
             consume_preroll = getattr(vad_provider, "consume_preroll", None)
             if callable(consume_preroll):
                 preroll = consume_preroll()
@@ -105,7 +216,7 @@ async def run_stt_worker(
                 and session.is_tts_active
                 and barge_in.is_barge_in(
                     vad_speech_seconds=speech_frames_in_window * _FRAME_DURATION_S,
-                    stt_preview_text="",
+                    stt_preview_text=last_partial_preview,
                     tts_is_active=True,
                 )
             ):
@@ -113,10 +224,14 @@ async def run_stt_worker(
                     session,
                     stt_provider=stt_provider,
                     vad_provider=vad_provider,
+                    channel=channel,
+                    language=language,
+                    peek_min_buffer_bytes=partial_min_buffer_bytes,
                 )
                 vad_open = False
                 speech_frames_in_window = 0
                 last_partial_at_frame = 0
+                last_partial_preview = ""
                 continue
 
             if (
@@ -136,6 +251,7 @@ async def run_stt_worker(
                     )
                     partial = None
                 if partial is not None and partial.text:
+                    last_partial_preview = partial.text.strip()
                     await on_partial_transcription(
                         session, partial.text, language
                     )
@@ -145,6 +261,7 @@ async def run_stt_worker(
             vad_open = False
             speech_frames_in_window = 0
             last_partial_at_frame = 0
+            last_partial_preview = ""
 
             if on_vad_state is not None:
                 await on_vad_state(session, "ended")

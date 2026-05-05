@@ -297,21 +297,27 @@ def create_service_app(
         """
         Гарантирует одну structured-запись на каждое необработанное исключение.
 
-        Не глотает: после логирования возвращает 500 JSON. Текст исключения
-        в ответе скрыт — реальные детали ищите в логах по trace_id/request_id.
+        Не глотает: после логирования возвращает 500 JSON. Тело по умолчанию без
+        текста исключения (клиент / межсервис). При ``server.debug=True`` добавляется
+        ``exception_detail`` (локальная отладка). ``exception_type`` — всегда, имя класса.
         """
+        exc_cls = type(exc).__name__
         logger.exception(
             "http_unhandled_exception",
             **{
-                "exception.type": type(exc).__name__,
+                "exception.type": exc_cls,
                 "http.path": request.url.path,
                 "http.method": request.method,
             },
         )
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Internal Server Error", "code": "internal_error"},
-        )
+        payload: dict[str, Any] = {
+            "detail": "Internal Server Error",
+            "code": "internal_error",
+            "exception_type": exc_cls,
+        }
+        if settings.server.debug:
+            payload["exception_detail"] = str(exc)[:4096]
+        return JSONResponse(status_code=500, content=payload)
     
     # Дополнительные атрибуты state
     if extra_state:

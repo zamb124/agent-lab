@@ -186,6 +186,23 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: voice",
+            "consoleTitle": "run.py: voice 🎙️",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "voice"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: flows_worker",
             "consoleTitle": "run.py: flows_worker ⚙️",
             "type": "debugpy",
@@ -301,6 +318,7 @@
                 "Run: scheduler-api",
                 "Run: browser",
                 "Run: provider_litserve",
+                "Run: voice",
                 "Run: flows_worker",
                 "Run: rag_worker",
                 "Run: sync_worker",

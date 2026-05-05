@@ -71,6 +71,53 @@ async def test_litserve_tts_client_returns_audio_bytes(
 
 
 @pytest.mark.asyncio
+async def test_litserve_tts_client_http_error_includes_upstream_detail(
+    fake_speech_server: FakeSpeechServer, unique_id: str
+) -> None:
+    async def _handler(request: web.Request) -> web.StreamResponse:
+        assert (await request.json())["model"] == "kokoro-82m-ru"
+        return web.json_response({"detail": f"tts-fail-{unique_id}"}, status=500)
+
+    fake_speech_server.route("POST", "/v1/audio/speech", _handler)
+
+    client = LitserveTTSClient(
+        base_url=fake_speech_server.base_url,
+        model="kokoro-82m-ru",
+        default_voice="alloy",
+        default_response_format="wav",
+        default_sample_rate=24000,
+        timeout=10.0,
+    )
+    with pytest.raises(RuntimeError, match=f"tts-fail-{unique_id}"):
+        await client.synthesize(text=f"hello {unique_id}")
+
+
+@pytest.mark.asyncio
+async def test_litserve_tts_client_platform_internal_error_appends_log_hint(
+    fake_speech_server: FakeSpeechServer, unique_id: str
+) -> None:
+    async def _handler(request: web.Request) -> web.StreamResponse:
+        _ = await request.json()
+        return web.json_response(
+            {"detail": "Internal Server Error", "code": "internal_error"},
+            status=500,
+        )
+
+    fake_speech_server.route("POST", "/v1/audio/speech", _handler)
+
+    client = LitserveTTSClient(
+        base_url=fake_speech_server.base_url,
+        model="kokoro-82m-ru",
+        default_voice="alloy",
+        default_response_format="wav",
+        default_sample_rate=24000,
+        timeout=10.0,
+    )
+    with pytest.raises(RuntimeError, match=r"http_unhandled_exception"):
+        await client.synthesize(text=f"hello {unique_id}")
+
+
+@pytest.mark.asyncio
 async def test_cloud_ru_tts_client_sends_authorization_and_returns_bytes(
     fake_speech_server: FakeSpeechServer, unique_id: str
 ) -> None:

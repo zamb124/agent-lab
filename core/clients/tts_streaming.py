@@ -117,6 +117,11 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         if text == "":
             raise ValueError("synthesize_chunk: text пустой.")
         result = await self._tts_client.synthesize(text=text)
+        if len(result.audio_bytes) == 0:
+            raise ValueError(
+                "BatchBackedTTSStreamer.synthesize_chunk: провайдер вернул пустой audio_bytes "
+                f"после успешного HTTP (provider={self._provider!r})."
+            )
         return result.audio_bytes
 
     async def astream(

@@ -117,11 +117,18 @@ async def test_barge_in_execute_resets_stt_and_vad(unique_id: str) -> None:
 
     stt_provider = MagicMock()
     stt_provider.reset = MagicMock()
+    stt_provider.peek_transcript = AsyncMock(return_value=None)
     vad_provider = MagicMock()
     vad_provider.reset_state = MagicMock()
+    channel = MagicMock()
+    channel.send_transcript = AsyncMock()
 
     await controller.execute_barge_in(
-        session, stt_provider=stt_provider, vad_provider=vad_provider
+        session,
+        stt_provider=stt_provider,
+        vad_provider=vad_provider,
+        channel=channel,
+        peek_min_buffer_bytes=32_000,
     )
 
     stt_provider.reset.assert_called_once_with()

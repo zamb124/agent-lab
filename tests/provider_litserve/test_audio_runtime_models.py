@@ -44,8 +44,8 @@ def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
             ProviderLitserveTTSModelEntry(
                 api_model_id=f"kokoro-{unique_id}",
                 hf_model_id="hexgrad/Kokoro-82M",
-                lang="ru",
-                voice="af",
+                lang="a",
+                voice="af_heart",
                 sample_rate=24000,
             ),
         ],

@@ -581,7 +581,7 @@ class TestLLMModelsServiceProviderLitserve:
                 return None
 
             def json(self):
-                return {"data": [{"id": "baai/bge-m3"}, {"id": "baai/bge-reranker-v2-gemma"}]}
+                return {"data": [{"id": "qwen/qwen3-embedding-8b"}, {"id": "qwen/qwen3-reranker-8b"}]}
 
         class _Client:
             async def __aenter__(self):
@@ -606,7 +606,7 @@ class TestLLMModelsServiceProviderLitserve:
             ):
                 models = await service._fetch_provider_litserve_models()
 
-        assert models == ["baai/bge-m3", "baai/bge-reranker-v2-gemma"]
+        assert models == ["qwen/qwen3-embedding-8b", "qwen/qwen3-reranker-8b"]
 
     @pytest.mark.asyncio
     async def test_sync_all_providers_includes_provider_litserve_without_services_attr(self):

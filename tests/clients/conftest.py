@@ -1,10 +1,12 @@
 """Изолированные fixtures для тестов STT/TTS/VAD клиентов.
 
-Исключает root `tests/conftest.py` (heavy DB/Loki/Tempo session-scope) через
-`--confcutdir=tests/clients`. Никаких mocks/monkeypatching: для
-HTTP-провайдеров поднимается реальный `aiohttp.web` сервер на свободном
-порту в session-scoped fixture, тесты дёргают его через настоящий
-`httpx.AsyncClient` внутри клиентов.
+Переопределяет session-фикстуру ``setup_database_before_tests`` из корневого
+``tests/conftest.py``: клиентские тесты не используют PostgreSQL, только
+локальный ``aiohttp``. Без этого autouse в корне валит сборку при
+недоступной тестовой БД.
+
+Дополнительно можно запускать только этот пакет с ``--confcutdir=tests/clients``,
+чтобы не подтягивать прочие хуки корневого conftest.
 """
 
 from __future__ import annotations
@@ -16,6 +18,12 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 import pytest
 import pytest_asyncio
 from aiohttp import web
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_database_before_tests():
+    """Пустышка: не гоняем Alembic/CREATE DATABASE для HTTP-клиентов."""
+    yield
 
 
 @pytest.fixture

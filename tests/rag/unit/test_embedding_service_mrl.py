@@ -9,7 +9,7 @@ def test_mrl_pads_to_full_dimension_and_normalizes_prefix() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["baai/bge-m3"],
+        models=["qwen/qwen3-embedding-8b"],
         dimension=8,
         mrl_output_dimension=2,
     )
@@ -27,7 +27,7 @@ def test_get_embedding_dimension_uses_full_dimension_with_mrl() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["baai/bge-m3"],
+        models=["qwen/qwen3-embedding-8b"],
         dimension=4096,
         mrl_output_dimension=512,
     )

@@ -1,6 +1,6 @@
 .PHONY: help dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
-.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging check-voice-resolver check-voice-canon build-i18n
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon build-i18n
 .PHONY: clean-i18n-unused base
 .PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
 
@@ -114,9 +114,12 @@ check-core-frontend-canon:
 check-voice-resolver:
 	@uv run python scripts/check_voice_resolver_usage.py
 
-check-voice-canon: check-voice-resolver
+check-speakable-parity:
+	@uv run python scripts/check_speakable_parity.py
 
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-i18n check-i18n-keys
+check-voice-canon: check-voice-resolver check-speakable-parity
+
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-i18n check-i18n-keys
 	@echo "check-events-canon: OK"
 
 check-i18n:

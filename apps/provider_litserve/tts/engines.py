@@ -1,6 +1,7 @@
 """Движок для локального TTS в provider_litserve.
 
-Список доступных моделей и их параметры (``lang``, ``voice``, ``sample_rate``,
+Список доступных моделей и их параметры (для Kokoro поле конфига ``lang`` —
+``lang_code`` у ``kokoro.KPipeline``, не ISO; см. README hexgrad/kokoro), ``voice``, ``sample_rate``,
 HF-id, опциональная ``revision``) берутся из ``cfg.tts_models``. Дефолт —
 ``cfg.tts_default_api_model_id``. Никаких хардкодов модели в коде.
 
@@ -123,7 +124,11 @@ class LocalTTSEngine:
             self._device,
         )
         started = time.monotonic()
-        pipeline = KPipeline(lang=entry.lang)
+        pipeline = KPipeline(
+            lang_code=entry.lang,
+            repo_id=entry.hf_model_id,
+            device=self._device if self._device else None,
+        )
         self._pipelines[cache_key] = pipeline
         logger.info(
             "TTS-pipeline %s загружен за %.2fs",
@@ -131,6 +136,31 @@ class LocalTTSEngine:
             time.monotonic() - started,
         )
         return pipeline
+
+    def warmup_pipeline(self, api_model_id: str | None) -> dict[str, Any]:
+        """Загрузить KPipeline в память без синтеза речи.
+
+        Вызывается из ``TTSLitAPI.setup`` для ``tts_default_api_model_id`` при старте воркера.
+        ``api_model_id`` — api id из ``cfg.tts_models``; ``None`` — дефолт из конфига.
+        """
+        mid = (api_model_id or "").strip() or self._cfg.tts_default_api_model_id.strip()
+        if mid == "":
+            raise ValueError(
+                "TTS warmup: задайте tts_default_api_model_id и непустой список tts_models в infra"
+            )
+        entry = self._resolve_entry(mid)
+        cache_key = (entry.hf_model_id, entry.lang or "", entry.revision or "")
+        cached_before = cache_key in self._pipelines
+        started = time.monotonic()
+        self._ensure_pipeline(entry)
+        elapsed = time.monotonic() - started
+        return {
+            "api_model_id": entry.api_model_id,
+            "hf_model_id": entry.hf_model_id,
+            "lang": entry.lang,
+            "cached_before": cached_before,
+            "load_seconds": round(elapsed, 3),
+        }
 
     def synthesize(
         self,
@@ -190,3 +220,24 @@ class LocalTTSEngine:
             time.monotonic() - started,
         )
         return payload
+
+
+_shared_tts_engine: LocalTTSEngine | None = None
+_shared_tts_engine_cfg_id: int | None = None
+
+
+def get_local_tts_engine(cfg: ProviderLitserveInfraConfig) -> LocalTTSEngine:
+    """Один ``LocalTTSEngine`` на процесс воркера LitServe (кэш KPipeline общий для speech и warmup)."""
+    global _shared_tts_engine, _shared_tts_engine_cfg_id
+    cid = id(cfg)
+    if _shared_tts_engine is None or _shared_tts_engine_cfg_id != cid:
+        _shared_tts_engine = LocalTTSEngine(cfg)
+        _shared_tts_engine_cfg_id = cid
+    return _shared_tts_engine
+
+
+def reset_local_tts_engine_for_tests() -> None:
+    """Только для тестов: сбросить singleton (изолировать процессы)."""
+    global _shared_tts_engine, _shared_tts_engine_cfg_id
+    _shared_tts_engine = None
+    _shared_tts_engine_cfg_id = None

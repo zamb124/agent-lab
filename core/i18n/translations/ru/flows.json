@@ -363,7 +363,9 @@
   },
   "chat_input": {
     "title_attach": "Прикрепить файл",
-    "title_remove_file": "Удалить файл"
+    "title_remove_file": "Удалить файл",
+    "title_stop": "Остановить ответ",
+    "title_stop_pending": "Останавливаю ответ…"
   },
   "bottom_toolbar": {
     "title_select": "Выбор (V)",
@@ -1041,6 +1043,7 @@
     "collapse_panel": "Обычный размер панели",
     "attach_files": "Прикрепить файлы",
     "stop": "Остановить",
+    "stop_pending": "Останавливаю…",
     "run_running": "Выполняется…",
     "run_start": "Запустить",
     "close": "Закрыть",

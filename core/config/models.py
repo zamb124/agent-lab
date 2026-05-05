@@ -4,10 +4,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Self
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.rag_indexing_schema import IndexProfileConfig
@@ -314,7 +322,15 @@ class LitserveSpeechBackendConfig(BaseModel):
             "Используется для /v1/audio/transcriptions, /v1/audio/speech, /v1/audio/vad."
         ),
     )
-    timeout_s: float = Field(default=60.0, gt=0.0)
+    timeout_s: float = Field(
+        default=120.0,
+        gt=0.0,
+        description=(
+            "Таймаут HTTP к provider-litserve (секунды). Локальный Kokoro на CPU может "
+            "держать ответ дольше 60 с при холодном старте; при необходимости поднять через "
+            "VOICE__STT__LITSERVE__TIMEOUT_S / VOICE__TTS__LITSERVE__TIMEOUT_S / VOICE__VAD__LITSERVE__TIMEOUT_S."
+        ),
+    )
 
 
 class CloudRuTTSBackendConfig(BaseModel):
@@ -690,8 +706,8 @@ class EmbeddingApiConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    model: str = "baai/bge-m3"
-    dimension: int = 1024
+    model: str = "qwen/qwen3-embedding-8b"
+    dimension: int = 4096
     # Явный override корня ``…/v1``: при ``provider=openrouter`` пусто — из ``llm``;
     # при ``provider=provider_litserve`` пусто — из ``provider_litserve.api.base_url`` в настройках.
     base_url: Optional[str] = None
@@ -708,7 +724,7 @@ class EmbeddingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["openrouter", "provider_litserve"] = "openrouter"
+    provider: Literal["openrouter", "provider_litserve"] = "provider_litserve"
     api: EmbeddingApiConfig = Field(default_factory=EmbeddingApiConfig)
 
     @model_validator(mode="before")
@@ -772,7 +788,7 @@ class RerankerRuntimeConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["none", "provider_litserve"] = "none"
+    provider: Literal["none", "provider_litserve"] = "provider_litserve"
     api: Optional[RerankerApiRuntimeConfig] = None
     # Биллинг (как у embedding в pgvector): оценка по tiktoken, запись через BillingService
     cost_per_1m_tokens: float = 5.0
@@ -853,6 +869,9 @@ class ProviderLitserveSTTModelEntry(BaseModel):
     )
 
 
+KOKORO_PIPELINE_LANG_CODES: frozenset[str] = frozenset(("a", "b", "e", "f", "h", "i", "p", "j", "z"))
+
+
 class ProviderLitserveTTSModelEntry(BaseModel):
     """Описание одной TTS-модели (api id ↔ HF id + параметры синтеза по умолчанию)."""
 
@@ -867,11 +886,15 @@ class ProviderLitserveTTSModelEntry(BaseModel):
     )
     lang: str | None = Field(
         default=None,
-        description="Язык pipeline (например, ru для русского Kokoro).",
+        description=(
+            "Для backend kokoro — аргумент ``lang_code`` у ``kokoro.KPipeline``: ровно одна строчная буква "
+            "из набора поддерживаемых пакетом (``a``, ``b``, ``e``, ``f``, ``h``, ``i``, ``p``, ``j``, ``z``; "
+            "см. README hexgrad/kokoro). Не ISO 639-1 (``ru`` / ``en`` недопустимы)."
+        ),
     )
     voice: str | None = Field(
         default=None,
-        description="Имя голоса по умолчанию для модели.",
+        description="Имя голоса по умолчанию для модели (для Kokoro — идентификатор вроде af_heart).",
     )
     sample_rate: int | None = Field(
         default=None,
@@ -879,6 +902,31 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         le=48000,
         description="Sample rate выходного PCM модели.",
     )
+
+    @field_validator("lang", mode="before")
+    @classmethod
+    def trim_lower_lang_optional(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError(f"TTS lang: ожидалась str или None, получено {type(v).__name__}")
+        s = v.strip().lower()
+        if not s:
+            return None
+        return s
+
+    @model_validator(mode="after")
+    def kokoro_lang_must_be_pipeline_code(self) -> Self:
+        if self.backend != "kokoro" or self.lang is None:
+            return self
+        if len(self.lang) != 1 or self.lang not in KOKORO_PIPELINE_LANG_CODES:
+            allowed = ", ".join(sorted(KOKORO_PIPELINE_LANG_CODES))
+            raise ValueError(
+                f"TTS kokoro: lang={self.lang!r} недопустим как lang_code для KPipeline "
+                f"(нужна одна буква из: {allowed}; не ISO вида ru/en). "
+                "См. README пакета hexgrad/kokoro."
+            )
+        return self
 
 
 class ProviderLitserveVADModelEntry(BaseModel):
@@ -935,7 +983,7 @@ class ProviderLitserveInfraConfig(BaseModel):
                 data[canonical] = legacy_val
         return data
 
-    backend: Literal["placeholder", "flagllm"] = "placeholder"
+    backend: Literal["placeholder", "flagllm"] = "flagllm"
     host: str = "0.0.0.0"
     gateway_port: int = 8014
     accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
@@ -952,21 +1000,23 @@ class ProviderLitserveInfraConfig(BaseModel):
     max_passages: int = 128
     max_query_chars: int = 16384
     max_passage_chars: int = 64000
-    max_length: int = 1024
-    model_batch_size: int = 8
-    model_id: str = "BAAI/bge-reranker-v2-gemma"
+    max_length: int = 8192
+    model_batch_size: int = 4
+    model_id: str = "Qwen/Qwen3-Reranker-8B"
 
     use_fp16: bool = True
     use_bf16: bool = False
     normalize_scores: bool = True
 
-    embedding_model_id: str = "BAAI/bge-m3"
-    embedding_openai_model_id: str = "baai/bge-m3"
-    rerank_openai_model_id: str = "baai/bge-reranker-v2-gemma"
+    embedding_model_id: str = "Qwen/Qwen3-Embedding-8B"
+    embedding_openai_model_id: str = "qwen/qwen3-embedding-8b"
+    rerank_openai_model_id: str = "qwen/qwen3-reranker-8b"
     llm_model_id: str = "Qwen/Qwen2.5-1.5B-Instruct"
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)
-    llm_model_ids: list[str] = Field(default_factory=list)
+    llm_model_ids: list[str] = Field(
+        default_factory=lambda: ["Qwen/Qwen2.5-1.5B-Instruct"],
+    )
 
     stt_models: list["ProviderLitserveSTTModelEntry"] = Field(
         default_factory=lambda: [
@@ -992,14 +1042,14 @@ class ProviderLitserveInfraConfig(BaseModel):
             ProviderLitserveTTSModelEntry(
                 api_model_id="kokoro-82m-ru",
                 hf_model_id="hexgrad/Kokoro-82M",
-                lang="ru",
-                voice="af",
+                lang="a",
+                voice="af_heart",
                 sample_rate=24000,
             ),
         ],
         description=(
             "Полный список TTS-моделей провайдера. Каждый элемент описывает одну модель "
-            "(api id для /v1/audio/speech, hf id, lang, voice, sample_rate). "
+            "(api id для /v1/audio/speech, hf id, lang как kokoro lang_code, voice, sample_rate). "
             "Дефолт указывается в tts_default_api_model_id. Расширяется из UI /litserve/models."
         ),
     )

@@ -23,6 +23,7 @@
     - ``{"type":"tts_state","state":"playing"|"stopped"}``
     - ``{"type":"error","code":"...","detail":"..."}``
     - ``{"type":"ping"}``
+    - ``{"type":"finalize_done"}`` — ответ на ``end_recording`` (flush STT выполнен)
 """
 
 from __future__ import annotations
@@ -126,6 +127,7 @@ class VoiceClientChannel:
         text: str,
         final: bool,
         language: str | None = None,
+        interrupted: bool = False,
     ) -> None:
         """Передать клиенту результат STT (partial или final)."""
         payload: dict[str, object] = {
@@ -135,6 +137,8 @@ class VoiceClientChannel:
         }
         if language is not None and language != "":
             payload["language"] = language
+        if interrupted:
+            payload["interrupted"] = True
         await self._send_json(payload)
 
     async def send_vad(self, state: VadState) -> None:
@@ -160,6 +164,14 @@ class VoiceClientChannel:
     async def send_ping(self) -> None:
         """Keep-alive heartbeat."""
         await self._send_json({"type": "ping"})
+
+    async def send_recording_finalized(self) -> None:
+        """Подтвердить клиенту завершение обработки команды ``end_recording``.
+
+        После финального/transcript может не быть (буфер пуст); клиент всё равно
+        переходит к закрытию локальной сессии.
+        """
+        await self._send_json({"type": "finalize_done"})
 
     async def _send_json(self, payload: dict[str, object]) -> None:
         if not self.is_open:

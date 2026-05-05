@@ -16,6 +16,7 @@
 export const SPEAKABLE_ARTIFACT_NAMES = Object.freeze(new Set([
     'response',
     'operator_reply',
+    'reasoning',
 ]));
 
 export const SPEAK_FLAG_KEY = 'speak';

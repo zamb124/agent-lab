@@ -591,6 +591,7 @@ export class ChatMessage extends PlatformElement {
         runTraceEntries: { type: Array },
         traceTaskId: { type: String },
         _runTracePanelOpen: { type: Boolean, state: true },
+        voicePlayGetHeaders: { attribute: false },
     };
 
     constructor() {
@@ -615,6 +616,7 @@ export class ChatMessage extends PlatformElement {
         this.runTraceEntries = [];
         this.traceTaskId = '';
         this._runTracePanelOpen = false;
+        this.voicePlayGetHeaders = null;
         this._i18nLocale = this.select((s) => s.i18n.locale);
         /** @type {(() => void) | null} */
         this._onTtsPrefBound = null;
@@ -1040,6 +1042,9 @@ export class ChatMessage extends PlatformElement {
                     .text=${text}
                     voice-base-url=${base}
                     credentials="include"
+                    .getHeaders=${typeof this.voicePlayGetHeaders === 'function'
+                        ? this.voicePlayGetHeaders
+                        : null}
                 ></platform-assistant-message-actions>
             </div>
         `;

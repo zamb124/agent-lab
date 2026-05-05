@@ -258,6 +258,24 @@ class BaseChannel(ABC):
         container = get_container()
         await container.state_manager.save_state(session_id, state)
 
+    async def _resolve_session_id_for_a2a_lookup(self, lookup_id: str) -> Optional[str]:
+        """А2A ``tasks/get`` / ``tasks/cancel`` передают ``id`` (= task_id из стрима или context_id).
+
+        Хранение state — по ``flow_id:context_id``; ``task_id`` может отличаться от ``context_id``,
+        поэтому сначала прямой ключ, затем поиск по полям state.
+        """
+        direct = self._generate_session_id(lookup_id)
+        st = await self._get_state(direct)
+        if st is not None and (
+            st.context_id == lookup_id or st.task_id == lookup_id
+        ):
+            return direct
+
+        container = get_container()
+        return await container.state_manager.resolve_session_id_by_flow_and_identifier(
+            self.flow_id, lookup_id
+        )
+
     async def _resolve_active_takeover_task(self, correlation_id: "UUID") -> Optional[str]:
         """Проверяет, есть ли активная (CLAIMED/USER_DIALOG) задача оператора по correlation_id.
 
@@ -667,6 +685,8 @@ class BaseChannel(ABC):
                 state = await runtime_flow.run(state)
             except FlowCancelled:
                 logger.info(f"Flow cancelled: task_id={effective_task_id}")
+                setattr(state, "_cancelled", True)
+                await self._save_state(params.session_id, state)
                 await emitter.emit_cancelled()
                 return {"response": "", "status": "canceled"}
             finally:
@@ -768,16 +788,20 @@ class BaseChannel(ABC):
     
     # === Общая реализация on_get_task ===
     
-    async def _get_task_from_state(self, context_id: str) -> Optional[Task]:
+    async def _get_task_from_state(self, lookup_id: str) -> Optional[Task]:
         """
         Получает Task из state.
-        
+
         Общая логика для всех каналов.
-        Использует context_id для генерации session_id (для multi-turn сценариев).
+        ``lookup_id`` — ``task_id`` или ``context_id`` из A2A.
         """
-        session_id = self._generate_session_id(context_id)
+        session_id = await self._resolve_session_id_for_a2a_lookup(lookup_id)
+
+        if session_id is None:
+            return None
+
         state = await self._get_state(session_id)
-        
+
         if state is None:
             return None
         
@@ -800,25 +824,29 @@ class BaseChannel(ABC):
         
         return Task(
             id=task_id,
-            contextId=context_id,
+            contextId=state.context_id,
             status=TaskStatus(state=task_state, message=new_agent_text_message(response)),
             history=messages if messages else None,
         )
     
-    async def _cancel_task_in_state(self, task_id: str) -> Optional[Task]:
-        """Отменяет Task в state."""
-        session_id = self._generate_session_id(task_id)
+    async def _cancel_task_in_state(self, lookup_id: str) -> Optional[Task]:
+        """Отменяет Task в state (``id`` из ``tasks/cancel`` = task_id или context_id)."""
+        session_id = await self._resolve_session_id_for_a2a_lookup(lookup_id)
+
+        if session_id is None:
+            return None
+
         state = await self._get_state(session_id)
-        
+
         if state is None:
             return None
-        
+
         setattr(state, "_cancelled", True)
         await self._save_state(session_id, state)
-        
+
         return Task(
-            id=task_id,
-            contextId=task_id,
+            id=state.task_id,
+            contextId=state.context_id,
             status=TaskStatus(
                 state=TaskState.canceled,
                 message=new_agent_text_message("Task cancelled"),

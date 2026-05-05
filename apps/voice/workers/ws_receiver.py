@@ -12,7 +12,7 @@ text (Starlette/FastAPI допускают только одного «реци�
   - ``{"type":"config","session":{...}}`` — опциональное stateful config;
   - ``{"type":"speak","text":"..."}`` → ``session.synthesis_queue.put(text)``;
   - ``{"type":"end_of_utterance"}`` → ``session.synthesis_queue.put(_END_OF_UTTERANCE)``;
-  - ``{"type":"stop_playback"}`` → сброс TTS + ``tts_state=stopped``.
+  - ``{"type":"end_recording"}`` — немедленный flush STT по открытому сегменту (перед закрытием клиентом WS);
 
 Никаких неявных дефолтов: незнакомый ``type`` или payload без обязательных
 полей → `send_error` клиенту с кодом ``voice/ws/bad_command``. Малформенный
@@ -35,7 +35,11 @@ from apps.voice.services.speak_worker import (
     enqueue_speak,
 )
 from apps.voice.services.voice_client_channel import VoiceClientChannel
-from apps.voice.services.voice_session import VoiceSession
+from apps.voice.services.voice_session import MicFinalizeRequest, VoiceSession
+from apps.voice.services.voice_transport_interrupt import (
+    VoiceTransportInterruptKind,
+    execute_voice_transport_interrupt,
+)
 from core.config import get_settings
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
@@ -247,6 +251,10 @@ async def _handle_text_frame(
         await _handle_stop_playback(session=session, channel=channel)
         return
 
+    if command == "end_recording":
+        await _handle_end_recording(session=session, channel=channel)
+        return
+
     if command == "config":
         logger.info(
             "voice.ws_receiver.config_received",
@@ -259,6 +267,32 @@ async def _handle_text_frame(
         code="voice/ws/bad_command",
         detail=f"Unknown command type={command!r}.",
     )
+
+
+async def _handle_end_recording(
+    *,
+    session: VoiceSession,
+    channel: VoiceClientChannel,
+) -> None:
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future[None] = loop.create_future()
+    req = MicFinalizeRequest(complete=fut)
+    try:
+        await session.enqueue_mic_finalize(req)
+    except Exception as exc:
+        if not fut.done():
+            fut.set_exception(exc)
+        raise
+
+    finalize_timeout_s = 30.0
+    try:
+        await asyncio.wait_for(fut, timeout=finalize_timeout_s)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "voice.ws_receiver.end_recording_timeout",
+            session_id=session.session_id,
+            timeout_s=finalize_timeout_s,
+        )
 
 
 async def _handle_speak(
@@ -288,15 +322,24 @@ async def _handle_stop_playback(
     session: VoiceSession,
     channel: VoiceClientChannel,
 ) -> None:
-    removed = session.clear_synthesis_and_audio_out()
     was_active = session.is_tts_active
-    session.mark_tts_active(False)
+    await execute_voice_transport_interrupt(
+        session=session,
+        kind=VoiceTransportInterruptKind.STOP_PLAYBACK,
+        clear_tts_queues=True,
+        reset_stt_vad=False,
+        channel=channel,
+        stt_provider=None,
+        vad_provider=None,
+        language=None,
+        peek_min_buffer_bytes=None,
+        on_barge_in_timestamp=None,
+    )
     if was_active:
         await channel.send_tts_state("stopped")
     logger.info(
         "voice.ws_receiver.stop_playback",
         session_id=session.session_id,
-        removed_queue_items=removed,
     )
 
 

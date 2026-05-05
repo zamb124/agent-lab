@@ -185,13 +185,6 @@ export class EmbedChatInput extends LitElement {
         svg {
             display: block;
         }
-        .voice-status-hint {
-            margin: 0 0 8px;
-            padding: 0 4px;
-            font-size: 11px;
-            line-height: 1.35;
-            color: var(--embed-chat-muted, rgba(255, 255, 255, 0.52));
-        }
     `;
 
     constructor() {
@@ -369,6 +362,16 @@ export class EmbedChatInput extends LitElement {
         return this._label('voice_status_idle', 'Voice mode: idle');
     }
 
+    _composerDuplexMicTitle() {
+        const LOff = this._label('voice_off', 'Disable voice');
+        const LOn = this._label('voice_on', 'Enable voice');
+        const base = this.voiceActive === true ? LOff : LOn;
+        if (this._voiceStatusHintVisible() !== true) {
+            return base;
+        }
+        return `${base}. ${this._voiceStatusHintText()}`;
+    }
+
     _onComposerMicClick() {
         if (this.voiceDuplex === true) {
             this.dispatchEvent(
@@ -436,12 +439,7 @@ export class EmbedChatInput extends LitElement {
     render() {
         const canSend = this._canSend();
         const locVal = this.interfaceLocale || 'auto';
-        const LOff = this._label('voice_off', 'Disable voice');
-        const LOn = this._label('voice_on', 'Enable voice');
-        const voiceHintRow =
-            this._voiceStatusHintVisible() === true
-                ? html`<div class="voice-status-hint">${this._voiceStatusHintText()}</div>`
-                : '';
+        const micTitleDuplex = this._composerDuplexMicTitle();
         const micActive =
             this.voiceDuplex === true
                 ? this.voiceActive === true ||
@@ -450,7 +448,10 @@ export class EmbedChatInput extends LitElement {
                   this.voiceStatus === 'error'
                 : this._listening === true;
         const duplexIdleOffVisible = this._composerMicDuplexIdleOff() === true;
-        const ariaMic = this.voiceDuplex === true ? (this.voiceActive === true ? LOff : LOn) : this._label('voice_title', 'Voice');
+        const ariaMic =
+            this.voiceDuplex === true
+                ? micTitleDuplex
+                : this._label('voice_title', 'Voice');
         const duplexMicSvgIdle = html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
                       d="M12 14c1.66 0 3-1.34 3-3V6a3 3 0 1 0-6 0v5c0 1.66 1.34 3 3 3Z"
@@ -530,7 +531,6 @@ export class EmbedChatInput extends LitElement {
                   `
                 : '';
         return html`
-            ${voiceHintRow}
             ${chips}
             <div class="composer">
                 <input type="file" multiple @change=${this._onPickFiles} />

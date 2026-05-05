@@ -80,6 +80,7 @@ export class ChatMessages extends PlatformElement {
         loading: { type: Boolean },
         runTrace: { type: Array },
         currentTaskId: { type: String, attribute: 'current-task-id' },
+        voicePlayGetHeaders: { attribute: false },
     };
 
     constructor() {
@@ -88,6 +89,7 @@ export class ChatMessages extends PlatformElement {
         this.loading = false;
         this.runTrace = [];
         this.currentTaskId = '';
+        this.voicePlayGetHeaders = null;
     }
 
     _lastUserMessageId() {
@@ -169,6 +171,9 @@ export class ChatMessages extends PlatformElement {
                             ?isLastUserMessage=${isLastUser}
                             .runTraceEntries=${isLastUser ? trace : []}
                             .traceTaskId=${isLastUser ? asString(this.currentTaskId) : ''}
+                            .voicePlayGetHeaders=${typeof this.voicePlayGetHeaders === 'function'
+                                ? this.voicePlayGetHeaders
+                                : null}
                         ></chat-message>
                     `;
                     }

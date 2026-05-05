@@ -8,7 +8,8 @@
 
 После успеха — запись ``record_tts_usage`` (если request-scope содержит
 ``user``); пустого текста и отсутствия ``company_id`` в контексте
-запроса не допускается (``Zero-Guess``).
+запроса не допускается (``Zero-Guess``). Если TTS не вернул ни одного
+ненулевого чанка — ``502`` и лог ``voice.synthesize.empty_audio_body``.
 """
 
 from __future__ import annotations
@@ -99,13 +100,44 @@ async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
         tts_streamer=tts_streamer, text=body.text
     )
 
-    return StreamingResponse(
-        _record_usage_after_stream(
-            audio_iter=audio_iter,
-            tts_streamer=tts_streamer,
+    recorded_iter = _record_usage_after_stream(
+        audio_iter=audio_iter,
+        tts_streamer=tts_streamer,
+        company_id=company_id,
+        text=body.text,
+    )
+
+    body_iter = recorded_iter.__aiter__()
+    try:
+        first_chunk = await body_iter.__anext__()
+    except StopAsyncIteration:
+        logger.warning(
+            "voice.synthesize.empty_audio_body",
             company_id=company_id,
-            text=body.text,
-        ),
+            provider=tts_streamer.provider,
+            char_count=len(body.text),
+            total_audio_bytes=0,
+            response_format=body.response_format,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "TTS вернул 0 байт аудио; провайдер см. заголовок X-Voice-Provider "
+                "и лог voice.synthesize.empty_audio_body по request_id."
+            ),
+        )
+
+    async def stream_from_first_chunk() -> AsyncIterator[bytes]:
+        yield first_chunk
+        try:
+            while True:
+                chunk = await body_iter.__anext__()
+                yield chunk
+        except StopAsyncIteration:
+            return
+
+    return StreamingResponse(
+        stream_from_first_chunk(),
         media_type=tts_streamer.mime_type,
         headers={"X-Voice-Provider": tts_streamer.provider},
     )

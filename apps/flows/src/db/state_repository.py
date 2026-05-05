@@ -78,6 +78,13 @@ class BaseStateRepository(ABC):
         """Удаляет состояние сессии."""
         pass
 
+    @abstractmethod
+    async def resolve_session_id_by_flow_and_identifier(
+        self, flow_id: str, lookup_id: str
+    ) -> Optional[str]:
+        """По ``task_id`` или ``context_id`` возвращает ``session_id`` вида ``flow_id:context_id``."""
+        pass
+
     async def get_for_update(
         self, session_id: str, conn: Any = None
     ) -> Optional["ExecutionState"]:
@@ -201,6 +208,56 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         entity = StateData(session_id=session_id, data=to_store)
         data = entity.model_dump_json()
         return await self._storage.set_in_transaction(self._get_table(), final_key, data, conn)
+
+    async def resolve_session_id_by_flow_and_identifier(
+        self, flow_id: str, lookup_id: str
+    ) -> Optional[str]:
+        if self._storage.session_factory is None:
+            raise RuntimeError("Storage не подключен")
+
+        tenant_prefix = self._build_final_prefix()
+        if not tenant_prefix:
+            raise ValueError(
+                "resolve_session_id_by_flow_and_identifier requires company-scoped repository"
+            )
+
+        table = self._get_table()
+        async with self._storage._get_session() as session:
+            from sqlalchemy import text
+
+            query = text(f"""
+                SELECT key FROM {table}
+                WHERE key LIKE :tenant_prefix
+                  AND key LIKE :flow_pattern
+                  AND (
+                      (value->'data'->>'task_id') = :lookup_id
+                      OR (value->'data'->>'context_id') = :lookup_id
+                  )
+                ORDER BY COALESCE(updated_at, created_at, '1970-01-01'::timestamptz) DESC, key DESC
+                LIMIT 1
+            """)
+            result = await session.execute(
+                query,
+                {
+                    "tenant_prefix": f"{tenant_prefix}%",
+                    "flow_pattern": f"%{flow_id}:%",
+                    "lookup_id": lookup_id,
+                },
+            )
+            row = result.mappings().first()
+            if row is None:
+                return None
+
+            raw_id: str = row["key"]
+            session_id = raw_id
+            if session_id.startswith(tenant_prefix):
+                session_id = session_id[len(tenant_prefix) :]
+
+            sp = self._get_prefix()
+            if session_id.startswith(sp):
+                session_id = session_id[len(sp) :]
+
+            return session_id if session_id != "" else None
 
     async def search_sessions(
         self,
@@ -445,3 +502,14 @@ class InMemoryStateRepository(BaseStateRepository):
                     del self._locks[session_id]
                 return True
             return False
+
+    async def resolve_session_id_by_flow_and_identifier(
+        self, flow_id: str, lookup_id: str
+    ) -> Optional[str]:
+        prefix = f"{flow_id}:"
+        for sid, state in tuple(self._storage.items()):
+            if not sid.startswith(prefix):
+                continue
+            if state.task_id == lookup_id or state.context_id == lookup_id:
+                return sid
+        return None

@@ -38,5 +38,5 @@ def test_simple_crawler_bundle_function_first_contract() -> None:
     assert variables.get("search_queries_count") == 3
     assert variables.get("search_links_per_query") == 5
     assert variables.get("rag_embedding_provider") == "provider_litserve"
-    assert variables.get("rag_embedding_model") == "baai/bge-m3"
-    assert variables.get("rag_embedding_dimension") == 1024
+    assert variables.get("rag_embedding_model") == "qwen/qwen3-embedding-8b"
+    assert variables.get("rag_embedding_dimension") == 4096

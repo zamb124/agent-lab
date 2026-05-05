@@ -42,15 +42,15 @@ def test_resolve_rag_provider_bundle_litserve_uses_resolved_v1_base() -> None:
     lit = ProviderLitserveConfig(api=ProviderLitserveApiConfig(base_url="http://127.0.0.1:8014/v1"))
     emb = EmbeddingConfig(
         provider="provider_litserve",
-        api=EmbeddingApiConfig(model="baai/bge-m3", dimension=1024, base_url=None),
+        api=EmbeddingApiConfig(model="qwen/qwen3-embedding-8b", dimension=4096, base_url=None),
     )
     settings = _minimal_settings(embedding=emb, provider_litserve=lit)
     bundle = resolve_rag_provider_bundle(settings)
     assert bundle.embedding_runtime is not None
     assert bundle.embedding_runtime["provider"] == "provider_litserve"
     assert bundle.embedding_runtime["base_url"] == "http://127.0.0.1:8014/v1"
-    assert bundle.embedding_runtime["model"] == "baai/bge-m3"
-    assert bundle.embedding_runtime["dimension"] == 1024
+    assert bundle.embedding_runtime["model"] == "qwen/qwen3-embedding-8b"
+    assert bundle.embedding_runtime["dimension"] == 4096
 
 
 def test_resolve_rag_embedding_runtime_litserve_prefers_embedding_api_base_url() -> None:
@@ -58,8 +58,8 @@ def test_resolve_rag_embedding_runtime_litserve_prefers_embedding_api_base_url()
     emb = EmbeddingConfig(
         provider="provider_litserve",
         api=EmbeddingApiConfig(
-            model="baai/bge-m3",
-            dimension=1024,
+            model="qwen/qwen3-embedding-8b",
+            dimension=4096,
             base_url="http://192.168.1.2:8014/v1",
         ),
     )
@@ -71,7 +71,8 @@ def test_resolve_rag_embedding_runtime_litserve_requires_root_when_api_base_url_
     lit = ProviderLitserveConfig(api=ProviderLitserveApiConfig(base_url=None))
     emb = EmbeddingConfig(
         provider="provider_litserve",
-        api=EmbeddingApiConfig(model="baai/bge-m3", dimension=1024, base_url=None),
+        api=EmbeddingApiConfig(model="qwen/qwen3-embedding-8b", dimension=4096, base_url=None),
     )
     with pytest.raises(ValueError, match="provider_litserve.api.base_url"):
         resolve_rag_embedding_runtime(emb, LLMConfig(), lit)
+

@@ -406,6 +406,7 @@ export function resampleMonoToPcm16ArrayBuffer(channel, inRate, state) {
  * @property {{ mime: string, sampleRate: number, channels: number }} mediaConfig
  * @property {{ code: string, detail: string }} error
  * @property {{ code: number, reason: string }} closed
+ * @property {Record<string, never>} recordingFinalized — ответ сервера на ``end_recording`` (``finalize_done``)
  */
 
 export class VoiceMediaSession extends EventTarget {
@@ -1285,7 +1286,11 @@ export class VoiceMediaSession extends EventTarget {
                     text: typeof payload.text === 'string' ? payload.text : '',
                     final: payload.final === true,
                     language: typeof payload.language === 'string' ? payload.language : undefined,
+                    interrupted: payload.interrupted === true,
                 });
+                break;
+            case 'finalize_done':
+                this._dispatch('recordingFinalized', {});
                 break;
             case 'vad':
                 if (payload.state === 'started' || payload.state === 'ended') {
@@ -1494,6 +1499,38 @@ export class VoiceMediaSession extends EventTarget {
      */
     _dispatch(type, detail) {
         this.dispatchEvent(new CustomEvent(type, { detail }));
+    }
+
+    /**
+     * Запросить на сервере немедленный flush STT по текущему сегменту (WS ``end_recording``)
+     * и дождаться ответа ``finalize_done`` или таймаута. Вызывать **до** bridge.stop() / close(),
+     * пока клиент ещё принимает транскрипты.
+     * @param {number} [timeoutMs]
+     * @returns {Promise<void>}
+     */
+    awaitRecordingFinalized(timeoutMs = 5000) {
+        if (this._closed || !this.isConnected) {
+            return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+            let settled = false;
+            let timer = 0;
+            const finish = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                if (timer !== 0) {
+                    window.clearTimeout(timer);
+                }
+                this.removeEventListener('recordingFinalized', onDone);
+                resolve();
+            };
+            const onDone = () => finish();
+            timer = window.setTimeout(finish, timeoutMs);
+            this.addEventListener('recordingFinalized', onDone, { once: true });
+            this._sendText({ type: 'end_recording' });
+        });
     }
 
     /**

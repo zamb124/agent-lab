@@ -15,9 +15,11 @@ batch-клиенты под капотом.
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+import httpx
 from pydantic import BaseModel, Field
 
 from core.http import get_httpx_client
@@ -43,6 +45,42 @@ _MIME_BY_FORMAT: dict[str, str] = {
     "pcm": "audio/L16",
     "lpcm": "audio/L16",
 }
+
+_UPSTREAM_ERROR_BODY_MAX = 2048
+
+
+def _tts_upstream_error_summary(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if isinstance(data, dict) and "detail" in data:
+        detail_obj = data["detail"]
+        if isinstance(detail_obj, str):
+            base = detail_obj
+        else:
+            base = json.dumps(detail_obj, ensure_ascii=False)
+        exc_type = data.get("exception_type")
+        exc_detail = data.get("exception_detail")
+        if isinstance(exc_type, str) and exc_type.strip():
+            if isinstance(exc_detail, str) and exc_detail.strip():
+                base = f"{base} [{exc_type}: {exc_detail.strip()[:2000]}]"
+            else:
+                base = f"{base} [{exc_type}]"
+        elif data.get("code") == "internal_error":
+            base = (
+                base
+                + " — provider_litserve: лог `http_unhandled_exception` (тип исключения + traceback); "
+                "синтез: `tts_litapi.predict_failed`. Локально: `SERVER__DEBUG=true` для текста в JSON."
+            )
+        return base[:_UPSTREAM_ERROR_BODY_MAX]
+    raw = response.text.strip()
+    if raw:
+        return raw[:_UPSTREAM_ERROR_BODY_MAX]
+    reason = response.reason_phrase
+    if reason:
+        return reason
+    return "no body"
 
 
 class TTSResult(BaseModel):
@@ -144,7 +182,19 @@ class LitserveTTSClient(BaseTTSClient):
 
         async with get_httpx_client(timeout=self._timeout) as client:
             response = await client.post(url, json=payload)
-        response.raise_for_status()
+        if response.is_error:
+            detail = _tts_upstream_error_summary(response)
+            logger.warning(
+                "litserve_tts.http_error status=%s url=%s detail=%s content_type=%s body_len=%s",
+                response.status_code,
+                url,
+                detail,
+                response.headers.get("content-type"),
+                len(response.content),
+            )
+            raise RuntimeError(
+                f"TTS litserve HTTP {response.status_code} for {url!r}: {detail}"
+            ) from None
 
         return TTSResult(
             provider="litserve",

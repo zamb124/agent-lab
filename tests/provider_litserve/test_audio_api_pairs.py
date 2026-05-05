@@ -80,8 +80,8 @@ def test_tts_pairs_use_api_id_as_key(unique_id):
             ProviderLitserveTTSModelEntry(
                 api_model_id=f"kokoro-{unique_id}",
                 hf_model_id="hexgrad/Kokoro-82M",
-                lang="ru",
-                voice="af",
+                lang="a",
+                voice="af_heart",
                 sample_rate=24000,
             ),
         ],

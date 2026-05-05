@@ -3,8 +3,18 @@
  */
 import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
 import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
+import { disposeVoiceMediaThenBridge } from '@platform/lib/voice/dispose-voice-session.js';
 import { readTtsOutputEnabled } from '@platform/lib/voice/tts-output-pref.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
+
+/**
+ * Дополнительные заголовки для fetch к voice / A2A (как `getAuthToken` в embed): по умолчанию {}.
+ * При встраивании с Bearer переопределите тот же контракт там, где создаёте сессию и Play.
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function flowsVoiceAuxiliaryHttpHeadersStub() {
+    return {};
+}
 
 /**
  * Нормализует локаль UI для query `language=` voice WebSocket (ISO 639-1 / префикс BCP-47).
@@ -89,6 +99,7 @@ export function formatFlowVoiceConnectErrorDetail(err, tFlows) {
  * @param {() => void} [p.onClosed]
  * @param {string} [p.sttLanguage] — для query `language=` (STT), из `state.i18n.locale`
  * @param {() => boolean} [p.getTtsOutputEnabled] — по умолчанию `readTtsOutputEnabled` из localStorage
+ * @param {() => Promise<Record<string, string>>} [p.getHeaders] — как embed `getAuthToken` для A2A `message/stream`
  * @returns {FlowVoiceSessionHandles}
  */
 export function createFlowVoiceSession(p) {
@@ -120,12 +131,15 @@ export function createFlowVoiceSession(p) {
     const media = new VoiceMediaSession(mediaOpts);
     const getTts =
         typeof p.getTtsOutputEnabled === 'function' ? p.getTtsOutputEnabled : () => readTtsOutputEnabled();
+    const getHeaders =
+        typeof p.getHeaders === 'function' ? p.getHeaders : flowsVoiceAuxiliaryHttpHeadersStub;
     const bridge = new VoiceAgentBridge({
         mediaSession: media,
         a2aBaseUrl,
         flowId: p.flowId,
         branchId: branchNorm,
         credentials: 'include',
+        getHeaders,
         initialContextId: p.initialContextId,
         getContextId: typeof p.getContextId === 'function' ? p.getContextId : undefined,
         getStreamMetadata: typeof p.getStreamMetadata === 'function' ? p.getStreamMetadata : undefined,
@@ -153,20 +167,8 @@ export function createFlowVoiceSession(p) {
 /**
  * @param {InstanceType<typeof VoiceMediaSession>|null} media
  * @param {InstanceType<typeof VoiceAgentBridge>|null} bridge
+ * @returns {Promise<void>}
  */
-export function disposeFlowVoiceSession(media, bridge) {
-    if (bridge) {
-        try {
-            bridge.stop();
-        } catch {
-            /* noop */
-        }
-    }
-    if (media) {
-        try {
-            media.close();
-        } catch {
-            /* noop */
-        }
-    }
+export async function disposeFlowVoiceSession(media, bridge) {
+    await disposeVoiceMediaThenBridge(media, bridge);
 }

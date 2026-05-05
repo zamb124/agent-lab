@@ -34,6 +34,7 @@ import uuid
 import pytest
 
 from apps.provider_litserve.runtime_models import reset_runtime_catalog_for_tests
+from apps.provider_litserve.tts.engines import reset_local_tts_engine_for_tests
 
 
 @pytest.fixture
@@ -46,8 +47,10 @@ def unique_id() -> str:
 def _reset_provider_litserve_runtime_catalog():
     """Перед/после каждого теста чистим runtime-каталог моделей."""
     reset_runtime_catalog_for_tests()
+    reset_local_tts_engine_for_tests()
     yield
     reset_runtime_catalog_for_tests()
+    reset_local_tts_engine_for_tests()
 
 
 @pytest.fixture(scope="session")

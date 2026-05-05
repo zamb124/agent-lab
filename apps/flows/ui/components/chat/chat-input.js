@@ -116,22 +116,6 @@ export class ChatInput extends PlatformElement {
                 background: color-mix(in srgb, var(--accent) 18%, var(--glass-solid-strong));
             }
 
-            .voice-status-hint {
-                max-width: 900px;
-                margin: 0 auto var(--space-2);
-                padding: 0 var(--space-6);
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                line-height: 1.35;
-            }
-
-            @media (max-width: 768px) {
-                .voice-status-hint {
-                    padding: 0 var(--space-4);
-                    max-width: none;
-                }
-            }
-
             .input-wrapper {
                 flex: 1;
                 position: relative;
@@ -283,6 +267,8 @@ export class ChatInput extends PlatformElement {
         voiceActive: { type: Boolean, attribute: 'voice-active' },
         voiceStatus: { type: String, attribute: 'voice-status' },
         ttsOutputEnabled: { type: Boolean, attribute: 'tts-output-enabled' },
+        /** Пока уходит `flows/chat_cancel` (HTTP tasks/cancel). */
+        cancelBusy: { type: Boolean, attribute: 'cancel-busy' },
         _value: { state: true },
         _selectedFiles: { state: true },
     };
@@ -299,6 +285,7 @@ export class ChatInput extends PlatformElement {
         this.voiceActive = false;
         this.voiceStatus = 'idle';
         this.ttsOutputEnabled = true;
+        this.cancelBusy = false;
         this._value = '';
         this._selectedFiles = [];
     }
@@ -420,11 +407,26 @@ export class ChatInput extends PlatformElement {
     }
 
     _stop() {
+        if (this.cancelBusy) return;
         this.emit('stop');
     }
 
     _onVoiceClick() {
         this.emit('voice-toggle');
+    }
+
+    _voiceMicDetailedLabel() {
+        const vs = typeof this.voiceStatus === 'string' ? this.voiceStatus : 'idle';
+        const primary = this.voiceActive
+            ? this.t('platform_chat.btn_voice_off')
+            : this.t('platform_chat.btn_voice_on');
+        const summaryVisible =
+            this.voiceActive || (vs !== 'idle' && vs !== 'closed');
+        if (!summaryVisible || !this.showVoice) {
+            return primary;
+        }
+        const statusHint = this.t(`platform_chat.voice_status_${vs}`);
+        return `${primary}. ${statusHint}`;
     }
 
     _onTtsOutputClick() {
@@ -440,15 +442,6 @@ export class ChatInput extends PlatformElement {
                     ${this._selectedFiles.map((file, index) => this._renderFilePreview(file, index))}
                 </div>
             ` : ''}
-            ${this.showVoice &&
-            (this.voiceActive ||
-                (this.voiceStatus !== 'idle' && this.voiceStatus !== 'closed'))
-                ? html`
-                      <div class="voice-status-hint">
-                          ${this.t(`platform_chat.voice_status_${this.voiceStatus}`)}
-                      </div>
-                  `
-                : ''}
             
             <div class="input-container">
                 <input
@@ -502,12 +495,8 @@ export class ChatInput extends PlatformElement {
                           <button
                               type="button"
                               class="voice-button ${this.voiceActive ? 'active' : ''}"
-                              title=${this.voiceActive
-                                  ? this.t('platform_chat.btn_voice_off')
-                                  : this.t('platform_chat.btn_voice_on')}
-                              aria-label=${this.voiceActive
-                                  ? this.t('platform_chat.btn_voice_off')
-                                  : this.t('platform_chat.btn_voice_on')}
+                              title=${this._voiceMicDetailedLabel()}
+                              aria-label=${this._voiceMicDetailedLabel()}
                               aria-pressed=${this.voiceActive ? 'true' : 'false'}
                               ?disabled=${this.disabled}
                               @click=${this._onVoiceClick}
@@ -522,10 +511,18 @@ export class ChatInput extends PlatformElement {
                 
                 ${this.loading ? html`
                     <button 
+                        type="button"
                         class="send-button stop"
+                        title=${this.cancelBusy ? this.t('chat_input.title_stop_pending') : this.t('chat_input.title_stop')}
+                        aria-label=${this.cancelBusy ? this.t('chat_input.title_stop_pending') : this.t('chat_input.title_stop')}
+                        ?disabled=${this.cancelBusy}
                         @click=${this._stop}
                     >
-                        <platform-icon name="stop" size="20" filled></platform-icon>
+                        <platform-icon
+                            name=${this.cancelBusy ? 'hourglass-top' : 'stop'}
+                            size="20"
+                            ?filled=${!this.cancelBusy}
+                        ></platform-icon>
                     </button>
                 ` : html`
                     <button 

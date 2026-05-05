@@ -275,11 +275,11 @@ litserve:
   port: 8014
   serviceName: provider-litserve
   # PVC под HF cache: GigaAM v3 (~3 Gi), Kokoro (~1 Gi), Silero VAD (~50 Mi),
-  # bge-m3 (~2 Gi), bge-reranker-v2-gemma (~5 Gi) + spare для разных backend-ов
-  # (gigaam/huggingface_ctc/whisper/kokoro/silero) → берём 100Gi.
+  # Qwen3-Embedding-8B, Qwen3-Reranker-8B, малый chat-Qwen (~1.5B) + запас
+  # (gigaam/kokoro/silero/qwen/flagllm) → берём 100Gi.
   modelCacheSize: 100Gi
-  modelId: BAAI/bge-reranker-v2-gemma
-  embeddingModelId: BAAI/bge-m3
+  modelId: Qwen/Qwen3-Reranker-8B
+  embeddingModelId: Qwen/Qwen3-Embedding-8B
   # API id дефолтных моделей (поля stt_default_api_model_id и т.д. в
   # ProviderLitserveInfraConfig). ENV: PROVIDER_LITSERVE__INFRA__STT_DEFAULT_API_MODEL_ID и т.д.
   sttDefaultApiModelId: gigaam-v3-rnnt-ru
@@ -287,8 +287,8 @@ litserve:
   vadDefaultApiModelId: silero-vad-v5
   resources:
     # Память: GigaAM v3 (~2.5 Gi RSS), Kokoro (~1.2 Gi), Silero VAD (~120 Mi),
-    # bge-m3 + reranker (~3 Gi). При CPU-режиме требуется ~ 8 Gi steady-state,
-    # при GPU — выгрузка весов в VRAM, RSS ~5 Gi.
+    # Qwen embedding + rerank + малый LLM в LitServe (см. conf provider_litserve.infra).
+    # При CPU-режиме выше RSS; при GPU — часть в VRAM, целиться в 8Gi request / 24Gi limit.
     requests:
       cpu: "1"
       memory: 8Gi

@@ -26,7 +26,7 @@ from apps.flows.src.runtime.a2a_messages import (
 )
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.state.cancellation import check_cancellation
+from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.runtime.llm_override_params import (
     split_llm_override_for_client,
     stream_kwargs_from_override,
@@ -316,6 +316,29 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         InterruptManager.clear_interrupt_path(state)
 
+    def _append_interrupted_stream_assistant(
+        self,
+        state: ExecutionState,
+        content: str,
+        *,
+        sid: str,
+        context_id: str,
+        task_id: str,
+    ) -> None:
+        text = content.strip()
+        if text == "":
+            return
+        state.messages.append(
+            new_assistant_message(
+                text,
+                sid,
+                None,
+                context_id=context_id,
+                task_id=task_id,
+                interrupted=True,
+            )
+        )
+
     async def _react_loop(
         self,
         state: ExecutionState,
@@ -412,49 +435,59 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         ) as llm_span:
                             llm_messages_for_trace = self._messages_to_dict(llm_messages)
                             tracer.record_llm_request(llm_span, llm_messages_for_trace, tools_schema, response_format)
-                            
-                            async for event in self._call_llm(
-                                llm,
-                                stream_kw,
-                                max_tok,
-                                llm_messages,
-                                tools_schema,
-                                context_id,
-                                task_id,
-                                response_format,
-                                state,
-                            ):
-                                should_yield = True
-                                
-                                if isinstance(event, TaskArtifactUpdateEvent):
-                                    artifact_name = event.artifact.name or "response"
-                                    if artifact_name != "reasoning":
-                                        for part in event.artifact.parts:
-                                            if hasattr(part.root, "text"):
-                                                content += part.root.text
-                                        if loop_mode == ReactLoopMode.EXPLICIT:
-                                            should_yield = False
-                                
-                                if should_yield:
-                                    await emitter.emit(event)
-                                    yield event
 
-                                if isinstance(event, TaskStatusUpdateEvent):
-                                    if event.status.message and event.status.message.metadata:
-                                        md = event.status.message.metadata
-                                        tc = md.get("tool_calls")
-                                        if tc:
-                                            tool_calls = tc
-                                        usage = md.get("usage")
-                                        if usage:
-                                            input_tokens = usage.get("input_tokens", 0)
-                                            output_tokens = usage.get("output_tokens", 0)
-                                            prc = usage.get("provider_reported_cost")
-                                            if isinstance(prc, (int, float)):
-                                                provider_reported_cost = float(prc)
-                                            puc = usage.get("provider_upstream_inference_cost")
-                                            if isinstance(puc, (int, float)):
-                                                provider_upstream_inference_cost = float(puc)
+                            try:
+                                async for event in self._call_llm(
+                                    llm,
+                                    stream_kw,
+                                    max_tok,
+                                    llm_messages,
+                                    tools_schema,
+                                    context_id,
+                                    task_id,
+                                    response_format,
+                                    state,
+                                ):
+                                    should_yield = True
+
+                                    if isinstance(event, TaskArtifactUpdateEvent):
+                                        artifact_name = event.artifact.name or "response"
+                                        if artifact_name != "reasoning":
+                                            for part in event.artifact.parts:
+                                                if hasattr(part.root, "text"):
+                                                    content += part.root.text
+                                            if loop_mode == ReactLoopMode.EXPLICIT:
+                                                should_yield = False
+
+                                    if should_yield:
+                                        await emitter.emit(event)
+                                        yield event
+
+                                    if isinstance(event, TaskStatusUpdateEvent):
+                                        if event.status.message and event.status.message.metadata:
+                                            md = event.status.message.metadata
+                                            tc = md.get("tool_calls")
+                                            if tc:
+                                                tool_calls = tc
+                                            usage = md.get("usage")
+                                            if usage:
+                                                input_tokens = usage.get("input_tokens", 0)
+                                                output_tokens = usage.get("output_tokens", 0)
+                                                prc = usage.get("provider_reported_cost")
+                                                if isinstance(prc, (int, float)):
+                                                    provider_reported_cost = float(prc)
+                                                puc = usage.get("provider_upstream_inference_cost")
+                                                if isinstance(puc, (int, float)):
+                                                    provider_upstream_inference_cost = float(puc)
+                            except FlowCancelled:
+                                self._append_interrupted_stream_assistant(
+                                    state,
+                                    content,
+                                    sid=sid,
+                                    context_id=context_id,
+                                    task_id=task_id,
+                                )
+                                raise
 
                             if (
                                 llm_provider == "openrouter"
