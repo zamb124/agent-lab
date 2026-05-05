@@ -26,7 +26,19 @@ import {
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
 } from '@platform/lib/voice/tts-output-pref.js';
-import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
+import {
+    resolveVoiceHttpOrigin,
+    resolveVoiceHttpOriginFromFlowsBaseUrl,
+} from '@platform/lib/voice/voice-http-origin.js';
+import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
+import { normalizeVoiceLocaleForWs } from '@platform/lib/voice/normalize-voice-locale.js';
+import {
+    feedStreamTtsFromA2aResult,
+    primeStreamTtsPlaybackFromUserGesture,
+    stopStreamTtsPlayback,
+    setStreamTtsTarget,
+    clearStreamTtsTarget,
+} from '@platform/lib/voice/stream-tts-registry.js';
 import './embed-block-renderer.js';
 import './embed-chat-input.js';
 
@@ -52,6 +64,7 @@ const ASSISTANT_EVENT_SCHEMA_VERSION = '1.0.0';
  * - getContextVariables: async () => Record<string, unknown> — контекст экрана/сущности для ассистента (мёрж после getExtraMetadataVariables)
  * - eventNamespace: префикс событий для внешнего хоста (по умолчанию assistant)
  * - assistantTitle (assistant-title): имя в шапке; иначе title; иначе labels.title из локали (?embed_assistant_name= на странице — см. drawer)
+ * - companyId (company-id), voiceBaseUrl (voice-base-url): для потоковой озвучки A2A без drawer; voiceBaseUrl опционально — из flowsBaseUrl
  *
  * Событие (после завершения стрима ответа на отправку пользователя): **`humanitec-embed-chat-assistant-reply-completed`**, bubbles + composed — для счётчика на FAB drawer.
  */
@@ -74,6 +87,8 @@ export class PlatformEmbedChat extends LitElement {
         interfaceLocale: { type: String, attribute: 'interface-locale' },
         showLocaleControl: { type: Boolean, attribute: 'show-locale-control' },
         hideHeader: { type: Boolean, attribute: 'hide-header' },
+        companyId: { type: String, attribute: 'company-id' },
+        voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
         visible: { type: Boolean, reflect: true },
         eventNamespace: { type: String, attribute: 'event-namespace' },
         eventAckRetries: { type: Number, attribute: 'event-ack-retries' },
@@ -83,6 +98,8 @@ export class PlatformEmbedChat extends LitElement {
         greetingSent: { type: Boolean, state: true },
         _credentials: { state: true },
         _credPopover: { state: true },
+        _embedTtsOnlyMedia: { state: true },
+        _embedTtsOnlyStreamStarting: { state: true },
     };
 
     static styles = css`
@@ -141,24 +158,57 @@ export class PlatformEmbedChat extends LitElement {
             flex-direction: column;
             gap: 12px;
         }
-        .msg {
+        .scroll > .msg {
+            align-self: flex-start;
             max-width: 92%;
+        }
+        .embed-msg-group {
+            display: flex;
+            flex-direction: column;
+            max-width: 92%;
+            min-width: 0;
+            align-items: stretch;
+        }
+        .embed-msg-group.user {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+        .embed-msg-group.assistant {
+            align-self: flex-start;
+        }
+        .msg {
+            max-width: 100%;
+            min-width: 0;
+            width: fit-content;
             padding: 12px 14px;
             border-radius: var(--embed-radius);
             font-size: 14px;
             line-height: 1.45;
+            box-sizing: border-box;
+        }
+        .embed-msg-group.user .msg {
+            width: auto;
+        }
+        .embed-msg-group.assistant .msg {
+            width: 100%;
         }
         .msg.user {
-            align-self: flex-end;
             background: var(--embed-chat-accent-muted);
         }
         .msg.assistant {
-            align-self: flex-start;
             background: var(--embed-chat-surface);
             border: 1px solid var(--embed-chat-border);
         }
-        .embed-assistant-actions {
-            margin-top: 10px;
+        .embed-assistant-actions,
+        .embed-user-actions {
+            margin-top: 6px;
+            padding: 0 2px;
+        }
+        .embed-msg-group.user .embed-user-actions {
+            display: flex;
+            justify-content: flex-end;
+            width: 100%;
+            box-sizing: border-box;
         }
         .meta {
             font-size: 11px;
@@ -437,6 +487,8 @@ export class PlatformEmbedChat extends LitElement {
         this.interfaceLocale = 'auto';
         this.showLocaleControl = false;
         this.hideHeader = false;
+        this.companyId = '';
+        this.voiceBaseUrl = '';
         this.visible = true;
         this.eventNamespace = 'assistant';
         this.eventAckRetries = 0;
@@ -448,6 +500,9 @@ export class PlatformEmbedChat extends LitElement {
         this._messages = [];
         this._loading = false;
         this._sseOpen = false;
+        this._cancelBusy = false;
+        /** @type {AbortController|null} */
+        this._streamAbort = null;
         this._contextId = `${Date.now()}`;
         this._currentTaskId = null;
         this.greetingSent = false;
@@ -462,6 +517,9 @@ export class PlatformEmbedChat extends LitElement {
         /** @type {Array<{provider:string, service:string}>} */
         this._credentials = [];
         this._credPopover = null;
+        /** @type {InstanceType<typeof VoiceMediaSession> | null} */
+        this._embedTtsOnlyMedia = null;
+        this._embedTtsOnlyStreamStarting = false;
         this._uiEventDispatchKeys = new Set();
         this._greetingTypingRunId = 0;
         this._pendingEventAcks = new Map();
@@ -470,13 +528,17 @@ export class PlatformEmbedChat extends LitElement {
         this._ackEventName = null;
         this._nackEventName = null;
         this._onCredClickOutside = this._onCredClickOutside.bind(this);
-        this._onTtsPrefForEmbed = () => this.requestUpdate();
+        this._onTtsPrefForEmbed = () => {
+            this.requestUpdate();
+            this._syncEmbedStreamTtsAfterPrefChange();
+        };
         this._onTtsStorageForEmbed = (e) => {
             if (
                 e.storageArea === window.localStorage
                 && e.key === TTS_OUTPUT_STORAGE_KEY
             ) {
                 this.requestUpdate();
+                this._syncEmbedStreamTtsAfterPrefChange();
             }
         };
         registerBuiltinEmbedBlocks();
@@ -521,6 +583,302 @@ export class PlatformEmbedChat extends LitElement {
     _lb(key, fb) {
         const L = this._mergedLabels();
         return L[key] != null && L[key] !== '' ? L[key] : fb;
+    }
+
+    /**
+     * Origin голосового шлюза для POST /api/v1/synthesize (кнопка озвучки).
+     * На странице embed хост документа часто не совпадает с хостом flows — URL из flowsBaseUrl.
+     * @returns {string}
+     */
+    _embedAssistantTtsVoiceBaseUrl() {
+        if (!readTtsOutputEnabled()) {
+            return '';
+        }
+        const flows = this.flowsBaseUrl != null ? String(this.flowsBaseUrl).trim() : '';
+        if (flows !== '') {
+            return resolveVoiceHttpOriginFromFlowsBaseUrl(flows);
+        }
+        return resolveVoiceHttpOrigin();
+    }
+
+    /**
+     * HTTP-база voice для WS TTS-only (без проверки pref озвучки).
+     * @returns {string}
+     */
+    _resolvedVoiceHttpBaseForStream() {
+        const explicit = String(this.voiceBaseUrl || '').trim().replace(/\/$/, '');
+        if (explicit !== '') {
+            return explicit;
+        }
+        const flows = this.flowsBaseUrl != null ? String(this.flowsBaseUrl).trim() : '';
+        if (flows !== '') {
+            return resolveVoiceHttpOriginFromFlowsBaseUrl(flows);
+        }
+        return resolveVoiceHttpOrigin();
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    _voiceEmbedTtsContextReady() {
+        const voiceBase = this._resolvedVoiceHttpBaseForStream();
+        if (voiceBase === '') {
+            return false;
+        }
+        if (!this.embedId && !this.flowId) {
+            return false;
+        }
+        if (String(this.companyId || '').trim() === '') {
+            return false;
+        }
+        if (String(this.flowsBaseUrl || '').trim() === '') {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * @returns {Record<string, string>}
+     */
+    _wsLanguageQueryForVoiceSession() {
+        const il = String(this.interfaceLocale || '').trim();
+        if (il === '' || il.toLowerCase() === 'auto') {
+            return {};
+        }
+        try {
+            return { language: normalizeVoiceLocaleForWs(il) };
+        } catch {
+            return {};
+        }
+    }
+
+    _disposeEmbedTtsOnlyStream() {
+        const m = this._embedTtsOnlyMedia;
+        this._embedTtsOnlyMedia = null;
+        this._embedTtsOnlyStreamStarting = false;
+        clearStreamTtsTarget();
+        if (m) {
+            try {
+                m.close();
+            } catch {
+                /* noop */
+            }
+        }
+    }
+
+    /**
+     * @returns {VoiceMediaSession}
+     */
+    _makeEmbedTtsOnlyVoiceMediaSession() {
+        const voiceBaseUrl = this._resolvedVoiceHttpBaseForStream().replace(/\/$/, '');
+        const companyId = String(this.companyId || '').trim();
+        const sessionId = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
+        const q = this._wsLanguageQueryForVoiceSession();
+        const opts = {
+            baseUrl: wsBase,
+            sessionId,
+            companyId,
+            autoRecord: false,
+        };
+        if (Object.keys(q).length > 0) {
+            Object.assign(opts, { query: q });
+        }
+        const media = new VoiceMediaSession(opts);
+        media.addEventListener('error', (e) => {
+            this.dispatchEvent(
+                new CustomEvent('humanitec-embed-voice-error', {
+                    bubbles: true,
+                    composed: true,
+                    detail: e.detail,
+                }),
+            );
+        });
+        media.addEventListener('closed', () => {
+            if (this._embedTtsOnlyMedia === media) {
+                this._embedTtsOnlyMedia = null;
+                clearStreamTtsTarget();
+            }
+        });
+        return media;
+    }
+
+    /**
+     * @param {VoiceMediaSession} media
+     * @returns {Promise<void>}
+     */
+    async _finalizeEmbedTtsOnlyStreamAfterConnect(media) {
+        await media.connect();
+        if (this._embedTtsOnlyMedia !== media) {
+            try {
+                media.close();
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        if (this.voiceComposerActive || !readTtsOutputEnabled() || !this.visible) {
+            this._embedTtsOnlyMedia = null;
+            clearStreamTtsTarget();
+            try {
+                media.close();
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setStreamTtsTarget(media, readTtsOutputEnabled);
+    }
+
+    /**
+     * Жест отправки: WS только для TTS (`speak`). Публичный API для drawer.
+     */
+    primeStreamTtsFromUserGesture() {
+        if (!readTtsOutputEnabled()) {
+            return;
+        }
+        if (this.voiceComposerActive) {
+            return;
+        }
+        if (!this._voiceEmbedTtsContextReady()) {
+            return;
+        }
+        if (this._embedTtsOnlyMedia !== null && this._embedTtsOnlyMedia.isConnected) {
+            this._embedTtsOnlyMedia.primePlaybackFromUserGesture();
+            setStreamTtsTarget(this._embedTtsOnlyMedia, readTtsOutputEnabled);
+            return;
+        }
+        if (this._embedTtsOnlyStreamStarting) {
+            const m = this._embedTtsOnlyMedia;
+            if (m && typeof m.primePlaybackFromUserGesture === 'function') {
+                m.primePlaybackFromUserGesture();
+            }
+            if (m) {
+                setStreamTtsTarget(m, readTtsOutputEnabled);
+            }
+            return;
+        }
+        this._disposeEmbedTtsOnlyStream();
+        this._embedTtsOnlyStreamStarting = true;
+        const media = this._makeEmbedTtsOnlyVoiceMediaSession();
+        this._embedTtsOnlyMedia = media;
+        media.primePlaybackFromUserGesture();
+        setStreamTtsTarget(media, readTtsOutputEnabled);
+        void (async () => {
+            try {
+                await this._finalizeEmbedTtsOnlyStreamAfterConnect(media);
+            } catch (err) {
+                if (this._embedTtsOnlyMedia === media) {
+                    this._embedTtsOnlyMedia = null;
+                }
+                clearStreamTtsTarget();
+                try {
+                    media.close();
+                } catch {
+                    /* noop */
+                }
+                this.dispatchEvent(
+                    new CustomEvent('humanitec-embed-voice-error', {
+                        bubbles: true,
+                        composed: true,
+                        detail: {
+                            code: 'voice/tts_stream_connect_failed',
+                            detail: err instanceof Error ? err.message : String(err),
+                        },
+                    }),
+                );
+            } finally {
+                this._embedTtsOnlyStreamStarting = false;
+            }
+        })();
+    }
+
+    async ensureTtsOnlyStream() {
+        if (!readTtsOutputEnabled()) {
+            this._disposeEmbedTtsOnlyStream();
+            return;
+        }
+        if (!this.visible || this.voiceComposerActive) {
+            return;
+        }
+        if (!this._voiceEmbedTtsContextReady()) {
+            return;
+        }
+        if (this._embedTtsOnlyMedia !== null && this._embedTtsOnlyMedia.isConnected) {
+            setStreamTtsTarget(this._embedTtsOnlyMedia, readTtsOutputEnabled);
+            return;
+        }
+        if (this._embedTtsOnlyStreamStarting) {
+            return;
+        }
+        this._disposeEmbedTtsOnlyStream();
+        this._embedTtsOnlyStreamStarting = true;
+        const media = this._makeEmbedTtsOnlyVoiceMediaSession();
+        this._embedTtsOnlyMedia = media;
+        try {
+            await this._finalizeEmbedTtsOnlyStreamAfterConnect(media);
+        } catch (err) {
+            if (this._embedTtsOnlyMedia === media) {
+                this._embedTtsOnlyMedia = null;
+            }
+            clearStreamTtsTarget();
+            try {
+                media.close();
+            } catch {
+                /* noop */
+            }
+            this.dispatchEvent(
+                new CustomEvent('humanitec-embed-voice-error', {
+                    bubbles: true,
+                    composed: true,
+                    detail: {
+                        code: 'voice/tts_stream_connect_failed',
+                        detail: err instanceof Error ? err.message : String(err),
+                    },
+                }),
+            );
+        } finally {
+            this._embedTtsOnlyStreamStarting = false;
+        }
+    }
+
+    disposeTtsOnlyStream() {
+        this._disposeEmbedTtsOnlyStream();
+    }
+
+    _syncEmbedStreamTtsAfterPrefChange() {
+        if (!readTtsOutputEnabled()) {
+            this._disposeEmbedTtsOnlyStream();
+            return;
+        }
+        if (this.visible && !this.voiceComposerActive) {
+            void this.ensureTtsOnlyStream();
+        }
+    }
+
+    /**
+     * Пока tts-only WS коннектится, `feedStreamTtsFromA2aResult` без цели; ждём перед SSE.
+     * @returns {Promise<void>}
+     */
+    async _awaitEmbedTtsOnlyReady() {
+        if (!this._voiceEmbedTtsContextReady()) {
+            return;
+        }
+        const t0 = Date.now();
+        const maxMs = 2500;
+        while (Date.now() - t0 < maxMs) {
+            if (this.voiceComposerActive || !readTtsOutputEnabled()) {
+                return;
+            }
+            if (
+                !this._embedTtsOnlyStreamStarting
+                && this._embedTtsOnlyMedia !== null
+                && this._embedTtsOnlyMedia.isConnected
+            ) {
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 40));
+        }
     }
 
     _headDisplayTitle() {
@@ -570,6 +928,7 @@ export class PlatformEmbedChat extends LitElement {
             }
         });
         this._pendingEventAcks.clear();
+        this._disposeEmbedTtsOnlyStream();
     }
 
     _bindAckListeners() {
@@ -890,6 +1249,9 @@ export class PlatformEmbedChat extends LitElement {
 
     updated(changed) {
         super.updated(changed);
+        if (changed.has('visible') && !this.visible) {
+            this._disposeEmbedTtsOnlyStream();
+        }
         if (changed.has('visible')) {
             this._startGreetingTypingIfNeeded();
         }
@@ -1073,6 +1435,96 @@ export class PlatformEmbedChat extends LitElement {
         });
     }
 
+    _onEmbedComposeEdit(e) {
+        const detail = e.detail;
+        const text = detail && typeof detail.text === 'string' ? detail.text : '';
+        if (text === '') {
+            return;
+        }
+        const input = this.renderRoot?.querySelector('embed-chat-input');
+        if (!input || typeof input.setDraft !== 'function') {
+            throw new Error('platform-embed-chat: embed-chat-input.setDraft unavailable');
+        }
+        input.setDraft(text);
+    }
+
+    _onEmbedStop() {
+        if (this._cancelBusy) {
+            return;
+        }
+        if (!this._loading) {
+            return;
+        }
+        stopStreamTtsPlayback();
+        if (this._voiceStreamAssistantId != null) {
+            this.dispatchEvent(
+                new CustomEvent('humanitec-embed-voice-bridge-user-stop', {
+                    bubbles: true,
+                    composed: true,
+                }),
+            );
+            return;
+        }
+        const ac = this._streamAbort;
+        if (ac !== null) {
+            try {
+                ac.abort();
+            } catch {
+                /* noop */
+            }
+        }
+        const tid = this._currentTaskId;
+        if (typeof tid === 'string' && tid !== '') {
+            this._cancelBusy = true;
+            this.requestUpdate();
+            void this._postEmbedTasksCancel(tid).finally(() => {
+                this._cancelBusy = false;
+                this.requestUpdate();
+            });
+        }
+    }
+
+    /**
+     * @param {string} taskId
+     * @returns {Promise<void>}
+     */
+    _postEmbedTasksCancel(taskId) {
+        const root = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim().replace(/\/$/, '')) || '';
+        if (root === '') {
+            return Promise.resolve();
+        }
+        const url = this.embedId
+            ? `${root}/api/v1/embed/${encodeURIComponent(this.embedId)}`
+            : `${root}/api/v1/${encodeURIComponent(this.flowId)}`;
+        const run = async () => {
+            const getHeaders = async () => {
+                if (typeof this.getAuthToken !== 'function') {
+                    return {};
+                }
+                const h = await this.getAuthToken();
+                return h && typeof h === 'object' ? h : {};
+            };
+            const extra = await getHeaders();
+            await fetch(url, {
+                method: 'POST',
+                credentials: this.useCredentials ? 'include' : 'omit',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...extra,
+                },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: String(Date.now()),
+                    method: 'tasks/cancel',
+                    params: { id: taskId },
+                }),
+            });
+        };
+        return run().catch(() => {
+            /* стрим уже оборван на клиенте */
+        });
+    }
+
     async _onSend(e) {
         const { message, files = [] } = e.detail;
         if ((!message && files.length === 0) || this._loading) {
@@ -1083,6 +1535,14 @@ export class PlatformEmbedChat extends LitElement {
         }
         if (!this.flowsBaseUrl || (!this.flowId && !this.embedId)) {
             throw new Error('flowsBaseUrl and (flowId or embedId) are required');
+        }
+
+        stopStreamTtsPlayback();
+
+        if (readTtsOutputEnabled()) {
+            primeStreamTtsPlaybackFromUserGesture();
+            this.primeStreamTtsFromUserGesture();
+            await this._awaitEmbedTtsOnlyReady();
         }
 
         const fileParts = await Promise.all(files.map((f) => this._fileToBase64Part(f)));
@@ -1116,6 +1576,7 @@ export class PlatformEmbedChat extends LitElement {
         this._sseOpen = true;
         this._pendingAssistantReplyNotify = true;
         this._stickToBottom = true;
+        this._streamAbort = new AbortController();
         this.requestUpdate();
 
         const getHeaders = async () => {
@@ -1147,35 +1608,42 @@ export class PlatformEmbedChat extends LitElement {
                     metadata: { variables },
                     getHeaders,
                     credentials: this.useCredentials ? 'include' : 'omit',
+                    signal: this._streamAbort.signal,
                 },
                 (event) => this._handleEvent(event, this._activeStreamMessageId),
             );
         } catch (err) {
-            const m = err instanceof Error ? err.message : String(err);
-            const isGuestLimit =
-                typeof m === 'string' &&
-                (m.includes('Достигнут лимит сообщений для этого виджета') ||
-                    m.includes('Guest message limit reached for this widget'));
-            if (isGuestLimit) {
-                this._patchMessage(assistantMsg.id, {
-                    content: '',
-                    streaming: false,
-                    inputRequired: {
-                        interruptKind: 'oauth_required',
-                        question: m,
-                        authUrl: '/login',
-                    },
-                });
+            const aborted = err instanceof Error && err.name === 'AbortError';
+            if (aborted) {
+                this._patchMessage(assistantMsg.id, { streaming: false });
             } else {
-                this._patchMessage(assistantMsg.id, { content: m, streaming: false });
+                const m = err instanceof Error ? err.message : String(err);
+                const isGuestLimit =
+                    typeof m === 'string' &&
+                    (m.includes('Достигнут лимит сообщений для этого виджета') ||
+                        m.includes('Guest message limit reached for this widget'));
+                if (isGuestLimit) {
+                    this._patchMessage(assistantMsg.id, {
+                        content: '',
+                        streaming: false,
+                        inputRequired: {
+                            interruptKind: 'oauth_required',
+                            question: m,
+                            authUrl: '/login',
+                        },
+                    });
+                } else {
+                    this._patchMessage(assistantMsg.id, { content: m, streaming: false });
+                }
+                this._emitAssistantEvent('error', {
+                    message: m,
+                    flow_id: this.flowId || null,
+                    branch_id: this._embedBranchId() || null,
+                    embed_id: this.embedId || null,
+                });
             }
-            this._emitAssistantEvent('error', {
-                message: m,
-                flow_id: this.flowId || null,
-                branch_id: this._embedBranchId() || null,
-                embed_id: this.embedId || null,
-            });
         } finally {
+            this._streamAbort = null;
             this._loading = false;
             this._sseOpen = false;
             if (this._pendingAssistantReplyNotify) {
@@ -1201,6 +1669,10 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     _handleEvent(event, messageId) {
+        const streamResult = event && typeof event === 'object' ? event.result : null;
+        if (streamResult !== null && typeof streamResult === 'object') {
+            feedStreamTtsFromA2aResult(streamResult);
+        }
         const msg = this._findMessage(messageId);
         if (!msg) {
             return;
@@ -1377,6 +1849,7 @@ export class PlatformEmbedChat extends LitElement {
                 </div>
                 <embed-chat-input
                     ?loading=${this._loading}
+                    ?cancel-busy=${this._cancelBusy}
                     placeholder=${this._lb('placeholder', 'Message...')}
                     .labels=${this._mergedLabels()}
                     ?enable-voice=${this.enableVoice}
@@ -1387,6 +1860,7 @@ export class PlatformEmbedChat extends LitElement {
                     interface-locale=${this.interfaceLocale || 'auto'}
                     @embed-locale-change=${this._onEmbedLocaleChange}
                     @embed-send=${this._onSend}
+                    @embed-stop=${this._onEmbedStop}
                 ></embed-chat-input>
             </div>
         `;
@@ -1434,10 +1908,28 @@ export class PlatformEmbedChat extends LitElement {
                 m.filesMeta && m.filesMeta.length
                     ? html`<div class="meta">${m.filesMeta.map((f) => f.name).join(', ')}</div>`
                     : nothing;
+            const body = typeof m.content === 'string' ? m.content.trim() : '';
+            const userActions =
+                body !== ''
+                    ? html`
+                          <div class="embed-user-actions">
+                              <platform-assistant-message-actions
+                                  .text=${body}
+                                  voice-base-url=""
+                                  credentials=${this.useCredentials ? 'include' : 'omit'}
+                                  show-edit
+                                  @compose-edit=${this._onEmbedComposeEdit}
+                              ></platform-assistant-message-actions>
+                          </div>
+                      `
+                    : nothing;
             return html`
-                <div class="msg user">
-                    ${files}
-                    ${m.content || ''}
+                <div class="embed-msg-group user">
+                    <div class="msg user">
+                        ${files}
+                        ${m.content || ''}
+                    </div>
+                    ${userActions}
                 </div>
             `;
         }
@@ -1518,7 +2010,7 @@ export class PlatformEmbedChat extends LitElement {
                       <div class="embed-assistant-actions">
                           <platform-assistant-message-actions
                               .text=${String(m.content).trim()}
-                              voice-base-url=${readTtsOutputEnabled() ? resolveVoiceHttpOrigin() : ''}
+                              voice-base-url=${this._embedAssistantTtsVoiceBaseUrl()}
                               credentials=${this.useCredentials ? 'include' : 'omit'}
                               .getHeaders=${typeof this.getAuthToken === 'function' ? this.getAuthToken : null}
                           ></platform-assistant-message-actions>
@@ -1526,13 +2018,15 @@ export class PlatformEmbedChat extends LitElement {
                   `
                 : nothing;
         return html`
-            <div class="msg assistant">
-                <div class="embed-msg-md">${unsafeHTML(bodyHtml)}</div>
-                ${m.streaming ? html`<span class="embed-stream-caret" aria-hidden="true">|</span>` : nothing}
-                ${interrupt}
-                ${operatorReplyHtml}
-                ${blocks}
-                ${toolStack}
+            <div class="embed-msg-group assistant">
+                <div class="msg assistant">
+                    <div class="embed-msg-md">${unsafeHTML(bodyHtml)}</div>
+                    ${m.streaming ? html`<span class="embed-stream-caret" aria-hidden="true">|</span>` : nothing}
+                    ${interrupt}
+                    ${operatorReplyHtml}
+                    ${blocks}
+                    ${toolStack}
+                </div>
                 ${assistantActions}
             </div>
         `;

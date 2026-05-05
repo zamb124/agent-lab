@@ -2,7 +2,7 @@
 name = "agent-lab"
 version = "0.1.0"
 description = "Agent Platform - платформа агентских систем"
-# Верхняя граница: kokoro → misaki[en] → spacy; wheels spacy пока только cp313.
+# Верхняя граница: torch/sentence-transformers; wheels под cp313.
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "google-auth>=2.43.0",
@@ -136,7 +136,7 @@ rag = [
     "sentence-transformers>=5.4.0",
     "tiktoken>=0.9.0",
     "transformers<5",
-    "kokoro>=0.9.4",
+    "silero>=0.5.5",
     "silero-vad>=5.1.2",
     "soundfile>=0.13.0",
     "hydra-core>=1.3.2",

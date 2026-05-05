@@ -21,10 +21,10 @@ import {
 } from '@platform/lib/voice/speakable.js';
 
 describe('speakable whitelist', () => {
-    it('SPEAKABLE_ARTIFACT_NAMES содержит response, operator_reply и reasoning', () => {
+    it('SPEAKABLE_ARTIFACT_NAMES содержит response и operator_reply', () => {
         expect(SPEAKABLE_ARTIFACT_NAMES.has('response')).toBe(true);
         expect(SPEAKABLE_ARTIFACT_NAMES.has('operator_reply')).toBe(true);
-        expect(SPEAKABLE_ARTIFACT_NAMES.has('reasoning')).toBe(true);
+        expect(SPEAKABLE_ARTIFACT_NAMES.has('reasoning')).toBe(false);
     });
 
     it('SPEAK_FLAG_KEY — "speak"', () => {
@@ -32,7 +32,7 @@ describe('speakable whitelist', () => {
     });
 
     it('SPEAKABLE_ARTIFACT_NAMES заморожен: содержит только whitelist', () => {
-        expect(SPEAKABLE_ARTIFACT_NAMES.size).toBe(3);
+        expect(SPEAKABLE_ARTIFACT_NAMES.size).toBe(2);
         expect(Object.isFrozen(SPEAKABLE_ARTIFACT_NAMES)).toBe(true);
     });
 });
@@ -41,13 +41,32 @@ describe('isSpeakableArtifact', () => {
     it('true для имени из whitelist', () => {
         expect(isSpeakableArtifact({ name: 'response', parts: [] })).toBe(true);
         expect(isSpeakableArtifact({ name: 'operator_reply', parts: [] })).toBe(true);
-        expect(isSpeakableArtifact({ name: 'reasoning', parts: [] })).toBe(true);
+        expect(isSpeakableArtifact({ name: 'reasoning', parts: [] })).toBe(false);
     });
 
     it('false для имени вне whitelist', () => {
         expect(isSpeakableArtifact({ name: 'thinking', parts: [] })).toBe(false);
         expect(isSpeakableArtifact({ name: 'search_plan', parts: [] })).toBe(false);
         expect(isSpeakableArtifact({ name: '', parts: [] })).toBe(false);
+    });
+
+    it('пустое имя и непустой TextPart — как response (стрим без name)', () => {
+        expect(
+            isSpeakableArtifact({
+                parts: [{ root: { kind: 'text', text: 'Привет' } }],
+            })
+        ).toBe(true);
+        expect(
+            isSpeakableArtifact({
+                parts: [{ root: { kind: 'data', data: {} } }],
+            })
+        ).toBe(false);
+        expect(
+            isSpeakableArtifact({
+                parts: [{ root: { kind: 'text', text: 'x' } }],
+                metadata: { speak: false },
+            })
+        ).toBe(false);
     });
 
     it('false когда metadata.speak === false', () => {
@@ -155,6 +174,16 @@ describe('extractSpeakableText', () => {
         expect(extractSpeakableText(ev)).toBe('Привет, друг.');
     });
 
+    it('возвращает null для артефакта reasoning', () => {
+        const ev = {
+            artifact: {
+                name: 'reasoning',
+                parts: [{ root: { kind: 'text', text: 'Внутреннее размышление.' } }],
+            },
+        };
+        expect(extractSpeakableText(ev)).toBeNull();
+    });
+
     it('возвращает null если артефакт не speakable', () => {
         const ev = {
             artifact: {
@@ -190,5 +219,17 @@ describe('extractSpeakableText', () => {
             },
         };
         expect(extractSpeakableText(ev)).toBeNull();
+    });
+
+    it('склеивает TextPart при отсутствии name (стрим)', () => {
+        const ev = {
+            artifact: {
+                parts: [
+                    { root: { kind: 'text', text: 'Один' } },
+                    { root: { kind: 'text', text: ' два' } },
+                ],
+            },
+        };
+        expect(extractSpeakableText(ev)).toBe('Один два');
     });
 });

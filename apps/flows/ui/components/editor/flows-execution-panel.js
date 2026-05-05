@@ -46,6 +46,7 @@ import {
     flowsVoiceAuxiliaryHttpHeadersStub,
     formatFlowVoiceConnectErrorDetail,
     normalizeFlowVoiceSttLanguage,
+    resolveFlowVoiceHttpOrigin,
 } from '../../_helpers/flow-voice-session.js';
 import { relayA2aVoiceStreamRpcFrame } from '../../_helpers/relay-voice-a2a-to-chat.js';
 import {
@@ -54,6 +55,13 @@ import {
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
 } from '@platform/lib/voice/tts-output-pref.js';
+import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
+import {
+    clearStreamTtsTarget,
+    primeStreamTtsPlaybackFromUserGesture,
+    setStreamTtsTarget,
+    stopStreamTtsPlayback,
+} from '@platform/lib/voice/stream-tts-registry.js';
 
 const ACCEPT_FILE_TYPES = '*/*';
 const EMPTY_TRACE = Object.freeze([]);
@@ -447,9 +455,20 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._voiceA2aAbortedHandler = null;
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
         this._localeSel = this.select((s) => s.i18n.locale);
-        this._onTtsExecPref = () => this.requestUpdate();
+        /** @type {InstanceType<typeof VoiceMediaSession> | null} */
+        this._ttsOnlyMedia = null;
+        this._ttsOnlyStreamStarting = false;
+        this._onTtsExecPref = () => {
+            if (!readTtsOutputEnabled()) {
+                this._disposeTtsOnlyStream();
+            }
+            this.requestUpdate();
+        };
         this._onTtsExecStorage = (e) => {
             if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
+                if (!readTtsOutputEnabled()) {
+                    this._disposeTtsOnlyStream();
+                }
                 this.requestUpdate();
             }
         };
@@ -464,6 +483,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     disconnectedCallback() {
+        this._disposeTtsOnlyStream();
         if (this._voiceOn) {
             const m = this._voiceMedia;
             const b = this._voiceBridge;
@@ -486,6 +506,9 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
         if (changedProperties.has('flowId') && this._voiceOn) {
             void this._stopExecPanelVoice();
+        }
+        if (changedProperties.has('flowId') && !this._voiceOn) {
+            this._disposeTtsOnlyStream();
         }
         super.updated(changedProperties);
         if (this._panelTab !== 'chat') {
@@ -617,6 +640,24 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._ui.setInputText({ text: asString(e.target.value) });
     }
 
+    _onChatComposeEdit(e) {
+        const detail = e.detail;
+        const text = detail && typeof detail.text === 'string' ? detail.text : '';
+        if (text === '') {
+            return;
+        }
+        this._ui.setInputText({ text });
+        void this.updateComplete.then(() => {
+            const ta = this.renderRoot?.querySelector('#flows-exec-compose-textarea');
+            if (!(ta instanceof HTMLTextAreaElement)) {
+                throw new Error('flows-execution-panel: compose textarea missing');
+            }
+            ta.focus();
+            const len = text.length;
+            ta.setSelectionRange(len, len);
+        });
+    }
+
     /**
      * @param {KeyboardEvent} e
      */
@@ -691,6 +732,8 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
         const contextId = this._ensureContextId();
 
+        stopStreamTtsPlayback();
+
         const userMessage = {
             id: `user_${Date.now()}`,
             role: 'user',
@@ -741,11 +784,159 @@ export class FlowsExecutionPanel extends PlatformElement {
             params.metadata = metadata;
         }
 
+        if (readTtsOutputEnabled() && !this._voiceOn) {
+            primeStreamTtsPlaybackFromUserGesture();
+            this._primeExecTtsOnlyStreamFromUserGesture();
+            await this._awaitExecTtsOnlyReady();
+        }
+
         this._editor.setAgentExecutionRunning({ running: true });
         try {
             await this._send.run({ flow_id: this.flowId, params });
         } finally {
             this._editor.setAgentExecutionRunning({ running: false });
+        }
+    }
+
+    _disposeTtsOnlyStream() {
+        const m = this._ttsOnlyMedia;
+        this._ttsOnlyMedia = null;
+        this._ttsOnlyStreamStarting = false;
+        clearStreamTtsTarget();
+        if (m) {
+            try {
+                m.close();
+            } catch {
+                /* noop */
+            }
+        }
+    }
+
+    _primeExecTtsOnlyStreamFromUserGesture() {
+        if (!readTtsOutputEnabled() || this._voiceOn) {
+            return;
+        }
+        const companyId = asString(this._activeCompanySel.value);
+        if (companyId === '' || !this.flowId) {
+            return;
+        }
+        const localeRaw = asString(this._localeSel.value);
+        /** @type {Record<string, string>} */
+        const wsQuery = {};
+        if (localeRaw.trim() !== '') {
+            try {
+                wsQuery.language = normalizeFlowVoiceSttLanguage(localeRaw);
+            } catch {
+                /* noop */
+            }
+        }
+        if (this._ttsOnlyMedia !== null && this._ttsOnlyMedia.isConnected) {
+            this._ttsOnlyMedia.primePlaybackFromUserGesture();
+            setStreamTtsTarget(this._ttsOnlyMedia, readTtsOutputEnabled);
+            return;
+        }
+        if (this._ttsOnlyStreamStarting) {
+            const m = this._ttsOnlyMedia;
+            if (m && typeof m.primePlaybackFromUserGesture === 'function') {
+                m.primePlaybackFromUserGesture();
+            }
+            if (m) {
+                setStreamTtsTarget(m, readTtsOutputEnabled);
+            }
+            return;
+        }
+        this._disposeTtsOnlyStream();
+        this._ttsOnlyStreamStarting = true;
+        const voiceBaseUrl = resolveFlowVoiceHttpOrigin();
+        const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
+        const sessionId = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const mediaOpts = {
+            baseUrl: wsBase,
+            sessionId,
+            companyId,
+            autoRecord: false,
+        };
+        if (Object.keys(wsQuery).length > 0) {
+            Object.assign(mediaOpts, { query: wsQuery });
+        }
+        const media = new VoiceMediaSession(mediaOpts);
+        media.addEventListener('error', (ev) => {
+            const d = ev.detail && typeof ev.detail === 'object' ? ev.detail : {};
+            const msg =
+                typeof d.detail === 'string' && d.detail.trim() !== ''
+                    ? d.detail
+                    : typeof d.code === 'string'
+                      ? d.code
+                      : this.t('platform_chat.toast_voice_ws_hint');
+            this.toast('flows:platform_chat.toast_voice_error', {
+                type: 'error',
+                vars: { detail: msg },
+            });
+        });
+        media.addEventListener('closed', () => {
+            if (this._ttsOnlyMedia === media) {
+                this._ttsOnlyMedia = null;
+                clearStreamTtsTarget();
+            }
+        });
+        this._ttsOnlyMedia = media;
+        media.primePlaybackFromUserGesture();
+        setStreamTtsTarget(media, readTtsOutputEnabled);
+        void (async () => {
+            try {
+                await media.connect();
+                if (this._ttsOnlyMedia !== media) {
+                    try {
+                        media.close();
+                    } catch {
+                        /* noop */
+                    }
+                    return;
+                }
+                if (this._voiceOn || !readTtsOutputEnabled()) {
+                    this._ttsOnlyMedia = null;
+                    clearStreamTtsTarget();
+                    try {
+                        media.close();
+                    } catch {
+                        /* noop */
+                    }
+                    return;
+                }
+                setStreamTtsTarget(media, readTtsOutputEnabled);
+            } catch (err) {
+                if (this._ttsOnlyMedia === media) {
+                    this._ttsOnlyMedia = null;
+                }
+                clearStreamTtsTarget();
+                try {
+                    media.close();
+                } catch {
+                    /* noop */
+                }
+                this.toast('flows:platform_chat.toast_voice_error', {
+                    type: 'error',
+                    vars: {
+                        detail: formatFlowVoiceConnectErrorDetail(err, (key) => this.t(key)),
+                    },
+                });
+            } finally {
+                this._ttsOnlyStreamStarting = false;
+            }
+        })();
+    }
+
+    async _awaitExecTtsOnlyReady() {
+        const t0 = Date.now();
+        const maxMs = 2500;
+        while (Date.now() - t0 < maxMs) {
+            if (this._voiceOn || !readTtsOutputEnabled()) {
+                return;
+            }
+            if (!this._ttsOnlyStreamStarting && this._ttsOnlyMedia !== null && this._ttsOnlyMedia.isConnected) {
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 40));
         }
     }
 
@@ -806,6 +997,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         if (!this.flowId) {
             return;
         }
+        this._disposeTtsOnlyStream();
         const chatState = asObject(this._chat.state);
         const taskId = typeof chatState.currentTaskId === 'string' ? chatState.currentTaskId : '';
         if (Boolean(chatState.streaming) && taskId.length > 0) {
@@ -818,6 +1010,7 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     async _startExecPanelVoice() {
         if (this._voiceOn) return;
+        this._disposeTtsOnlyStream();
         if (typeof this.flowId !== 'string' || this.flowId.length === 0) return;
         const companyId = asString(this._activeCompanySel.value);
         if (companyId === '') {
@@ -878,6 +1071,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                 return meta;
             },
             beforeA2aStream: async (text) => {
+                stopStreamTtsPlayback();
                 const ctx = this._ensureContextId();
                 voiceStreamRelayState.contextId = ctx;
                 voiceStreamRelayState.taskId = null;
@@ -972,6 +1166,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         bridge.addEventListener('a2aSettled', onVoiceA2aSettled);
         bridge.addEventListener('a2aAborted', onVoiceA2aAborted);
         bridge.start();
+        setStreamTtsTarget(media, readTtsOutputEnabled);
         this._voiceMedia = media;
         this._voiceBridge = bridge;
         this._voiceOn = true;
@@ -1014,6 +1209,9 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     _toggleExecTtsOutput() {
         toggleTtsOutputEnabled();
+        if (!readTtsOutputEnabled()) {
+            this._disposeTtsOnlyStream();
+        }
         this.requestUpdate();
     }
 
@@ -1201,6 +1399,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                                         },
                                         (message) => html`
                                             <chat-message
+                                                @compose-edit=${this._onChatComposeEdit}
                                                 .role=${asString(message.role)}
                                                 .content=${typeof message.content === 'string' ? message.content : ''}
                                                 .timestamp=${asString(message.timestamp)}
@@ -1235,6 +1434,8 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     @change=${this._handleFileSelect}
                                 />
                                 <textarea
+                                    id="flows-exec-compose-textarea"
+                                    class="flows-exec-compose-textarea"
                                     .value=${ui.inputText}
                                     placeholder=${this.t(placeholderKey)}
                                     @input=${this._onInputChange}
@@ -1297,7 +1498,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                                             @click=${this._onStop}
                                         >
                                             <platform-icon
-                                                name=${this._cancel.busy ? 'hourglass-top' : 'stop'}
+                                                name="stop"
                                                 size="16"
                                             ></platform-icon>
                                         </glass-button>

@@ -28,10 +28,7 @@ from abc import ABC, abstractmethod
 from typing import AsyncIterator, Optional
 
 from core.clients.tts_client import BaseTTSClient
-from core.logging import get_logger
-
-
-logger = get_logger(__name__)
+from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 
 class BaseTTSStreamer(ABC):
@@ -114,8 +111,8 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         return self._sample_rate
 
     async def synthesize_chunk(self, text: str) -> bytes:
-        if text == "":
-            raise ValueError("synthesize_chunk: text пустой.")
+        if not sanitize_text_for_speech_backend(text).strip():
+            return b""
         result = await self._tts_client.synthesize(text=text)
         if len(result.audio_bytes) == 0:
             raise ValueError(
@@ -140,12 +137,16 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
                 continue
             chunks = chunker.feed(text_piece)
             for speakable in chunks:
+                if not sanitize_text_for_speech_backend(speakable).strip():
+                    continue
                 audio = await self.synthesize_chunk(speakable)
                 if audio:
                     yield audio
 
-        tail = chunker.flush()
-        if tail:
+        tails = chunker.flush()
+        for tail in tails:
+            if not sanitize_text_for_speech_backend(tail).strip():
+                continue
             audio = await self.synthesize_chunk(tail)
             if audio:
                 yield audio

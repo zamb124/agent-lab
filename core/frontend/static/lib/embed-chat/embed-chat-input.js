@@ -3,6 +3,7 @@ import { LitElement, html, css } from './lit-shim.js';
 export class EmbedChatInput extends LitElement {
     static properties = {
         loading: { type: Boolean },
+        cancelBusy: { type: Boolean, attribute: 'cancel-busy' },
         placeholder: { type: String },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
         voiceDuplex: { type: Boolean, attribute: 'voice-duplex' },
@@ -90,6 +91,13 @@ export class EmbedChatInput extends LitElement {
         }
         .send-btn:not(:disabled):hover {
             filter: brightness(1.05);
+        }
+        .circle-btn.stop {
+            background: rgba(229, 57, 53, 0.9);
+            color: #fff;
+        }
+        .circle-btn.stop:not(:disabled):hover {
+            filter: brightness(1.06);
         }
         .send-btn.muted {
             background: var(--embed-chat-surface, rgba(255, 255, 255, 0.12));
@@ -190,6 +198,7 @@ export class EmbedChatInput extends LitElement {
     constructor() {
         super();
         this.loading = false;
+        this.cancelBusy = false;
         this.placeholder = '';
         this.enableVoice = true;
         this.voiceDuplex = false;
@@ -269,6 +278,9 @@ export class EmbedChatInput extends LitElement {
     _onKey(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            if (this.loading) {
+                return;
+            }
             this._onSend();
         }
     }
@@ -312,6 +324,36 @@ export class EmbedChatInput extends LitElement {
         if (fi) {
             fi.click();
         }
+    }
+
+    _onPickFiles(e) {
+        const raw = e.target && e.target.files ? e.target.files : null;
+        const picked = raw ? Array.from(raw) : [];
+        if (picked.length === 0) {
+            return;
+        }
+        this._files = [...this._files, ...picked];
+        this._syncFileInputFromFiles();
+        this.requestUpdate();
+        const fi = this.shadowRoot?.querySelector('input[type=file]');
+        if (fi) {
+            fi.value = '';
+        }
+    }
+
+    _embedStop() {
+        if (this.cancelBusy) {
+            return;
+        }
+        if (!this.loading) {
+            return;
+        }
+        this.dispatchEvent(
+            new CustomEvent('embed-stop', {
+                bubbles: true,
+                composed: true,
+            }),
+        );
     }
 
     _onLocaleSelect(e) {
@@ -412,9 +454,17 @@ export class EmbedChatInput extends LitElement {
             const t = ev.results?.[0]?.[0]?.transcript;
             if (typeof t === 'string' && t.trim()) {
                 const ta = this.shadowRoot.querySelector('textarea');
-                const cur = ta.value;
-                ta.value = cur ? `${cur.trim()} ${t.trim()}` : t.trim();
-                this._text = ta.value;
+                const cur = ta && typeof ta.value === 'string' ? ta.value.trim() : '';
+                const next = cur !== '' ? `${cur} ${t.trim()}` : t.trim();
+                if (ta) {
+                    ta.value = next;
+                }
+                this._text = next;
+                this._listening = false;
+                this._rec = null;
+                this.requestUpdate();
+                this._onSend();
+                return;
             }
             this._listening = false;
             this._rec = null;
@@ -434,6 +484,26 @@ export class EmbedChatInput extends LitElement {
         this._listening = true;
         rec.start();
         this.requestUpdate();
+    }
+
+    /**
+     * @param {string} text
+     */
+    setDraft(text) {
+        if (typeof text !== 'string') {
+            throw new TypeError('embed-chat-input.setDraft expects a string');
+        }
+        this._text = text;
+        this.requestUpdate();
+        void this.updateComplete.then(() => {
+            const ta = this.shadowRoot?.querySelector('textarea');
+            if (!(ta instanceof HTMLTextAreaElement)) {
+                throw new Error('embed-chat-input: textarea missing');
+            }
+            ta.focus();
+            const len = text.length;
+            ta.setSelectionRange(len, len);
+        });
     }
 
     render() {
@@ -555,6 +625,7 @@ export class EmbedChatInput extends LitElement {
                         rows="1"
                         .value=${this._text}
                         placeholder=${this.placeholder}
+                        ?disabled=${this.loading}
                         @input=${this._onInput}
                         @keydown=${this._onKey}
                     ></textarea>
@@ -585,6 +656,26 @@ export class EmbedChatInput extends LitElement {
                           </button>
                       `
                     : ''}
+                ${this.loading
+                    ? html`
+                          <button
+                              type="button"
+                              class="circle-btn stop"
+                              ?disabled=${this.cancelBusy}
+                              @click=${this._embedStop}
+                              title=${this.cancelBusy
+                                  ? this._label('title_stop_pending', 'Stopping response…')
+                                  : this._label('title_stop', 'Stop response')}
+                              aria-label=${this.cancelBusy
+                                  ? this._label('title_stop_pending', 'Stopping response…')
+                                  : this._label('title_stop', 'Stop response')}
+                          >
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                  <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+                              </svg>
+                          </button>
+                      `
+                    : html`
                 <button
                     type="button"
                     class="circle-btn send-btn ${canSend ? '' : 'muted'}"
@@ -602,6 +693,7 @@ export class EmbedChatInput extends LitElement {
                         />
                     </svg>
                 </button>
+            `}
             </div>
             <div class="disclaimer">
                 ${this._label(

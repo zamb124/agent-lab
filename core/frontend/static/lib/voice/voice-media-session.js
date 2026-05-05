@@ -24,6 +24,12 @@
 import { getUserMediaCompat, hasGetUserMediaApi } from '../utils/voice-recording.js';
 
 /**
+ * Один JSON `speak` с текстом длиннее лимита часто рвётся на прокси/WebSocket (типично 64k–1M).
+ * A2A SSE шлёт серию коротких апдейтов — там проблема не проявляется; один финальный длинный кадр — да.
+ */
+const VOICE_WS_SPEAK_TEXT_CHUNK_MAX = 6000;
+
+/**
  * Hostname'ы dev-оригина, где пробуем mic/WebAudio при HTTP (isSecureContext=false):
  * поддомены lvh.me, localhost, 127.0.0.1. Иначе Chromium не отдаёт getUserMedia — см. startRecording.
  *
@@ -469,12 +475,17 @@ export class VoiceMediaSession extends EventTarget {
         /** @type {AudioContext|null} */
         this._playbackCtx = null;
         this._playbackCursor = 0;
+        /** Очередь TTS binary: decode+schedule строго по порядку прихода WS-кадров (без гонок). */
+        this._playbackQueue = Promise.resolve();
 
         this._closed = false;
         this._openPromise = null;
         /** Очередь PCM до OPEN (CONNECTING); иначе pump шлёт, пока сокет не OPEN — теряются. */
         this._pcmOutboundQueue = [];
         this._pcmOutboundQueueCap = 200;
+        /** Очередь JSON (`speak`, `end_of_utterance`, …) до OPEN — иначе первые чанки TTS теряются. */
+        this._textOutboundQueue = [];
+        this._textOutboundQueueCap = 64;
         /** Живой путь uplink (только диагностика). */
         this._voiceUplinkPath = /** @type {'none'|'ac_worklet'|'ac_script'|'ac_analyser'} */ ('none');
         this._pcmUplinkDebugCount = 0;
@@ -527,6 +538,7 @@ export class VoiceMediaSession extends EventTarget {
         ws.addEventListener('close', (event) => this._handleWsClose(event));
         ws.addEventListener('open', () => {
             this._flushPcmOutboundQueue();
+            this._flushTextOutboundQueue();
         });
 
         const openPromise = new Promise((resolve, reject) => {
@@ -576,6 +588,7 @@ export class VoiceMediaSession extends EventTarget {
             throw err;
         }
         this._flushPcmOutboundQueue();
+        this._flushTextOutboundQueue();
         _voiceClientDebug('ws_open', {
             session_id: this._sessionId,
             uplink_path: this._voiceUplinkPath,
@@ -595,6 +608,31 @@ export class VoiceMediaSession extends EventTarget {
 
     _clearPcmOutboundQueue() {
         this._pcmOutboundQueue.length = 0;
+    }
+
+    _clearTextOutboundQueue() {
+        this._textOutboundQueue.length = 0;
+    }
+
+    /**
+     * Отправить накопленные JSON-команды после OPEN.
+     */
+    _flushTextOutboundQueue() {
+        if (this._ws === null || this._ws.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        while (this._textOutboundQueue.length > 0) {
+            const payload = this._textOutboundQueue.shift();
+            try {
+                this._ws.send(JSON.stringify(payload));
+            } catch (err) {
+                this._dispatch('error', {
+                    code: 'voice/client/ws_send_failed',
+                    detail: err instanceof Error ? err.message : String(err),
+                });
+                break;
+            }
+        }
     }
 
     /**
@@ -1214,8 +1252,56 @@ export class VoiceMediaSession extends EventTarget {
      */
     speak(text, options) {
         if (typeof text !== 'string' || text === '') return;
+        const isFinal = options && options.final === true;
+        if (text.length <= VOICE_WS_SPEAK_TEXT_CHUNK_MAX) {
+            this._sendSpeakCommand(text, isFinal);
+            return;
+        }
+        const pieces = [];
+        let start = 0;
+        while (start < text.length) {
+            let end = Math.min(start + VOICE_WS_SPEAK_TEXT_CHUNK_MAX, text.length);
+            if (end < text.length) {
+                const win = text.slice(start, end);
+                let cutRel = -1;
+                const minSepIdx = Math.floor(VOICE_WS_SPEAK_TEXT_CHUNK_MAX * 0.35);
+                const seps = ['\n\n', '\n', '. ', '。', '! ', '? ', '; ', ', '];
+                for (let s = 0; s < seps.length; s += 1) {
+                    const sep = seps[s];
+                    const idx = win.lastIndexOf(sep);
+                    if (idx >= minSepIdx) {
+                        cutRel = Math.max(cutRel, idx + sep.length);
+                    }
+                }
+                if (cutRel > 0) {
+                    end = start + cutRel;
+                }
+            }
+            const piece = text.slice(start, end);
+            if (piece !== '') {
+                pieces.push(piece);
+            }
+            start = end;
+        }
+        if (pieces.length === 0) {
+            if (isFinal) {
+                this.endUtterance();
+            }
+            return;
+        }
+        for (let i = 0; i < pieces.length; i += 1) {
+            const last = i === pieces.length - 1;
+            this._sendSpeakCommand(pieces[i], isFinal && last);
+        }
+    }
+
+    /**
+     * @param {string} text
+     * @param {boolean} isFinal
+     */
+    _sendSpeakCommand(text, isFinal) {
         const payload = { type: 'speak', text };
-        if (options && options.final === true) {
+        if (isFinal) {
             payload.final = true;
         }
         this._sendText(payload);
@@ -1240,10 +1326,26 @@ export class VoiceMediaSession extends EventTarget {
      * @param {object} payload
      */
     _sendText(payload) {
-        if (this._ws === null || this._ws.readyState !== WebSocket.OPEN) {
+        if (this._ws === null) {
             return;
         }
-        this._ws.send(JSON.stringify(payload));
+        if (this._ws.readyState === WebSocket.OPEN) {
+            try {
+                this._ws.send(JSON.stringify(payload));
+            } catch (err) {
+                this._dispatch('error', {
+                    code: 'voice/client/ws_send_failed',
+                    detail: err instanceof Error ? err.message : String(err),
+                });
+            }
+            return;
+        }
+        if (this._ws.readyState === WebSocket.CONNECTING) {
+            while (this._textOutboundQueue.length >= this._textOutboundQueueCap) {
+                this._textOutboundQueue.shift();
+            }
+            this._textOutboundQueue.push(payload);
+        }
     }
 
     /**
@@ -1341,6 +1443,7 @@ export class VoiceMediaSession extends EventTarget {
         });
         this._closed = true;
         this._clearPcmOutboundQueue();
+        this._clearTextOutboundQueue();
         this._ws = null;
         this._teardownCapture();
     }
@@ -1421,6 +1524,7 @@ export class VoiceMediaSession extends EventTarget {
     }
 
     _resetPlayback() {
+        this._playbackQueue = Promise.resolve();
         if (this._playbackCtx !== null) {
             try { this._playbackCtx.close(); } catch { /* noop */ }
             this._playbackCtx = null;
@@ -1432,17 +1536,26 @@ export class VoiceMediaSession extends EventTarget {
      * Воспроизвести чанк аудио от voice.
      * @param {ArrayBuffer} buffer
      */
-    async _playAudioChunk(buffer) {
+    _playAudioChunk(buffer) {
+        this._playbackQueue = this._playbackQueue.then(
+            () => this._playAudioChunkSequential(buffer),
+            () => this._playAudioChunkSequential(buffer),
+        );
+    }
+
+    /**
+     * @param {ArrayBuffer} buffer
+     */
+    async _playAudioChunkSequential(buffer) {
         const ctx = await this._ensurePlaybackContext();
         const mime = (this._mediaConfig.mime || '').toLowerCase();
         if (mime === 'audio/l16' || mime === 'audio/pcm') {
-            this._playRawPcm(ctx, buffer);
+            await this._playRawPcm(ctx, buffer);
             return;
         }
-        // WAV / MP3 / OGG — декодируем через встроенный декодер.
         try {
             const audioBuffer = await ctx.decodeAudioData(buffer.slice(0));
-            this._scheduleAudioBuffer(ctx, audioBuffer);
+            await this._scheduleAudioBuffer(ctx, audioBuffer);
         } catch (err) {
             this._dispatch('error', {
                 code: 'voice/client/decode_failed',
@@ -1453,22 +1566,61 @@ export class VoiceMediaSession extends EventTarget {
 
     async _ensurePlaybackContext() {
         if (this._playbackCtx !== null && this._playbackCtx.state !== 'closed') {
+            if (this._playbackCtx.state !== 'running') {
+                try {
+                    await this._playbackCtx.resume();
+                } catch (_resumeErr) {
+                    /* noop */
+                }
+            }
             return this._playbackCtx;
         }
         const Ctx = window.AudioContext || window.webkitAudioContext;
         this._playbackCtx = new Ctx({ sampleRate: this._mediaConfig.sampleRate });
-        if (this._playbackCtx.state === 'suspended') {
-            try { await this._playbackCtx.resume(); } catch { /* noop */ }
+        if (this._playbackCtx.state !== 'running') {
+            try {
+                await this._playbackCtx.resume();
+            } catch (_resumeErr) {
+                /* noop */
+            }
         }
         this._playbackCursor = this._playbackCtx.currentTime;
         return this._playbackCtx;
     }
 
     /**
+     * Только из синхронного обработчика жеста (отправка сообщения, микрофон).
+     * Иначе Chromium держит AudioContext в suspended — чанки TTS по WS ставятся в очередь без звука.
+     */
+    primePlaybackFromUserGesture() {
+        if (this._closed) {
+            return;
+        }
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (this._playbackCtx === null || this._playbackCtx.state === 'closed') {
+            this._playbackCtx = new Ctx({ sampleRate: this._mediaConfig.sampleRate });
+            this._playbackCursor = this._playbackCtx.currentTime;
+        }
+        if (this._playbackCtx.state === 'suspended') {
+            try {
+                const pr = this._playbackCtx.resume();
+                if (pr !== undefined && typeof pr.then === 'function') {
+                    pr.then(
+                        () => {},
+                        () => {},
+                    );
+                }
+            } catch (_resumeErr) {
+                /* noop */
+            }
+        }
+    }
+
+    /**
      * @param {AudioContext} ctx
      * @param {ArrayBuffer} buffer
      */
-    _playRawPcm(ctx, buffer) {
+    async _playRawPcm(ctx, buffer) {
         const int16 = new Int16Array(buffer);
         if (int16.length === 0) return;
         const float32 = new Float32Array(int16.length);
@@ -1477,14 +1629,21 @@ export class VoiceMediaSession extends EventTarget {
         }
         const audioBuffer = ctx.createBuffer(1, float32.length, this._mediaConfig.sampleRate);
         audioBuffer.copyToChannel(float32, 0);
-        this._scheduleAudioBuffer(ctx, audioBuffer);
+        await this._scheduleAudioBuffer(ctx, audioBuffer);
     }
 
     /**
      * @param {AudioContext} ctx
      * @param {AudioBuffer} audioBuffer
      */
-    _scheduleAudioBuffer(ctx, audioBuffer) {
+    async _scheduleAudioBuffer(ctx, audioBuffer) {
+        if (ctx.state !== 'closed' && ctx.state !== 'running') {
+            try {
+                await ctx.resume();
+            } catch (_resumeErr) {
+                /* noop */
+            }
+        }
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(ctx.destination);
@@ -1540,6 +1699,7 @@ export class VoiceMediaSession extends EventTarget {
         if (this._closed) return;
         this._closed = true;
         this._clearPcmOutboundQueue();
+        this._clearTextOutboundQueue();
         this._teardownCapture();
         this._resetPlayback();
         if (this._ws !== null) {

@@ -14,11 +14,13 @@ from aiohttp import web
 from core.clients.tts_client import (
     CloudRuTTSClient,
     LitserveTTSClient,
+    TTSLitserveHttpError,
     MockTTSClient,
     SberTTSClient,
     TTSResult,
     YandexTTSClient,
 )
+from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 from .conftest import FakeSpeechServer
 
@@ -42,7 +44,7 @@ async def test_litserve_tts_client_returns_audio_bytes(
 
     async def _handler(request: web.Request) -> web.StreamResponse:
         body = await request.json()
-        assert body["model"] == "kokoro-82m-ru"
+        assert body["model"] == "silero-tts-v5-5-ru"
         assert body["input"] == f"hello {unique_id}"
         assert body["response_format"] == "wav"
         assert body["voice"] == "alloy"
@@ -52,7 +54,7 @@ async def test_litserve_tts_client_returns_audio_bytes(
 
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="kokoro-82m-ru",
+        model="silero-tts-v5-5-ru",
         default_voice="alloy",
         default_response_format="wav",
         default_sample_rate=24000,
@@ -67,7 +69,59 @@ async def test_litserve_tts_client_returns_audio_bytes(
     assert result.sample_rate == 24000
     assert result.response_format == "wav"
     assert result.voice == "alloy"
-    assert result.model == "kokoro-82m-ru"
+    assert result.model == "silero-tts-v5-5-ru"
+
+
+@pytest.mark.asyncio
+async def test_litserve_tts_client_sends_utf16_sanitized_input(
+    fake_speech_server: FakeSpeechServer,
+) -> None:
+    captured: dict[str, str] = {}
+
+    async def _handler(request: web.Request) -> web.StreamResponse:
+        body = await request.json()
+        captured["input"] = body["input"]
+        return web.Response(body=_wav_header(), content_type="audio/wav")
+
+    fake_speech_server.route("POST", "/v1/audio/speech", _handler)
+
+    raw = "a" + chr(0xD800) + "b"
+    client = LitserveTTSClient(
+        base_url=fake_speech_server.base_url,
+        model="silero-tts-v5-5-ru",
+        default_voice="alloy",
+        default_response_format="wav",
+        default_sample_rate=24000,
+        timeout=10.0,
+    )
+    await client.synthesize(text=raw)
+    assert captured["input"] == sanitize_text_for_speech_backend(raw)
+
+
+@pytest.mark.asyncio
+async def test_litserve_tts_client_sanitizes_voice_in_payload(
+    fake_speech_server: FakeSpeechServer,
+) -> None:
+    captured: dict[str, str] = {}
+
+    async def _handler(request: web.Request) -> web.StreamResponse:
+        body = await request.json()
+        captured["voice"] = body["voice"]
+        return web.Response(body=_wav_header(), content_type="audio/wav")
+
+    fake_speech_server.route("POST", "/v1/audio/speech", _handler)
+
+    client = LitserveTTSClient(
+        base_url=fake_speech_server.base_url,
+        model="silero-tts-v5-5-ru",
+        default_voice="alloy\u200b",
+        default_response_format="wav",
+        default_sample_rate=24000,
+        timeout=10.0,
+    )
+    await client.synthesize(text="hello")
+    assert captured["voice"] == "alloy"
+    assert "\u200b" not in captured["voice"]
 
 
 @pytest.mark.asyncio
@@ -75,21 +129,22 @@ async def test_litserve_tts_client_http_error_includes_upstream_detail(
     fake_speech_server: FakeSpeechServer, unique_id: str
 ) -> None:
     async def _handler(request: web.Request) -> web.StreamResponse:
-        assert (await request.json())["model"] == "kokoro-82m-ru"
+        assert (await request.json())["model"] == "silero-tts-v5-5-ru"
         return web.json_response({"detail": f"tts-fail-{unique_id}"}, status=500)
 
     fake_speech_server.route("POST", "/v1/audio/speech", _handler)
 
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="kokoro-82m-ru",
+        model="silero-tts-v5-5-ru",
         default_voice="alloy",
         default_response_format="wav",
         default_sample_rate=24000,
         timeout=10.0,
     )
-    with pytest.raises(RuntimeError, match=f"tts-fail-{unique_id}"):
+    with pytest.raises(TTSLitserveHttpError, match=f"tts-fail-{unique_id}") as excinfo:
         await client.synthesize(text=f"hello {unique_id}")
+    assert excinfo.value.status_code == 500
 
 
 @pytest.mark.asyncio
@@ -107,13 +162,13 @@ async def test_litserve_tts_client_platform_internal_error_appends_log_hint(
 
     client = LitserveTTSClient(
         base_url=fake_speech_server.base_url,
-        model="kokoro-82m-ru",
+        model="silero-tts-v5-5-ru",
         default_voice="alloy",
         default_response_format="wav",
         default_sample_rate=24000,
         timeout=10.0,
     )
-    with pytest.raises(RuntimeError, match=r"http_unhandled_exception"):
+    with pytest.raises(TTSLitserveHttpError, match=r"http_unhandled_exception"):
         await client.synthesize(text=f"hello {unique_id}")
 
 

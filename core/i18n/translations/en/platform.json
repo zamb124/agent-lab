@@ -170,8 +170,13 @@
     },
     "assistant_message_actions": {
         "play": "Play",
-        "play_busy": "Playing…",
+        "stop": "Stop",
+        "play_aria": "Speak message",
+        "stop_aria": "Stop speaking",
         "copy": "Copy",
+        "copy_aria": "Copy message text",
+        "edit": "Edit",
+        "edit_aria": "Put message text in composer to edit",
         "toast_copied": "Copied",
         "toast_copy_failed": "Copy failed",
         "toast_play_failed": "Playback failed: {detail}"

@@ -17,6 +17,10 @@
  */
 
 import { createResourceCollection, createAsyncOp, HttpError, httpRequest, httpStream } from '@platform/lib/events/index.js';
+import {
+    feedStreamTtsFromA2aResult,
+    stopStreamTtsPlayback,
+} from '@platform/lib/voice/stream-tts-registry.js';
 
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
@@ -667,6 +671,15 @@ function _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId) {
     return currentTaskId;
 }
 
+/**
+ * Редьюсер чата и авто-TTS из одного кадра A2A (HTTP `chat_send` и `relayA2aVoiceStreamRpcFrame`).
+ */
+function _dispatchA2aEventAndMaybeFeedStreamTts(ctx, contextId, currentTaskId, result, causationId) {
+    const nextTaskId = _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId);
+    feedStreamTtsFromA2aResult(result);
+    return nextTaskId;
+}
+
 function _resolveStatusMetadata(result, message) {
     if (result && typeof result === 'object' && result.metadata && typeof result.metadata === 'object') {
         return result.metadata;
@@ -798,7 +811,8 @@ function _dispatchTerminal(ctx, contextId, taskId, state, message, metadata, cau
 
 /**
  * Стримит SSE-ответ A2A: для каждого `data: <json>` парсит JSON-RPC и
- * прогоняет `result` через `_dispatchA2aEvent`. Возвращает
+ * прогоняет `result` через `_dispatchA2aEventAndMaybeFeedStreamTts` (редьюсер +
+ * `feedStreamTtsFromA2aResult`). Возвращает
  * `{ task_id, context_id }` после первого терминального state или
  * исчерпания стрима.
  *
@@ -841,7 +855,7 @@ async function _consumeA2aStream(req, ctx, contextId, causationId) {
                     streamTaskPrimed = true;
                 }
             }
-            const nextTaskId = _dispatchA2aEvent(ctx, contextId, taskId, result, causationId);
+            const nextTaskId = _dispatchA2aEventAndMaybeFeedStreamTts(ctx, contextId, taskId, result, causationId);
             if (nextTaskId) taskId = nextTaskId;
             let stateValue = null;
             if (result.kind === 'status-update' && result.status && typeof result.status.state === 'string') {
@@ -876,7 +890,8 @@ async function _consumeA2aStream(req, ctx, contextId, causationId) {
 
 /**
  * Прокидывает кадр SSE (JSON-RPC из `data:`) голосового `message/stream` в тот же reducer,
- * что и `flows/chat_send`, без второго HTTP-запроса. Состояние стрима мутабельное между кадрами.
+ * что и `flows/chat_send`, без второго HTTP-запроса; затем `feedStreamTtsFromA2aResult`.
+ * Состояние стрима мутабельное между кадрами (`streamState`).
  *
  * @param {{ dispatch: Function }} ctx
  * @param {{ contextId: string|null, taskId: string|null, taskPrimed: boolean }} streamState
@@ -944,7 +959,7 @@ export function relayA2aVoiceStreamRpcFrame(ctx, streamState, rpcFrame, causatio
             streamState.taskPrimed = true;
         }
     }
-    const nextTaskId = _dispatchA2aEvent(
+    const nextTaskId = _dispatchA2aEventAndMaybeFeedStreamTts(
         ctx,
         streamState.contextId,
         streamState.taskId,
@@ -981,6 +996,7 @@ export const chatSendOp = createAsyncOp({
         if (!params || typeof params !== 'object' || !params.message) {
             throw new Error('flows/chat_send: params.message required');
         }
+        stopStreamTtsPlayback();
         const contextId =
             typeof params.message.contextId === 'string' && params.message.contextId.length > 0
                 ? params.message.contextId

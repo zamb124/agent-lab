@@ -16,10 +16,10 @@
  *    запустил `message/stream`, пустой `stop()` после снятия эфира **не**
  *    вызывает `AbortController.abort` на этом fetch (иначе UI успевает показать
  *    сообщение пользователя из `beforeA2aStream`, а ответ гаснет).
- *  - `flows → voice`: читает SSE, для каждого
- *    `TaskArtifactUpdateEvent` с speakable-артефактом
- *    (см. `speakable.js`) вызывает `voice.speak(text,...)`. На
- *    `TaskStatusUpdateEvent{final:true}` — `voice.endUtterance()`.
+ *  - Авто-TTS из ответа обрабатывается отдельно: после `_dispatchA2aEvent` в
+ *    `apps/flows/ui/events/resources/chat.resource.js` и в embed
+ *    `_handleEvent` вызывается `feedStreamTtsFromA2aResult` (registry —
+ *    `stream-tts-registry.js`, см. `voice.mdc`).
  *  - Barge-in: `vad` с непрерывной речью ≥ ~0,3 s (как порог на шлюзе)
  *    во время TTS **или** пока живёт A2A fetch (фаза SSE до первого TTS) →
  *    `voice.stopPlayback()`, `AbortController.abort`, при наличии `taskId` —
@@ -30,13 +30,12 @@
  * Инкапсуляция: bridge не знает ни про конкретный UI-компонент, ни
  * про state-store; он общается только через DOM-события
  * `VoiceMediaSession` и публичные DOM-события самого bridge
- * (`userMessage`, `agentText`, `taskFinal`, `bargeIn`, `a2aAborted`, `a2aSettled`, `error`) —
+ * (`userMessage`, `bargeIn`, `a2aAborted`, `a2aSettled`, `error`) —
  * чтобы UI мог показывать live transcript/индикаторы без костылей
  * в модулях friend'ах.
  */
 
 import { streamEmbedA2A } from '../embed-chat/embed-a2a-stream.js';
-import { extractSpeakableText } from './speakable.js';
 import { isVoiceClientDebugEnabled } from './voice-media-session.js';
 
 /** Минимальная длительность сегмента речи (VAD open) до client barge-in, мс — как `vad_speech_seconds < 0.3` в `BargeInController`. */
@@ -55,8 +54,7 @@ const CLIENT_BARGE_MIN_SPEECH_MS = 300;
  * @property {() => string|null|undefined} [getContextId] — перед каждым message/stream подставляется актуальный contextId из UI (например embed-chat).
  * @property {() => Promise<Record<string, unknown>|null|undefined>} [getStreamMetadata] — metadata для A2A (как у текстовой отправки: variables и т.д.).
  * @property {(text: string) => Promise<void>} [beforeA2aStream] — перед fetch (например добавить user/assistant пузыри в чат).
- * @property {(event: object) => void} [onA2aStreamEvent] — каждое SSE-событие для отображения в том же UI, что и текстовый стрим.
- * @property {() => boolean} [getTtsOutputEnabled] — если вернёт false, не вызывать `speak` (текст A2A по-прежнему в UI через `onA2aStreamEvent`).
+ * @property {(event: object) => void} [onA2aStreamEvent] — каждый SSE-кадр для UI; потребитель вызывает релей/reducer и там же `feedStreamTtsFromA2aResult` (flows: `relayA2aVoiceStreamRpcFrame`, embed: `platform-embed-chat._handleEvent`). Сам `VoiceAgentBridge` авто-TTS не вызывает.
  */
 
 export class VoiceAgentBridge extends EventTarget {
@@ -91,8 +89,6 @@ export class VoiceAgentBridge extends EventTarget {
         this._beforeA2aStream = typeof options.beforeA2aStream === 'function' ? options.beforeA2aStream : null;
         this._onA2aStreamEvent =
             typeof options.onA2aStreamEvent === 'function' ? options.onA2aStreamEvent : null;
-        this._getTtsOutputEnabled =
-            typeof options.getTtsOutputEnabled === 'function' ? options.getTtsOutputEnabled : () => true;
 
         /** @type {AbortController|null} */
         this._currentAbort = null;
@@ -379,15 +375,6 @@ export class VoiceAgentBridge extends EventTarget {
             if (typeof result.taskId === 'string' && result.taskId !== '') {
                 this._currentTaskId = result.taskId;
             }
-            const text = extractSpeakableText(result);
-            if (text === null) return;
-            this._dispatch('agentText', {
-                text,
-                last: result.lastChunk === true,
-            });
-            if (this._getTtsOutputEnabled()) {
-                this._media.speak(text, { final: result.lastChunk === true });
-            }
             return;
         }
 
@@ -395,11 +382,15 @@ export class VoiceAgentBridge extends EventTarget {
             if (typeof result.taskId === 'string' && result.taskId !== '') {
                 this._currentTaskId = result.taskId;
             }
-            if (result.final === true) {
-                this._dispatch('taskFinal', {});
-                this._media.endUtterance();
-            }
         }
+    }
+
+    /**
+     * Кнопка «Стоп» в UI: заглушить TTS и прервать активный A2A fetch + tasks/cancel.
+     */
+    userStopActiveTurn() {
+        this._media.stopPlayback();
+        void this._cancelCurrentTask();
     }
 
     async _cancelCurrentTask() {

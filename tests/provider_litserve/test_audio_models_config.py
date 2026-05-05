@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from core.config.models import (
     EmbeddingConfig,
+    ProviderLitserveInfraConfig,
     ProviderLitserveSTTModelEntry,
     ProviderLitserveTTSModelEntry,
     ProviderLitserveVADModelEntry,
@@ -56,16 +57,43 @@ def test_default_stt_entry_has_gigaam_backend_and_revision(unique_id):
     assert default.revision == "e2e_rnnt"
 
 
-def test_default_tts_entry_has_kokoro_lang_voice_sample_rate(unique_id):
+def test_default_tts_entry_has_silero_bundle_voice_sample_rate(unique_id):
     cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
     default = next(
         m for m in cfg.tts_models if m.api_model_id == cfg.tts_default_api_model_id
     )
-    assert default.backend == "kokoro"
-    assert default.hf_model_id == "hexgrad/Kokoro-82M"
-    assert default.lang == "a"
-    assert default.voice == "af_heart"
+    assert default.backend == "silero"
+    assert default.hf_model_id == "snakers4/silero-models"
+    assert default.silero_bundle == "v5_5_ru"
+    assert default.silero_language == "ru"
+    assert default.voice == "xenia"
+    assert default.synthesis_locale == "ru"
     assert default.sample_rate == 24000
+    assert default.tts_input_steps == ("silero_ru_latin_to_cyrillic",)
+
+
+def test_tts_entry_unknown_input_step_raises(unique_id):
+    with pytest.raises(ValidationError, match="неизвестные шаги"):
+        ProviderLitserveTTSModelEntry(
+            api_model_id=f"t-{unique_id}",
+            hf_model_id="snakers4/silero-models",
+            silero_bundle="v5_5_ru",
+            voice="xenia",
+            sample_rate=24000,
+            tts_input_steps=("silero_ru_latin_to_cyrillic", "nope"),
+        )
+
+
+def test_tts_entry_empty_input_steps_allowed(unique_id):
+    entry = ProviderLitserveTTSModelEntry(
+        api_model_id=f"t-{unique_id}",
+        hf_model_id="snakers4/silero-models",
+        silero_bundle="v5_5_ru",
+        voice="xenia",
+        sample_rate=24000,
+        tts_input_steps=(),
+    )
+    assert entry.tts_input_steps == ()
 
 
 def test_default_vad_entry_has_silero_threshold(unique_id):
@@ -121,37 +149,48 @@ def test_vad_threshold_out_of_range_raises_validation_error(unique_id):
         )
 
 
-def test_tts_sample_rate_out_of_range_raises_validation_error(unique_id):
-    with pytest.raises(ValidationError):
+def test_tts_sample_rate_not_v5_ru_choice_raises_validation_error(unique_id):
+    with pytest.raises(ValidationError, match="8000"):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
-            hf_model_id="x/y",
-            lang="a",
-            voice="af_heart",
+            hf_model_id="snakers4/silero-models",
+            silero_bundle="v5_5_ru",
+            voice="xenia",
             sample_rate=999,
         )
 
 
-def test_kokoro_tts_iso_lang_ru_raises_validation_error(unique_id):
-    with pytest.raises(ValidationError, match="недопустим"):
+def test_silero_tts_unknown_bundle_raises_validation_error(unique_id):
+    with pytest.raises(ValidationError, match="не из поддерживаемых"):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
-            hf_model_id="hexgrad/Kokoro-82M",
-            lang="ru",
-            voice="af_heart",
+            hf_model_id="snakers4/silero-models",
+            silero_bundle="not_a_bundle",
+            voice="xenia",
             sample_rate=24000,
         )
 
 
-def test_kokoro_tts_lang_whitespace_normalized(unique_id):
+def test_silero_tts_bundle_whitespace_normalized(unique_id):
     entry = ProviderLitserveTTSModelEntry(
         api_model_id=f"t-{unique_id}",
-        hf_model_id="hexgrad/Kokoro-82M",
-        lang=" A ",
-        voice="af_heart",
+        hf_model_id="snakers4/silero-models",
+        silero_bundle=" V5_5_RU ",
+        voice="xenia",
         sample_rate=24000,
     )
-    assert entry.lang == "a"
+    assert entry.silero_bundle == "v5_5_ru"
+
+
+def test_silero_tts_voice_eugene_invalid_for_v5_4_ru(unique_id):
+    with pytest.raises(ValidationError, match="недопустим"):
+        ProviderLitserveTTSModelEntry(
+            api_model_id=f"t-{unique_id}",
+            hf_model_id="snakers4/silero-models",
+            silero_bundle="v5_4_ru",
+            voice="eugene",
+            sample_rate=24000,
+        )
 
 
 def test_extra_field_in_entry_is_forbidden(unique_id):

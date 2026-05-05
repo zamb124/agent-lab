@@ -1,13 +1,13 @@
 /**
  * Speakable-контракт (JS-зеркало apps/flows/src/streaming/speakable.py).
  *
- * Flows (logic) помечает A2A-артефакты как «озвучиваемые» именем
- * артефакта + опциональным флагом `metadata.speak`. Клиентский bridge
- * (`voice-agent-bridge.js`) читает этот файл, чтобы решить, какие куски
- * текста из A2A-стрима отправить в `apps/voice` через WS-команду
- * `speak`. Именно **этот файл** — единственный источник правды на
- * стороне клиента: whitelist имён и правило negative-override должны
- * совпадать с Python-версией.
+ * Flows помечает A2A-артефакты как «озвучиваемые» именем артефакта +
+ * опциональным флагом `metadata.speak`. На клиенте тот же whitelist использует
+ * `a2a-result-tts.js` (через `stream-tts-registry.js`), чтобы решить, какие куски текста
+ * из кадра A2A отправить в `apps/voice` WS-командой
+ * `speak`. Именно **этот файл** — единственный источник правды на стороне клиента для
+ * имён артефактов и negative-override; для потока без поля `name` при наличии
+ * `TextPart` действует то же правило, что и у `speakable.py` (как `response`).
  *
  * Парность (`speakable.py` ↔ `speakable.js`) проверяется CI
  * (`scripts/check_speakable_parity.py`).
@@ -16,10 +16,34 @@
 export const SPEAKABLE_ARTIFACT_NAMES = Object.freeze(new Set([
     'response',
     'operator_reply',
-    'reasoning',
 ]));
 
 export const SPEAK_FLAG_KEY = 'speak';
+
+/**
+ * @param {object} artifact
+ * @returns {boolean}
+ */
+function artifactHasAnyTextPart(artifact) {
+    const parts = Array.isArray(artifact.parts) ? artifact.parts : [];
+    for (const part of parts) {
+        if (part === null || typeof part !== 'object') {
+            continue;
+        }
+        const root = part.root !== undefined ? part.root : part;
+        if (root === null || typeof root !== 'object') {
+            continue;
+        }
+        const kind = typeof root.kind === 'string' ? root.kind : '';
+        if (kind !== 'text') {
+            continue;
+        }
+        if (typeof root.text === 'string' && root.text !== '') {
+            return true;
+        }
+    }
+    return false;
+}
 
 /**
  * @param {object} artifact A2A `artifact` object (из `TaskArtifactUpdateEvent`).
@@ -29,7 +53,13 @@ export function isSpeakableArtifact(artifact) {
     if (artifact === null || typeof artifact !== 'object') {
         return false;
     }
-    const name = typeof artifact.name === 'string' ? artifact.name : '';
+    let name = typeof artifact.name === 'string' ? artifact.name : '';
+    if (name === '') {
+        if (!artifactHasAnyTextPart(artifact)) {
+            return false;
+        }
+        name = 'response';
+    }
     if (!SPEAKABLE_ARTIFACT_NAMES.has(name)) {
         return false;
     }

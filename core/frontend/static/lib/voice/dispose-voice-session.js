@@ -1,3 +1,5 @@
+import { clearStreamTtsTarget } from './stream-tts-registry.js';
+
 /**
  * Унифицированное завершение сессии (media + VoiceAgentBridge):
  * пока WS открыт — server-side flush STT (``end_recording`` → ``finalize_done``), затем
@@ -11,6 +13,7 @@
  * @returns {Promise<void>}
  */
 export async function disposeVoiceMediaThenBridge(media, bridge, opts = {}) {
+    clearStreamTtsTarget();
     const finalizeTimeoutMs =
         typeof opts.finalizeTimeoutMs === 'number' && opts.finalizeTimeoutMs > 0
             ? opts.finalizeTimeoutMs

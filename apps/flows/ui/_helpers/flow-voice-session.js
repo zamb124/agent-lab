@@ -4,8 +4,8 @@
 import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
 import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
 import { disposeVoiceMediaThenBridge } from '@platform/lib/voice/dispose-voice-session.js';
-import { readTtsOutputEnabled } from '@platform/lib/voice/tts-output-pref.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
+import { normalizeVoiceLocaleForWs } from '@platform/lib/voice/normalize-voice-locale.js';
 
 /**
  * Дополнительные заголовки для fetch к voice / A2A (как `getAuthToken` в embed): по умолчанию {}.
@@ -16,35 +16,7 @@ export async function flowsVoiceAuxiliaryHttpHeadersStub() {
     return {};
 }
 
-/**
- * Нормализует локаль UI для query `language=` voice WebSocket (ISO 639-1 / префикс BCP-47).
- * @param {string} locale
- * @returns {string}
- */
-export function normalizeFlowVoiceSttLanguage(locale) {
-    if (typeof locale !== 'string') {
-        throw new Error('normalizeFlowVoiceSttLanguage: locale must be string');
-    }
-    const trimmed = locale.trim();
-    if (trimmed === '') {
-        throw new Error('normalizeFlowVoiceSttLanguage: locale required');
-    }
-    const lower = trimmed.toLowerCase();
-    const dash = lower.indexOf('-');
-    const under = lower.indexOf('_');
-    let cut = lower.length;
-    if (dash >= 0) {
-        cut = Math.min(cut, dash);
-    }
-    if (under >= 0) {
-        cut = Math.min(cut, under);
-    }
-    const base = lower.slice(0, cut);
-    if (base.length < 2) {
-        throw new Error('normalizeFlowVoiceSttLanguage: invalid locale');
-    }
-    return base;
-}
+export { normalizeVoiceLocaleForWs as normalizeFlowVoiceSttLanguage };
 
 /**
  * HTTP-оригин голосового шлюза: тот же host, что у страницы, путь `/voice` (dev: WS-прокси
@@ -92,13 +64,12 @@ export function formatFlowVoiceConnectErrorDetail(err, tFlows) {
  * @param {() => string|null|undefined} [p.getContextId] — перед каждым A2A message/stream (из слайса flows/chat).
  * @param {() => Promise<Record<string, unknown>|null|undefined>} [p.getStreamMetadata] — branch/metadata как у текстовой отправки.
  * @param {(text: string) => Promise<void>} [p.beforeA2aStream]
- * @param {(frame: object) => void} [p.onA2aStreamEvent] — SSE JSON-RPC для релея в `flows/chat`.
+ * @param {(frame: object) => void} [p.onA2aStreamEvent] — SSE JSON-RPC для релея в `flows/chat`; после `_dispatchA2aEvent` вызывается `feedStreamTtsFromA2aResult`.
  * @param {(e: CustomEvent) => void} [p.onVad]
  * @param {(e: CustomEvent) => void} [p.onTtsState]
  * @param {(e: CustomEvent) => void} [p.onMediaError]
  * @param {() => void} [p.onClosed]
  * @param {string} [p.sttLanguage] — для query `language=` (STT), из `state.i18n.locale`
- * @param {() => boolean} [p.getTtsOutputEnabled] — по умолчанию `readTtsOutputEnabled` из localStorage
  * @param {() => Promise<Record<string, string>>} [p.getHeaders] — как embed `getAuthToken` для A2A `message/stream`
  * @returns {FlowVoiceSessionHandles}
  */
@@ -116,7 +87,7 @@ export function createFlowVoiceSession(p) {
     /** @type {Record<string, string>} */
     const wsQuery = {};
     if (typeof p.sttLanguage === 'string' && p.sttLanguage.trim() !== '') {
-        wsQuery.language = normalizeFlowVoiceSttLanguage(p.sttLanguage);
+        wsQuery.language = normalizeVoiceLocaleForWs(p.sttLanguage);
     }
 
     const mediaOpts = {
@@ -129,8 +100,6 @@ export function createFlowVoiceSession(p) {
         Object.assign(mediaOpts, { query: wsQuery });
     }
     const media = new VoiceMediaSession(mediaOpts);
-    const getTts =
-        typeof p.getTtsOutputEnabled === 'function' ? p.getTtsOutputEnabled : () => readTtsOutputEnabled();
     const getHeaders =
         typeof p.getHeaders === 'function' ? p.getHeaders : flowsVoiceAuxiliaryHttpHeadersStub;
     const bridge = new VoiceAgentBridge({
@@ -145,7 +114,6 @@ export function createFlowVoiceSession(p) {
         getStreamMetadata: typeof p.getStreamMetadata === 'function' ? p.getStreamMetadata : undefined,
         beforeA2aStream: typeof p.beforeA2aStream === 'function' ? p.beforeA2aStream : undefined,
         onA2aStreamEvent: typeof p.onA2aStreamEvent === 'function' ? p.onA2aStreamEvent : undefined,
-        getTtsOutputEnabled: getTts,
     });
 
     if (typeof p.onVad === 'function') {

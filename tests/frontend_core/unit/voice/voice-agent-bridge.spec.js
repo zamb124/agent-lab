@@ -4,8 +4,9 @@
  * Проверяется:
  *  - на финальный `transcript{final:true}` от VoiceMediaSession bridge
  *    отправляет `message/stream` в A2A через streamEmbedA2A;
- *  - speakable `TaskArtifactUpdateEvent` → `mediaSession.speak(text,...)`;
- *  - `TaskStatusUpdateEvent{final:true}` → `mediaSession.endUtterance()`;
+ *  - speakable `TaskArtifactUpdateEvent` → `feedStreamTtsFromA2aResult` + registry → `mediaSession.speak`;
+ *  - финальный `status-update`: текст в `status.message` при `input-required` / `metadata.platform_interrupt`
+ *    → `speak` (interrupt ask_user и т.п.), затем `endUtterance`; иначе только `endUtterance`;
  *  - `vad{state:"started"}` с ≥ ~300 мс непрерывной речи (до `ended`) во время
  *    активного A2A fetch и/или TTS → `mediaSession.stopPlayback()`, `abort`, `tasks/cancel`;
  */
@@ -19,6 +20,11 @@ vi.mock('@platform/lib/embed-chat/embed-a2a-stream.js', () => ({
 }));
 
 import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
+import {
+    clearStreamTtsTarget,
+    feedStreamTtsFromA2aResult,
+    setStreamTtsTarget,
+} from '@platform/lib/voice/stream-tts-registry.js';
 
 class FakeMediaSession extends EventTarget {
     constructor() {
@@ -52,7 +58,18 @@ beforeEach(() => {
 });
 afterEach(() => {
     globalThis.fetch = originalFetch;
+    clearStreamTtsTarget();
 });
+
+/**
+ * Имитация relay после `_handleA2AEvent`: тот же кадр уходит в `feedStreamTtsFromA2aResult`.
+ * @param {(frame: object) => void} onEv
+ * @param {object} frame
+ */
+function relayVoiceStreamFrame(onEv, frame) {
+    onEv(frame);
+    feedStreamTtsFromA2aResult(frame.result);
+}
 
 describe('VoiceAgentBridge: construction', () => {
     it('требует mediaSession', () => {
@@ -72,6 +89,38 @@ describe('VoiceAgentBridge: construction', () => {
             mediaSession: new FakeMediaSession(),
             a2aBaseUrl: 'https://h/flows',
         })).toThrow(/flowId or embedId required/);
+    });
+});
+
+describe('VoiceAgentBridge: userStopActiveTurn', () => {
+    it('вызывает stopPlayback и прерывает A2A fetch, шлёт tasks/cancel', async () => {
+        let signal = null;
+        streamMock.mockImplementation(async (opts, onEvent) => {
+            signal = opts.signal;
+            onEvent({ result: { kind: 'task', id: 'tid-user-stop' } });
+            await new Promise((_res, rej) => {
+                opts.signal.addEventListener('abort', () =>
+                    rej(new DOMException('aborted', 'AbortError'))
+                );
+            });
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+        emitTranscript(media, 'q', true);
+        await Promise.resolve();
+        if (!signal) {
+            throw new Error('expected stream signal');
+        }
+        bridge.userStopActiveTurn();
+        await Promise.resolve();
+        expect(media.stopPlaybackCount).toBe(1);
+        expect(signal.aborted).toBe(true);
+        expect(globalThis.fetch).toHaveBeenCalled();
     });
 });
 
@@ -157,17 +206,18 @@ describe('VoiceAgentBridge: flows → voice', () => {
             flowId: 'flow-1',
         });
         bridge.start();
+        setStreamTtsTarget(media, () => true);
         emitTranscript(media, 'вопрос.', true);
         await Promise.resolve();
 
-        capturedOnEvent({
+        relayVoiceStreamFrame(capturedOnEvent, {
             result: {
                 kind: 'task',
                 id: 'task-1',
                 contextId: 'ctx-1',
             },
         });
-        capturedOnEvent({
+        relayVoiceStreamFrame(capturedOnEvent, {
             result: {
                 kind: 'artifact-update',
                 taskId: 'task-1',
@@ -184,7 +234,7 @@ describe('VoiceAgentBridge: flows → voice', () => {
         ]);
     });
 
-    it('reasoning artifact-update → mediaSession.speak', async () => {
+    it('artifact-update reasoning — не вызывает speak', async () => {
         /** @type {(ev:any)=>void} */
         let capturedOnEvent = () => {};
         streamMock.mockImplementation(async (_opts, onEvent) => {
@@ -198,10 +248,11 @@ describe('VoiceAgentBridge: flows → voice', () => {
             flowId: 'flow-1',
         });
         bridge.start();
+        setStreamTtsTarget(media, () => true);
         emitTranscript(media, 'вопрос.', true);
         await Promise.resolve();
 
-        capturedOnEvent({
+        relayVoiceStreamFrame(capturedOnEvent, {
             result: {
                 kind: 'artifact-update',
                 taskId: 'task-1',
@@ -213,7 +264,7 @@ describe('VoiceAgentBridge: flows → voice', () => {
             },
         });
 
-        expect(media.spoken).toEqual([{ text: 'Шаг размышления.', opts: { final: false } }]);
+        expect(media.spoken).toEqual([]);
     });
 
     it('getTtsOutputEnabled:false — speakable artifact не вызывает speak', async () => {
@@ -227,13 +278,13 @@ describe('VoiceAgentBridge: flows → voice', () => {
             mediaSession: media,
             a2aBaseUrl: 'https://h/flows',
             flowId: 'flow-1',
-            getTtsOutputEnabled: () => false,
         });
         bridge.start();
+        setStreamTtsTarget(media, () => false);
         emitTranscript(media, 'вопрос.', true);
         await Promise.resolve();
 
-        capturedOnEvent({
+        relayVoiceStreamFrame(capturedOnEvent, {
             result: {
                 kind: 'artifact-update',
                 taskId: 'task-1',
@@ -261,13 +312,93 @@ describe('VoiceAgentBridge: flows → voice', () => {
             flowId: 'flow-1',
         });
         bridge.start();
+        setStreamTtsTarget(media, () => true);
         emitTranscript(media, 'вопрос.', true);
         await Promise.resolve();
 
-        capturedOnEvent({
+        relayVoiceStreamFrame(capturedOnEvent, {
             result: { kind: 'status-update', taskId: 'task-1', final: true },
         });
 
+        expect(media.endUtteranceCount).toBe(1);
+    });
+
+    it('status-update final:input-required с текстом в status.message → speak + endUtterance', async () => {
+        let capturedOnEvent = () => {};
+        streamMock.mockImplementation(async (_opts, onEvent) => {
+            capturedOnEvent = onEvent;
+            await new Promise(() => {});
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+        setStreamTtsTarget(media, () => true);
+        emitTranscript(media, 'чем?', true);
+        await Promise.resolve();
+
+        relayVoiceStreamFrame(capturedOnEvent, {
+            result: {
+                kind: 'status-update',
+                taskId: 'task-1',
+                final: true,
+                metadata: {
+                    platform_interrupt: {
+                        body: { kind: 'user_message', question: 'Я вижу…' },
+                        system: {},
+                    },
+                },
+                status: {
+                    state: 'input-required',
+                    message: {
+                        role: 'agent',
+                        parts: [{ kind: 'text', text: 'Я вижу, ваше сообщение обрезалось. Чем помочь?' }],
+                    },
+                },
+            },
+        });
+
+        expect(media.spoken).toEqual([
+            { text: 'Я вижу, ваше сообщение обрезалось. Чем помочь?', opts: { final: true } },
+        ]);
+        expect(media.endUtteranceCount).toBe(1);
+    });
+
+    it('interrupt status-update при getTtsOutputEnabled:false — без speak, только endUtterance', async () => {
+        let capturedOnEvent = () => {};
+        streamMock.mockImplementation(async (_opts, onEvent) => {
+            capturedOnEvent = onEvent;
+            await new Promise(() => {});
+        });
+        const media = new FakeMediaSession();
+        const bridge = new VoiceAgentBridge({
+            mediaSession: media,
+            a2aBaseUrl: 'https://h/flows',
+            flowId: 'flow-1',
+        });
+        bridge.start();
+        setStreamTtsTarget(media, () => false);
+        emitTranscript(media, 'чем?', true);
+        await Promise.resolve();
+
+        relayVoiceStreamFrame(capturedOnEvent, {
+            result: {
+                kind: 'status-update',
+                taskId: 'task-1',
+                final: true,
+                status: {
+                    state: 'input-required',
+                    message: {
+                        parts: [{ kind: 'text', text: 'Вопрос пользователю.' }],
+                    },
+                },
+            },
+        });
+
+        expect(media.spoken).toEqual([]);
         expect(media.endUtteranceCount).toBe(1);
     });
 
@@ -284,10 +415,11 @@ describe('VoiceAgentBridge: flows → voice', () => {
             flowId: 'flow-1',
         });
         bridge.start();
+        setStreamTtsTarget(media, () => true);
         emitTranscript(media, 'вопрос.', true);
         await Promise.resolve();
 
-        capturedOnEvent({
+        relayVoiceStreamFrame(capturedOnEvent, {
             result: {
                 kind: 'artifact-update',
                 taskId: 'task-1',

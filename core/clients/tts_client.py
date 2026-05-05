@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 
 if TYPE_CHECKING:
@@ -47,6 +48,16 @@ _MIME_BY_FORMAT: dict[str, str] = {
 }
 
 _UPSTREAM_ERROR_BODY_MAX = 2048
+
+
+def _sanitize_tts_voice_id(voice: str | None) -> str | None:
+    """Идентификатор голоса не проходит через streamer; чистим здесь перед HTTP."""
+    if voice is None:
+        return None
+    cleaned = sanitize_text_for_speech_backend(voice)
+    if cleaned == "":
+        raise ValueError("TTS: пустой voice после нормализации Unicode.")
+    return cleaned
 
 
 def _tts_upstream_error_summary(response: httpx.Response) -> str:
@@ -81,6 +92,18 @@ def _tts_upstream_error_summary(response: httpx.Response) -> str:
     if reason:
         return reason
     return "no body"
+
+
+class TTSLitserveHttpError(Exception):
+    """Ответ провайдера ``provider_litserve`` на ``POST /v1/audio/speech`` с ``status >= 400``."""
+
+    def __init__(self, *, status_code: int, detail: str, url: str) -> None:
+        self.status_code = status_code
+        self.detail = detail
+        self.url = url
+        super().__init__(
+            f"TTS litserve HTTP {status_code} for {url!r}: {detail}"
+        )
 
 
 class TTSResult(BaseModel):
@@ -158,9 +181,10 @@ class LitserveTTSClient(BaseTTSClient):
         response_format: str | None = None,
         sample_rate: int | None = None,
     ) -> TTSResult:
+        text = sanitize_text_for_speech_backend(text)
         if text == "":
             raise ValueError("TTS litserve: пустой text.")
-        chosen_voice = voice or self._default_voice
+        chosen_voice = _sanitize_tts_voice_id(voice or self._default_voice)
         chosen_format = response_format or self._default_format
         chosen_sample_rate = sample_rate or self._default_sample_rate
         if chosen_format not in _MIME_BY_FORMAT:
@@ -192,8 +216,10 @@ class LitserveTTSClient(BaseTTSClient):
                 response.headers.get("content-type"),
                 len(response.content),
             )
-            raise RuntimeError(
-                f"TTS litserve HTTP {response.status_code} for {url!r}: {detail}"
+            raise TTSLitserveHttpError(
+                status_code=response.status_code,
+                detail=detail,
+                url=url,
             ) from None
 
         return TTSResult(
@@ -252,9 +278,10 @@ class CloudRuTTSClient(BaseTTSClient):
         response_format: str | None = None,
         sample_rate: int | None = None,
     ) -> TTSResult:
+        text = sanitize_text_for_speech_backend(text)
         if text == "":
             raise ValueError("TTS cloud_ru: пустой text.")
-        chosen_voice = voice or self._default_voice
+        chosen_voice = _sanitize_tts_voice_id(voice or self._default_voice)
         chosen_format = response_format or self._default_format
         chosen_sample_rate = sample_rate or self._default_sample_rate
         if chosen_format not in _MIME_BY_FORMAT:
@@ -348,17 +375,19 @@ class MockTTSClient(BaseTTSClient):
         response_format: str | None = None,
         sample_rate: int | None = None,
     ) -> TTSResult:
+        text = sanitize_text_for_speech_backend(text)
         if text == "":
             raise ValueError("TTS mock: пустой text.")
         chosen_format = response_format or "wav"
         chosen_sample_rate = sample_rate or 8000
+        resolved_voice = _sanitize_tts_voice_id(voice)
         return TTSResult(
             provider="mock",
             audio_bytes=self._WAV_HEADER,
             mime_type=_MIME_BY_FORMAT.get(chosen_format, "audio/wav"),
             sample_rate=chosen_sample_rate,
             response_format=chosen_format,
-            voice=voice,
+            voice=resolved_voice,
             model="mock",
         )
 
@@ -466,6 +495,7 @@ class TTSClientFactory:
 __all__ = [
     "BaseTTSClient",
     "TTSResult",
+    "TTSLitserveHttpError",
     "LitserveTTSClient",
     "CloudRuTTSClient",
     "YandexTTSClient",

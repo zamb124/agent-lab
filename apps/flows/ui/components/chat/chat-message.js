@@ -15,6 +15,7 @@ import {
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
 } from '@platform/lib/voice/tts-output-pref.js';
+import { stopStreamTtsPlayback } from '@platform/lib/voice/stream-tts-registry.js';
 import './flows-chat-run-trace.js';
 
 export class ChatMessage extends PlatformElement {
@@ -75,11 +76,27 @@ export class ChatMessage extends PlatformElement {
                 max-width: 70%;
                 min-width: 0;
             }
-            
-            .message.user .bubble {
+
+            .message.user .bubble,
+            .message.assistant .bubble,
+            .message.operator .bubble,
+            .message.system .bubble {
                 display: flex;
                 flex-direction: column;
+            }
+
+            .message.user .bubble {
+                flex: 0 1 auto;
+                width: fit-content;
+                max-width: 70%;
+                min-width: 0;
                 align-items: flex-end;
+            }
+
+            .message.assistant .bubble,
+            .message.operator .bubble,
+            .message.system .bubble {
+                align-items: flex-start;
             }
             
             .content {
@@ -96,10 +113,24 @@ export class ChatMessage extends PlatformElement {
                 border-bottom-right-radius: var(--radius-sm);
                 box-shadow: 0 4px 16px rgba(153, 166, 249, 0.2);
             }
-            
-            .message.assistant .content {
+
+            .message.assistant .content,
+            .message.operator .content {
                 background: var(--glass-solid-medium);
                 border-bottom-left-radius: var(--radius-sm);
+            }
+
+            .message.assistant .bubble .content,
+            .message.operator .bubble .content,
+            .message.system .bubble .content {
+                align-self: stretch;
+                box-sizing: border-box;
+                width: 100%;
+                min-width: 0;
+            }
+
+            .message.user .bubble .content {
+                max-width: 100%;
             }
             
             .message.system .content {
@@ -301,8 +332,21 @@ export class ChatMessage extends PlatformElement {
                 }
             }
             
-            .assistant-actions {
-                margin-top: var(--space-3);
+            .assistant-actions,
+            .user-actions {
+                flex-shrink: 0;
+                margin-top: var(--space-2);
+                padding-left: var(--space-1);
+            }
+
+            .message.user .assistant-actions,
+            .message.user .user-actions {
+                width: 100%;
+                box-sizing: border-box;
+                display: flex;
+                justify-content: flex-end;
+                padding-left: 0;
+                padding-right: 0;
             }
 
             .activity-line {
@@ -1024,6 +1068,10 @@ export class ChatMessage extends PlatformElement {
         return resolveFlowVoiceHttpOrigin();
     }
 
+    _onMessageHttpPlayStarted() {
+        stopStreamTtsPlayback();
+    }
+
     _renderAssistantActions() {
         if (this.role !== 'assistant') {
             return nothing;
@@ -1045,6 +1093,29 @@ export class ChatMessage extends PlatformElement {
                     .getHeaders=${typeof this.voicePlayGetHeaders === 'function'
                         ? this.voicePlayGetHeaders
                         : null}
+                    @play-started=${this._onMessageHttpPlayStarted}
+                ></platform-assistant-message-actions>
+            </div>
+        `;
+    }
+
+    _renderUserActions() {
+        if (this.role !== 'user') {
+            return nothing;
+        }
+        if (this.streaming) {
+            return nothing;
+        }
+        const text = asString(this.content).trim();
+        if (text.length === 0) {
+            return nothing;
+        }
+        return html`
+            <div class="user-actions">
+                <platform-assistant-message-actions
+                    .text=${text}
+                    voice-base-url=""
+                    show-edit
                 ></platform-assistant-message-actions>
             </div>
         `;
@@ -1242,8 +1313,9 @@ export class ChatMessage extends PlatformElement {
                         ${this._renderInputRequired()}
                         ${this._renderOperatorReply()}
                         ${this._renderBreakpoint()}
-                        ${this._renderAssistantActions()}
                     </div>
+                    ${this._renderUserActions()}
+                    ${this._renderAssistantActions()}
                 </div>
             </div>
         `;

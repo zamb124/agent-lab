@@ -11,6 +11,12 @@ from apps.voice.services.voice_chunker import VoiceChunker
 from apps.voice.services.voice_session import VoiceSession
 
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_database_before_tests():
+    """Переопределение корневой session-фикстуры: тесты voice не используют Postgres."""
+    yield
+
+
 @pytest.fixture
 def mock_vad() -> MockVADProvider:
     """VAD-провайдер — всегда обнаруживает речь."""

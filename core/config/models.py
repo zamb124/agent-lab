@@ -326,7 +326,7 @@ class LitserveSpeechBackendConfig(BaseModel):
         default=120.0,
         gt=0.0,
         description=(
-            "Таймаут HTTP к provider-litserve (секунды). Локальный Kokoro на CPU может "
+            "Таймаут HTTP к provider-litserve (секунды). Локальный Silero TTS на CPU может "
             "держать ответ дольше 60 с при холодном старте; при необходимости поднять через "
             "VOICE__STT__LITSERVE__TIMEOUT_S / VOICE__TTS__LITSERVE__TIMEOUT_S / VOICE__VAD__LITSERVE__TIMEOUT_S."
         ),
@@ -481,7 +481,7 @@ class TTSProvidersConfig(BaseModel):
     provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
     default_model: Optional[str] = Field(
         default=None,
-        description="OpenAI-совместимый id модели по умолчанию (например `kokoro-82m`).",
+        description="OpenAI-совместимый id модели по умолчанию (например `silero-tts-v5-5-ru`).",
     )
     default_voice: Optional[str] = None
     default_response_format: Literal["wav", "mp3", "ogg", "pcm"] = "wav"
@@ -869,7 +869,17 @@ class ProviderLitserveSTTModelEntry(BaseModel):
     )
 
 
-KOKORO_PIPELINE_LANG_CODES: frozenset[str] = frozenset(("a", "b", "e", "f", "h", "i", "p", "j", "z"))
+SILERO_TTS_RU_V5_BUNDLES: frozenset[str] = frozenset(
+    ("v5_ru", "v5_2_ru", "v5_3_ru", "v5_4_ru", "v5_5_ru")
+)
+
+SILERO_V5_RU_SPEAKERS_BY_BUNDLE: dict[str, frozenset[str]] = {
+    "v5_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
+    "v5_2_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
+    "v5_3_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
+    "v5_4_ru": frozenset(("aidar", "baya", "kseniya", "xenia")),
+    "v5_5_ru": frozenset(("aidar", "baya", "kseniya", "xenia", "eugene")),
+}
 
 
 class ProviderLitserveTTSModelEntry(BaseModel):
@@ -880,51 +890,146 @@ class ProviderLitserveTTSModelEntry(BaseModel):
     api_model_id: str
     hf_model_id: str
     revision: str | None = None
-    backend: Literal["kokoro"] = Field(
-        default="kokoro",
-        description="Runtime-адаптер для TTS-модели (kokoro: KPipeline). Расширяется по мере добавления моделей.",
+    backend: Literal["silero"] = Field(
+        default="silero",
+        description="Runtime-адаптер TTS (silero: silero_tts + apply_tts).",
     )
-    lang: str | None = Field(
-        default=None,
+    silero_language: Literal["ru"] = Field(
+        default="ru",
+        description="Код языка для ``silero.silero_tts`` (локальный каталог — русский v5).",
+    )
+    silero_bundle: str = Field(
         description=(
-            "Для backend kokoro — аргумент ``lang_code`` у ``kokoro.KPipeline``: ровно одна строчная буква "
-            "из набора поддерживаемых пакетом (``a``, ``b``, ``e``, ``f``, ``h``, ``i``, ``p``, ``j``, ``z``; "
-            "см. README hexgrad/kokoro). Не ISO 639-1 (``ru`` / ``en`` недопустимы)."
+            "Идентификатор бандла модели Silero v5 для ``silero_tts(..., speaker=...)`` "
+            "(например ``v5_5_ru``); не путать с голосом ``voice`` для ``apply_tts``."
         ),
     )
     voice: str | None = Field(
         default=None,
-        description="Имя голоса по умолчанию для модели (для Kokoro — идентификатор вроде af_heart).",
+        description="Голос по умолчанию для ``apply_tts`` (например ``xenia``, ``aidar`` для v5_5_ru).",
+    )
+    synthesis_locale: str | None = Field(
+        default=None,
+        description=(
+            "ISO 639-1 (две буквы): при совпадении с языком сессии TTS в voice_resolver "
+            "(query `language` WebSocket или company_voice_providers.tts) выбирается эта запись "
+            "каталога вместо tier-default."
+        ),
     )
     sample_rate: int | None = Field(
         default=None,
-        ge=8000,
-        le=48000,
-        description="Sample rate выходного PCM модели.",
+        description="Sample rate выходного PCM (для ru v5 допустимы 8000, 24000, 48000).",
+    )
+    tts_input_steps: tuple[str, ...] = Field(
+        default=("silero_ru_latin_to_cyrillic",),
+        description=(
+            "Именованные шаги подготовки текста после Unicode-нормализации на стороне LitServe. "
+            "Пустой кортеж — без доп. шагов (только проверка кириллицы для silero ru). "
+            "Реестр шагов — ``core.utils.tts_input_steps.TTS_INPUT_STEP_REGISTRY``."
+        ),
     )
 
-    @field_validator("lang", mode="before")
+    @field_validator("voice", mode="before")
     @classmethod
-    def trim_lower_lang_optional(cls, v: Any) -> str | None:
+    def trim_lower_voice_optional(cls, v: Any) -> str | None:
         if v is None:
             return None
         if not isinstance(v, str):
-            raise ValueError(f"TTS lang: ожидалась str или None, получено {type(v).__name__}")
+            raise ValueError(f"TTS voice: ожидалась str или None, получено {type(v).__name__}")
         s = v.strip().lower()
         if not s:
             return None
         return s
 
-    @model_validator(mode="after")
-    def kokoro_lang_must_be_pipeline_code(self) -> Self:
-        if self.backend != "kokoro" or self.lang is None:
-            return self
-        if len(self.lang) != 1 or self.lang not in KOKORO_PIPELINE_LANG_CODES:
-            allowed = ", ".join(sorted(KOKORO_PIPELINE_LANG_CODES))
+    @field_validator("silero_bundle", mode="before")
+    @classmethod
+    def normalize_silero_bundle(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            raise ValueError(f"TTS silero_bundle: ожидалась str, получено {type(v).__name__}")
+        s = v.strip().lower()
+        if not s:
+            raise ValueError("TTS silero_bundle: не может быть пустым")
+        if s not in SILERO_TTS_RU_V5_BUNDLES:
+            allowed = ", ".join(sorted(SILERO_TTS_RU_V5_BUNDLES))
             raise ValueError(
-                f"TTS kokoro: lang={self.lang!r} недопустим как lang_code для KPipeline "
-                f"(нужна одна буква из: {allowed}; не ISO вида ru/en). "
-                "См. README пакета hexgrad/kokoro."
+                f"TTS silero_bundle={v!r} не из поддерживаемых русских v5: {allowed}"
+            )
+        return s
+
+    @field_validator("synthesis_locale", mode="before")
+    @classmethod
+    def synthesis_locale_iso639(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError(f"TTS synthesis_locale: ожидалась str или None, получено {type(v).__name__}")
+        s = v.strip().lower()
+        if s == "":
+            return None
+        base = s.split("-")[0].split("_")[0]
+        if len(base) < 2:
+            raise ValueError("TTS synthesis_locale: нужна ISO 639-1 (минимум 2 буквы)")
+        return base[:2]
+
+    @field_validator("tts_input_steps", mode="before")
+    @classmethod
+    def normalize_tts_input_steps(cls, v: Any) -> tuple[str, ...]:
+        if v is None:
+            return ("silero_ru_latin_to_cyrillic",)
+        if isinstance(v, str):
+            raise ValueError("tts_input_steps: ожидался tuple или list имён шагов, не str")
+        if isinstance(v, list):
+            v = tuple(v)
+        if not isinstance(v, tuple):
+            raise ValueError(
+                f"tts_input_steps: ожидался tuple или list, получено {type(v).__name__}"
+            )
+        out: list[str] = []
+        for i, item in enumerate(v):
+            if not isinstance(item, str):
+                raise ValueError(
+                    f"tts_input_steps[{i}]: ожидалась str, получено {type(item).__name__}"
+                )
+            s = item.strip()
+            if s == "":
+                raise ValueError(f"tts_input_steps[{i}]: пустая строка")
+            out.append(s)
+        return tuple(out)
+
+    @model_validator(mode="after")
+    def sample_rate_must_be_v5_ru_choice(self) -> Self:
+        if self.sample_rate is None:
+            return self
+        if self.sample_rate not in (8000, 24000, 48000):
+            raise ValueError(
+                f"TTS sample_rate={self.sample_rate}: для Silero ru v5 допустимы только 8000, 24000, 48000"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def voice_must_match_silero_bundle(self) -> Self:
+        if self.voice is None:
+            return self
+        allowed = SILERO_V5_RU_SPEAKERS_BY_BUNDLE.get(self.silero_bundle)
+        if allowed is None:
+            raise ValueError(f"TTS: нет таблицы голосов для silero_bundle={self.silero_bundle!r}")
+        if self.voice not in allowed:
+            opts = ", ".join(sorted(allowed))
+            raise ValueError(
+                f"TTS voice={self.voice!r} недопустим для silero_bundle={self.silero_bundle!r}; "
+                f"допустимы: {opts}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def tts_input_steps_must_be_registered(self) -> Self:
+        from core.utils.tts_input_steps import TTS_INPUT_STEP_IDS
+
+        unknown = [s for s in self.tts_input_steps if s not in TTS_INPUT_STEP_IDS]
+        if unknown:
+            allowed = ", ".join(sorted(TTS_INPUT_STEP_IDS))
+            raise ValueError(
+                f"tts_input_steps: неизвестные шаги {unknown}; зарегистрированы: {allowed}"
             )
         return self
 
@@ -1040,21 +1145,22 @@ class ProviderLitserveInfraConfig(BaseModel):
     tts_models: list["ProviderLitserveTTSModelEntry"] = Field(
         default_factory=lambda: [
             ProviderLitserveTTSModelEntry(
-                api_model_id="kokoro-82m-ru",
-                hf_model_id="hexgrad/Kokoro-82M",
-                lang="a",
-                voice="af_heart",
+                api_model_id="silero-tts-v5-5-ru",
+                hf_model_id="snakers4/silero-models",
+                silero_bundle="v5_5_ru",
+                voice="xenia",
+                synthesis_locale="ru",
                 sample_rate=24000,
             ),
         ],
         description=(
             "Полный список TTS-моделей провайдера. Каждый элемент описывает одну модель "
-            "(api id для /v1/audio/speech, hf id, lang как kokoro lang_code, voice, sample_rate). "
+            "(api id для /v1/audio/speech, hf id каталога, silero_bundle, voice, sample_rate). "
             "Дефолт указывается в tts_default_api_model_id. Расширяется из UI /litserve/models."
         ),
     )
     tts_default_api_model_id: str = Field(
-        default="kokoro-82m-ru",
+        default="silero-tts-v5-5-ru",
         description="api id TTS-модели по умолчанию (должен присутствовать в tts_models).",
     )
 

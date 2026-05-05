@@ -109,15 +109,15 @@ def test_voice_chunker_flush_returns_remainder() -> None:
     chunker = VoiceChunker()
     chunker.feed("Текст без окончания")
     remainder = chunker.flush()
-    assert remainder == "Текст без окончания"
+    assert remainder == ["Текст без окончания"]
 
 
 def test_voice_chunker_flush_empty_after_complete_sentence() -> None:
-    # 3 слова → чанк будет выдан в feed(), буфер пуст → flush() = None
+    # 3 слова → чанк будет выдан в feed(), буфер пуст → flush() = []
     chunker = VoiceChunker()
     chunker.feed("Раз два три.")
     remainder = chunker.flush()
-    assert remainder is None
+    assert remainder == []
 
 
 def test_voice_chunker_accumulates_across_feeds() -> None:
@@ -129,7 +129,11 @@ def test_voice_chunker_accumulates_across_feeds() -> None:
     assert "предложения." in result2[0]
 
 
-def test_voice_chunker_no_chunks_for_short_incomplete(unique_id: str) -> None:
-    chunker = VoiceChunker(min_words=3)
-    chunks = chunker.feed("Ок")
-    assert chunks == []
+def test_voice_chunker_flush_splits_long_tail_without_punctuation() -> None:
+    chunker = VoiceChunker(chunk_max_chars=40, min_words=2)
+    chunker.feed("один два " + "слово " * 30)
+    parts = chunker.flush()
+    assert len(parts) >= 3
+    assert all(len(p) <= 40 for p in parts)
+    joined = " ".join(parts)
+    assert "один два" in joined

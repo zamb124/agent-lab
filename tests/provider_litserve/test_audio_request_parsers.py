@@ -65,34 +65,81 @@ def test_parse_stt_body_no_default_and_no_model_raises_422():
 def test_parse_tts_body_uses_default_and_normalizes_response_format(unique_id):
     parsed = parse_tts_body(
         {"input": "Привет, мир", "response_format": "FLAC"},
-        default_api_model_id=f"kokoro-{unique_id}",
+        default_api_model_id=f"silero-tts-{unique_id}",
     )
     assert parsed["text"] == "Привет, мир"
-    assert parsed["model"] == f"kokoro-{unique_id}"
+    assert parsed["model"] == f"silero-tts-{unique_id}"
     assert parsed["voice_override"] is None
     # Неизвестный формат -> wav
     assert parsed["response_format"] == "wav"
 
 
-def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
+def test_parse_tts_body_normalizes_voice_to_lowercase(unique_id):
     parsed = parse_tts_body(
         {
             "input": "Тест",
-            "model": f"kokoro-{unique_id}",
-            "voice": "bf",
+            "model": f"silero-tts-{unique_id}",
+            "voice": "Baya",
             "response_format": "pcm",
         },
-        default_api_model_id=f"kokoro-{unique_id}",
+        default_api_model_id=f"silero-tts-{unique_id}",
     )
-    assert parsed["voice_override"] == "bf"
+    assert parsed["voice_override"] == "baya"
+
+
+def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
+
+    parsed = parse_tts_body(
+        {
+            "input": "Тест",
+            "model": f"silero-tts-{unique_id}",
+            "voice": "baya",
+            "response_format": "pcm",
+        },
+        default_api_model_id=f"silero-tts-{unique_id}",
+    )
+    assert parsed["voice_override"] == "baya"
     assert parsed["response_format"] == "pcm"
 
 
 def test_parse_tts_body_empty_input_raises_value_error(unique_id):
     with pytest.raises(ValueError, match="input"):
         parse_tts_body(
-            {"input": "   "}, default_api_model_id=f"kokoro-{unique_id}"
+            {"input": "   "}, default_api_model_id=f"silero-tts-{unique_id}"
         )
+
+
+def test_parse_tts_body_replaces_lone_surrogate_so_unicode_is_safe_for_tts():
+    """Литерал U+D800 ломает UTF-8 в FFI; parse убирает через UTF-16 roundtrip."""
+    parsed = parse_tts_body(
+        {"input": "a" + chr(0xD800) + "b"},
+        default_api_model_id="silero-tts-default",
+    )
+    assert parsed["text"] == "a" + "\ufffd" + "b"
+    assert chr(0xD800) not in parsed["text"]
+
+
+def test_parse_tts_body_strips_format_chars_control_and_keeps_newline():
+    text_in = "x\u200by\nz"
+    parsed = parse_tts_body(
+        {"input": text_in},
+        default_api_model_id="silero-tts-default",
+    )
+    assert "\u200b" not in parsed["text"]
+    assert "\n" in parsed["text"]
+    assert parsed["text"] == "xy\nz"
+    zwj = parse_tts_body(
+        {"input": "a\u200db"},
+        default_api_model_id="silero-tts-default",
+    )
+    assert "\u200d" not in zwj["text"]
+    assert zwj["text"] == "ab"
+    no_null = parse_tts_body(
+        {"input": "a" + chr(0) + "b"},
+        default_api_model_id="silero-tts-default",
+    )
+    assert chr(0) not in no_null["text"]
+    assert no_null["text"] == "ab"
 
 
 def test_parse_vad_body_default_and_explicit_sample_rate(unique_id):
@@ -198,3 +245,28 @@ def test_audio_lit_apis_decode_request_annotation_is_fastapi_request():
             f"{cls.__name__}.decode_request: параметр request должен быть аннотирован "
             f"классом fastapi.Request в runtime (не строкой/ForwardRef): получено {raw_ann!r}"
         )
+
+
+def test_media_type_for_tts_audio_sniffs_wav_pcm_mp3():
+    from apps.provider_litserve.tts.api import _media_type_for_tts_audio
+
+    assert _media_type_for_tts_audio(b"RIFF" + bytes(12)) == "audio/wav"
+    assert _media_type_for_tts_audio(bytes(80)) == "audio/L16"
+    assert _media_type_for_tts_audio(b"\xff\xfb" + bytes(4)) == "audio/mpeg"
+    assert _media_type_for_tts_audio(b"ID3" + bytes(8)) == "audio/mpeg"
+
+
+def test_tts_litapi_encode_response_returns_starlette_not_raw_bytes(unique_id):
+    """Сырой ``bytes`` в FastAPI с аннотацией ``-> bytes`` сериализуется как JSON → UnicodeDecodeError на WAV."""
+    from starlette.responses import Response
+
+    from apps.provider_litserve.tts.api import TTSLitAPI
+    from core.config.models import ProviderLitserveInfraConfig
+
+    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
+    api = TTSLitAPI(cfg)
+    body = b"RIFF" + bytes(40)
+    out = api.encode_response(body)
+    assert isinstance(out, Response)
+    assert out.body == body
+    assert out.media_type == "audio/wav"

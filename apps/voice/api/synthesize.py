@@ -2,14 +2,17 @@
 
 ``POST /voice/api/v1/synthesize`` — синтезировать ``text`` в аудио-поток
 через платформенного TTS-провайдера (``core.clients.voice_resolver``).
-Ответ возвращается чанками (первый кусок уходит сразу после первой
-синтаксической границы — правило «ни миллисекунды»), ``Content-Type``
-берётся из текущего провайдера (``BaseTTSStreamer.mime_type``).
+Для ``audio/wav`` внутри собирается один RIFF: потоковый TTS режет текст на
+фразы и каждая даёт **отдельный** WAV; сыря конкатенация байт ломает
+``<audio>`` в браузере (слышна только первая фраза). Для иных MIME чанки
+пробрасываются как раньше. ``Content-Type`` — ``BaseTTSStreamer.mime_type``.
 
 После успеха — запись ``record_tts_usage`` (если request-scope содержит
 ``user``); пустого текста и отсутствия ``company_id`` в контексте
 запроса не допускается (``Zero-Guess``). Если TTS не вернул ни одного
 ненулевого чанка — ``502`` и лог ``voice.synthesize.empty_audio_body``.
+HTTP ``4xx`` от ``provider_litserve`` (``TTSLitserveHttpError``) пробрасываются
+клиенту с тем же кодом и ``detail``; ответы ``5xx`` апстрима — ``502``.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from apps.voice.services.voice_usage import record_tts_usage
 from core.clients.speech_override import SpeechOverride
+from core.clients.tts_client import TTSLitserveHttpError
 from core.clients.tts_streaming import BaseTTSStreamer
 from core.clients.voice_resolver import get_tts_streamer
 from core.context import get_context
@@ -31,6 +35,12 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 synthesize_router = APIRouter(prefix="/api/v1", tags=["voice-synthesize"])
+
+
+def _http_status_for_litserve_tts_error(exc: TTSLitserveHttpError) -> int:
+    if 400 <= exc.status_code < 500:
+        return exc.status_code
+    return status.HTTP_502_BAD_GATEWAY
 
 
 class SynthesizeRequest(BaseModel):
@@ -51,9 +61,8 @@ class SynthesizeRequest(BaseModel):
     "/synthesize",
     summary="Синтезировать речь (streaming)",
     description=(
-        "Принимает текст, возвращает аудио-поток (Transfer-Encoding: chunked). "
-        "Первый чанк отправляется сразу после первой синтаксической границы, "
-        "без ожидания полного ответа. Провайдер выбирается через voice_resolver "
+        "Принимает текст, возвращает аудио-поток. Для WAV — один корректный контейнер "
+        "после полного синтеза (склейка PCM из фразовых WAV). Провайдер — voice_resolver "
         "(override -> per-company -> deployment-default)."
     ),
     responses={
@@ -110,6 +119,16 @@ async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
     body_iter = recorded_iter.__aiter__()
     try:
         first_chunk = await body_iter.__anext__()
+    except TTSLitserveHttpError as exc:
+        code = _http_status_for_litserve_tts_error(exc)
+        logger.warning(
+            "voice.synthesize.litserve_http_error",
+            company_id=company_id,
+            provider=tts_streamer.provider,
+            upstream_status=exc.status_code,
+            response_status=code,
+        )
+        raise HTTPException(status_code=code, detail=exc.detail) from exc
     except StopAsyncIteration:
         logger.warning(
             "voice.synthesize.empty_audio_body",
@@ -153,10 +172,26 @@ async def _synthesize_audio_chunks(
     tts_streamer: BaseTTSStreamer,
     text: str,
 ) -> AsyncIterator[bytes]:
-    """Пропустить ``text`` через ``BaseTTSStreamer.astream`` по кускам."""
+    """Собрать чанки ``astream``; для WAV — один RIFF, иначе проброс по частям."""
+    raw_chunks: list[bytes] = []
     async for audio_bytes in tts_streamer.astream(_single_text_stream(text)):
         if audio_bytes:
-            yield audio_bytes
+            raw_chunks.append(audio_bytes)
+    if not raw_chunks:
+        return
+    mime = (tts_streamer.mime_type or "").strip().lower()
+    use_wav_merge = mime in ("audio/wav", "audio/wave", "audio/x-wav") or (
+        len(raw_chunks[0]) >= 12
+        and raw_chunks[0][:4] == b"RIFF"
+        and raw_chunks[0][8:12] == b"WAVE"
+    )
+    if use_wav_merge:
+        from core.files.media.wav_merge import merge_wav_s16le_mono_files
+
+        yield merge_wav_s16le_mono_files(raw_chunks)
+        return
+    for part in raw_chunks:
+        yield part
 
 
 async def _record_usage_after_stream(

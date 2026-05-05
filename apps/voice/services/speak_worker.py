@@ -103,16 +103,17 @@ async def _flush_and_synthesize(
     chunker: VoiceChunker,
     channel: VoiceClientChannel,
 ) -> None:
-    """Флашим остаток и отправляем последний чанк синтеза."""
-    tail = chunker.flush()
-    if not tail:
+    """Флашим остаток и отправляем синтез по сегментам (лимит чанкера)."""
+    tails = chunker.flush()
+    if not tails:
         await _announce_tts_stopped(session=session, channel=channel)
         return
 
     try:
-        audio_bytes = await tts_streamer.synthesize_chunk(tail)
-        if audio_bytes:
-            await channel.send_pcm(audio_bytes)
+        for tail in tails:
+            audio_bytes = await tts_streamer.synthesize_chunk(tail)
+            if audio_bytes:
+                await channel.send_pcm(audio_bytes)
     except asyncio.CancelledError:
         raise
     except Exception as exc:

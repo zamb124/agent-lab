@@ -12,6 +12,7 @@ import {
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
 } from '../voice/tts-output-pref.js';
+import { setStreamTtsTarget } from '../voice/stream-tts-registry.js';
 import './platform-embed-chat.js';
 
 /**
@@ -352,8 +353,6 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._voiceStatus = 'idle';
         /** @type {VoiceMediaSession|null} */
         this._voiceMedia = null;
-        /** @type {VoiceAgentBridge|null} */
-        this._voiceBridge = null;
         this.locale = '';
         this.open = false;
         this.theme = 'auto';
@@ -389,10 +388,14 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._onPanelDragPointerMove = this._onPanelDragPointerMove.bind(this);
         this._onPanelDragPointerUp = this._onPanelDragPointerUp.bind(this);
         this._onViewportResize = this._onViewportResize.bind(this);
-        this._onTtsDrawerPref = () => this.requestUpdate();
+        this._onTtsDrawerPref = () => {
+            this.requestUpdate();
+            this._syncEmbedStreamTtsAfterPrefChange();
+        };
         this._onTtsDrawerStorage = (e) => {
             if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
                 this.requestUpdate();
+                this._syncEmbedStreamTtsAfterPrefChange();
             }
         };
     }
@@ -455,6 +458,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     disconnectedCallback() {
+        void this._disposeTtsOnlyStream();
         if (this._voiceOn) {
             const m = this._voiceMedia;
             const b = this._voiceBridge;
@@ -510,6 +514,12 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     detail: { open: this.open },
                 }),
             );
+            if (!this.open) {
+                void this._disposeTtsOnlyStream();
+            }
+            if (this.open && readTtsOutputEnabled() && !this._voiceOn) {
+                void this._ensureTtsOnlyStream();
+            }
             if (this.open && this.voiceEnabled && this.voiceDefaultOn && !this._voiceOn) {
                 this._startVoice().catch(() => { /* ошибки идут через toast/event */ });
             }
@@ -636,11 +646,70 @@ export class PlatformEmbedChatDrawer extends LitElement {
         );
     }
 
+    /**
+     * Тот же контекст, что для duplex voice: без него WS session не поднять.
+     * @returns {boolean}
+     */
+    _voiceEmbedTtsContextReady() {
+        const voiceBaseUrl = String(this.voiceBaseUrl || '').replace(/\/$/, '');
+        if (voiceBaseUrl === '') {
+            return false;
+        }
+        if (!this.embedId && !this.flowId) {
+            return false;
+        }
+        if (String(this.companyId || '').trim() === '') {
+            return false;
+        }
+        if (String(this.flowsBaseUrl || '').trim() === '') {
+            return false;
+        }
+        return true;
+    }
+
+    _syncEmbedStreamTtsAfterPrefChange() {
+        if (!readTtsOutputEnabled()) {
+            void this._disposeTtsOnlyStream();
+            return;
+        }
+        if (this.open && !this._voiceOn) {
+            void this._ensureTtsOnlyStream();
+        }
+    }
+
+    _embedChatEl() {
+        return this.renderRoot?.querySelector('platform-embed-chat') ?? null;
+    }
+
+    _disposeTtsOnlyStream() {
+        const el = this._embedChatEl();
+        if (el && typeof el.disposeTtsOnlyStream === 'function') {
+            el.disposeTtsOnlyStream();
+        }
+    }
+
+    /**
+     * WS без микрофона: потоковая озвучка A2A — реализация в platform-embed-chat.
+     */
+    async _ensureTtsOnlyStream() {
+        const el = this._embedChatEl();
+        if (el && typeof el.ensureTtsOnlyStream === 'function') {
+            await el.ensureTtsOnlyStream();
+        }
+    }
+
     _onComposerVoiceToggle() {
         if (this.voiceEnabled !== true) {
             return;
         }
         this._toggleVoice();
+    }
+
+    _onEmbedVoiceBridgeUserStop() {
+        const b = this._voiceBridge;
+        if (b && typeof b.userStopActiveTurn === 'function') {
+            b.userStopActiveTurn();
+        }
     }
 
     onAssistantEvent(handler) {
@@ -924,6 +993,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
     async _startVoice() {
         if (this._voiceOn) return;
         if (!this.voiceEnabled) return;
+        this._disposeTtsOnlyStream();
         const voiceBaseUrl = String(this.voiceBaseUrl || '').replace(/\/$/, '');
         if (voiceBaseUrl === '') {
             this._toastVoicePrepFailure('no_base_url');
@@ -993,7 +1063,6 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     el.applyVoiceA2aStreamEvent(ev);
                 }
             },
-            getTtsOutputEnabled: () => readTtsOutputEnabled(),
         });
         bridge.addEventListener('a2aSettled', () => {
             const el = this.renderRoot?.querySelector('platform-embed-chat');
@@ -1030,6 +1099,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             this._voiceStatus = e.detail.state === 'playing' ? 'speaking' : 'idle';
         });
         try {
+            media.primePlaybackFromUserGesture();
             await media.connect();
         } catch (err) {
             this._voiceStatus = 'error';
@@ -1041,6 +1111,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             return;
         }
         bridge.start();
+        setStreamTtsTarget(media, readTtsOutputEnabled);
         this._voiceMedia = media;
         this._voiceBridge = bridge;
         this._voiceOn = true;
@@ -1055,6 +1126,9 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._voiceMedia = null;
         this._voiceOn = false;
         this._voiceStatus = 'idle';
+        if (readTtsOutputEnabled() && this.open) {
+            void this._ensureTtsOnlyStream();
+        }
     }
 
     _toggleVoice() {
@@ -1068,6 +1142,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
     _toggleTtsOutputDrawer() {
         toggleTtsOutputEnabled();
         this.requestUpdate();
+        this._syncEmbedStreamTtsAfterPrefChange();
     }
 
     render() {
@@ -1224,6 +1299,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                 </div>
                 <platform-embed-chat
                     @humanitec-embed-chat-assistant-reply-completed=${this._onEmbedAssistantReplyCompleted}
+                    @humanitec-embed-voice-bridge-user-stop=${this._onEmbedVoiceBridgeUserStop}
                     @voice-toggle=${this._onComposerVoiceToggle}
                     ?hide-header=${true}
                     ?visible=${this.open}
@@ -1231,6 +1307,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     interface-locale=${this._interfaceLocaleForChat()}
                     ?show-locale-control=${this.showLocaleControl}
                     .flowsBaseUrl=${this.flowsBaseUrl}
+                    company-id=${this.companyId || ''}
+                    voice-base-url=${this.voiceBaseUrl || ''}
                     flow-id=${this.flowId || ''}
                     embed-id=${this.embedId || ''}
                     branch-id=${(this.branchId || this.skillId || '').trim()}

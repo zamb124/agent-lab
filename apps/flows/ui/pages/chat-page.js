@@ -18,6 +18,7 @@ import {
     flowsVoiceAuxiliaryHttpHeadersStub,
     formatFlowVoiceConnectErrorDetail,
     normalizeFlowVoiceSttLanguage,
+    resolveFlowVoiceHttpOrigin,
 } from '../_helpers/flow-voice-session.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
@@ -31,6 +32,13 @@ import {
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
 } from '@platform/lib/voice/tts-output-pref.js';
+import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
+import {
+    clearStreamTtsTarget,
+    primeStreamTtsPlaybackFromUserGesture,
+    setStreamTtsTarget,
+    stopStreamTtsPlayback,
+} from '@platform/lib/voice/stream-tts-registry.js';
 
 export class ChatPage extends PlatformPage {
     static properties = {
@@ -185,6 +193,9 @@ export class ChatPage extends PlatformPage {
         this._onTtsOutputPref = null;
         /** @type {((e: StorageEvent) => void) | null} */
         this._onTtsOutputStorage = null;
+        /** @type {InstanceType<typeof VoiceMediaSession> | null} */
+        this._ttsOnlyMedia = null;
+        this._ttsOnlyStreamStarting = false;
     }
 
     connectedCallback() {
@@ -207,12 +218,18 @@ export class ChatPage extends PlatformPage {
         }
         document.addEventListener('pointerdown', this._onDocPointer);
         this._onTtsOutputPref = () => {
+            if (!readTtsOutputEnabled()) {
+                this._disposeTtsOnlyStream();
+            }
             this.requestUpdate();
         };
         if (typeof window !== 'undefined') {
             window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsOutputPref);
             this._onTtsOutputStorage = (e) => {
                 if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
+                    if (!readTtsOutputEnabled()) {
+                        this._disposeTtsOnlyStream();
+                    }
                     this.requestUpdate();
                 }
             };
@@ -221,6 +238,7 @@ export class ChatPage extends PlatformPage {
     }
 
     disconnectedCallback() {
+        this._disposeTtsOnlyStream();
         if (this._voiceOn) {
             void this._stopVoice();
         }
@@ -239,8 +257,140 @@ export class ChatPage extends PlatformPage {
         super.disconnectedCallback();
     }
 
+    _disposeTtsOnlyStream() {
+        const m = this._ttsOnlyMedia;
+        this._ttsOnlyMedia = null;
+        this._ttsOnlyStreamStarting = false;
+        clearStreamTtsTarget();
+        if (m) {
+            try {
+                m.close();
+            } catch {
+                /* noop */
+            }
+        }
+    }
+
+    /**
+     * Жест отправки: WS только для TTS (`speak`), без микрофона — цель `feedStreamTtsFromA2aResult`.
+     */
+    _primeChatTtsOnlyStreamFromUserGesture() {
+        if (!readTtsOutputEnabled() || this._voiceOn) {
+            return;
+        }
+        const companyId = asString(this._activeCompanySel.value);
+        if (companyId === '' || !this.flowId) {
+            return;
+        }
+        const localeRaw = asString(this._localeSel.value);
+        /** @type {Record<string, string>} */
+        const wsQuery = {};
+        if (localeRaw.trim() !== '') {
+            try {
+                wsQuery.language = normalizeFlowVoiceSttLanguage(localeRaw);
+            } catch {
+                /* noop */
+            }
+        }
+        if (this._ttsOnlyMedia !== null && this._ttsOnlyMedia.isConnected) {
+            this._ttsOnlyMedia.primePlaybackFromUserGesture();
+            setStreamTtsTarget(this._ttsOnlyMedia, readTtsOutputEnabled);
+            return;
+        }
+        if (this._ttsOnlyStreamStarting) {
+            const m = this._ttsOnlyMedia;
+            if (m && typeof m.primePlaybackFromUserGesture === 'function') {
+                m.primePlaybackFromUserGesture();
+            }
+            if (m) {
+                setStreamTtsTarget(m, readTtsOutputEnabled);
+            }
+            return;
+        }
+        this._disposeTtsOnlyStream();
+        this._ttsOnlyStreamStarting = true;
+        const voiceBaseUrl = resolveFlowVoiceHttpOrigin();
+        const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
+        const sessionId = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const mediaOpts = {
+            baseUrl: wsBase,
+            sessionId,
+            companyId,
+            autoRecord: false,
+        };
+        if (Object.keys(wsQuery).length > 0) {
+            Object.assign(mediaOpts, { query: wsQuery });
+        }
+        const media = new VoiceMediaSession(mediaOpts);
+        media.addEventListener('error', (ev) => {
+            const d = ev.detail && typeof ev.detail === 'object' ? ev.detail : {};
+            const msg =
+                typeof d.detail === 'string' && d.detail.trim() !== ''
+                    ? d.detail
+                    : typeof d.code === 'string'
+                      ? d.code
+                      : this.t('platform_chat.toast_voice_ws_hint');
+            this.toast('flows:platform_chat.toast_voice_error', {
+                type: 'error',
+                vars: { detail: msg },
+            });
+        });
+        media.addEventListener('closed', () => {
+            if (this._ttsOnlyMedia === media) {
+                this._ttsOnlyMedia = null;
+                clearStreamTtsTarget();
+            }
+        });
+        this._ttsOnlyMedia = media;
+        media.primePlaybackFromUserGesture();
+        setStreamTtsTarget(media, readTtsOutputEnabled);
+        void (async () => {
+            try {
+                await media.connect();
+                if (this._ttsOnlyMedia !== media) {
+                    try {
+                        media.close();
+                    } catch {
+                        /* noop */
+                    }
+                    return;
+                }
+                if (this._voiceOn || !readTtsOutputEnabled()) {
+                    this._ttsOnlyMedia = null;
+                    clearStreamTtsTarget();
+                    try {
+                        media.close();
+                    } catch {
+                        /* noop */
+                    }
+                    return;
+                }
+                setStreamTtsTarget(media, readTtsOutputEnabled);
+            } catch (err) {
+                if (this._ttsOnlyMedia === media) {
+                    this._ttsOnlyMedia = null;
+                }
+                clearStreamTtsTarget();
+                try {
+                    media.close();
+                } catch {
+                    /* noop */
+                }
+                this.toast('flows:platform_chat.toast_voice_error', {
+                    type: 'error',
+                    vars: {
+                        detail: formatFlowVoiceConnectErrorDetail(err, (key) => this.t(key)),
+                    },
+                });
+            } finally {
+                this._ttsOnlyStreamStarting = false;
+            }
+        })();
+    }
+
     async _startVoice() {
         if (this._voiceOn) return;
+        this._disposeTtsOnlyStream();
         if (!this.flowId) return;
         const companyId = asString(this._activeCompanySel.value);
         if (companyId === '') {
@@ -273,6 +423,7 @@ export class ChatPage extends PlatformPage {
                 return typeof cid === 'string' && cid.length > 0 ? cid : null;
             },
             beforeA2aStream: async (text) => {
+                stopStreamTtsPlayback();
                 const ctx = this._chat.state?.currentContextId;
                 if (typeof ctx !== 'string' || ctx.length === 0) {
                     throw new Error('flows chat voice: отсутствует currentContextId');
@@ -371,6 +522,7 @@ export class ChatPage extends PlatformPage {
         bridge.addEventListener('a2aSettled', onVoiceA2aSettled);
         bridge.addEventListener('a2aAborted', onVoiceA2aAborted);
         bridge.start();
+        setStreamTtsTarget(media, readTtsOutputEnabled);
         this._voiceMedia = media;
         this._voiceBridge = bridge;
         this._voiceOn = true;
@@ -403,6 +555,9 @@ export class ChatPage extends PlatformPage {
 
     _onTtsOutputToggle() {
         toggleTtsOutputEnabled();
+        if (!readTtsOutputEnabled()) {
+            this._disposeTtsOnlyStream();
+        }
         this.requestUpdate();
     }
 
@@ -412,6 +567,12 @@ export class ChatPage extends PlatformPage {
         }
         if ((changed.has('flowId') || changed.has('branchId')) && this._voiceOn) {
             void this._stopVoice();
+        }
+        if (
+            (changed.has('flowId') || changed.has('branchId')) &&
+            !this._voiceOn
+        ) {
+            this._disposeTtsOnlyStream();
         }
         if (changed.has('flowId') || changed.has('sessionId') || changed.has('branchId')) {
             this._initOrLoadSession();
@@ -484,6 +645,8 @@ export class ChatPage extends PlatformPage {
         const contextId = state?.currentContextId;
         if (!contextId) return;
 
+        stopStreamTtsPlayback();
+
         const fileParts = await Promise.all(files.map((file) => this._fileToPart(file)));
 
         const userMessage = {
@@ -511,7 +674,30 @@ export class ChatPage extends PlatformPage {
         const params = { message: a2aMessage };
         if (Object.keys(metadata).length > 0) params.metadata = metadata;
 
+        if (readTtsOutputEnabled() && !this._voiceOn) {
+            primeStreamTtsPlaybackFromUserGesture();
+            this._primeChatTtsOnlyStreamFromUserGesture();
+            await this._awaitChatTtsOnlyReady();
+        }
+
         await this._send.run({ flow_id: this.flowId, params });
+    }
+
+    /**
+     * Пока tts-only WS коннектится, `feedStreamTtsFromA2aResult` без цели; ждём перед SSE.
+     */
+    async _awaitChatTtsOnlyReady() {
+        const t0 = Date.now();
+        const maxMs = 2500;
+        while (Date.now() - t0 < maxMs) {
+            if (this._voiceOn || !readTtsOutputEnabled()) {
+                return;
+            }
+            if (!this._ttsOnlyStreamStarting && this._ttsOnlyMedia !== null && this._ttsOnlyMedia.isConnected) {
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 40));
+        }
     }
 
     async _fileToPart(file) {
@@ -544,6 +730,7 @@ export class ChatPage extends PlatformPage {
 
     _onClear() {
         this._overflowOpen = false;
+        this._disposeTtsOnlyStream();
         this._chat.resetSession();
     }
 
@@ -590,6 +777,19 @@ export class ChatPage extends PlatformPage {
 
     _onChatShowTracing(e) {
         this._openTracingModalFromDetail(e.detail);
+    }
+
+    _onComposeEditFromMessages(e) {
+        const detail = e.detail;
+        const text = detail && typeof detail.text === 'string' ? detail.text : '';
+        if (text === '') {
+            return;
+        }
+        const input = this.renderRoot?.querySelector('chat-input');
+        if (!input || typeof input.setDraft !== 'function') {
+            throw new Error('chat-page: chat-input.setDraft is not available');
+        }
+        input.setDraft(text);
     }
 
     _openLogs() {
@@ -776,6 +976,7 @@ export class ChatPage extends PlatformPage {
                     .currentTaskId=${currentTaskId}
                     .voicePlayGetHeaders=${flowsVoiceAuxiliaryHttpHeadersStub}
                     @show-tracing=${this._onChatShowTracing}
+                    @compose-edit=${this._onComposeEditFromMessages}
                 ></chat-messages>
                 <chat-input
                     ?show-voice=${hasFlow}

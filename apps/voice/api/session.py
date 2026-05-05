@@ -52,7 +52,7 @@ async def voice_session(
     tts_model: str | None = Query(default=None, description="Override TTS модели."),
     tts_voice: str | None = Query(default=None, description="Override TTS голоса."),
     vad_provider_name: str | None = Query(default=None, description="Override VAD провайдера."),
-    language: str | None = Query(default=None, description="Override языка (для STT)."),
+    language: str | None = Query(default=None, description="Язык сессии (ISO 639-1): STT и выбор TTS-модели LitServe по `synthesis_locale` в каталоге."),
 ) -> None:
     """WebSocket сессия: PCM uplink + text/PCM downlink.
 
@@ -84,6 +84,7 @@ async def voice_session(
         provider=tts_provider_name,
         model=tts_model,
         voice=tts_voice,
+        language=language,
     )
     vad_override = SpeechOverride(provider=vad_provider_name)
 

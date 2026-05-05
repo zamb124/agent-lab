@@ -41,7 +41,7 @@ def main() -> None:
         default=os.environ.get("LITSERVE_BENCHMARK_BASE_URL", "").strip() or None,
         help="Корень API …/v1 (по умолчанию ENV LITSERVE_BENCHMARK_BASE_URL)",
     )
-    parser.add_argument("--model", default="kokoro-82m-ru")
+    parser.add_argument("--model", default="silero-tts-v5-5-ru")
     parser.add_argument("--voice", default="")
     parser.add_argument("--text", default="Тестовая русская фраза для синтеза речи.")
     parser.add_argument("--iterations", type=int, default=25, ge=3)

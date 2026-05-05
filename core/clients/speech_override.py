@@ -62,7 +62,7 @@ class SpeechOverride(BaseModel):
         default=None,
         description=(
             "OpenAI-совместимый id модели у провайдера "
-            "(например `gigaam-v3` для litserve STT, `kokoro-82m` для litserve TTS)."
+            "(например `gigaam-v3` для litserve STT, `silero-tts-v5-5-ru` для litserve TTS)."
         ),
     )
     voice: str | None = Field(
@@ -71,7 +71,11 @@ class SpeechOverride(BaseModel):
     )
     language: str | None = Field(
         default=None,
-        description="ISO-код языка для STT (например `ru`, `en`).",
+        description=(
+            "ISO-код языка для STT (например `ru`, `en`). Для TTS провайдера "
+            "`litserve` участвует в выборе модели в каталоге `provider_litserve.infra.tts_models`: "
+            "запись с `synthesis_locale`, совпадающим с этим кодом, заменяет tier-default."
+        ),
     )
     sample_rate: int | None = Field(
         default=None,

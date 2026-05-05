@@ -21,6 +21,12 @@ CI (`scripts/check_voice_resolver_usage.py`).
    `provider_litserve.infra.<stt|tts|vad>_default_api_model_id` (должно
    совпадать с моделью в конфиге процесса `provider_litserve`).
 
+5. **TTS LitServe + язык сессии** — если задан `SpeechOverride.language` (query
+   `language` на WebSocket voice или поле company для `tts`) и в каталоге
+   `provider_litserve.infra.tts_models` есть запись с тем же `synthesis_locale`
+   (ISO 639-1), её `api_model_id` подменяет результат шагов 1–4 для выбора
+   модели Silero TTS по локали.
+
 Если итоговое значение обязательного поля после всех шагов отсутствует —
 `raise ValueError` без маскировки.
 
@@ -54,12 +60,12 @@ from core.clients.vad_client import (
     VADClientFactory,
 )
 from core.config import get_settings
+from core.config.models import ProviderLitserveTTSModelEntry
 from core.db.repositories.company_voice_provider_repository import (
     CompanyVoiceProviderRepository,
     VoiceKind,
 )
 from core.logging import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -209,6 +215,42 @@ def _fallback_litserve_api_model_id(
     if kind == "tts":
         return infra.tts_default_api_model_id
     return infra.vad_default_api_model_id
+
+
+def _normalize_iso639_1_session_locale(value: str | None) -> str | None:
+    if value is None:
+        return None
+    s = value.strip().lower()
+    if s == "":
+        return None
+    dash = s.find("-")
+    under = s.find("_")
+    cut = len(s)
+    if dash >= 0:
+        cut = min(cut, dash)
+    if under >= 0:
+        cut = min(cut, under)
+    base = s[:cut]
+    if len(base) < 2:
+        return None
+    return base[:2]
+
+
+def _pick_tts_api_model_for_synthesis_locale(
+    *,
+    tts_models: list[ProviderLitserveTTSModelEntry],
+    session_locale: str,
+    tier_model: str,
+) -> str:
+    norm = _normalize_iso639_1_session_locale(session_locale)
+    if norm is None:
+        return tier_model
+    for e in tts_models:
+        if e.synthesis_locale is None:
+            continue
+        if e.synthesis_locale == norm:
+            return e.api_model_id
+    return tier_model
 
 
 def _resolve_str(
@@ -384,8 +426,21 @@ async def get_tts_client(
         company_value=company_row.model if company_row else None,
         default_value=cfg.default_model,
     )
+    locale_for_tts = _resolve_optional_str(
+        override_value=override.language,
+        company_value=company_row.language if company_row else None,
+        default_value=None,
+    )
     if provider_name == "litserve":
         model = _fallback_litserve_api_model_id(resolved=model, kind="tts")
+        if locale_for_tts:
+            infra = get_settings().provider_litserve.infra
+            model = _pick_tts_api_model_for_synthesis_locale(
+                tts_models=infra.tts_models,
+                session_locale=locale_for_tts,
+                tier_model=model or "",
+            )
+            model = _fallback_litserve_api_model_id(resolved=model, kind="tts")
     voice = _resolve_optional_str(
         override_value=override.voice,
         company_value=company_row.voice if company_row else None,
@@ -409,6 +464,9 @@ async def get_tts_client(
         company_id=company_id,
         provider=provider_name,
         model=model,
+        synthesis_locale_hint=_normalize_iso639_1_session_locale(locale_for_tts)
+        if locale_for_tts
+        else None,
         voice=voice,
         response_format=response_format,
         sample_rate=sample_rate,

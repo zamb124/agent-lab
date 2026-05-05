@@ -406,6 +406,22 @@ export class ChatInput extends PlatformElement {
         }
     }
 
+    /**
+     * Подставить текст в композер (например из «исправить» на сообщении пользователя).
+     * @param {string} text
+     */
+    setDraft(text) {
+        if (typeof text !== 'string') {
+            throw new TypeError('chat-input.setDraft expects a string');
+        }
+        this._value = text;
+        this.requestUpdate();
+        void this.updateComplete.then(() => {
+            this._adjustHeight();
+            this.focus();
+        });
+    }
+
     _stop() {
         if (this.cancelBusy) return;
         this.emit('stop');
@@ -519,7 +535,7 @@ export class ChatInput extends PlatformElement {
                         @click=${this._stop}
                     >
                         <platform-icon
-                            name=${this.cancelBusy ? 'hourglass-top' : 'stop'}
+                            name="stop"
                             size="20"
                             ?filled=${!this.cancelBusy}
                         ></platform-icon>

@@ -4,7 +4,7 @@
 ``replace_runtime_catalog`` / ``resolve_hf_model_id`` /
 ``allowed_api_model_ids`` / ``runtime_api_model_ids`` /
 ``reset_runtime_catalog_for_tests``. Перед каждым тестом autouse-фикстура
-из conftest сбрасывает каталог, поэтому тесты независимы.
+в этом модуле сбрасывает каталог, поэтому тесты независимы.
 """
 
 from __future__ import annotations
@@ -29,6 +29,11 @@ from core.config.models import (
 pytestmark = pytest.mark.timeout(15)
 
 
+@pytest.fixture(autouse=True)
+def _reset_runtime_catalog_autouse() -> None:
+    reset_runtime_catalog_for_tests()
+
+
 def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
     return ProviderLitserveInfraConfig(
         sqlite_path=f"./data/test/{unique_id}.db",
@@ -42,14 +47,14 @@ def _cfg(unique_id: str) -> ProviderLitserveInfraConfig:
         stt_default_api_model_id=f"gigaam-{unique_id}",
         tts_models=[
             ProviderLitserveTTSModelEntry(
-                api_model_id=f"kokoro-{unique_id}",
-                hf_model_id="hexgrad/Kokoro-82M",
-                lang="a",
-                voice="af_heart",
+                api_model_id=f"silero-tts-{unique_id}",
+                hf_model_id="snakers4/silero-models",
+                silero_bundle="v5_5_ru",
+                voice="xenia",
                 sample_rate=24000,
             ),
         ],
-        tts_default_api_model_id=f"kokoro-{unique_id}",
+        tts_default_api_model_id=f"silero-tts-{unique_id}",
         vad_models=[
             ProviderLitserveVADModelEntry(
                 api_model_id=f"silero-{unique_id}",
@@ -66,7 +71,7 @@ def test_resolve_uses_default_map_when_runtime_catalog_not_initialized(unique_id
     cfg = _cfg(unique_id)
     reset_runtime_catalog_for_tests()
     assert resolve_hf_model_id("stt", f"gigaam-{unique_id}", cfg) == "ai-sage/GigaAM-v3"
-    assert resolve_hf_model_id("tts", f"kokoro-{unique_id}", cfg) == "hexgrad/Kokoro-82M"
+    assert resolve_hf_model_id("tts", f"silero-tts-{unique_id}", cfg) == "snakers4/silero-models"
     assert resolve_hf_model_id("vad", f"silero-{unique_id}", cfg) == "snakers4/silero-vad"
 
 

@@ -9,13 +9,12 @@
 
 Используется streaming-TTS-клиентами (`core.clients.tts_streaming`) и
 speak-воркером voice-сессии (`apps/voice/services/speak_worker.py`).
+
+``flush()`` отдаёт остаток списком сегментов длиной не больше ``chunk_max_chars``,
+чтобы бэкенды вроде Silero не получали один огромный ``input``.
 """
 
 from __future__ import annotations
-
-from core.logging import get_logger
-
-logger = get_logger(__name__)
 
 
 class VoiceChunker:
@@ -75,11 +74,37 @@ class VoiceChunker:
 
         return None, buf
 
-    def flush(self) -> str | None:
-        """Забрать остаток буфера."""
-        result = self._buffer.strip() if self._buffer.strip() else None
+    def flush(self) -> list[str]:
+        """Забрать остаток буфера (список сегментов, каждый ≤ ``chunk_max_chars``)."""
+        raw = self._buffer
         self._buffer = ""
-        return result
+        buf = raw.strip()
+        if not buf:
+            return []
+
+        max_c = self._chunk_max_chars
+        if len(buf) <= max_c:
+            return [buf]
+
+        parts: list[str] = []
+        rest = buf
+        while rest:
+            if len(rest) <= max_c:
+                if rest.strip():
+                    parts.append(rest)
+                break
+            cut = max_c
+            sp = rest.rfind(" ", 0, cut)
+            if sp > max_c // 2:
+                cut = sp + 1
+            piece = rest[:cut].strip()
+            if not piece:
+                piece = rest[:max_c].strip()
+                cut = max_c
+            parts.append(piece)
+            rest = rest[cut:].lstrip()
+
+        return [p for p in parts if p]
 
     @staticmethod
     def _words_in(text: str) -> int:

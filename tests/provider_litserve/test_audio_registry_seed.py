@@ -37,14 +37,14 @@ def _cfg(tmp_path, unique_id) -> ProviderLitserveInfraConfig:
         stt_default_api_model_id=f"gigaam-{unique_id}",
         tts_models=[
             ProviderLitserveTTSModelEntry(
-                api_model_id=f"kokoro-{unique_id}",
-                hf_model_id="hexgrad/Kokoro-82M",
-                lang="a",
-                voice="af_heart",
+                api_model_id=f"silero-tts-{unique_id}",
+                hf_model_id="snakers4/silero-models",
+                silero_bundle="v5_5_ru",
+                voice="xenia",
                 sample_rate=24000,
             ),
         ],
-        tts_default_api_model_id=f"kokoro-{unique_id}",
+        tts_default_api_model_id=f"silero-tts-{unique_id}",
         vad_models=[
             ProviderLitserveVADModelEntry(
                 api_model_id=f"silero-{unique_id}",
@@ -77,13 +77,13 @@ def test_bootstrap_seeds_audio_models(tmp_path, unique_id):
 
     api_ids = {m.api_model_id: m for m in list_models(cfg)}
     assert f"gigaam-{unique_id}" in api_ids
-    assert f"kokoro-{unique_id}" in api_ids
+    assert f"silero-tts-{unique_id}" in api_ids
     assert f"silero-{unique_id}" in api_ids
 
     assert api_ids[f"gigaam-{unique_id}"].kind == "stt"
     assert api_ids[f"gigaam-{unique_id}"].hf_model_id == "ai-sage/GigaAM-v3"
-    assert api_ids[f"kokoro-{unique_id}"].kind == "tts"
-    assert api_ids[f"kokoro-{unique_id}"].hf_model_id == "hexgrad/Kokoro-82M"
+    assert api_ids[f"silero-tts-{unique_id}"].kind == "tts"
+    assert api_ids[f"silero-tts-{unique_id}"].hf_model_id == "snakers4/silero-models"
     assert api_ids[f"silero-{unique_id}"].kind == "vad"
     assert api_ids[f"silero-{unique_id}"].hf_model_id == "snakers4/silero-vad"
 

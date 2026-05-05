@@ -86,7 +86,7 @@ portainer (community-аддон microk8s, `bootstrap-master.sh`).
 | livekit + livekit-egress | Deployment | master (hostNetwork) | `livekit.nodeName` / `livekitEgress.nodeName` | — | WebRTC сигналинг + egress; при смене ноды → `rebind-public-node.sh` |
 | coturn | DaemonSet | master (hostNetwork) | `coturn.nodeName` | — | TURN-сервер для WebRTC; при смене → `rebind-public-node.sh` |
 | onlyoffice | Deployment | master | `onlyoffice.nodeName` | — | OnlyOffice DocumentServer (CE) |
-| provider-litserve | Deployment | **gpu-worker** | `litserve.nodeName` | 100Gi (`litserve.modelCacheSize`) | Эмбеддинги, rerank **и audio** (STT GigaAM, TTS Kokoro, VAD Silero) — OpenAI-совместимый HTTP `/v1/audio/transcriptions`/`speech`/`vad`; при `nodeName` в `gpuNodeNames` → GPU resource + toleration |
+| provider-litserve | Deployment | **gpu-worker** | `litserve.nodeName` | 100Gi (`litserve.modelCacheSize`) | Эмбеддинги, rerank **и audio** (STT GigaAM, TTS Silero v5, VAD Silero) — OpenAI-совместимый HTTP `/v1/audio/transcriptions`/`speech`/`vad`; при `nodeName` в `gpuNodeNames` → GPU resource + toleration |
 | nvidia-device-plugin | DaemonSet | gpu-worker | — (DaemonSet, label `accelerator=nvidia-gpu`) | — | NVIDIA k8s-device-plugin v0.19.1 — публикует `nvidia.com/gpu` в Allocatable |
 | portainer | Deployment (community-аддон) | master | — (вне Helm-чарта) | — | UI кластера на NodePort `30777` (HTTP) / `30779` (HTTPS) |
 | 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
@@ -241,7 +241,7 @@ helm rollback agent-lab <REV> -n platform
 5. `cluster-health.sh` секция «Provider Litserve (audio)» проверяет наличие
    эндпоинтов и доступность пода — должна быть `[OK]` после деплоя.
 6. GPU-ноду рестартили — проверь `kubectl exec deployment/provider-litserve -- nvidia-smi`
-   (драйвер) и cold-start модели (логи `gigaam-v3-rnnt-ru` / `kokoro-82m-ru` /
+   (драйвер) и cold-start модели (логи `gigaam-v3-rnnt-ru` / `silero-tts-v5-5-ru` /
    `silero-vad-v5` загружаются один раз на старт пода).
 7. Для co-location со `voice` под `provider-litserve` ходит на `gpu-worker`
    (`values.yaml: voice.nodeName=gpu-worker`); если voice уехал на master —

@@ -308,8 +308,7 @@ def test_voice_chunker_real_sentences_split() -> None:
 
     result = chunker.feed("Первое предложение завершено. Второе тоже. А вот третье длиннее всего.")
     remainder = chunker.flush()
-
-    all_chunks = result + ([remainder] if remainder else [])
+    all_chunks = result + remainder
     assert len(all_chunks) >= 2
     joined = " ".join(all_chunks)
     assert "Первое предложение завершено" in joined
@@ -323,4 +322,4 @@ def test_voice_chunker_flush_returns_remainder() -> None:
     assert chunks == []
 
     remainder = chunker.flush()
-    assert remainder == "Без точки в конце"
+    assert remainder == ["Без точки в конце"]

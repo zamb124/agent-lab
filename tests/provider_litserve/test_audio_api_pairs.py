@@ -78,16 +78,16 @@ def test_tts_pairs_use_api_id_as_key(unique_id):
         unique_id=unique_id,
         tts=[
             ProviderLitserveTTSModelEntry(
-                api_model_id=f"kokoro-{unique_id}",
-                hf_model_id="hexgrad/Kokoro-82M",
-                lang="a",
-                voice="af_heart",
+                api_model_id=f"silero-tts-{unique_id}",
+                hf_model_id="snakers4/silero-models",
+                silero_bundle="v5_5_ru",
+                voice="xenia",
                 sample_rate=24000,
             ),
         ],
-        tts_default=f"kokoro-{unique_id}",
+        tts_default=f"silero-tts-{unique_id}",
     )
-    assert build_tts_api_pairs(cfg) == {f"kokoro-{unique_id}": "hexgrad/Kokoro-82M"}
+    assert build_tts_api_pairs(cfg) == {f"silero-tts-{unique_id}": "snakers4/silero-models"}
 
 
 def test_vad_pairs_use_api_id_as_key(unique_id):

@@ -594,7 +594,7 @@ GLOBALS: List[Dict[str, Any]] = [
             "ответ или передаёт каналу). Провайдер/голос/язык — через единый\n"
             "voice_resolver (override → company → deployment-default):\n"
             "file_id = await synthesize_speech('Привет!', voice='alloy', language='ru-RU')\n"
-            "file_id = await synthesize_speech('Hello', provider='litserve', model='kokoro-82m')"
+            "file_id = await synthesize_speech('Hello', provider='litserve', model='silero-tts-v5-5-ru')"
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["voice", "tts", "files", "platform"],

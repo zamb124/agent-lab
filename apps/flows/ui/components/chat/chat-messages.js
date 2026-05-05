@@ -119,6 +119,25 @@ export class ChatMessages extends PlatformElement {
         });
     }
 
+    /**
+     * compose-edit из shadow `chat-message` — переслать сверху для `chat-page`.
+     * @param {CustomEvent<{ text?: string }>} e
+     */
+    _forwardComposeEdit(e) {
+        const detail = e.detail;
+        const text = detail && typeof detail.text === 'string' ? detail.text : '';
+        if (text === '') {
+            return;
+        }
+        this.dispatchEvent(
+            new CustomEvent('compose-edit', {
+                bubbles: true,
+                composed: true,
+                detail: { text },
+            }),
+        );
+    }
+
     render() {
         const trace = asArray(this.runTrace);
         if (this.messages.length === 0 && !this.loading && trace.length === 0) {
@@ -150,6 +169,7 @@ export class ChatMessages extends PlatformElement {
                         const isLastUser = lastUserId.length > 0 && message.role === 'user' && mid === lastUserId;
                         return html`
                         <chat-message
+                            @compose-edit=${this._forwardComposeEdit}
                             .role=${message.role}
                             .content=${message.content}
                             .timestamp=${asString(message.timestamp)}

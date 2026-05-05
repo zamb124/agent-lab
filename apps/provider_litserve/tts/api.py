@@ -1,7 +1,7 @@
 """LitServe API для TTS: POST /v1/audio/speech (OpenAI-совместимое).
 
-Список моделей и их параметры (для Kokoro поле ``lang`` в конфиге — ``lang_code`` для ``kokoro.KPipeline``, не ISO; голоса вроде ``af_heart``) — в ``cfg.tts_models``.
-Никаких хардкодов в этом модуле. При ``setup()`` воркера — прогрев дефолтной TTS-модели (загрузка ``KPipeline`` без синтеза речи).
+Список моделей и их параметры (``silero_bundle``, ``voice``, ``sample_rate``, ``hf_model_id``) — в ``cfg.tts_models``.
+Никаких хардкодов в этом модуле. При ``setup()`` воркера — прогрев дефолтной TTS-модели (загрузка весов Silero без синтеза речи).
 
 Аннотация ``request: fastapi.Request`` обязательна для LitServe — см.
 комментарий в ``apps/provider_litserve/stt/api.py`` (тот же контракт).
@@ -14,6 +14,7 @@ from typing import Any
 
 import litserve as ls
 from fastapi import HTTPException, Request
+from starlette.responses import Response
 
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
@@ -22,6 +23,17 @@ from core.logging import get_logger
 from .engines import get_local_tts_engine, parse_tts_body
 
 logger = get_logger(__name__)
+
+
+def _media_type_for_tts_audio(body: bytes) -> str:
+    """Контент-тайп по сигнатурам; pcm-сырые s16le без заголовка — ``audio/L16``."""
+    if len(body) >= 4 and body[:4] == b"RIFF":
+        return "audio/wav"
+    if len(body) >= 2 and body[:2] == b"\xff\xfb":
+        return "audio/mpeg"
+    if len(body) >= 3 and body[:3] == b"ID3":
+        return "audio/mpeg"
+    return "audio/L16"
 
 
 class TTSLitAPI(ls.LitAPI):
@@ -74,7 +86,10 @@ class TTSLitAPI(ls.LitAPI):
             )
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    def encode_response(self, output: Any, **kwargs: Any) -> bytes:
+    def encode_response(self, output: Any, **kwargs: Any) -> Response:
         if isinstance(output, bytes):
-            return output
+            return Response(
+                content=output,
+                media_type=_media_type_for_tts_audio(output),
+            )
         raise HTTPException(status_code=500, detail="TTS: неожиданный тип ответа")
