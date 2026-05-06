@@ -116,7 +116,7 @@ class TriggerExecutor:
             user_id=effective_user_id,
             content=content,
             branch_id=trigger.branch_id,
-            channel="a2a",  # Используем A2A канал для триггеров
+            channel=("telegram" if trigger_type == "telegram" else "a2a"),
             task_id=task_id,
             context_id=context_id,
             metadata=final_metadata,
@@ -139,11 +139,16 @@ class TriggerExecutor:
     def _extract_user_id(self, trigger_type: str, payload: Dict[str, Any]) -> str:
         """Извлекает user_id из payload в зависимости от типа триггера."""
         if trigger_type == "telegram":
-            # Telegram: message.from.id
+            cq = payload.get("callback_query")
+            if isinstance(cq, dict) and cq:
+                from_user = cq.get("from") if isinstance(cq.get("from"), dict) else {}
+                uid = from_user.get("id")
+                if uid is not None:
+                    return f"tg:{uid}"
             message = payload.get("message", {})
             from_user = message.get("from", {})
             user_id = from_user.get("id")
-            if user_id:
+            if user_id is not None:
                 return f"tg:{user_id}"
         
         if trigger_type == "email":

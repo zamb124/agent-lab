@@ -156,7 +156,7 @@ make k8s-rollback                   # helm rollback на предыдущую р
 
 **flows.py** - API выполнения флоу. Создает задачи в БД для TaskProcessor. Поддерживает синхронное и асинхронное выполнение через очередь задач.
 
-**telegram.py** - Telegram webhook endpoints. Создает TelegramInterface на лету для каждого флоу. Поддерживает универсальные webhooks вида `/webhook/telegram/{flow_id}`.
+**telegram.py** (flows service) — триггеры Telegram Bot API: регистрация `setWebhook`, приём `POST /flows/api/v1/triggers/telegram/{flow_id}/{trigger_id}` с заголовком `X-Telegram-Bot-Api-Secret-Token`.
 
 **whatsapp.py** - WhatsApp webhook endpoints. Полная поддержка WhatsApp Business Cloud API с интерактивными кнопками, медиа и командами.
 

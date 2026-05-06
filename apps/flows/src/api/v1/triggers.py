@@ -570,13 +570,28 @@ async def telegram_webhook(
     if trigger.type != TriggerType.TELEGRAM:
         raise HTTPException(status_code=400, detail="Not a Telegram trigger")
 
-    # Верификация secret_token
     telegram_handler = TelegramTriggerHandler(base_url="")
 
-    if x_telegram_bot_api_secret_token:
-        if not telegram_handler.verify_secret_token(trigger, x_telegram_bot_api_secret_token):
-            logger.warning(f"Telegram webhook: invalid secret token: {trigger_id}")
-            raise HTTPException(status_code=403, detail="Invalid secret token")
+    if not trigger.config.get("_secret_token"):
+        logger.warning(
+            "Telegram webhook: trigger %s has no _secret_token (register or reregister)",
+            trigger_id,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Telegram webhook secret is not configured for this trigger; "
+                "save the flow or POST .../reregister."
+            ),
+        )
+    if not x_telegram_bot_api_secret_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Missing X-Telegram-Bot-Api-Secret-Token",
+        )
+    if not telegram_handler.verify_secret_token(trigger, x_telegram_bot_api_secret_token):
+        logger.warning("Telegram webhook: invalid secret token: %s", trigger_id)
+        raise HTTPException(status_code=403, detail="Invalid secret token")
 
     # Парсим Update
     try:

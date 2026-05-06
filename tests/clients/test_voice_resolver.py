@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import ast
+import logging
 import time
 
 import pytest
@@ -22,9 +24,32 @@ from core.clients.voice_resolver import (
     reset_voice_resolver_for_tests,
     resolve_stt_settings,
 )
+from core.config import get_settings
 
 
 pytestmark = pytest.mark.timeout(15)
+
+
+def _voice_resolver_log_dict(rec: logging.LogRecord) -> dict[str, object]:
+    raw = rec.getMessage()
+    if not raw.startswith("{"):
+        raise AssertionError(f"voice_resolver caplog: ожидался dict в message, получено {raw[:120]!r}")
+    data = ast.literal_eval(raw)
+    if not isinstance(data, dict):
+        raise AssertionError(f"voice_resolver caplog: literal_eval не dict: {type(data).__name__}")
+    return data
+
+
+def _find_voice_resolver_caplog_record(
+    caplog: pytest.LogCaptureFixture, *, event_name: str
+) -> logging.LogRecord:
+    for r in caplog.records:
+        if r.name != "core.clients.voice_resolver":
+            continue
+        if event_name not in r.getMessage():
+            continue
+        return r
+    raise AssertionError(f"Нет log record voice_resolver с событием {event_name!r}")
 
 
 def _stub_company_cache(company_id: str, *, kind: str, row: _CompanyOverrideRow | None) -> None:
@@ -48,7 +73,7 @@ async def test_resolve_stt_settings_uses_settings_when_no_company_override(
 
     resolved = await resolve_stt_settings(company_id=cid)
 
-    assert resolved.provider == "litserve"
+    assert resolved.provider == get_settings().voice.stt.provider
     assert resolved.source_provider == "settings"
     assert resolved.source_language == "settings"
 
@@ -124,16 +149,12 @@ async def test_get_stt_client_logs_resolved_fields(
     )
 
     assert client is not None
-    rec = next(
-        (r for r in caplog.records if r.message == "voice_resolver.stt_resolved"),
-        None,
-    )
-    assert rec is not None
-    extra = getattr(rec, "provider", None)
-    assert extra == "mock"
-    assert getattr(rec, "language", None) == "en"
-    assert getattr(rec, "source_provider", None) == "override"
-    assert getattr(rec, "source_language", None) == "override"
+    rec = _find_voice_resolver_caplog_record(caplog, event_name="voice_resolver.stt_resolved")
+    payload = _voice_resolver_log_dict(rec)
+    assert payload["provider"] == "mock"
+    assert payload["language"] == "en"
+    assert payload["source_provider"] == "override"
+    assert payload["source_language"] == "override"
 
 
 @pytest.mark.asyncio
@@ -160,9 +181,6 @@ async def test_get_vad_client_ignores_company_vad_row_in_cache(
     caplog.set_level("INFO", logger="core.clients.voice_resolver")
     await get_vad_client(company_id=cid)
 
-    rec = next(
-        (r for r in caplog.records if r.message == "voice_resolver.vad_resolved"),
-        None,
-    )
-    assert rec is not None
-    assert getattr(rec, "source_provider", None) == "settings"
+    rec = _find_voice_resolver_caplog_record(caplog, event_name="voice_resolver.vad_resolved")
+    payload = _voice_resolver_log_dict(rec)
+    assert payload["source_provider"] == "settings"

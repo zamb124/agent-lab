@@ -28,9 +28,23 @@ apps/voice в точности тот же, что из web-клиента. Ес
 from __future__ import annotations
 
 import json
+from concurrent.futures import CancelledError as FuturesCancelledError
+from contextlib import contextmanager, suppress
 
 import pytest
 from fastapi.testclient import TestClient
+
+
+@contextmanager
+def _websocket_session(client: TestClient, url: str):
+    """Starlette TestClient: при выходе из сессии ``fut.result()`` после cancel даёт ``CancelledError``."""
+    cm = client.websocket_connect(url)
+    ws = cm.__enter__()
+    try:
+        yield ws
+    finally:
+        with suppress(FuturesCancelledError):
+            cm.__exit__(None, None, None)
 
 
 @pytest.mark.e2e
@@ -41,7 +55,7 @@ def test_voice_chat_e2e_speak_roundtrip(voice_app, unique_id: str) -> None:
             f"/voice/api/ws/session/e2e-{unique_id}"
             "?company_id=system"
         )
-        with client.websocket_connect(url) as ws:
+        with _websocket_session(client, url) as ws:
             media_cfg = None
             for _ in range(10):
                 msg = ws.receive()
@@ -116,7 +130,7 @@ def test_voice_chat_e2e_binary_pcm_upload_smoke(
             f"/voice/api/ws/session/pcm-{unique_id}"
             "?company_id=system"
         )
-        with client.websocket_connect(url) as ws:
+        with _websocket_session(client, url) as ws:
             for _ in range(10):
                 msg = ws.receive()
                 text = msg.get("text")

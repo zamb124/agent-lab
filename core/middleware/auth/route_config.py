@@ -188,7 +188,6 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/openapi.json", auth_required=False, context_type="anonymous"),
 
     # Вебхуки (без JWT, используют свою аутентификацию)
-    RouteRule("/flows/api/v1/webhook/telegram/*", auth_required=False, context_type="webhook", channel="telegram"),
     RouteRule("/flows/api/v1/webhook/whatsapp/*", auth_required=False, context_type="webhook", channel="whatsapp"),
     # Telegram Bot API: тот же путь, что в generate_webhook_url (setWebhook) — публичный POST без JWT
     RouteRule("/flows/api/v1/triggers/telegram/*", auth_required=False, context_type="anonymous"),

@@ -889,7 +889,10 @@
     "delete_branch_message": "Delete branch \"{{id}}\"?",
     "footer_triggers": "Triggers",
     "footer_integrations": "Integrations",
-    "action_cancel": "Cancel"
+    "action_cancel": "Cancel",
+    "search_placeholder": "Search flows…",
+    "search_aria": "Search flows catalog",
+    "search_empty": "No matches"
   },
   "sessions_modal": {
     "modal_title": "Sessions",

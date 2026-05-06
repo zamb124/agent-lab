@@ -6,6 +6,7 @@ from typing import Dict, Type
 
 from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.channels.base import BaseChannel
+from apps.flows.src.channels.trigger_telegram_channel import TelegramInboundChannel
 from apps.flows.src.channels.websocket import WebSocketChannel
 
 
@@ -43,6 +44,7 @@ def get_channel(name: str, flow_id: str, context=None) -> BaseChannel:
 def _register_builtin_channels():
     """Регистрация встроенных каналов."""
     register_channel(A2AChannel)
+    register_channel(TelegramInboundChannel)
     register_channel(WebSocketChannel)
 
 

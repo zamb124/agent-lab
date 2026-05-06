@@ -2,8 +2,9 @@
 TelegramChannelHandler - отправка сообщений через Telegram Bot API.
 """
 
-import os
-from typing import Any, Dict, Optional, Union
+import asyncio
+import time
+from typing import Any, Dict, List, Optional, Union
 
 from apps.flows.src.models.enums import ChannelType
 from core.http import get_httpx_client
@@ -12,6 +13,8 @@ from core.logging import get_logger
 from .base import BaseChannelHandler
 
 logger = get_logger(__name__)
+
+MESSAGE_DRAFT_MIN_INTERVAL_SEC = 0.08
 
 
 def get_telegram_api_base(config: Dict[str, Any] = None) -> str:
@@ -92,7 +95,89 @@ class TelegramChannelHandler(BaseChannelHandler):
             
             logger.info(f"Telegram message sent to {recipient}")
             return result
-    
+
+    async def send_message_draft(
+        self,
+        recipient: str,
+        draft_id: int,
+        text: str,
+        config: Dict[str, Any],
+        variables: Dict[str, Any],
+        parse_mode: Optional[str] = None,
+        message_thread_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Частичное обновление текста через Bot API sendMessageDraft (стриминг генерации).
+
+        По документации Telegram метод ориентирован на приватные чаты. После серии вызовов
+        отправьте итог через send_message.
+        """
+        if draft_id == 0:
+            raise ValueError("draft_id must be non-zero")
+        bot_token = self._get_bot_token(config, variables)
+        url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendMessageDraft"
+
+        payload: Dict[str, Any] = {
+            "chat_id": recipient,
+            "draft_id": draft_id,
+            "text": text,
+        }
+        if parse_mode is not None:
+            payload["parse_mode"] = parse_mode
+        elif config.get("parse_mode"):
+            payload["parse_mode"] = config["parse_mode"]
+        if message_thread_id is not None:
+            payload["message_thread_id"] = message_thread_id
+
+        async with get_httpx_client(timeout=30.0, proxy=True) as client:
+            response = await client.post(url, json=payload)
+            result = response.json()
+
+            if not result.get("ok"):
+                logger.error(
+                    "Telegram sendMessageDraft failed: %s",
+                    result.get("description"),
+                )
+                raise RuntimeError(
+                    f"Telegram API error: {result.get('description', 'Unknown error')}"
+                )
+
+            return result
+
+    async def stream_message_draft_text(
+        self,
+        recipient: str,
+        draft_id: int,
+        accumulated_text: str,
+        config: Dict[str, Any],
+        variables: Dict[str, Any],
+        *,
+        last_sent_monotonic: Optional[List[float]] = None,
+        min_interval_sec: float = MESSAGE_DRAFT_MIN_INTERVAL_SEC,
+        parse_mode: Optional[str] = None,
+        message_thread_id: Optional[int] = None,
+    ) -> None:
+        """
+        Отправляет sendMessageDraft с троттлингом по времени (список из одного float —
+        время последней успешной отправки, монотонные секунды).
+        """
+        now = time.monotonic()
+        if last_sent_monotonic is None:
+            last_sent_monotonic = [0.0]
+        elapsed = now - last_sent_monotonic[0]
+        if elapsed < min_interval_sec:
+            await asyncio.sleep(min_interval_sec - elapsed)
+        await self.send_message_draft(
+            recipient,
+            draft_id,
+            accumulated_text,
+            config,
+            variables,
+            parse_mode=parse_mode,
+            message_thread_id=message_thread_id,
+        )
+        last_sent_monotonic[0] = time.monotonic()
+
     async def send_photo(
         self,
         recipient: str,

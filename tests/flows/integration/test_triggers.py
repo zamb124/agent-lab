@@ -826,23 +826,79 @@ class TestTelegramWebhookEndpoint:
             triggers={"tg_secure": trigger},
         )
         await container.flow_repository.set(agent)
-        
-        # Без токена - проходит (токен опциональный)
+
+        # Без заголовка — 403
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/tg_secure",
             json={"update_id": 123, "message": {"text": "test", "chat": {"id": 1}, "from": {"id": 1}}},
         )
-        # Может быть ошибка валидации, но не 403
-        assert response.status_code != 403
-        
-        # С неправильным токеном - 403
+        assert response.status_code == 403
+
+        # С неправильным токеном — 403
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/tg_secure",
             json={"update_id": 123, "message": {"text": "test"}},
             headers={"X-Telegram-Bot-Api-Secret-Token": "wrong_token"},
         )
         assert response.status_code == 403
-        
+
+        # С правильным токеном — не 403 (может быть validation/skipped из-за неполного message)
+        response = await client.post(
+            f"/flows/api/v1/triggers/telegram/{flow_id}/tg_secure",
+            json={"update_id": 124, "message": {"text": "test", "chat": {"id": 1}, "from": {"id": 1}}},
+            headers={"X-Telegram-Bot-Api-Secret-Token": "correct_token"},
+        )
+        assert response.status_code != 403
+
+        await container.flow_repository.delete(flow_id)
+
+    @pytest.mark.asyncio
+    async def test_telegram_webhook_callback_query_ok(
+        self, app, client, container, unique_id, mock_llm_with_queue
+    ):
+        """Webhook принимает callback_query при allowed_updates и секрете."""
+        mock_llm_with_queue(["ok"])
+        flow_id = f"tg_cb_{unique_id}"
+        sec = f"cb_sec_{unique_id}"
+        agent = FlowConfig(
+            flow_id=flow_id,
+            name="cb agent",
+            entry="main",
+            nodes={"main": {"type": "llm_node", "prompt": "Reply"}},
+            triggers={
+                "tg_cb": TriggerConfig(
+                    trigger_id="tg_cb",
+                    name="CB",
+                    type=TriggerType.TELEGRAM,
+                    enabled=True,
+                    config={
+                        "_secret_token": sec,
+                        "allowed_updates": ["callback_query"],
+                    },
+                ),
+            },
+        )
+        await container.flow_repository.set(agent)
+        payload = {
+            "update_id": 1,
+            "callback_query": {
+                "id": "cq1",
+                "from": {"id": 100, "first_name": "U"},
+                "message": {
+                    "message_id": 5,
+                    "chat": {"id": 200, "type": "private"},
+                    "text": "hi",
+                },
+                "data": "btn_ok",
+            },
+        }
+        response = await client.post(
+            f"/flows/api/v1/triggers/telegram/{flow_id}/tg_cb",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": sec},
+        )
+        assert response.status_code == 200
+        assert response.json().get("status") == "ok"
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
@@ -1020,7 +1076,8 @@ class TestTelegramTriggerHandler:
             type=TriggerType.TELEGRAM,
             config={},
         )
-        assert handler.verify_secret_token(trigger_no_secret, "anything") is True
+        assert handler.verify_secret_token(trigger_no_secret, "anything") is False
+        assert handler.verify_secret_token(trigger_no_secret, None) is False
 
 
 class TestTelegramTriggerE2E:
@@ -1070,7 +1127,10 @@ class TestTelegramTriggerE2E:
                     name="Main Telegram",
                     type=TriggerType.TELEGRAM,
                     enabled=True,
-                    config={"bot_token": "test_t"},
+                    config={
+                        "bot_token": "test_t",
+                        "_secret_token": f"tg_e2e_sec_{unique_id}",
+                    },
                     input_mapping={
                         "content": "@trigger:message.text",
                         "context.chat_id": "@trigger:message.chat.id",
@@ -1110,6 +1170,7 @@ class TestTelegramTriggerE2E:
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/telegram_main",
             json=telegram_update,
+            headers={"X-Telegram-Bot-Api-Secret-Token": f"tg_e2e_sec_{unique_id}"},
         )
         
         assert response.status_code == 200
@@ -1156,7 +1217,10 @@ class TestTelegramTriggerE2E:
                     name="Calculator Trigger",
                     type=TriggerType.TELEGRAM,
                     enabled=True,
-                    config={"bot_token": "test_t"},
+                    config={
+                        "bot_token": "test_t",
+                        "_secret_token": f"tg_calc_sec_{unique_id}",
+                    },
                     input_mapping={
                         "content": "@trigger:message.text",
                         "context.chat_id": "@trigger:message.chat.id",
@@ -1180,6 +1244,7 @@ class TestTelegramTriggerE2E:
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/tg_calc",
             json=telegram_update,
+            headers={"X-Telegram-Bot-Api-Secret-Token": f"tg_calc_sec_{unique_id}"},
         )
         
         assert response.status_code == 200
@@ -1211,7 +1276,10 @@ class TestTelegramTriggerE2E:
                     name="Filtered",
                     type=TriggerType.TELEGRAM,
                     enabled=True,
-                    config={"allowed_users": [111, 222]},
+                    config={
+                        "allowed_users": [111, 222],
+                        "_secret_token": f"tg_filt_sec_{unique_id}",
+                    },
                     input_mapping={"content": "@trigger:message.text"},
                 ),
             },
@@ -1231,6 +1299,7 @@ class TestTelegramTriggerE2E:
                     "text": "Hello",
                 },
             },
+            headers={"X-Telegram-Bot-Api-Secret-Token": f"tg_filt_sec_{unique_id}"},
         )
         assert response_allowed.status_code == 200
         assert response_allowed.json()["status"] == "ok"
@@ -1248,6 +1317,7 @@ class TestTelegramTriggerE2E:
                     "text": "Hello",
                 },
             },
+            headers={"X-Telegram-Bot-Api-Secret-Token": f"tg_filt_sec_{unique_id}"},
         )
         assert response_denied.status_code == 200
         assert response_denied.json()["status"] == "skipped"
@@ -1277,7 +1347,10 @@ class TestTelegramTriggerE2E:
                     name="Commands Only",
                     type=TriggerType.TELEGRAM,
                     enabled=True,
-                    config={"commands": ["/start", "/help"]},
+                    config={
+                        "commands": ["/start", "/help"],
+                        "_secret_token": f"tg_cmd_sec_{unique_id}",
+                    },
                     input_mapping={"content": "@trigger:message.text"},
                 ),
             },
@@ -1297,6 +1370,7 @@ class TestTelegramTriggerE2E:
                     "text": "/start",
                 },
             },
+            headers={"X-Telegram-Bot-Api-Secret-Token": f"tg_cmd_sec_{unique_id}"},
         )
         assert response_start.status_code == 200
         assert response_start.json()["status"] == "ok"
@@ -1314,6 +1388,7 @@ class TestTelegramTriggerE2E:
                     "text": "просто текст",
                 },
             },
+            headers={"X-Telegram-Bot-Api-Secret-Token": f"tg_cmd_sec_{unique_id}"},
         )
         assert response_text.status_code == 200
         assert response_text.json()["status"] == "skipped"
@@ -1807,6 +1882,11 @@ class NotificationServer:
             self._handle_telegram_send_document,
             methods=["POST"],
         )
+        self._app.add_api_route(
+            "/telegram/{token}/sendMessageDraft",
+            self._handle_telegram_send_message_draft,
+            methods=["POST"],
+        )
         self._server: uvicorn.Server | None = None
         self._server_task: asyncio.Task | None = None
     
@@ -1863,7 +1943,17 @@ class NotificationServer:
             "ok": True,
             "result": {"message_id": 12347}
         })
-    
+
+    async def _handle_telegram_send_message_draft(self, token: str, request: Request) -> JSONResponse:
+        """Обработчик Telegram sendMessageDraft."""
+        data = await request.json()
+        self.received_requests.append({
+            "type": "telegram_send_message_draft",
+            "token": token,
+            "data": data,
+        })
+        return JSONResponse({"ok": True, "result": True})
+
     async def start(self) -> str:
         """Запускает сервер и возвращает base URL."""
         config = uvicorn.Config(
@@ -2055,7 +2145,36 @@ class TestTelegramChannelE2E:
         assert "test_bot_token_123" in requests[0]["token"]
         assert requests[0]["data"]["chat_id"] == "12345678"
         assert requests[0]["data"]["text"] == "Hello from agent!"
-    
+
+    @pytest.mark.asyncio
+    async def test_telegram_send_message_draft_real_http(self, notification_server):
+        """sendMessageDraft через TelegramChannelHandler."""
+        from apps.flows.src.channels.telegram import TelegramChannelHandler
+
+        server, base_url = notification_server
+
+        handler = TelegramChannelHandler()
+
+        result = await handler.send_message_draft(
+            recipient="12345678",
+            draft_id=424242,
+            text="partial…",
+            config={
+                "bot_token": "draft_bot_tok",
+                "api_base": f"{base_url}/telegram",
+            },
+            variables={},
+        )
+
+        assert result["ok"] is True
+
+        requests = server.get_requests("telegram_send_message_draft")
+        assert len(requests) == 1
+        assert "draft_bot_tok" in requests[0]["token"]
+        assert requests[0]["data"]["chat_id"] == "12345678"
+        assert requests[0]["data"]["draft_id"] == 424242
+        assert requests[0]["data"]["text"] == "partial…"
+
     @pytest.mark.asyncio
     async def test_telegram_send_photo_real_http(self, notification_server):
         """Отправка фото через TelegramChannelHandler."""
@@ -2583,7 +2702,7 @@ class TestProcessTaskTriggerOutput:
         }
         server.clear()
         ctx = mock_context.model_copy(
-            update={"session_id": session_id, "flow_id": flow_id, "channel": "a2a"},
+            update={"session_id": session_id, "flow_id": flow_id, "channel": "telegram"},
         )
         set_context(ctx)
         result = await process_flow_task(
@@ -2592,7 +2711,7 @@ class TestProcessTaskTriggerOutput:
             user_id="tg:1",
             content="question",
             branch_id="default",
-            channel="a2a",
+            channel="telegram",
             task_id=f"task_{unique_id}",
             context_id=context_id,
             metadata=metadata,
@@ -2666,7 +2785,7 @@ class TestProcessTaskTriggerOutput:
         }
         server.clear()
         ctx = mock_context.model_copy(
-            update={"session_id": session_id, "flow_id": flow_id, "channel": "a2a"},
+            update={"session_id": session_id, "flow_id": flow_id, "channel": "telegram"},
         )
         set_context(ctx)
         await process_flow_task(
@@ -2674,6 +2793,8 @@ class TestProcessTaskTriggerOutput:
             session_id=session_id,
             user_id="u1",
             content="a",
+            branch_id="default",
+            channel="telegram",
             context_id=context_id,
             metadata=metadata,
             context_data=ctx.to_dict(),
@@ -2716,7 +2837,7 @@ class TestFullTriggerFlowE2E:
             type=TriggerType.TELEGRAM,
             config={
                 "bot_token": "full_flow_bot_token",
-                "secret_token": "full_flow_secret",
+                "_secret_token": "full_flow_secret",
                 "api_base": f"{base_url}/telegram",
             },
             input_mapping={
@@ -3081,7 +3202,7 @@ class TestFullWebhookToChannelE2E:
             type=TriggerType.TELEGRAM,
             config={
                 "bot_token": "webhook_e2e_bot",
-                "secret_token": "webhook_e2e_secret",
+                "_secret_token": "webhook_e2e_secret",
             },
             input_mapping={
                 "content": "@trigger:message.text",
@@ -3198,7 +3319,7 @@ class TestFullWebhookToChannelE2E:
             type=TriggerType.TELEGRAM,
             config={
                 "bot_token": "reply_bot_token_123",
-                "secret_token": "reply_secret_123",
+                "_secret_token": "reply_secret_123",
             },
             input_mapping={
                 "content": "@trigger:message.text",

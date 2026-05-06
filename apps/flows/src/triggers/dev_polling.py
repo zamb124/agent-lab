@@ -28,12 +28,14 @@ class TelegramPollingBot:
         bot_token: str,
         subdomain: str,
         handler_callback,
+        allowed_updates: List[str],
     ):
         self.flow_id = flow_id
         self.trigger_id = trigger_id
         self.bot_token = bot_token
         self.subdomain = subdomain
         self.handler_callback = handler_callback
+        self.allowed_updates = allowed_updates
         self.offset = 0
         self.running = False
     
@@ -59,7 +61,7 @@ class TelegramPollingBot:
                 params={
                     "offset": self.offset,
                     "timeout": 30,
-                    "allowed_updates": ["message", "callback_query"],
+                    "allowed_updates": self.allowed_updates,
                 },
                 timeout=35.0,
             )
@@ -224,6 +226,7 @@ class TelegramDevPolling:
                             "trigger_id": trigger_id,
                             "bot_token": bot_token,
                             "subdomain": subdomain,
+                            "trigger_config": dict(trigger.config),
                         })
             except Exception as e:
                 logger.error(
@@ -308,14 +311,33 @@ class TelegramDevPolling:
     
     async def _sync_bots(self):
         """Синхронизирует polling боты с текущими триггерами."""
+        from apps.flows.src.triggers.handlers.base import TriggerRegistrationError
+        from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+
         triggers = await self._get_telegram_triggers()
         
         current_keys: Set[str] = set()
         
         for trigger_data in triggers:
             key = f"{trigger_data['flow_id']}:{trigger_data['trigger_id']}"
+
+            try:
+                allowed_updates = TelegramTriggerHandler.normalize_allowed_updates(
+                    trigger_data["flow_id"],
+                    trigger_data["trigger_id"],
+                    trigger_data["trigger_config"],
+                )
+            except TriggerRegistrationError as e:
+                logger.error(
+                    "Dev polling: invalid allowed_updates for %s: %s",
+                    key,
+                    e,
+                    exc_info=True,
+                )
+                continue
+
             current_keys.add(key)
-            
+
             if key not in self.bots:
                 bot = TelegramPollingBot(
                     flow_id=trigger_data["flow_id"],
@@ -323,6 +345,7 @@ class TelegramDevPolling:
                     bot_token=trigger_data["bot_token"],
                     subdomain=trigger_data["subdomain"],
                     handler_callback=self._handle_update,
+                    allowed_updates=allowed_updates,
                 )
                 self.bots[key] = bot
                 asyncio.create_task(bot.run())

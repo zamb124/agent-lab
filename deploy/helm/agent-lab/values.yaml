@@ -60,6 +60,8 @@ appCommonEnv:
   redisPort: 6379
   postgresService: postgres
   postgresPort: 5432
+  # Только если публичный webhook flows не {platform_public_base_url}/flows (редкий случай).
+  flowsWebhookPublicBaseUrl: ""
 
 applications:
   flows:

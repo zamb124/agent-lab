@@ -41,6 +41,10 @@
   value: {{ required "agent-lab Helm: задайте image.tag для SERVER__DEPLOYMENT_VERSION" .Values.image.tag | quote }}
 - name: SERVER__FLOWS_SERVICE_URL
   value: http://{{ .Values.applications.flows.serviceName }}:{{ .Values.applications.flows.port }}
+{{- if .Values.appCommonEnv.flowsWebhookPublicBaseUrl }}
+- name: SERVER__FLOWS_WEBHOOK_PUBLIC_BASE_URL
+  value: {{ .Values.appCommonEnv.flowsWebhookPublicBaseUrl | quote }}
+{{- end }}
 - name: SERVER__FRONTEND_SERVICE_URL
   value: http://{{ .Values.applications.frontend.serviceName }}:{{ .Values.applications.frontend.port }}
 - name: SERVER__CRM_SERVICE_URL

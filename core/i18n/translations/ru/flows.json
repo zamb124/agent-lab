@@ -889,7 +889,10 @@
     "delete_branch_message": "Вы уверены, что хотите удалить ветку «{{id}}»?",
     "footer_triggers": "Триггеры",
     "footer_integrations": "Интеграции",
-    "action_cancel": "Отмена"
+    "action_cancel": "Отмена",
+    "search_placeholder": "Поиск по flows…",
+    "search_aria": "Поиск в каталоге flows",
+    "search_empty": "Ничего не найдено"
   },
   "sessions_modal": {
     "modal_title": "Сессии",

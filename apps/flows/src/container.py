@@ -263,7 +263,7 @@ class FlowContainer(BaseContainer):
         from apps.flows.src.models import TriggerType
         
         settings = get_settings()
-        base_url = settings.server.get_flows_service_url().rstrip("/")
+        base_url = settings.server.get_flows_webhook_public_base_url()
         
         registry = TriggerRegistry(base_url=base_url)
         

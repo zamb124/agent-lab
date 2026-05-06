@@ -144,6 +144,13 @@ class TelegramTriggerConfig(StrictBaseModel):
         default_factory=list,
         description="Реагировать только на эти команды (пусто = все сообщения)"
     )
+    allowed_updates: List[str] = Field(
+        default_factory=lambda: ["message"],
+        description=(
+            "Типы Update для setWebhook/getUpdates: message, callback_query "
+            "(см. TelegramTriggerHandler.normalize_allowed_updates)"
+        ),
+    )
 
 
 class CronTriggerConfig(StrictBaseModel):

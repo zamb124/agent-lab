@@ -196,6 +196,15 @@ class ServerConfig(BaseModel):
     flows_service_url: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("flows_service_url"),
+        description="Внутренний или dev URL сервиса flows (ServiceClient, локальные вызовы).",
+    )
+    flows_webhook_public_base_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("flows_webhook_public_base_url"),
+        description=(
+            "Явный публичный origin без завершающего слэша для setWebhook (если отличается от "
+            "канона ingress). Если пусто — {platform_public_base_url}/flows, иначе flows_service_url."
+        ),
     )
     crm_service_url: Optional[str] = None
     frontend_service_url: Optional[str] = None
@@ -256,6 +265,22 @@ class ServerConfig(BaseModel):
     def get_flows_service_url(self) -> str:
         """URL сервиса flows."""
         return self.get_service_url("flows")
+
+    def get_flows_webhook_public_base_url(self) -> str:
+        """
+        Публичный базовый URL для webhook flows (Telegram setWebhook).
+
+        Приоритет: flows_webhook_public_base_url → {platform_public_base_url}/flows
+        (совпадает с ingress path `/flows`) → flows_service_url.
+        """
+        if self.flows_webhook_public_base_url:
+            return str(self.flows_webhook_public_base_url).rstrip("/")
+        pub = self.platform_public_base_url
+        if pub is not None:
+            trimmed = str(pub).strip()
+            if trimmed:
+                return f"{trimmed.rstrip('/')}/flows"
+        return self.get_flows_service_url().rstrip("/")
 
     workers: int = 4
     worker_class: str = "uvicorn.workers.UvicornWorker"
