@@ -155,17 +155,26 @@ async def transcribe_audio(
     s3 = await container.file_processor._get_s3_client()
     audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
 
+    from apps.flows.src.services.flow_speech_resolve import (
+        load_flow_speech_layers_from_context_metadata,
+        merge_explicit_over_flow_speech_layer,
+    )
+
     override = SpeechOverride(
         provider=provider,
         model=model,
         language=language,
     )
+    stt_flow, _, _ = load_flow_speech_layers_from_context_metadata(
+        ctx.metadata if ctx else None
+    )
+    override = merge_explicit_over_flow_speech_layer(override, stt_flow)
     stt = await get_stt_client(company_id=company_id, override=override)
     result = await stt.transcribe_audio(
         audio_bytes=audio_bytes,
         file_name=record.original_name,
         mime_type=record.content_type,
-        language=language,
+        language=override.language,
     )
 
     if ctx.user is not None:
@@ -244,6 +253,11 @@ async def synthesize_speech(
     company_id = ctx.active_company.company_id
     user_id = ctx.user.user_id if ctx.user else None
 
+    from apps.flows.src.services.flow_speech_resolve import (
+        load_flow_speech_layers_from_context_metadata,
+        merge_explicit_over_flow_speech_layer,
+    )
+
     override = SpeechOverride(
         provider=provider,
         model=model,
@@ -251,6 +265,10 @@ async def synthesize_speech(
         language=language,
         response_format=response_format,  # type: ignore[arg-type]
     )
+    _, tts_flow, _ = load_flow_speech_layers_from_context_metadata(
+        ctx.metadata if ctx else None
+    )
+    override = merge_explicit_over_flow_speech_layer(override, tts_flow)
     tts = await get_tts_client(company_id=company_id, override=override)
     result = await tts.synthesize(text=text)
 

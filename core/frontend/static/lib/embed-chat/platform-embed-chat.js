@@ -1318,6 +1318,9 @@ export class PlatformEmbedChat extends LitElement {
         if (message === '') {
             throw new Error('platform-embed-chat: empty voice text');
         }
+        if (this._voiceStreamAssistantId != null) {
+            this.finalizeVoiceA2aStream();
+        }
         if (this._sseOpen || this._loading) {
             throw new Error('platform-embed-chat: stream active');
         }

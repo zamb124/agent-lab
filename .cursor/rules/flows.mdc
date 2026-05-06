@@ -46,11 +46,11 @@ UI-фабрика `chatSendOp`/`chatCancelOp` (`transport: 'http'`, `apps/flows/
 
 ## Push-события (sync открытых редакторов)
 
-Бэкенд публикует через `core.ui_events.publish_ui_event_to_user` после успешного REST PUT/DELETE flow и POST/PUT/DELETE branch:
+Бэкенд публикует через `core.ui_events.publish_ui_event_to_user` после успешного REST PUT/DELETE flow, POST `reload-from-bundle`, и POST/PUT/DELETE branch:
 
 | Push | Источник | Слушатель |
 |---|---|---|
-| `flows/flow/updated` | `apps/flows/src/api/v1/flows.py::update_flow` | `<flows-app>` (`useResource('flows/flows').get(flow_id)`) |
+| `flows/flow/updated` | `update_flow`, `reload_flow_from_bundle` | `<flows-app>` (`useResource('flows/flows').get(flow_id)`) |
 | `flows/flow/deleted` | `delete_flow` | `<flows-app>` (`useResource('flows/flows').load()`) |
 | `flows/branch/created` / `flows/branch/updated` / `flows/branch/deleted` | `apps/flows/src/api/a2a.py` | `<flows-app>` (`get(flow_id)`) |
 | `notify/flows/flows_operator_tasks_updated_received` | `operator_tasks_broadcast.py` | `<operator-page>` (`useEvent` → reload) |
@@ -195,6 +195,14 @@ Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 
 - `GET /flows/api/v1/code/editor-state?flow_id=...&branch_id=default` — стартовый `ExecutionState` как при `FlowFactory.get_flow` + `create_initial_state` (резолвнутые variables, `flow_config`, формат `session_id`). Требуется аутентифицированный пользователь (401 без user). UI подставляет в TestPanel.
 - `GET /flows/api/v1/tasks/state?session_id=...` (или `context_id`+`flow_id`) — сохранённый state сессии. Записи нет — `{"messages": [], "task_id": null}`, HTTP 200. В TestPanel редактора ноды state вводится только вручную JSON.
+- `GET /flows/api/v1/flows/{flow_id}/voice-session-query?branch_id=...` — строковые query-параметры для WebSocket voice-сессии (effective профиль `FlowConfig.speech` + опционально `BranchConfig.speech`), см. `triple_to_voice_ws_query_dict` в `apps/flows/src/services/flow_speech_resolve.py`. Используется SPA flows и embed перед `VoiceMediaSession.connect`.
+
+## Профиль речи flow (`FlowConfig.speech`)
+
+- Конфиг: `apps/flows/src/models/flow_speech_settings.py` (`FlowSpeechSttBlock`, `FlowSpeechTtsBlock`, `FlowSpeechVadBlock`, вложенный `FlowSpeechSettings`). Поля совместимы с заполнением `SpeechOverride` и query voice WS; **секреты провайдеров в JSON flow не хранятся** (остаются в deployment и `company_voice_providers`).
+- Перекрытие ветки: `BranchConfig.speech` мержится поверх уровня flow (`effective_flow_speech_settings` в `flow_speech_resolve.py`). Для базового графа и запросов без ветки в HTTP-клиентах используется `branch_id=default`; синтетический таб редактора `base` не является ключом `FlowConfig.branches`.
+- Рантайм: после снимка конфига `attach_flow_speech_layers_to_context` записывает в `Context.metadata["platform_flow_speech_layers"]` три блока STT/TTS/VAD (`SpeechOverride.model_dump`). Авто-STT вложений (`audio_input.py`) и фасады `platform_services` (`transcribe_audio` / `synthesize_speech`) вызывают `merge_explicit_over_flow_speech_layer`: явный override побеждает по каждому полю, затем результат уходит в `voice_resolver`.
+- UI редактора: лимиты flow и профиль речи (`flow.speech` / `BranchConfig.speech`) — карточка `flows-flow-property-panel.js` в правом столбе `.editor-right-rail` (`flow-editor-page.js`); открывается и закрывается кнопкой в том же стиле, что строки триггеров, **над** секцией «Триггеры» в `flows-node-types-sidebar.js` (`toggle-flow-settings`). Перекрытие ветки — на активной вкладке ветки (не `base`). Редактор выбранной ноды или ресурса — только во `flows-floating-panel` (`dock-stack`) → `flows-property-panel.js` / `flows-resource-property-panel.js`. Каталог провайдеров для селектов — `flows/voice_providers_catalog_load` → `GET /flows/api/v1/voice-providers/catalog` (консоль — `frontend/voice_providers_catalog_load` → `/frontend/api/voice-providers/catalog`).
 
 ## Breakpoint и `previewExecutionState`
 

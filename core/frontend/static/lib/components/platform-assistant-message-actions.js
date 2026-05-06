@@ -287,7 +287,9 @@ export class PlatformAssistantMessageActions extends PlatformElement {
     render() {
         const canPlay = typeof this.voiceBaseUrl === 'string' && this.voiceBaseUrl !== '';
         const textOk = typeof this.text === 'string' && this.text.trim() !== '';
+        const btnCls = 'action-btn';
         const playBtnCls = this._busyPlay ? `${btnCls} action-btn--tts-stop` : btnCls;
+        const playLabel = this._playButtonTitle();
         const speakIcon = html`<platform-icon
             name=${this._busyPlay ? 'stop' : 'volume-up'}
             size="18"

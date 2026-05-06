@@ -477,6 +477,8 @@ export class VoiceMediaSession extends EventTarget {
         this._playbackCursor = 0;
         /** Очередь TTS binary: decode+schedule строго по порядку прихода WS-кадров (без гонок). */
         this._playbackQueue = Promise.resolve();
+        /** Число binary-кадров, ещё не завершивших `_playAudioChunkSequential` (беклог декода/планирования). */
+        this._playbackChunksInFlight = 0;
 
         this._closed = false;
         this._openPromise = null;
@@ -1320,6 +1322,40 @@ export class VoiceMediaSession extends EventTarget {
     stopPlayback() {
         this._sendText({ type: 'stop_playback' });
         this._resetPlayback();
+        this._nudgeCaptureResumeIfRecording();
+    }
+
+    /**
+     * Есть ли ещё исходящий с клиента TTS в Web Audio (очередь декода/воспроизведения).
+     * Нужен для client barge-in: сервер может прислать `tts_state: stopped` раньше, чем очередь на клиенте доиграет.
+     * @returns {boolean}
+     */
+    hasScheduledTtsPlayback() {
+        if (this._playbackChunksInFlight > 0) {
+            return true;
+        }
+        if (this._playbackCtx === null || this._playbackCtx.state === 'closed') {
+            return false;
+        }
+        return this._playbackCursor > this._playbackCtx.currentTime + 0.02;
+    }
+
+    /**
+     * После TTS часть браузеров держит захват в suspended; единый вызов resume для duplex STT.
+     * @returns {void}
+     */
+    _nudgeCaptureResumeIfRecording() {
+        if (!this._recording || this._closed) {
+            return;
+        }
+        const c = this._captureCtx;
+        if (c === null || c.state === 'closed') {
+            return;
+        }
+        if (c.state === 'running') {
+            return;
+        }
+        void c.resume().catch(() => {});
     }
 
     /**
@@ -1402,6 +1438,9 @@ export class VoiceMediaSession extends EventTarget {
             case 'tts_state':
                 if (payload.state === 'playing' || payload.state === 'stopped') {
                     this._dispatch('ttsState', { state: payload.state });
+                    if (payload.state === 'stopped') {
+                        this._nudgeCaptureResumeIfRecording();
+                    }
                 }
                 break;
             case 'media_config':
@@ -1525,6 +1564,7 @@ export class VoiceMediaSession extends EventTarget {
 
     _resetPlayback() {
         this._playbackQueue = Promise.resolve();
+        this._playbackChunksInFlight = 0;
         if (this._playbackCtx !== null) {
             try { this._playbackCtx.close(); } catch { /* noop */ }
             this._playbackCtx = null;
@@ -1537,10 +1577,12 @@ export class VoiceMediaSession extends EventTarget {
      * @param {ArrayBuffer} buffer
      */
     _playAudioChunk(buffer) {
-        this._playbackQueue = this._playbackQueue.then(
-            () => this._playAudioChunkSequential(buffer),
-            () => this._playAudioChunkSequential(buffer),
-        );
+        this._playbackChunksInFlight += 1;
+        const run = () =>
+            this._playAudioChunkSequential(buffer).finally(() => {
+                this._playbackChunksInFlight -= 1;
+            });
+        this._playbackQueue = this._playbackQueue.then(run, run);
     }
 
     /**

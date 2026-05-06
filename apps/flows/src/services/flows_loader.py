@@ -111,6 +111,17 @@ class FlowsLoader:
         self._nodes_cache: Dict[str, NodeConfig] = {}  # Кеш nodes для инлайнинга
         self._target_company_id: str | None = None
 
+    def load_registry_yaml(self) -> None:
+        """Загружает ``registry.yaml`` в ``_registry`` и ``_defaults`` (секция ``defaults``)."""
+        if not self.registry_path.exists():
+            logger.warning("Registry не найден: %s", self.registry_path)
+            self._registry = {}
+            self._defaults = {}
+            return
+        with open(self.registry_path, "r", encoding="utf-8") as f:
+            self._registry = yaml.safe_load(f) or {}
+        self._defaults = self._registry.get("defaults", {})
+
     async def load_all(self) -> tuple[List[str], List[str]]:
         """
         Загружает flows из ``registry.yaml`` (секция ``flows``) и связанные nodes в БД.
@@ -127,10 +138,7 @@ class FlowsLoader:
             logger.warning(f"Registry не найден: {self.registry_path}")
             return [], []
 
-        with open(self.registry_path, "r", encoding="utf-8") as f:
-            self._registry = yaml.safe_load(f) or {}
-
-        self._defaults = self._registry.get("defaults", {})
+        self.load_registry_yaml()
         registry_entries = self._registry.get("flows", [])
         
         # Если старый формат (список строк), конвертируем в новый
@@ -1057,9 +1065,7 @@ class FlowsLoader:
         if not self.registry_path.exists():
             raise ValueError(f"Registry не найден: {self.registry_path}")
 
-        with open(self.registry_path, "r", encoding="utf-8") as f:
-            self._registry = yaml.safe_load(f) or {}
-        self._defaults = self._registry.get("defaults", {})
+        self.load_registry_yaml()
 
         bundle_dir = self.bundles_dir / bundle_id
         config_path = bundle_dir / "flow.json"

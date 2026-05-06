@@ -24,12 +24,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from apps.frontend.api.voice_providers_catalog_helpers import (
     CompanySecretsMetaDTO,
     allowed_secret_keys,
-    cloud_ru_stt_model_ids,
-    cloud_ru_tts_model_ids,
     secrets_dict_to_meta,
 )
 from apps.frontend.dependencies import ContainerDep
-from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS
+from core.clients.speech_provider_catalog import (
+    STT_TTS_PROVIDER_IDS,
+    cloud_ru_stt_model_ids,
+    cloud_ru_tts_model_ids,
+)
 from core.clients.voice_resolver import invalidate_company_overrides_cache
 from core.config import get_settings
 from core.db.company_voice_provider_secrets import merge_secrets

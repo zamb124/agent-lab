@@ -7,6 +7,8 @@
  *   - useOp('flows/resource_types').lastResult — ресурсные типы (раздел «Ресурсы»).
  *   - useOp('flows/triggers_list').run({ flow_id }) — триггеры flow для
  *     отдельной секции в шапке сайдбара.
+ * Кнопка «Лимиты и речь» над секцией триггеров — показ/скрытие панели
+ * `flows-flow-property-panel` в правом столбе (событие `toggle-flow-settings`).
  *
  * Поиск фильтрует все категории + ресурсы (по name / description / type),
  * категории без совпадений скрываются.
@@ -41,6 +43,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
+        flowSettingsActive: { type: Boolean, attribute: 'flow-settings-active' },
         _query: { state: true },
     };
 
@@ -159,6 +162,20 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 border-color: var(--error, #f43f5e);
             }
 
+            button.trigger-row {
+                appearance: none;
+                margin: 0;
+                font: inherit;
+                color: inherit;
+                width: 100%;
+                text-align: left;
+                cursor: pointer;
+            }
+            button.trigger-row.is-active {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
+            }
+
             /* Search */
             .search-box {
                 position: relative;
@@ -249,6 +266,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
     constructor() {
         super();
         this.flowId = '';
+        this.flowSettingsActive = false;
         this._query = '';
         this._nodeTypesOp = this.useOp('flows/node_types');
         this._resourceTypesOp = this.useOp('flows/resource_types');
@@ -323,6 +341,39 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         if (!ok) return;
         await this._removeTriggerOp.run({ flow_id: this.flowId, trigger_id: tr.trigger_id });
         void this._triggersOp.run({ flow_id: this.flowId });
+    }
+
+    _toggleFlowSettingsPanel() {
+        if (!this.flowId) return;
+        this.emit('toggle-flow-settings', {});
+    }
+
+    _renderFlowSettingsPanelToggle() {
+        if (!this.flowId) return '';
+        const flowTok = getCategoryToken('flow');
+        const wrapBg = `color-mix(in oklab, ${flowTok} 14%, transparent)`;
+        return html`
+            <div class="triggers-section">
+                <button
+                    type="button"
+                    class="trigger-row ${this.flowSettingsActive ? 'is-active' : ''}"
+                    aria-pressed=${this.flowSettingsActive ? 'true' : 'false'}
+                    title=${this.t('node_types_sidebar.flow_settings_toggle_hint')}
+                    @click=${this._toggleFlowSettingsPanel}
+                >
+                    <div class="trigger-row-main">
+                        <div
+                            class="trigger-type-icon-wrap"
+                            style="background:${wrapBg};color:${flowTok};"
+                            aria-hidden="true"
+                        >
+                            <platform-icon name="adjustment" size="12"></platform-icon>
+                        </div>
+                        <span class="trigger-row-label">${this.t('flow_property_panel.card_title')}</span>
+                    </div>
+                </button>
+            </div>
+        `;
     }
 
     _renderTriggers() {
@@ -448,6 +499,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
         }
 
         return html`
+            ${this._renderFlowSettingsPanelToggle()}
             ${this._renderTriggers()}
             ${this._renderSearch()}
             ${NODE_CATEGORY_ORDER.map((cat) => this._renderCategory(this._categoryTitleKey(cat), asArray(grouped.get(cat)), this._onDragNodeType, cat))}

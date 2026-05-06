@@ -509,7 +509,19 @@ class LlmNode(BaseNode):
         
         self.prompt_template = self.prompt or cfg.get("prompt", "")
         self.tool_refs = cfg.get("tools", []) or self.tools
-        self.llm_config_dict = cfg.get("llm", {})
+        raw_override = cfg.get("llm_override")
+        raw_llm = cfg.get("llm")
+        if isinstance(raw_override, dict):
+            if raw_override:
+                self.llm_config_dict = dict(raw_override)
+            elif isinstance(raw_llm, dict):
+                self.llm_config_dict = dict(raw_llm)
+            else:
+                self.llm_config_dict = {}
+        elif isinstance(raw_llm, dict):
+            self.llm_config_dict = dict(raw_llm)
+        else:
+            self.llm_config_dict = {}
         
         self._node_config = node_config
         self._runner = None
@@ -1326,7 +1338,7 @@ def _infer_node_type_from_fields(node_config: Dict[str, Any]) -> None:
     if node_config.get("flow_id"):
         node_config["type"] = NodeType.FLOW.value
         return
-    if node_config.get("llm") is not None:
+    if node_config.get("llm") is not None or node_config.get("llm_override") is not None:
         node_config["type"] = NodeType.LLM_NODE.value
         return
     prompt = node_config.get("prompt")

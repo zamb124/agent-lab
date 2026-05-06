@@ -9,9 +9,10 @@
  *     .canvas-host:
  *       <flows-flow-canvas />         — native SVG canvas
  *       <flows-bottom-toolbar />      — floating pill снизу
- *     <flows-floating-panel>          — chrome для property/resource panel
- *       <flows-property-panel />      — выбранная нода
- *       <flows-resource-property-panel /> — выбранный ресурс
+ *     .editor-right-rail:
+ *       <flows-flow-property-panel /> — лимиты и речь (по кнопке в сайдбаре над триггерами)
+ *       <flows-floating-panel dock-stack> — chrome для ноды или ресурса
+ *         <flows-property-panel /> / <flows-resource-property-panel />
  *   <flows-execution-panel />        — тестовый запуск (виден по флагу)
  */
 
@@ -21,6 +22,7 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 import '../components/editor/flows-editor-header.js';
 import '../components/editor/flows-branches-tabs.js';
 import '../components/editor/flows-node-types-sidebar.js';
+import '../components/editor/flows-flow-property-panel.js';
 import '../components/editor/flows-property-panel.js';
 import '../components/editor/flows-resource-property-panel.js';
 import '../components/editor/flows-bottom-toolbar.js';
@@ -35,6 +37,7 @@ export class FlowEditorPage extends PlatformPage {
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
         branchId: { type: String, attribute: 'branch-id' },
+        _flowSettingsOpen: { state: true, type: Boolean },
     };
 
     static styles = [
@@ -56,6 +59,35 @@ export class FlowEditorPage extends PlatformPage {
                 display: flex;
                 flex-direction: column;
             }
+            .editor-right-rail {
+                position: absolute;
+                top: var(--space-3);
+                right: var(--space-3);
+                bottom: var(--space-3);
+                width: 420px;
+                z-index: 5;
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                pointer-events: none;
+            }
+            :host(.flow-settings-panel-open) .editor-right-rail {
+                z-index: 92;
+            }
+            .editor-right-rail > * {
+                pointer-events: auto;
+            }
+            .flow-settings-dismiss-layer {
+                position: fixed;
+                inset: 0;
+                z-index: 90;
+                background: transparent;
+                cursor: default;
+            }
+            .flow-settings-dismiss-safe {
+                position: relative;
+                z-index: 91;
+            }
         `,
     ];
 
@@ -63,6 +95,7 @@ export class FlowEditorPage extends PlatformPage {
         super();
         this.flowId = '';
         this.branchId = 'base';
+        this._flowSettingsOpen = false;
         this._editor = this.useOp('flows/editor');
         this._flows = this.useResource('flows/flows');
         this._editorStateOp = this.useOp('flows/code_editor_state');
@@ -77,14 +110,25 @@ export class FlowEditorPage extends PlatformPage {
 
     connectedCallback() {
         super.connectedCallback();
+        this.classList.toggle('flow-settings-panel-open', Boolean(this._flowSettingsOpen));
         this._loadFlowIfNeeded();
     }
 
     updated(changed) {
         super.updated?.(changed);
+        if (changed.has('flowId')) {
+            this._flowSettingsOpen = false;
+        }
+        if (changed.has('_flowSettingsOpen') || changed.has('flowId')) {
+            this.classList.toggle('flow-settings-panel-open', Boolean(this._flowSettingsOpen));
+        }
         if (changed.has('flowId') || changed.has('branchId')) {
             this._loadFlowIfNeeded();
         }
+    }
+
+    _onDismissFlowSettingsBackdrop() {
+        this._flowSettingsOpen = false;
     }
 
     _loadFlowIfNeeded() {
@@ -146,12 +190,17 @@ export class FlowEditorPage extends PlatformPage {
         return null;
     }
 
-    _renderPanel() {
+    _onToggleFlowSettings() {
+        this._flowSettingsOpen = !this._flowSettingsOpen;
+    }
+
+    _renderFloatingPanelDocked() {
         const header = this._panelHeader();
         if (!header) return '';
         const state = asObject(this._editor.state);
         return html`
             <flows-floating-panel
+                dock-stack
                 header-icon=${header.icon}
                 header-title=${header.title}
                 color-token=${header.colorToken}
@@ -173,18 +222,39 @@ export class FlowEditorPage extends PlatformPage {
         `;
     }
 
-    render() {
+    _renderRightRail() {
+        if (!this.flowId) return '';
         return html`
-            <flows-editor-header .flowId=${this.flowId} .branchId=${this.branchId}></flows-editor-header>
-            <flows-branches-tabs .flowId=${this.flowId} active-branch-id=${this.branchId}></flows-branches-tabs>
+            <div class="editor-right-rail">
+                ${this._flowSettingsOpen
+                    ? html`<flows-flow-property-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-flow-property-panel>`
+                    : ''}
+                ${this._renderFloatingPanelDocked()}
+            </div>
+        `;
+    }
+
+    render() {
+        const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
+        return html`
+            ${this._flowSettingsOpen
+                ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
+                : ''}
+            <flows-editor-header class=${dismissSafe} .flowId=${this.flowId} .branchId=${this.branchId}></flows-editor-header>
+            <flows-branches-tabs class=${dismissSafe} .flowId=${this.flowId} active-branch-id=${this.branchId}></flows-branches-tabs>
             <div class="editor-shell">
-                <flows-node-types-sidebar flow-id=${this.flowId}></flows-node-types-sidebar>
+                <flows-node-types-sidebar
+                    class=${dismissSafe}
+                    flow-id=${this.flowId}
+                    ?flow-settings-active=${this._flowSettingsOpen}
+                    @toggle-flow-settings=${() => this._onToggleFlowSettings()}
+                ></flows-node-types-sidebar>
                 <div class="canvas-host">
                     <flows-flow-canvas .flowId=${this.flowId} .branchId=${this.branchId}></flows-flow-canvas>
                     <flows-bottom-toolbar></flows-bottom-toolbar>
                     <flows-execution-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-execution-panel>
                 </div>
-                ${this._renderPanel()}
+                ${this._renderRightRail()}
             </div>
         `;
     }

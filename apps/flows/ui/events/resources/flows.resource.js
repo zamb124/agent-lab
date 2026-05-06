@@ -63,6 +63,17 @@ export const flowReloadFromBundleOp = createAsyncOp({
             body: {},
         });
     },
+    onSuccess: (ctx, _result, event) => {
+        const id = event?.payload?.flow_id;
+        if (typeof id !== 'string' || id.length === 0) {
+            throw new Error('flowReloadFromBundleOp.onSuccess: payload.flow_id required');
+        }
+        ctx.dispatch(
+            flowsResource.events.ITEM_REQUESTED,
+            { flow_id: id },
+            { causation_id: event.id, source: 'local' },
+        );
+    },
 });
 
 export const flowVersionsListOp = createAsyncOp({
@@ -104,6 +115,28 @@ export const flowValidateOp = createAsyncOp({
             method: 'POST',
             url: '/flows/api/v1/flows/validate',
             body: payload,
+        });
+    },
+});
+
+export const flowVoiceSessionQueryOp = createAsyncOp({
+    name: 'flows/flow_voice_session_query',
+    silent: true,
+    restMirror: {
+        method: 'GET',
+        path: '/flows/api/v1/flows/{flow_id}/voice-session-query',
+    },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
+            throw new Error('flowVoiceSessionQueryOp: flow_id required');
+        }
+        const bid =
+            typeof payload.branch_id === 'string' && payload.branch_id.trim() !== ''
+                ? payload.branch_id.trim()
+                : 'default';
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}/voice-session-query?branch_id=${encodeURIComponent(bid)}`,
         });
     },
 });

@@ -7,19 +7,30 @@ from typing import FrozenSet
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.clients.speech_provider_catalog import (
-    STT_TTS_PROVIDER_IDS,
-    VOICE_RESPONSE_FORMAT_IDS,
+    catalog_sber_speech_models,
+    catalog_yandex_speech_models,
+    cloud_ru_stt_model_ids,
+    cloud_ru_tts_model_ids,
+)
+from core.models.voice_providers_catalog import (
+    TtsLitserveVoiceHint,
+    VoiceProvidersCatalogDTO,
+    build_voice_providers_catalog_dto,
 )
 
-_CLOUD_RU_STT_MODELS: tuple[str, ...] = (
-    "openai/whisper-large-v3",
-)
-_CLOUD_RU_TTS_MODELS: tuple[str, ...] = (
-    "openai/tts-1",
-    "openai/tts-1-hd",
-)
-_YANDEX_SPEECH_MODELS: tuple[str, ...] = ("general",)
-_SBER_SPEECH_MODELS: tuple[str, ...] = ("general",)
+__all__ = [
+    "TtsLitserveVoiceHint",
+    "VoiceProvidersCatalogDTO",
+    "build_voice_providers_catalog_dto",
+    "allowed_secret_keys",
+    "needs_model_dropdown",
+    "CompanySecretsMetaDTO",
+    "secrets_dict_to_meta",
+    "cloud_ru_stt_model_ids",
+    "cloud_ru_tts_model_ids",
+    "catalog_yandex_speech_models",
+    "catalog_sber_speech_models",
+]
 
 
 def allowed_secret_keys(kind: str, provider: str) -> FrozenSet[str]:
@@ -41,32 +52,6 @@ def needs_model_dropdown(kind: str, provider: str) -> bool:
     if provider in ("silero_local", "mock"):
         return False
     return provider in {"litserve", "cloud_ru", "yandex", "sber"}
-
-
-class TtsLitserveVoiceHint(BaseModel):
-    """Подсказка по голосу для одной Litserve TTS-модели."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    api_model_id: str
-    default_voice: str | None = None
-
-
-class VoiceProvidersCatalogDTO(BaseModel):
-    """Ответ GET .../voice-providers/catalog (без конфиденциальных данных из conf)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    stt_tts_provider_ids: list[str] = Field(default_factory=list)
-    response_format_ids: list[str] = Field(default_factory=list)
-    credential_field_groups: dict[str, list[list[str]]] = Field(default_factory=dict)
-    stt_litserve_models: list[str] = Field(default_factory=list)
-    tts_litserve_models: list[str] = Field(default_factory=list)
-    tts_litserve_voice_hints: list[TtsLitserveVoiceHint] = Field(default_factory=list)
-    cloud_ru_stt_models: list[str] = Field(default_factory=list)
-    cloud_ru_tts_models: list[str] = Field(default_factory=list)
-    yandex_speech_models: list[str] = Field(default_factory=list)
-    sber_speech_models: list[str] = Field(default_factory=list)
 
 
 class CompanySecretsMetaDTO(BaseModel):
@@ -114,61 +99,3 @@ def secrets_dict_to_meta(
             scope=scope,
         )
     return None
-
-
-def cloud_ru_stt_model_ids() -> list[str]:
-    return list(_CLOUD_RU_STT_MODELS)
-
-
-def cloud_ru_tts_model_ids() -> list[str]:
-    return list(_CLOUD_RU_TTS_MODELS)
-
-
-def catalog_yandex_speech_models() -> list[str]:
-    return list(_YANDEX_SPEECH_MODELS)
-
-
-def catalog_sber_speech_models() -> list[str]:
-    return list(_SBER_SPEECH_MODELS)
-
-
-def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCatalogDTO:
-    """Собирает каталог только из уже разрешённых полей конфига."""
-
-    credential_field_groups: dict[str, list[list[str]]] = {
-        "cloud_ru": [["api_key"]],
-        "yandex": [["api_key"], ["folder_id"]],
-        "sber": [["client_id"], ["client_secret"], ["scope"]],
-    }
-
-    def _pull_ids(getter: object, field: str = "api_model_id") -> list[str]:
-        items = getter
-        ident: list[str] = []
-        for entry in items:
-            v = getattr(entry, field)
-            ident.append(str(v))
-        return ident
-
-    pls_any = pls_settings
-    stt_models = getattr(pls_any, "stt_models", [])
-    tts_models = getattr(pls_any, "tts_models", [])
-    voice_hints = [
-        TtsLitserveVoiceHint(
-            api_model_id=str(tts.api_model_id),
-            default_voice=tts.voice if hasattr(tts, "voice") else None,
-        )
-        for tts in tts_models
-    ]
-
-    return VoiceProvidersCatalogDTO(
-        stt_tts_provider_ids=sorted(STT_TTS_PROVIDER_IDS),
-        response_format_ids=sorted(VOICE_RESPONSE_FORMAT_IDS),
-        credential_field_groups=credential_field_groups,
-        stt_litserve_models=_pull_ids(stt_models),
-        tts_litserve_models=_pull_ids(tts_models),
-        tts_litserve_voice_hints=voice_hints,
-        cloud_ru_stt_models=cloud_ru_stt_model_ids(),
-        cloud_ru_tts_models=cloud_ru_tts_model_ids(),
-        yandex_speech_models=catalog_yandex_speech_models(),
-        sber_speech_models=catalog_sber_speech_models(),
-    )

@@ -17,7 +17,8 @@ import '@platform/lib/embed-chat/platform-lara-assistant.js';
 
 import { flowsResource, flowUpdateOp, flowReloadFromBundleOp, flowVersionsListOp,
          flowStoreBundlesOp, flowValidateOp, branchCreateOp, branchUpdateOp,
-         branchRemoveOp } from '../events/resources/flows.resource.js';
+         branchRemoveOp, flowVoiceSessionQueryOp } from '../events/resources/flows.resource.js';
+import { flowsVoiceCatalogLoadOp } from '../events/resources/voice-catalog.resource.js';
 import { toolsResource, toolsAllOp } from '../events/resources/tools.resource.js';
 import { resourcesBundleResource, resourceUpdateOp } from '../events/resources/resources-bundle.resource.js';
 import { mcpServersResource, mcpServerUpdateOp, mcpServerSyncOp, mcpServerTestOp } from '../events/resources/mcp.resource.js';
@@ -79,6 +80,8 @@ export class FlowsApp extends PlatformApp {
         branchCreateOp,
         branchUpdateOp,
         branchRemoveOp,
+        flowsVoiceCatalogLoadOp,
+        flowVoiceSessionQueryOp,
         toolsResource,
         toolsAllOp,
         resourcesBundleResource,

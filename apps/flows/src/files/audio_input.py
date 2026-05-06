@@ -26,6 +26,11 @@ from typing import Any, Dict, List, Optional
 
 from core.clients.speech_override import SpeechOverride
 from core.clients.voice_resolver import get_stt_client
+from core.context import get_context
+from apps.flows.src.services.flow_speech_resolve import (
+    load_flow_speech_layers_from_context_metadata,
+    merge_explicit_over_flow_speech_layer,
+)
 from core.files.types import FileCategory, ext_to_category, mime_to_category
 from core.logging import get_logger
 from pathlib import Path
@@ -91,8 +96,18 @@ async def transcribe_incoming_audio_files(
     if not audio_items:
         return ""
 
-    override = SpeechOverride(language=language) if language else SpeechOverride()
-    stt = await get_stt_client(company_id=company_id, override=override)
+    ctx = get_context()
+    stt_flow, _, _ = load_flow_speech_layers_from_context_metadata(
+        ctx.metadata if ctx else None
+    )
+    merged = merge_explicit_over_flow_speech_layer(SpeechOverride(), stt_flow)
+    if language:
+        merged = merged.model_copy(update={"language": language})
+    elif ctx is not None and merged.language is None:
+        lv = ctx.language.value if ctx.language is not None else None
+        if lv:
+            merged = merged.model_copy(update={"language": lv})
+    stt = await get_stt_client(company_id=company_id, override=merged)
 
     parts: List[str] = []
     for item in audio_items:
@@ -112,7 +127,7 @@ async def transcribe_incoming_audio_files(
             audio_bytes=audio_bytes,
             file_name=original_name,
             mime_type=mime_type,
-            language=language,
+            language=merged.language,
         )
         text = (result.text or "").strip()
         if text == "":

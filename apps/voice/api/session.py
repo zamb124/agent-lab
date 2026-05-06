@@ -51,7 +51,10 @@ async def voice_session(
     tts_provider_name: str | None = Query(default=None, description="Override TTS провайдера."),
     tts_model: str | None = Query(default=None, description="Override TTS модели."),
     tts_voice: str | None = Query(default=None, description="Override TTS голоса."),
+    tts_sample_rate: int | None = Query(default=None, description="Override частоты дискретизации TTS (Гц)."),
     vad_provider_name: str | None = Query(default=None, description="Override VAD провайдера."),
+    vad_sample_rate: int | None = Query(default=None, description="Override частоты дискретизации VAD (Гц)."),
+    vad_threshold: float | None = Query(default=None, description="Override порога детекции VAD [0..1]."),
     language: str | None = Query(default=None, description="Язык сессии (ISO 639-1): STT и выбор TTS-модели LitServe по `synthesis_locale` в каталоге."),
 ) -> None:
     """WebSocket сессия: PCM uplink + text/PCM downlink.
@@ -85,8 +88,13 @@ async def voice_session(
         model=tts_model,
         voice=tts_voice,
         language=language,
+        sample_rate=tts_sample_rate,
     )
-    vad_override = SpeechOverride(provider=vad_provider_name)
+    vad_override = SpeechOverride(
+        provider=vad_provider_name,
+        sample_rate=vad_sample_rate,
+        threshold=vad_threshold,
+    )
 
     try:
         vad_provider = await container.create_vad_provider(

@@ -44,6 +44,12 @@ from .flow_config import (
     TestTarget,
     TestTurn,
 )
+from .flow_speech_settings import (
+    FlowSpeechSettings,
+    FlowSpeechSttBlock,
+    FlowSpeechTtsBlock,
+    FlowSpeechVadBlock,
+)
 
 from .session_config import SessionConfig
 from .tool_reference import CallParameter, ToolReference
@@ -103,6 +109,10 @@ __all__ = [
     "ResponseSchema",
     "ResponseStatus",
     "ResponseType",
+    "FlowSpeechSettings",
+    "FlowSpeechSttBlock",
+    "FlowSpeechTtsBlock",
+    "FlowSpeechVadBlock",
     "SessionConfig",
     "SessionStatus",
     "BranchConfig",

@@ -7,6 +7,8 @@
  *   - подсветка `lara-glow` при push-событии `flows/lara/node_updated` (3.2s).
  *
  * Заголовок берёт icon + colorToken (CSS-переменная) из родителя.
+ * Атрибут `dock-stack`: вложена в правый столб `.editor-right-rail` под карточкой flow —
+ * растягивается по высоте (`flex: 1`), без абсолютного позиционирования у `:host`.
  * В `.header-actions-host` (слева от «свернуть») `flows-base-node-editor`
  * монтирует `flows-node-run-control`.
  *
@@ -22,6 +24,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         headerIcon: { type: String, attribute: 'header-icon' },
         headerTitle: { type: String, attribute: 'header-title' },
         colorToken: { type: String, attribute: 'color-token' },
+        dockStack: { type: Boolean, attribute: 'dock-stack', reflect: true },
         expanded: { type: Boolean, reflect: true },
         _laraGlow: { state: true },
     };
@@ -50,6 +53,18 @@ export class FlowsFloatingPanel extends PlatformElement {
                     left var(--duration-slow) var(--easing-smooth),
                     width var(--duration-slow) var(--easing-smooth),
                     height var(--duration-slow) var(--easing-smooth);
+            }
+
+            :host([dock-stack]:not([expanded])) {
+                position: relative;
+                top: auto;
+                right: auto;
+                bottom: auto;
+                width: 100%;
+                flex: 1;
+                min-height: 0;
+                animation: none;
+                z-index: 5;
             }
 
             :host([expanded]) {
@@ -176,6 +191,7 @@ export class FlowsFloatingPanel extends PlatformElement {
         this.headerIcon = 'box';
         this.headerTitle = '';
         this.colorToken = 'var(--accent)';
+        this.dockStack = false;
         this.expanded = false;
         this._laraGlow = false;
         this.useEvent('flows/lara/node_updated', () => {

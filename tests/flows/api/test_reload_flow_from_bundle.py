@@ -55,6 +55,60 @@ async def test_reload_from_bundle_restores_config_from_disk(
     body = get_response.json()
     assert body["name"] == original_name
     assert body.get("source") == "file"
+    assert body.get("has_bundle_update") is False
+
+
+@pytest.mark.asyncio
+async def test_get_flow_has_no_bundle_update_after_reload_matches_disk(
+    client,
+    auth_headers_system,
+):
+    """После reload GET не помечает flow как отстающий от bundle (флаг в API)."""
+    flow_id = "example_react"
+
+    response = await client.post(
+        f"/flows/api/v1/flows/{flow_id}/reload-from-bundle",
+        headers=auth_headers_system,
+    )
+    assert response.status_code == 200, response.text
+
+    get_response = await client.get(
+        f"/flows/api/v1/flows/{flow_id}",
+        headers=auth_headers_system,
+    )
+    assert get_response.status_code == 200
+    assert get_response.json().get("has_bundle_update") is False
+
+
+@pytest.mark.asyncio
+async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
+    client,
+    container,
+    auth_headers_system,
+):
+    """
+    Метаданные редактора не участвуют в сравнении с disk-bundle: индикатор не зажигается.
+    """
+    flow_id = "example_react"
+    cfg = await container.flow_repository.get(flow_id)
+    if cfg is None:
+        pytest.fail(f"Ожидался загруженный при старте flow {flow_id} (registry / lifespan)")
+
+    assert (getattr(cfg, "source", None) or "manual") == "file"
+    original_meta = dict(cfg.metadata) if cfg.metadata else {}
+    try:
+        cfg.metadata = {"sticky_notes": [{"id": "test-note-only-metadata", "x": 0, "y": 0, "text": "n"}]}
+        await container.flow_repository.set(cfg)
+
+        get_response = await client.get(
+            f"/flows/api/v1/flows/{flow_id}",
+            headers=auth_headers_system,
+        )
+        assert get_response.status_code == 200
+        assert get_response.json().get("has_bundle_update") is False
+    finally:
+        cfg.metadata = original_meta
+        await container.flow_repository.set(cfg)
 
 
 @pytest.mark.asyncio

@@ -20,9 +20,11 @@ from .company import router as company_router
 from .mcp import router as mcp_router
 from .resources import router as resources_router
 from .operator import router as operator_router
+from .voice_providers_catalog import router as flows_voice_providers_catalog_router
 
 api_v1_router = APIRouter()
 
+api_v1_router.include_router(flows_voice_providers_catalog_router)
 api_v1_router.include_router(flows_router, prefix="/flows")
 api_v1_router.include_router(certificate_router, prefix="/certificate")
 api_v1_router.include_router(evaluation_router, prefix="/evaluation")

@@ -23,9 +23,12 @@
  *  - Barge-in: `vad` с непрерывной речью ≥ ~0,3 s (как порог на шлюзе)
  *    во время TTS **или** пока живёт A2A fetch (фаза SSE до первого TTS) →
  *    `voice.stopPlayback()`, `AbortController.abort`, при наличии `taskId` —
- *    `tasks/cancel`. DOM `a2aAborted`: при оборванном SSE — из `catch (AbortError)`
+ *    `tasks/cancel`. Учитывается и локальная очередь Web Audio (`hasScheduledTtsPlayback`):
+ *    сервер может прислать `tts_state: stopped` до конца воспроизведения буфера на клиенте. DOM `a2aAborted`: при оборванном SSE — из `catch (AbortError)`
  *    после установки `_pendingA2aAbortDetail`; если fetch уже закрыт (например, только TTS) —
  *    сразу из `_cancelCurrentTask`. Payload: `task_id`/`context_id` для сброса `flows/chat`.
+ *  - `a2aSettled`: только если `finally` того же инвока `_sendUserMessage` (`_sendSeq`);
+ *    иначе суперсессия вторым финальным STT не триггерит `finalize` embed по старому fetch.
  *
  * Инкапсуляция: bridge не знает ни про конкретный UI-компонент, ни
  * про state-store; он общается только через DOM-события
@@ -106,6 +109,8 @@ export class VoiceAgentBridge extends EventTarget {
          */
         this._pendingA2aAbortDetail = null;
         this._started = false;
+        /** Инкремент на каждый `_sendUserMessage`; `a2aSettled` только если `finally` того же инвока (не суперсессия). */
+        this._sendSeq = 0;
 
         /** @type {string} — последний нефинальный STT-текст; при `stop()` без финала уходит в A2A один раз */
         this._pendingPartialTranscript = '';
@@ -191,7 +196,13 @@ export class VoiceAgentBridge extends EventTarget {
      * @returns {boolean}
      */
     _isClientBargeInScope() {
-        return this._ttsActive === true || this._currentAbort !== null;
+        if (this._ttsActive === true || this._currentAbort !== null) {
+            return true;
+        }
+        if (typeof this._media.hasScheduledTtsPlayback === 'function') {
+            return this._media.hasScheduledTtsPlayback();
+        }
+        return false;
     }
 
     /**
@@ -273,6 +284,7 @@ export class VoiceAgentBridge extends EventTarget {
         }
 
         this._abortCurrent();
+        const mySeq = ++this._sendSeq;
         const ac = new AbortController();
         this._currentAbort = ac;
         this._dispatch('userMessage', { text });
@@ -345,7 +357,9 @@ export class VoiceAgentBridge extends EventTarget {
                 this._currentAbort = null;
             }
             this._pendingA2aAbortDetail = null;
-            this._dispatch('a2aSettled', {});
+            if (this._sendSeq === mySeq) {
+                this._dispatch('a2aSettled', {});
+            }
         }
     }
 

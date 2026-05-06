@@ -23,10 +23,24 @@ from apps.flows.src.services.bundle_node_repair import (
     get_bundle_base_nodes_for_flow,
     repair_node_map_with_canonical_top_level,
 )
+from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_validator import FlowValidator
+from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
+from apps.flows.src.services.flow_speech_resolve import (
+    effective_flow_speech_settings,
+    flow_speech_to_triple_override,
+    triple_to_voice_ws_query_dict,
+)
 
 logger = get_logger(__name__)
+
+
+def _speech_to_json(settings: FlowSpeechSettings | None) -> Optional[Dict[str, Any]]:
+    if settings is None:
+        return None
+    dumped = settings.model_dump(mode="json", exclude_none=True)
+    return dumped if dumped else None
 
 
 def _drop_files_fields(value: Any) -> Any:
@@ -43,7 +57,13 @@ def _drop_files_fields(value: Any) -> Any:
 
 
 def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
-    """Детерминированный payload для сравнения текущего flow и bundle."""
+    """
+    Детерминированный payload для сравнения текущего flow и bundle.
+
+    Исключаются поля, которые ``build_flow_bundle_config`` не задаёт из flow.json
+    (defaults FlowConfig), поля редактора/платформы (metadata, speech, resources)
+    и служебные — иначе ``has_bundle_update`` ложноположительный.
+    """
     payload = flow_cfg.model_dump(
         mode="json",
         exclude={
@@ -53,9 +73,30 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
             "source",
             "public_fields",
             "store_card_image_url",
+            "metadata",
+            "speech",
+            "resources",
+            "channels",
+            "store",
+            "mock",
+            "permission",
+            "timeout",
+            "max_retries",
+            "hidden",
         },
     )
     return _drop_files_fields(payload)
+
+
+def _canonical_flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
+    """
+    Payload для сравнения с bundle после того же пайплайна, что при READ из БД:
+    ``model_dump`` → ``normalize_flow_config_dict`` → ``FlowConfig.model_validate``.
+    Иначе свежесобранный bundle и конфиг из репозитория расходятся в ``nodes.tools`` и т.п.
+    """
+    normalized = normalize_flow_config_dict(flow_cfg.model_dump(mode="json"))
+    canonical = FlowConfig.model_validate(normalized)
+    return _flow_semantic_payload(canonical)
 
 
 def _build_bundle_index(flows_root: Path) -> Dict[str, str]:
@@ -119,6 +160,9 @@ async def _get_bundle_update_flags(
         tool_repository=container.tool_repository,
         registry_path=flows_root / "registry.yaml",
     )
+    # Иначе _defaults пустой: _apply_defaults не мержит registry.yaml defaults.llm,
+    # а после reload в БД llm уже с defaults — вечный has_bundle_update.
+    loader.load_registry_yaml()
     await loader._load_tools_cache()
     await loader._load_nodes_cache()
 
@@ -137,7 +181,9 @@ async def _get_bundle_update_flags(
         if bundle_cfg is None:
             raise HTTPException(status_code=500, detail=f"Failed to build bundle config for '{bundle_id}'")
 
-        flags[flow_cfg.flow_id] = _flow_semantic_payload(flow_cfg) != _flow_semantic_payload(bundle_cfg)
+        flags[flow_cfg.flow_id] = _canonical_flow_semantic_payload(flow_cfg) != _canonical_flow_semantic_payload(
+            bundle_cfg
+        )
 
     return flags
 
@@ -302,6 +348,7 @@ class BranchRequest(BaseModel):
     edges_mode: Optional[str] = None
     variables: Dict[str, Any] = {}
     variables_mode: Optional[str] = None
+    speech: Optional[FlowSpeechSettings] = None
 
 
 class BranchResponse(BaseModel):
@@ -317,6 +364,7 @@ class BranchResponse(BaseModel):
     nodes_mode: Optional[str] = None
     edges_mode: Optional[str] = None
     variables_mode: Optional[str] = None
+    speech: Optional[Dict[str, Any]] = None
 
 
 def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
@@ -359,6 +407,7 @@ def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
         nodes_mode=nodes_mode,
         edges_mode=edges_mode,
         variables_mode=variables_mode,
+        speech=_speech_to_json(branch_cfg.speech),
     )
 
 
@@ -393,6 +442,12 @@ def _branch_request_to_config(
     ex_n = existing.nodes_mode if existing is not None else None
     ex_e = existing.edges_mode if existing is not None else None
     ex_v = existing.variables_mode if existing is not None else None
+    speech_val: Optional[FlowSpeechSettings] = None
+    if branch_req.speech is not None:
+        speech_val = branch_req.speech
+    elif existing is not None:
+        speech_val = existing.speech
+
     return BranchConfig(
         name=branch_req.name,
         description=branch_req.description,
@@ -404,6 +459,7 @@ def _branch_request_to_config(
         nodes_mode=_mode(branch_req.nodes_mode, ex_n, MergeMode.REPLACE),
         edges_mode=_mode(branch_req.edges_mode, ex_e, MergeMode.REPLACE),
         variables_mode=_mode(branch_req.variables_mode, ex_v, MergeMode.MERGE),
+        speech=speech_val,
     )
 
 
@@ -423,6 +479,7 @@ class FlowCreateRequest(BaseModel):
     triggers: Dict[str, Any] = {}
     resources: Dict[str, Any] = {}
     store_card_image_url: Optional[str] = None
+    speech: Optional[FlowSpeechSettings] = None
 
     @field_validator("store_card_image_url", mode="before")
     @classmethod
@@ -481,6 +538,14 @@ class FlowResponse(BaseModel):
 
     # manual | api | file (bundle в репозитории)
     source: str = "manual"
+
+    speech: Optional[Dict[str, Any]] = None
+
+
+class FlowVoiceSessionQueryResponse(BaseModel):
+    """Query-параметры для WS voice-сессии (effective flow + branch speech)."""
+
+    query: Dict[str, str]
 
 
 class ReloadFlowFromBundleResponse(BaseModel):
@@ -808,6 +873,7 @@ async def create_flow(
         evaluation=request.evaluation,
         source="api",
         store_card_image_url=request.store_card_image_url,
+        speech=request.speech,
     )
 
     await container.flow_repository.set(flow_config)
@@ -838,7 +904,22 @@ async def create_flow(
         url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
         source=flow_config.source,
         store_card_image_url=getattr(flow_config, "store_card_image_url", None),
+        speech=_speech_to_json(flow_config.speech),
     )
+
+
+@router.get("/{flow_id}/voice-session-query", response_model=FlowVoiceSessionQueryResponse)
+async def get_flow_voice_session_query(
+    flow_id: str,
+    container: ContainerDep,
+    branch_id: str = Query("default", description="ID ветки графа для мержа speech"),
+) -> FlowVoiceSessionQueryResponse:
+    cfg = await container.flow_repository.get(flow_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    eff = effective_flow_speech_settings(cfg, branch_id)
+    stt, tts, vad = flow_speech_to_triple_override(eff)
+    return FlowVoiceSessionQueryResponse(query=triple_to_voice_ws_query_dict(stt, tts, vad))
 
 
 @router.get("/{flow_id}", response_model=FlowResponse)
@@ -914,6 +995,7 @@ async def get_flow(
             source=getattr(flow_cfg, "source", None) or "manual",
             has_bundle_update=bundle_update,
             store_card_image_url=getattr(flow_cfg, "store_card_image_url", None),
+            speech=_speech_to_json(flow_cfg.speech),
         )
     except HTTPException:
         raise
@@ -953,6 +1035,18 @@ async def reload_flow_from_bundle(
         if "не найден" in msg or "not found" in msg:
             raise HTTPException(status_code=404, detail=str(e)) from e
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    reloaded_cfg = await container.flow_repository.get(loaded_id)
+    if reloaded_cfg is None:
+        raise HTTPException(status_code=500, detail=f"Flow '{loaded_id}' missing after reload-from-bundle")
+
+    ctx = get_context()
+    if ctx and ctx.user and ctx.user.user_id:
+        await publish_ui_event_to_user(
+            user_id=ctx.user.user_id,
+            type="flows/flow/updated",
+            payload={"flow_id": loaded_id, "version": reloaded_cfg.version or ""},
+        )
 
     return ReloadFlowFromBundleResponse(
         flow_id=loaded_id,
@@ -1011,6 +1105,8 @@ async def update_flow(
 
     resources = request.resources or {}
 
+    speech_merged = request.speech if request.speech is not None else existing.speech
+
     flow_config = FlowConfig(
         flow_id=flow_id,
         name=request.name,
@@ -1027,6 +1123,7 @@ async def update_flow(
         resources=resources,
         metadata=getattr(existing, "metadata", None) or {},
         store_card_image_url=request.store_card_image_url,
+        speech=speech_merged,
     )
 
     await container.flow_repository.set(flow_config)
@@ -1072,6 +1169,7 @@ async def update_flow(
         metadata=getattr(flow_config, "metadata", None) or {},
         source=flow_config.source,
         store_card_image_url=getattr(flow_config, "store_card_image_url", None),
+        speech=_speech_to_json(flow_config.speech),
     )
 
 
@@ -1137,7 +1235,9 @@ async def bulk_delete_nodes(
         source=existing.source,
         triggers=existing.triggers or {},
         resources=existing.resources or {},
+        metadata=getattr(existing, "metadata", None) or {},
         store_card_image_url=getattr(existing, "store_card_image_url", None),
+        speech=getattr(existing, "speech", None),
     )
     await container.flow_repository.set(flow_config)
 
@@ -1199,6 +1299,7 @@ async def update_flow_metadata(
         resources=existing.resources or {},
         metadata=metadata,
         store_card_image_url=getattr(existing, "store_card_image_url", None),
+        speech=getattr(existing, "speech", None),
     )
     await container.flow_repository.set(flow_config)
 
@@ -1255,6 +1356,15 @@ async def get_version(
         for e in (version_cfg.edges or []) if e
     ]
     
+    triggers_response = {}
+    if version_cfg.triggers:
+        for trigger_id, trigger in version_cfg.triggers.items():
+            triggers_response[trigger_id] = trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
+
+    evaluation_dict = None
+    if version_cfg.evaluation:
+        evaluation_dict = {k: v.model_dump() if hasattr(v, 'model_dump') else v for k, v in version_cfg.evaluation.items()}
+
     return FlowResponse(
         flow_id=version_cfg.flow_id,
         version=version_cfg.version or "",
@@ -1267,10 +1377,15 @@ async def get_version(
         variables=version_cfg.variables or {},
         tags=version_cfg.tags or [],
         branches=branches_response,
+        evaluation=evaluation_dict,
         hidden=getattr(version_cfg, 'hidden', False),
         url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, getattr(version_cfg, 'url', None)),
+        triggers=triggers_response,
+        resources=version_cfg.resources or {},
+        metadata=getattr(version_cfg, "metadata", None) or {},
         source=getattr(version_cfg, "source", None) or "manual",
         store_card_image_url=getattr(version_cfg, "store_card_image_url", None),
+        speech=_speech_to_json(version_cfg.speech),
     )
 
 

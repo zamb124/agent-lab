@@ -15,7 +15,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { renderFlowsNodeEditorSurface } from './flows-node-editor-surface.js';
-import { asArray, asObject, asNumber, asString, isPlainObject, getBranchData, getBranchNodes } from '../../_helpers/flows-resolvers.js';
+import { asArray, asNumber, asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsPropertyPanel extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -126,41 +126,6 @@ export class FlowsPropertyPanel extends PlatformElement {
         this._editor.selectNode({ nodeId: newId });
     }
 
-    _onFlowTimeout(e) {
-        const v = e.target.value.trim();
-        if (v === '') {
-            this._editor.patchFlowConfig({ patch: { timeout: null } });
-            return;
-        }
-        const n = parseInt(v, 10);
-        if (!Number.isFinite(n) || n < 1) {
-            return;
-        }
-        const clamped = Math.min(n, 3600);
-        this._editor.patchFlowConfig({ patch: { timeout: clamped } });
-    }
-
-    _renderFlowSettings() {
-        const state = asObject(this._editor.state);
-        const fc = state.flowConfig;
-        const raw = fc && typeof fc.timeout === 'number' ? String(fc.timeout) : '';
-        return html`
-            <div class="flow-settings" style="padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);">
-                <div style="font-weight: var(--font-semibold); margin-bottom: var(--space-1);">${this.t('property_panel.flow_settings_title')}</div>
-                <label style="font-size: var(--text-sm); color: var(--text-secondary);">${this.t('property_panel.flow_timeout_seconds')}</label>
-                <input
-                    type="number"
-                    min="1"
-                    max="3600"
-                    style="padding: var(--space-2); border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); background: var(--glass-solid-subtle); color: var(--text-primary); font: inherit;"
-                    .value=${raw}
-                    @input=${this._onFlowTimeout}
-                />
-                <div style="font-size: var(--text-xs); color: var(--text-tertiary); line-height: 1.4;">${this.t('property_panel.flow_timeout_hint')}</div>
-            </div>
-        `;
-    }
-
     _renderEditor(node, nodeId) {
         const state = asObject(this._editor.state);
         const skillsData = isPlainObject(state.branchData) ? state.branchData : {};
@@ -192,7 +157,6 @@ export class FlowsPropertyPanel extends PlatformElement {
         const nodeId = state.selectedNodeId;
         if (!nodeId) {
             return html`
-                ${this._renderFlowSettings()}
                 <div style="padding: var(--space-3); color: var(--text-tertiary)">${this.t('property_panel.select_node')}</div>
             `;
         }

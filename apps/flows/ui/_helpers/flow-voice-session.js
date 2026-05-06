@@ -70,10 +70,12 @@ export function formatFlowVoiceConnectErrorDetail(err, tFlows) {
  * @param {(e: CustomEvent) => void} [p.onMediaError]
  * @param {() => void} [p.onClosed]
  * @param {string} [p.sttLanguage] — для query `language=` (STT), из `state.i18n.locale`
+ * @param {Record<string, string>} [p.voiceWsQuery] — готовые query с сервера (flow speech); мерж после language
+ * @param {() => Promise<Record<string, string>>} [p.getVoiceWsQuery] — async загрузка query (приоритет над voiceWsQuery)
  * @param {() => Promise<Record<string, string>>} [p.getHeaders] — как embed `getAuthToken` для A2A `message/stream`
  * @returns {FlowVoiceSessionHandles}
  */
-export function createFlowVoiceSession(p) {
+export async function createFlowVoiceSession(p) {
     const voiceBaseUrl = resolveFlowVoiceHttpOrigin();
     const pageOrigin =
         typeof window !== 'undefined' && window.location
@@ -86,6 +88,19 @@ export function createFlowVoiceSession(p) {
 
     /** @type {Record<string, string>} */
     const wsQuery = {};
+    if (typeof p.sttLanguage === 'string' && p.sttLanguage.trim() !== '') {
+        wsQuery.language = normalizeVoiceLocaleForWs(p.sttLanguage);
+    }
+    let serverQuery = {};
+    if (typeof p.getVoiceWsQuery === 'function') {
+        const loaded = await p.getVoiceWsQuery();
+        if (loaded && typeof loaded === 'object') {
+            serverQuery = loaded;
+        }
+    } else if (p.voiceWsQuery && typeof p.voiceWsQuery === 'object') {
+        serverQuery = p.voiceWsQuery;
+    }
+    Object.assign(wsQuery, serverQuery);
     if (typeof p.sttLanguage === 'string' && p.sttLanguage.trim() !== '') {
         wsQuery.language = normalizeVoiceLocaleForWs(p.sttLanguage);
     }

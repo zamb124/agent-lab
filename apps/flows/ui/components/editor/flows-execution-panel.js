@@ -439,6 +439,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._chat = this.useResource('flows/chat');
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
+        this._flowVoiceSessionQuery = this.useOp('flows/flow_voice_session_query');
         this._ui = this.useSlice('flows/execution_ui');
         this._lastChatCtx = '';
         this._lastChatLen = 0;
@@ -1031,12 +1032,26 @@ export class FlowsExecutionPanel extends PlatformElement {
             taskId: null,
             taskPrimed: false,
         };
-        const { media, bridge } = createFlowVoiceSession({
+        const branchForVoice =
+            typeof this.branchId === 'string' && this.branchId !== '' && this.branchId !== 'base'
+                ? this.branchId
+                : 'default';
+        const { media, bridge } = await createFlowVoiceSession({
             flowId: this.flowId,
             branchId: this.branchId,
             companyId,
             sttLanguage,
             initialContextId,
+            getVoiceWsQuery: async () => {
+                const raw = await this._flowVoiceSessionQuery.run({
+                    flow_id: this.flowId,
+                    branch_id: branchForVoice,
+                });
+                if (!raw || typeof raw !== 'object' || !raw.query || typeof raw.query !== 'object') {
+                    throw new Error('flows execution voice: voice-session-query invalid response');
+                }
+                return raw.query;
+            },
             getHeaders: flowsVoiceAuxiliaryHttpHeadersStub,
             getContextId: () => {
                 const st = this._chat.state;

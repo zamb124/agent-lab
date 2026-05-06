@@ -633,6 +633,15 @@ class BaseChannel(ABC):
                 self.flow_id, state.flow_config_version
             )
             root_flow_mock = flow_config.mock if flow_config else None
+
+            if flow_config is not None:
+                from apps.flows.src.services.flow_speech_resolve import (
+                    attach_flow_speech_layers_to_context,
+                )
+
+                attach_flow_speech_layers_to_context(
+                    self.context, flow_config, params.branch_id
+                )
             
             branch_mock = None
             if flow_config and flow_config.branches and params.branch_id in flow_config.branches:

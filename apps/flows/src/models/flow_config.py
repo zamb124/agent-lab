@@ -26,6 +26,7 @@ from apps.flows.src.constants.execution_limits import get_flow_execution_wall_ti
 from .enums import MergeMode, TestTargetType
 from .resource import ResourceReference
 from .trigger_config import TriggerConfig
+from .flow_speech_settings import FlowSpeechSettings
 
 # Тип для permission: строка или список строк
 Permission = Optional[Union[str, List[str]]]
@@ -319,6 +320,11 @@ class BranchConfig(StrictBaseModel):
         description="Режим применения resources: 'merge' или 'replace'"
     )
 
+    speech: Optional[FlowSpeechSettings] = Field(
+        default=None,
+        description="Переопределение профиля речи для ветки (мержится поверх flow.speech)",
+    )
+
     @model_validator(mode="before")
     @classmethod
     def _normalize_variables(cls, data: Any) -> Any:
@@ -537,6 +543,11 @@ class FlowConfig(StrictBaseModel):
         description="Тест-кейсы для оценки flow {test_id: config}"
     )
     
+    speech: Optional[FlowSpeechSettings] = Field(
+        default=None,
+        description="Профиль речи (STT/TTS/VAD) без секретов; tier ниже explicit SpeechOverride, выше company",
+    )
+
     # Триггеры flow — точки входа (telegram, cron, webhook, email)
     triggers: Dict[str, TriggerConfig] = Field(
         default_factory=dict,

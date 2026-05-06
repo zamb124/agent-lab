@@ -13,6 +13,7 @@ import {
     TTS_OUTPUT_STORAGE_KEY,
 } from '../voice/tts-output-pref.js';
 import { setStreamTtsTarget } from '../voice/stream-tts-registry.js';
+import { normalizeVoiceLocaleForWs } from '../voice/normalize-voice-locale.js';
 import './platform-embed-chat.js';
 
 /**
@@ -358,6 +359,9 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.theme = 'auto';
         this.showLauncher = false;
         this.labels = {};
+        this._voiceDisconnectExpected = false;
+        /** @type {ReturnType<typeof setTimeout>|null} */
+        this._voiceReconnectAfterCloseTimer = null;
         this.getAuthToken = undefined;
         this.getExtraMetadataVariables = undefined;
         this.getContextVariables = undefined;
@@ -458,15 +462,19 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     disconnectedCallback() {
+        this._clearVoiceReconnectTimer();
         void this._disposeTtsOnlyStream();
         if (this._voiceOn) {
+            this._voiceDisconnectExpected = true;
             const m = this._voiceMedia;
             const b = this._voiceBridge;
             this._voiceMedia = null;
             this._voiceBridge = null;
             this._voiceOn = false;
             this._voiceStatus = 'idle';
-            void disposeVoiceMediaThenBridge(m, b);
+            void disposeVoiceMediaThenBridge(m, b).finally(() => {
+                this._voiceDisconnectExpected = false;
+            });
         }
         this._stopPanelDrag();
         window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsDrawerPref);
@@ -574,6 +582,35 @@ export class PlatformEmbedChatDrawer extends LitElement {
             return p;
         }
         return 'auto';
+    }
+
+    /** @returns {void} */
+    _clearVoiceReconnectTimer() {
+        if (this._voiceReconnectAfterCloseTimer !== null) {
+            window.clearTimeout(this._voiceReconnectAfterCloseTimer);
+            this._voiceReconnectAfterCloseTimer = null;
+        }
+    }
+
+    /** @returns {void} */
+    _scheduleVoiceReconnectAfterUnexpectedClose() {
+        this._clearVoiceReconnectTimer();
+        this._voiceReconnectAfterCloseTimer = window.setTimeout(() => {
+            this._voiceReconnectAfterCloseTimer = null;
+            if (this._voiceDisconnectExpected) {
+                return;
+            }
+            if (!this.open || this.voiceEnabled !== true) {
+                return;
+            }
+            if (this._embedComposerWsDuplex() !== true) {
+                return;
+            }
+            if (this._voiceOn) {
+                return;
+            }
+            this._startVoice().catch(() => { /* ошибки — toast / humanitec-embed-voice-error */ });
+        }, 500);
     }
 
     /** Заголовок шапки: явное имя ассистента или строка title из labels/локали. */
@@ -1008,9 +1045,69 @@ export class PlatformEmbedChatDrawer extends LitElement {
         }
     }
 
+    /**
+     * Effective query для Voice WS из профиля flow (без flow_id — пустой объект).
+     * @returns {Promise<Record<string, string>>}
+     */
+    async _fetchFlowVoiceSessionQueryDict() {
+        const fid = String(this.flowId || '').trim();
+        const root = String(this.flowsBaseUrl || '').replace(/\/$/, '');
+        if (fid === '' || root === '') {
+            return {};
+        }
+        let bid = String(this.branchId || this.skillId || '').trim();
+        if (bid === '') {
+            bid = 'default';
+        }
+        const url = `${root}/api/v1/flows/${encodeURIComponent(fid)}/voice-session-query?branch_id=${encodeURIComponent(bid)}`;
+        const headersRaw =
+            typeof this.getAuthToken === 'function' ? await this.getAuthToken() : {};
+        const headers =
+            headersRaw && typeof headersRaw === 'object' && !Array.isArray(headersRaw)
+                ? headersRaw
+                : {};
+        const res = await fetch(url, {
+            method: 'GET',
+            credentials: this.useCredentials === true ? 'include' : 'omit',
+            headers,
+        });
+        if (!res.ok) {
+            const t = await res.text();
+            throw new Error(`voice-session-query HTTP ${res.status}: ${t}`);
+        }
+        const body = await res.json();
+        if (!body || typeof body !== 'object' || !body.query || typeof body.query !== 'object') {
+            throw new Error('voice-session-query: invalid response body');
+        }
+        return { ...body.query };
+    }
+
+    /** ISO-код для query language=; null если явной локали нет (оставить значение из профиля flow). */
+    _voiceSttLanguageOverlayOrNull() {
+        const ifLoc = this._interfaceLocaleForChat();
+        let raw = '';
+        if (ifLoc === 'auto') {
+            raw =
+                typeof document !== 'undefined'
+                    ? String(document.documentElement.lang || '').trim()
+                    : '';
+            if (raw === '') {
+                return null;
+            }
+        } else {
+            raw = ifLoc;
+        }
+        try {
+            return normalizeVoiceLocaleForWs(raw);
+        } catch {
+            return null;
+        }
+    }
+
     async _startVoice() {
         if (this._voiceOn) return;
         if (this.voiceEnabled !== true) return;
+        this._clearVoiceReconnectTimer();
         this._disposeTtsOnlyStream();
         const voiceBaseUrl = String(this.voiceBaseUrl || '').replace(/\/$/, '');
         if (voiceBaseUrl === '') {
@@ -1039,12 +1136,37 @@ export class PlatformEmbedChatDrawer extends LitElement {
             }
             return {};
         };
-        const media = new VoiceMediaSession({
+        /** @type {Record<string, string>} */
+        let wsQuery = {};
+        if (String(this.flowId || '').trim() !== '') {
+            try {
+                wsQuery = await this._fetchFlowVoiceSessionQueryDict();
+            } catch (err) {
+                const detail = err instanceof Error ? err.message : String(err);
+                this._voiceStatus = 'error';
+                this.dispatchEvent(new CustomEvent('humanitec-embed-voice-error', {
+                    bubbles: true,
+                    composed: true,
+                    detail: { code: 'voice/session_query_failed', detail },
+                }));
+                return;
+            }
+        }
+        const langOverlay = this._voiceSttLanguageOverlayOrNull();
+        if (langOverlay !== null) {
+            wsQuery.language = langOverlay;
+        }
+        /** @type {{ baseUrl: string, sessionId: string, companyId: string, autoRecord: boolean, query?: Record<string, string> }} */
+        const mediaOpts = {
             baseUrl: wsBase,
             sessionId,
             companyId,
             autoRecord: true,
-        });
+        };
+        if (Object.keys(wsQuery).length > 0) {
+            Object.assign(mediaOpts, { query: wsQuery });
+        }
+        const media = new VoiceMediaSession(mediaOpts);
         const bridge = new VoiceAgentBridge({
             mediaSession: media,
             a2aBaseUrl,
@@ -1109,6 +1231,16 @@ export class PlatformEmbedChatDrawer extends LitElement {
         media.addEventListener('closed', () => {
             this._voiceStatus = 'closed';
             this._voiceOn = false;
+            if (this._voiceMedia === media) {
+                this._voiceMedia = null;
+            }
+            if (this._voiceBridge === bridge) {
+                this._voiceBridge = null;
+            }
+            if (!this._voiceDisconnectExpected) {
+                this._scheduleVoiceReconnectAfterUnexpectedClose();
+            }
+            this.requestUpdate();
         });
         media.addEventListener('vad', (e) => {
             this._voiceStatus = e.detail.state === 'started' ? 'listening' : 'idle';
@@ -1137,9 +1269,15 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     async _stopVoice() {
-        const m = this._voiceMedia;
-        const b = this._voiceBridge;
-        await disposeVoiceMediaThenBridge(m, b);
+        this._clearVoiceReconnectTimer();
+        this._voiceDisconnectExpected = true;
+        try {
+            const m = this._voiceMedia;
+            const b = this._voiceBridge;
+            await disposeVoiceMediaThenBridge(m, b);
+        } finally {
+            this._voiceDisconnectExpected = false;
+        }
         this._voiceBridge = null;
         this._voiceMedia = null;
         this._voiceOn = false;

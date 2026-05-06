@@ -176,6 +176,7 @@ export class ChatPage extends PlatformPage {
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
         this._sessionState = this.useOp('flows/session_state');
+        this._flowVoiceSessionQuery = this.useOp('flows/flow_voice_session_query');
         this._flows = this.useResource('flows/flows');
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
         this._localeSel = this.select((s) => s.i18n.locale);
@@ -411,13 +412,26 @@ export class ChatPage extends PlatformPage {
             taskId: null,
             taskPrimed: false,
         };
-        const { media, bridge } = createFlowVoiceSession({
+        const { media, bridge } = await createFlowVoiceSession({
             flowId: this.flowId,
             branchId: this.branchId,
             companyId,
             sttLanguage,
             initialContextId,
-            getHeaders: flowsVoiceAuxiliaryHttpHeadersStub,
+            getVoiceWsQuery: async () => {
+                const branchForVoice =
+                    typeof this.branchId === 'string' && this.branchId !== '' && this.branchId !== 'base'
+                        ? this.branchId
+                        : 'default';
+                const raw = await this._flowVoiceSessionQuery.run({
+                    flow_id: this.flowId,
+                    branch_id: branchForVoice,
+                });
+                if (!raw || typeof raw !== 'object' || !raw.query || typeof raw.query !== 'object') {
+                    throw new Error('flows chat voice: voice-session-query invalid response');
+                }
+                return raw.query;
+            },
             getContextId: () => {
                 const cid = this._chat.state?.currentContextId;
                 return typeof cid === 'string' && cid.length > 0 ? cid : null;

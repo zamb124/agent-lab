@@ -75,6 +75,7 @@ import './components/resources/flows-cache-resource-editor.js';
 import './components/editor/flows-editor-header.js';
 import './components/editor/flows-bottom-toolbar.js';
 import './components/editor/flows-node-types-sidebar.js';
+import './components/editor/flows-flow-property-panel.js';
 import './components/editor/flows-property-panel.js';
 import './components/editor/flows-resource-property-panel.js';
 import './components/editor/flows-branches-tabs.js';
