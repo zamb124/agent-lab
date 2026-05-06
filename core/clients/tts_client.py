@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 import httpx
 from pydantic import BaseModel, Field
 
+from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.utils.text_sanitize import sanitize_text_for_speech_backend
@@ -360,12 +361,7 @@ class SberTTSClient(BaseTTSClient):
 
 
 class MockTTSClient(BaseTTSClient):
-    """TTS клиент для тестов: возвращает фиксированную пустую WAV-заглушку."""
-
-    _WAV_HEADER = (
-        b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
-        b"\x40\x1f\x00\x00\x80>\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
-    )
+    """TTS клиент для тестов: короткий валидный WAV (ненулевой PCM s16le mono)."""
 
     async def synthesize(
         self,
@@ -381,9 +377,11 @@ class MockTTSClient(BaseTTSClient):
         chosen_format = response_format or "wav"
         chosen_sample_rate = sample_rate or 8000
         resolved_voice = _sanitize_tts_voice_id(voice)
+        stub_pcm = b"\x01\x00" * max(80, chosen_sample_rate // 50)
+        audio_bytes = pcm_s16le_mono_to_wav(stub_pcm, sample_rate=chosen_sample_rate)
         return TTSResult(
             provider="mock",
-            audio_bytes=self._WAV_HEADER,
+            audio_bytes=audio_bytes,
             mime_type=_MIME_BY_FORMAT.get(chosen_format, "audio/wav"),
             sample_rate=chosen_sample_rate,
             response_format=chosen_format,

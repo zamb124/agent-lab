@@ -162,7 +162,8 @@ class TestStateManager:
 
         assert len(state.messages) == 1
 
-    def test_get_messages(self, state_manager: StateManager):
+    @pytest.mark.asyncio
+    async def test_get_messages(self, state_manager: StateManager):
         """Получение списка A2A Message."""
         from core.state import ExecutionState
         
@@ -176,13 +177,14 @@ class TestStateManager:
             messages=[msg1, msg2]
         )
 
-        messages = state_manager.get_messages(state)
+        messages = await state_manager.get_messages(state)
 
         assert len(messages) == 2
         assert messages[0].role == Role.user
         assert messages[1].role == Role.agent
 
-    def test_get_messages_empty(self, state_manager: StateManager):
+    @pytest.mark.asyncio
+    async def test_get_messages_empty(self, state_manager: StateManager):
         """get_messages для пустого state."""
         from core.state import ExecutionState
         
@@ -193,7 +195,7 @@ class TestStateManager:
             session_id="test-agent:test-context"
         )
 
-        messages = state_manager.get_messages(state)
+        messages = await state_manager.get_messages(state)
 
         assert messages == []
 

@@ -23,10 +23,24 @@ FastAPI приложения на каждый ассерт.
 from __future__ import annotations
 
 import json
+from concurrent.futures import CancelledError as FuturesCancelledError
+from contextlib import contextmanager, suppress
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
+
+
+@contextmanager
+def _websocket_session(client: TestClient, url: str):
+    """Starlette TestClient: при выходе из сессии fut.result() после cancel даёт CancelledError."""
+    cm = client.websocket_connect(url)
+    ws = cm.__enter__()
+    try:
+        yield ws
+    finally:
+        with suppress(FuturesCancelledError):
+            cm.__exit__(None, None, None)
 
 
 def _ws_url(session_id: str) -> str:
@@ -56,6 +70,7 @@ def test_voice_ws_requires_company_id(voice_app, unique_id: str) -> None:
                 ws.receive_text()
 
 
+@pytest.mark.timeout(30)
 def test_voice_ws_full_text_frame_contract(voice_app, unique_id: str) -> None:
     """Полный контракт text/binary фреймов uplink и downlink.
 
@@ -66,7 +81,7 @@ def test_voice_ws_full_text_frame_contract(voice_app, unique_id: str) -> None:
     """
     with TestClient(voice_app) as client:
         sid = f"contract-{unique_id}"
-        with client.websocket_connect(_ws_url(sid)) as ws:
+        with _websocket_session(client, _ws_url(sid)) as ws:
             media_cfg = _find_text_frame(ws, lambda f: f.get("type") == "media_config")
             assert media_cfg is not None
             assert isinstance(media_cfg["mime"], str) and media_cfg["mime"] != ""

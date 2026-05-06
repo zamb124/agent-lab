@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import types
 from typing import Any
 
@@ -22,16 +23,31 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from apps.provider_litserve.openai_server_contracts import (
+    build_provider_litserve_v1_models_response,
+)
 from apps.provider_litserve.provider_litserve_asgi import create_provider_litserve_asgi_app
 from apps.provider_litserve.main import ChatCompletionsLitAPI
 from apps.provider_litserve.provider_litserve_http_schemas import (
     OpenAIEmbeddingsResponseBody,
     RerankResponseBody,
     V1ModelsResponseBody,
+    validate_v1_models_response,
+)
+from apps.provider_litserve.runtime_models import (
+    reset_runtime_catalog_for_tests,
+    runtime_api_model_ids,
 )
 from core.config.models import ProviderLitserveInfraConfig
 
 EMBEDDING_DIM = 4
+
+
+@pytest.fixture(autouse=True)
+def _reset_provider_litserve_runtime_catalog() -> None:
+    reset_runtime_catalog_for_tests()
+    yield
+    reset_runtime_catalog_for_tests()
 
 
 def _infra(**kwargs: Any) -> ProviderLitserveInfraConfig:
@@ -81,6 +97,26 @@ async def test_get_v1_models_contract(
     provider_asgi_app: FastAPI,
     provider_litserve_infra: ProviderLitserveInfraConfig,
 ) -> None:
+    created = int(time.time())
+    raw_expected = build_provider_litserve_v1_models_response(
+        embedding_openai_model_id=provider_litserve_infra.embedding_openai_model_id,
+        embedding_model_ids=provider_litserve_infra.embedding_model_ids,
+        embedding_hf_model_id=provider_litserve_infra.embedding_model_id,
+        embedding_dimension=EMBEDDING_DIM,
+        embedding_context_length=8192,
+        rerank_openai_model_id=provider_litserve_infra.rerank_openai_model_id,
+        rerank_model_ids=provider_litserve_infra.rerank_model_ids,
+        rerank_hf_model_id=provider_litserve_infra.model_id,
+        rerank_context_length=8192,
+        chat_model_ids=[],
+        stt_model_ids=runtime_api_model_ids("stt", provider_litserve_infra),
+        tts_model_ids=runtime_api_model_ids("tts", provider_litserve_infra),
+        vad_model_ids=runtime_api_model_ids("vad", provider_litserve_infra),
+        created=created,
+    )
+    expected_body = validate_v1_models_response(raw_expected)
+    expected_ids = {m.id for m in expected_body.data}
+
     async with AsyncClient(
         transport=ASGITransport(app=provider_asgi_app),
         base_url="http://test",
@@ -89,16 +125,6 @@ async def test_get_v1_models_contract(
     assert r.status_code == 200
     body = V1ModelsResponseBody.model_validate(r.json())
     assert body.object == "list"
-    expected_ids = {
-        provider_litserve_infra.embedding_openai_model_id,
-        provider_litserve_infra.rerank_openai_model_id,
-    }
-    for entry in provider_litserve_infra.stt_models:
-        expected_ids.add(entry.api_model_id)
-    for entry in provider_litserve_infra.tts_models:
-        expected_ids.add(entry.api_model_id)
-    for entry in provider_litserve_infra.vad_models:
-        expected_ids.add(entry.api_model_id)
     ids = {m.id for m in body.data}
     assert ids == expected_ids
     assert len(body.data) == len(expected_ids)

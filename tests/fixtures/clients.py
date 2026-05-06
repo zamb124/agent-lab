@@ -292,7 +292,8 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
     и для async (voice_client) тестов.
 
     Устанавливает provider = 'mock' для всех провайдеров через monkeypatch env,
-    затем сбрасывает синглтоны конфига и контейнера.
+    сбрасывает синглтон ``core.config.get_settings``, кэш ``voice_resolver``,
+    затем локальные синглтоны ``VoiceServiceSettings`` и контейнера voice.
     Провайдеры — реальные классы (MockSTTProvider / MockTTSProvider / MockVADProvider),
     не unittest.mock. Внешние ML-модели и cloud.ru API не используются.
 
@@ -305,9 +306,13 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("VOICE__TTS__PROVIDER", "mock")
     monkeypatch.setenv("VOICE__VAD__PROVIDER", "mock")
 
+    import core.config.base as config_base
     from apps.voice.config import reset_voice_settings
     from apps.voice.container import reset_voice_container
+    from core.clients.voice_resolver import reset_voice_resolver_for_tests
 
+    monkeypatch.setattr(config_base, "_settings_instance", None)
+    reset_voice_resolver_for_tests()
     reset_voice_settings()
     reset_voice_container()
 
@@ -315,6 +320,7 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
 
     yield app
 
+    reset_voice_resolver_for_tests()
     reset_voice_container()
     reset_voice_settings()
 

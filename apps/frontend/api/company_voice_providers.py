@@ -193,11 +193,11 @@ def _validate_model_for_voice(
     if model_value is None or model_value == "":
         return
 
-    cfg = get_settings().provider_litserve
+    infra = get_settings().provider_litserve.infra
     if kind == "stt":
-        allowed = frozenset(m.api_model_id for m in cfg.stt_models)
+        allowed = frozenset(m.api_model_id for m in infra.stt_models)
     else:
-        allowed = frozenset(m.api_model_id for m in cfg.tts_models)
+        allowed = frozenset(m.api_model_id for m in infra.tts_models)
 
     if model_value not in allowed:
         raise HTTPException(status_code=400, detail=f"Неизвестная litserve модель: {model_value!r}")

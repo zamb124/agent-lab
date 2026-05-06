@@ -268,7 +268,7 @@ class LocalSileroVADClient(BaseVADClient):
 
 
 class MockVADClient(BaseVADClient):
-    """VAD клиент-заглушка для тестов: всегда возвращает один сегмент."""
+    """VAD клиент-заглушка для тестов: batch — один сегмент; streaming prob по энергии PCM."""
 
     async def detect_segments(
         self,
@@ -293,9 +293,17 @@ class MockVADClient(BaseVADClient):
         audio_bytes: bytes,
         sample_rate: int,
     ) -> float:
-        if not audio_bytes:
+        _ = sample_rate
+        if not audio_bytes or len(audio_bytes) < 2:
             return 0.0
-        return 1.0
+        samples = [
+            int.from_bytes(audio_bytes[i : i + 2], "little", signed=True)
+            for i in range(0, len(audio_bytes) - (len(audio_bytes) % 2), 2)
+        ]
+        if not samples:
+            return 0.0
+        peak = max(abs(s) for s in samples)
+        return 1.0 if peak > 0 else 0.0
 
 
 class VADClientFactory:

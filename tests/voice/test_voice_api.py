@@ -4,13 +4,24 @@
 Проверяет HTTP-эндпоинты и WebSocket-сессию на уровне HTTP/WS протокола.
 """
 
-import asyncio
-import json
 import os
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
+
+from apps.voice.providers.streaming_adapters import (
+    StreamingSTTProvider,
+    StreamingTTSProvider,
+    StreamingVADProvider,
+)
+from core.clients.stt_client import MockSTTClient
+from core.clients.tts_client import MockTTSClient
+from core.clients.vad_client import MockVADClient
+
+
+def _voice_ws_url(session_id: str) -> str:
+    return f"/voice/api/ws/session/{session_id}?company_id=test-company"
 
 
 @pytest.mark.asyncio
@@ -40,7 +51,7 @@ def test_voice_ws_session_accepts_binary_frames(voice_app, unique_id: str) -> No
     """WebSocket принимает бинарные PCM-фреймы и не падает."""
     with TestClient(voice_app) as client:
         session_id = f"ws-binary-{unique_id}"
-        with client.websocket_connect(f"/voice/api/ws/session/{session_id}") as ws:
+        with client.websocket_connect(_voice_ws_url(session_id)) as ws:
             # Отправляем несколько PCM-фреймов (16-bit mono 16kHz, 20ms каждый)
             pcm_frame = b"\x01\x00" * 320
             ws.send_bytes(pcm_frame)
@@ -53,7 +64,7 @@ def test_voice_ws_session_accepts_silence_frames(voice_app, unique_id: str) -> N
     """WebSocket принимает тишину и не зависает."""
     with TestClient(voice_app) as client:
         session_id = f"ws-silence-{unique_id}"
-        with client.websocket_connect(f"/voice/api/ws/session/{session_id}") as ws:
+        with client.websocket_connect(_voice_ws_url(session_id)) as ws:
             silence = b"\x00\x00" * 320
             for _ in range(15):
                 ws.send_bytes(silence)
@@ -65,10 +76,10 @@ def test_voice_ws_session_distinct_session_ids(voice_app, unique_id: str) -> Non
         sid1 = f"sess-a-{unique_id}"
         sid2 = f"sess-b-{unique_id}"
 
-        with client.websocket_connect(f"/voice/api/ws/session/{sid1}") as ws1:
+        with client.websocket_connect(_voice_ws_url(sid1)) as ws1:
             ws1.send_bytes(b"\x00" * 64)
 
-        with client.websocket_connect(f"/voice/api/ws/session/{sid2}") as ws2:
+        with client.websocket_connect(_voice_ws_url(sid2)) as ws2:
             ws2.send_bytes(b"\x00" * 64)
 
 
@@ -77,7 +88,7 @@ def test_voice_ws_stt_pipeline_produces_no_error(voice_app, unique_id: str) -> N
     with TestClient(voice_app) as client:
         session_id = f"stt-pipeline-{unique_id}"
 
-        with client.websocket_connect(f"/voice/api/ws/session/{session_id}") as ws:
+        with client.websocket_connect(_voice_ws_url(session_id)) as ws:
             speech = b"\x01\x00" * 320
             silence = b"\x00\x00" * 320
 
@@ -93,12 +104,9 @@ def test_voice_ws_stt_pipeline_produces_no_error(voice_app, unique_id: str) -> N
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_mock_tts_provider_synthesizes_bytes(voice_app) -> None:
-    """Mock TTS провайдер в контейнере voice синтезирует непустые байты."""
-    from apps.voice.container import get_voice_container
-
-    container = get_voice_container()
-    tts = container.tts_provider
-
+    """Mock TTS через StreamingTTSProvider и MockTTSClient синтезирует непустые байты."""
+    tts = StreamingTTSProvider(tts_client=MockTTSClient())
+    await tts.init()
     audio = await tts.synthesize("Привет мир")
 
     assert isinstance(audio, bytes)
@@ -108,29 +116,35 @@ async def test_mock_tts_provider_synthesizes_bytes(voice_app) -> None:
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_mock_stt_provider_transcribes(voice_app) -> None:
-    """Mock STT провайдер в контейнере возвращает текст из VOICE__STT__MOCK_TRANSCRIPT_TEXT (тестовый env)."""
-    from apps.voice.container import get_voice_container
-
-    container = get_voice_container()
-    stt = container.stt_provider
+    """Mock STT возвращает текст из VOICE__STT__MOCK_TRANSCRIPT_TEXT (тестовый env)."""
+    expected = os.environ.get(
+        "VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция"
+    )
+    stt = StreamingSTTProvider(stt_client=MockSTTClient(transcript_text=expected))
 
     await stt.push_audio(b"\x01\x00" * 320)
     result = await stt.flush_buffer()
 
     assert result is not None
-    assert result.text == os.environ.get(
-        "VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция"
-    )
+    assert result.text == expected
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_mock_vad_detects_speech(voice_app) -> None:
-    """Mock VAD провайдер в контейнере правильно детектирует речь."""
-    from apps.voice.container import get_voice_container
+    """StreamingVADProvider с MockVADClient детектирует ненулевой PCM как речь."""
+    vad = StreamingVADProvider(
+        vad_client=MockVADClient(),
+        sample_rate=16000,
+        activation_threshold=0.5,
+        deactivation_threshold=0.35,
+        min_speech_ms=50,
+        min_silence_ms=550,
+        prefix_padding_ms=500,
+    )
 
-    container = get_voice_container()
-    vad = container.vad_provider
-
-    is_speech = await vad.detect_speech(b"\x01\x00" * 320, sample_rate=16000)
+    # Два чанка по 512 сэмплов (1024 байта): иначе VAD не вызывается и состояние
+    # остаётся silence (см. StreamingVADProvider._chunk_bytes).
+    pcm = b"\x01\x00" * 2048
+    is_speech = await vad.detect_speech(pcm, sample_rate=16000)
     assert is_speech is True

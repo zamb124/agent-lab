@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
 import time
 
@@ -25,19 +26,37 @@ from core.clients.voice_resolver import (
     resolve_stt_settings,
 )
 from core.config import get_settings
+from core.logging.scope import SystemLogScope
 
 
 pytestmark = pytest.mark.timeout(15)
 
 
+def _caplog_message_to_dict(raw: str) -> dict[str, object]:
+    """structlog в caplog может дать JSON или repr(dict) в зависимости от рендера."""
+    stripped = raw.strip()
+    if stripped.startswith("{"):
+        try:
+            parsed: object = json.loads(stripped)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    try:
+        parsed = ast.literal_eval(stripped)
+    except (ValueError, SyntaxError) as exc:
+        raise AssertionError(
+            f"voice_resolver caplog: не удалось разобрать message: {raw[:200]!r}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise AssertionError(
+            f"voice_resolver caplog: ожидался dict, получено {type(parsed).__name__}"
+        )
+    return parsed
+
+
 def _voice_resolver_log_dict(rec: logging.LogRecord) -> dict[str, object]:
-    raw = rec.getMessage()
-    if not raw.startswith("{"):
-        raise AssertionError(f"voice_resolver caplog: ожидался dict в message, получено {raw[:120]!r}")
-    data = ast.literal_eval(raw)
-    if not isinstance(data, dict):
-        raise AssertionError(f"voice_resolver caplog: literal_eval не dict: {type(data).__name__}")
-    return data
+    return _caplog_message_to_dict(rec.getMessage())
 
 
 def _find_voice_resolver_caplog_record(
@@ -46,9 +65,16 @@ def _find_voice_resolver_caplog_record(
     for r in caplog.records:
         if r.name != "core.clients.voice_resolver":
             continue
-        if event_name not in r.getMessage():
-            continue
-        return r
+        msg = r.getMessage()
+        if event_name in msg:
+            return r
+        if msg.strip().startswith("{"):
+            try:
+                parsed = _caplog_message_to_dict(msg)
+                if parsed.get("message") == event_name:
+                    return r
+            except AssertionError:
+                continue
     raise AssertionError(f"Нет log record voice_resolver с событием {event_name!r}")
 
 
@@ -142,11 +168,12 @@ async def test_get_stt_client_logs_resolved_fields(
     cid = f"company_{unique_id}"
     _stub_company_cache(cid, kind="stt", row=None)
 
-    caplog.set_level("INFO", logger="core.clients.voice_resolver")
-    client = await get_stt_client(
-        company_id=cid,
-        override=SpeechOverride(provider="mock", language="en"),
-    )
+    with SystemLogScope():
+        caplog.set_level("INFO", logger="core.clients.voice_resolver")
+        client = await get_stt_client(
+            company_id=cid,
+            override=SpeechOverride(provider="mock", language="en"),
+        )
 
     assert client is not None
     rec = _find_voice_resolver_caplog_record(caplog, event_name="voice_resolver.stt_resolved")
@@ -178,8 +205,9 @@ async def test_get_vad_client_ignores_company_vad_row_in_cache(
         ),
     )
 
-    caplog.set_level("INFO", logger="core.clients.voice_resolver")
-    await get_vad_client(company_id=cid)
+    with SystemLogScope():
+        caplog.set_level("INFO", logger="core.clients.voice_resolver")
+        await get_vad_client(company_id=cid)
 
     rec = _find_voice_resolver_caplog_record(caplog, event_name="voice_resolver.vad_resolved")
     payload = _voice_resolver_log_dict(rec)
