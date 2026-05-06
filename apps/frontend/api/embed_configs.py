@@ -125,8 +125,8 @@ class CreateEmbedConfigRequest(BaseModel):
         description="Лимит пользовательских сообщений на диалог (embed-session); не задан — без лимита",
     )
     voice_enabled: bool = Field(
-        default=False,
-        description="Разрешить голосовой режим в виджете",
+        default=True,
+        description="Дуплекс голоса (WebSocket эфир); при false — только браузерная диктовка при поддержке",
     )
     voice_default_on: bool = Field(
         default=False,

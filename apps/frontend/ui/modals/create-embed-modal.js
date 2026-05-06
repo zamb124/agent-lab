@@ -102,7 +102,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
         this._guestMaxUserMessages = '';
-        this._voiceEnabled = false;
+        this._voiceEnabled = true;
         this._voiceDefaultOn = false;
         this.size = 'lg';
         this._configs = this.useResource('frontend/embed_configs');
@@ -134,7 +134,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this._landingCardImageUrl = '';
         this._landingSortOrder = 0;
         this._guestMaxUserMessages = '';
-        this._voiceEnabled = false;
+        this._voiceEnabled = true;
         this._voiceDefaultOn = false;
         this._placeholder = this.t('embed_create_modal.default_message_placeholder');
     }

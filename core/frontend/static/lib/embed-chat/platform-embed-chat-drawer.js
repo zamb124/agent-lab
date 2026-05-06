@@ -699,10 +699,28 @@ export class PlatformEmbedChatDrawer extends LitElement {
     }
 
     _onComposerVoiceToggle() {
-        if (this.voiceEnabled !== true) {
-            return;
-        }
         this._toggleVoice();
+    }
+
+    /**
+     * Микрофон в композере: WebSocket эфир (как flows), а не браузерная диктовка.
+     */
+    _embedComposerWsDuplex() {
+        return (
+            this.enableVoice === true
+            && this.voiceEnabled === true
+            && this._voiceEmbedTtsContextReady() === true
+        );
+    }
+
+    /**
+     * Запасной путь: Web Speech в textarea (нет инфраструктуры voice или отключён дуплекс в конфиге).
+     */
+    _embedComposerBrowserDictation() {
+        return (
+            this.enableVoice === true
+            && (this._voiceEmbedTtsContextReady() !== true || this.voiceEnabled !== true)
+        );
     }
 
     _onEmbedVoiceBridgeUserStop() {
@@ -992,7 +1010,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
 
     async _startVoice() {
         if (this._voiceOn) return;
-        if (!this.voiceEnabled) return;
+        if (this.voiceEnabled !== true) return;
         this._disposeTtsOnlyStream();
         const voiceBaseUrl = String(this.voiceBaseUrl || '').replace(/\/$/, '');
         if (voiceBaseUrl === '') {
@@ -1317,8 +1335,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     .title=${headTitle}
                     .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}
                     ?use-credentials=${this.useCredentials}
-                    ?enable-voice=${this.enableVoice === true && this.voiceEnabled !== true}
-                    ?voice-duplex=${this.voiceEnabled === true}
+                    ?enable-voice=${this._embedComposerBrowserDictation()}
+                    ?voice-duplex=${this._embedComposerWsDuplex()}
                     ?voice-composer-active=${this._voiceOn}
                     voice-composer-status=${this._voiceStatus || 'idle'}
                     .getAuthToken=${this.getAuthToken}
