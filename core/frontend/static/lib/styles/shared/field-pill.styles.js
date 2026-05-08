@@ -1,0 +1,405 @@
+/**
+ * Field pill — единый канон плашки поля и «голых» контролов внутри неё.
+ * Токены: --field-pill-* в core/frontend/static/assets/css/tokens.css
+ */
+import { css } from 'lit';
+
+export const fieldPillStyles = css`
+    .field-pill,
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--field-pill-gap);
+        padding: var(--field-pill-padding-y) var(--field-pill-padding-x);
+        border-radius: var(--field-pill-radius);
+        box-sizing: border-box;
+        background: var(--field-pill-bg);
+        border: 1px solid var(--field-pill-border);
+        min-width: 0;
+    }
+
+    .form-group {
+        margin-bottom: var(--space-6);
+    }
+
+    .form-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .field-pill--textarea {
+        gap: var(--field-pill-gap-textarea);
+    }
+
+    .field-pill--tags {
+        gap: var(--field-pill-gap-tags);
+    }
+
+    .field-pill--compact {
+        --field-pill-padding-y: var(--field-pill-compact-padding-y);
+        --field-pill-padding-x: var(--field-pill-compact-padding-x);
+        --field-pill-radius: var(--field-pill-compact-radius);
+        --field-pill-gap: var(--field-pill-compact-gap);
+        --field-pill-input-size: var(--field-pill-compact-input-size);
+        --field-pill-input-weight: var(--field-pill-compact-input-weight);
+    }
+
+    .field-pill--compact .field-pill-select,
+    .field-pill--compact .form-select {
+        padding-right: var(--field-pill-compact-select-chevron-padding-end);
+        background-position: right var(--space-1) center;
+    }
+
+    .field-pill--tags .tags-row {
+        min-height: 28px;
+    }
+
+    .field-pill--tags .tag-input {
+        flex: 1;
+        min-width: var(--field-pill-tag-input-min-width);
+        margin: 0;
+        padding: 2px 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        font-family: inherit;
+        font-size: var(--field-pill-input-size);
+        font-weight: var(--field-pill-input-weight);
+        color: var(--field-pill-input-color);
+    }
+
+    .field-pill--tags .tag-input:focus {
+        outline: none;
+    }
+
+    .field-pill--tags .tag-input::placeholder {
+        color: var(--field-pill-muted-color);
+        font-weight: var(--font-normal);
+    }
+
+    .field-pill--tags .tag-chip {
+        border: none;
+        background: var(--field-pill-tag-chip-bg);
+    }
+
+    .field-pill-tags-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+    }
+
+    .field-pill-label,
+    .form-label,
+    .form-group > label {
+        display: block;
+        font-size: var(--field-pill-label-size);
+        font-weight: var(--field-pill-label-weight);
+        text-transform: uppercase;
+        letter-spacing: var(--field-pill-label-letter);
+        color: var(--field-pill-label-color);
+    }
+
+    .field-pill-head {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+    }
+
+    .field-pill-head .field-pill-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .field-pill-head platform-help-hint {
+        flex-shrink: 0;
+    }
+
+    .field-pill-control {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .field-pill-control-main {
+        flex: 1;
+        min-width: 0;
+        display: block;
+    }
+
+    slot[name='suffix']::slotted(*) {
+        flex-shrink: 0;
+    }
+
+    .form-group small {
+        display: block;
+        margin-top: var(--space-1);
+        font-size: var(--field-pill-hint-size);
+        font-weight: var(--font-normal);
+        color: var(--field-pill-hint-color);
+        text-transform: none;
+        letter-spacing: normal;
+        line-height: var(--leading-normal);
+    }
+
+    .field-pill-input,
+    .field-pill-textarea,
+    .field-pill-select,
+    .form-input,
+    .form-textarea,
+    .form-select {
+        width: 100%;
+        border: none;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        outline: none;
+        font-family: inherit;
+        font-size: var(--field-pill-input-size);
+        font-weight: var(--field-pill-input-weight);
+        line-height: var(--field-pill-input-line);
+        color: var(--field-pill-input-color);
+        padding: 0;
+        margin: 0;
+        border-radius: 0;
+        box-sizing: border-box;
+    }
+
+    .field-pill-input::placeholder,
+    .field-pill-textarea::placeholder,
+    .form-input::placeholder,
+    .form-textarea::placeholder {
+        color: var(--text-disabled);
+    }
+
+    .field-pill-textarea,
+    .form-textarea {
+        resize: vertical;
+        min-height: var(--field-pill-textarea-min-height);
+        line-height: var(--leading-normal);
+        font-weight: var(--font-normal);
+    }
+
+    .field-pill-select,
+    .form-select {
+        appearance: none;
+        cursor: pointer;
+        padding-right: 28px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2371717a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right var(--space-2) center;
+    }
+
+    .field-pill-readonly-text {
+        font-size: var(--field-pill-input-size);
+        font-weight: var(--field-pill-input-weight);
+        color: var(--field-pill-input-color);
+        line-height: var(--field-pill-input-line);
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+    }
+
+    .field-pill-readonly-muted {
+        font-size: var(--field-pill-readonly-muted-size);
+        font-weight: var(--font-normal);
+        color: var(--field-pill-muted-color);
+        margin: 0;
+    }
+
+    .field-pill-readonly-inline {
+        display: flex;
+        align-items: center;
+        min-height: 24px;
+    }
+
+    .tag-count-badge {
+        flex-shrink: 0;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 6px;
+        border-radius: 11px;
+        background: var(--field-pill-tag-count-bg);
+        color: var(--field-pill-tag-count-color);
+        font-size: var(--field-pill-tag-count-size);
+        font-weight: var(--font-bold);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .attr-row {
+        display: grid;
+        gap: var(--field-attr-row-gap);
+        min-width: 0;
+    }
+
+    .attr-hint {
+        color: var(--field-pill-hint-color);
+        font-size: var(--field-pill-hint-size);
+    }
+
+    .field-pill-empty {
+        font-size: var(--field-pill-readonly-muted-size);
+        font-weight: var(--font-normal);
+        color: var(--text-disabled);
+        font-style: italic;
+        margin: 0;
+    }
+
+    .field-pill-file-refs-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 0;
+        width: 100%;
+    }
+
+    .field-pill-file-ref-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-1) var(--space-2);
+        min-height: 36px;
+        box-sizing: border-box;
+        background: var(--glass-solid-medium);
+        border: 1px solid var(--glass-border-subtle);
+        border-radius: var(--radius-full);
+        min-width: 0;
+    }
+
+    .field-pill-file-ref-icon {
+        flex-shrink: 0;
+        line-height: 0;
+    }
+
+    .field-pill-file-ref-info {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: var(--space-1);
+        overflow: hidden;
+    }
+
+    .field-pill-file-ref-line {
+        display: flex;
+        align-items: baseline;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        font-size: var(--text-sm);
+        line-height: var(--leading-tight);
+    }
+
+    .field-pill-file-ref-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+    }
+
+    .field-pill-file-ref-sep {
+        flex-shrink: 0;
+        color: var(--text-tertiary);
+        font-weight: var(--font-normal);
+        user-select: none;
+    }
+
+    .field-pill-file-ref-meta {
+        flex-shrink: 0;
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+        font-weight: var(--font-normal);
+        white-space: nowrap;
+    }
+
+    .field-pill-file-ref-remove {
+        appearance: none;
+        -webkit-appearance: none;
+        margin: 0;
+        background: transparent;
+        border: none;
+        padding: 6px;
+        cursor: pointer;
+        color: var(--text-tertiary);
+        border-radius: var(--radius-full);
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 0;
+        opacity: 0.75;
+        transition:
+            color var(--duration-fast) var(--easing-default),
+            opacity var(--duration-fast) var(--easing-default),
+            background var(--duration-fast) var(--easing-default);
+    }
+
+    .field-pill-file-ref-remove:hover {
+        opacity: 1;
+        color: var(--error);
+        background: var(--error-bg);
+    }
+
+    .field-pill-file-ref-remove:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+    }
+
+    .field-pill-file-refs-attach {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .field-pill-file-refs-attach-btn {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--glass-solid-medium);
+        border: 1px dashed var(--glass-border-medium);
+        border-radius: var(--radius-md);
+        color: var(--text-tertiary);
+        cursor: pointer;
+    }
+
+    .field-pill-file-refs-attach-btn:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+    }
+
+    .form-input:disabled,
+    .form-select:disabled,
+    .form-textarea:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .form-input.readonly {
+        color: var(--text-secondary);
+        cursor: default;
+    }
+
+    .field-pill-input:focus,
+    .field-pill-textarea:focus,
+    .field-pill-select:focus,
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+        outline: none;
+    }
+`;
