@@ -18,6 +18,8 @@ from core.billing.settlement_rules import (
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.tracing import attributes as trace_attr
 
+pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
+
 
 @pytest.mark.asyncio
 async def test_list_spans_pending_billing_limit_invalid(frontend_container) -> None:

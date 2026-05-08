@@ -4,10 +4,11 @@
 Используется и как нода агента, и как tool для react агентов.
 """
 
+import json
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class HTTPMethod(str, Enum):
@@ -35,34 +36,6 @@ class ResponseStatus(str, Enum):
     ERROR = "error"
 
 
-class ParameterLocation(str, Enum):
-    """Расположение параметра в запросе"""
-
-    QUERY = "query"
-    PATH = "path"
-    HEADER = "header"
-    BODY = "body"
-
-
-class ParameterSchema(BaseModel):
-    """Схема параметра (OpenAPI-like)"""
-
-    name: str = Field(..., description="Имя параметра")
-    source: Optional[str] = Field(
-        default=None,
-        description="Источник значения (@state:user.profile.name). Если указан - берёт из state по пути",
-    )
-    location: ParameterLocation = Field(default=ParameterLocation.BODY, description="Расположение")
-    type: str = Field(
-        default="string", description="Тип: string, integer, number, boolean, object, array"
-    )
-    description: Optional[str] = Field(default=None, description="Описание параметра")
-    required: bool = Field(default=False, description="Обязательный параметр")
-    default: Optional[Any] = Field(
-        default=None, description="Значение по умолчанию (поддерживает @var:)"
-    )
-
-
 class ResponseSchema(BaseModel):
     """Схема ответа"""
 
@@ -78,7 +51,8 @@ class ExternalAPIConfig(BaseModel):
     """
     Конфигурация вызова внешнего HTTP API.
 
-    Поддерживает @var: переменные в url, headers, auth_headers и default значениях параметров.
+    Поддерживает @var: / @state: в url и headers; JSON body_template;
+    ключи входа подставляются в {placeholder} URL и мержятся в тело после шаблона.
     """
 
     api_id: str = Field(..., description="Уникальный идентификатор")
@@ -89,14 +63,8 @@ class ExternalAPIConfig(BaseModel):
     method: HTTPMethod = Field(default=HTTPMethod.POST, description="HTTP метод")
 
     headers: Dict[str, str] = Field(
-        default_factory=dict, description="HTTP заголовки (поддерживают @var:)"
-    )
-    auth_headers: Dict[str, str] = Field(
-        default_factory=dict, description="Заголовки авторизации (поддерживают @var:)"
-    )
-
-    parameters: List[ParameterSchema] = Field(
-        default_factory=list, description="Параметры запроса (OpenAPI-like)"
+        default_factory=dict,
+        description="HTTP заголовки (строки: @state:path, @var:path, токены @var: в тексте)",
     )
 
     request_content_type: str = Field(
@@ -109,30 +77,25 @@ class ExternalAPIConfig(BaseModel):
 
     timeout: float = Field(default=30.0, description="Таймаут запроса в секундах")
 
+    body_template: str = Field(
+        default="{}",
+        description='JSON-тело запроса; в строках допускаются целые @state:path, @var:path и токены @var: в тексте',
+    )
+
     state_mapping: Dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг полей ответа на state: {response_field: state_field}",
     )
 
-    def get_openapi_parameters(self) -> Dict[str, Any]:
-        """Возвращает параметры в формате для LLM tools."""
-        properties = {}
-        required = []
-
-        for param in self.parameters:
-            prop = {
-                "type": param.type,
-            }
-            if param.description:
-                prop["description"] = param.description
-
-            properties[param.name] = prop
-
-            if param.required:
-                required.append(param.name)
-
-        return {
-            "type": "object",
-            "properties": properties,
-            "required": required,
-        }
+    @model_validator(mode="after")
+    def _body_template_is_json_object(self) -> "ExternalAPIConfig":
+        raw = self.body_template.strip() if isinstance(self.body_template, str) else ""
+        if not raw:
+            return self
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise ValueError("body_template must be valid JSON") from e
+        if not isinstance(parsed, dict):
+            raise ValueError("body_template JSON must be an object at the root")
+        return self

@@ -32,7 +32,7 @@ from core.models.identity_models import Company
 from core.billing.service import company_resource_prices_storage_key
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.settlement_rules import parse_settlement_rules_json
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.models.billing_models import UsageType
 from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _facet_query_fragment
 
@@ -42,6 +42,15 @@ _STORAGE_PRICES_KEY = "billing:resource_base_prices_json"
 
 _BILLING_COMPANY_LIST_CAP = 2000
 _COMPANIES_OVERVIEW_MAX_LIMIT = 500
+
+
+def _billing_overview_subdomain(c: Company) -> Optional[str]:
+    """Для system без subdomain в storage отдаём каноническое значение (админка биллинга)."""
+    if c.company_id != SYSTEM_COMPANY_ID:
+        return c.subdomain
+    if not (c.subdomain or "").strip():
+        return SYSTEM_COMPANY_SUBDOMAIN
+    return c.subdomain
 
 
 def _billing_company_facet_label(co: Company) -> str:
@@ -155,7 +164,7 @@ async def companies_billing_overview(
         PlatformBillingCompanyOverviewItem(
             company_id=c.company_id,
             name=c.name,
-            subdomain=c.subdomain,
+            subdomain=_billing_overview_subdomain(c),
             status=c.status,
             tariff_plan=c.tariff_plan.value,
             balance=c.balance,

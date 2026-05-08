@@ -84,3 +84,42 @@ def test_normalize_rejects_evaluation_skill_ids_and_branch_ids() -> None:
     }
     with pytest.raises(ValueError, match="одновременно"):
         normalize_flow_config_dict(raw)
+
+
+def test_normalize_merges_external_api_parameters_header_default_into_headers() -> None:
+    raw = _minimal_local_flow()
+    raw["nodes"]["ext"] = {
+        "node_id": "ext",
+        "type": "external_api",
+        "url": "https://api.example/x",
+        "headers": {"X-Existing": "keep"},
+        "parameters": [
+            {
+                "name": "X-Trace-Id",
+                "location": "header",
+                "default": "@var:tid",
+                "type": "string",
+            }
+        ],
+    }
+    norm = normalize_flow_config_dict(raw)
+    ext = norm["nodes"]["ext"]
+    assert ext.get("parameters") is None
+    assert ext["headers"]["X-Existing"] == "keep"
+    assert ext["headers"]["X-Trace-Id"] == "@var:tid"
+
+
+def test_normalize_strip_external_api_parameters_non_header() -> None:
+    raw = _minimal_local_flow()
+    raw["nodes"]["ext"] = {
+        "node_id": "ext",
+        "type": "external_api",
+        "url": "https://api.example/items/{item_id}",
+        "headers": {},
+        "parameters": [
+            {"name": "city", "location": "query", "type": "string"},
+            {"name": "item_id", "location": "path", "type": "string"},
+        ],
+    }
+    norm = normalize_flow_config_dict(raw)
+    assert norm["nodes"]["ext"].get("parameters") is None

@@ -99,7 +99,7 @@ class RAGRepository:
             ns = bind.namespace
         if not ns:
             raise ValueError(
-                "RAGRepository: нужен namespace_id или bind.namespace (как у RAGResourceConfig)"
+                "RAGRepository: нужен namespace_id или bind.namespace (RagResourceBindParams)"
             )
         return ns
 

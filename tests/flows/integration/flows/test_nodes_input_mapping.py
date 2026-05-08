@@ -13,9 +13,7 @@ from apps.flows.src.runtime.nodes import (
     RemoteFlowNode,
     ExternalAPINode,
     CodeNode,
-    CodeNode,
 )
-from apps.flows.src.models.external_api import ParameterSchema
 from core.state import ExecutionState
 
 
@@ -426,293 +424,197 @@ class TestRemoteFlowNodeInputMapping:
         
         assert inputs == {}
 
-
-class TestExternalAPINodeParameterSource:
-    """Тесты для ExternalAPINode с source в параметрах."""
-
-    def test_parameter_with_state_source(self):
-        """Параметр с source: @state:path"""
-        # Создаём параметры с source
-        param = ParameterSchema(
-            name="city",
-            source="@state:user.address.city",
-            location="query"
-        )
-        
-        assert param.name == "city"
-        assert param.source == "@state:user.address.city"
-        assert param.location.value == "query"
-
-    def test_parameter_with_var_source(self):
-        """Параметр с source: @var:name"""
-        param = ParameterSchema(
-            name="api_key",
-            source="@var:weather.api_key",
-            location="header"
-        )
-        
-        assert param.name == "api_key"
-        assert param.source == "@var:weather.api_key"
-
-    def test_parameter_without_source(self):
-        """Параметр без source (обратная совместимость)"""
-        param = ParameterSchema(
-            name="query",
-            location="query",
-            type="string",
-            required=True
-        )
-        
-        assert param.name == "query"
-        assert param.source is None
-
-    def test_parameter_with_default(self):
-        """Параметр с default"""
-        param = ParameterSchema(
-            name="limit",
-            type="integer",
-            default=10
-        )
-        
-        assert param.name == "limit"
-        assert param.default == 10
-
-
-class TestExternalAPINodeResolveArgs:
-    """Тесты для резолвинга аргументов в ExternalAPINode.
-
-    Тестируем логику выбора источника значения:
-    1. source (если указан) -> MappingResolver.resolve_value
-    2. state[param.name] (обратная совместимость)
-    3. param.default (если есть)
-    """
-
-    def test_source_has_priority(self):
-        """source имеет приоритет над state[param.name]"""
-        from apps.flows.src.mapping import MappingResolver
-        
-        param = ParameterSchema(
-            name="city",
-            source="@state:user.city"
-        )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            city="from_direct_state",  # Игнорируется
-            user={"city": "from_source_path"},  # Используется
-            variables={}
-        )
-        
-        # source указан -> используем MappingResolver
-        result = MappingResolver.resolve_value(param.source, state.model_dump())
-        
-        assert result == "from_source_path"
-
-    def test_var_source_works(self):
-        """@var: работает в source"""
-        from apps.flows.src.mapping import MappingResolver
-        
-        param = ParameterSchema(
-            name="api_key",
-            source="@var:config.api_key"
-        )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            api_key="from_direct",  # Игнорируется
-            variables={
-                "config": {"api_key": "from_var"}
-            }
-        )
-        
-        result = MappingResolver.resolve_value(param.source, state.model_dump())
-        
-        assert result == "from_var"
-
-    def test_fallback_to_state_name(self):
-        """Без source берётся state[param.name]"""
-        param = ParameterSchema(
-            name="city"
-            # source не указан
-        )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            city="Moscow",
-            variables={}
-        )
-        
-        # source None -> берём напрямую из state
-        assert param.source is None
-        assert state.get(param.name) == "Moscow"
-
-    def test_fallback_to_default(self):
-        """Без source и state[name] используется default"""
-        param = ParameterSchema(
-            name="limit",
-            default=10
-        )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            variables={}
-        )
-        
-        assert param.source is None
-        assert param.name not in state
-        assert param.default == 10
-
-
-class TestAuthHeadersWithNestedVars:
-    """Тесты для auth_headers с вложенными @var: путями."""
+class TestHeadersWithNestedVars:
+    """Тесты для headers/URL с вложенными @var: путями."""
 
     def test_remote_flow_resolve_value_simple(self):
-        """RemoteFlowNode._resolve_value с простым @var:"""
-        node = RemoteFlowNode(
-            node_id="test",
-            config={"url": "http://agent:8080"}
+        """Простой @var: в строке заголовка через MappingResolver."""
+        from apps.flows.src.mapping import MappingResolver
+
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            variables={"token": "abc123"},
         )
-        variables = {"token": "abc123"}
-        
-        result = node._resolve_value("Bearer @var:token", variables)
-        
+
+        result = MappingResolver.resolve_http_header_value(
+            "Bearer @var:token",
+            state,
+            state.variables,
+        )
+
         assert result == "Bearer abc123"
 
     def test_remote_flow_resolve_value_nested(self):
-        """RemoteFlowNode._resolve_value с вложенным @var:"""
-        node = RemoteFlowNode(
-            node_id="test",
-            config={"url": "http://agent:8080"}
+        """Строковый заголовок/URL с вложенным @var: через MappingResolver."""
+        from apps.flows.src.mapping import MappingResolver
+
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            variables={
+                "auth": {
+                    "bearer": "eyJhbGciOiJIUzI1NiJ9.test"
+                }
+            },
         )
-        variables = {
-            "auth": {
-                "bearer": "eyJhbGciOiJIUzI1NiJ9.test"
-            }
-        }
-        
-        result = node._resolve_value("Bearer @var:auth.bearer", variables)
-        
+
+        result = MappingResolver.resolve_http_header_value(
+            "Bearer @var:auth.bearer",
+            state,
+            state.variables,
+        )
+
         assert result == "Bearer eyJhbGciOiJIUzI1NiJ9.test"
 
-    def test_remote_flow_resolve_auth_headers(self):
-        """RemoteFlowNode._resolve_auth_headers с вложенными @var:"""
+    def test_remote_flow_resolve_headers_dict(self):
+        """RemoteFlowNode._resolve_headers_dict с вложенными @var:"""
         node = RemoteFlowNode(
             node_id="test",
             config={
                 "url": "http://agent:8080",
-                "auth_headers": {
+                "headers": {
                     "Authorization": "Bearer @var:auth.token",
-                    "X-API-Key": "@var:api.keys.primary"
-                }
-            }
+                    "X-API-Key": "@var:api.keys.primary",
+                },
+            },
         )
-        variables = {
-            "auth": {"token": "jwt_token_123"},
-            "api": {"keys": {"primary": "pk_live_abc"}}
-        }
-        
-        result = node._resolve_auth_headers(node.auth_headers_config, variables)
-        
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            variables={
+                "auth": {"token": "jwt_token_123"},
+                "api": {"keys": {"primary": "pk_live_abc"}},
+            },
+        )
+
+        result = node._resolve_headers_dict(node.headers_config, state, state.variables)
+
         assert result["Authorization"] == "Bearer jwt_token_123"
         assert result["X-API-Key"] == "pk_live_abc"
 
     def test_remote_flow_url_with_nested_var(self):
-        """RemoteFlowNode URL с вложенным @var:"""
-        node = RemoteFlowNode(
-            node_id="test",
-            config={"url": "https://@var:config.api.host/v1"}
+        """URL с вложенным @var:"""
+        from apps.flows.src.mapping import MappingResolver
+
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            variables={
+                "config": {
+                    "api": {"host": "api.example.com"}
+                }
+            },
         )
-        variables = {
-            "config": {
-                "api": {"host": "api.example.com"}
-            }
-        }
-        
-        result = node._resolve_value(node.url, variables)
-        
+
+        result = MappingResolver.resolve_http_header_value(
+            "https://@var:config.api.host/v1",
+            state,
+            state.variables,
+        )
+
         assert result == "https://api.example.com/v1"
 
 
-class TestExternalAPIClientAuthHeaders:
-    """Тесты для ExternalAPIClient с auth_headers."""
+class TestExternalAPIClientHeaders:
+    """Тесты для ExternalAPIClient и MappingResolver (@var:@state: в url/headers)."""
 
-    def test_resolve_value_simple_var(self):
-        """ExternalAPIClient._resolve_value с простым @var:"""
-        from apps.flows.src.clients.external_api_client import ExternalAPIClient
-        
-        client = ExternalAPIClient()
+    def _state(self, variables):
+        return ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+            variables=variables,
+        )
+
+    def test_resolve_string_template_simple_var(self):
+        """Строковый шаблон: простой @var:"""
+        from apps.flows.src.mapping import MappingResolver
+
         variables = {"api_key": "secret123"}
-        
-        result = client._resolve_value("@var:api_key", variables)
-        
-        assert result == "secret123"
+        state = self._state(variables)
 
-    def test_resolve_value_nested_var(self):
-        """ExternalAPIClient._resolve_value с вложенным @var:"""
-        from apps.flows.src.clients.external_api_client import ExternalAPIClient
-        
-        client = ExternalAPIClient()
+        assert (
+            MappingResolver.resolve_http_header_value("@var:api_key", state, variables)
+            == "secret123"
+        )
+
+    def test_resolve_string_template_nested_var(self):
+        """Вложенный @var:"""
+        from apps.flows.src.mapping import MappingResolver
+
         variables = {
             "config": {
                 "credentials": {
-                    "api_key": "nested_secret"
-                }
-            }
+                    "api_key": "nested_secret",
+                },
+            },
         }
-        
-        result = client._resolve_value("@var:config.credentials.api_key", variables)
-        
-        assert result == "nested_secret"
+        state = self._state(variables)
 
-    def test_resolve_value_bearer_token_nested(self):
-        """Bearer token с вложенным путём"""
-        from apps.flows.src.clients.external_api_client import ExternalAPIClient
-        
-        client = ExternalAPIClient()
+        assert (
+            MappingResolver.resolve_http_header_value(
+                "@var:config.credentials.api_key",
+                state,
+                variables,
+            )
+            == "nested_secret"
+        )
+
+    def test_resolve_string_template_bearer_nested(self):
+        """Bearer token с токенами @var: в тексте."""
+        from apps.flows.src.mapping import MappingResolver
+
         variables = {
             "auth": {
                 "tokens": {
-                    "access": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
-                }
-            }
+                    "access": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9",
+                },
+            },
         }
-        
-        result = client._resolve_value("Bearer @var:auth.tokens.access", variables)
-        
-        assert result == "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
+        state = self._state(variables)
 
-    def test_build_headers_with_nested_vars(self):
+        assert (
+            MappingResolver.resolve_http_header_value(
+                "Bearer @var:auth.tokens.access",
+                state,
+                variables,
+            )
+            == "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
+        )
         """ExternalAPIClient._build_headers с вложенными @var:"""
         from apps.flows.src.clients.external_api_client import ExternalAPIClient
         from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
-        
+
         client = ExternalAPIClient()
         config = ExternalAPIConfig(
             api_id="test_api",
             name="test_api",
             url="https://api.example.com",
             method=HTTPMethod.GET,
-            headers={"Content-Type": "application/json"},
-            auth_headers={
+            headers={
+                "Content-Type": "application/json",
                 "Authorization": "Bearer @var:auth.access_token",
-                "X-API-Key": "@var:credentials.api.key"
-            }
+                "X-API-Key": "@var:credentials.api.key",
+            },
         )
         variables = {
             "auth": {"access_token": "jwt_123"},
-            "credentials": {"api": {"key": "api_key_456"}}
+            "credentials": {"api": {"key": "api_key_456"}},
         }
-        
-        headers = client._build_headers(config, variables)
-        
+        state = self._state(variables)
+
+        headers = client._build_headers(config, state.variables, state)
+
         assert headers["Authorization"] == "Bearer jwt_123"
         assert headers["X-API-Key"] == "api_key_456"
         assert headers["Content-Type"] == "application/json"
@@ -720,40 +622,44 @@ class TestExternalAPIClientAuthHeaders:
     def test_resolve_url_with_nested_vars(self):
         """ExternalAPIClient._resolve_url с вложенными @var:"""
         from apps.flows.src.clients.external_api_client import ExternalAPIClient
-        
+
         client = ExternalAPIClient()
         variables = {
             "api": {
                 "host": "api.weather.com",
-                "version": "v3"
-            }
+                "version": "v3",
+            },
         }
         args = {}
-        
+        state = self._state(variables)
+
         result = client._resolve_url(
             "https://@var:api.host/@var:api.version/forecast",
             args,
-            variables
+            variables,
+            state,
         )
-        
+
         assert result == "https://api.weather.com/v3/forecast"
 
     def test_resolve_url_with_nested_vars_and_path_params(self):
         """URL с вложенными @var: и path параметрами"""
         from apps.flows.src.clients.external_api_client import ExternalAPIClient
-        
+
         client = ExternalAPIClient()
         variables = {
-            "config": {"base_url": "https://api.example.com"}
+            "config": {"base_url": "https://api.example.com"},
         }
         args = {"user_id": "123"}
-        
+        state = self._state(variables)
+
         result = client._resolve_url(
             "@var:config.base_url/users/{user_id}",
             args,
-            variables
+            variables,
+            state,
         )
-        
+
         assert result == "https://api.example.com/users/123"
 
 

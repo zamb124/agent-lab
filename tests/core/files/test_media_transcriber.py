@@ -2,6 +2,10 @@
 
 STT работает через MockSTTClient (провайдер mock из конфигурации тестов),
 но весь пайплайн — реальный: ffmpeg, чанкование, извлечение дорожки.
+
+company_id для tier-резолва — синтетический с суффиксом ``unique_id``: у компании
+``system`` в БД часто есть override ``company_voice_providers`` (litserve и т.д.),
+он сильнее ``VOICE__STT__PROVIDER`` из окружения и даёт реальный HTTP без сервера.
 """
 
 from __future__ import annotations
@@ -25,6 +29,11 @@ from core.files.media.youtube import is_youtube_url
 from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind
 from tests.fixtures.audio_bytes import minimal_wav_silence
+
+
+def _mock_stt_tier_company_id(unique_id: str) -> str:
+    """Нет строки в ``company_voice_providers`` — STT из deployment (в тестах mock)."""
+    return f"media_transcriber_tier_{unique_id}"
 
 
 def _generate_test_mp4(duration_sec: float = 1.0) -> bytes:
@@ -194,9 +203,9 @@ class TestIsYouTubeUrl:
 
 @pytest.mark.asyncio
 class TestMediaTranscriberAudio:
-    async def test_transcribe_wav_with_mock_stt(self) -> None:
+    async def test_transcribe_wav_with_mock_stt(self, unique_id: str) -> None:
         wav = minimal_wav_silence(duration_sec=1.0)
-        transcriber = MediaTranscriber(company_id="system")
+        transcriber = MediaTranscriber(company_id=_mock_stt_tier_company_id(unique_id))
         result = await transcriber.transcribe_audio(
             audio_bytes=wav,
             file_name="voice.wav",
@@ -205,8 +214,8 @@ class TestMediaTranscriberAudio:
         assert isinstance(result, TranscriptionResult)
         assert len(result.text) > 0
 
-    async def test_raises_on_empty_audio(self) -> None:
-        transcriber = MediaTranscriber(company_id="system")
+    async def test_raises_on_empty_audio(self, unique_id: str) -> None:
+        transcriber = MediaTranscriber(company_id=_mock_stt_tier_company_id(unique_id))
         with pytest.raises(ValueError, match="audio_bytes"):
             await transcriber.transcribe_audio(
                 audio_bytes=b"",
@@ -214,8 +223,8 @@ class TestMediaTranscriberAudio:
                 mime_type="audio/wav",
             )
 
-    async def test_raises_on_empty_filename(self) -> None:
-        transcriber = MediaTranscriber(company_id="system")
+    async def test_raises_on_empty_filename(self, unique_id: str) -> None:
+        transcriber = MediaTranscriber(company_id=_mock_stt_tier_company_id(unique_id))
         with pytest.raises(ValueError, match="file_name"):
             await transcriber.transcribe_audio(
                 audio_bytes=b"\x00\x01",
@@ -226,9 +235,9 @@ class TestMediaTranscriberAudio:
 
 @pytest.mark.asyncio
 class TestMediaTranscriberVideo:
-    async def test_transcribe_mp4_with_mock_stt(self) -> None:
+    async def test_transcribe_mp4_with_mock_stt(self, unique_id: str) -> None:
         video_bytes = _generate_test_mp4(duration_sec=1.0)
-        transcriber = MediaTranscriber(company_id="system")
+        transcriber = MediaTranscriber(company_id=_mock_stt_tier_company_id(unique_id))
         result = await transcriber.transcribe_video(
             video_bytes=video_bytes,
             file_name="call.mp4",
@@ -236,8 +245,8 @@ class TestMediaTranscriberVideo:
         assert isinstance(result, TranscriptionResult)
         assert len(result.text) > 0
 
-    async def test_raises_on_empty_video(self) -> None:
-        transcriber = MediaTranscriber(company_id="system")
+    async def test_raises_on_empty_video(self, unique_id: str) -> None:
+        transcriber = MediaTranscriber(company_id=_mock_stt_tier_company_id(unique_id))
         with pytest.raises(ValueError, match="video_bytes"):
             await transcriber.transcribe_video(
                 video_bytes=b"",
@@ -276,22 +285,26 @@ class TestFileReaderAudioVideo:
             info = reader.recognize_file_type(file_name=f"file{ext}")
             assert info.detected_kind == FileReadKind.AUDIO, f"Failed for {ext}"
 
-    async def test_read_wav_returns_transcription(self) -> None:
+    async def test_read_wav_returns_transcription(self, unique_id: str) -> None:
         wav = minimal_wav_silence(duration_sec=1.0)
         reader = FileReader()
-        result = await reader.read(wav, file_name="voice.wav", transcription_company_id="system")
+        result = await reader.read(
+            wav,
+            file_name="voice.wav",
+            transcription_company_id=_mock_stt_tier_company_id(unique_id),
+        )
         assert result.detected_kind == FileReadKind.AUDIO
         assert result.page_count == 1
         assert len(result.pages) == 1
         assert len(result.pages[0].text) > 0
 
-    async def test_read_mp4_returns_transcription(self) -> None:
+    async def test_read_mp4_returns_transcription(self, unique_id: str) -> None:
         video_bytes = _generate_test_mp4(duration_sec=1.0)
         reader = FileReader()
         result = await reader.read(
             video_bytes,
             file_name="meeting.mp4",
-            transcription_company_id="system",
+            transcription_company_id=_mock_stt_tier_company_id(unique_id),
         )
         assert result.detected_kind == FileReadKind.VIDEO
         assert result.page_count == 1

@@ -104,7 +104,6 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
             }
-            .field { display: flex; flex-direction: column; gap: var(--space-1); }
             .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             select, input {
@@ -161,7 +160,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 align-items: flex-end;
                 gap: var(--space-3);
             }
-            .react-composite-row > .field {
+            .react-composite-row > platform-field {
                 min-width: 0;
             }
             .react-field-grow {
@@ -170,15 +169,14 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             .react-field-tight {
                 flex: 0 1 112px;
             }
-            .react-field-tight input[type="number"] {
-                width: 100%;
-                box-sizing: border-box;
-            }
             .react-exit-strict-row {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) auto;
                 gap: var(--space-3);
                 align-items: end;
+            }
+            .react-exit-strict-row platform-field {
+                min-width: 0;
             }
             .react-exit-strict-row platform-switch {
                 max-width: min(100%, 320px);
@@ -808,45 +806,47 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             typeof react.exit_tool === 'string' && react.exit_tool.length > 0 ? react.exit_tool : 'finish';
         const strict = react.strict === undefined ? true : Boolean(react.strict);
         const reminder = typeof react.reminder_message === 'string' ? react.reminder_message : '';
-        const loopModeValues = REACT_LOOP_MODES.map((m) => ({ value: m, label: m }));
+        const loopModeValues = REACT_LOOP_MODES.map((m) => ({
+            value: m,
+            label: m === 'explicit'
+                ? this.t('llm_node_editor.react_loop_explicit')
+                : this.t('llm_node_editor.react_loop_auto'),
+        }));
         const exitToolEnum = loopMode === 'explicit' ? this._exitToolEnumConfig(exitTool) : null;
         return html`
             <section class="block">
                 <h4 class="block-title">${this.t('llm_node_editor.section_react')}</h4>
                 <div class="block-card">
                     <div class="react-composite-row">
-                        <div class="field react-field-grow">
-                            <label>${this.t('llm_node_editor.react_loop_mode')}</label>
-                            <platform-field
-                                mode="edit"
-                                type="enum"
-                                .value=${loopMode}
-                                .config=${{ values: loopModeValues }}
-                                @change=${this._onReactLoopMode}
-                            ></platform-field>
-                        </div>
-                        <div class="field react-field-tight">
-                            <label>${this.t('llm_node_editor.react_max_iterations')}</label>
-                            <platform-field
-                                mode="edit"
-                                type="integer"
-                                .value=${maxIter}
-                                @change=${this._onReactMaxIter}
-                            ></platform-field>
-                        </div>
+                        <platform-field
+                            class="react-field-grow"
+                            mode="edit"
+                            type="enum"
+                            .label=${this.t('llm_node_editor.react_loop_mode')}
+                            .value=${loopMode}
+                            .config=${{ values: loopModeValues }}
+                            @change=${this._onReactLoopMode}
+                        ></platform-field>
+                        <platform-field
+                            class="react-field-tight"
+                            mode="edit"
+                            type="integer"
+                            .label=${this.t('llm_node_editor.react_max_iterations')}
+                            .value=${maxIter}
+                            @change=${this._onReactMaxIter}
+                        ></platform-field>
                     </div>
                     ${loopMode === 'explicit' ? html`
                         <div class="react-exit-strict-row">
-                            <div class="field react-field-grow">
-                                <label>${this.t('llm_node_editor.react_exit_tool')}</label>
-                                <platform-field
-                                    mode="edit"
-                                    type="enum"
-                                    .value=${exitTool}
-                                    .config=${exitToolEnum}
-                                    @change=${this._onReactExitTool}
-                                ></platform-field>
-                            </div>
+                            <platform-field
+                                class="react-field-grow"
+                                mode="edit"
+                                type="enum"
+                                .label=${this.t('llm_node_editor.react_exit_tool')}
+                                .value=${exitTool}
+                                .config=${exitToolEnum}
+                                @change=${this._onReactExitTool}
+                            ></platform-field>
                             <platform-switch
                                 size="sm"
                                 ?checked=${strict}
@@ -854,15 +854,13 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                                 @change=${this._onReactStrict}
                             ></platform-switch>
                         </div>
-                        <div class="field">
-                            <label>${this.t('llm_node_editor.react_reminder')}</label>
-                            <platform-field
-                                mode="edit"
-                                type="string"
-                                .value=${reminder}
-                                @change=${this._onReactReminder}
-                            ></platform-field>
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('llm_node_editor.react_reminder')}
+                            .value=${reminder}
+                            @change=${this._onReactReminder}
+                        ></platform-field>
                     ` : ''}
                 </div>
             </section>

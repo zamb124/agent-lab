@@ -20,6 +20,8 @@ from core.billing.service import (
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company
 
+pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
+
 
 def _minimal_base_prices() -> dict:
     return {"llm": {"*": 1.0}, "livekit": {"*": 2.0}}

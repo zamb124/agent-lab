@@ -26,18 +26,34 @@ export class FlowsFilesResourceEditor extends PlatformElement {
     static styles = [
         PlatformElement.styles,
         css`
-            .body { padding: 0 var(--space-3); }
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
-            input {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
+            .body {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+                padding: var(--space-3) var(--space-3);
+                box-sizing: border-box;
             }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+            .usage-hint {
+                margin: 0;
+                font-size: var(--text-sm);
+                line-height: 1.45;
+                color: var(--text-secondary);
+            }
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .field label {
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+            }
+            .grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: var(--space-3);
+                align-items: start;
+            }
         `,
     ];
 
@@ -85,6 +101,7 @@ export class FlowsFilesResourceEditor extends PlatformElement {
                 @change=${(e) => this.emit('change', e.detail)}
             >
                 <div slot="settings" class="body">
+                    <p class="usage-hint">${this.t('files_resource_editor.usage_hint')}</p>
                     <div class="grid">
                         <platform-field
                             mode="edit"

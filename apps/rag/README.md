@@ -79,7 +79,7 @@
 
 В графах flow ресурс **`RAGResource`** (`apps/flows/src/resources/wrappers/rag_resource.py`):
 
-- **Поиск** — **`RAGRepository.search_namespace`** (`core/rag/repository.py`) через **`ServiceClient`** → **`POST /rag/api/v1/namespaces/{namespace_id}/search`**. Дефолты **`namespace`**, **`provider`**, **`default_top_k`**, **`company_id`**, **`search_options`** — из **`RagResourceBindParams`** (`core/rag/rag_resource_bind.py`, те же поля, что у **`RAGResourceConfig`**).
+- **Поиск** — **`RAGRepository.search_namespace`** (`core/rag/repository.py`) через **`ServiceClient`** → **`POST /rag/api/v1/namespaces/{namespace_id}/search`**. Дефолты **`namespace`**, **`provider`**, **`default_top_k`**, **`company_id`**, **`search_options`** — из **`RagResourceBindParams`** (`core/rag/rag_resource_bind.py`); те же поля у **`core.rag.rag_resource.RAGResource`** в интеграционных сценариях.
 - **Загрузка текста** (`add_document`) — in-process **`RAGRepository.provider.upload_document_from_text`**.
 
 Параметры конфига: **`namespace`**, **`provider`**, **`default_top_k`**, опционально **`company_id`**, **`search_options`** и **`index_profile_config`**.

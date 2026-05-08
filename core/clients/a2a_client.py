@@ -67,14 +67,14 @@ class A2AClient:
     async def get_agent_card(
         self,
         base_url: str,
-        auth_headers: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Получает agent-card.json от внешнего агента.
 
         Args:
             base_url: Базовый URL агента
-            auth_headers: Заголовки авторизации
+            headers: Дополнительные HTTP-заголовки
 
         Returns:
             AgentCard как dict
@@ -83,11 +83,11 @@ class A2AClient:
             A2AClientError: При ошибке запроса
         """
         url = f"{base_url.rstrip('/')}/.well-known/agent-card.json"
-        headers = auth_headers or {}
+        merged_headers = dict(headers or {})
 
         try:
             async with get_httpx_client(timeout=self.timeout) as client:
-                response = await client.get(url, headers=headers)
+                response = await client.get(url, headers=merged_headers)
 
                 if response.status_code != 200:
                     raise A2AClientError(f"Failed to get agent-card from {url}: {response.status_code}")
@@ -105,7 +105,7 @@ class A2AClient:
         session_id: Optional[str] = None,
         branch_id: str = "default",
         metadata: Optional[Dict[str, Any]] = None,
-        auth_headers: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Отправляет задачу внешнему агенту.
@@ -116,7 +116,7 @@ class A2AClient:
             session_id: ID сессии (опционально)
             branch_id: ID ветки агента (в metadata уходит как `branch`)
             metadata: Дополнительные данные
-            auth_headers: Заголовки авторизации
+            headers: Дополнительные HTTP-заголовки (до слияния с контекстом)
 
         Returns:
             Ответ агента
@@ -154,27 +154,27 @@ class A2AClient:
             payload["params"]["metadata"] = final_metadata
 
         # Автоматически добавляем заголовки из контекста
-        headers = auth_headers or {}
+        request_headers = dict(headers or {})
         context = get_context()
         if context:
-            if context.auth_token and "Authorization" not in headers:
-                headers["Authorization"] = f"Bearer {context.auth_token}"
-            if context.active_company and "X-Company-Id" not in headers:
-                headers["X-Company-Id"] = context.active_company.company_id
-            if context.user and "X-User-Id" not in headers:
-                headers["X-User-Id"] = context.user.user_id
-            if context.trace_id and "X-Trace-Id" not in headers:
-                headers["X-Trace-Id"] = context.trace_id
-            if context.language and "Accept-Language" not in headers:
-                headers["Accept-Language"] = context.language.value
+            if context.auth_token and "Authorization" not in request_headers:
+                request_headers["Authorization"] = f"Bearer {context.auth_token}"
+            if context.active_company and "X-Company-Id" not in request_headers:
+                request_headers["X-Company-Id"] = context.active_company.company_id
+            if context.user and "X-User-Id" not in request_headers:
+                request_headers["X-User-Id"] = context.user.user_id
+            if context.trace_id and "X-Trace-Id" not in request_headers:
+                request_headers["X-Trace-Id"] = context.trace_id
+            if context.language and "Accept-Language" not in request_headers:
+                request_headers["Accept-Language"] = context.language.value
         
         logger.debug(f"A2A send_task to {url}: {content[:100]}...")
 
         try:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            headers = {**headers, "Content-Type": "application/json"}
+            out_headers = {**request_headers, "Content-Type": "application/json"}
             async with get_httpx_client(timeout=self.timeout, follow_redirects=True) as client:
-                response = await client.post(url, content=body, headers=headers)
+                response = await client.post(url, content=body, headers=out_headers)
 
                 if response.status_code != 200:
                     raise A2AClientError(
@@ -248,20 +248,20 @@ class A2AClient:
     async def check_health(
         self,
         base_url: str,
-        auth_headers: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> bool:
         """
         Проверяет доступность агента.
 
         Args:
             base_url: Базовый URL агента
-            auth_headers: Заголовки авторизации
+            headers: Дополнительные HTTP-заголовки
 
         Returns:
             True если агент доступен
         """
         try:
-            await self.get_agent_card(base_url, auth_headers)
+            await self.get_agent_card(base_url, headers)
             return True
         except (A2AClientError, httpx.HTTPError, ValueError):
             return False

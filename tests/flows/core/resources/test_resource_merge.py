@@ -128,12 +128,16 @@ def test_merge_llm_resource_patch_dicts_two_partials() -> None:
     assert out["extra_request_body"] == {"k": {"a": 1, "b": 2}}
 
 
-def test_merge_shared_http_shallow_then_validates() -> None:
-    base = {"base_url": "https://api.example", "timeout": 30, "headers": {}}
+def test_merge_shared_files_shallow_then_validates() -> None:
+    base = {
+        "bucket": "my-bucket",
+        "prefix": "p1",
+        "region": "us-east-1",
+    }
     out = merge_shared_definition_config_with_patch(
-        ResourceType.HTTP,
+        ResourceType.FILES,
         base,
-        {"timeout": 60},
+        {"prefix": "p2"},
     )
-    assert out["timeout"] == 60
-    assert out["base_url"] == "https://api.example"
+    assert out["prefix"] == "p2"
+    assert out["bucket"] == "my-bucket"

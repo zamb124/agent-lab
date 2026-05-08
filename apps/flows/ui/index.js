@@ -63,13 +63,8 @@ import './components/nodes/flows-remote-flow-editor.js';
 // Редакторы ресурсов
 import './components/resources/flows-base-resource-editor.js';
 import './components/resources/flows-llm-resource-editor.js';
-import './components/resources/flows-secret-resource-editor.js';
 import './components/resources/flows-code-resource-editor.js';
-import './components/resources/flows-http-resource-editor.js';
 import './components/resources/flows-files-resource-editor.js';
-import './components/resources/flows-prompt-resource-editor.js';
-import './components/resources/flows-rag-resource-editor.js';
-import './components/resources/flows-cache-resource-editor.js';
 
 // Editor shell
 import './components/editor/flows-editor-header.js';

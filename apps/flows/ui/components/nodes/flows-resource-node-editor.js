@@ -60,11 +60,20 @@ export class FlowsResourceNodeEditor extends PlatformElement {
                 letter-spacing: 0.06em;
                 margin: 0;
             }
+            .resource-definitions {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+                min-width: 0;
+            }
             .resource-def-card {
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
                 background: var(--glass-solid-subtle);
-                overflow: hidden;
+                overflow: visible;
+                min-width: 0;
+                padding: var(--space-5);
+                box-sizing: border-box;
             }
             .resource-def-miss {
                 padding: var(--space-3);

@@ -38,8 +38,6 @@ _SCAN_EXCLUDED_RES: tuple[re.Pattern[str], ...] = (
     re.compile(r"^crm\.entity_merge_modal\."),
     re.compile(r"^platform\.apps\."),
     re.compile(r"^platform\.file_preview_modal\."),
-    re.compile(r"^flows\.http_resource_editor\.auth_"),
-    re.compile(r"^flows\.rag_resource_editor\.provider_"),
     re.compile(r"^flows\.external_api_editor\.location_"),
     re.compile(r"^flows\.trigger_editor_modal\."),
     re.compile(r"^flows\.flow_create_modal\.preset_"),

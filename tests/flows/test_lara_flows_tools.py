@@ -10,7 +10,6 @@ from core.state import ExecutionState
 
 pytestmark = [
     pytest.mark.timeout(90, func_only=True),
-    pytest.mark.xdist_group("real_taskiq"),
 ]
 
 

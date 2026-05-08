@@ -1,12 +1,9 @@
 """
-RAGResource - wrapper для rag ресурса.
+Доступ к RAG namespace из процессов с ``RAGRepository`` на контейнере
+(``container.rag_repository``).
 
-``RAGRepository`` — ``container.rag_repository`` из ``BaseContainer`` (in-process провайдер — ``pgvector``,
-``service_client`` для HTTP-поиска).
-
-Поиск — ``RAGRepository.search_namespace`` (``ServiceClient`` → REST RAG API) с ``bind=self._bind``.
-
-Загрузка текста — in-process ``RAGRepository.provider.upload_document_from_text`` с тем же ``index_profile_config``.
+Поиск — ``RAGRepository.search_namespace`` с ``bind=self._bind``.
+Загрузка текста — ``RAGRepository.provider.upload_document_from_text``.
 """
 
 from __future__ import annotations
@@ -22,12 +19,12 @@ from core.rag.rag_resource_bind import RagResourceBindParams
 
 class RAGResource:
     """
-    Ресурс для работы с RAG namespace.
+    Работа с RAG namespace.
 
     Пример:
         kb = RAGResource(
             "ns-1",
-            get_container(),
+            container,
             search_options={
                 "channels": {"semantic": True, "lexical": True},
                 "rerank": True,
@@ -72,7 +69,7 @@ class RAGResource:
         filters: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Поиск по документам namespace через ``RAGRepository.search_namespace`` (дефолты из ``RagResourceBindParams``).
+        Поиск по документам namespace через ``RAGRepository.search_namespace``.
         """
         limit = top_k if top_k is not None else self._bind.default_top_k
 
@@ -117,9 +114,7 @@ class RAGResource:
         *,
         index_profile_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Загрузить текст документа в namespace.
-        """
+        """Загрузить текст документа в namespace."""
         repo = self._container.rag_repository
         context = get_context()
         if context is None or context.active_company is None:
@@ -156,3 +151,6 @@ class RAGResource:
 
     def __repr__(self) -> str:
         return f"<RAGResource namespace={self._bind.namespace} provider={self._bind.provider}>"
+
+
+__all__ = ["RAGResource"]

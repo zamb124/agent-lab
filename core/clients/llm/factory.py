@@ -1006,6 +1006,8 @@ def _detect_provider(base_url: Optional[str]) -> Optional[str]:
         return "openrouter"
     if "bothub.chat" in base_url:
         return "bothub"
+    if "api.openai.com" in base_url:
+        return "openai"
     if "llm.api.cloud.yandex.net" in base_url:
         return "yandex"
     return None

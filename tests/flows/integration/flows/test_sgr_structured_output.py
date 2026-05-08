@@ -216,7 +216,7 @@ async def run(state):
             config={
                 "url": test_a2a_sample,
                 "input_mapping": {"content": "@state:payload"},
-                "auth_headers": {"X-API-Key": "test-api-key-12345"},
+                "headers": {"X-API-Key": "test-api-key-12345"},
             }
         )
         
@@ -511,7 +511,7 @@ async def run(state):
             config={
                 "url": test_a2a_sample,
                 "input_mapping": {"content": "@state:tool2_data"},
-                "auth_headers": {"X-API-Key": "test-api-key-12345"},
+                "headers": {"X-API-Key": "test-api-key-12345"},
             }
         )
         

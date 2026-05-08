@@ -1,7 +1,7 @@
 """
-Параметры привязки RAG namespace к клиенту и к ресурсу Flow.
+Параметры привязки RAG namespace к клиенту (поиск, индексация).
 
-Согласовано с ``RAGResourceConfig`` в ``apps/flows/src/models/resource.py`` (наследует эту модель).
+Используются ``RAGRepository`` и ``core.rag.rag_resource.RAGResource``.
 """
 
 from __future__ import annotations

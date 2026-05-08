@@ -97,7 +97,7 @@ Tools = inline-конфиги внутри ноды / `FlowConfig`. Встрое
 |---|---|---|
 | `code` | Inline Python (`def execute(args, state)`), sandbox namespace | `code` |
 | `flow` | Дочерний flow как тул | `flow_id`, `branch_id`, `args_schema` |
-| `external_api` | HTTP к внешнему API | `url`, `method`, `args_schema` |
+| `external_api` | HTTP к внешнему API | `url`, `method`, `headers`, `body_template`, `input_mapping`; схема аргументов для LLM-tool — поле конфига `args_schema` |
 | `mcp` | Внешний MCP-сервер | `mcp_server`, `mcp_tool` (`mcp.mdc`) |
 | `llm_node` | Вложенный ReAct-узел как тул | `prompt`, `tools` (см. `flows_logic.mdc`, `NodeAsToolWrapper`) |
 

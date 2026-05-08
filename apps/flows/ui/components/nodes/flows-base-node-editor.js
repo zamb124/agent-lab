@@ -4,7 +4,7 @@
  * Два режима рендера, выбираются атрибутом `expanded`:
  *
  * 1. compact: header (только слот Run) → «Запустить» в шапке `flows-floating-panel`; заголовок панели — `cfg.name` или id;
- *    хост панели ищется обходом DOM ShadowRoot→host, иначе fallback. Для `nodeType === 'resource'` рядом с Run монтируется `platform-help-hint` (ресурсы на графе).
+ *    хост панели ищется обходом DOM ShadowRoot→host, иначе fallback. Для `resource` и `external_api` рядом с Run монтируется `platform-help-hint`.
  * 2. модалка «Инструмент» в LLM: `.embedded-tool-run-host` в шапке `flows-embedded-tool-config-modal`.
  * 3. expanded: .panel-main — fallback для Run без floating-panel и без этой модалки.
  * Запуск: `useOp('flows/code_execute')`, UI — `flows-node-run-control` (imperative mount).
@@ -251,7 +251,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._resources = this.useResource('flows/resources', { autoload: true });
         this._flowEditor = this.useOp('flows/editor');
         this._nodeRunControlEl = null;
-        this._resourceGraphHintEl = null;
+        this._panelHeaderHintEl = null;
         this._onNodeRunFired = () => { void this._runNodeTest(); };
         this._onNodeRunOpenFullEvent = (e) => { this._onOpenExecuteFull(e); };
     }
@@ -271,9 +271,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             this._nodeRunControlEl.remove();
             this._nodeRunControlEl = null;
         }
-        if (this._resourceGraphHintEl) {
-            this._resourceGraphHintEl.remove();
-            this._resourceGraphHintEl = null;
+        if (this._panelHeaderHintEl) {
+            this._panelHeaderHintEl.remove();
+            this._panelHeaderHintEl = null;
         }
         super.disconnectedCallback();
     }
@@ -295,22 +295,33 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         return el;
     }
 
-    _ensureResourceGraphHint() {
-        if (this._resourceGraphHintEl) {
-            return this._resourceGraphHintEl;
+    _ensurePanelHeaderHint() {
+        if (this._panelHeaderHintEl) {
+            return this._panelHeaderHintEl;
         }
         const hint = document.createElement('platform-help-hint');
-        this._resourceGraphHintEl = hint;
+        this._panelHeaderHintEl = hint;
         return hint;
     }
 
-    _syncResourceGraphHintProps() {
-        const hint = this._resourceGraphHintEl;
+    _syncPanelHeaderHintProps() {
+        const hint = this._panelHeaderHintEl;
         if (!hint) {
             return;
         }
-        hint.label = this.t('resource_node_editor.help_label');
-        hint.text = this.t('resource_node_editor.help_body');
+        if (this.nodeType === 'resource') {
+            hint.size = '';
+            hint.label = this.t('resource_node_editor.help_label');
+            hint.text = this.t('resource_node_editor.help_body');
+            return;
+        }
+        if (this.nodeType === 'external_api') {
+            hint.size = 'md';
+            hint.label = this.t('external_api_editor.help_label');
+            hint.text = this.t('external_api_editor.contract_hint');
+            return;
+        }
+        throw new Error(`flows-base-node-editor: panel header hint only for resource or external_api, got "${this.nodeType}"`);
     }
 
     _syncNodeRunControlProps() {
@@ -408,20 +419,22 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             target = this.renderRoot?.querySelector?.('[data-node-run-fallback="compact"]') ?? null;
         }
         if (!target) {
-            if (this._resourceGraphHintEl) {
-                this._resourceGraphHintEl.remove();
+            if (this._panelHeaderHintEl) {
+                this._panelHeaderHintEl.remove();
+                this._panelHeaderHintEl = null;
             }
             return;
         }
         if (el.parentElement !== target) {
             target.appendChild(el);
         }
-        if (this.nodeType === 'resource') {
-            const hint = this._ensureResourceGraphHint();
-            this._syncResourceGraphHintProps();
+        if (this.nodeType === 'resource' || this.nodeType === 'external_api') {
+            const hint = this._ensurePanelHeaderHint();
+            this._syncPanelHeaderHintProps();
             target.insertBefore(hint, el);
-        } else if (this._resourceGraphHintEl) {
-            this._resourceGraphHintEl.remove();
+        } else if (this._panelHeaderHintEl) {
+            this._panelHeaderHintEl.remove();
+            this._panelHeaderHintEl = null;
         }
     }
 
@@ -1148,12 +1161,14 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const cfg = asObject(this.nodeConfig);
         const tab = this._mappingTab;
         const isMcp = this.nodeType === 'mcp';
+        const isExternalApi = this.nodeType === 'external_api';
+        const useStateMappingOnOutput = isMcp || isExternalApi;
         let rawMapping;
         let field;
         if (tab === 'input') {
             rawMapping = cfg.input_mapping;
             field = 'input_mapping';
-        } else if (isMcp) {
+        } else if (useStateMappingOnOutput) {
             rawMapping = cfg.state_mapping;
             field = 'state_mapping';
         } else {
@@ -1161,7 +1176,8 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             field = 'output_mapping';
         }
         const mapping = isPlainObject(rawMapping) ? rawMapping : {};
-        const syncKey = `${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--imap--${isMcp ? 'mcp-' : ''}${tab}`;
+        const syncSegment = isMcp ? 'mcp-' : isExternalApi ? 'extapi-' : '';
+        const syncKey = `${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--imap--${syncSegment}${tab}`;
         return html`
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_mapping')}</div>

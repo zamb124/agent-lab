@@ -21,7 +21,7 @@ class ExternalFlowConfig(BaseModel):
     """Внешний flow (A2A endpoint) для подключения при старте."""
 
     url: str = Field(..., description="Base URL удалённого flow (A2A)")
-    auth_headers: Dict[str, str] = Field(default_factory=dict, description="Заголовки авторизации")
+    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP-заголовки к внешнему агенту")
     name: Optional[str] = Field(
         default=None,
         description="Отображаемое имя (если не задано — из A2A Agent Card удалённого endpoint)",

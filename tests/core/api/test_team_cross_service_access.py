@@ -7,6 +7,8 @@ core/api/team.py подключается в factory.py — эндпоинт GET
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -109,14 +111,18 @@ async def test_team_members_consistent_across_services(
         ("office", office_team_client, "/documents/api/team/members"),
     ]
 
-    member_sets: dict[str, set[str]] = {}
-    for service_name, client, url in clients:
+    async def _member_ids(service_name: str, client, url: str) -> tuple[str, set[str]]:
         response = await client.get(url, headers=auth_headers_system)
-        assert response.status_code == 200
+        assert response.status_code == 200, service_name
         response_data = response.json()
         members = response_data["items"]
         member_ids = {m["user_id"] for m in members}
-        member_sets[service_name] = member_ids
+        return service_name, member_ids
+
+    pairs = await asyncio.gather(
+        *[_member_ids(service_name, client, url) for service_name, client, url in clients]
+    )
+    member_sets = dict(pairs)
 
     reference = member_sets["frontend"]
     for service_name, ids in member_sets.items():

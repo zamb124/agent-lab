@@ -130,13 +130,16 @@ async def test_infer_unique_llm_key_two_shared_one_llm_counts_one() -> None:
                 type=ResourceType.LLM,
                 config={"provider": "openai", "model": "m", "temperature": 0.1},
             )
-        if rid == "sec-1":
-            return MagicMock(type=ResourceType.SECRET, config={"key": "@var:x"})
+        if rid == "files-1":
+            return MagicMock(
+                type=ResourceType.FILES,
+                config={"bucket": "b", "prefix": "", "region": "us-east-1"},
+            )
         raise AssertionError(f"unexpected resource_id {rid!r}")
 
     repo.get = AsyncMock(side_effect=_get)
     flow_resources = {
-        "s": {"resource_id": "sec-1"},
+        "f": {"resource_id": "files-1"},
         "l": {"resource_id": "llm-1"},
     }
     key = await infer_unique_llm_resource_key_from_merged_maps(

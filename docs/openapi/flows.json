@@ -2590,7 +2590,7 @@
             ],
             "title": "Url"
           },
-          "auth_headers": {
+          "headers": {
             "anyOf": [
               {
                 "additionalProperties": {
@@ -2602,7 +2602,7 @@
                 "type": "null"
               }
             ],
-            "title": "Auth Headers"
+            "title": "Headers"
           },
           "status": {
             "anyOf": [

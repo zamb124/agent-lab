@@ -92,12 +92,16 @@ def _analyze_llm_response(*, note_name: str, person_name: str) -> str:
     )
 
 
+@pytest.mark.timeout(30)
 class TestResolveNoteText:
     """Прямые тесты NoteProcessingService.resolve_note_text без LLM.
 
     Используем crm_container для обращения к сервису напрямую.
     Никакого real_taskiq не нужно — LLM не вызывается при маленьких файлах
     и при отключённой суммаризации.
+
+    Несколько upload + чтение файлов из MinIO часто превышают глобальные 5s
+    на теле теста — отдельный лимит только для этого класса.
     """
 
     @pytest.mark.asyncio

@@ -233,12 +233,15 @@ class WebhookChannelHandler(BaseChannelHandler):
         """Строит заголовки с резолвингом переменных."""
         headers = {"Content-Type": "application/json"}
         
-        config_headers = config.get("headers", {})
-        for key, value in config_headers.items():
-            headers[key] = self._resolve_value(value, variables)
-        
-        auth_headers = config.get("auth_headers", {})
-        for key, value in auth_headers.items():
+        config_headers = config.get("headers")
+        if not isinstance(config_headers, dict):
+            config_headers = {}
+        legacy_auth = config.get("auth_headers")
+        if isinstance(legacy_auth, dict) and len(legacy_auth) > 0:
+            merged_h = {**config_headers, **legacy_auth}
+        else:
+            merged_h = dict(config_headers)
+        for key, value in merged_h.items():
             headers[key] = self._resolve_value(value, variables)
         
         return headers

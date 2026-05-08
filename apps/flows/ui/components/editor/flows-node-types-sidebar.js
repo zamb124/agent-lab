@@ -16,6 +16,10 @@
  * Drag: dataTransfer `application/x-flow-node-type` для нод и
  * `application/x-flow-resource-type` для ресурсов.
  *
+ * Тип ноды `resource` в палитре не показываем: нода-ресурс на канве создаётся
+ * только перетаскиванием записи из секции «Ресурсы» (конкретный resource type),
+ * иначе дублирует смысл и путает.
+ *
  * UI-actions: «+» — новый триггер; карандаш/мусор в строке — редактирование / удаление.
  */
 
@@ -489,7 +493,8 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
     render() {
         const nodeTypes = Array.isArray(this._nodeTypesOp.lastResult) ? this._nodeTypesOp.lastResult : [];
         const resourceTypes = Array.isArray(this._resourceTypesOp.lastResult) ? this._resourceTypesOp.lastResult : [];
-        const filteredNodes = this._filterItems(nodeTypes);
+        const paletteNodeTypes = nodeTypes.filter((it) => it && it.type !== 'resource');
+        const filteredNodes = this._filterItems(paletteNodeTypes);
         const filteredResources = this._filterItems(resourceTypes);
 
         const grouped = new Map();

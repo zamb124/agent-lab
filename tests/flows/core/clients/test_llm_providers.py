@@ -626,6 +626,7 @@ class TestLLMModelsServiceProviderLitserve:
         settings.llm.bothub = None
         settings.llm.openrouter = None
         settings.llm.openai = None
+        settings.llm.yandex = None
         settings.provider_litserve.api.base_url = "http://127.0.0.1:8014/v1"
 
         with patch("apps.flows.src.services.llm_models_service.get_settings", return_value=settings):

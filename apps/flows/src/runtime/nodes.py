@@ -41,7 +41,7 @@ from apps.flows.src.mock import get_mock_for_node
 from apps.flows.src.models import NodeLLMOverride, NodeConfig, ReactConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
-from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchema
+from apps.flows.src.models.external_api import ExternalAPIConfig
 from core.context import get_context as get_request_context
 from core.state import (
     ExecutionExceptionRecord,
@@ -983,7 +983,7 @@ class RemoteFlowNode(BaseNode):
         self.url = cfg.get("url")
         self.remote_registry_flow_id = cfg.get("flow_id")
         self.branch_id = cfg.get("branch_id", "default")
-        self.auth_headers_config = cfg.get("auth_headers", {})
+        self.headers_config: Dict[str, str] = cfg.get("headers", {})
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """Вызывает внешний flow по A2A."""
@@ -991,9 +991,8 @@ class RemoteFlowNode(BaseNode):
             raise ValueError("RemoteFlowNode requires 'url' or 'flow_id'")
 
         container = get_container()
-        variables = state.variables
 
-        url, auth_headers = await self._resolve_connection(container, variables)
+        url, req_headers = await self._resolve_connection(container, state)
 
         content = inputs.get("content", state.content or "")
         if not isinstance(content, str):
@@ -1004,7 +1003,7 @@ class RemoteFlowNode(BaseNode):
             content=content,
             session_id=state.session_id,
             branch_id=self.branch_id,
-            auth_headers=auth_headers,
+            headers=req_headers,
         )
 
         if not isinstance(result, dict):
@@ -1021,36 +1020,38 @@ class RemoteFlowNode(BaseNode):
         return result["response"]
 
     async def _resolve_connection(
-        self, container, variables: Dict[str, Any]
+        self, container, state: ExecutionState
     ) -> tuple[str, Dict[str, str]]:
-        """Резолвит URL и auth headers."""
+        """Резолвит URL и HTTP-заголовки (@state: / @var: в строках)."""
+        variables = state.variables
         if self.remote_registry_flow_id:
             external_flow = await container.flow_discovery.get_flow(self.remote_registry_flow_id)
             if external_flow is None:
                 raise ValueError(
                     f"External flow '{self.remote_registry_flow_id}' not found in registry"
                 )
-            return external_flow.url, external_flow.auth_headers
-        
-        url = self._resolve_value(self.url, variables)
-        auth_headers = self._resolve_auth_headers(self.auth_headers_config, variables)
-        return url, auth_headers
+            return external_flow.url, self._resolve_headers_dict(
+                external_flow.headers, state, variables
+            )
 
-    def _resolve_value(self, value: str, variables: Dict[str, Any]) -> str:
-        """Резолвит @var: в строке."""
-        if not value:
-            return value
-        return MappingResolver.resolve_vars_in_string(value, variables)
+        url_raw = self.url
+        if not isinstance(url_raw, str) or not url_raw.strip():
+            raise ValueError("RemoteFlowNode: url must be a non-empty string when flow_id is not set")
+        url = MappingResolver.resolve_http_header_value(url_raw, state, variables)
+        return url, self._resolve_headers_dict(self.headers_config, state, variables)
 
-    def _resolve_auth_headers(
+    def _resolve_headers_dict(
         self,
         headers: Optional[Dict[str, str]],
+        state: ExecutionState,
         variables: Dict[str, Any],
     ) -> Dict[str, str]:
-        """Резолвит @var: во всех значениях headers."""
         if not headers:
             return {}
-        return {k: self._resolve_value(v, variables) for k, v in headers.items()}
+        return {
+            k: MappingResolver.resolve_http_header_value(v, state, variables)
+            for k, v in headers.items()
+        }
 
 
 class ExternalAPINode(BaseNode):
@@ -1062,11 +1063,6 @@ class ExternalAPINode(BaseNode):
 
     def _build_api_config(self) -> ExternalAPIConfig:
         """Строит конфиг API."""
-        parameters = []
-        for p in self.api_config.get("parameters", []):
-            if isinstance(p, dict):
-                parameters.append(ParameterSchema(**p))
-
         return ExternalAPIConfig(
             api_id=self.node_id,
             name=self.api_config.get("name", self.node_id),
@@ -1074,9 +1070,8 @@ class ExternalAPINode(BaseNode):
             url=self.api_config.get("url"),
             method=self.api_config.get("method", "POST"),
             headers=self.api_config.get("headers", {}),
-            auth_headers=self.api_config.get("auth_headers", {}),
-            parameters=parameters,
             timeout=self.api_config.get("timeout", 30.0),
+            body_template=self.api_config.get("body_template", "{}"),
             state_mapping=self.api_config.get("state_mapping", {}),
         )
 
@@ -1085,15 +1080,8 @@ class ExternalAPINode(BaseNode):
         api_cfg = self._build_api_config()
         variables = state.variables
 
-        # Если input_mapping не задан, автоматически берем параметры из state
-        if not inputs:
-            for param in api_cfg.parameters:
-                value = state.get(param.name)
-                if value is not None:
-                    inputs[param.name] = value
-
         client = ExternalAPIClient(timeout=api_cfg.timeout)
-        result = await client.call(api_cfg, inputs, variables)
+        result = await client.call(api_cfg, inputs, variables, state)
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             interrupt_data = result["interrupt"]

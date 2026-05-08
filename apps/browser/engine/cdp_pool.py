@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Optional
 
+from apps.browser.engine.cdp_url_normalize import normalize_playwright_cdp_connect_url
+
 
 class CDPConnectionPool:
     """
@@ -94,7 +96,8 @@ class CDPConnectionPool:
                 raise RuntimeError("Playwright не инициализирован")
             if endpoint_key in self._browsers:
                 return self._browsers[endpoint_key]
-            browser = await self._playwright.chromium.connect_over_cdp(cdp_url)
+            ws_url = await normalize_playwright_cdp_connect_url(cdp_url)
+            browser = await self._playwright.chromium.connect_over_cdp(ws_url)
             self._browsers[endpoint_key] = browser
             return browser
 

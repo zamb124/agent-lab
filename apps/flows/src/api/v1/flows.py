@@ -513,7 +513,7 @@ class FlowResponse(BaseModel):
     
     # EXTERNAL flow (A2A)
     url: Optional[str] = None
-    auth_headers: Optional[Dict[str, str]] = None
+    headers: Optional[Dict[str, str]] = None
     status: Optional[str] = None
     last_health_check: Optional[str] = None
     agent_card: Optional[Dict[str, Any]] = None
@@ -699,7 +699,7 @@ async def list_flows(
             status_value = f.status.value if isinstance(f.status, ExternalAgentStatus) else f.status
             response_data.update({
                 "url": f.url,
-                "auth_headers": f.auth_headers,
+                "headers": f.headers,
                 "status": status_value,
                 "last_health_check": f.last_health_check.isoformat() if f.last_health_check else None,
                 "agent_card": f.agent_card,

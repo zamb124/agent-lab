@@ -577,10 +577,9 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/echo",
                     "method": "POST",
-                    "parameters": [
-                        {"name": "message", "location": "body"},
-                        {"name": "uppercase", "location": "body"}
-                    ]
+                    "body_template": (
+                        '{"message": "@state:message", "uppercase": "@state:uppercase"}'
+                    ),
                 },
                 "state": state
             }
@@ -605,9 +604,7 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/user/{{user_id}}",
                     "method": "GET",
-                    "parameters": [
-                        {"name": "user_id", "location": "path"}
-                    ]
+                    "input_mapping": {"user_id": "@state:user_id"},
                 },
                 "state": state
             }
@@ -631,11 +628,9 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/calculate",
                     "method": "POST",
-                    "parameters": [
-                        {"name": "a", "location": "body"},
-                        {"name": "b", "location": "body"},
-                        {"name": "operation", "location": "body"}
-                    ]
+                    "body_template": (
+                        '{"a": "@state:a", "b": "@state:b", "operation": "@state:operation"}'
+                    ),
                 },
                 "state": state
             }
@@ -658,11 +653,9 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/calculate",
                     "method": "POST",
-                    "parameters": [
-                        {"name": "a", "location": "body"},
-                        {"name": "b", "location": "body"},
-                        {"name": "operation", "location": "body"}
-                    ]
+                    "body_template": (
+                        '{"a": "@state:a", "b": "@state:b", "operation": "@state:operation"}'
+                    ),
                 },
                 "state": state
             }
@@ -685,8 +678,8 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/auth-required",
                     "method": "POST",
-                    "auth_headers": {"Authorization": "Bearer test-token-123"},
-                    "parameters": [{"name": "message", "location": "body"}]
+                    "headers": {"Authorization": "Bearer test-token-123"},
+                    "body_template": '{"message": "@state:message"}',
                 },
                 "state": state
             }
@@ -709,8 +702,8 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/auth-required",
                     "method": "POST",
-                    "auth_headers": {"X-API-Key": "api-key-456"},
-                    "parameters": [{"name": "message", "location": "body"}]
+                    "headers": {"X-API-Key": "api-key-456"},
+                    "body_template": '{"message": "@state:message"}',
                 },
                 "state": state
             }
@@ -736,8 +729,8 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/auth-required",
                     "method": "POST",
-                    "auth_headers": {"Authorization": "Bearer @var:api_token"},
-                    "parameters": [{"name": "message", "location": "body"}]
+                    "headers": {"Authorization": "Bearer @var:api_token"},
+                    "body_template": '{"message": "@state:message"}',
                 },
                 "state": state
             }
@@ -760,7 +753,7 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/echo",
                     "method": "POST",
-                    "parameters": [{"name": "message", "location": "body"}],
+                    "body_template": '{"message": "@state:message"}',
                     "state_mapping": {"result": "echo_result"}
                 },
                 "state": state
@@ -784,11 +777,9 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/calculate",
                     "method": "POST",
-                    "parameters": [
-                        {"name": "a", "location": "body"},
-                        {"name": "b", "location": "body"},
-                        {"name": "operation", "location": "body"}
-                    ],
+                    "body_template": (
+                        '{"a": "@state:a", "b": "@state:b", "operation": "@state:operation"}'
+                    ),
                     "state_mapping": {"result": "calculation_result"}
                 },
                 "state": state
@@ -812,11 +803,9 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/calculate",
                     "method": "POST",
-                    "parameters": [
-                        {"name": "a", "location": "body"},
-                        {"name": "b", "location": "body"},
-                        {"name": "operation", "location": "body"}
-                    ],
+                    "body_template": (
+                        '{"a": "@state:a", "b": "@state:b", "operation": "@state:operation"}'
+                    ),
                     "state_mapping": {
                         "result": "calc_result",
                         "operation": "calc_operation"
@@ -847,7 +836,7 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": "@var:base_url/user/{user_id}",
                     "method": "GET",
-                    "parameters": [{"name": "user_id", "location": "path"}]
+                    "input_mapping": {"user_id": "@state:user_id"},
                 },
                 "state": state
             }
@@ -886,11 +875,9 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/calculate",
                     "method": "POST",
-                    "parameters": [
-                        {"name": "a", "location": "body"},
-                        {"name": "b", "location": "body"},
-                        {"name": "operation", "location": "body"}
-                    ]
+                    "body_template": (
+                        '{"a": "@state:a", "b": "@state:b", "operation": "@state:operation"}'
+                    ),
                 },
                 "state": state
             }
@@ -913,7 +900,7 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/auth-required",
                     "method": "POST",
-                    "parameters": [{"name": "message", "location": "body"}]
+                    "body_template": '{"message": "@state:message"}',
                 },
                 "state": state
             }
@@ -936,7 +923,7 @@ class TestExternalAPINode:
                 "node_config": {
                     "url": f"{external_api_server}/ask-clarification",
                     "method": "POST",
-                    "parameters": [{"name": "message", "location": "body"}]
+                    "body_template": '{"message": "@state:message"}',
                 },
                 "state": state
             }
@@ -1074,7 +1061,7 @@ class TestRemoteFlowNode:
                 "node_type": "remote_flow",
                 "node_config": {
                     "url": remote_flow_server,
-                    "auth_headers": {"Authorization": "Bearer token-123"}
+                    "headers": {"Authorization": "Bearer token-123"}
                 },
                 "state": state
             }
@@ -1098,7 +1085,7 @@ class TestRemoteFlowNode:
                 "node_type": "remote_flow",
                 "node_config": {
                     "url": remote_flow_server,
-                    "auth_headers": {"Authorization": "Bearer @var:remote_token"}
+                    "headers": {"Authorization": "Bearer @var:remote_token"}
                 },
                 "state": state
             }

@@ -172,8 +172,8 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(last.patch).to.deep.equal({ operator_queue_slug: 'support' });
     });
 
-    it('flows-external-api-editor — добавление параметра', async () => {
-        const node = { node_id: 'a', type: 'external_api', name: 'API', url: 'https://x', method: 'POST', parameters: [] };
+    it('flows-external-api-editor — смена HTTP-метода эмитит patch', async () => {
+        const node = { node_id: 'a', type: 'external_api', name: 'API', url: 'https://x', method: 'POST' };
         const el = await fixture(html`
             <flows-external-api-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
                 .nodeConfig=${node} .nodeType=${'external_api'}>
@@ -181,11 +181,24 @@ describe('node editors — top-level NodeConfig contract', () => {
         `);
         await elementUpdated(el);
         let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
-        const addBtn = el.shadowRoot.querySelector('flows-base-node-editor').querySelector('glass-button');
-        addBtn.click();
-        expect(last.patch.parameters).to.have.lengthOf(1);
-        expect(last.patch.parameters[0]).to.have.property('location', 'body');
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const methodPf = base.querySelector('.grid platform-field[type="enum"]');
+        expect(methodPf, 'method enum field').to.not.be.null;
+        const pfEnum = methodPf.shadowRoot.querySelector('platform-field-enum');
+        expect(pfEnum, 'method platform-field-enum').to.not.be.null;
+        const inp = pfEnum.shadowRoot.querySelector('input.field-pill-enum-input');
+        inp.focus();
+        await elementUpdated(pfEnum);
+        const getRow = pfEnum.shadowRoot.querySelector('[data-enum-value="GET"]');
+        expect(getRow, 'GET enum row').to.not.be.null;
+        getRow.click();
+        expect(last, 'editor change event').to.exist;
+        expect(last.patch).to.deep.equal({ method: 'GET' });
     });
 
     it('flows-mcp-node-editor — server select', async () => {

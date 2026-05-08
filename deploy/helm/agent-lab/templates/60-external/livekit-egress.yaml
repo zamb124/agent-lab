@@ -21,7 +21,7 @@ spec:
       containers:
         - name: egress
           image: {{ .Values.livekitEgress.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.livekitEgress.imagePullPolicy }}
           env:
             - name: LIVEKIT_API_KEY
               valueFrom:

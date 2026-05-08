@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from apps.flows.src.container import FlowContainer
-from apps.flows.src.resources.wrappers.rag_resource import RAGResource
+from core.rag.rag_resource import RAGResource
 from core.clients.service_client import ServiceClient
 from core.rag.providers.pgvector_provider import PgVectorProvider
 

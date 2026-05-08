@@ -56,7 +56,7 @@ class TestFlowDiscoveryService:
             url="http://test-agent:8080",
             name="Test Agent 1",
             status=ExternalAgentStatus.ACTIVE,
-            auth_headers={"X-API-Key": "test-key"},
+            headers={"X-API-Key": "test-key"},
         )
 
         await container.flow_repository.set(agent)
@@ -67,7 +67,7 @@ class TestFlowDiscoveryService:
         found = await container.flow_repository.get("test_agent_1")
         assert found is not None
         assert found.name == "Test Agent 1"
-        assert found.auth_headers == {"X-API-Key": "test-key"}
+        assert found.headers == {"X-API-Key": "test-key"}
 
     @pytest.mark.asyncio
     async def test_list_active_agents(self, app):

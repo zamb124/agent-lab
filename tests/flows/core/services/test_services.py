@@ -271,14 +271,14 @@ class TestFlowDiscoveryService:
         url = f"http://new-agent-{unique_id}:8080"
         registered = await discovery_service.register_agent(
             url=url,
-            auth_headers={"Authorization": "Bearer token"},
+            headers={"Authorization": "Bearer token"},
             name="Custom Name",
         )
 
         assert registered is not None
         assert registered.name == "Custom Name"
         assert registered.url == url
-        assert registered.auth_headers == {"Authorization": "Bearer token"}
+        assert registered.headers == {"Authorization": "Bearer token"}
         assert registered.status == ExternalAgentStatus.ACTIVE
         assert registered.agent_card["name"] == "Test Agent"
 
@@ -530,12 +530,12 @@ class TestFlowDiscoveryService:
         configs = [
             ExternalFlowConfig(
                 url=url1,
-                auth_headers={"X-Key": "key1"},
+                headers={"X-Key": "key1"},
                 name="Config Agent 1",
             ),
             ExternalFlowConfig(
                 url=url2,
-                auth_headers={"X-Key": "key2"},
+                headers={"X-Key": "key2"},
             ),
         ]
 

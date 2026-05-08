@@ -62,6 +62,7 @@ import {
     MAX_CHIPS_SHOWN,
 } from '../../_helpers/flows-tool-visual.js';
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
+import { getBlankExternalApiNodeConfig } from '../../_helpers/flows-external-api-defaults.js';
 const NODE_RADIUS = 12;
 const PORT_R = 6;
 const SNAP_THRESHOLD = 4;
@@ -1238,13 +1239,16 @@ export class FlowsFlowCanvas extends PlatformElement {
                 return;
             }
             const id = genId('n');
-            const newNode = {
+            const base = {
                 type: nodeType,
                 name: nodeType,
                 pos_x: local.x - NODE_W / 2,
                 pos_y: local.y - NODE_H / 2,
-                config: {},
             };
+            const newNode =
+                nodeType === 'external_api'
+                    ? { ...base, ...getBlankExternalApiNodeConfig() }
+                    : { ...base, config: {} };
             const nodes = { ...asObject(data.nodes), [id]: newNode };
             const next = { ...data, nodes };
             this._editor.updateBranchData({ data: next });

@@ -47,12 +47,43 @@ from apps.flows.src.container import get_container
 from core.auth import permission_checker
 from core.logging import get_logger
 from apps.flows.src.mock import get_mock_for_tool
-from apps.flows.src.models.external_api import ExternalAPIConfig, ParameterSchema
+from apps.flows.src.models.external_api import ExternalAPIConfig
 
 logger = get_logger(__name__)
 
 # Тип для permission: строка или список строк
 Permission = Optional[Union[str, List[str]]]
+
+
+def _external_api_flat_args_schema_to_model(schema: Dict[str, Any]) -> type[BaseModel]:
+    """Плоский {name: {type, description, default?}} -> Pydantic-модель для BaseTool.parameters."""
+    from pydantic import Field, create_model
+
+    fields = {}
+    for name, meta in schema.items():
+        if not isinstance(meta, dict):
+            raise ValueError(
+                f"ExternalAPITool args_schema['{name}'] must be a dict, got {type(meta).__name__}"
+            )
+        field_type: type = str
+        type_str = meta.get("type", "string")
+        if type_str == "integer":
+            field_type = int
+        elif type_str == "number":
+            field_type = float
+        elif type_str == "boolean":
+            field_type = bool
+        elif type_str == "array":
+            field_type = list
+        elif type_str == "object":
+            field_type = dict
+        description = meta.get("description", "")
+        default = meta.get("default", ...)
+        if default is ...:
+            fields[name] = (field_type, Field(description=description))
+        else:
+            fields[name] = (field_type, Field(default=default, description=description))
+    return create_model("ExternalAPIToolArgs", **fields)
 
 
 def is_test_mode() -> bool:
@@ -390,8 +421,8 @@ class ExternalAPITool(BaseTool):
     """
     Инструмент для вызова внешнего HTTP API.
 
-    Может использоваться в react агентах для вызова внешних сервисов.
-    Поддерживает @var: переменные и OpenAPI-like параметры.
+    Используется в основном в тестах; конфиг узла задаёт URL, headers, body_template (@state:, @var:).
+    Схема аргументов для LLM — через args_schema родителя (по умолчанию без полей в properties).
     """
 
     def __init__(
@@ -402,13 +433,14 @@ class ExternalAPITool(BaseTool):
         title: Optional[str] = None,
         description: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
-        auth_headers: Optional[Dict[str, str]] = None,
-        parameters: Optional[list] = None,
+        body_template: str = "{}",
         timeout: float = 30.0,
         response_mapping: Optional[Dict[str, str]] = None,
         permission: Permission = None,
         tags: Optional[List[str]] = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
+        *,
+        flat_args_schema: Optional[Dict[str, Any]] = None,
     ):
         self.api_id = api_id
         self.name = api_id
@@ -419,57 +451,15 @@ class ExternalAPITool(BaseTool):
         self._url = url
         self._method = method
         self._headers = headers or {}
-        self._auth_headers = auth_headers or {}
-        self._api_parameters = parameters or []
+        self._body_template = body_template if isinstance(body_template, str) else "{}"
         self._timeout = timeout
         self._response_mapping = response_mapping or {}
-
-    @property
-    def parameters(self) -> Dict[str, Any]:
-        """Строит OpenAI-совместимую схему параметров."""
-        properties = {}
-        required = []
-
-        for param in self._api_parameters:
-            param_name = param.get("name") if isinstance(param, dict) else param.name
-            param_type = (
-                param.get("type", "string")
-                if isinstance(param, dict)
-                else getattr(param, "type", "string")
-            )
-            param_desc = (
-                param.get("description")
-                if isinstance(param, dict)
-                else getattr(param, "description", None)
-            )
-            param_required = (
-                param.get("required", False)
-                if isinstance(param, dict)
-                else getattr(param, "required", False)
-            )
-
-            properties[param_name] = {"type": param_type}
-            if param_desc:
-                properties[param_name]["description"] = param_desc
-
-            if param_required:
-                required.append(param_name)
-
-        return {
-            "type": "object",
-            "properties": properties,
-            "required": required,
-        }
+        self.args_schema = (
+            _external_api_flat_args_schema_to_model(flat_args_schema) if flat_args_schema else None
+        )
 
     async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """Вызывает внешний API."""
-        parameters = []
-        for p in self._api_parameters:
-            if isinstance(p, dict):
-                parameters.append(ParameterSchema(**p))
-            else:
-                parameters.append(p)
-
         api_config = ExternalAPIConfig(
             api_id=self.api_id,
             name=self.name,
@@ -477,15 +467,14 @@ class ExternalAPITool(BaseTool):
             url=self._url,
             method=self._method,
             headers=self._headers,
-            auth_headers=self._auth_headers,
-            parameters=parameters,
+            body_template=self._body_template,
             timeout=self._timeout,
         )
 
         variables = state.variables
 
         client = ExternalAPIClient(timeout=self._timeout)
-        result = await client.call(api_config, args, variables)
+        result = await client.call(api_config, args, variables, state)
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             from apps.flows.src.runtime.exceptions import FlowInterrupt

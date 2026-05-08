@@ -3,6 +3,7 @@
  * (кастомный триггер). Пузырёк в document.body (z-index из nextModalLayerZIndex).
  * Свойство strategy для совместимости; `wide` — широкий моноширинный режим (JSON).
  * `placement`: `auto` — не вылезать за верх вьюпорта (снизу от якоря), `top` / `bottom` — жёстко.
+ * `size`: `md` — кнопка 32×32 (как `flows-node-run-control`).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
@@ -97,6 +98,13 @@ export class PlatformHelpHint extends PlatformElement {
                     border-color var(--duration-fast, 0.2s) ease;
             }
 
+            :host([size='md']) .hint-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+                border-radius: var(--radius-md, 8px);
+            }
+
             .hint-btn:hover,
             .hint-root:focus-within .hint-btn {
                 color: var(--text-primary, rgba(255, 255, 255, 0.92));
@@ -113,6 +121,8 @@ export class PlatformHelpHint extends PlatformElement {
         strategy: { type: String },
         /** @type {'auto'|'top'|'bottom'} */
         placement: { type: String, reflect: true },
+        /** Площадь кнопки как у flows-node-run-control (32×32). */
+        size: { type: String, reflect: true },
         wide: { type: Boolean, reflect: true },
         _open: { state: true },
     };
@@ -123,6 +133,7 @@ export class PlatformHelpHint extends PlatformElement {
         this.label = 'Справка';
         this.strategy = 'portal';
         this.placement = 'auto';
+        this.size = '';
         this.wide = false;
         this._open = false;
         this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;

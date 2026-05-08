@@ -227,6 +227,7 @@ class SessionWorkerManager:
             "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL",
             "S3__DEFAULT_BUCKET",
             "DATABASE__FLOWS_URL",
+            "MOCK_LLM_REDIS_KEY",
         )
         payload = "\n".join(f"{k}={env.get(k, '')}" for k in critical_keys)
         return hashlib.sha256(payload.encode()).hexdigest()
@@ -450,8 +451,8 @@ def taskiq_worker():
         name="TaskIQ",
         lock_file=_TASKIQ_WORKER_LOCK,
         pid_file=_TASKIQ_WORKER_PID,
-        # Один процесс: mock LLM в Redis (mock_llm:responses) без атомарного pop — при -w 2
-        # параллельные задачи крадут ответы друг у друга и E2E (триггеры, RAG) падают.
+        # Один процесс TaskIQ: несколько параллельных задач делят одну очередь mock LLM в Redis
+        # для данной полосы (MOCK_LLM_REDIS_KEY=mock_llm:responses:flows).
         command=[sys.executable, "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app", "-w", "1"],
         env={
             **TEST_DATABASE_ENV,
@@ -459,6 +460,7 @@ def taskiq_worker():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
+            "MOCK_LLM_REDIS_KEY": "mock_llm:responses:flows",
             "CALLS__LIVEKIT_URL": "ws://localhost:7890",
             "CALLS__LIVEKIT_PUBLIC_URL": "http://localhost:7890",
             "CALLS__LIVEKIT_API_KEY": "devkey",
@@ -503,6 +505,7 @@ def rag_worker():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
+            "MOCK_LLM_REDIS_KEY": "mock_llm:responses:rag",
             "S3__DEFAULT_BUCKET": "test-bucket",
             "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
         },
@@ -576,6 +579,7 @@ def sync_worker():
             "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
             "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
             "SERVER__SYNC_SERVICE_URL": "http://127.0.0.1:9005",
+            "MOCK_LLM_REDIS_KEY": "mock_llm:responses:sync",
         },
         cleanup_patterns=[
             "apps.sync_worker.worker",
@@ -615,6 +619,7 @@ def crm_worker():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
+            "MOCK_LLM_REDIS_KEY": "mock_llm:responses:crm",
         },
         cleanup_patterns=[
             "apps.crm_worker.worker",
@@ -666,6 +671,7 @@ def taskiq_scheduler():
             "DATABASE__REDIS_URL": "redis://localhost:63792/0",
             "TASKS__BROKER_URL": "redis://localhost:63792/1",
             "AUTH__PERMISSIONS_ENABLED": "false",
+            "MOCK_LLM_REDIS_KEY": "mock_llm:responses:flows",
         },
     )
 

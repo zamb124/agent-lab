@@ -14,6 +14,8 @@ from core.billing.service import company_resource_prices_storage_key, company_se
 from core.models.identity_models import Company
 from core.models.payment_models import PaymentProviderType
 
+pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
+
 
 @pytest_asyncio.fixture
 async def frontend_client_system(frontend_app, auth_token_system):

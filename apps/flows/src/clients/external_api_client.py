@@ -2,8 +2,8 @@
 ExternalAPIClient - HTTP клиент для вызова внешних API.
 
 Поддерживает:
-- @var: переменные в URL, headers, параметрах (включая вложенные пути @var:config.api_key)
-- OpenAPI-like параметры (query, path, header, body)
+- @var: / @state: в URL, headers; JSON body_template с рекурсивным резолвом
+- Подстановка {key} в URL значениями из args (inputs / input_mapping)
 - Протокол ответа с interrupt
 - Умная логика прокси: сначала без, при 401/403 - с прокси
 """
@@ -14,16 +14,15 @@ from urllib.parse import urlparse
 import httpx
 
 from apps.flows.src.mapping import MappingResolver
+from apps.flows.src.models.external_api import (
+    ExternalAPIConfig,
+    ResponseStatus,
+    ResponseType,
+)
 from core.errors import ExternalAPIError
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
-from apps.flows.src.models.external_api import (
-    ExternalAPIConfig,
-    ParameterLocation,
-    ResponseStatus,
-    ResponseType,
-)
 
 logger = get_logger(__name__)
 
@@ -46,6 +45,7 @@ class ExternalAPIClient:
         config: ExternalAPIConfig,
         args: Dict[str, Any],
         variables: Optional[Dict[str, Any]] = None,
+        state: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Выполняет вызов внешнего API.
@@ -54,8 +54,9 @@ class ExternalAPIClient:
 
         Args:
             config: Конфигурация API
-            args: Аргументы вызова (от LLM или из state)
-            variables: Резолвнутые переменные (state.variables)
+            args: Результат input_mapping (подстановка {key} в url, merge в JSON body)
+            variables: state.variables
+            state: ExecutionState для резолва body_template (@state: / @var: в JSON)
 
         Returns:
             Результат в формате:
@@ -68,25 +69,28 @@ class ExternalAPIClient:
             }
         """
         variables = variables or {}
+        if state is None:
+            raise ExternalAPIError(
+                "execution state is required for external_api url, headers, and body_template"
+            )
 
-        url = self._resolve_url(config.url, args, variables)
-        headers = self._build_headers(config, variables)
-        query_params, body = self._build_request(config, args, variables)
+        url = self._resolve_url(config.url, args, variables, state)
+        headers = self._build_headers(config, variables, state)
 
-        logger.debug(f"ExternalAPI call: {config.method.value} {url}")
-
-        request_kwargs = {
+        request_kwargs: Dict[str, Any] = {
             "method": config.method.value,
             "url": url,
             "headers": headers,
         }
-        if query_params:
-            request_kwargs["params"] = query_params
-        if body and config.method.value != "GET":
+
+        if config.method.value != "GET":
+            body = self._build_json_body(config, state, variables, args)
             if config.request_content_type == "application/json":
                 request_kwargs["json"] = body
             else:
                 request_kwargs["data"] = body
+
+        logger.debug(f"ExternalAPI call: {config.method.value} {url}")
 
         async with traced_operation(
             "flows.external_api.call",
@@ -130,20 +134,15 @@ class ExternalAPIClient:
         hostname = parsed.hostname or ""
         return hostname in LOCAL_HOSTS
 
-    def _resolve_value(self, value: Any, variables: Dict[str, Any]) -> Any:
-        """Резолвит @var: значения с поддержкой вложенных путей."""
-        if not isinstance(value, str):
-            return value
-        return MappingResolver.resolve_vars_in_string(value, variables)
-
     def _resolve_url(
         self,
         url: str,
         args: Dict[str, Any],
         variables: Dict[str, Any],
+        state: Any,
     ) -> str:
-        """Резолвит URL с path параметрами и @var."""
-        resolved = self._resolve_value(url, variables)
+        """Резолвит URL с path параметрами и шаблонами в строке."""
+        resolved = MappingResolver.resolve_http_header_value(url, state, variables)
 
         for key, value in args.items():
             resolved = resolved.replace(f"{{{key}}}", str(value))
@@ -154,53 +153,34 @@ class ExternalAPIClient:
         self,
         config: ExternalAPIConfig,
         variables: Dict[str, Any],
+        state: Any,
     ) -> Dict[str, str]:
-        """Собирает headers с резолвингом @var."""
-        headers = {}
+        """Собирает headers с резолвингом @state: / @var:."""
+        headers: Dict[str, str] = {}
 
         for key, value in config.headers.items():
-            headers[key] = self._resolve_value(value, variables)
-
-        for key, value in config.auth_headers.items():
-            headers[key] = self._resolve_value(value, variables)
+            headers[key] = MappingResolver.resolve_http_header_value(value, state, variables)
 
         if config.request_content_type and "Content-Type" not in headers:
             headers["Content-Type"] = config.request_content_type
 
         return headers
 
-    def _build_request(
+    def _build_json_body(
         self,
         config: ExternalAPIConfig,
-        args: Dict[str, Any],
+        state: Any,
         variables: Dict[str, Any],
-    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Собирает query params и body из параметров.
-
-        Returns:
-            (query_params, body)
-        """
-        query_params = {}
-        body = {}
-
-        for param in config.parameters:
-            value = args.get(param.name)
-
-            if value is None and param.default is not None:
-                value = self._resolve_value(param.default, variables)
-
-            if value is None:
-                if param.required:
-                    raise ExternalAPIError(f"Required parameter '{param.name}' is missing")
-                continue
-
-            if param.location == ParameterLocation.QUERY:
-                query_params[param.name] = value
-            elif param.location == ParameterLocation.BODY:
-                body[param.name] = value
-
-        return query_params, body
+        args: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        merged = MappingResolver.parse_and_resolve_body_template(
+            config.body_template, state, variables
+        )
+        if not isinstance(merged, dict):
+            raise ExternalAPIError("body_template must resolve to a JSON object at the root")
+        if not args:
+            return merged
+        return {**merged, **args}
 
     def _parse_response(
         self,

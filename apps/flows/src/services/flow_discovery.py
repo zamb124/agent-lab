@@ -36,7 +36,7 @@ class FlowDiscoveryService:
             try:
                 flow_cfg = await self.register_agent(
                     url=item.url,
-                    auth_headers=item.auth_headers,
+                    headers=item.headers,
                     name=item.name,
                 )
                 registered += 1
@@ -50,7 +50,7 @@ class FlowDiscoveryService:
     async def register_agent(
         self,
         url: str,
-        auth_headers: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
         name: Optional[str] = None,
     ) -> FlowConfig:
         """
@@ -67,7 +67,7 @@ class FlowDiscoveryService:
                 logger.info(f"External flow already registered: {url}")
                 return existing
 
-        card_payload = await self._fetch_agent_card(url, auth_headers)
+        card_payload = await self._fetch_agent_card(url, headers)
 
         flow_id = self._generate_flow_id(url)
         display_name = name or card_payload.get("name", flow_id)
@@ -80,7 +80,7 @@ class FlowDiscoveryService:
             url=url,
             name=display_name,
             description=card_payload.get("description", ""),
-            auth_headers=auth_headers or {},
+            headers=headers or {},
             status=ExternalAgentStatus.ACTIVE,
             last_health_check=now,
             agent_card=card_payload,
@@ -143,7 +143,7 @@ class FlowDiscoveryService:
             return False
 
         try:
-            card_payload = await self._fetch_agent_card(ext_cfg.url, ext_cfg.auth_headers)
+            card_payload = await self._fetch_agent_card(ext_cfg.url, ext_cfg.headers)
 
             ext_cfg.status = ExternalAgentStatus.ACTIVE
             ext_cfg.last_health_check = datetime.now(timezone.utc)
@@ -167,10 +167,10 @@ class FlowDiscoveryService:
     async def _fetch_agent_card(
         self,
         url: str,
-        auth_headers: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """HTTP: A2A agent-card (спека A2A)."""
-        return await self._a2a_client.get_agent_card(url, auth_headers)
+        return await self._a2a_client.get_agent_card(url, headers)
 
     def _generate_flow_id(self, url: str) -> str:
         """Стабильный flow_id из host:port URL."""

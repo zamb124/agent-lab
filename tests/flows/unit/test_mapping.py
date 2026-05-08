@@ -626,8 +626,8 @@ class TestBuildMappedStateWithVar:
         with pytest.raises(VariableResolutionError):
             MappingResolver.build_mapped_state(mapping, state)
 
-    def test_auth_headers_with_var(self):
-        """Реальный сценарий: auth headers с @var:"""
+    def test_headers_with_var(self):
+        """Реальный сценарий: HTTP headers с @var:"""
         mapping = {
             "Authorization": "@var:api_token",
             "X-API-Key": "@var:config.keys.primary"

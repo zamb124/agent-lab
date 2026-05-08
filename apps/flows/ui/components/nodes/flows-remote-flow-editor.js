@@ -4,7 +4,7 @@
  * Поля точно по `RemoteFlowNode` (apps/flows/src/runtime/nodes.py):
  *   - url (direct URL) ИЛИ flow_id (внешний реестр)
  *   - branch_id (default 'default')
- *   - auth_headers (dict<str, str>)
+ *   - headers (dict<str, str>, @state: / @var: в строках)
  *
  * Toggle режима: direct URL ↔ by flow_id.
  */
@@ -135,8 +135,8 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         this._emitPatch({ branch_id: v });
     }
 
-    _onAuthHeaders(parsed) {
-        this._emitPatch({ auth_headers: parsed && typeof parsed === 'object' ? parsed : {} });
+    _onHeaders(parsed) {
+        this._emitPatch({ headers: parsed && typeof parsed === 'object' ? parsed : {} });
     }
 
     render() {
@@ -145,8 +145,8 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         const url = typeof cfg.url === 'string' ? cfg.url : '';
         const flowIdValue = typeof cfg.flow_id === 'string' ? cfg.flow_id : '';
         const branchId = typeof cfg.branch_id === 'string' ? cfg.branch_id : 'default';
-        const authHeaders = cfg.auth_headers && typeof cfg.auth_headers === 'object'
-            ? JSON.stringify(cfg.auth_headers, null, 2) : '{}';
+        const headersJson = cfg.headers && typeof cfg.headers === 'object'
+            ? JSON.stringify(cfg.headers, null, 2) : '{}';
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -202,10 +202,10 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
                     </div>
                     <div class="field-auth-headers">
                         <flows-json-field-editor
-                            .value=${authHeaders}
-                            @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onAuthHeaders(e.detail.parsed); }}
+                            .value=${headersJson}
+                            @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onHeaders(e.detail.parsed); }}
                         >
-                            <span slot="toolbar-start">${this.t('remote_flow_editor.auth_headers')}</span>
+                            <span slot="toolbar-start">${this.t('remote_flow_editor.headers')}</span>
                         </flows-json-field-editor>
                     </div>
                 </div>

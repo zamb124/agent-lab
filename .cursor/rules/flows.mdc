@@ -147,28 +147,25 @@ Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 
 ## Resources
 
-Переиспользуемые компоненты (RAG, S3, LLM, Cache, HTTP, Code модули):
+Переиспользуемые shared-ресурсы графа (только типы каталога):
 
 | Тип | Класс | Назначение |
 |---|---|---|
 | `code` | `CodeModule` | Python-модуль с функциями |
-| `rag` | `RAGResource` | Поиск + `add_document`. `RAGResourceConfig`: `search_options`, опционально `index_profile_config` (см. `rag.mdc`) |
-| `files` | `FilesResource` | S3/MinIO |
-| `cache` | `CacheResource` | Redis |
-| `llm` | `LLMResource` | LLM-вызовы |
-| `prompt` | `PromptResource` | Jinja2 |
-| `http` | `HTTPResource` | HTTP-клиент с `base_url` |
-| `secret` | `str` | Секрет из variables |
+| `files` | `FilesResource` | S3/MinIO в namespace под ключом ресурса: `read`/`read_bytes`, `write`/`write_bytes`, `list`, `exists`, `delete`; путь = prefix + объектный ключ. Без явных ключей — дефолтный `S3Client` из настроек. |
+| `llm` | `LLMResource` | LLM-вызовы (в т.ч. пресет для `llm_node` через `llm_resource_key`) |
+
+Семантический поиск по RAG и иные сценарии — **платформенные тулы** (`rag_search`, …) и фасады sandbox, не тип `resource` в этом словаре. Обёртка `RAGResource` для кода вне карты ресурсов — `core.rag.rag_resource.RAGResource` (контейнер с `rag_repository`).
 
 Иерархия слоёв (инвариант merge): **L0** `FlowConfig.resources` (база), **L1** `BranchConfig.resources` (skill/variant), **L2** `NodeConfig.resources`. Для одного логического ключа карты **склеиваются по ключам**: последующий слой перекрывает предыдущий при конфликте **разных ссылок** на тот же ключ; реализация — `merge_flow_skill_node_resource_maps` (`apps/flows/src/resources/merge.py`), тот же порядок, что в `ResourceResolver.resolve_for_node`.
 
-**Shared из БД:** `{"resource_id": "shared_faq_rag"}` или с переопределением полей: `{"resource_id": "shared_rag", "config": {...}}`. Поле `config` у reference — **типизированный patch** к материализованному shared: для `ResourceType.LLM` слияние через `LLMResourcePatch` (extra=forbid), deep merge `extra_request_body`, поверхностное объединение `extra_request_headers`; для остальных типов — shallow `{**base, **patch}` с последующей строгой `parse_typed_resource_config` (`merge_shared_definition_config_with_patch`). Два inline под одним ключом с **разными** `type` — ошибка на валидации, не «тихий» выбор победителя.
+**Shared из БД:** `{"resource_id": "shared_code_1"}` или с переопределением полей: `{"resource_id": "shared_llm_1", "config": {...}}`. Поле `config` у reference — **типизированный patch** к материализованному shared: для `ResourceType.LLM` слияние через `LLMResourcePatch` (extra=forbid), deep merge `extra_request_body`, поверхностное объединение `extra_request_headers`; для `code` и `files` — shallow `{**base, **patch}` с последующей строгой `parse_typed_resource_config` (`merge_shared_definition_config_with_patch`). Два inline под одним ключом с **разными** `type` — ошибка на валидации, не «тихий» выбор победителя.
 
 Inline на слое — полный `config` целевого типа. **Типизированный union** конфигов: `ResourceConfigUnion` + фабрика `parse_typed_resource_config(type, dict)` (`apps/flows/src/models/resource.py`).
 
 **LLM resource island:** оверлей `node.llm` на привязанный LLM в карте ветки использует те же правила patch, что и shared override (`merge_llm_resource_config_with_patch` / `merge_llm_resource_patch_dicts` в `apps/flows/src/resources/merge_llm.py`).
 
-Объекты доступны как переменные в inline-коде и LlmNode tools (`await kb.search(...)`, `await storage.write(...)`, `await cache.get(...)`).
+Объекты из `resources` доступны как переменные в inline-коде и LlmNode tools (`await storage.write(...)`, `await gpt.complete(...)` для `llm`, вызовы из `CodeModule` для `code`).
 
 ## Bundles
 

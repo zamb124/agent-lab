@@ -54,6 +54,53 @@ def normalize_tool_entry(entry: Any) -> Any:
     return out
 
 
+def _merge_legacy_auth_headers_into_headers(target: MutableMapping[str, Any]) -> None:
+    """Легаси: auth_headers отдельно от headers; при чтении слить (как бывший порядок в клиенте)."""
+    if "auth_headers" not in target:
+        return
+    legacy = target.get("auth_headers")
+    if legacy is None or legacy == {}:
+        target.pop("auth_headers", None)
+        return
+    if not isinstance(legacy, dict):
+        raise ValueError("auth_headers must be a dict when present")
+    base = target.get("headers")
+    if not isinstance(base, dict):
+        base = {}
+    target["headers"] = {**base, **legacy}
+    target.pop("auth_headers", None)
+
+
+def _migrate_external_api_legacy_parameters(node: MutableMapping[str, Any]) -> None:
+    """
+    Легаси external_api.parameters (path/query/header): при чтении удалить.
+
+    После этого: ключи строковых default для location header мержятся первыми в headers,
+    существующие ключи headers не перезаписываются.
+    """
+    raw = node.get("parameters")
+    if raw is None:
+        return
+    if not isinstance(raw, list):
+        node.pop("parameters", None)
+        return
+    base = node.get("headers")
+    if not isinstance(base, dict):
+        base = {}
+    migration: Dict[str, str] = {}
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("location") != "header":
+            continue
+        pname = entry.get("name")
+        default_val = entry.get("default")
+        if isinstance(pname, str) and pname and isinstance(default_val, str):
+            migration[pname] = default_val
+    node["headers"] = {**migration, **base}
+    node.pop("parameters", None)
+
+
 def normalize_node_config(node: Mapping[str, Any]) -> Dict[str, Any]:
     out = copy.deepcopy(node)
     nid = str(out.get("node_id", "?"))
@@ -65,6 +112,10 @@ def normalize_node_config(node: Mapping[str, Any]) -> Dict[str, Any]:
     tools = out.get("tools")
     if isinstance(tools, list):
         out["tools"] = [normalize_tool_entry(t) for t in tools]
+    if nt in ("external_api", "remote_flow"):
+        _merge_legacy_auth_headers_into_headers(out)
+    if nt == "external_api":
+        _migrate_external_api_legacy_parameters(out)
     return out
 
 
@@ -137,6 +188,8 @@ def normalize_flow_config_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
     ev = out.get("evaluation")
     if ev is not None:
         _normalize_evaluation(ev)
+    if "auth_headers" in out:
+        _merge_legacy_auth_headers_into_headers(out)
     return out
 
 

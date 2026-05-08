@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from apps.flows.src.container import FlowContainer
-from apps.flows.src.resources.wrappers.rag_resource import RAGResource
+from core.rag.rag_resource import RAGResource
 from core.config import get_settings
 from tests.fixtures.auth import service_client_asgi_auth_context
 

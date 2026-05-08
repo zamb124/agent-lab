@@ -95,10 +95,14 @@ Alembic миграции — **Helm hook Job** `migrations` (`post-install`, `po
 
 | Хост | TLS Secret | Маршруты |
 |---|---|---|
-| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `/flows`, `/crm`, `/rag`, `/sync`, `/documents`, `/scheduler`, `/voice`, `/litserve`, `/` — только если соответствующий сервис включён в `values.yaml` (`applications.*.enabled` / `litserve.enabled`); `templates/80-ingress/platform-ingress.yaml` |
-| `livekit.humanitec.ru` | `livekit-tls` | `/` → livekit:7880 |
-| `onlyoffice.humanitec.ru` | `onlyoffice-tls` | `/` → onlyoffice:80 |
-| `grafana.humanitec.ru` | `grafana-tls` | `/` → grafana:3000 |
+| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `/flows`, `/crm`, `/rag`, `/sync`, `/documents`, `/scheduler`, `/voice`, `/litserve`, `/` — только если соответствующий сервис включён в `values.yaml` (`applications.*.enabled` / `litserve.enabled`); `templates/80-ingress/platform-ingress.yaml`; **Traefik:** у этого Ingress `router.priority: "1"`, иначе wildcard `*.humanitec.ru` перехватывает трафик вида `livekit.humanitec.ru` раньше отдельных Ingress. |
+| `livekit.humanitec.ru` | `platform-tls` | `/` → livekit:7880; `router.priority: "100"` |
+| `onlyoffice.humanitec.ru` | `platform-tls` | `/` → onlyoffice:80; `router.priority: "100"` |
+| `grafana.humanitec.ru` | `platform-tls` | `/` → grafana:3000; `router.priority: "100"` |
+
+Dedicated Ingress (livekit, onlyoffice, grafana) задают `traefik.ingress.kubernetes.io/router.priority: "100"` выше, чем platform (`"1"`).
+
+`Deployment/livekit` использует `hostNetwork` и занятые порты на ноде — **strategy `Recreate`**, не `RollingUpdate`: иначе новый под зависает в `Pending`, пока жив старый.
 
 `platform` Ingress генерирует одинаковые правила для apex и wildcard через `range`. Аннотации: `proxy-body-size: 100m`, `proxy-read-timeout: 300s` (для `/documents` и WebSocket sync).
 

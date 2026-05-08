@@ -30,6 +30,7 @@ from .models import (
 )
 from .parsed_document import BlockKind, ParsedBlock, ParsedDocument
 from .parsing import parse_document_bytes
+from .rag_resource import RAGResource
 from .rag_resource_bind import RagResourceBindParams
 from .rag_worker_tasks_port import RagWorkerTasksPort
 from .providers import AgentsetRAGProvider, PgVectorProvider
@@ -54,6 +55,7 @@ __all__ = [
     "ParsedBlock",
     "ParsedDocument",
     "parse_document_bytes",
+    "RAGResource",
     "RagResourceBindParams",
     "RagWorkerTasksPort",
     "split_parsed_document",

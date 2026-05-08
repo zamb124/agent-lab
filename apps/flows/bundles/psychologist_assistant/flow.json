@@ -1,7 +1,7 @@
 {
   "id": "psychologist_assistant",
   "name": "Ассистент Лары Швед",
-  "description": "Эмпатичный ассистент психолога Лары Швед с доступом к базе знаний через RAG",
+  "description": "Эмпатичный ассистент психолога Лары Швед с поиском по базе знаний (rag_search)",
   "version": "1.0.0",
   "tags": [
     "psychology",
@@ -20,14 +20,6 @@
         "temperature": 0.2,
         "provider": "openrouter"
       },
-      "resources": {
-        "kb": {
-          "type": "rag",
-          "config": {
-            "namespace": "psychology"
-          }
-        }
-      },
       "tools": [
         "ask_user",
         {
@@ -41,7 +33,7 @@
               "description": "Поисковый запрос для базы знаний"
             }
           },
-          "code": "async def execute(args, state):\n    query = args.get('query')\n    if not query:\n        return 'Пожалуйста, укажите поисковый запрос.'\n    \n    # Ресурс 'kb' доступен в пространстве имен инлайн-кода как переменная\n    # Методы RAG ресурса: search(query, top_k=5, filters=None)\n    results = await kb.search(query, top_k=3)\n    \n    if not results:\n        return 'В психологической базе знаний ничего не найдено по данному запросу.'\n    \n    output = []\n    for res in results:\n        # res - это объект RAGSearchResult (content, document_name, score, etc)\n        output.append(f'--- {res.document_name} ---\\n{res.content}')\n    \n    return '\\n\\n'.join(output)"
+          "code": "async def execute(args, state):\n    query = args.get('query')\n    if not query:\n        return 'Пожалуйста, укажите поисковый запрос.'\n    raw = await rag_search(\n        namespace_id='psychology',\n        collection_id='default',\n        query=query,\n        limit=3,\n    )\n    if not raw.get('success'):\n        return str(raw.get('error', 'Ошибка поиска'))\n    results = raw.get('results') or []\n    if not results:\n        return 'В психологической базе знаний ничего не найдено по данному запросу.'\n    output = []\n    for res in results:\n        name = res.get('document_name') or res.get('document_id', '')\n        output.append(f\"--- {name} ---\\n{res.get('content', '')}\")\n    return '\\n\\n'.join(output)"
         }
       ],
       "output_key": "response"

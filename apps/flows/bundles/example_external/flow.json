@@ -14,7 +14,7 @@
     "cat_facts": {
       "type": "remote_flow",
       "url": "http://localhost:8002",
-      "auth_headers": {
+      "headers": {
         "X-API-Key": "@var:cat_flow_api_key"
       },
       "branch_id": "default"

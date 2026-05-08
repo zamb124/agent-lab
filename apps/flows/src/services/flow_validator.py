@@ -532,19 +532,15 @@ class FlowValidator:
             if "url" in config:
                 check_var_refs(config["url"], node_id, "url")
             
-            # auth_headers
-            if "auth_headers" in config:
-                check_var_refs(config["auth_headers"], node_id, "auth_headers")
-            
-            # headers
+            # headers (remote_flow, external_api)
             if "headers" in config:
                 check_var_refs(config["headers"], node_id, "headers")
             
-            # parameters с default
-            if "parameters" in config:
-                for param in config.get("parameters", []):
-                    if isinstance(param, dict) and "default" in param:
-                        check_var_refs(param["default"], node_id, f"parameters.{param.get('name', '?')}.default")
+            # body_template (external_api и др.)
+            if "body_template" in config:
+                bt = config.get("body_template")
+                if isinstance(bt, str):
+                    check_var_refs(bt, node_id, "body_template")
         
         # Проверяем значения переменных flow на @var: ссылки
         for var_key, var_value in variables.items():

@@ -30,6 +30,7 @@ from typing import Any, Dict, List
 
 import pytest
 import pytest_asyncio
+from _pytest.nodes import Node
 from filelock import FileLock
 from httpx import ASGITransport, AsyncClient
 
@@ -106,6 +107,26 @@ if id(process_flow_task.broker) != id(platform_broker_module.broker):
 _DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
 # Один gw держит lock на DROP + run_migrations_async по всем сервисам; при -n auto остальные ждут дольше 120s.
 _DB_SETUP_LOCK_TIMEOUT_SEC = int(os.environ.get("PLATFORM_TEST_DB_LOCK_TIMEOUT", "1800"))
+
+
+def _real_taskiq_lane(node: Node) -> str:
+    """Доменная полоса очереди mock_llm в Redis для real_taskiq.
+
+    Должна совпадать с суффиксом MOCK_LLM_REDIS_KEY у соответствующего TaskIQ worker
+    и uvicorn session-сервисов (tests/fixtures/workers.py, tests/fixtures/services.py).
+    """
+    path = str(node.path).replace("\\", "/")
+    if "test_lara_crm_tools.py" in path:
+        return "crm"
+    if "/tests/crm/" in path:
+        return "crm"
+    if "/tests/sync/" in path:
+        return "sync"
+    if "/tests/rag/" in path:
+        return "rag"
+    if "/tests/frontend/" in path:
+        return "flows"
+    return "flows"
 
 
 async def _alembic_version_ready(db_url: str) -> bool:
@@ -607,16 +628,17 @@ def pytest_configure(config):
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list) -> None:
     """
-    Тесты с маркером real_taskiq используют один Redis-ключ mock_llm:responses
-    для передачи ответов LLM в TaskIQ worker и в uvicorn тестовых сервисов.
-    Без группировки разные gw-workers одновременно портят очередь; без сброса
-    PYTEST_XDIST_WORKER у дочернего uvicorn flows читал бы mock_llm:responses:gwN
-    и не видел бы очередь, записанную фикстурой mock_llm_redis.
+    Тесты с маркером real_taskiq передают ответы LLM через Redis; очередь изолирована
+    по доменным полосам mock_llm:responses:<lane> (flows/crm/sync/rag), см.
+    MOCK_LLM_REDIS_KEY в session TaskIQ workers и uvicorn (fixtures).
 
-    Решение: все real_taskiq — в xdist_group real_taskiq (последовательно на
-    одном gw при --dist=loadgroup); SessionServerManager убирает
-    PYTEST_XDIST_WORKER из env процессов 9001–9005; MockLLM снимает элемент
-    очереди из Redis одной Lua-транзакцией.
+    Раньше все real_taskiq были в одной xdist_group — при --dist=loadgroup они
+    выполнялись строго по очереди на одном gw. Полосы позволяют параллелить gw:
+    CRM и flows не делят одну очередь в Redis.
+
+    SessionServerManager убирает PYTEST_XDIST_WORKER из env дочерних процессов;
+    ключ очереди задаётся MOCK_LLM_REDIS_KEY. Фикстура mock_llm_redis для
+    real_taskiq пишет в ключ полосы теста (_real_taskiq_lane).
 
     tryfirst=True обязателен: xdist remote.py тоже регистрирует
     pytest_collection_modifyitems и добавляет @gname к nodeid по существующим
@@ -624,7 +646,8 @@ def pytest_collection_modifyitems(items: list) -> None:
     """
     for item in items:
         if item.get_closest_marker("real_taskiq"):
-            item.add_marker(pytest.mark.xdist_group("real_taskiq"))
+            lane = _real_taskiq_lane(item)
+            item.add_marker(pytest.mark.xdist_group(f"real_taskiq_{lane}"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
         elif item.nodeid.startswith("tests/sync/"):
@@ -813,11 +836,9 @@ async def mock_llm_redis(container, request):
 
     НЕ использовать с sync_tools!
 
-    Для real_taskiq тестов используется базовый ключ (без суффикса xdist worker),
-    т.к. TaskIQ worker subprocess и uvicorn тестовых HTTP-сервисов (SessionServerManager)
-    сбрасывают PYTEST_XDIST_WORKER в env и читают тот же ключ, что и эта фикстура.
-    Все real_taskiq тесты в одной xdist_group; параллельный доступ к очереди LLM
-    снимает атомарный Lua-pop в MockLLM._get_redis_response.
+    Для real_taskiq тестов ключ очереди mock_llm:responses:<lane> по пути теста
+    (_real_taskiq_lane), согласован с MOCK_LLM_REDIS_KEY у TaskIQ worker и uvicorn
+    session-сервисов. PYTEST_XDIST_WORKER в дочерних процессах сброшен.
 
     Usage:
         async def test_integration(mock_llm_redis):
@@ -828,7 +849,11 @@ async def mock_llm_redis(container, request):
     from core.clients.llm.mock import setup_mock_responses_redis, clear_mock_responses_redis
 
     is_real_taskiq = request.node.get_closest_marker("real_taskiq") is not None
-    key_override = "mock_llm:responses" if is_real_taskiq else None
+    key_override = (
+        f"mock_llm:responses:{_real_taskiq_lane(request.node)}"
+        if is_real_taskiq
+        else None
+    )
 
     async def _factory(responses: List[Any]) -> None:
         await clear_mock_responses_redis(container.redis_client, key_override=key_override)

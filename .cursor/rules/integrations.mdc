@@ -98,11 +98,17 @@ external_flow = await container.flow_discovery.register_agent(
 ## External API node
 
 ```json
-{"type": "external_api", "url": "https://@var:api.host/endpoint", "method": "POST",
- "auth_headers": {"Authorization": "Bearer @var:auth.token"},
- "parameters": [{"name": "city", "source": "@state:user.city", "type": "string", "location": "query"}],
- "state_mapping": {"result": "api_result"}}
+{"type": "external_api",
+ "url": "https://@var:api.host/v1/items/{item_id}?dry_run=@state:flags.dry_run",
+ "method": "POST",
+ "headers": {"Authorization": "Bearer @var:auth.token", "X-Trace-Id": "@state:trace_id"},
+ "body_template": "{\"payload\": \"@state:content\"}",
+ "input_mapping": {"item_id": "@state:order.id"},
+ "args_schema": {"item_id": {"type": "string", "description": "Path placeholder {item_id} when invoked as LLM tool"}}
+}
 ```
+
+Входы ноды: **input_mapping** (как у остальных нод); значения из резолва подставляются в `{ключ}` URL и мержатся поверх резолва **body_template**; строки заголовков и тела поддерживают **@state:** / **@var:**. Отдельной таблицы query/path/header-параметров нет — при необходимости query в строке URL. Для тула без графового маппинга — **args_schema** в конфиге (как у NodeAsToolWrapper).
 
 `@var:` поддерживает вложенные пути: `@var:api.host` → `variables["api"]["host"]`; `@var:auth.tokens.access` → `variables["auth"]["tokens"]["access"]`.
 

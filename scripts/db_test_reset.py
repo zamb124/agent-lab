@@ -16,6 +16,9 @@
   - FLUSHDB Redis DB 0 (state) и DB 1 (TaskIQ broker) — убивает застрявшие
     `mock_llm:*`, `session:*`, `*lock*`, `taskiq:*` ключи
 
+Перед TRUNCATE по каждой БД завершаются чужие сессии к этой БД (`pg_terminate_backend`),
+иначе команда может ждать блокировку от зависших клиентов на том же порту 54322.
+
 Защита от случайного запуска не на тестовом окружении: скрипт принимает
 URL только с портом 54322 (Postgres test) и 63792 (Redis test). На любой
 другой порт — `RuntimeError`.
@@ -84,6 +87,23 @@ def _assert_test_redis(host: str, port: int) -> None:
         )
 
 
+async def _terminate_other_sessions(conn: asyncpg.Connection) -> int:
+    """Закрывает все прочие подключения к текущей БД (кроме этого соединения).
+
+    Иначе TRUNCATE может бесконечно ждать блокировку от pytest / uvicorn / IDE,
+    оставшихся на localhost:54322 после прерванного прогона.
+    """
+    rows = await conn.fetch(
+        """
+        SELECT pg_terminate_backend(pg_stat_activity.pid) AS terminated
+        FROM pg_stat_activity
+        WHERE pg_stat_activity.datname = current_database()
+          AND pid <> pg_backend_pid()
+        """
+    )
+    return sum(1 for row in rows if row["terminated"])
+
+
 async def _truncate_database(base_dsn: str, db_name: str) -> int:
     """Truncate всех user-таблиц одной БД. Возвращает количество таблиц."""
     parsed = urlparse(base_dsn)
@@ -107,6 +127,10 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
         return 0
 
     try:
+        killed = await _terminate_other_sessions(conn)
+        if killed:
+            print(f"  [{db_name}] завершено сторонних сессий: {killed}")
+
         rows = await conn.fetch(
             """
             SELECT table_name
@@ -122,6 +146,7 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
             return 0
 
         # Один TRUNCATE — атомарно, FK не блокируют благодаря CASCADE.
+        await conn.execute("SET statement_timeout = '120s'")
         quoted = ", ".join(f'"{name}"' for name in tables)
         await conn.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
         print(f"  [{db_name}] TRUNCATE: {len(tables)} таблиц")

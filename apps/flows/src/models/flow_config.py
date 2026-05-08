@@ -412,7 +412,7 @@ class FlowConfig(StrictBaseModel):
     
     # EXTERNAL FLOW ПОЛЯ - обязательны для EXTERNAL, опциональны для LOCAL
     url: Optional[str] = Field(default=None, description="Base URL внешнего flow (A2A) - ОБЯЗАТЕЛЬНО для EXTERNAL")
-    auth_headers: Dict[str, str] = Field(default_factory=dict, description="Заголовки авторизации")
+    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP-заголовки к внешнему агенту (A2A)")
     status: ExternalAgentStatus = Field(
         default=ExternalAgentStatus.INACTIVE, description="Статус внешнего flow (A2A)"
     )

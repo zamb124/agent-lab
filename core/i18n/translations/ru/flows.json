@@ -617,6 +617,7 @@
     "input_mapping_hint": "Входные параметры вызова MCP задаются в секции «Маппинг» ниже, вкладка «Вход»: путь state/variables → имя параметра tool. При первом выборе tool драфт подставляется из схемы (см. превью)."
   },
   "external_api_editor": {
+    "help_label": "Контракт ноды External API",
     "field_method": "HTTP метод",
     "field_url": "URL",
     "field_headers": "Headers (JSON)",
@@ -626,41 +627,27 @@
     "url": "URL",
     "method": "Метод",
     "timeout": "Таймаут (сек)",
+    "body_template": "Тело запроса (JSON)",
+    "body_template_hint": "Корневой объект JSON. В строках: целиком @state:путь или @var:путь; либо вставки @var: внутри строки. Смешивание текста с @state: не поддерживается.",
     "headers": "Заголовки (JSON)",
-    "auth_headers": "Заголовки авторизации (JSON)",
-    "parameters": "Параметры запроса",
-    "parameter_name": "Имя",
-    "parameter_location": "Место",
-    "parameter_type": "Тип",
-    "parameter_required": "Обяз.",
-    "parameter_default": "По умолчанию",
-    "parameter_add": "+ Параметр",
-    "parameter_remove": "Удалить параметр",
-    "location_body": "body",
-    "location_query": "query",
-    "location_path": "path",
-    "location_header": "header",
-    "response_mapping": "Маппинг ответа на state"
+    "headers_hint": "В значениях — целиком @state:путь или @var:путь, либо вставки @var: в тексте (как в строках тела запроса).",
+    "url_hint": "Плейсхолдеры {имяКлюча} заменяются значениями входа после input_mapping; в самой строке — @state:/@var: как в заголовках.",
+    "contract_hint": "Входы: секция «Маппинг», вкладка «Вход» — input_mapping. Строки запроса задаются только через URL, заголовки (JSON) и тело (JSON), без отдельной таблицы параметров. Для тула у LLM можно задать args_schema в редакторе ноды (код/схема)."
   },
   "remote_flow_editor": {
     "field_url": "URL",
     "field_branch_id": "Ветка",
-    "field_auth_headers": "Auth headers (JSON)",
+    "field_headers": "Заголовки (JSON)",
     "mode_url": "Прямой URL",
     "mode_id": "Реестровый flow_id",
     "url": "URL",
     "flow_id": "Flow ID",
     "branch_id": "Ветка",
-    "auth_headers": "Auth headers (JSON)"
+    "headers": "Заголовки (JSON)"
   },
   "base_resource_editor": {
     "field_description": "Описание",
     "tags": "Теги"
-  },
-  "secret_resource_editor": {
-    "field_value": "Значение",
-    "key": "Имя секрета",
-    "hint": "Используется как @var:KEY в @var:resolver"
   },
   "code_resource_editor": {
     "field_code": "Код (Python)",
@@ -668,20 +655,8 @@
     "code": "Код",
     "docs": "Документация"
   },
-  "http_resource_editor": {
-    "field_base_url": "Base URL",
-    "field_default_headers": "Default headers (JSON)",
-    "base_url": "Base URL",
-    "headers": "Заголовки (JSON)",
-    "timeout": "Таймаут (сек)",
-    "auth_type": "Тип авторизации",
-    "auth_value": "Значение токена",
-    "auth_none": "—",
-    "auth_bearer": "Bearer",
-    "auth_basic": "Basic",
-    "auth_api_key": "API key"
-  },
   "files_resource_editor": {
+    "usage_hint": "В коде ноды и tools имя переменной совпадает с ключом ресурса в карте: это клиент S3 (read, write, list, exists, delete) для bucket и префикса. Если не заданы ключи доступа, используется S3 из настроек платформы.",
     "field_patterns": "Паттерны (по одному на строку)",
     "bucket": "Bucket",
     "prefix": "Префикс пути",
@@ -689,31 +664,6 @@
     "access_key_id": "Access key ID",
     "secret_access_key": "Secret access key",
     "region": "Регион"
-  },
-  "prompt_resource_editor": {
-    "field_template": "Jinja-шаблон",
-    "template": "Шаблон",
-    "variables": "Переменные (JSON)",
-    "render_button": "Рендер превью",
-    "render_preview": "Превью рендера"
-  },
-  "rag_resource_editor": {
-    "field_namespace": "RAG namespace",
-    "field_top_k": "Top K",
-    "namespace": "Namespace",
-    "provider": "Провайдер",
-    "default_top_k": "Top K по умолчанию",
-    "search_options": "Параметры поиска (JSON)",
-    "index_profile_config": "Профиль индексации (JSON)",
-    "provider_pgvector": "pgvector",
-    "provider_qdrant": "qdrant",
-    "provider_pinecone": "pinecone"
-  },
-  "cache_resource_editor": {
-    "field_ttl_seconds": "TTL (сек)",
-    "field_namespace": "Namespace",
-    "namespace": "Namespace",
-    "ttl": "TTL (сек)"
   },
   "breakpoint_manager": {
     "title": "Брейкпоинты",

@@ -617,6 +617,7 @@
     "input_mapping_hint": "Map flow inputs in the Mapping section below, Input tab: state/variables path → MCP tool parameter name. On first tool selection a draft is filled from the schema (see preview)."
   },
   "external_api_editor": {
+    "help_label": "External API node contract",
     "field_method": "HTTP method",
     "field_url": "URL",
     "field_headers": "Headers (JSON)",
@@ -626,41 +627,27 @@
     "url": "URL",
     "method": "Method",
     "timeout": "Timeout (sec)",
+    "body_template": "Request body (JSON)",
+    "body_template_hint": "Root JSON object. In string values: full @state:path or @var:path; or @var: tokens embedded in text. Mixing free text with @state: is not supported.",
     "headers": "Headers (JSON)",
-    "auth_headers": "Auth headers (JSON)",
-    "parameters": "Request parameters",
-    "parameter_name": "Name",
-    "parameter_location": "Location",
-    "parameter_type": "Type",
-    "parameter_required": "Req.",
-    "parameter_default": "Default",
-    "parameter_add": "+ Parameter",
-    "parameter_remove": "Remove parameter",
-    "location_body": "body",
-    "location_query": "query",
-    "location_path": "path",
-    "location_header": "header",
-    "response_mapping": "Response → state mapping"
+    "headers_hint": "Values support full @state:path or @var:path, or embedded @var: tokens (same rules as body template strings).",
+    "url_hint": "{name} placeholders are replaced with input values after input_mapping; in the URL string use @state:/@var: like in headers.",
+    "contract_hint": "Inputs: Mapping section, Input tab — input_mapping. Request shape is only URL, headers JSON, and body JSON; there is no separate request-parameters table. For an LLM-invoked tool set args_schema via the node editor (code/schema) where needed."
   },
   "remote_flow_editor": {
     "field_url": "URL",
     "field_branch_id": "Branch",
-    "field_auth_headers": "Auth headers (JSON)",
+    "field_headers": "Headers (JSON)",
     "mode_url": "Direct URL",
     "mode_id": "Registry flow_id",
     "url": "URL",
     "flow_id": "Flow ID",
     "branch_id": "Branch",
-    "auth_headers": "Auth headers (JSON)"
+    "headers": "Headers (JSON)"
   },
   "base_resource_editor": {
     "field_description": "Description",
     "tags": "Tags"
-  },
-  "secret_resource_editor": {
-    "field_value": "Value",
-    "key": "Secret name",
-    "hint": "Used as @var:KEY in @var:resolver"
   },
   "code_resource_editor": {
     "field_code": "Code (Python)",
@@ -668,20 +655,8 @@
     "code": "Code",
     "docs": "Documentation"
   },
-  "http_resource_editor": {
-    "field_base_url": "Base URL",
-    "field_default_headers": "Default headers (JSON)",
-    "base_url": "Base URL",
-    "headers": "Headers (JSON)",
-    "timeout": "Timeout (sec)",
-    "auth_type": "Auth type",
-    "auth_value": "Token value",
-    "auth_none": "—",
-    "auth_bearer": "Bearer",
-    "auth_basic": "Basic",
-    "auth_api_key": "API key"
-  },
   "files_resource_editor": {
+    "usage_hint": "In node and tool code, the variable name is the resource map key: an S3 client (read, write, list, exists, delete) for the bucket and prefix. If access keys are omitted, the platform default S3 settings are used.",
     "field_patterns": "Patterns (one per line)",
     "bucket": "Bucket",
     "prefix": "Path prefix",
@@ -689,31 +664,6 @@
     "access_key_id": "Access key ID",
     "secret_access_key": "Secret access key",
     "region": "Region"
-  },
-  "prompt_resource_editor": {
-    "field_template": "Jinja template",
-    "template": "Template",
-    "variables": "Variables (JSON)",
-    "render_button": "Render preview",
-    "render_preview": "Render preview"
-  },
-  "rag_resource_editor": {
-    "field_namespace": "RAG namespace",
-    "field_top_k": "Top K",
-    "namespace": "Namespace",
-    "provider": "Provider",
-    "default_top_k": "Default top K",
-    "search_options": "Search options (JSON)",
-    "index_profile_config": "Index profile (JSON)",
-    "provider_pgvector": "pgvector",
-    "provider_qdrant": "qdrant",
-    "provider_pinecone": "pinecone"
-  },
-  "cache_resource_editor": {
-    "field_ttl_seconds": "TTL (seconds)",
-    "field_namespace": "Namespace",
-    "namespace": "Namespace",
-    "ttl": "TTL (sec)"
   },
   "breakpoint_manager": {
     "title": "Breakpoints",

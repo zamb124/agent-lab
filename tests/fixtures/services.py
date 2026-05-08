@@ -76,6 +76,10 @@ _COMMON_TEST_ENV = {
 }
 
 
+def _with_mock_llm_lane(base_env: dict[str, str], lane: str) -> dict[str, str]:
+    return {**base_env, "MOCK_LLM_REDIS_KEY": f"mock_llm:responses:{lane}"}
+
+
 @pytest.fixture(scope="session")
 def flows_service():
     """
@@ -98,7 +102,7 @@ def flows_service():
         app_path="apps.flows.main:app",
         port=9001,
         startup_wait=20.0,
-        env=_COMMON_TEST_ENV
+        env=_with_mock_llm_lane(_COMMON_TEST_ENV, "flows"),
     )
     
     with manager.start():
@@ -126,8 +130,8 @@ def rag_service():
         pid_file=_RAG_SERVER_PID,
         app_path="apps.rag.main:app",
         port=9002,
-        startup_wait=3.0,
-        env=_COMMON_TEST_ENV
+        startup_wait=18.0,
+        env=_with_mock_llm_lane(_COMMON_TEST_ENV, "rag"),
     )
     
     with manager.start():
@@ -179,7 +183,7 @@ def crm_service(flows_service, rag_service, voice_service):
         startup_wait=12.0,
         log_file="/tmp/crm_server.log",
         err_file="/tmp/crm_server_err.log",
-        env=_COMMON_TEST_ENV
+        env=_with_mock_llm_lane(_COMMON_TEST_ENV, "crm"),
     )
     
     with manager.start():
@@ -206,7 +210,7 @@ def frontend_service():
         app_path="apps.frontend.main:app",
         port=9004,
         startup_wait=20.0,
-        env=_COMMON_TEST_ENV
+        env=_with_mock_llm_lane(_COMMON_TEST_ENV, "flows"),
     )
     
     with manager.start():
@@ -235,7 +239,7 @@ def sync_service():
         app_path="apps.sync.main:app",
         port=9005,
         startup_wait=10.0,
-        env=_COMMON_TEST_ENV,
+        env=_with_mock_llm_lane(_COMMON_TEST_ENV, "sync"),
     )
 
     with manager.start():

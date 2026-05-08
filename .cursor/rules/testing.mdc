@@ -34,7 +34,7 @@ alwaysApply: false
 - Захардкоженные идентификаторы (`task_id="my-task"`, `flow_id="test_flow"`) запрещены — все ID содержат `unique_id`.
 - Захардкоженные порты, временные файлы, Redis-ключи без `unique_id`/xdist-суффикса запрещены (исключение: session-фикстуры с `FileLock`).
 - Тесты с эксклюзивным доступом к общему ресурсу — обязательно в `xdist_group` (маркер или `pytest_collection_modifyitems`).
-- `@pytest.mark.real_taskiq` → группа `real_taskiq` (`tests/conftest.py`): на одном gw выполняются по очереди, без параллели на соседнем gw (LiveKit, MinIO, CPU).
+- `@pytest.mark.real_taskiq` → группа `real_taskiq_<lane>` по домену теста (`crm`/`sync`/`rag`/`flows`), см. `tests/conftest.py::_real_taskiq_lane`; параллельные gw не делят одну очередь `mock_llm:responses` в Redis (`MOCK_LLM_REDIS_KEY` у session worker и uvicorn в fixtures).
 - `time.sleep` для ожидания асинхронного результата запрещён — только `asyncio.wait_for`/`asyncio.sleep` с поллингом или `await` с таймаутом.
 
 ### Идемпотентность фикстур

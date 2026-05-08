@@ -19,6 +19,8 @@ from core.billing.service import company_resource_prices_storage_key
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan
 from core.models.identity_models import Company
 
+pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
+
 
 @pytest.mark.asyncio
 async def test_settle_span_rule_charge_idempotent(frontend_container, unique_id, system_user_id) -> None:

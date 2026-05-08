@@ -42,7 +42,17 @@ MessageInput = Union[
 StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
 
 def _mock_redis_key() -> str:
-    """Ключ Redis для mock LLM ответов, уникальный для каждого xdist воркера."""
+    """Ключ Redis для mock LLM ответов.
+
+    При MOCK_LLM_REDIS_KEY (полное имя ключа, например mock_llm:responses:flows)
+    процесс читает ту же очередь, что выставила фикстура mock_llm_redis для
+    session-воркеров TaskIQ и uvicorn тестовых сервисов.
+
+    Иначе уникальный ключ на pytest-xdist gw для in-process тестов без общего lane.
+    """
+    explicit = os.environ.get("MOCK_LLM_REDIS_KEY", "").strip()
+    if explicit:
+        return explicit
     worker = os.environ.get("PYTEST_XDIST_WORKER", "")
     if worker:
         return f"mock_llm:responses:{worker}"
@@ -740,8 +750,9 @@ async def setup_mock_responses_redis(
     в отдельном subprocess.
 
     key_override: если задан, используется вместо автоматического ключа.
-    Для real_taskiq передаётся базовый ключ mock_llm:responses: у TaskIQ worker
-    и uvicorn тестовых сервисов в env нет PYTEST_XDIST_WORKER (см. workers.py).
+    Для real_taskiq фикстура mock_llm_redis задаёт ключ mock_llm:responses:<lane>;
+    у соответствующего worker и uvicorn в TEST окружение задаёт MOCK_LLM_REDIS_KEY
+    на тот же ключ (PYTEST_XDIST_WORKER снят у subprocess).
     """
     key = key_override or _mock_redis_key()
     await redis_client.set(key, json.dumps(response_queue))

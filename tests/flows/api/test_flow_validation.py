@@ -494,8 +494,8 @@ class TestFlowValidationVariables:
         assert "undefined_variable" not in error_codes
 
     @pytest.mark.asyncio
-    async def test_validate_variable_in_auth_headers(self, client, app):
-        """@var: в auth_headers."""
+    async def test_validate_variable_in_headers(self, client, app):
+        """@var: в headers."""
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -503,7 +503,7 @@ class TestFlowValidationVariables:
                     "main": {
                         "type": "external_api",
                         "url": "https://api.example.com",
-                        "auth_headers": {
+                        "headers": {
                             "Authorization": "Bearer @var:api_token",
                         },
                     }

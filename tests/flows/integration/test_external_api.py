@@ -18,9 +18,6 @@ from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.external_api import (
     ExternalAPIConfig,
     HTTPMethod,
-    ParameterLocation,
-    ParameterSchema,
-    ResponseSchema,
 )
 from apps.flows.src.tools import ExternalAPITool
 from core.state import ExecutionState
@@ -122,13 +119,21 @@ class TestExternalAPIClientWithConfig:
             name="Echo API",
             url="http://test/echo",
             method=HTTPMethod.POST,
-            parameters=[
-                ParameterSchema(name="message", location=ParameterLocation.BODY, required=True),
-            ]
+            body_template="{}",
         )
 
         client = ExternalAPIClient()
-        result = await client.call(config, {"message": "test message"})
+        state = ExecutionState(
+            task_id="t",
+            context_id="c",
+            user_id="u",
+            session_id="s:s",
+        )
+        result = await client.call(
+            config,
+            {"message": "test message"},
+            state=state,
+        )
 
         assert result["status"] == "completed"
         assert result["data"]["result"] == "test message"
@@ -140,8 +145,14 @@ class TestExternalAPIClientWithConfig:
 
         url = "@var:base_url/api/test"
         variables = {"base_url": "http://example.com"}
-
-        resolved = client._resolve_value(url, variables)
+        state = ExecutionState(
+            task_id="t",
+            context_id="c",
+            user_id="u",
+            session_id="f:c",
+            variables=variables,
+        )
+        resolved = client._resolve_url(url, {}, variables, state)
         assert resolved == "http://example.com/api/test"
 
     @pytest.mark.asyncio
@@ -153,11 +164,17 @@ class TestExternalAPIClientWithConfig:
             api_id="test",
             name="Test",
             url="http://test",
-            auth_headers={"Authorization": "@var:api_token"}
+            headers={"Authorization": "@var:api_token"},
         )
 
-        variables = {"api_token": "Bearer secret123"}
-        headers = client._build_headers(config, variables)
+        state = ExecutionState(
+            task_id="t",
+            context_id="c",
+            user_id="u",
+            session_id="f:c",
+            variables={"api_token": "Bearer secret123"},
+        )
+        headers = client._build_headers(config, state.variables, state)
 
         assert headers["Authorization"] == "Bearer secret123"
 
@@ -173,9 +190,7 @@ class TestExternalAPINode:
             "name": "Echo API",
             "url": "http://test/echo",
             "method": "POST",
-            "parameters": [
-                {"name": "message", "location": "body", "required": True},
-            ]
+            "body_template": '{"message": "@state:message"}',
         }
 
         node = await create_node("echo_node", node_config)
@@ -206,9 +221,7 @@ class TestExternalAPINode:
             config={
                 "url": "http://test/echo",
                 "method": "POST",
-                "parameters": [
-                    {"name": "message", "location": "body", "required": True},
-                ]
+                "body_template": '{"message": "@state:message"}',
             }
         )
 
@@ -245,7 +258,7 @@ class TestExternalAPINode:
             config={
                 "url": "http://test/clarify",
                 "method": "POST",
-                "parameters": [],
+                "body_template": "{}",
             }
         )
 
@@ -281,8 +294,7 @@ class TestExternalAPINode:
             config={
                 "url": "http://test/auth",
                 "method": "POST",
-                "auth_headers": {"Authorization": "@var:auth_token"},
-                "parameters": [],
+                "headers": {"Authorization": "@var:auth_token"},
             }
         )
 
@@ -309,9 +321,9 @@ class TestExternalAPITool:
             url="http://test/echo",
             method="POST",
             description="Echo API tool",
-            parameters=[
-                {"name": "message", "type": "string", "required": True},
-            ]
+            flat_args_schema={
+                "message": {"type": "string", "description": "Message to echo"},
+            },
         )
 
         assert tool.name == "echo_tool"
@@ -338,9 +350,9 @@ class TestExternalAPITool:
             api_id="process_tool",
             url="http://test/process",
             method="POST",
-            parameters=[
-                {"name": "input", "type": "string", "required": True},
-            ]
+            flat_args_schema={
+                "input": {"type": "string"},
+            },
         )
 
         state = ExecutionState(
@@ -360,10 +372,10 @@ class TestExternalAPITool:
             api_id="calc_tool",
             url="http://test/calc",
             description="Calculator tool",
-            parameters=[
-                {"name": "a", "type": "number", "description": "First number", "required": True},
-                {"name": "b", "type": "number", "description": "Second number", "required": True},
-            ]
+            flat_args_schema={
+                "a": {"type": "number", "description": "First number"},
+                "b": {"type": "number", "description": "Second number"},
+            },
         )
 
         schema = tool.to_openai_schema()
@@ -372,6 +384,8 @@ class TestExternalAPITool:
         assert schema["function"]["name"] == "calc_tool"
         assert "a" in schema["function"]["parameters"]["properties"]
         assert "b" in schema["function"]["parameters"]["properties"]
+        req = schema["function"]["parameters"].get("required") or []
+        assert "a" in req and "b" in req
 
     @pytest.mark.asyncio
     async def test_external_api_tool_with_response_mapping(self, monkeypatch):
@@ -395,7 +409,6 @@ class TestExternalAPITool:
         tool = ExternalAPITool(
             api_id="calc",
             url="http://test/calc",
-            parameters=[],
             response_mapping={"calculation_result": "answer"}
         )
 
@@ -441,7 +454,7 @@ class TestFlowWithExternalAPI:
                     "type": "external_api",
                     "url": "http://test/process",
                     "method": "POST",
-                    "parameters": [],
+                    "body_template": "{}",
                 }
             },
             edges=[Edge(from_node="api_call", to_node=None)]

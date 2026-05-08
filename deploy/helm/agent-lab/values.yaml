@@ -308,7 +308,8 @@ nvidiaDevicePlugin:
 livekit:
   enabled: true
   nodeName: master
-  image: livekit/livekit-server:latest
+  image: livekit/livekit-server:v1.11.0
+  imagePullPolicy: Always
   apiKey: devkey
   publicUrl: wss://livekit.humanitec.ru
 
@@ -316,6 +317,7 @@ livekitEgress:
   enabled: true
   nodeName: master
   image: livekit/egress:latest
+  imagePullPolicy: Always
 
 coturn:
   enabled: true

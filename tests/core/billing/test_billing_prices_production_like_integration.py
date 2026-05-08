@@ -20,6 +20,8 @@ from core.config.models import default_billing_resource_base_prices
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan, UsageType
 from core.models.identity_models import Company
 
+pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
+
 # Канон платформы (дублирует core.config.models.default_billing_resource_base_prices).
 PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
     "llm": {"*": 0.0001},

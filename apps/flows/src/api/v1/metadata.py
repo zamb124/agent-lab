@@ -112,17 +112,11 @@ _NODE_TYPES: list[Dict[str, Any]] = [
 
 
 # Resource-типы для отдельного раздела «Ресурсы» в редакторе. Это не runtime
-# node, а ссылки на shared-сущности (Code/RAG/Files/Prompt/LLM/Secret/HTTP/Cache),
-# которые подцепляются к нодам в редакторе.
+# node, а ссылки на shared-сущности (Code, Files, LLM), которые подцепляются к нодам.
 _RESOURCE_TYPES: list[Dict[str, Any]] = [
     {"type": "code",   "name": "Code",   "icon": "code",     "description": "Inline Python/JS код",     "color": "#8b5cf6"},
-    {"type": "rag",    "name": "RAG",    "icon": "search",   "description": "RAG namespace для поиска", "color": "#3b82f6"},
     {"type": "files",  "name": "Files",  "icon": "folder",   "description": "S3/MinIO файловое хранилище", "color": "#f59e0b"},
-    {"type": "prompt", "name": "Prompt", "icon": "chat",     "description": "Шаблон промпта",           "color": "#99A6F9"},
     {"type": "llm",    "name": "LLM",    "icon": "bot",      "description": "LLM модель",                "color": "#ec4899"},
-    {"type": "secret", "name": "Secret", "icon": "key",      "description": "Секрет из переменных",      "color": "#ef4444"},
-    {"type": "http",   "name": "HTTP",   "icon": "globe",    "description": "HTTP endpoint",             "color": "#06b6d4"},
-    {"type": "cache",  "name": "Cache",  "icon": "database", "description": "Redis cache namespace",     "color": "#14b8a6"},
 ]
 
 
@@ -135,7 +129,7 @@ async def get_node_types(container: ContainerDep) -> List[Dict[str, Any]]:
 
 @router.get("/resource-types")
 async def get_resource_types(container: ContainerDep) -> List[Dict[str, Any]]:
-    """Список типов ресурсов (Code/RAG/Files/Prompt/LLM/Secret/HTTP/Cache)."""
+    """Список типов ресурсов (Code, Files, LLM)."""
     _ = container
     return _RESOURCE_TYPES
 

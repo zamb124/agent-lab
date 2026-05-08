@@ -5,6 +5,10 @@ kind: Ingress
 metadata:
   name: platform
   namespace: {{ .Values.namespace }}
+  annotations:
+    # Traefik: *.humanitec.ru пересекается с livekit/onlyoffice/grafana — без приоритета
+    # wildcard забирает трафик на frontend (uvicorn), LiveKit отдаёт 404 на /rtc/v1/validate.
+    traefik.ingress.kubernetes.io/router.priority: "1"
   # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
 spec:
   ingressClassName: {{ .Values.ingress.className }}

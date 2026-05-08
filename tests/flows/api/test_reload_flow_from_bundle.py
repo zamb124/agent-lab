@@ -84,12 +84,24 @@ async def test_get_flow_has_no_bundle_update_after_reload_matches_disk(
 async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
     client,
     container,
+    unique_id: str,
     auth_headers_system,
-):
+) -> None:
+    _ = unique_id
     """
     Метаданные редактора не участвуют в сравнении с disk-bundle: индикатор не зажигается.
+
+    Перед проверкой выполняем reload-from-bundle: в общей БД тестов ``example_react``
+    мог быть изменён другими кейсами — без синхронизации с диском семантика уже
+    расходится с bundle и флаг ложноположительный не из‑за metadata.
     """
     flow_id = "example_react"
+    reload_resp = await client.post(
+        f"/flows/api/v1/flows/{flow_id}/reload-from-bundle",
+        headers=auth_headers_system,
+    )
+    assert reload_resp.status_code == 200, reload_resp.text
+
     cfg = await container.flow_repository.get(flow_id)
     if cfg is None:
         pytest.fail(f"Ожидался загруженный при старте flow {flow_id} (registry / lifespan)")
