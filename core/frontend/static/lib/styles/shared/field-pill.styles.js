@@ -41,6 +41,8 @@ export const fieldPillStyles = css`
         --field-pill-gap: var(--field-pill-compact-gap);
         --field-pill-input-size: var(--field-pill-compact-input-size);
         --field-pill-input-weight: var(--field-pill-compact-input-weight);
+        --field-pill-number-spin-width: 26px;
+        --field-pill-number-spin-height: 34px;
     }
 
     .field-pill--compact .field-pill-select,
@@ -125,6 +127,7 @@ export const fieldPillStyles = css`
         min-width: 0;
         width: 100%;
         box-sizing: border-box;
+        overflow: visible;
     }
 
     .field-pill-control-main {
@@ -384,7 +387,10 @@ export const fieldPillStyles = css`
 
     .form-input:disabled,
     .form-select:disabled,
-    .form-textarea:disabled {
+    .form-textarea:disabled,
+    .field-pill-input:disabled,
+    .field-pill-textarea:disabled,
+    .field-pill-select:disabled {
         opacity: 0.5;
         cursor: not-allowed;
     }
@@ -401,5 +407,185 @@ export const fieldPillStyles = css`
     .form-select:focus,
     .form-textarea:focus {
         outline: none;
+    }
+
+    .field-pill-number {
+        display: flex;
+        align-items: center;
+        gap: var(--field-pill-number-gap);
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .field-pill-number-input {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .field-pill-number-input::-webkit-outer-spin-button,
+    .field-pill-number-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+        appearance: none;
+    }
+
+    .field-pill-number-input[type='number'] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+
+    .field-pill-number-spin {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        width: var(--field-pill-number-spin-width);
+        height: var(--field-pill-number-spin-height);
+        border-radius: var(--field-pill-number-spin-radius);
+        overflow: hidden;
+        border: 1px solid var(--field-pill-number-spin-border);
+        background: var(--field-pill-number-spin-bg);
+        box-sizing: border-box;
+    }
+
+    .field-pill-number-spin-btn {
+        appearance: none;
+        -webkit-appearance: none;
+        flex: 1 1 50%;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        color: var(--field-pill-number-spin-icon-color);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 0;
+        transition:
+            background var(--duration-fast) var(--easing-default),
+            color var(--duration-fast) var(--easing-default);
+    }
+
+    .field-pill-number-spin-btn:first-of-type {
+        border-bottom: 1px solid var(--field-pill-number-spin-divider);
+    }
+
+    .field-pill-number-spin-btn:hover:not(:disabled) {
+        background: var(--field-pill-number-spin-hover-bg);
+        color: var(--text-secondary);
+    }
+
+    .field-pill-number-spin-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+        z-index: 1;
+    }
+
+    .field-pill-number-spin-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    .field-pill-number-spin-btn svg {
+        display: block;
+        flex-shrink: 0;
+    }
+
+    /* Enum combobox — inline-поиск, список в стиле glass (редактор platform-field-enum) */
+
+    .field-pill-enum-wrap {
+        position: relative;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .field-pill-enum-input {
+        padding-right: 28px;
+        cursor: text;
+    }
+
+    .field-pill--compact .field-pill-enum-input {
+        padding-right: 24px;
+    }
+
+    .field-pill-enum-chevron {
+        position: absolute;
+        pointer-events: none;
+        top: 50%;
+        transform: translateY(-50%);
+        right: var(--space-2);
+        width: 12px;
+        height: 12px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2371717a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: center;
+    }
+
+    :host-context([data-theme='light']) .field-pill-enum-chevron {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2352525b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    }
+
+    .field-pill-enum-list {
+        position: absolute;
+        z-index: var(--field-pill-enum-list-z, var(--z-dropdown));
+        left: 0;
+        right: 0;
+        top: calc(100% + 4px);
+        margin: 0;
+        padding: var(--space-1) 0;
+        list-style: none;
+        max-height: min(280px, 46vh);
+        overflow-x: hidden;
+        overflow-y: auto;
+        box-sizing: border-box;
+        background: var(--glass-solid-medium);
+        border: 1px solid var(--glass-border-subtle);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.2));
+        backdrop-filter: blur(var(--glass-blur-subtle));
+        -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
+    }
+
+    .field-pill-enum-opt {
+        margin: 0;
+        padding: var(--space-2) var(--space-3);
+        cursor: pointer;
+        font-size: var(--field-pill-readonly-muted-size);
+        font-weight: var(--font-medium);
+        line-height: var(--leading-tight);
+        color: var(--text-primary);
+        transition: background var(--duration-fast) var(--easing-default);
+    }
+
+    .field-pill-enum-opt:hover {
+        background: var(--accent-subtle);
+    }
+
+    .field-pill-enum-opt:focus {
+        outline: none;
+        background: var(--accent-subtle);
+    }
+
+    .field-pill-enum-opt--selected {
+        background: var(--glass-solid-subtle);
+        font-weight: var(--font-semibold);
+    }
+
+    .field-pill-enum-opt--selected:hover {
+        background: var(--accent-subtle);
+    }
+
+    .field-pill-enum-empty {
+        margin: 0;
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--field-pill-readonly-muted-size);
+        color: var(--text-tertiary);
+        list-style: none;
     }
 `;

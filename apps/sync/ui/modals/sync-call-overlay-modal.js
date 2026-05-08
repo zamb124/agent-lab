@@ -934,43 +934,43 @@ export class SyncCallOverlayModal extends PlatformModal {
 
     async _connectRoom() {
         if (!this.callId) return;
-        let tokenResult = this._prefetchedLiveKitBundle();
-        if (tokenResult === null) {
-            try {
-                await this._tokenOp.run({ call_id: this.callId });
-            } catch (err) {
+        try {
+            let tokenResult = this._prefetchedLiveKitBundle();
+            if (tokenResult === null) {
+                try {
+                    await this._tokenOp.run({ call_id: this.callId });
+                } catch (err) {
+                    this._status = 'error';
+                    this._error = err && typeof err.message === 'string' ? err.message : this.t('call_overlay.err_token_failed');
+                    this._connecting = false;
+                    return;
+                }
+                tokenResult = this._tokenOp.lastResult;
+            }
+            if (!tokenResult || typeof tokenResult.token !== 'string' || typeof tokenResult.livekit_url !== 'string') {
                 this._status = 'error';
-                this._error = err && typeof err.message === 'string' ? err.message : this.t('call_overlay.err_token_failed');
+                this._error = this.t('call_overlay.err_livekit_required');
                 this._connecting = false;
                 return;
             }
-            tokenResult = this._tokenOp.lastResult;
-        }
-        if (!tokenResult || typeof tokenResult.token !== 'string' || typeof tokenResult.livekit_url !== 'string') {
-            this._status = 'error';
-            this._error = this.t('call_overlay.err_livekit_required');
-            this._connecting = false;
-            return;
-        }
-        const lk = await import('@livekit/client');
-        this._lk = lk;
-        this._room = new lk.Room({
-            adaptiveStream: true,
-            dynacast: true,
-            publishDefaults: lk.ScreenSharePresets
-                ? { screenShareEncoding: lk.ScreenSharePresets.h1080fps30.encoding }
-                : undefined,
-        });
-        const ev = lk.RoomEvent;
-        this._room.on(ev.ParticipantConnected, () => this._syncParticipants());
-        this._room.on(ev.ParticipantDisconnected, () => this._syncParticipants());
-        this._room.on(ev.TrackSubscribed, () => this._syncParticipants());
-        this._room.on(ev.TrackUnsubscribed, () => this._syncParticipants());
-        this._room.on(ev.LocalTrackPublished, () => this._syncParticipants());
-        this._room.on(ev.LocalTrackUnpublished, () => this._syncParticipants());
-        this._room.on(ev.Disconnected, () => this._onRoomDisconnected());
+            const lk = await import('@livekit/client');
+            this._lk = lk;
+            this._room = new lk.Room({
+                adaptiveStream: true,
+                dynacast: true,
+                publishDefaults: lk.ScreenSharePresets
+                    ? { screenShareEncoding: lk.ScreenSharePresets.h1080fps30.encoding }
+                    : undefined,
+            });
+            const ev = lk.RoomEvent;
+            this._room.on(ev.ParticipantConnected, () => this._syncParticipants());
+            this._room.on(ev.ParticipantDisconnected, () => this._syncParticipants());
+            this._room.on(ev.TrackSubscribed, () => this._syncParticipants());
+            this._room.on(ev.TrackUnsubscribed, () => this._syncParticipants());
+            this._room.on(ev.LocalTrackPublished, () => this._syncParticipants());
+            this._room.on(ev.LocalTrackUnpublished, () => this._syncParticipants());
+            this._room.on(ev.Disconnected, () => this._onRoomDisconnected());
 
-        try {
             await this._room.connect(tokenResult.livekit_url, tokenResult.token);
             if (_canUseMediaDevices()) {
                 await this._room.localParticipant.enableCameraAndMicrophone();
@@ -984,21 +984,20 @@ export class SyncCallOverlayModal extends PlatformModal {
                 this._camOff = true;
                 this._micMuted = true;
             }
+            this._status = 'active';
+            this._connecting = false;
+            await this._loadDeviceLists();
+            this._syncParticipants();
+            try {
+                await this._statusOp.run({ call_id: this.callId });
+            } catch (_err) {
+                // не критично — без admin-меню overlay работает.
+            }
         } catch (err) {
             this._status = 'error';
             this._error = err && typeof err.message === 'string' ? err.message : this.t('call_overlay.err_connect_failed');
             this._connecting = false;
-            return;
-        }
-        this._status = 'active';
-        this._connecting = false;
-        await this._loadDeviceLists();
-        this._syncParticipants();
-        // Подгружаем call status, чтобы знать meeting admin (created_by_user_id).
-        try {
-            await this._statusOp.run({ call_id: this.callId });
-        } catch (_err) {
-            // не критично — без admin-меню overlay работает.
+            this._disconnectRoom();
         }
     }
 

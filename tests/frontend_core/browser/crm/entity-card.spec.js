@@ -145,12 +145,13 @@ describe('crm-entity-card', () => {
         expect(statusField, 'status platform-field').to.exist;
         const pfEnum = statusField.shadowRoot && statusField.shadowRoot.querySelector('platform-field-enum');
         expect(pfEnum, 'platform-field-enum').to.exist;
-        const statusInner = pfEnum.shadowRoot && pfEnum.shadowRoot.querySelector('select');
-        expect(statusInner, 'status select inside platform-field').to.exist;
-        const firstOpt = statusInner.querySelector('option[value="active"]');
-        expect(firstOpt, 'status option').to.exist;
-        expect((firstOpt.textContent || '').length > 0).to.equal(true);
-        expect((firstOpt.textContent || '').includes('Актив')).to.equal(true);
+        const enumInp = pfEnum.shadowRoot && pfEnum.shadowRoot.querySelector('input.field-pill-enum-input');
+        expect(enumInp, 'enum combobox inside platform-field').to.exist;
+        enumInp.focus();
+        await elementUpdated(pfEnum);
+        const activeRow = pfEnum.shadowRoot.querySelector('[data-enum-value="active"]');
+        expect(activeRow, 'status enum row active').to.exist;
+        expect((activeRow.textContent || '').includes('Актив')).to.equal(true);
     });
 
     it('panel-mode=edit: связь с score показывает полосу силы связи', async () => {

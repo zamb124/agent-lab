@@ -48,7 +48,7 @@ CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `-
 - **Каноничный компонент:** [`<platform-field>`](core/frontend/static/lib/components/fields/platform-field.js) — единственный канон для **любого** поля формы во всех сервисах (имя/email/url/password/query/description, типизированные атрибуты CRM). Полный API — `data-types.mdc`.
 - **Оболочка:** `.field-pill` и эквивалент для legacy-форм **`.form-group`** — один визуальный канон (паддинг, фон `--field-pill-bg`, бордер, скругление `--field-pill-radius`). Значение задаётся в [`core/frontend/static/lib/styles/shared/field-pill.styles.js`](core/frontend/static/lib/styles/shared/field-pill.styles.js); семантические токены — `--field-pill-*` в [`tokens.css`](core/frontend/static/assets/css/tokens.css).
 - **Лейбл:** `.field-pill-label` и **`.form-label`** — общие правила (uppercase, `--field-pill-label-*`).
-- **Контрол внутри пилюли** (без отдельной «стеклянной» рамки элемента): `.field-pill-input`, `.field-pill-textarea`, `.field-pill-select`; в разметке legacy-форм допускаются **алиасы** `.form-input`, `.form-textarea`, `.form-select`.
+- **Контрол внутри пилюли** (без отдельной «стеклянной» рамки элемента): `.field-pill-input`, `.field-pill-textarea`, `.field-pill-select` (где нужен нативный одиночный `<select>`); тип **`enum` в `<platform-field>`** — всегда **searchable combobox** (`.field-pill-enum-input` + выпадающий список в `field-pill.styles.js`), не `<select>`; в legacy-формах допускаются алиасы `.form-input`, `.form-textarea`, `.form-select`.
 - **Список вложенных файлов + скрытый `input type="file"`:** оболочка как у пилюли — импорт [`field-pill.styles.js`](core/frontend/static/lib/styles/shared/field-pill.styles.js) (`fieldPillStyles`) в `static styles` компонента, разметка `.field-pill` + `.field-pill-head` + `.field-pill-file-refs-body` и классы `.field-pill-file-ref-*` / `.field-pill-file-refs-attach*` из того же модуля; отдельные `.file-*` стили в `apps/**` не вводить (см. эталон [`flows-base-node-editor.js`](apps/flows/ui/components/nodes/flows-base-node-editor.js)).
 - **`<glass-input>` / `<glass-textarea>` УДАЛЕНЫ** в PHASE 1.5. Импорт запрещён (`scripts/check_ui_canon.sh` п.18).
 
@@ -94,6 +94,7 @@ CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `-
 - Закрытие: `this.close()` внутри модалки (диспатчит `UI_MODAL_CLOSE`).
 - Стек живёт в `state.modals.stack` (`core/frontend/static/lib/events/reducers/modals.js`).
 - Рендер — `<platform-modal-stack>`, монтируется один раз в `PlatformApp.render()`.
+- **Z-index модалок:** при открытии `glass-modal` задаёт `--platform-modal-layer-z` через `nextModalLayerZIndex()` ([`modal-z-stack.js`](core/frontend/static/lib/utils/modal-z-stack.js)): монотонный рост от `stackFloor()` (= max среди `--z-notification-panel`, `--z-max`, `--z-tooltip`, `--z-toast`, `--z-modal` на `:root`). Фиксированные слои — токены в [`tokens.css`](core/frontend/static/assets/css/tokens.css). Порталы тултипов CodeMirror в flows: узел `#flows-cm-tooltip-mount` на `document.body` с инлайн `z-index` из `editorBodyPortalZIndex()` (вычисляет `--z-editor-body-portal`, а не парсит сырое `calc(...)` из `getPropertyValue`).
 
 ### Регистрация
 

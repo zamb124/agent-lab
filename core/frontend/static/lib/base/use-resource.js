@@ -175,15 +175,16 @@ export class OpController {
                 if (typeof unsubFail === 'function') unsubFail();
             };
             unsubOk = this.bus.subscribeType(okType, (event) => {
-                if (!event.meta || event.meta.causation_id !== requestedId) return;
+                if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
                 cleanup();
-                const out = event.payload && Object.prototype.hasOwnProperty.call(event.payload, 'result')
-                    ? event.payload.result
+                const pl = event.payload;
+                const out = pl != null && Object.prototype.hasOwnProperty.call(pl, 'result')
+                    ? pl.result
                     : null;
                 resolve(out);
             });
             unsubFail = this.bus.subscribeType(failType, (event) => {
-                if (!event.meta || event.meta.causation_id !== requestedId) return;
+                if (!event || !event.meta || event.meta.causation_id !== requestedId) return;
                 cleanup();
                 resolve(null);
             });

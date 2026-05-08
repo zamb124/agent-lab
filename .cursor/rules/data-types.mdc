@@ -4,7 +4,7 @@ alwaysApply: false
 ---
 # Data Type Components (`platform-field`)
 
-`<platform-field>` — **единственный** допустимый способ ввода и отображения **любого поля формы** на платформе: типизированные атрибуты CRM, имя/email/url/password/query/description/comment в любом сервисе. Компонент-диспетчер делегирует рендеринг подкомпоненту по `type`. Диспетчер всегда рендерит оболочку **pill** (`class="field-pill"`): при непустом `label` сверху — `field-pill-label`, затем подкомпонент. Подкомпонент **не** дублирует pill; внутри используются классы `field-pill-input` / `field-pill-textarea` / `field-pill-select` (edit) и `field-pill-readonly-text` / `field-pill-empty` (view), плюс узкие варианты (`enum-chip`, `view-json`, чипы массива).
+`<platform-field>` — **единственный** допустимый способ ввода и отображения **любого поля формы** на платформе: типизированные атрибуты CRM, имя/email/url/password/query/description/comment в любом сервисе. Компонент-диспетчер делегирует рендеринг подкомпоненту по `type`. Диспетчер всегда рендерит оболочку **pill** (`class="field-pill"`): при непустом `label` сверху — `field-pill-label`, затем подкомпонент. Подкомпонент **не** дублирует pill; внутри используются классы `field-pill-input` / `field-pill-textarea` (`edit`) и для нативного списка вне enum — `field-pill-select`; **enum в edit** — combobox (`field-pill-enum-*`, инлайн-поиск, `data-canon="search-as-you-type"`). View: `field-pill-readonly-text` / `field-pill-empty`, плюс узкие варианты (`enum-chip`, `view-json`, чипы массива).
 
 `<glass-input>` / `<glass-textarea>` **удалены** в PHASE 1.5; импортировать запрещено (детектор `scripts/check_ui_canon.sh` п.18).
 
@@ -47,7 +47,7 @@ alwaysApply: false
 | `mode` | `'view' \| 'edit'` | view = readonly |
 | `label` | `string` | Опц. |
 | `config` | `object` | По типу. Для `enum` — `{ values: [...] }`: массив строк ИЛИ `{value, label}` объектов. Для отображения human-readable label с техническим value — обязательно `{value, label}`. Для **`array`**: опционально **`allowed_values: string[]`** (непустой — режим чипов + `select` только из списка, `data-canon="combobox"`); **`preserve_case: true`** — свободный ввод через `<tag-input>` без приведения к lower case (иначе как в CRM — lower case). |
-| `placeholder` | `string` | Edit-режим; для `array` пробрасывается в `<tag-input>` / подпись добавления в режиме `allowed_values` |
+| `placeholder` | `string` | Edit-режим; для `enum` — placeholder у поля поиска списка; для `array` — в `<tag-input>` / подпись добавления в режиме `allowed_values` |
 | `disabled` | `boolean` | — |
 | `inputType` | `'text'\|'email'\|'password'\|'url'\|'tel'\|'search'` | Только при `type='string'` — нативный `<input type=...>`. Default `'text'`. Любое другое значение — `throw`. |
 | `hint` | `string` | Подсказка-tooltip рядом с `label` (рисуется через `<platform-help-hint>`). **НЕ** always-visible div — содержимое появляется при наведении/фокусе на «?». Локальный `<div class="hint">…</div>` под полем формы запрещён. |
@@ -76,7 +76,7 @@ Side-effect import: диспетчер автоматически импорти
 
 ## i18n (namespace `platform`)
 
-`platform_field.empty_value`, `boolean_true`/`boolean_false`, `array_placeholder`, `array_remove_value`, `object_placeholder`, `external_refs_*` (empty, record_id, last_seen, account_key, raw_version, readonly).
+`platform_field.empty_value`, `number_increment`/`number_decrement`, `enum_blank_fallback`, `enum_search_placeholder`, `enum_list_aria`, `enum_no_matches`, `boolean_true`/`boolean_false`, `array_placeholder`, `array_remove_value`, `object_placeholder`, `external_refs_*` (empty, record_id, last_seen, account_key, raw_version, readonly).
 
 ## Обязательные правила
 

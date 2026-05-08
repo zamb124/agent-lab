@@ -100,6 +100,8 @@
         "submit": "Create"
     },
     "platform_field": {
+        "number_increment": "Increase",
+        "number_decrement": "Decrease",
         "empty_value": "Not set",
         "boolean_true": "Yes",
         "boolean_false": "No",
@@ -111,7 +113,11 @@
         "external_refs_last_seen": "Last seen",
         "external_refs_account_key": "Account",
         "external_refs_raw_version": "Version",
-        "external_refs_readonly": "Managed by integrations; not editable here."
+        "external_refs_readonly": "Managed by integrations; not editable here.",
+        "enum_blank_fallback": "\u2014",
+        "enum_search_placeholder": "Search in list\u2026",
+        "enum_list_aria": "Options",
+        "enum_no_matches": "No matches"
     },
     "user_chip": {
         "unknown": "Unknown user",

@@ -172,6 +172,7 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value ?? ''}
                     .mode=${this.mode}
                     .config=${this.config}
+                    .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
                     @change=${this._onChange}
                 ></platform-field-enum>`;

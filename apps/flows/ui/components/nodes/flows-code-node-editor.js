@@ -136,6 +136,15 @@ export class FlowsCodeNodeEditor extends PlatformElement {
             ? cfg.args_schema
             : {};
         const language = typeof cfg.language === 'string' && cfg.language.length > 0 ? cfg.language : 'python';
+        const fv =
+            this.flowVariables &&
+            typeof this.flowVariables === 'object' &&
+            !Array.isArray(this.flowVariables)
+                ? this.flowVariables
+                : {};
+        const completionVariableKeys = Object.keys(fv);
+        const bid = typeof this.branchId === 'string' && this.branchId.length > 0 ? this.branchId : '';
+        const fid = typeof this.flowId === 'string' ? this.flowId : '';
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -157,6 +166,9 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                         .code=${code}
                         .language=${language}
                         .argsSchema=${argsSchema}
+                        .completionFlowId=${fid}
+                        .completionBranchId=${bid}
+                        .completionVariableKeys=${completionVariableKeys}
                         @code-workbench-change=${this._onWorkbenchChange}
                     ></flows-code-workbench>
                 </div>

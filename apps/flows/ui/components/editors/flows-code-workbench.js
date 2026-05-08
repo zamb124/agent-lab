@@ -28,11 +28,17 @@ export class FlowsCodeWorkbench extends PlatformElement {
         argsSchema: { type: Object },
         /** flows.code_docs: node | editor */
         documentationPerspective: { type: String },
+        /** Ключи flow variables для автодополнения `variables.` / `state.variables.` */
+        completionVariableKeys: { type: Array },
+        /** Подгрузка `GET /code/editor-state` для ключей variables при наличии flow */
+        completionFlowId: { type: String },
+        completionBranchId: { type: String },
         /** Смена ключа сбрасывает вкладку и ошибку схемы */
         scopeKey: { type: String },
         _mainTab: { state: true },
         _schemaInvalid: { state: true },
         _schemaError: { state: true },
+        _editorStateVarKeys: { state: true },
     };
 
     static styles = [
@@ -144,10 +150,17 @@ export class FlowsCodeWorkbench extends PlatformElement {
         this.language = 'python';
         this.argsSchema = {};
         this.documentationPerspective = 'node';
+        this.completionVariableKeys = [];
+        this.completionFlowId = '';
+        this.completionBranchId = '';
         this.scopeKey = '';
         this._mainTab = 'code';
         this._schemaInvalid = false;
         this._schemaError = '';
+        this._editorStateVarKeys = [];
+        /** @type {number} */
+        this._editorStateFetchSeq = 0;
+        this._codeEditorStateOp = this.useOp('flows/code_editor_state');
     }
 
     willUpdate(changed) {
@@ -157,6 +170,91 @@ export class FlowsCodeWorkbench extends PlatformElement {
             this._schemaInvalid = false;
             this._schemaError = '';
         }
+        if (changed.has('completionFlowId') || changed.has('completionBranchId')) {
+            this._editorStateVarKeys = [];
+        }
+    }
+
+    updated(changed) {
+        super.updated?.(changed);
+        if (changed.has('completionFlowId') || changed.has('completionBranchId')) {
+            void this._syncEditorStateVariableKeys();
+        }
+    }
+
+    _documentationPerspectiveResolved() {
+        if (typeof this.documentationPerspective === 'string' && this.documentationPerspective.length > 0) {
+            return this.documentationPerspective;
+        }
+        return this.variant === 'resource' ? 'editor' : 'node';
+    }
+
+    _completionContextPayload() {
+        const lang = this._normalizedLanguage();
+        return {
+            language: lang === 'javascript' ? 'javascript' : 'python',
+            perspective: this._documentationPerspectiveResolved(),
+            include_runtime_namespace_extras: true,
+        };
+    }
+
+    _effectiveCompletionVariableKeys() {
+        const manual = Array.isArray(this.completionVariableKeys)
+            ? this.completionVariableKeys.filter((k) => typeof k === 'string')
+            : [];
+        const fromState = Array.isArray(this._editorStateVarKeys)
+            ? this._editorStateVarKeys.filter((k) => typeof k === 'string')
+            : [];
+        const out = [];
+        const seen = new Set();
+        for (const k of [...manual, ...fromState]) {
+            if (seen.has(k)) {
+                continue;
+            }
+            seen.add(k);
+            out.push(k);
+        }
+        return out;
+    }
+
+    async _syncEditorStateVariableKeys() {
+        const seq = this._editorStateFetchSeq + 1;
+        this._editorStateFetchSeq = seq;
+        const fid = typeof this.completionFlowId === 'string' ? this.completionFlowId.trim() : '';
+        if (fid.length === 0) {
+            if (seq === this._editorStateFetchSeq) {
+                this._editorStateVarKeys = [];
+            }
+            return;
+        }
+        const bid =
+            typeof this.completionBranchId === 'string' && this.completionBranchId.length > 0
+                ? this.completionBranchId
+                : 'default';
+        let raw;
+        try {
+            raw = await this._codeEditorStateOp.run({ flow_id: fid, branch_id: bid });
+        } catch {
+            if (seq !== this._editorStateFetchSeq) {
+                return;
+            }
+            this._editorStateVarKeys = [];
+            return;
+        }
+        if (seq !== this._editorStateFetchSeq) {
+            return;
+        }
+        const varsRaw =
+            raw &&
+            typeof raw === 'object' &&
+            raw !== null &&
+            'variables' in raw &&
+            raw.variables &&
+            typeof raw.variables === 'object' &&
+            !Array.isArray(raw.variables)
+                ? raw.variables
+                : {};
+        this._editorStateVarKeys = Object.keys(varsRaw);
     }
 
     _normalizedLanguage() {
@@ -301,6 +399,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
         const argsSchema = this._argsSchemaObject();
         const schemaText = JSON.stringify(argsSchema, null, 2);
         const cmLang = this._cmLanguageForCodeTab();
+        const completionCtx = this._completionContextPayload();
+        const varKeysEff = this._effectiveCompletionVariableKeys();
 
         if (this.variant === 'resource') {
             const lang = this._normalizedLanguage();
@@ -312,6 +412,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
                             <flows-code-editor
                                 language=${cmLang}
                                 .value=${code}
+                                .completionContext=${completionCtx}
+                                .completionVariableKeys=${varKeysEff}
                                 @change=${this._onCodeEditorChange}
                             >
                                 <div slot="toolbar-start">${this._renderToolbarStart()}</div>
@@ -349,6 +451,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
                         <flows-code-editor
                             language=${cmLang}
                             .value=${code}
+                            .completionContext=${completionCtx}
+                            .completionVariableKeys=${varKeysEff}
                             @change=${this._onCodeEditorChange}
                         >
                             <div slot="toolbar-start">${this._renderToolbarStart()}</div>

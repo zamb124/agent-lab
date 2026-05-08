@@ -2,11 +2,11 @@
  * platform-field-* — поля типизированного отображения/редактирования.
  *
  * После PHASE 1.5: платформа имеет один канон pill (<platform-field>),
- * подкомпоненты используют классы field-pill-input/-textarea/-select,
+ * подкомпоненты используют классы field-pill-input/-textarea/-select или enum-combobox (.field-pill-enum-*),
  * у platform-field-string есть property inputType (text|email|password|url|tel|search).
  */
 
-import { fixture, html, expect, oneEvent } from '../helpers/render.js';
+import { fixture, html, expect, oneEvent, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/fields/platform-field-string.js';
@@ -259,7 +259,7 @@ describe('platform-field-enum', () => {
         expect(el.shadowRoot.querySelector('.enum-chip').textContent).to.equal('Активно');
     });
 
-    it('edit с {value,label}: option рендерит label', async () => {
+    it('edit: combobox и список label при фокусе', async () => {
         const el = await fixture(html`
             <platform-field-enum
                 mode="edit"
@@ -267,25 +267,33 @@ describe('platform-field-enum', () => {
                 .config=${{ values: [{ value: 'x', label: 'X-Label' }, { value: 'y', label: 'Y-Label' }] }}
             ></platform-field-enum>
         `);
-        const sel = el.shadowRoot.querySelector('select.field-pill-select');
-        expect(sel).to.exist;
-        const options = sel.querySelectorAll('option');
-        expect(options[1].value).to.equal('x');
-        expect(options[1].textContent.trim()).to.equal('X-Label');
-        expect(options[2].value).to.equal('y');
-        expect(options[2].textContent.trim()).to.equal('Y-Label');
+        const inp = el.shadowRoot.querySelector('input.field-pill-enum-input');
+        expect(inp).to.exist;
+        inp.focus();
+        await elementUpdated(el);
+        const rowX = el.shadowRoot.querySelector('[data-enum-value="x"]');
+        const rowY = el.shadowRoot.querySelector('[data-enum-value="y"]');
+        expect(rowX).to.exist;
+        expect(rowY).to.exist;
+        expect(rowX.textContent.trim()).to.equal('X-Label');
+        expect(rowY.textContent.trim()).to.equal('Y-Label');
     });
 
-    it('edit с массивом строк: option value=label', async () => {
+    it('edit с массивом строк: data-enum-value совпадает с value опции', async () => {
         const el = await fixture(html`
             <platform-field-enum mode="edit" value="a" .config=${{ values: ['a', 'b'] }}></platform-field-enum>
         `);
-        const options = el.shadowRoot.querySelectorAll('option');
-        expect(options[1].value).to.equal('a');
-        expect(options[1].textContent.trim()).to.equal('a');
+        const inp = el.shadowRoot.querySelector('input.field-pill-enum-input');
+        inp.focus();
+        await elementUpdated(el);
+        const rows = Array.from(el.shadowRoot.querySelectorAll('[data-enum-value]'));
+        expect(rows.length).to.equal(3);
+        expect(rows.some((li) => li.getAttribute('data-enum-value') === '')).to.equal(true);
+        expect(rows.some((li) => li.getAttribute('data-enum-value') === 'a')).to.equal(true);
+        expect(rows.some((li) => li.getAttribute('data-enum-value') === 'b')).to.equal(true);
     });
 
-    it('edit: {value: "", label} без дублирующего --', async () => {
+    it('edit: {value: "", label} без дублирующей синтетической пустой строки', async () => {
         const el = await fixture(html`
             <platform-field-enum
                 mode="edit"
@@ -293,11 +301,49 @@ describe('platform-field-enum', () => {
                 .config=${{ values: [{ value: '', label: 'Default row' }, { value: 'x', label: 'X' }] }}
             ></platform-field-enum>
         `);
-        const options = el.shadowRoot.querySelectorAll('option');
-        expect(options.length).to.equal(2);
-        expect(options[0].value).to.equal('');
-        expect(options[0].textContent.trim()).to.equal('Default row');
-        expect(options[1].value).to.equal('x');
+        const inp = el.shadowRoot.querySelector('input.field-pill-enum-input');
+        inp.focus();
+        await elementUpdated(el);
+        const rows = Array.from(el.shadowRoot.querySelectorAll('[data-enum-value]'));
+        expect(rows.length).to.equal(2);
+        const emptyRow = rows.find((li) => li.getAttribute('data-enum-value') === '');
+        expect(emptyRow.textContent.trim()).to.equal('Default row');
+        const xRow = rows.find((li) => li.getAttribute('data-enum-value') === 'x');
+        expect(xRow.textContent.trim()).to.equal('X');
+    });
+
+    it('edit: фильтрует опции при вводе', async () => {
+        const el = await fixture(html`
+            <platform-field-enum
+                mode="edit"
+                value="a"
+                .config=${{ values: [{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }] }}
+            ></platform-field-enum>
+        `);
+        const inp = el.shadowRoot.querySelector('input.field-pill-enum-input');
+        inp.focus();
+        await elementUpdated(el);
+        inp.value = 'Bet';
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        await elementUpdated(el);
+        const items = el.shadowRoot.querySelectorAll('[data-enum-value]');
+        expect(items.length).to.equal(1);
+        expect(items[0].getAttribute('data-enum-value')).to.equal('b');
+    });
+
+    it('edit: выбор опции испускает change', async () => {
+        const el = await fixture(html`
+            <platform-field-enum mode="edit" value="a" .config=${{ values: ['a', 'b'] }}></platform-field-enum>
+        `);
+        const inp = el.shadowRoot.querySelector('input.field-pill-enum-input');
+        inp.focus();
+        await elementUpdated(el);
+        const p = oneEvent(el, 'change');
+        const row = el.shadowRoot.querySelector('[data-enum-value="b"]');
+        expect(row).to.exist;
+        row.click();
+        const ev = await p;
+        expect(ev.detail.value).to.equal('b');
     });
 });
 

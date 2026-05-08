@@ -13,7 +13,8 @@
  *   - showToolbar: boolean (шапка: полноэкран, подсказка про сохранение)
  *   - headerOnly: boolean — только шапка (слот + Save/Fullscreen), без CodeMirror (для соседнего контента под шапкой)
  *   - slot `toolbar-start` — светлый DOM слева в шапке (вкладки «Код»/«Схема» и т.п.).
- *   - completionContext: object (опц.) — передаётся в payload `flows/code_completions`.
+ *   - completionContext: object (опц.) — query для `flows/code_completions` (`language`, `perspective`, `include_runtime_namespace_extras`).
+ *   - completionVariableKeys: string[] (опц.) — ключи `variables` / `state.variables` для автодополнения.
  *
  * События (emit, slot-композиция):
  *   - 'change' { value }
@@ -24,9 +25,35 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/glass-button.js';
-import { asObject, asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import {
+    buildPythonCompletions,
+    fetchCompletionCatalog,
+} from '../../_helpers/flows-python-completion-catalog.js';
+import { editorBodyPortalZIndex } from '@platform/lib/utils/modal-z-stack.js';
 
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
+
+const FLOWS_CM_TOOLTIP_MOUNT_ID = 'flows-cm-tooltip-mount';
+
+/**
+ * Единый контейнер на document.body для CM tooltips(): z-index инлайном (editorBodyPortalZIndex).
+ * Внешний вид тултипов — селекторы `#flows-cm-tooltip-mount` в tokens.css (после инжекта baseTheme CM).
+ *
+ * @returns {HTMLElement}
+ */
+function ensureFlowsCmTooltipMount() {
+    let el = document.getElementById(FLOWS_CM_TOOLTIP_MOUNT_ID);
+    if (!el) {
+        el = document.createElement('div');
+        el.id = FLOWS_CM_TOOLTIP_MOUNT_ID;
+        document.body.appendChild(el);
+    }
+    el.style.position = 'relative';
+    el.style.pointerEvents = 'none';
+    el.style.zIndex = String(editorBodyPortalZIndex());
+    return el;
+}
 
 let _cmPromise = null;
 function loadCodeMirror() {
@@ -49,6 +76,7 @@ export class FlowsCodeEditor extends PlatformElement {
         fillParent: { type: Boolean, reflect: true, attribute: 'fill-parent' },
         fullscreen: { type: Boolean, reflect: true, attribute: 'fullscreen' },
         completionContext: { type: Object, attribute: false },
+        completionVariableKeys: { type: Array, attribute: false },
     };
 
     static styles = [
@@ -217,6 +245,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this.fillParent = false;
         this.fullscreen = false;
         this.completionContext = null;
+        this.completionVariableKeys = [];
         this._editorView = null;
         this._cm = null;
         this._readonlyCompartment = null;
@@ -377,6 +406,7 @@ export class FlowsCodeEditor extends PlatformElement {
         const extensions = [
             cm.history(),
             cm.lineNumbers(),
+            cm.tooltips({ parent: ensureFlowsCmTooltipMount(), position: 'absolute' }),
             this._readonlyCompartment.of(cm.EditorState.readOnly.of(this.readonly)),
             this._languageCompartment.of(this._buildLanguageExtension()),
             this._themeCompartment.of(this._buildThemeExtension()),
@@ -448,35 +478,29 @@ export class FlowsCodeEditor extends PlatformElement {
         if (this.language !== 'python') {
             return null;
         }
-        const word = ctx.matchBefore(/\w*/);
-        if (!word || (word.from === word.to && !ctx.explicit)) {
+        let catalog;
+        try {
+            catalog = await fetchCompletionCatalog(
+                (payload) => this._completionsOp.run(payload),
+                this.completionContext,
+            );
+        } catch {
             return null;
         }
-        const code = ctx.state.doc.toString();
-        const cursor = ctx.pos;
-        const result = await this._completionsOp.run({
-            code,
-            cursor,
-            ...asObject(this.completionContext),
+        const variableKeys = Array.isArray(this.completionVariableKeys)
+            ? this.completionVariableKeys.filter((k) => typeof k === 'string')
+            : [];
+        const built = buildPythonCompletions({
+            docText: ctx.state.doc.toString(),
+            pos: ctx.pos,
+            catalog,
+            variableKeys,
+            explicit: ctx.explicit === true,
         });
-        const items = Array.isArray(result?.items) ? result.items : Array.isArray(result) ? result : [];
-        if (items.length === 0) {
+        if (!built || built.options.length === 0) {
             return null;
         }
-        return {
-            from: word.from,
-            options: items.map((it) => ({
-                label:
-                    typeof it === 'string'
-                        ? it
-                        : typeof it.label === 'string' && it.label.length > 0
-                          ? it.label
-                          : asString(it.text),
-                type: typeof it === 'object' && it.type ? it.type : 'variable',
-                detail: typeof it === 'object' ? asString(it.detail) : '',
-                info: typeof it === 'object' ? asString(it.info) : '',
-            })),
-        };
+        return built;
     }
 
     _onSaveFromToolbar() {

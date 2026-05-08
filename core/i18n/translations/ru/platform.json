@@ -100,6 +100,8 @@
         "submit": "Создать"
     },
     "platform_field": {
+        "number_increment": "Увеличить",
+        "number_decrement": "Уменьшить",
         "empty_value": "Не задано",
         "boolean_true": "Да",
         "boolean_false": "Нет",
@@ -111,7 +113,11 @@
         "external_refs_last_seen": "Последняя синхронизация",
         "external_refs_account_key": "Аккаунт",
         "external_refs_raw_version": "Версия",
-        "external_refs_readonly": "Поле заполняется интеграциями, редактирование недоступно."
+        "external_refs_readonly": "Поле заполняется интеграциями, редактирование недоступно.",
+        "enum_blank_fallback": "\u2014",
+        "enum_search_placeholder": "Поиск в списке…",
+        "enum_list_aria": "Варианты",
+        "enum_no_matches": "Ничего не найдено"
     },
     "user_chip": {
         "unknown": "Неизвестный пользователь",

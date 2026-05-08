@@ -62,10 +62,14 @@ describe('flows-llm-config-editor', () => {
         expect(providerPf).to.not.be.null;
         const providerEnum = providerPf.shadowRoot.querySelector('platform-field-enum');
         expect(providerEnum).to.not.be.null;
-        const sel = providerEnum.shadowRoot.querySelector('select');
-        expect(sel).to.not.be.null;
-        sel.value = '';
-        sel.dispatchEvent(new Event('change'));
+        const inp = providerEnum.shadowRoot.querySelector('input.field-pill-enum-input');
+        expect(inp).to.not.be.null;
+        inp.focus();
+        await elementUpdated(providerEnum);
+        const emptyOpt = providerEnum.shadowRoot.querySelector('[data-enum-value=""]');
+        expect(emptyOpt).to.not.be.null;
+        emptyOpt.click();
+        await elementUpdated(el);
         expect(last.config).to.deep.equal({});
     });
 });

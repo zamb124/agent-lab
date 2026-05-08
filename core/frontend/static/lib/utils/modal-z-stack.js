@@ -27,6 +27,31 @@ function stackFloor() {
 let _seq = null;
 
 /**
+ * Z-index слоя портала тултипов CodeMirror на `document.body`. Должен быть выше любого
+ * `glass-modal` (`nextModalLayerZIndex` растёт от stackFloor). Значение из `--z-editor-body-portal`
+ * в tokens.css; при отсутствии вычисленного числа — stackFloor + 10000.
+ *
+ * @returns {number}
+ */
+export function editorBodyPortalZIndex() {
+    if (typeof document === 'undefined') {
+        return stackFloor() + 10000;
+    }
+    const doc = document.documentElement;
+    const probe = document.createElement('div');
+    probe.style.cssText =
+        'position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;z-index:var(--z-editor-body-portal)';
+    doc.appendChild(probe);
+    const computed = getComputedStyle(probe).zIndex;
+    probe.remove();
+    const n = parseInt(computed, 10);
+    if (Number.isFinite(n)) {
+        return n;
+    }
+    return stackFloor() + 10000;
+}
+
+/**
  * @returns {number}
  */
 export function nextModalLayerZIndex() {

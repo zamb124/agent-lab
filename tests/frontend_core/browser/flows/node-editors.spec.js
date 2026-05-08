@@ -104,11 +104,15 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-code-node-editor>
         `);
         await elementUpdated(el);
-        const tabs = el.shadowRoot.querySelectorAll('.main-tab');
+        const workbench = el.shadowRoot.querySelector('flows-code-workbench');
+        expect(workbench).to.not.be.null;
+        await elementUpdated(workbench);
+        const tabs = workbench.shadowRoot.querySelectorAll('.main-tab');
         expect(tabs.length).to.be.greaterThanOrEqual(2);
         tabs[1].click();
+        await elementUpdated(workbench);
         await elementUpdated(el);
-        const jsonEditor = el.shadowRoot.querySelector('flows-code-editor[language="json"]');
+        const jsonEditor = workbench.shadowRoot.querySelector('flows-code-editor[language="json"]');
         expect(jsonEditor).to.not.be.null;
     });
 
@@ -131,10 +135,12 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(channelPf, 'channel enum field').to.not.be.null;
         const pfEnum = channelPf.shadowRoot.querySelector('platform-field-enum');
         expect(pfEnum, 'channel platform-field-enum').to.not.be.null;
-        const select = pfEnum.shadowRoot.querySelector('select');
-        expect(select, 'channel select').to.not.be.null;
-        select.value = 'webhook';
-        select.dispatchEvent(new Event('change'));
+        const inp = pfEnum.shadowRoot.querySelector('input.field-pill-enum-input');
+        inp.focus();
+        await elementUpdated(pfEnum);
+        const webhookRow = pfEnum.shadowRoot.querySelector('[data-enum-value="webhook"]');
+        expect(webhookRow, 'webhook enum row').to.not.be.null;
+        webhookRow.click();
         expect(last, 'editor change event').to.exist;
         expect(last.patch).to.have.property('channel', 'webhook');
         expect(last.patch).to.have.property('channel_config').that.deep.equals({});
