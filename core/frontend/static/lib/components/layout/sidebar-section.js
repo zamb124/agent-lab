@@ -12,6 +12,7 @@ export class SidebarSection extends PlatformElement {
         title: { type: String },
         icon: { type: String },
         collapsed: { type: Boolean, reflect: true },
+        customHeader: { type: Boolean, reflect: true, attribute: 'custom-header' },
     };
 
     static styles = [
@@ -29,6 +30,10 @@ export class SidebarSection extends PlatformElement {
             :host([collapsed]) .section-header {
                 display: none;
             }
+
+            .section-header--custom {
+                justify-content: stretch;
+            }
         `
     ];
 
@@ -37,11 +42,17 @@ export class SidebarSection extends PlatformElement {
         this.title = '';
         this.icon = '';
         this.collapsed = false;
+        this.customHeader = false;
     }
 
     render() {
-        return html`
-            <div class="section">
+        const header = this.customHeader
+            ? html`
+                <div class="section-header section-header--custom">
+                    <slot name="header"></slot>
+                </div>
+            `
+            : html`
                 <div class="section-header">
                     <div class="section-title">
                         ${this.icon ? html`
@@ -53,6 +64,10 @@ export class SidebarSection extends PlatformElement {
                         <slot name="actions"></slot>
                     </div>
                 </div>
+            `;
+        return html`
+            <div class="section">
+                ${header}
                 <div class="section-content">
                     <slot></slot>
                 </div>

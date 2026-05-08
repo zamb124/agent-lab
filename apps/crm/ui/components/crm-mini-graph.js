@@ -448,6 +448,7 @@ export class CRMMiniGraph extends PlatformElement {
         }
         this._graphPayload = graphResult;
         this._clampInitialDisplayDepth();
+        this.requestUpdate();
         await this.updateComplete;
         if (this._trimEntityId() !== id) {
             return;

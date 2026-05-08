@@ -13,6 +13,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const CREATE_OP_NAME = 'office/document_create_empty';
 
@@ -62,7 +63,6 @@ export class OfficeDocumentCreateEmptyModal extends PlatformFormModal {
                 color: var(--text-secondary);
             }
             .type-card.active .label { color: var(--accent); }
-            .form-grid .form-input { color: var(--text-secondary); }
             .footer-actions {
                 display: flex; gap: var(--space-3);
                 justify-content: flex-end;
@@ -92,7 +92,10 @@ export class OfficeDocumentCreateEmptyModal extends PlatformFormModal {
         this.isDirty = this._title.length > 0;
     }
 
-    _onTitleInput(e) { this._title = e.target.value; }
+    _onTitleChange(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._title = v;
+    }
     _onTypeSelect(id) { this._typeId = id; }
 
     async _performSave() {
@@ -134,14 +137,15 @@ export class OfficeDocumentCreateEmptyModal extends PlatformFormModal {
     renderBody() {
         return html`
             <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
-                <div class="form-group">
-                    <label class="form-label">${this.t('document_create_empty_modal.label_title')}</label>
-                    <input type="text" class="form-input"
-                           autocomplete="off" spellcheck="false"
-                           placeholder=${this.t('document_create_empty_modal.title_placeholder')}
-                           .value=${this._title}
-                           @input=${this._onTitleInput} />
-                </div>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('document_create_empty_modal.label_title')}
+                    .placeholder=${this.t('document_create_empty_modal.title_placeholder')}
+                    .value=${this._title}
+                    ?disabled=${this._create.busy}
+                    @change=${this._onTitleChange}
+                ></platform-field>
                 <div class="form-group">
                     <label class="form-label">${this.t('document_create_empty_modal.section_type')}</label>
                     <div class="type-grid">

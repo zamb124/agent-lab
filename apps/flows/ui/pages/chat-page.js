@@ -218,6 +218,18 @@ export class ChatPage extends PlatformPage {
             this._isMobile = next;
         }
         document.addEventListener('pointerdown', this._onDocPointer);
+        this.useEvent('flows/chat/compose_edit', (ev) => {
+            const p = ev.payload && typeof ev.payload === 'object' ? ev.payload : null;
+            const text = p && typeof p.text === 'string' ? p.text : '';
+            if (text === '') {
+                return;
+            }
+            const input = this.renderRoot?.querySelector('chat-input');
+            if (!input || typeof input.setDraft !== 'function') {
+                throw new Error('chat-page: chat-input.setDraft is not available');
+            }
+            input.setDraft(text);
+        });
         this._onTtsOutputPref = () => {
             if (!readTtsOutputEnabled()) {
                 this._disposeTtsOnlyStream();
@@ -525,11 +537,7 @@ export class ChatPage extends PlatformPage {
                 d && typeof d.task_id === 'string' ? d.task_id : null;
             const context_id =
                 d && typeof d.context_id === 'string' ? d.context_id : null;
-            this.dispatch(
-                'flows/chat/a2a_interrupted',
-                { task_id, context_id },
-                { source: 'local' },
-            );
+            this.dispatch('flows/chat/a2a_interrupted', { task_id, context_id }, { source: 'local' });
         };
         this._voiceA2aSettledHandler = onVoiceA2aSettled;
         this._voiceA2aAbortedHandler = onVoiceA2aAborted;
@@ -793,19 +801,6 @@ export class ChatPage extends PlatformPage {
         this._openTracingModalFromDetail(e.detail);
     }
 
-    _onComposeEditFromMessages(e) {
-        const detail = e.detail;
-        const text = detail && typeof detail.text === 'string' ? detail.text : '';
-        if (text === '') {
-            return;
-        }
-        const input = this.renderRoot?.querySelector('chat-input');
-        if (!input || typeof input.setDraft !== 'function') {
-            throw new Error('chat-page: chat-input.setDraft is not available');
-        }
-        input.setDraft(text);
-    }
-
     _openLogs() {
         this._overflowOpen = false;
         const state = this._chat.state;
@@ -990,7 +985,6 @@ export class ChatPage extends PlatformPage {
                     .currentTaskId=${currentTaskId}
                     .voicePlayGetHeaders=${flowsVoiceAuxiliaryHttpHeadersStub}
                     @show-tracing=${this._onChatShowTracing}
-                    @compose-edit=${this._onComposeEditFromMessages}
                 ></chat-messages>
                 <chat-input
                     ?show-voice=${hasFlow}

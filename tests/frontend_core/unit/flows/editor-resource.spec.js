@@ -303,6 +303,29 @@ describe('flows/editor extraReducer', () => {
         expect(s.multiSelection).toEqual(['fresh']);
         expect(s.breakpointNodeIds).toEqual(['fresh']);
         expect(s.isDirty).toBe(true);
+        expect(s.branchData.nodes.fresh.name).toBe('A');
+    });
+
+    it('node_id_changed обновляет name вместе с id, если name пустой или совпадал со старым id', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: {
+                flow_id: 'demo',
+                name: 'Demo',
+                nodes: {
+                    old: { type: 'code', name: 'old' },
+                    n2: { type: 'code' },
+                },
+                edges: [],
+                entry: 'old',
+            },
+            branchId: 'base',
+        });
+        bus.dispatch('flows/editor/node_id_changed', { oldId: 'old', newId: 'fresh' });
+        expect(getState().flowsEditor.branchData.nodes.fresh.name).toBe('fresh');
+
+        bus.dispatch('flows/editor/node_id_changed', { oldId: 'n2', newId: 'n2_renamed' });
+        expect(getState().flowsEditor.branchData.nodes.n2_renamed.name).toBe('n2_renamed');
     });
 
     it('node_id_changed игнорирует коллизию имён', () => {

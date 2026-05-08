@@ -6,8 +6,11 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class FlowsLlmMocksEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         mocks: { type: Array },
         _rows: { state: true },
@@ -22,15 +25,6 @@ export class FlowsLlmMocksEditor extends PlatformElement {
                 display: grid; grid-template-columns: 1fr 2fr auto;
                 gap: var(--space-2); margin-bottom: var(--space-2); align-items: start;
             }
-            .row input, .row textarea {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
-            }
-            .row textarea { min-height: 64px; resize: vertical; }
             button {
                 padding: var(--space-1) var(--space-2);
                 border-radius: var(--radius-md);
@@ -88,17 +82,22 @@ export class FlowsLlmMocksEditor extends PlatformElement {
                 ? html`<div class="empty">${this.t('llm_mocks_editor.empty')}</div>`
                 : this._rows.map((r, i) => html`
                     <div class="row">
-                        <input
-                            type="text"
-                            placeholder=${this.t('llm_mocks_editor.placeholder_match')}
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            label=""
+                            .placeholder=${this.t('llm_mocks_editor.placeholder_match')}
                             .value=${r.match}
-                            @input=${(e) => this._updateRow(i, 'match', e.target.value)}
-                        />
-                        <textarea
-                            placeholder=${this.t('llm_mocks_editor.placeholder_response')}
+                            @change=${(e) => this._updateRow(i, 'match', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                        ></platform-field>
+                        <platform-field
+                            type="text"
+                            mode="edit"
+                            label=""
+                            .placeholder=${this.t('llm_mocks_editor.placeholder_response')}
                             .value=${r.response}
-                            @input=${(e) => this._updateRow(i, 'response', e.target.value)}
-                        ></textarea>
+                            @change=${(e) => this._updateRow(i, 'response', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                        ></platform-field>
                         <button type="button" @click=${() => this._removeRow(i)}>×</button>
                     </div>
                 `)}

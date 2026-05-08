@@ -289,6 +289,10 @@ function _trimmedOrNull(raw) {
 
 export const entityCreateForm = createForm({
     name: 'crm/entity_create_form',
+    submittingClearOnEventTypes: [
+        entitiesResource.events.CREATED,
+        entitiesResource.events.CREATE_FAILED,
+    ],
     schema: {
         entity_type: {
             required: true,

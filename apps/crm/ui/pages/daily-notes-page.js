@@ -1612,6 +1612,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             <input
                 class="search-input"
                 type="text"
+                data-canon="search-as-you-type"
                 style=${toolbarInputStyle}
                 placeholder=${this.t('search.placeholder')}
                 .value=${this._query}

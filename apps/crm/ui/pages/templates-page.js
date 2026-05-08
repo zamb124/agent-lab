@@ -29,6 +29,7 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
@@ -306,31 +307,8 @@ export class CRMTemplatesPage extends PlatformPage {
                 justify-content: flex-end;
             }
 
-            .input,
-            .select,
-            .textarea {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-                padding: var(--space-2) var(--space-3);
-                font: inherit;
-                font-size: var(--text-sm);
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .textarea {
-                min-height: 88px;
-                resize: vertical;
-            }
-
-            .input:focus,
-            .select:focus,
-            .textarea:focus {
-                outline: none;
-                border-color: var(--accent);
-                box-shadow: 0 0 0 1px var(--accent);
+            .stage-row platform-field {
+                min-width: 0;
             }
 
             .grid-2 {
@@ -954,23 +932,36 @@ export class CRMTemplatesPage extends PlatformPage {
                                 </div>
                                 ${board.stages.map((st, si) => html`
                                     <div class="stage-row">
-                                        <input
-                                            class="input"
-                                            type="text"
-                                            autocomplete="off"
-                                            spellcheck="false"
-                                            placeholder=${this.t('space_detail_page.task_board_stage_id_ph')}
+                                        <platform-field
+                                            type="string"
+                                            mode="edit"
+                                            input-type="text"
+                                            .placeholder=${this.t('space_detail_page.task_board_stage_id_ph')}
                                             .value=${st.id}
-                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'id', e.target.value)}
-                                        />
-                                        <input
-                                            class="input"
-                                            type="text"
-                                            autocomplete="off"
-                                            placeholder=${this.t('space_detail_page.task_board_stage_label_ph')}
+                                            ?disabled=${this._taskBoardSaveBusy
+                                                || this._savingMeta
+                                                || this._savingType
+                                                || this._deletingTemplate}
+                                            @change=${(e) => {
+                                                const v = typeof e.detail.value === 'string' ? e.detail.value : '';
+                                                this._onTaskBoardStageField(bi, si, 'id', v);
+                                            }}
+                                        ></platform-field>
+                                        <platform-field
+                                            type="string"
+                                            mode="edit"
+                                            input-type="text"
+                                            .placeholder=${this.t('space_detail_page.task_board_stage_label_ph')}
                                             .value=${st.label}
-                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'label', e.target.value)}
-                                        />
+                                            ?disabled=${this._taskBoardSaveBusy
+                                                || this._savingMeta
+                                                || this._savingType
+                                                || this._deletingTemplate}
+                                            @change=${(e) => {
+                                                const v = typeof e.detail.value === 'string' ? e.detail.value : '';
+                                                this._onTaskBoardStageField(bi, si, 'label', v);
+                                            }}
+                                        ></platform-field>
                                         <platform-palette-color-picker
                                             class="stage-color-picker"
                                             allow-clear
@@ -1423,45 +1414,45 @@ export class CRMTemplatesPage extends PlatformPage {
     _renderCreateForm() {
         return html`
             <form @submit=${this._onCreateSubmit} class="panel" style="background: var(--glass-solid-medium);">
-                <div class="field">
-                    ${this._fieldLabelWithHint(
-                        'templates_page.label_template_id',
-                        'templates_page.label_template_id_hint',
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('templates_page.label_template_id')}
+                    .hint=${this.t('templates_page.label_template_id_hint')}
+                    .placeholder=${this.t('templates_page.ph_template_id')}
+                    .value=${this._newDraft.template_id}
+                    ?disabled=${this._creatingTemplate}
+                    @change=${(e) => this._updateNewDraft(
+                        'template_id',
+                        typeof e.detail.value === 'string' ? e.detail.value : '',
                     )}
-                    <input
-                        class="input mono"
-                        .value=${this._newDraft.template_id}
-                        placeholder=${this.t('templates_page.ph_template_id')}
-                        ?disabled=${this._creatingTemplate}
-                        @input=${(e) => this._updateNewDraft('template_id', e.target.value)}
-                    />
-                </div>
-                <div class="field">
-                    ${this._fieldLabelWithHint(
-                        'templates_page.label_name',
-                        'templates_page.label_name_hint',
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('templates_page.label_name')}
+                    .hint=${this.t('templates_page.label_name_hint')}
+                    .placeholder=${this.t('templates_page.ph_template_name')}
+                    .value=${this._newDraft.name}
+                    ?disabled=${this._creatingTemplate}
+                    @change=${(e) => this._updateNewDraft(
+                        'name',
+                        typeof e.detail.value === 'string' ? e.detail.value : '',
                     )}
-                    <input
-                        class="input"
-                        .value=${this._newDraft.name}
-                        placeholder=${this.t('templates_page.ph_template_name')}
-                        ?disabled=${this._creatingTemplate}
-                        @input=${(e) => this._updateNewDraft('name', e.target.value)}
-                    />
-                </div>
-                <div class="field">
-                    ${this._fieldLabelWithHint(
-                        'templates_page.label_description',
-                        'templates_page.label_description_hint',
+                ></platform-field>
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('templates_page.label_description')}
+                    .hint=${this.t('templates_page.label_description_hint')}
+                    .placeholder=${this.t('templates_page.ph_template_description')}
+                    .value=${this._newDraft.description}
+                    ?disabled=${this._creatingTemplate}
+                    @change=${(e) => this._updateNewDraft(
+                        'description',
+                        typeof e.detail.value === 'string' ? e.detail.value : '',
                     )}
-                    <textarea
-                        class="textarea"
-                        .value=${this._newDraft.description}
-                        placeholder=${this.t('templates_page.ph_template_description')}
-                        ?disabled=${this._creatingTemplate}
-                        @input=${(e) => this._updateNewDraft('description', e.target.value)}
-                    ></textarea>
-                </div>
+                ></platform-field>
                     <div class="field">
                         ${this._fieldLabelWithHint(
                             'templates_page.label_icon',
@@ -1562,18 +1553,18 @@ export class CRMTemplatesPage extends PlatformPage {
                     <span class="chip mono">${detail.template_id}</span>
                 </div>
                 <div class="grid-2">
-                    <div class="field">
-                        ${this._fieldLabelWithHint(
-                            'templates_page.label_name',
-                            'templates_page.label_name_hint',
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        .label=${this.t('templates_page.label_name')}
+                        .hint=${this.t('templates_page.label_name_hint')}
+                        .value=${this._metaDraft.name}
+                        ?disabled=${this._savingMeta || this._deletingTemplate}
+                        @change=${(e) => this._updateMetaField(
+                            'name',
+                            typeof e.detail.value === 'string' ? e.detail.value : '',
                         )}
-                        <input
-                            class="input"
-                            .value=${this._metaDraft.name}
-                            ?disabled=${this._savingMeta || this._deletingTemplate}
-                            @input=${(e) => this._updateMetaField('name', e.target.value)}
-                        />
-                    </div>
+                    ></platform-field>
                     <div class="field">
                         ${this._fieldLabelWithHint(
                             'templates_page.label_icon',
@@ -1588,18 +1579,18 @@ export class CRMTemplatesPage extends PlatformPage {
                         ></platform-icon-picker>
                     </div>
                 </div>
-                <div class="field">
-                    ${this._fieldLabelWithHint(
-                        'templates_page.label_description',
-                        'templates_page.label_description_hint',
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('templates_page.label_description')}
+                    .hint=${this.t('templates_page.label_description_hint')}
+                    .value=${this._metaDraft.description}
+                    ?disabled=${this._savingMeta || this._deletingTemplate}
+                    @change=${(e) => this._updateMetaField(
+                        'description',
+                        typeof e.detail.value === 'string' ? e.detail.value : '',
                     )}
-                    <textarea
-                        class="textarea"
-                        .value=${this._metaDraft.description}
-                        ?disabled=${this._savingMeta || this._deletingTemplate}
-                        @input=${(e) => this._updateMetaField('description', e.target.value)}
-                    ></textarea>
-                </div>
+                ></platform-field>
                 <crm-namespace-note-defaults-fields
                     .defaultNoteVoiceMode=${normalizeDefaultNoteVoiceMode(this._metaDraft.default_note_voice)}
                     .showNoteVoiceUi=${this._metaDraft.show_note_voice_ui !== false}

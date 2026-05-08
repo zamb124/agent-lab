@@ -13,6 +13,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-namespace.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const FORM_NAME = 'office/namespace_create_form';
 const NAMESPACES_NAME = 'office/namespaces';
@@ -157,8 +158,15 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
     }
 
     _onTemplateSelect(template_id) { this._form.setField('template_id', template_id); }
-    _onNameInput(event) { this._form.setField('name', event.target.value); }
-    _onDescriptionInput(event) { this._form.setField('description', event.target.value); }
+    _onNameChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._form.setField('name', v);
+    }
+
+    _onDescriptionChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._form.setField('description', v);
+    }
 
     async _performSave() {
         this._form.submit();
@@ -239,24 +247,27 @@ export class OfficeNamespaceCreateModal extends PlatformFormModal {
                     ${this._renderFieldError('template_id')}
                     <div class="hint">${this.t('namespace_modal.template_hint')}</div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">${this.t('namespace_modal.label_name')}</label>
-                    <input type="text" class="form-input"
-                           autocomplete="off" spellcheck="false"
-                           placeholder=${this.t('namespace_modal.name_placeholder')}
-                           .value=${draft.name}
-                           @input=${this._onNameInput} />
-                    ${this._renderFieldError('name')}
-                    <div class="hint">${this.t('namespace_modal.name_hint')}</div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">${this.t('namespace_modal.label_description')}</label>
-                    <textarea class="form-textarea" rows="3"
-                              placeholder=${this.t('namespace_modal.description_placeholder')}
-                              .value=${draft.description}
-                              @input=${this._onDescriptionInput}></textarea>
-                    ${this._renderFieldError('description')}
-                </div>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('namespace_modal.label_name')}
+                    .hint=${this.t('namespace_modal.name_hint')}
+                    .placeholder=${this.t('namespace_modal.name_placeholder')}
+                    .value=${draft.name}
+                    ?disabled=${this._form.submitting}
+                    @change=${this._onNameChange}
+                ></platform-field>
+                ${this._renderFieldError('name')}
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('namespace_modal.label_description')}
+                    .placeholder=${this.t('namespace_modal.description_placeholder')}
+                    .value=${draft.description}
+                    ?disabled=${this._form.submitting}
+                    @change=${this._onDescriptionChange}
+                ></platform-field>
+                ${this._renderFieldError('description')}
             </form>
         `;
     }

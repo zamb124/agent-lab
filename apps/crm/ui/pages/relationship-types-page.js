@@ -15,6 +15,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const PALETTE = [
     '#007aff', '#5856d6', '#34c759', '#ff9500', '#ff3b30',
@@ -84,52 +85,15 @@ export class CRMRelationshipTypesPage extends PlatformPage {
                 display: grid;
                 gap: var(--space-3);
                 grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+                align-items: start;
             }
 
-            .form-group {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
+            .form-grid platform-field {
+                min-width: 0;
             }
 
-            .form-label {
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-            }
-
-            .form-input,
-            .form-textarea {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-                padding: var(--space-2) var(--space-3);
-                font: inherit;
-                font-size: var(--text-sm);
-            }
-
-            .form-input:focus,
-            .form-textarea:focus {
-                outline: 2px solid var(--accent);
-                outline-offset: 1px;
-            }
-
-            .form-textarea {
-                min-height: 60px;
-                resize: vertical;
-            }
-
-            .form-checkbox {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                cursor: pointer;
-                color: var(--text-primary);
-            }
-
-            .form-checkbox input {
-                accent-color: var(--accent);
+            .palette-card {
+                margin-bottom: 0;
             }
 
             .form-footer {
@@ -359,53 +323,54 @@ export class CRMRelationshipTypesPage extends PlatformPage {
             <div class="section">
                 <strong>${this.t('relationship_types_page.form_title')}</strong>
                 <div class="form-grid">
-                    <div class="form-group">
-                        <label class="form-label">${this.t('relationship_types_page.label_type_id')} *</label>
-                        <input
-                            class="form-input"
-                            .value=${d.type_id}
-                            placeholder="works_for"
-                            @input=${(e) => this._updateDraft('type_id', e.target.value)}
-                        />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${this.t('relationship_types_page.label_name')} *</label>
-                        <input
-                            class="form-input"
-                            .value=${d.name}
-                            @input=${(e) => this._updateDraft('name', e.target.value)}
-                        />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${this.t('relationship_types_page.label_description')}</label>
-                        <textarea
-                            class="form-textarea"
-                            .value=${d.description}
-                            @input=${(e) => this._updateDraft('description', e.target.value)}
-                        ></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${this.t('relationship_types_page.label_inverse')}</label>
-                        <input
-                            class="form-input"
-                            .value=${d.inverse_type_id}
-                            placeholder="employed_by"
-                            @input=${(e) => this._updateDraft('inverse_type_id', e.target.value)}
-                        />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${this.t('relationship_types_page.label_weight')}</label>
-                        <input
-                            class="form-input"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            .value=${String(d.weight_default)}
-                            @input=${(e) => this._updateDraft('weight_default', e.target.value)}
-                        />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">${this.t('relationship_types_page.label_color')}</label>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        input-type="text"
+                        .label=${`${this.t('relationship_types_page.label_type_id')} *`}
+                        placeholder="works_for"
+                        .value=${d.type_id}
+                        @change=${(e) => this._updateDraft('type_id', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        input-type="text"
+                        .label=${`${this.t('relationship_types_page.label_name')} *`}
+                        .value=${d.name}
+                        @change=${(e) => this._updateDraft('name', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                    ></platform-field>
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        .label=${this.t('relationship_types_page.label_description')}
+                        .value=${d.description}
+                        @change=${(e) => this._updateDraft('description', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        input-type="text"
+                        .label=${this.t('relationship_types_page.label_inverse')}
+                        placeholder="employed_by"
+                        .value=${d.inverse_type_id}
+                        @change=${(e) => this._updateDraft('inverse_type_id', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                    ></platform-field>
+                    <platform-field
+                        type="number"
+                        mode="edit"
+                        .label=${this.t('relationship_types_page.label_weight')}
+                        .value=${d.weight_default}
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            const next = v != null && typeof v === 'number' && Number.isFinite(v) ? v : 1.0;
+                            this._updateDraft('weight_default', next);
+                        }}
+                    ></platform-field>
+                    <div class="field-pill palette-card">
+                        <div class="field-pill-head">
+                            <span class="field-pill-label">${this.t('relationship_types_page.label_color')}</span>
+                        </div>
                         <div class="palette">
                             ${PALETTE.map((c) => html`
                                 <div
@@ -416,16 +381,13 @@ export class CRMRelationshipTypesPage extends PlatformPage {
                             `)}
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-checkbox">
-                            <input
-                                type="checkbox"
-                                .checked=${d.is_directed}
-                                @change=${(e) => this._updateDraft('is_directed', e.target.checked)}
-                            />
-                            ${this.t('relationship_types_page.label_directed')}
-                        </label>
-                    </div>
+                    <platform-field
+                        type="boolean"
+                        mode="edit"
+                        .label=${this.t('relationship_types_page.label_directed')}
+                        .value=${d.is_directed}
+                        @change=${(e) => this._updateDraft('is_directed', Boolean(e.detail.value))}
+                    ></platform-field>
                 </div>
                 <div class="form-footer">
                     <button class="btn btn-primary" ?disabled=${this._saving} @click=${this._onSubmit}>

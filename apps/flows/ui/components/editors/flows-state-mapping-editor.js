@@ -11,6 +11,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 function _parseInputSource(raw) {
     const s = String(raw);
@@ -85,12 +86,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
             }
             .map-row {
                 display: grid;
-                align-items: end;
+                align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-3);
-                background: var(--glass-tint-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
+                padding: 0;
                 box-sizing: border-box;
             }
             .map-row.input-grid {
@@ -103,39 +101,18 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 text-align: center;
                 color: var(--text-tertiary);
                 font-size: var(--text-sm);
-                padding-bottom: var(--space-2);
+                user-select: none;
             }
             .arrow {
                 text-align: center;
                 color: var(--text-secondary);
                 font-size: var(--text-lg);
-                padding-bottom: var(--space-1);
+                user-select: none;
             }
-            .field {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-1);
+            .map-row platform-field {
                 min-width: 0;
-            }
-            .field label {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                font-weight: var(--font-normal);
-            }
-            .field input,
-            .field select {
-                width: 100%;
-                box-sizing: border-box;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-elevated);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-            }
-            .field select {
-                cursor: pointer;
+                --field-pill-padding-y: var(--space-1);
+                --field-pill-padding-x: var(--space-2);
             }
             .remove-btn {
                 width: 32px;
@@ -287,6 +264,16 @@ export class FlowsStateMappingEditor extends PlatformElement {
         this._emitChange();
     }
 
+    _inputSourceTypeEnumConfig() {
+        return {
+            values: [
+                { value: 'state', label: '@state' },
+                { value: 'var', label: '@var' },
+                { value: 'const', label: this.t('state_mapping_editor.type_const') },
+            ],
+        };
+    }
+
     render() {
         const isOut = this._isOutput;
         const empty = this._rows.length === 0;
@@ -331,21 +318,21 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 ${isOut
                     ? this._rows.map((r, i) => html`
                         <div class="map-row output-grid">
-                            <div class="field">
-                                <input
-                                    type="text"
-                                    .value=${r.resultKey}
-                                    @input=${(e) => this._updateOutputRow(i, { resultKey: e.target.value })}
-                                />
-                            </div>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                label=""
+                                .value=${r.resultKey}
+                                @change=${(e) => this._updateOutputRow(i, { resultKey: typeof e.detail.value === 'string' ? e.detail.value : '' })}
+                            ></platform-field>
                             <span class="arrow" title="">→</span>
-                            <div class="field">
-                                <input
-                                    type="text"
-                                    .value=${r.stateField}
-                                    @input=${(e) => this._updateOutputRow(i, { stateField: e.target.value })}
-                                />
-                            </div>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                label=""
+                                .value=${r.stateField}
+                                @change=${(e) => this._updateOutputRow(i, { stateField: typeof e.detail.value === 'string' ? e.detail.value : '' })}
+                            ></platform-field>
                             <button
                                 type="button"
                                 class="remove-btn"
@@ -355,32 +342,30 @@ export class FlowsStateMappingEditor extends PlatformElement {
                     `)
                     : this._rows.map((r, i) => html`
                         <div class="map-row input-grid">
-                            <div class="field">
-                                <input
-                                    type="text"
-                                    .value=${r.sourcePath}
-                                    @input=${(e) => this._updateInputRow(i, { sourcePath: e.target.value })}
-                                />
-                            </div>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                label=""
+                                .value=${r.sourcePath}
+                                @change=${(e) => this._updateInputRow(i, { sourcePath: typeof e.detail.value === 'string' ? e.detail.value : '' })}
+                            ></platform-field>
                             <span class="sep" aria-hidden="true">|</span>
-                            <div class="field">
-                                <select
-                                    .value=${r.sourceType}
-                                    @change=${(e) => this._updateInputRow(i, { sourceType: e.target.value })}
-                                >
-                                    <option value="state">@state</option>
-                                    <option value="var">@var</option>
-                                    <option value="const">${this.t('state_mapping_editor.type_const')}</option>
-                                </select>
-                            </div>
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                label=""
+                                .value=${r.sourceType}
+                                .config=${this._inputSourceTypeEnumConfig()}
+                                @change=${(e) => this._updateInputRow(i, { sourceType: typeof e.detail.value === 'string' ? e.detail.value : 'state' })}
+                            ></platform-field>
                             <span class="arrow" aria-hidden="true">→</span>
-                            <div class="field">
-                                <input
-                                    type="text"
-                                    .value=${r.param}
-                                    @input=${(e) => this._updateInputRow(i, { param: e.target.value })}
-                                />
-                            </div>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                label=""
+                                .value=${r.param}
+                                @change=${(e) => this._updateInputRow(i, { param: typeof e.detail.value === 'string' ? e.detail.value : '' })}
+                            ></platform-field>
                             <button
                                 type="button"
                                 class="remove-btn"

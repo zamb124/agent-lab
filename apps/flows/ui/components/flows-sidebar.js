@@ -146,10 +146,24 @@ export class FlowsSidebar extends PlatformElement {
             platform-service-sidebar[collapsed] .footer-link span {
                 display: none;
             }
+            .flows-toolbar {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .flows-toolbar .flows-search {
+                flex: 1;
+                min-width: 0;
+            }
+            .flows-toolbar .create-btn {
+                flex-shrink: 0;
+            }
             .flows-search {
                 position: relative;
                 flex-shrink: 0;
-                padding-bottom: var(--space-2);
             }
             .flows-search .search-icon {
                 position: absolute;
@@ -180,7 +194,7 @@ export class FlowsSidebar extends PlatformElement {
                 opacity: 0.65;
                 cursor: not-allowed;
             }
-            platform-service-sidebar[collapsed] .flows-search {
+            platform-service-sidebar[collapsed] .flows-toolbar {
                 display: none;
             }
             .flows-search-empty {
@@ -349,32 +363,34 @@ export class FlowsSidebar extends PlatformElement {
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
-                <sidebar-section
-                    title=${this.t('flows_sidebar.section_all_flows')}
-                    icon="folder"
-                    ?collapsed=${this.collapsed}
-                >
-                    <button
-                        slot="actions"
-                        class="create-btn"
-                        title=${this.t('flows_sidebar.create_flow_tooltip')}
-                        @click=${this._createFlow}
+                <sidebar-section custom-header ?collapsed=${this.collapsed}>
+                    <div
+                        slot="header"
+                        class="flows-toolbar"
+                        role="group"
+                        aria-label=${this.t('flows_sidebar.section_all_flows')}
                     >
-                        <platform-icon name="plus" size="12"></platform-icon>
-                    </button>
-                    <div class="flows-search">
-                        <span class="search-icon" aria-hidden="true">
-                            <platform-icon name="search" size="14"></platform-icon>
-                        </span>
-                        <input
-                            type="search"
-                            class="flows-search-input"
-                            .value=${this._flowSearchQuery}
-                            placeholder=${this.t('flows_sidebar.search_placeholder')}
-                            aria-label=${this.t('flows_sidebar.search_aria')}
-                            ?disabled=${this._flows.loading && items.length === 0}
-                            @input=${this._onFlowSearchInput}
-                        />
+                        <div class="flows-search">
+                            <span class="search-icon" aria-hidden="true">
+                                <platform-icon name="search" size="14"></platform-icon>
+                            </span>
+                            <input
+                                type="search"
+                                class="flows-search-input"
+                                .value=${this._flowSearchQuery}
+                                placeholder=${this.t('flows_sidebar.search_placeholder')}
+                                aria-label=${this.t('flows_sidebar.search_aria')}
+                                ?disabled=${this._flows.loading && items.length === 0}
+                                @input=${this._onFlowSearchInput}
+                            />
+                        </div>
+                        <button
+                            class="create-btn"
+                            title=${this.t('flows_sidebar.create_flow_tooltip')}
+                            @click=${this._createFlow}
+                        >
+                            <platform-icon name="plus" size="12"></platform-icon>
+                        </button>
                     </div>
                     <div class="flows-list">
                         ${this._flows.loading && items.length === 0

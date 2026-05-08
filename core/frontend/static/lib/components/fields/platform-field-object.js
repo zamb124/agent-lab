@@ -1,23 +1,23 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
-import { formStyles } from '../../styles/shared/form.styles.js';
 
 export class PlatformFieldObject extends PlatformElement {
     static properties = {
         value: { type: Object },
         mode: { type: String },
         disabled: { type: Boolean },
-        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
-        formStyles,
         css`
-            :host { display: block; }
+            :host {
+                display: block;
+                min-width: 0;
+            }
 
             .view-json {
-                font-family: 'SF Mono', 'Fira Code', monospace;
+                font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 color: var(--text-primary);
                 background: var(--glass-tint-subtle);
@@ -30,17 +30,10 @@ export class PlatformFieldObject extends PlatformElement {
                 overflow-y: auto;
             }
 
-            .empty {
-                font-size: var(--text-sm);
-                color: var(--text-disabled);
-                font-style: italic;
-            }
-
-            .form-textarea {
-                font-family: 'SF Mono', 'Fira Code', monospace;
+            .field-pill-textarea {
+                font-family: var(--font-mono);
                 font-size: var(--text-xs);
                 min-height: 100px;
-                resize: vertical;
             }
 
             .json-error {
@@ -56,7 +49,6 @@ export class PlatformFieldObject extends PlatformElement {
         this.value = null;
         this.mode = 'view';
         this.disabled = false;
-        this.flat = false;
         this._jsonError = '';
     }
 
@@ -96,14 +88,14 @@ export class PlatformFieldObject extends PlatformElement {
     render() {
         if (this.mode === 'view') {
             if (this.value == null || (typeof this.value === 'object' && Object.keys(this.value).length === 0)) {
-                return html`<span class="empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
+                return html`<span class="field-pill-empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
             }
             return html`<pre class="view-json">${this._serialize(this.value)}</pre>`;
         }
 
         return html`
             <textarea
-                class="form-textarea"
+                class="field-pill-textarea"
                 .value=${this._serialize(this.value)}
                 placeholder=${(this.t('platform_field.object_placeholder') || 'platform_field.object_placeholder')}
                 ?disabled=${this.disabled}

@@ -17,6 +17,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-user-chip.js';
 
 export class SyncChannelCreateModal extends PlatformFormModal {
@@ -159,25 +160,36 @@ export class SyncChannelCreateModal extends PlatformFormModal {
         const teamLoading = this._teamLoadingSel.value;
         return html`
             <div class="form-group">
-                <label class="form-label">${this.t('channel_modal.field_name')}</label>
-                <input
-                    class="form-input"
-                    type="text"
-                    .value=${this._name}
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    label=${this.t('channel_modal.field_name')}
                     placeholder=${this.t('channel_settings.placeholder_name')}
-                    @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
-                />
+                    .value=${this._name}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('sync channel create: name expects detail.value string');
+                        }
+                        this._name = e.detail.value;
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
 
             <div class="form-group">
-                <label class="form-label">${this.t('channel_modal.field_members')}</label>
-                <input
-                    class="form-input"
-                    type="text"
-                    .value=${this._membersFilter}
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    label=${this.t('channel_modal.field_members')}
                     placeholder=${this.t('channel_modal.members_filter_placeholder')}
-                    @input=${(e) => { this._membersFilter = e.target.value; }}
-                />
+                    .value=${this._membersFilter}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('sync channel create: members filter expects detail.value string');
+                        }
+                        this._membersFilter = e.detail.value;
+                    }}
+                ></platform-field>
                 <div class="members-list">
                     ${teamLoading && candidates.length === 0 ? html`
                         <div class="members-empty">${this.t('channel_modal.members_loading')}</div>

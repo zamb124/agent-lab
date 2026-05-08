@@ -39,6 +39,7 @@ import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class SyncSidebar extends PlatformElement {
     static i18nNamespace = 'sync';
@@ -116,14 +117,19 @@ export class SyncSidebar extends PlatformElement {
 
             .ns-section {
                 display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                margin-bottom: var(--space-2);
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .ns-section-controls {
+                display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: var(--space-1) var(--space-3);
-                background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-                border-radius: var(--radius-full, 999px);
+                min-width: 0;
                 width: 100%;
-                box-sizing: border-box;
             }
             .ns-label {
                 font-size: var(--text-xs);
@@ -131,44 +137,25 @@ export class SyncSidebar extends PlatformElement {
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
                 color: var(--text-tertiary);
-                white-space: nowrap;
-                flex-shrink: 0;
                 line-height: 1.2;
+                align-self: stretch;
             }
-            .ns-select {
-                flex: 1;
+            .ns-section-controls platform-field {
+                flex: 1 1 0;
                 min-width: 0;
-                background: transparent;
-                border: none;
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                cursor: pointer;
-                outline: none;
-                padding: 0 var(--space-2);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                line-height: 1.25;
+                display: block;
             }
-            .ns-edit-btn,
-            .ns-add-btn {
+            .ns-edit-btn {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 width: 24px;
                 height: 24px;
-                border: none;
                 border-radius: var(--radius-md);
                 cursor: pointer;
                 flex-shrink: 0;
-                transition: transform var(--duration-fast);
-            }
-            .ns-add-btn {
-                background: var(--accent-gradient);
-                color: var(--text-inverse);
-            }
-            .ns-add-btn:hover { transform: scale(1.05); }
-            .ns-edit-btn {
+                box-sizing: border-box;
+                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
                 background: transparent;
                 color: var(--text-secondary);
                 border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
@@ -197,7 +184,7 @@ export class SyncSidebar extends PlatformElement {
                 color: var(--accent);
                 box-shadow: 0 0 0 4px var(--accent-subtle, rgba(153, 166, 249, 0.16));
             }
-            .search-box input {
+            .search-box input[data-canon="search-as-you-type"] {
                 flex: 1;
                 min-width: 0;
                 background: transparent;
@@ -388,13 +375,28 @@ export class SyncSidebar extends PlatformElement {
         return this._namespaces.items.find((ns) => ns.name === activeNs) || null;
     }
 
+    _namespaceEnumHeaderConfig() {
+        const items = this._namespaces.items;
+        if (!Array.isArray(items)) {
+            throw new Error('SyncSidebar._namespaceEnumHeaderConfig: items must be an array');
+        }
+        const values = [{ value: '', label: this.t('sidebar.all_namespaces') }];
+        for (const ns of items) {
+            if (!ns || typeof ns.name !== 'string' || ns.name.length === 0) {
+                throw new Error('SyncSidebar._namespaceEnumHeaderConfig: invalid namespace item');
+            }
+            values.push({ value: ns.name, label: ns.name });
+        }
+        return { values };
+    }
+
     _onNamespaceChange(e) {
         const user = this._authSel.value;
         if (!user || typeof user.company_id !== 'string' || user.company_id === '') {
             throw new Error('SyncSidebar: cannot change namespace without active company_id');
         }
-        const value = e.target.value;
-        setPlatformNamespaceSelection(user.company_id, value === '' ? null : value);
+        const raw = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        setPlatformNamespaceSelection(user.company_id, raw === '' ? null : raw);
     }
 
     _onEditActiveNamespace() {
@@ -490,27 +492,35 @@ export class SyncSidebar extends PlatformElement {
                 <div class="header-area">
                     <div class="ns-section">
                         <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
-                        <select class="ns-select" .value=${selectValue} @change=${this._onNamespaceChange}>
-                            <option value="">${this.t('sidebar.all_namespaces')}</option>
-                            ${this._namespaces.items.map((ns) => html`
-                                <option value=${ns.name} ?selected=${ns.name === selectValue}>${ns.name}</option>
-                            `)}
-                        </select>
-                        ${selectValue !== '' && this._activeNamespaceItem() !== null ? html`
-                            <button
-                                type="button"
-                                class="ns-edit-btn"
-                                @click=${this._onEditActiveNamespace}
-                                title=${this.t('sidebar.edit_namespace_tooltip')}
-                            >
-                                <platform-icon name="settings" size="14"></platform-icon>
-                            </button>
-                        ` : ''}
+                        <div class="ns-section-controls">
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                label=""
+                                class="ns-select"
+                                pill-density="compact"
+                                .value=${selectValue}
+                                .config=${this._namespaceEnumHeaderConfig()}
+                                @change=${this._onNamespaceChange}
+                            ></platform-field>
+                            ${selectValue !== '' && this._activeNamespaceItem() !== null ? html`
+                                <button
+                                    type="button"
+                                    class="ns-edit-btn"
+                                    @click=${this._onEditActiveNamespace}
+                                    title=${this.t('sidebar.edit_namespace_tooltip')}
+                                >
+                                    <platform-icon name="settings" size="14"></platform-icon>
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                     <div class="search-box">
                         <platform-icon name="search" size="14"></platform-icon>
                         <input
+                            class="sync-sidebar-search-input"
                             type="text"
+                            data-canon="search-as-you-type"
                             .value=${search}
                             @input=${this._onSearchInput}
                             placeholder=${this.t('sidebar.direct_search_placeholder')}

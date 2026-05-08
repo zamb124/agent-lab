@@ -5,8 +5,9 @@
  * Делегирует рендеринг типовому подкомпоненту (platform-field-string,
  * platform-field-number и т.д.) на основании свойства `type`.
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
+import '../platform-help-hint.js';
 
 import './platform-field-string.js';
 import './platform-field-text.js';
@@ -41,34 +42,17 @@ export class PlatformField extends PlatformElement {
         disabled: { type: Boolean },
         config: { type: Object },
         placeholder: { type: String },
-        flat: { type: Boolean, reflect: true },
+        inputType: { type: String, attribute: 'input-type' },
+        hint: { type: String },
+        pillDensity: { type: String, attribute: 'pill-density' },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
-
-            .field-label {
+            :host {
                 display: block;
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                color: var(--text-secondary);
-                margin-bottom: var(--space-2);
-                text-transform: uppercase;
-                letter-spacing: 0.06em;
-            }
-
-            :host([flat]) .field-label {
-                font-size: 11px;
-                font-weight: 600;
-                letter-spacing: 0.04em;
-                margin-bottom: 8px;
-                color: var(--text-secondary);
-            }
-
-            :host-context([data-theme="light"]) :host([flat]) .field-label {
-                color: var(--text-tertiary);
+                min-width: 0;
             }
         `,
     ];
@@ -82,7 +66,19 @@ export class PlatformField extends PlatformElement {
         this.disabled = false;
         this.config = {};
         this.placeholder = '';
-        this.flat = false;
+        this.inputType = 'text';
+        this.hint = '';
+        this.pillDensity = 'default';
+    }
+
+    willUpdate(changedProps) {
+        super.willUpdate(changedProps);
+        if (changedProps.has('pillDensity')) {
+            const v = this.pillDensity;
+            if (v !== 'default' && v !== 'compact') {
+                throw new Error(`platform-field: pillDensity must be "default" or "compact", got "${v}"`);
+            }
+        }
     }
 
     _onChange(e) {
@@ -96,14 +92,13 @@ export class PlatformField extends PlatformElement {
 
     _renderField() {
         const tagName = FIELD_TYPE_MAP[this.type];
-        const f = this.flat === true;
         if (!tagName) {
             return html`<platform-field-string
                 .value=${this.value != null ? String(this.value) : ''}
                 .mode=${this.mode}
                 .placeholder=${this.placeholder}
+                .inputType=${this.inputType}
                 ?disabled=${this.disabled}
-                ?flat=${f}
                 @change=${this._onChange}
             ></platform-field-string>`;
         }
@@ -114,8 +109,8 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value ?? ''}
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
+                    .inputType=${this.inputType}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-string>`;
 
@@ -125,7 +120,6 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-text>`;
 
@@ -135,7 +129,6 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-number>`;
 
@@ -146,7 +139,6 @@ export class PlatformField extends PlatformElement {
                     .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
                     ?integer=${true}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-number>`;
 
@@ -155,7 +147,6 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value}
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-boolean>`;
 
@@ -164,7 +155,6 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value}
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-date>`;
 
@@ -174,7 +164,6 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
                     ?datetime=${true}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-date>`;
 
@@ -184,7 +173,6 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .config=${this.config}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-enum>`;
 
@@ -192,8 +180,9 @@ export class PlatformField extends PlatformElement {
                 return html`<platform-field-array
                     .value=${this.value}
                     .mode=${this.mode}
+                    .config=${this.config}
+                    .placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-array>`;
 
@@ -202,7 +191,6 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value}
                     .mode=${this.mode}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-object>`;
 
@@ -218,17 +206,34 @@ export class PlatformField extends PlatformElement {
                     .value=${this.value != null ? String(this.value) : ''}
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
+                    .inputType=${this.inputType}
                     ?disabled=${this.disabled}
-                    ?flat=${f}
                     @change=${this._onChange}
                 ></platform-field-string>`;
         }
     }
 
     render() {
+        const hasLabel = typeof this.label === 'string' && this.label !== '';
+        const hasHint = typeof this.hint === 'string' && this.hint !== '';
+        const density = this.pillDensity === 'compact' ? 'field-pill--compact' : '';
         return html`
-            ${this.label ? html`<span class="field-label">${this.label}</span>` : ''}
-            ${this._renderField()}
+            <div class="field-pill ${density}" data-mode=${this.mode}>
+                ${hasLabel
+                    ? html`
+                        <div class="field-pill-head">
+                            <span class="field-pill-label">${this.label}</span>
+                            ${hasHint
+                                ? html`<platform-help-hint .text=${this.hint}></platform-help-hint>`
+                                : nothing}
+                        </div>
+                    `
+                    : nothing}
+                <div class="field-pill-control">
+                    <div class="field-pill-control-main">${this._renderField()}</div>
+                    <slot name="suffix"></slot>
+                </div>
+            </div>
         `;
     }
 }

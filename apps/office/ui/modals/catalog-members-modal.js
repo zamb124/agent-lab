@@ -14,6 +14,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const MEMBERS_NAME = 'office/catalog_members';
 const COMPANY_MEMBERS_NAME = 'office/company_members';
@@ -127,7 +128,10 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
         this.isDirty = false;
     }
 
-    _onQueryInput(e) { this._query = e.target.value; }
+    _onQueryChange(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._query = v;
+    }
 
     _onAdd(userId) {
         if (typeof userId !== 'string' || userId.length === 0) return;
@@ -198,10 +202,14 @@ export class OfficeCatalogMembersModal extends PlatformFormModal {
         const candidates = this._candidates();
         return html`
             <div class="hint">${this.t('catalog_members_modal.members_private_hint')}</div>
-            <input type="search" class="form-input"
-                   placeholder=${this.t('catalog_members_modal.search_placeholder')}
-                   .value=${this._query}
-                   @input=${this._onQueryInput} />
+            <platform-field
+                type="string"
+                input-type="search"
+                mode="edit"
+                .placeholder=${this.t('catalog_members_modal.search_placeholder')}
+                .value=${this._query}
+                @change=${this._onQueryChange}
+            ></platform-field>
             ${candidates.length === 0 ? html`
                 <div class="empty">${
                     this._query.trim().length > 0

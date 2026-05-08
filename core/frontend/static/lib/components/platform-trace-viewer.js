@@ -5,7 +5,7 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import '@platform/lib/components/glass-input.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-icon.js';
 import {
     normalizeTraceRoots,
@@ -334,7 +334,7 @@ export class PlatformTraceViewer extends PlatformElement {
     _onSearchInput(e) {
         const d = e.detail;
         if (d == null || typeof d !== 'object' || typeof d.value !== 'string') {
-            throw new Error('platform-trace-viewer: glass-input must emit detail.value');
+            throw new Error('platform-trace-viewer: platform-field must emit detail.value');
         }
         this._search = d.value.trim().toLowerCase();
         this._applySearchExpand();
@@ -394,11 +394,14 @@ export class PlatformTraceViewer extends PlatformElement {
             return html`
                 <div class="toolbar">
                     <div class="search-wrap">
-                        <glass-input
-                            placeholder=${this.t('trace_viewer.search_placeholder')}
+                        <platform-field
+                            type="string"
+                            input-type="search"
+                            mode="edit"
+                            .placeholder=${this.t('trace_viewer.search_placeholder')}
                             .value=${this._search}
-                            @input=${this._onSearchInput}
-                        ></glass-input>
+                            @change=${this._onSearchInput}
+                        ></platform-field>
                     </div>
                 </div>
                 <div class="empty">${this.t('trace_viewer.search_no_results')}</div>
@@ -439,11 +442,14 @@ export class PlatformTraceViewer extends PlatformElement {
                     </button>
                 </div>
                 <div class="search-wrap">
-                    <glass-input
-                        placeholder=${this.t('trace_viewer.search_placeholder')}
+                    <platform-field
+                        type="string"
+                        input-type="search"
+                        mode="edit"
+                        .placeholder=${this.t('trace_viewer.search_placeholder')}
                         .value=${this._search}
-                        @input=${this._onSearchInput}
-                    ></glass-input>
+                        @change=${this._onSearchInput}
+                    ></platform-field>
                 </div>
                 ${!timelineOk
                     ? html`<div class="timeline-hint">${this.t('trace_viewer.timeline_unavailable')}</div>`

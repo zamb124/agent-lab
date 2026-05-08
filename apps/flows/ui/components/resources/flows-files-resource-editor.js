@@ -12,6 +12,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-resource-editor.js';
 import '../editors/flows-variable-input.js';
 
@@ -50,6 +51,21 @@ export class FlowsFilesResourceEditor extends PlatformElement {
         this.emit('change', { resourceId: this.resourceId, patch: { config: { ...base, ...patch } } });
     }
 
+    _strDetail(e, ctx) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error(`flows-files-resource-editor: ${ctx} change detail`);
+        }
+        if (!('value' in d)) {
+            throw new Error(`flows-files-resource-editor: ${ctx} detail.value`);
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error(`flows-files-resource-editor: ${ctx} string required`);
+        }
+        return v;
+    }
+
     render() {
         const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
         const bucket = typeof cfg.bucket === 'string' ? cfg.bucket : '';
@@ -67,33 +83,54 @@ export class FlowsFilesResourceEditor extends PlatformElement {
             >
                 <div slot="settings" class="body">
                     <div class="grid">
-                        <div class="field">
-                            <label>${this.t('files_resource_editor.bucket')}</label>
-                            <input type="text" .value=${bucket}
-                                @input=${(e) => this._emitConfig({ bucket: e.target.value })} />
-                        </div>
-                        <div class="field">
-                            <label>${this.t('files_resource_editor.prefix')}</label>
-                            <input type="text" .value=${prefix}
-                                @input=${(e) => this._emitConfig({ prefix: e.target.value })} />
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('files_resource_editor.bucket')}
+                            .value=${bucket}
+                            @change=${(e) => this._emitConfig({ bucket: this._strDetail(e, 'bucket') })}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('files_resource_editor.prefix')}
+                            .value=${prefix}
+                            @change=${(e) => this._emitConfig({ prefix: this._strDetail(e, 'prefix') })}
+                        ></platform-field>
                     </div>
-                    <div class="field">
-                        <label>${this.t('files_resource_editor.endpoint_url')}</label>
-                        <input type="url" placeholder="https://s3.amazonaws.com" .value=${endpoint}
-                            @input=${(e) => this._emitConfig({ endpoint_url: e.target.value.length > 0 ? e.target.value : null })} />
-                    </div>
+                    <platform-field
+                        mode="edit"
+                        type="string"
+                        input-type="url"
+                        .label=${this.t('files_resource_editor.endpoint_url')}
+                        .placeholder=${'https://s3.amazonaws.com'}
+                        .value=${endpoint}
+                        @change=${(e) => {
+                            const v = this._strDetail(e, 'endpoint_url');
+                            this._emitConfig({ endpoint_url: v.length > 0 ? v : null });
+                        }}
+                    ></platform-field>
                     <div class="grid">
-                        <div class="field">
-                            <label>${this.t('files_resource_editor.access_key_id')}</label>
-                            <input type="text" .value=${accessKey}
-                                @input=${(e) => this._emitConfig({ access_key_id: e.target.value.length > 0 ? e.target.value : null })} />
-                        </div>
-                        <div class="field">
-                            <label>${this.t('files_resource_editor.region')}</label>
-                            <input type="text" .value=${region}
-                                @input=${(e) => this._emitConfig({ region: e.target.value.length > 0 ? e.target.value : 'us-east-1' })} />
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('files_resource_editor.access_key_id')}
+                            .value=${accessKey}
+                            @change=${(e) => {
+                                const v = this._strDetail(e, 'access_key_id');
+                                this._emitConfig({ access_key_id: v.length > 0 ? v : null });
+                            }}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('files_resource_editor.region')}
+                            .value=${region}
+                            @change=${(e) => {
+                                const v = this._strDetail(e, 'region');
+                                this._emitConfig({ region: v.length > 0 ? v : 'us-east-1' });
+                            }}
+                        ></platform-field>
                     </div>
                     <div class="field">
                         <label>${this.t('files_resource_editor.secret_access_key')}</label>

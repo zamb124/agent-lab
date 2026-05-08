@@ -9,9 +9,9 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-input.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class SyncCallJoinPage extends PlatformPage {
     static i18nNamespace = 'sync';
@@ -303,19 +303,17 @@ export class SyncCallJoinPage extends PlatformPage {
 
     _renderGuestBlock() {
         return html`
-            <div>
-                <label class="field-label" for="sync-call-join-name">${this.t('call_join.label_guest_name')}</label>
-                <glass-input
-                    id="sync-call-join-name"
-                    .value=${this._guestName}
-                    placeholder=${this.t('call_join.guest_name_placeholder')}
-                    autocomplete="name"
-                    ?disabled=${this._acceptOp.busy}
-                    @input=${(e) => {
-                        this._guestName = e.target.value;
-                    }}
-                ></glass-input>
-            </div>
+            <platform-field
+                type="string"
+                mode="edit"
+                .label=${this.t('call_join.label_guest_name')}
+                .value=${this._guestName}
+                .placeholder=${this.t('call_join.guest_name_placeholder')}
+                ?disabled=${this._acceptOp.busy}
+                @change=${(e) => {
+                    this._guestName = e.detail.value;
+                }}
+            ></platform-field>
             <div class="actions">
                 <platform-button
                     variant="primary"

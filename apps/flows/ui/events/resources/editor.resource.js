@@ -791,8 +791,15 @@ export const editorResource = createAsyncOp({
             const nextNodes = {};
             for (const [id, node] of Object.entries(nodes)) {
                 const targetId = id === oldId ? newId : id;
-                const nodeCopy = node && typeof node === 'object' ? { ...node, node_id: targetId } : node;
-                nextNodes[targetId] = nodeCopy;
+                if (id !== oldId || !node || typeof node !== 'object') {
+                    nextNodes[targetId] = node && typeof node === 'object' ? { ...node, node_id: targetId } : node;
+                    continue;
+                }
+                const prevName = typeof node.name === 'string' ? node.name : '';
+                const syncNameToId = prevName === '' || prevName === oldId;
+                nextNodes[targetId] = syncNameToId
+                    ? { ...node, node_id: targetId, name: newId }
+                    : { ...node, node_id: targetId };
             }
             const edges = Array.isArray(data.edges) ? data.edges : [];
             const nextEdges = edges.map((edge) => {

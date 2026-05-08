@@ -20,6 +20,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const INVITE_ROLES = Object.freeze(['developer', 'admin', 'viewer']);
 const ROLE_FILTER_KEYS = Object.freeze(['owner', 'admin', 'developer', 'viewer']);
@@ -80,16 +81,9 @@ export class FrontendTeamPage extends PlatformPage {
                 width: 100%;
                 box-sizing: border-box;
             }
-            .invite-row .invite-role {
+            .invite-row platform-field.invite-role {
                 flex: 1 1 0;
                 min-width: 0;
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-strong);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                cursor: pointer;
             }
             .invite-row .btn { flex: 0 0 auto; white-space: nowrap; }
             .btn-invite {
@@ -249,6 +243,15 @@ export class FrontendTeamPage extends PlatformPage {
         this._filterRole = role;
     }
 
+    _inviteRoleEnumConfig() {
+        return {
+            values: INVITE_ROLES.map((r) => ({
+                value: r,
+                label: this.t(`team_roles.${r}`),
+            })),
+        };
+    }
+
     _renderRoleFilters() {
         return html`
             <div class="role-filters" role="tablist" aria-label=${this.t('team_page.col_role')}>
@@ -282,16 +285,21 @@ export class FrontendTeamPage extends PlatformPage {
         return html`
             <div class="invite-toolbar">
                 <div class="invite-row">
-                    <select
+                    <platform-field
                         class="invite-role"
+                        type="enum"
+                        mode="edit"
+                        label=""
                         .value=${this._selectedRole}
+                        .config=${this._inviteRoleEnumConfig()}
                         ?disabled=${this._invite.busy}
-                        @change=${(e) => { this._selectedRole = e.target.value; }}
-                    >
-                        ${INVITE_ROLES.map((r) => html`
-                            <option value=${r}>${this.t(`team_roles.${r}`)}</option>
-                        `)}
-                    </select>
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('team page: invite role expects detail.value string');
+                            }
+                            this._selectedRole = e.detail.value;
+                        }}
+                    ></platform-field>
                     <button
                         type="button"
                         class="btn btn-invite"

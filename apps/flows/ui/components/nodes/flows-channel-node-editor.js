@@ -16,6 +16,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-variable-input.js';
 import '../editors/flows-json-field-editor.js';
@@ -86,13 +87,36 @@ export class FlowsChannelNodeEditor extends PlatformElement {
     }
 
     _onChannel(e) {
-        const v = e.target.value;
-        if (!CHANNELS.includes(v)) return;
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-channel-node-editor: channel change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-channel-node-editor: channel detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-channel-node-editor: channel string required');
+        }
+        if (!CHANNELS.includes(v)) {
+            return;
+        }
         this._emitPatch({ channel: v, channel_config: {} });
     }
 
     _onAction(e) {
-        this._emitPatch({ action: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-channel-node-editor: action change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-channel-node-editor: action detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-channel-node-editor: action string required');
+        }
+        this._emitPatch({ action: v });
     }
 
     _onChannelConfig(field, value) {
@@ -101,6 +125,85 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             : {};
         const next = { ...current, [field]: value };
         this._emitPatch({ channel_config: next });
+    }
+
+    _onChannelConfigStringField(field, e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error(`flows-channel-node-editor: channel_config ${field} change detail`);
+        }
+        if (!('value' in d)) {
+            throw new Error(`flows-channel-node-editor: channel_config ${field} detail.value`);
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error(`flows-channel-node-editor: channel_config ${field} string required`);
+        }
+        this._onChannelConfig(field, v);
+    }
+
+    _onChannelConfigParseMode(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-channel-node-editor: parse_mode change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-channel-node-editor: parse_mode detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-channel-node-editor: parse_mode string required');
+        }
+        this._onChannelConfig('parse_mode', v.length > 0 ? v : null);
+    }
+
+    _onChannelConfigSmtpPort(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-channel-node-editor: smtp_port change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-channel-node-editor: smtp_port detail.value');
+        }
+        const v = d.value;
+        if (v === null) {
+            this._onChannelConfig('smtp_port', null);
+            return;
+        }
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+            throw new Error('flows-channel-node-editor: smtp_port number|null required');
+        }
+        this._onChannelConfig('smtp_port', Math.floor(v));
+    }
+
+    _onChannelConfigWebhookMethod(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-channel-node-editor: webhook method change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-channel-node-editor: webhook method detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-channel-node-editor: webhook method string required');
+        }
+        this._onChannelConfig('method', v);
+    }
+
+    _onChannelConfigWebhookUrl(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-channel-node-editor: webhook url change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-channel-node-editor: webhook url detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-channel-node-editor: webhook url string required');
+        }
+        this._onChannelConfig('url', v);
     }
 
     _onChannelConfigJson(parsed) {
@@ -119,12 +222,18 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             </div>
             <div class="field">
                 <label>${this.t('channel_node_editor.telegram_parse_mode')}</label>
-                <select
+                <platform-field
+                    mode="edit"
+                    type="enum"
                     .value=${typeof cfg.parse_mode === 'string' ? cfg.parse_mode : ''}
-                    @change=${(e) => this._onChannelConfig('parse_mode', e.target.value.length > 0 ? e.target.value : null)}
-                >
-                    ${PARSE_MODES.map((m) => html`<option value=${m}>${m === '' ? '—' : m}</option>`)}
-                </select>
+                    .config=${{
+                        values: PARSE_MODES.map((m) => ({
+                            value: m,
+                            label: m === '' ? '—' : m,
+                        })),
+                    }}
+                    @change=${this._onChannelConfigParseMode}
+                ></platform-field>
             </div>
         `;
     }
@@ -132,21 +241,28 @@ export class FlowsChannelNodeEditor extends PlatformElement {
     _renderEmail(cfg) {
         return html`
             <div class="grid">
-                <div class="field">
-                    <label>${this.t('channel_node_editor.email_smtp_host')}</label>
-                    <input type="text" .value=${asString(cfg.smtp_host)}
-                        @input=${(e) => this._onChannelConfig('smtp_host', e.target.value)} />
-                </div>
-                <div class="field">
-                    <label>${this.t('channel_node_editor.email_smtp_port')}</label>
-                    <input type="number" .value=${cfg.smtp_port == null ? '' : String(cfg.smtp_port)}
-                        @input=${(e) => this._onChannelConfig('smtp_port', e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                </div>
-                <div class="field">
-                    <label>${this.t('channel_node_editor.email_from')}</label>
-                    <input type="email" .value=${asString(cfg.from_email)}
-                        @input=${(e) => this._onChannelConfig('from_email', e.target.value)} />
-                </div>
+                <platform-field
+                    mode="edit"
+                    type="string"
+                    .label=${this.t('channel_node_editor.email_smtp_host')}
+                    .value=${asString(cfg.smtp_host)}
+                    @change=${(e) => this._onChannelConfigStringField('smtp_host', e)}
+                ></platform-field>
+                <platform-field
+                    mode="edit"
+                    type="integer"
+                    .label=${this.t('channel_node_editor.email_smtp_port')}
+                    .value=${typeof cfg.smtp_port === 'number' && Number.isFinite(cfg.smtp_port) ? cfg.smtp_port : null}
+                    @change=${this._onChannelConfigSmtpPort}
+                ></platform-field>
+                <platform-field
+                    mode="edit"
+                    type="string"
+                    input-type="email"
+                    .label=${this.t('channel_node_editor.email_from')}
+                    .value=${asString(cfg.from_email)}
+                    @change=${(e) => this._onChannelConfigStringField('from_email', e)}
+                ></platform-field>
                 <div class="field">
                     <label>${this.t('channel_node_editor.email_password')}</label>
                     <flows-variable-input
@@ -163,17 +279,25 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         const headers = cfg.headers && typeof cfg.headers === 'object'
             ? JSON.stringify(cfg.headers, null, 2) : '{}';
         return html`
-            <div class="field">
-                <label>${this.t('channel_node_editor.webhook_url')}</label>
-                <input type="url" .value=${asString(cfg.url)}
-                    @input=${(e) => this._onChannelConfig('url', e.target.value)} />
-            </div>
+            <platform-field
+                mode="edit"
+                type="string"
+                input-type="url"
+                .label=${this.t('channel_node_editor.webhook_url')}
+                .value=${asString(cfg.url)}
+                @change=${this._onChannelConfigWebhookUrl}
+            ></platform-field>
             <div class="field">
                 <label>${this.t('channel_node_editor.webhook_method')}</label>
-                <select .value=${typeof cfg.method === 'string' && cfg.method.length > 0 ? cfg.method : 'POST'}
-                    @change=${(e) => this._onChannelConfig('method', e.target.value)}>
-                    ${HTTP_METHODS.map((m) => html`<option value=${m}>${m}</option>`)}
-                </select>
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .value=${typeof cfg.method === 'string' && cfg.method.length > 0 ? cfg.method : 'POST'}
+                    .config=${{
+                        values: HTTP_METHODS.map((m) => ({ value: m, label: m })),
+                    }}
+                    @change=${this._onChannelConfigWebhookMethod}
+                ></platform-field>
             </div>
             <div class="field">
                 <label>${this.t('channel_node_editor.webhook_headers')}</label>
@@ -224,16 +348,21 @@ export class FlowsChannelNodeEditor extends PlatformElement {
             >
                 <div slot="settings">
                     <div class="grid">
-                        <div class="field">
-                            <label>${this.t('channel_node_editor.channel')}</label>
-                            <select .value=${channel} @change=${this._onChannel}>
-                                ${CHANNELS.map((c) => html`<option value=${c} ?selected=${c === channel}>${c}</option>`)}
-                            </select>
-                        </div>
-                        <div class="field">
-                            <label>${this.t('channel_node_editor.action')}</label>
-                            <input type="text" .value=${action} @input=${this._onAction} />
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .label=${this.t('channel_node_editor.channel')}
+                            .value=${channel}
+                            .config=${{ values: CHANNELS.map((c) => ({ value: c, label: c })) }}
+                            @change=${this._onChannel}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('channel_node_editor.action')}
+                            .value=${action}
+                            @change=${this._onAction}
+                        ></platform-field>
                     </div>
                     <details open>
                         <summary>${this.t('channel_node_editor.channel_config')}</summary>

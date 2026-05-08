@@ -267,6 +267,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 <input
                     class="flow-name-input"
                     type="text"
+                    data-canon="inline-edit"
                     .value=${flowName}
                     placeholder=${this.t('editor_header.flow_name_placeholder')}
                     @input=${this._onNameInput}

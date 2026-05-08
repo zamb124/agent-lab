@@ -14,6 +14,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { compressImageFileToJpeg } from '../_helpers/sync-avatar-image-compress.js';
 import { syncChannelPlaceholderCollection } from '../_helpers/sync-channel-placeholder-collection.js';
 import { resolveChannelTitle } from '../_helpers/sync-id-resolvers.js';
@@ -415,17 +416,20 @@ export class SyncChannelEditModal extends PlatformFormModal {
                               </div>
                           </div>
                           <div class="avatar-name-row__name">
-                              <label class="form-label">${this.t('channel_settings.field_name')}</label>
-                              <input
-                                  class="form-input"
-                                  type="text"
-                                  .value=${this._name}
+                              <platform-field
+                                  type="string"
+                                  mode="edit"
+                                  label=${this.t('channel_settings.field_name')}
                                   placeholder=${this.t('channel_settings.placeholder_name')}
-                                  @input=${(e) => {
-                                      this._name = e.target.value;
+                                  .value=${this._name}
+                                  @change=${(e) => {
+                                      if (!e.detail || typeof e.detail.value !== 'string') {
+                                          throw new Error('sync channel edit: name expects detail.value string');
+                                      }
+                                      this._name = e.detail.value;
                                       this.isDirty = true;
                                   }}
-                              />
+                              ></platform-field>
                           </div>
                       </div>
                   `

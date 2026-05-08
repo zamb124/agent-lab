@@ -6,7 +6,7 @@
  *   - type (badge)
  *   - name
  *   - description
- *   - tags (через flows-tag-input)
+ *   - tags (platform-field type=array)
  *
  * Slot 'settings' — type-specific поля (`config: dict`).
  *
@@ -16,8 +16,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '../editors/flows-tag-input.js';
-import { asString } from '../../_helpers/flows-resolvers.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class FlowsBaseResourceEditor extends PlatformElement {
     static properties = {
@@ -39,14 +38,9 @@ export class FlowsBaseResourceEditor extends PlatformElement {
             .row {
                 display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
             }
-            input.name {
-                flex: 1; min-width: 0;
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                font-weight: var(--font-semibold);
+            platform-field.name-field {
+                flex: 1;
+                min-width: 0;
             }
             .badge {
                 padding: 2px 8px; font-size: var(--text-xs);
@@ -64,14 +58,6 @@ export class FlowsBaseResourceEditor extends PlatformElement {
             }
             .field { display: flex; flex-direction: column; gap: var(--space-1); }
             .field label { font-size: var(--text-sm); color: var(--text-secondary); }
-            textarea {
-                width: 100%; box-sizing: border-box;
-                padding: var(--space-2); resize: vertical; min-height: 60px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-            }
         `,
     ];
 
@@ -87,15 +73,47 @@ export class FlowsBaseResourceEditor extends PlatformElement {
     }
 
     _onName(e) {
-        this._emitPatch({ name: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-base-resource-editor: name change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-base-resource-editor: name detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-base-resource-editor: name detail.value string');
+        }
+        this._emitPatch({ name: v });
     }
 
     _onDescription(e) {
-        this._emitPatch({ description: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-base-resource-editor: description change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-base-resource-editor: description detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-base-resource-editor: description detail.value string');
+        }
+        this._emitPatch({ description: v });
     }
 
     _onTags(e) {
-        const tags = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-base-resource-editor: tags change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-base-resource-editor: tags detail.value');
+        }
+        const tags = d.value;
+        if (!Array.isArray(tags)) {
+            throw new Error('flows-base-resource-editor: tags must be array');
+        }
         this._emitPatch({ tags });
     }
 
@@ -115,24 +133,34 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         return html`
             <div class="header">
                 <div class="row">
-                    <input class="name" type="text" .value=${name} @input=${this._onName} />
+                    <platform-field
+                        class="name-field"
+                        mode="edit"
+                        type="string"
+                        .value=${name}
+                        @change=${this._onName}
+                    ></platform-field>
                     <span class="badge">${type}</span>
                 </div>
                 <div class="row">
                     <span class="id">${this.resourceId}</span>
                 </div>
-                <div class="field">
-                    <label>${this.t('base_resource_editor.field_description')}</label>
-                    <textarea .value=${description} @input=${this._onDescription}></textarea>
-                </div>
-                <div class="field">
-                    <label>${this.t('base_resource_editor.tags')}</label>
-                    <flows-tag-input
-                        .tags=${tags}
-                        placeholder=${this.t('tag_input.placeholder')}
-                        @change=${this._onTags}
-                    ></flows-tag-input>
-                </div>
+                <platform-field
+                    mode="edit"
+                    type="text"
+                    .label=${this.t('base_resource_editor.field_description')}
+                    .value=${description}
+                    @change=${this._onDescription}
+                ></platform-field>
+                <platform-field
+                    type="array"
+                    mode="edit"
+                    .label=${this.t('base_resource_editor.tags')}
+                    .placeholder=${this.t('tag_input.placeholder')}
+                    .value=${tags}
+                    .config=${{ preserve_case: true }}
+                    @change=${this._onTags}
+                ></platform-field>
             </div>
             <slot name="settings"></slot>
         `;

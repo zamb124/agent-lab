@@ -8,8 +8,9 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
-import { asObject, asString } from '../../_helpers/flows-resolvers.js';
+import { asObject } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsFlowNodeEditor extends PlatformElement {
     static properties = {
@@ -141,11 +142,33 @@ export class FlowsFlowNodeEditor extends PlatformElement {
     }
 
     _onFlowId(e) {
-        this._emitPatch({ flow_id: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-flow-node-editor: flow_id change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-flow-node-editor: flow_id detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-flow-node-editor: flow_id string required');
+        }
+        this._emitPatch({ flow_id: v });
     }
 
     _onBranchId(e) {
-        this._emitPatch({ branch_id: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-flow-node-editor: branch_id change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-flow-node-editor: branch_id detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-flow-node-editor: branch_id string required');
+        }
+        this._emitPatch({ branch_id: v });
     }
 
     render() {
@@ -156,6 +179,14 @@ export class FlowsFlowNodeEditor extends PlatformElement {
         const flows = Array.isArray(this._flows.items) ? this._flows.items.filter((f) => f && f.flow_id !== this.flowId) : [];
         const isInList = flows.some((f) => f.flow_id === flowId);
         const useCustom = this._showCustom || (flowId.length > 0 && !isInList);
+        const flowIdEnumValues = [
+            { value: '', label: '—' },
+            ...flows.map((f) => ({
+                value: f.flow_id,
+                label: typeof f.name === 'string' && f.name.length > 0 ? f.name : f.flow_id,
+            })),
+        ];
+        const branchEnumValues = branchOptions.map((sid) => ({ value: sid, label: sid }));
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -181,26 +212,33 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                             </button>
                         </div>
                         ${useCustom ? html`
-                            <input type="text" placeholder=${this.t('flow_node_editor.custom_id_hint')}
-                                .value=${flowId} @input=${this._onFlowId} />
+                            <platform-field
+                                mode="edit"
+                                type="string"
+                                .placeholder=${this.t('flow_node_editor.custom_id_hint')}
+                                .value=${flowId}
+                                @change=${this._onFlowId}
+                            ></platform-field>
                         ` : html`
-                            <select .value=${flowId} @change=${this._onFlowId}>
-                                <option value="">—</option>
-                                ${flows.map((f) => html`<option value=${f.flow_id} ?selected=${f.flow_id === flowId}>${typeof f.name === 'string' && f.name.length > 0 ? f.name : f.flow_id}</option>`)}
-                            </select>
+                            <platform-field
+                                mode="edit"
+                                type="enum"
+                                .value=${flowId}
+                                .config=${{ values: flowIdEnumValues }}
+                                @change=${this._onFlowId}
+                            ></platform-field>
                         `}
                     </div>
                     <div class="field">
                         <label>${this.t('flow_node_editor.branch_id')}</label>
-                        <select
+                        <platform-field
+                            mode="edit"
+                            type="enum"
                             .value=${branchId}
+                            .config=${{ values: branchEnumValues }}
                             ?disabled=${flowId.length === 0}
                             @change=${this._onBranchId}
-                        >
-                            ${branchOptions.map(
-                                (sid) => html`<option value=${sid}>${sid}</option>`,
-                            )}
-                        </select>
+                        ></platform-field>
                     </div>
                 </div>
             </flows-base-node-editor>

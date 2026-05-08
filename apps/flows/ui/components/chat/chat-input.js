@@ -5,6 +5,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
+import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class ChatInput extends PlatformElement {
@@ -384,11 +385,7 @@ export class ChatInput extends PlatformElement {
     }
 
     _formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        return formatFileSize(bytes);
     }
 
     _isImage(file) {
@@ -478,6 +475,7 @@ export class ChatInput extends PlatformElement {
                 
                 <div class="input-wrapper">
                     <textarea
+                        data-canon="composer"
                         .value=${this._value}
                         placeholder=${this.placeholder}
                         maxlength=${this.maxLength}

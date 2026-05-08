@@ -24,6 +24,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
+import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 
 const RESOURCE_NAME = 'crm/access_requests';
 const UPDATE_OP = 'crm/access_request_update';
@@ -33,20 +34,13 @@ const STATUS_APPROVED = 'approved';
 const STATUS_REJECTED = 'rejected';
 const STATUSES = [STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED];
 
-const DATE_FORMAT = new Intl.DateTimeFormat('ru-RU', {
+const DATE_OPTIONS = Object.freeze({
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
 });
-
-function _formatDate(value) {
-    if (typeof value !== 'string' || value.length === 0) return '';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return DATE_FORMAT.format(d);
-}
 
 export class CRMAccessRequestsPage extends PlatformPage {
     static i18nNamespace = 'crm';
@@ -283,6 +277,18 @@ export class CRMAccessRequestsPage extends PlatformPage {
         this._status = STATUS_PENDING;
         this._requests = this.useResource(RESOURCE_NAME);
         this._updateOp = this.useOp(UPDATE_OP);
+        this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
+    }
+
+    _formatDate(value) {
+        if (typeof value !== 'string' || value.length === 0) {
+            return '';
+        }
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) {
+            return value;
+        }
+        return formatPlatformDate(d, this._locale.value, DATE_OPTIONS);
     }
 
     connectedCallback() {
@@ -387,7 +393,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
                     <div class="request-meta">
                         <span>
                             <platform-icon name="calendar" size="11"></platform-icon>
-                            ${_formatDate(req.created_at)}
+                            ${this._formatDate(req.created_at)}
                         </span>
                         <span class="status-badge ${req.status}">
                             ${this.t(`access_requests_page.status_${req.status}`)}

@@ -37,6 +37,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 import '../components/entity-type-editor.js';
@@ -230,17 +231,9 @@ export class CRMSpaceDetailPage extends PlatformPage {
             .stage-head-cell.stage-head-actions {
                 justify-content: flex-end;
             }
-            .input, .textarea {
-                width: 100%;
-                box-sizing: border-box;
-                padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                background: var(--crm-surface);
-                color: var(--text-primary);
-                font-size: var(--text-sm);
+            .stage-row platform-field {
+                min-width: 0;
             }
-            .textarea { min-height: 76px; resize: vertical; }
 
             .meta {
                 display: grid;
@@ -742,7 +735,10 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._setTaskBoardDraft(next);
     }
 
-    _onDescriptionInput(e) { this._description = e.target.value; }
+    _onDescriptionChange(e) {
+        const v = e.detail.value;
+        this._description = typeof v === 'string' ? v : '';
+    }
 
     _onNoteDefaultVoiceFromChild(e) {
         const d = e.detail;
@@ -1054,18 +1050,16 @@ export class CRMSpaceDetailPage extends PlatformPage {
                     <div class="hint mono">${ns.name}</div>
                 </div>
 
-                <div class="field">
-                    ${this._fieldLabelWithHint(
-                        'namespace_modal.label_description',
-                        'space_detail_page.meta_description_hint',
-                    )}
-                    <textarea
-                        class="textarea"
-                        placeholder=${this.t('namespace_modal.description_placeholder')}
-                        .value=${this._description}
-                        @input=${this._onDescriptionInput}
-                    ></textarea>
-                </div>
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('namespace_modal.label_description')}
+                    .hint=${this.t('space_detail_page.meta_description_hint')}
+                    .placeholder=${this.t('namespace_modal.description_placeholder')}
+                    .value=${this._description}
+                    ?disabled=${this._savingMeta}
+                    @change=${this._onDescriptionChange}
+                ></platform-field>
 
                 <crm-namespace-note-defaults-fields
                     .defaultNoteVoiceMode=${this._defaultNoteVoiceMode}
@@ -1274,23 +1268,36 @@ export class CRMSpaceDetailPage extends PlatformPage {
                                 </div>
                                 ${board.stages.map((st, si) => html`
                                     <div class="stage-row">
-                                        <input
-                                            class="input"
-                                            type="text"
-                                            autocomplete="off"
-                                            spellcheck="false"
-                                            placeholder=${this.t('space_detail_page.task_board_stage_id_ph')}
+                                        <platform-field
+                                            type="string"
+                                            mode="edit"
+                                            input-type="text"
+                                            .placeholder=${this.t('space_detail_page.task_board_stage_id_ph')}
                                             .value=${st.id}
-                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'id', e.target.value)}
-                                        />
-                                        <input
-                                            class="input"
-                                            type="text"
-                                            autocomplete="off"
-                                            placeholder=${this.t('space_detail_page.task_board_stage_label_ph')}
+                                            ?disabled=${this._taskBoardSaveBusy
+                                                || this._savingMeta
+                                                || this._savingAllowed
+                                                || this._sidebarMenuBusy}
+                                            @change=${(e) => {
+                                                const v = typeof e.detail.value === 'string' ? e.detail.value : '';
+                                                this._onTaskBoardStageField(bi, si, 'id', v);
+                                            }}
+                                        ></platform-field>
+                                        <platform-field
+                                            type="string"
+                                            mode="edit"
+                                            input-type="text"
+                                            .placeholder=${this.t('space_detail_page.task_board_stage_label_ph')}
                                             .value=${st.label}
-                                            @input=${(e) => this._onTaskBoardStageField(bi, si, 'label', e.target.value)}
-                                        />
+                                            ?disabled=${this._taskBoardSaveBusy
+                                                || this._savingMeta
+                                                || this._savingAllowed
+                                                || this._sidebarMenuBusy}
+                                            @change=${(e) => {
+                                                const v = typeof e.detail.value === 'string' ? e.detail.value : '';
+                                                this._onTaskBoardStageField(bi, si, 'label', v);
+                                            }}
+                                        ></platform-field>
                                         <platform-palette-color-picker
                                             class="stage-color-picker"
                                             allow-clear

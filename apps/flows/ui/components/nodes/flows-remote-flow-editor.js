@@ -11,6 +11,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-json-field-editor.js';
@@ -91,15 +92,48 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
     }
 
     _onUrl(e) {
-        this._emitPatch({ url: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-remote-flow-editor: url change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-remote-flow-editor: url detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-remote-flow-editor: url string required');
+        }
+        this._emitPatch({ url: v });
     }
 
     _onFlowId(e) {
-        this._emitPatch({ flow_id: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-remote-flow-editor: flow_id change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-remote-flow-editor: flow_id detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-remote-flow-editor: flow_id string required');
+        }
+        this._emitPatch({ flow_id: v });
     }
 
     _onBranchId(e) {
-        this._emitPatch({ branch_id: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-remote-flow-editor: branch_id change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-remote-flow-editor: branch_id detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-remote-flow-editor: branch_id string required');
+        }
+        this._emitPatch({ branch_id: v });
     }
 
     _onAuthHeaders(parsed) {
@@ -137,21 +171,32 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
                         </button>
                     </div>
                     ${mode === 'url' ? html`
-                        <div class="field">
-                            <label>${this.t('remote_flow_editor.url')}</label>
-                            <input type="url" placeholder="https://api.example.com/a2a"
-                                .value=${url} @input=${this._onUrl} />
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            input-type="url"
+                            .label=${this.t('remote_flow_editor.url')}
+                            .placeholder=${'https://api.example.com/a2a'}
+                            .value=${url}
+                            @change=${this._onUrl}
+                        ></platform-field>
                     ` : html`
-                        <div class="field">
-                            <label>${this.t('remote_flow_editor.flow_id')}</label>
-                            <input type="text" .value=${flowIdValue} @input=${this._onFlowId} />
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('remote_flow_editor.flow_id')}
+                            .value=${flowIdValue}
+                            @change=${this._onFlowId}
+                        ></platform-field>
                     `}
-                    <div class="field">
-                        <label>${this.t('remote_flow_editor.branch_id')}</label>
-                        <input type="text" placeholder="default" .value=${branchId} @input=${this._onBranchId} />
-                    </div>
+                    <platform-field
+                        mode="edit"
+                        type="string"
+                        .label=${this.t('remote_flow_editor.branch_id')}
+                        .placeholder=${'default'}
+                        .value=${branchId}
+                        @change=${this._onBranchId}
+                    ></platform-field>
                     <div class="field">
                         <label>${this.t('remote_flow_editor.auth_headers')}</label>
                         <flows-json-field-editor

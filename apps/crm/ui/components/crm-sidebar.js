@@ -28,6 +28,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-notification-manager.js';
+import '@platform/lib/components/fields/platform-field.js';
 import {
     buildDefaultSidebarNav,
     dropCrmSidebarLegacyTopLevelNodes,
@@ -168,42 +169,32 @@ export class CRMSidebar extends PlatformElement {
 
             .ns-section {
                 display: flex;
-                align-items: center;
+                flex-direction: column;
                 gap: var(--space-2);
-                padding: var(--space-2);
-                margin-bottom: var(--space-4);
-                background: var(--crm-surface-muted);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
+                margin-bottom: var(--space-3);
                 width: 100%;
+                min-width: 0;
                 box-sizing: border-box;
             }
+            .ns-section-controls {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                width: 100%;
+            }
             .ns-label {
-                font-size: 10px;
-                font-weight: 600;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
                 color: var(--text-tertiary);
-                white-space: nowrap;
-                flex-shrink: 0;
+                line-height: 1.2;
+                align-self: stretch;
             }
-            .ns-select {
-                flex: 1;
+            .ns-field-wrap {
+                flex: 1 1 0;
                 min-width: 0;
-                background: transparent;
-                border: none;
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                font-weight: 500;
-                cursor: pointer;
-                outline: none;
-                padding: var(--space-1) var(--space-2);
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .ns-select option {
-                background: var(--crm-surface-elevated);
-                color: var(--text-primary);
             }
             .ns-add-btn {
                 display: flex;
@@ -372,12 +363,30 @@ export class CRMSidebar extends PlatformElement {
         this.renderRoot?.querySelector('platform-service-sidebar')?.closeMobile?.();
     }
 
+    _namespaceDropdownConfig(items) {
+        if (!Array.isArray(items)) {
+            throw new Error('CRMSidebar._namespaceDropdownConfig: items must be an array');
+        }
+        const values = [{ value: '', label: this.t('sidebar.all_namespaces') }];
+        for (const ns of items) {
+            if (!ns || typeof ns.name !== 'string' || ns.name.length === 0) {
+                throw new Error('CRMSidebar._namespaceDropdownConfig: namespace name required');
+            }
+            const title = typeof ns.title === 'string' && ns.title.length > 0 ? ns.title : ns.name;
+            values.push({ value: ns.name, label: title });
+        }
+        return { values };
+    }
+
     _onNamespaceChange(event) {
         const user = this._authSel.value;
         if (!user || typeof user.company_id !== 'string') {
             throw new Error('CRMSidebar: cannot change namespace without active company_id');
         }
-        const value = event.target.value;
+        if (!event.detail || typeof event.detail.value !== 'string') {
+            throw new Error('CRMSidebar: namespace field expects change detail.value string');
+        }
+        const value = event.detail.value;
         setPlatformNamespaceSelection(user.company_id, value === '' ? null : value);
     }
 
@@ -515,32 +524,36 @@ export class CRMSidebar extends PlatformElement {
                 <div slot="header">
                     <div class="ns-section">
                         <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
-                        <select class="ns-select" .value=${selectValue} @change=${this._onNamespaceChange}>
-                            <option value="">${this.t('sidebar.all_namespaces')}</option>
-                            ${items.map((ns) => html`
-                                <option value=${ns.name} ?selected=${ns.name === selectValue}>
-                                    ${typeof ns.title === 'string' && ns.title.length > 0 ? ns.title : ns.name}
-                                </option>
-                            `)}
-                        </select>
-                        ${selectValue !== '' ? html`
+                        <div class="ns-section-controls">
+                            <platform-field
+                                class="ns-field-wrap"
+                                type="enum"
+                                mode="edit"
+                                label=""
+                                pill-density="compact"
+                                .value=${selectValue}
+                                .config=${this._namespaceDropdownConfig(items)}
+                                @change=${this._onNamespaceChange}
+                            ></platform-field>
+                            ${selectValue !== '' ? html`
+                                <button
+                                    class="ns-edit-btn"
+                                    type="button"
+                                    title=${this.t('sidebar.edit_space_tooltip')}
+                                    @click=${() => this._openEditNamespace(selectValue)}
+                                >
+                                    <platform-icon name="edit" size="14"></platform-icon>
+                                </button>
+                            ` : ''}
                             <button
-                                class="ns-edit-btn"
+                                class="ns-add-btn"
                                 type="button"
-                                title=${this.t('sidebar.edit_space_tooltip')}
-                                @click=${() => this._openEditNamespace(selectValue)}
+                                title=${this.t('sidebar.create_space_tooltip')}
+                                @click=${this._openCreateNamespace}
                             >
-                                <platform-icon name="edit" size="14"></platform-icon>
+                                <platform-icon name="plus" size="14"></platform-icon>
                             </button>
-                        ` : ''}
-                        <button
-                            class="ns-add-btn"
-                            type="button"
-                            title=${this.t('sidebar.create_space_tooltip')}
-                            @click=${this._openCreateNamespace}
-                        >
-                            <platform-icon name="plus" size="14"></platform-icon>
-                        </button>
+                        </div>
                     </div>
                 </div>
 

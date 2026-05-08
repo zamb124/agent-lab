@@ -11,6 +11,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const FORM_NAME = 'office/catalog_edit_form';
 const CATALOGS_NAME = 'office/catalogs';
@@ -86,7 +87,10 @@ export class OfficeCatalogEditModal extends PlatformFormModal {
         this.isDirty = dirty_title || dirty_public;
     }
 
-    _onTitleInput(e) { this._form.setField('title', e.target.value); }
+    _onTitleChange(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._form.setField('title', v);
+    }
     _onPublicChange(e) { this._form.setField('is_public', Boolean(e.detail.value)); }
 
     async _performSave() { this._form.submit(); }
@@ -119,14 +123,15 @@ export class OfficeCatalogEditModal extends PlatformFormModal {
         const draft = this._form.draft;
         return html`
             <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
-                <div class="form-group">
-                    <label class="form-label">${this.t('catalog_edit_modal.label_title')}</label>
-                    <input type="text" class="form-input"
-                           autocomplete="off" spellcheck="false"
-                           .value=${draft.title}
-                           @input=${this._onTitleInput} />
-                    ${this._renderFieldError('title')}
-                </div>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('catalog_edit_modal.label_title')}
+                    .value=${draft.title}
+                    ?disabled=${this._form.submitting}
+                    @change=${this._onTitleChange}
+                ></platform-field>
+                ${this._renderFieldError('title')}
                 <div class="form-group">
                     <div class="switch-row">
                         <span class="switch-label">${this.t('catalog_edit_modal.switch_public')}</span>

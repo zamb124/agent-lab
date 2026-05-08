@@ -616,7 +616,6 @@
         "download": "Download",
         "attachment_remove": "Remove attachment",
         "action_attachments": "Open attachments",
-        "action_show_graph": "Show relationship graph",
         "action_delete": "Delete note",
         "action_edit": "Edit",
         "date_prefix": "from {{date}}",

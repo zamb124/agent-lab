@@ -13,6 +13,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export function createEmptySchemaFieldRow(defaultType) {
     if (typeof defaultType !== 'string' || defaultType.length === 0) {
@@ -179,6 +180,10 @@ export class SchemaFieldBuilder extends PlatformElement {
                 grid-template-columns: 1fr 1fr;
             }
 
+            .field-row platform-field {
+                min-width: 0;
+            }
+
             .field-inline {
                 display: flex;
                 align-items: center;
@@ -194,30 +199,6 @@ export class SchemaFieldBuilder extends PlatformElement {
             .add-row {
                 display: flex;
                 margin-top: var(--space-1);
-            }
-
-            .input,
-            .select {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-                padding: var(--space-2) var(--space-3);
-                font: inherit;
-                font-size: var(--text-sm);
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .input:disabled,
-            .select:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-
-            .mono {
-                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-                font-size: var(--text-xs);
             }
 
             .btn {
@@ -306,69 +287,116 @@ export class SchemaFieldBuilder extends PlatformElement {
         this._emitRows(next);
     }
 
+    _fieldTypeEnumConfig(fieldTypes) {
+        const values = fieldTypes.map((ti) => {
+            const id = typeof ti.type_id === 'string' ? ti.type_id : '';
+            const lb = typeof ti.label === 'string' && ti.label.length > 0 ? ti.label : id;
+            return { value: id, label: lb };
+        });
+        return { values };
+    }
+
+    _enumSetEnumConfig(enumSets) {
+        const local = { value: '', label: this.t('schema_builder.enum_local') };
+        const rest = enumSets.map((si) => {
+            const id = typeof si.enum_set_id === 'string' ? si.enum_set_id : '';
+            const lb = typeof si.label === 'string' && si.label.length > 0 ? si.label : id;
+            return { value: id, label: lb };
+        });
+        return { values: [local, ...rest] };
+    }
+
     render() {
         const rows = Array.isArray(this.rows) ? this.rows : [];
         const fieldTypes = this.schemaOptions && Array.isArray(this.schemaOptions.field_types) ? this.schemaOptions.field_types : [];
         const enumSets = this.schemaOptions && Array.isArray(this.schemaOptions.enum_sets) ? this.schemaOptions.enum_sets : [];
         return html`
             <div class="fields-list">
-                ${rows.length > 0 ? rows.map((row, index) => html`
+                ${rows.length > 0 ? rows.map((row, index) => {
+                        const rowKey = typeof row.key === 'string' ? row.key : '';
+                        const rowLabel = typeof row.label === 'string' ? row.label : '';
+                        const rowType = typeof row.type === 'string' ? row.type : this._defaultFieldType();
+                        const rowDesc = typeof row.description === 'string' ? row.description : '';
+                        const rowEnumSet = typeof row.enum_set_id === 'string' ? row.enum_set_id : '';
+                        const rowEnumText = typeof row.enum_values_text === 'string' ? row.enum_values_text : '';
+                        return html`
                     <div class="field-card">
                         <div class="field-row">
-                            <input
-                                class="input mono"
-                                placeholder=${this.t('schema_builder.ph_key')}
-                                .value=${row.key || ''}
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                input-type="text"
+                                .placeholder=${this.t('schema_builder.ph_key')}
+                                .value=${rowKey}
                                 ?disabled=${this.disabled}
-                                @input=${(e) => this._updateRow(index, { key: e.target.value })}
-                            />
-                            <input
-                                class="input"
-                                placeholder=${this.t('schema_builder.ph_label')}
-                                .value=${row.label || ''}
+                                @change=${(e) => this._updateRow(
+                                    index,
+                                    { key: typeof e.detail.value === 'string' ? e.detail.value : '' },
+                                )}
+                            ></platform-field>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                input-type="text"
+                                .placeholder=${this.t('schema_builder.ph_label')}
+                                .value=${rowLabel}
                                 ?disabled=${this.disabled}
-                                @input=${(e) => this._updateRow(index, { label: e.target.value })}
-                            />
+                                @change=${(e) => this._updateRow(
+                                    index,
+                                    { label: typeof e.detail.value === 'string' ? e.detail.value : '' },
+                                )}
+                            ></platform-field>
                         </div>
                         <div class="field-row">
-                            <select
-                                class="select"
-                                .value=${row.type || this._defaultFieldType()}
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                .config=${this._fieldTypeEnumConfig(fieldTypes)}
+                                .value=${rowType}
                                 ?disabled=${this.disabled}
-                                @change=${(e) => this._updateRow(index, { type: e.target.value })}
-                            >
-                                ${fieldTypes.map((typeItem) => html`
-                                    <option value=${typeItem.type_id}>${typeItem.label}</option>
-                                `)}
-                            </select>
-                            <input
-                                class="input"
-                                placeholder=${this.t('schema_builder.ph_desc')}
-                                .value=${row.description || ''}
+                                @change=${(e) => this._updateRow(
+                                    index,
+                                    { type: typeof e.detail.value === 'string' ? e.detail.value : this._defaultFieldType() },
+                                )}
+                            ></platform-field>
+                            <platform-field
+                                type="string"
+                                mode="edit"
+                                input-type="text"
+                                .placeholder=${this.t('schema_builder.ph_desc')}
+                                .value=${rowDesc}
                                 ?disabled=${this.disabled}
-                                @input=${(e) => this._updateRow(index, { description: e.target.value })}
-                            />
+                                @change=${(e) => this._updateRow(
+                                    index,
+                                    { description: typeof e.detail.value === 'string' ? e.detail.value : '' },
+                                )}
+                            ></platform-field>
                         </div>
-                        ${row.type === 'enum' ? html`
+                        ${rowType === 'enum' ? html`
                             <div class="field-row">
-                                <select
-                                    class="select"
-                                    .value=${row.enum_set_id || ''}
+                                <platform-field
+                                    type="enum"
+                                    mode="edit"
+                                    .config=${this._enumSetEnumConfig(enumSets)}
+                                    .value=${rowEnumSet}
                                     ?disabled=${this.disabled}
-                                    @change=${(e) => this._updateRow(index, { enum_set_id: e.target.value })}
-                                >
-                                    <option value="">${this.t('schema_builder.enum_local')}</option>
-                                    ${enumSets.map((setItem) => html`
-                                        <option value=${setItem.enum_set_id}>${setItem.label}</option>
-                                    `)}
-                                </select>
-                                <input
-                                    class="input"
-                                    placeholder=${this.t('schema_builder.ph_enum_values')}
-                                    .value=${row.enum_values_text || ''}
+                                    @change=${(e) => this._updateRow(
+                                        index,
+                                        { enum_set_id: typeof e.detail.value === 'string' ? e.detail.value : '' },
+                                    )}
+                                ></platform-field>
+                                <platform-field
+                                    type="string"
+                                    mode="edit"
+                                    input-type="text"
+                                    .placeholder=${this.t('schema_builder.ph_enum_values')}
+                                    .value=${rowEnumText}
                                     ?disabled=${this.disabled || Boolean(row.enum_set_id)}
-                                    @input=${(e) => this._updateRow(index, { enum_values_text: e.target.value })}
-                                />
+                                    @change=${(e) => this._updateRow(
+                                        index,
+                                        { enum_values_text: typeof e.detail.value === 'string' ? e.detail.value : '' },
+                                    )}
+                                ></platform-field>
                             </div>
                         ` : ''}
                         <div class="field-inline">
@@ -382,7 +410,8 @@ export class SchemaFieldBuilder extends PlatformElement {
                             </button>
                         </div>
                     </div>
-                `) : html`<div class="empty">${this.t('schema_builder.no_fields')}</div>`}
+                `;
+                }) : html`<div class="empty">${this.t('schema_builder.no_fields')}</div>`}
             </div>
             <div class="add-row">
                 <button

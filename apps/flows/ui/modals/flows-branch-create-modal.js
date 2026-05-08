@@ -5,10 +5,11 @@
  * загружает обновлённый flow через push `flows/branch/created`.
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const BRANCH_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -28,16 +29,6 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            .field input, .field textarea {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-            }
-            .field textarea { min-height: 72px; resize: vertical; }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
             .form-error { color: var(--error); font-size: var(--text-xs); }
         `,
     ];
@@ -64,31 +55,44 @@ export class FlowsBranchCreateModal extends PlatformFormModal {
         const validId = BRANCH_ID_PATTERN.test(this._branchId);
         return html`
             <div class="field">
-                <label>${this.t('branch_create_modal.field_branch_id')}</label>
-                <input
-                    type="text"
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('branch_create_modal.field_branch_id')}
+                    .placeholder=${'my_branch'}
                     .value=${this._branchId}
-                    placeholder="my_branch"
-                    @input=${(e) => { this._branchId = e.target.value; this.isDirty = true; }}
-                />
-                ${this._branchId && !validId
+                    @change=${(e) => {
+                        this._branchId = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
+                ${this._branchId.length > 0 && !validId
                     ? html`<div class="form-error">${this.t('branch_create_modal.err_branch_id_pattern')}</div>`
-                    : ''}
+                    : nothing}
             </div>
             <div class="field">
-                <label>${this.t('branch_create_modal.field_name')}</label>
-                <input
-                    type="text"
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('branch_create_modal.field_name')}
                     .value=${this._name}
-                    @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
-                />
+                    @change=${(e) => {
+                        this._name = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
             <div class="field">
-                <label>${this.t('branch_create_modal.field_description')}</label>
-                <textarea
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('branch_create_modal.field_description')}
                     .value=${this._description}
-                    @input=${(e) => { this._description = e.target.value; this.isDirty = true; }}
-                ></textarea>
+                    @change=${(e) => {
+                        this._description = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
         `;
     }

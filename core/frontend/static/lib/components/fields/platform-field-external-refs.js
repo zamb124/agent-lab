@@ -1,6 +1,5 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
-import { formStyles } from '../../styles/shared/form.styles.js';
 
 /**
  * Ссылки на записи внешних систем: `attributes.external_refs` — объект
@@ -18,14 +17,10 @@ export class PlatformFieldExternalRefs extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
-        formStyles,
         css`
-            :host { display: block; }
-
-            .empty {
-                font-size: var(--text-sm);
-                color: var(--text-disabled);
-                font-style: italic;
+            :host {
+                display: block;
+                min-width: 0;
             }
 
             .cards {
@@ -43,9 +38,9 @@ export class PlatformFieldExternalRefs extends PlatformElement {
 
             .provider {
                 font-size: var(--text-xs);
-                font-weight: 600;
+                font-weight: var(--font-semibold);
                 text-transform: uppercase;
-                letter-spacing: 0.04em;
+                letter-spacing: var(--field-pill-label-letter);
                 color: var(--text-secondary);
                 margin-bottom: var(--space-2);
                 word-break: break-word;
@@ -65,7 +60,7 @@ export class PlatformFieldExternalRefs extends PlatformElement {
 
             .v {
                 color: var(--text-primary);
-                font-family: 'SF Mono', 'Fira Code', monospace;
+                font-family: var(--font-mono);
                 word-break: break-word;
             }
 
@@ -144,7 +139,7 @@ export class PlatformFieldExternalRefs extends PlatformElement {
     render() {
         const entries = this._entries();
         if (entries.length === 0) {
-            return html`<span class="empty">${this.t('platform_field.external_refs_empty')}</span>`;
+            return html`<span class="field-pill-empty">${this.t('platform_field.external_refs_empty')}</span>`;
         }
         const body = html`<div class="cards">${entries.map(([id, p]) => this._renderCard(id, p))}</div>`;
         if (this.mode === 'edit' && this.disabled) {

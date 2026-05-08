@@ -343,6 +343,108 @@ async _createEntity(payload) {
 
 Подписка `useEvent` на CoreEvents — допустима (например, страница хочет реагировать на `AUTH_COMPANY_SWITCHED`, `ROUTER_ROUTE_CHANGED`, `UI_DOCUMENTS_RELOAD_REQUESTED`). Запрет — на исходящий dispatch UI-семейств.
 
+## Field canon (поля форм)
+
+Полное правило: [`data-types.mdc`](.cursor/rules/data-types.mdc), [`frontend.mdc`](.cursor/rules/frontend.mdc) (раздел «Field canon»), [`ui_components.mdc`](.cursor/rules/ui_components.mdc) (раздел «Field pill canon»).
+
+`<platform-field>` — единственный канон для **любого** поля формы во всех сервисах (имя/email/url/password/query/description, типизированные атрибуты CRM). Диспетчер всегда рисует `<div class="field-pill">` + опциональный `<span class="field-pill-label">` + подкомпонент.
+
+### API
+
+```html
+<platform-field
+    type="string"
+    input-type="email"
+    .label=${this.t('lead_form.email_label')}
+    .value=${draft.email}
+    .placeholder=${this.t('lead_form.email_placeholder')}
+    mode="edit"
+    ?disabled=${false}
+    @change=${(e) => this._setEmail(e.detail.value)}>
+</platform-field>
+```
+
+| Свойство | Тип | Что |
+|---|---|---|
+| `type` | `string\|text\|number\|integer\|boolean\|date\|datetime\|enum\|array\|object\|external_refs` | Тип поля |
+| `value` | any | Типизированное значение |
+| `mode` | `'view'\|'edit'` | view = readonly |
+| `label` | string | Опц.; рисуется как `field-pill-label` |
+| `config` | object | Для `enum`: `{ values: [...] }` |
+| `placeholder` | string | Edit-режим |
+| `disabled` | boolean | — |
+| `inputType` | `'text'\|'email'\|'password'\|'url'\|'tel'\|'search'` | Только при `type='string'`. Default `'text'`. Любое другое — `throw`. Атрибут: `input-type` |
+| `hint` | string | Подсказка-tooltip рядом с label через `<platform-help-hint>` (наведение/фокус). НЕ always-visible div. |
+
+`@change.detail.value` содержит **типизированное** значение.
+
+`config.values` для `type='enum'` — массив строк `['a', 'b']` ИЛИ массив объектов `[{ value: 'a', label: 'Активно' }, ...]`. Для технических id (flow_id, provider id, etc.) **обязательно** `{value, label}` — иначе пользователь видит сырой технический id вместо имени.
+
+### Whitelist core-виджетов с собственным UI (НЕ заменяют поле)
+
+`<platform-date-picker>`, `<platform-switch>`, `<platform-cron-field>`, `<platform-timezone-picker>`, `<platform-icon-picker>`, `<platform-palette-color-picker>`, `<tag-input>` (внутри `platform-field-array`; атрибут `flat` удалён), `<platform-help-hint>`.
+
+### Сырые `<input>` / `<textarea>` / `<select>` вне `<platform-field>`
+
+Правило: [`scripts/check_field_canon.sh`](scripts/check_field_canon.sh) — запуск `make check-field-canon`. Whitelist `input type` и `data-canon` — как в [`frontend.mdc`](.cursor/rules/frontend.mdc). Классы `form-input` / `field-pill-input` на сыром DOM не освобождают от проверки.
+
+### Spec-widgets через `data-canon`
+
+```html
+<input type="text" class="task-input" data-canon="composer" @input=${...}/>
+<textarea data-canon="mention" @input=${...}></textarea>
+<input data-canon="inline-edit" .value=${title}/>
+<input data-canon="search-as-you-type" type="text"/>
+<input data-canon="combobox" type="text"/>
+```
+
+Без `data-canon` (где требуется) или без whitelisted `type` для `<input>` — нарушение `check_field_canon`.
+
+### Запреты
+
+- `<glass-input>` / `<glass-textarea>` — компоненты удалены в PHASE 1.5; импортировать запрещено.
+- Локальный `css\`...\`` блок в `apps/**` с правилами `.form-input` / `.form-textarea` / `.form-select` / `.form-group` / `.form-label` / `.field-pill*`.
+- Атрибут `flat` (на `<tag-input>` и любых подкомпонентах).
+- Сырые `<input>` / `<textarea>` / `<select>` без `<platform-field>`, без whitelisted `type` и без требуемого `data-canon`.
+
+CI: [`make check-field-canon`](Makefile) ([`scripts/check_field_canon.sh`](scripts/check_field_canon.sh)); [`scripts/check_ui_canon.sh`](scripts/check_ui_canon.sh) п.17/18. Реализация стилей — [`field-pill.styles.js`](core/frontend/static/lib/styles/shared/field-pill.styles.js), токены `--field-pill-*` в [`tokens.css`](core/frontend/static/assets/css/tokens.css).
+
+## Utility canon (форматтеры / escape / hash / validators)
+
+Любая «общая» утильная функция живёт в [`core/frontend/static/lib/utils/`](core/frontend/static/lib/utils/) и [`core/frontend/static/lib/events/factories/_multipart-upload.js`](core/frontend/static/lib/events/factories/_multipart-upload.js). Локальные копии в `apps/<svc>/ui/**` запрещены — это нарушение DRY и канона.
+
+### Канонические модули
+
+| Модуль | API |
+|---|---|
+| [`format-file-size.js`](core/frontend/static/lib/utils/format-file-size.js) | `formatFileSize(bytes, { precision? })` |
+| [`format-duration.js`](core/frontend/static/lib/utils/format-duration.js) | `formatDurationSeconds(sec, { withHours? })`, `formatDurationMs(ms, { withHours? })` |
+| [`format-platform-number.js`](core/frontend/static/lib/utils/format-platform-number.js) | `formatPlatformNumber(value, locale, options?)`, `formatPlatformCurrencyRub(amount, locale, options?)` |
+| [`format-platform-date.js`](core/frontend/static/lib/utils/format-platform-date.js) | `formatPlatformDate(input, locale, options?)`, `formatPlatformDateTime(input, locale)`, `formatPlatformTime(input, locale)` |
+| [`escape-html.js`](core/frontend/static/lib/utils/escape-html.js) | `escapeHtml(value)` |
+| [`hash-string.js`](core/frontend/static/lib/utils/hash-string.js) | `hashString31(seed)`, `hueFromString(seed)`, `initialsFromName(name)`, `indexFromSeed(seed, modulo)` |
+| [`validators.js`](core/frontend/static/lib/utils/validators.js) | `EMAIL_RE`, `isValidEmail(value)`, `digitsOnly(value)`, `isValidPhone(value)`, `PHONE_DIGITS_MIN` |
+| [`storage-keys.js`](core/frontend/static/lib/utils/storage-keys.js) | `platformStorageKey(scope, key)` — единый префикс `platform:<scope>:<key>` |
+| [`_multipart-upload.js`](core/frontend/static/lib/events/factories/_multipart-upload.js) | `createMultipartFileUploadOp({ name, url, extraFields?, restMirror? })` |
+
+### Локаль для форматтеров
+
+`formatPlatform*` принимают `locale` аргументом. Компонент берёт активную локаль через `this.select((s) => s.i18n.locale).value`. Хардкод `'ru-RU'` / `'en-US'` в `Intl.*` / `toLocaleString` запрещён.
+
+### Запреты в `apps/<svc>/ui/**`
+
+- Локальный `function escapeHtml`, `const escapeHtml = ...`.
+- Локальный `EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/`, `_digitsOnly`, ad-hoc email regex.
+- Локальный hash-цикл `h = (h * 31 + s.charCodeAt(i))`.
+- Локальный `formatFileSize` / `_formatBytes` / `_formatFileSize` цикл (свой). Допустима тонкая обёртка-метод компонента, делегирующая в core `formatFileSize`.
+- `Intl.NumberFormat('ru-RU', ...)`, `Intl.DateTimeFormat('ru-RU', ...)`, `toLocaleDateString('ru-RU', ...)`, `toLocaleString('ru-RU', ...)`.
+- Свободный префикс ключа localStorage (`humanitec.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
+- Свой multipart-upload `createAsyncOp` без обёртки `createMultipartFileUploadOp` — копипаста запрещена.
+- Always-visible `<div class="hint">…</div>` под полем формы: описание передавай в `.hint=${...}` атрибут `<platform-field>` — он рисует hover-tooltip через `<platform-help-hint>`.
+- `<platform-field type='enum' .config=${{ values: ['flow_id_1', 'flow_id_2'] }}>` для технических id: пользователь увидит сырой id. Канон — `{ values: [{ value: 'flow_id_1', label: 'Имя flow' }, ...] }`.
+
+CI: [`scripts/check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 (детекторы `'ru-RU'`, `EMAIL_RE`/`_digitsOnly`, `escapeHtml`, hash×31).
+
 ## Modal canon
 
 Правила: [`ui_components.mdc`](.cursor/rules/ui_components.mdc) (раздел «Modal canon»). Реализация: [`core/frontend/static/lib/components/glass-modal.js`](core/frontend/static/lib/components/glass-modal.js), [`core/frontend/static/lib/utils/modal-registry.js`](core/frontend/static/lib/utils/modal-registry.js), [`core/frontend/static/lib/components/platform-modal-stack.js`](core/frontend/static/lib/components/platform-modal-stack.js).
@@ -618,12 +720,18 @@ make test-frontend-core-browser
 5. Каждая новая модалка имеет `static modalKind = '<scope>.<name>'` + `registerModalKind(...)` + рендерится из `platform-modal-stack` (т.е. открывается через `this.openModal(...)`).
 6. Никаких `||`/`??` фолбеков в `apps/**/events/resources/**` и в pages/modals/components.
 7. Никаких `import { fooResource } from '../events/resources/foo.resource.js'`, `new XController(...)`, `httpRequest(...)`, `fetch(...)`, `this.dispatch(CoreEvents.UI_*)` в pages/modals/components.
+8. Все новые поля ввода — `<platform-field>`. Никаких сырых `<input>`/`<textarea>`/`<select>` без `data-canon` или whitelisted `type` (`file|hidden|range|color|checkbox|radio|search`).
+9. Никаких `<glass-input>` / `<glass-textarea>` импортов (компоненты удалены).
+10. Никаких локальных `.form-*` / `.field-pill*` CSS правил в `static styles` компонентов сервиса; кастомизация — только токены `--field-pill-*` в [`tokens.css`](core/frontend/static/assets/css/tokens.css).
+11. Никаких локальных `escapeHtml` / `EMAIL_RE` / `_digitsOnly` / `hash*31` / `formatFileSize` циклов / `Intl.*('ru-RU', ...)` / `toLocale*('ru-RU')`. Используй `core/frontend/static/lib/utils/` (см. раздел «Utility canon»).
+12. Никакого своего multipart-upload `createAsyncOp` — только `createMultipartFileUploadOp({ name, url, extraFields? })` из [`@platform/lib/events/index.js`](core/frontend/static/lib/events/factories/_multipart-upload.js).
+13. Никаких свободных префиксов localStorage (`humanitec.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')` из [`@platform/lib/utils/storage-keys.js`](core/frontend/static/lib/utils/storage-keys.js).
 
 Если что-то из этого нельзя выполнить — задача **не закрыта**. Возвращаюсь к канону, при необходимости — к правке `.cursor/rules/`.
 
 ## Анти-паттерны (краткая сводка)
 
-Полный каталог — [`anti-patterns.md`](.cursor/skills/frontend-engineer/anti-patterns.md). Топ-12 типовых костылей и единственно корректные ответы:
+Полный каталог — [`anti-patterns.md`](.cursor/skills/frontend-engineer/anti-patterns.md). Топ-20 типовых костылей и единственно корректные ответы:
 
 | # | Костыль | Корректно | Детектор |
 |---|---|---|---|
@@ -639,6 +747,14 @@ make test-frontend-core-browser
 | 10 | Ручной `WebSocket` или `fetch` для WS-команды; `restMirror` нет; команда без `_requested` | `transport: 'ws'` + `wsTimeoutMs` + `restMirror` + `commandType` (если имя фабрики ≠ `<svc>/<entity>/<verb>_requested`) | [`check_command_rest_mirror.py`](scripts/check_command_rest_mirror.py), [`check_ui_factories.py`](scripts/check_ui_factories.py) |
 | 11 | `new CustomEvent(...)` для cross-component обмена в `apps/<svc>/ui/**` | `this.dispatch(<event>)`; `emit()` оставить только для slot-композиции внутри одного компонента | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.5 |
 | 12 | `window.dispatchEvent('platform-sidebar-open' / 'office-documents-list-reload' / 'navigate')` | `dispatch(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED)` / `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)` / `dispatch(ROUTER_NAVIGATE_REQUESTED)` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.10 |
+| 13 | `<glass-input>` / `<glass-textarea>` (импорт `@platform/lib/components/glass-input.js`/`glass-textarea.js`) | `<platform-field type='string' input-type='email\|password\|...'>` или `<platform-field type='text'>` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.18 |
+| 14 | Локальный `css\`...\`` с правилами `.form-input` / `.form-textarea` / `.form-select` / `.form-group` / `.form-label` / `.field-pill*` в `apps/<svc>/ui/**` | Удалить — стили в [`field-pill.styles.js`](core/frontend/static/lib/styles/shared/field-pill.styles.js); кастомизация только через токены `--field-pill-*` в [`tokens.css`](core/frontend/static/assets/css/tokens.css) | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.17 |
+| 15 | Сырые `<input>` / `<textarea>` / `<select>` в `apps/<svc>/ui/{pages,modals,components}/**` без `<platform-field>`, без whitelisted `input type` и без требуемого `data-canon` | `<platform-field type='...'>`; для spec-widget — whitelist `type`/`data-canon` по канону | [`check_field_canon.sh`](scripts/check_field_canon.sh); [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.17 (локальный CSS `.form-*`/`.field-pill*`) |
+| 16 | Атрибут `flat` (на `<tag-input>` или любом подкомпоненте) | удалён в PHASE 1.5; pill — единственный режим | ручная проверка в code-review |
+| 17 | Локальный `function escapeHtml` / `const escapeHtml = ...` в `apps/<svc>/ui/**` | `import { escapeHtml } from '@platform/lib/utils/escape-html.js'` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 |
+| 18 | Локальный `EMAIL_RE` / `_digitsOnly` / ad-hoc email regex | `import { isValidEmail, digitsOnly, EMAIL_RE } from '@platform/lib/utils/validators.js'` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 |
+| 19 | Локальный hash-цикл `h * 31 + charCodeAt`, локальный `_formatBytes`/`_formatFileSize`, локальный `_formatDuration` (mm:ss) | `hashString31`/`hueFromString` из `@platform/lib/utils/hash-string.js`; `formatFileSize` из `@platform/lib/utils/format-file-size.js`; `formatDurationSeconds`/`formatDurationMs` из `@platform/lib/utils/format-duration.js` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 |
+| 20 | `Intl.NumberFormat('ru-RU', ...)`, `Intl.DateTimeFormat('ru-RU', ...)`, `toLocale*('ru-RU')` хардкод | `formatPlatformNumber`/`formatPlatformCurrencyRub`/`formatPlatformDate*` с локалью из `state.i18n.locale` | [`check_ui_canon.sh`](scripts/check_ui_canon.sh) п.19 |
 
 ## Прогрессивные ссылки
 

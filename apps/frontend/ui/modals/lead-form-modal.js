@@ -7,13 +7,9 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import { isValidEmail, digitsOnly } from '@platform/lib/utils/validators.js';
 import '@platform/lib/components/platform-icon.js';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function _digitsOnly(value) {
-    return String(value).replace(/\D/g, '');
-}
+import '@platform/lib/components/fields/platform-field.js';
 
 export class FrontendLeadFormModal extends PlatformFormModal {
     static i18nNamespace = 'landing';
@@ -57,9 +53,6 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                 gap: var(--space-2);
                 font-size: var(--text-sm);
             }
-            select.form-input {
-                width: 100%;
-            }
         `,
     ];
 
@@ -91,11 +84,11 @@ export class FrontendLeadFormModal extends PlatformFormModal {
         if (!this._name.trim()) errors.name = this.t('cta.toast_required');
 
         const email = this._email.trim();
-        if (email !== '' && !EMAIL_RE.test(email)) {
+        if (email !== '' && !isValidEmail(email)) {
             errors.email = this.t('cta.toast_email_invalid');
         }
 
-        const phoneDigits = _digitsOnly(this._phone);
+        const phoneDigits = digitsOnly(this._phone);
         const hasEmail = email !== '';
         const hasPhone = phoneDigits.length >= 10;
         if (!hasEmail && !hasPhone) {
@@ -140,84 +133,111 @@ export class FrontendLeadFormModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
+    _headcountEnumConfig() {
+        return {
+            values: [
+                { value: '', label: this.t('cta.select_headcount_placeholder') },
+                { value: '1_49', label: this.t('cta.headcount_1_49') },
+                { value: '50_199', label: this.t('cta.headcount_50_199') },
+                { value: '200_499', label: this.t('cta.headcount_200_499') },
+                { value: '500_plus', label: this.t('cta.headcount_500_plus') },
+            ],
+        };
+    }
+
     renderBody() {
         return html`
             <form @submit=${this._onSubmit} @input=${() => { this.isDirty = true; }}>
                 <div class="lead-fields">
                     <div class="lead-row">
-                        <div class="form-group">
-                            <input
-                                class="form-input"
-                                name="name"
-                                autocomplete="name"
-                                placeholder=${this.t('cta.placeholder_name')}
-                                .value=${this._name}
-                                @input=${(e) => { this._name = e.target.value; }}
-                                autofocus
-                                required
-                            />
-                            ${this.renderFieldError('name')}
-                        </div>
-                        <div class="form-group">
-                            <input
-                                class="form-input"
-                                name="email"
-                                type="email"
-                                autocomplete="email"
-                                placeholder=${this.t('cta.placeholder_email')}
-                                .value=${this._email}
-                                @input=${(e) => { this._email = e.target.value; }}
-                            />
-                            ${this.renderFieldError('email')}
-                        </div>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            label=""
+                            placeholder=${this.t('cta.placeholder_name')}
+                            .value=${this._name}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('lead-form name field expects detail.value string');
+                                }
+                                this._name = e.detail.value;
+                            }}
+                        ></platform-field>
+                        ${this.renderFieldError('name')}
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            input-type="email"
+                            label=""
+                            placeholder=${this.t('cta.placeholder_email')}
+                            .value=${this._email}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('lead-form email field expects detail.value string');
+                                }
+                                this._email = e.detail.value;
+                            }}
+                        ></platform-field>
+                        ${this.renderFieldError('email')}
                     </div>
                     <div class="lead-row">
-                        <div class="form-group">
-                            <input
-                                class="form-input"
-                                name="phone"
-                                type="tel"
-                                autocomplete="tel"
-                                placeholder=${this.t('cta.placeholder_phone')}
-                                .value=${this._phone}
-                                @input=${(e) => { this._phone = e.target.value; }}
-                            />
-                        </div>
-                        <div class="form-group">
-                            <input
-                                class="form-input"
-                                name="company"
-                                autocomplete="organization"
-                                placeholder=${this.t('cta.placeholder_company')}
-                                .value=${this._company}
-                                @input=${(e) => { this._company = e.target.value; }}
-                            />
-                        </div>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            input-type="tel"
+                            label=""
+                            placeholder=${this.t('cta.placeholder_phone')}
+                            .value=${this._phone}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('lead-form phone field expects detail.value string');
+                                }
+                                this._phone = e.detail.value;
+                            }}
+                        ></platform-field>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            label=""
+                            placeholder=${this.t('cta.placeholder_company')}
+                            .value=${this._company}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('lead-form company field expects detail.value string');
+                                }
+                                this._company = e.detail.value;
+                            }}
+                        ></platform-field>
                     </div>
                     <div class="lead-row">
-                        <div class="form-group">
-                            <input
-                                class="form-input"
-                                name="job_title"
-                                autocomplete="organization-title"
-                                placeholder=${this.t('cta.placeholder_job_title')}
-                                .value=${this._jobTitle}
-                                @input=${(e) => { this._jobTitle = e.target.value; }}
-                            />
-                        </div>
-                        <div class="form-group">
-                            <select
-                                class="form-input"
-                                name="headcount"
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            label=""
+                            placeholder=${this.t('cta.placeholder_job_title')}
+                            .value=${this._jobTitle}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('lead-form job_title field expects detail.value string');
+                                }
+                                this._jobTitle = e.detail.value;
+                            }}
+                        ></platform-field>
+                        <div>
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                label=""
+                                placeholder=""
                                 .value=${this._headcountRange}
-                                @change=${(e) => { this._headcountRange = e.target.value; }}
-                            >
-                                <option value="" disabled>${this.t('cta.select_headcount_placeholder')}</option>
-                                <option value="1_49">${this.t('cta.headcount_1_49')}</option>
-                                <option value="50_199">${this.t('cta.headcount_50_199')}</option>
-                                <option value="200_499">${this.t('cta.headcount_200_499')}</option>
-                                <option value="500_plus">${this.t('cta.headcount_500_plus')}</option>
-                            </select>
+                                .config=${this._headcountEnumConfig()}
+                                @change=${(e) => {
+                                    if (!e.detail || typeof e.detail.value !== 'string') {
+                                        throw new Error('lead-form headcount field expects detail.value string');
+                                    }
+                                    this._headcountRange = e.detail.value;
+                                }}
+                            ></platform-field>
                             ${this.renderFieldError('headcount')}
                         </div>
                     </div>
@@ -267,15 +287,19 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                         ${this.renderFieldError('products')}
                         ${this.renderFieldError('contact')}
                     </div>
-                    <div class="form-group">
-                        <input
-                            class="form-input"
-                            name="comment"
-                            placeholder=${this.t('cta.placeholder_comment')}
-                            .value=${this._comment}
-                            @input=${(e) => { this._comment = e.target.value; }}
-                        />
-                    </div>
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        label=""
+                        placeholder=${this.t('cta.placeholder_comment')}
+                        .value=${this._comment}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('lead-form comment field expects detail.value string');
+                            }
+                            this._comment = e.detail.value;
+                        }}
+                    ></platform-field>
                 </div>
             </form>
         `;

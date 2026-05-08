@@ -76,6 +76,7 @@ export class FlowsVariableInput extends PlatformElement {
     render() {
         return html`
             <input
+                data-canon="search-as-you-type"
                 type="text"
                 .value=${this.value}
                 placeholder=${this.placeholder}

@@ -22,6 +22,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '../components/editors/flows-code-editor.js';
 import { getEdgeEndpoints } from '../_helpers/flows-resolvers.js';
 
@@ -408,17 +409,29 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     }
 
     _onVariableChange(e) {
-        this._variable = e.target.value;
+        const v = e.detail.value;
+        if (typeof v !== 'string') {
+            throw new TypeError('flows-edge-condition-modal: variable change expects string detail.value');
+        }
+        this._variable = v;
         this.isDirty = true;
     }
 
     _onOperatorChange(e) {
-        this._operator = e.target.value;
+        const v = e.detail.value;
+        if (typeof v !== 'string') {
+            throw new TypeError('flows-edge-condition-modal: operator change expects string detail.value');
+        }
+        this._operator = v;
         this.isDirty = true;
     }
 
     _onValueInput(e) {
-        this._value = e.target.value;
+        const v = e.detail.value;
+        if (typeof v !== 'string') {
+            throw new TypeError('flows-edge-condition-modal: value change expects string detail.value');
+        }
+        this._value = v;
         this.isDirty = true;
     }
 
@@ -482,30 +495,47 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
     _renderSimple() {
         const variables = this._collectVariables();
+        const variableEnumConfig = {
+            values: [
+                { value: '', label: this.t('edge_condition_modal.select_placeholder') },
+                ...variables.map((v) => ({ value: v, label: v })),
+            ],
+        };
+        const operatorEnumConfig = {
+            values: OPERATORS.map((op) => ({ value: op, label: op })),
+        };
         return html`
             <div class="builder-row">
                 <div class="form-field">
                     <label>${this.t('edge_condition_modal.label_variable')}</label>
-                    <select .value=${this._variable} @change=${this._onVariableChange}>
-                        <option value="">${this.t('edge_condition_modal.select_placeholder')}</option>
-                        ${variables.map((v) => html`<option value=${v} ?selected=${v === this._variable}>${v}</option>`)}
-                    </select>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .value=${this._variable}
+                        .config=${variableEnumConfig}
+                        @change=${this._onVariableChange}
+                    ></platform-field>
                     ${this.renderFieldError('variable')}
                 </div>
                 <div class="form-field">
                     <label>${this.t('edge_condition_modal.label_operator')}</label>
-                    <select .value=${this._operator} @change=${this._onOperatorChange}>
-                        ${OPERATORS.map((op) => html`<option value=${op} ?selected=${op === this._operator}>${op}</option>`)}
-                    </select>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .value=${this._operator}
+                        .config=${operatorEnumConfig}
+                        @change=${this._onOperatorChange}
+                    ></platform-field>
                 </div>
                 <div class="form-field">
                     <label>${this.t('edge_condition_modal.label_value')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${this._value}
                         placeholder=${this.t('edge_condition_modal.value_placeholder')}
-                        @input=${this._onValueInput}
-                    />
+                        @change=${this._onValueInput}
+                    ></platform-field>
                     ${this.renderFieldError('value')}
                 </div>
             </div>

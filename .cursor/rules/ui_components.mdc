@@ -10,7 +10,7 @@ alwaysApply: false
 
 ## Категории
 
-1. **Presentational** (`glass-button`, `glass-input`, `glass-textarea`, `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`, `tag-input`, `platform-icon-picker`, `platform-help-hint`, `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
+1. **Presentational** (`glass-button`, `glass-card`, `glass-spinner`, `platform-button`, `platform-switch`, `tag-input`, `platform-icon-picker`, `platform-help-hint`, `platform-timezone-picker`, `platform-cron-field`, `platform-palette-color-picker`, `platform-trace-viewer`, `platform-log-viewer`, `platform-shell-page`, `layout/platform-sidebar-nav-tree`, `layout/*`, `fields/*`):
    - Не читают state платформы (только `t()` для подписей).
    - Не диспатчат в bus, кроме `CoreEvents.UI_TOAST_SHOW` (через `this.toast(...)`).
    - Локальные DOM-события `this.emit('change', detail)` для родителя.
@@ -41,7 +41,43 @@ alwaysApply: false
 
 ## Стили и токены
 
-CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `--text-*`, `--font-*`, `--glass-solid-*`, `--glass-border-*`, `--accent`, `--text-primary`, `--bg-gradient`, … Тема — `[data-theme="dark|light"]`.
+CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `--text-*`, `--font-*`, `--glass-solid-*`, `--glass-border-*`, `--accent`, `--text-primary`, `--bg-gradient`, группа **`--field-pill-*`** (плашка поля, лейбл, инпут внутри пилюли), … Тема — `[data-theme="dark|light"]`.
+
+## Field pill canon (формы и поля ввода)
+
+- **Каноничный компонент:** [`<platform-field>`](core/frontend/static/lib/components/fields/platform-field.js) — единственный канон для **любого** поля формы во всех сервисах (имя/email/url/password/query/description, типизированные атрибуты CRM). Полный API — `data-types.mdc`.
+- **Оболочка:** `.field-pill` и эквивалент для legacy-форм **`.form-group`** — один визуальный канон (паддинг, фон `--field-pill-bg`, бордер, скругление `--field-pill-radius`). Значение задаётся в [`core/frontend/static/lib/styles/shared/field-pill.styles.js`](core/frontend/static/lib/styles/shared/field-pill.styles.js); семантические токены — `--field-pill-*` в [`tokens.css`](core/frontend/static/assets/css/tokens.css).
+- **Лейбл:** `.field-pill-label` и **`.form-label`** — общие правила (uppercase, `--field-pill-label-*`).
+- **Контрол внутри пилюли** (без отдельной «стеклянной» рамки элемента): `.field-pill-input`, `.field-pill-textarea`, `.field-pill-select`; в разметке legacy-форм допускаются **алиасы** `.form-input`, `.form-textarea`, `.form-select`.
+- **Список вложенных файлов + скрытый `input type="file"`:** оболочка как у пилюли — импорт [`field-pill.styles.js`](core/frontend/static/lib/styles/shared/field-pill.styles.js) (`fieldPillStyles`) в `static styles` компонента, разметка `.field-pill` + `.field-pill-head` + `.field-pill-file-refs-body` и классы `.field-pill-file-ref-*` / `.field-pill-file-refs-attach*` из того же модуля; отдельные `.file-*` стили в `apps/**` не вводить (см. эталон [`flows-base-node-editor.js`](apps/flows/ui/components/nodes/flows-base-node-editor.js)).
+- **`<glass-input>` / `<glass-textarea>` УДАЛЕНЫ** в PHASE 1.5. Импорт запрещён (`scripts/check_ui_canon.sh` п.18).
+
+### Whitelist core-виджетов с собственным UI
+
+| Компонент | Назначение |
+|---|---|
+| `<platform-date-picker>` | popup-календарь date / datetime |
+| `<platform-switch>` | toggle boolean |
+| `<platform-cron-field>` | cron-builder |
+| `<platform-timezone-picker>` | combobox таймзон |
+| `<platform-icon-picker>` | picker иконок |
+| `<platform-palette-color-picker>` | swatches цветов |
+| `<tag-input>` | multi-tag input (внутри `platform-field-array`); атрибут `flat` удалён |
+| `<platform-help-hint>` | info bubble |
+
+### Сырые `<input>` / `<textarea>` / `<select>` вне `<platform-field>`
+
+Детект: `scripts/check_field_canon.sh` (`make check-field-canon`). Whitelist `input type` и `data-canon` — как в `frontend.mdc` / `data-types.mdc`. Классы `form-input` / `field-pill-input` на сыром DOM не освобождают от проверки.
+
+### Spec-widgets через `data-canon`
+
+Сырые `<input>` / `<textarea>` для composer / mention / inline-edit / search-as-you-type / combobox: `data-canon="composer|mention|inline-edit|search-as-you-type|combobox"`. Для `<select>` в режиме combobox — `data-canon="combobox"`.
+
+### Запрещено
+
+- Локальный `css\`...\`` блок в `apps/**` с правилами `.form-input` / `.form-textarea` / `.form-select` / `.form-group` / `.form-label` / `.field-pill*` (детектор `scripts/check_ui_canon.sh` п.17).
+- Нарушение `make check-field-canon`: сырые теги без whitelist / без `data-canon` где требуется.
+- Атрибут `flat` (на `<tag-input>` и любом подкомпоненте) — удалён.
 
 ## emit vs dispatch
 
@@ -182,6 +218,7 @@ registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-
 
 - `setPlatformNamespaceSelection(companyId, name)` диспатчит `CoreEvents.UI_NAMESPACE_SELECT_REQUESTED`. `ui.effect.js` персистит выбор в `localStorage` и эмитит `UI_NAMESPACE_CHANGED` + `UI_DOCUMENTS_RELOAD_REQUESTED`.
 - Подписка — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`, не `window.addEventListener('office-documents-list-reload')`.
+- Селектор в шапке service sidebar (CRM / Office / Sync): колонка — подпись (`ns-label` / `namespace-label`) отдельной строкой, затем ряд `ns-section-controls` / `namespace-selector-row` с `<platform-field type="enum" mode="edit" label="" pill-density="compact">` (`flex: 1 1 0; min-width: 0`) и иконками действий. Не оборачивать в отдельный блок с фоном и бордером вокруг поля: один визуальный контур — `field-pill` у `platform-field`, иначе «капсула в капсуле» и обрезание текста в `<select>`.
 
 ### Запреты sidebar/breadcrumbs/namespace
 

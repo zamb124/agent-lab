@@ -3,6 +3,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import { nextModalLayerZIndex } from '@platform/lib/utils/modal-z-stack.js';
+import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 
 const PREVIEW_WIDTH = 320;
 const PREVIEW_GAP = 10;
@@ -119,16 +120,6 @@ function _isIsoDateLike(value) {
     return typeof value === 'string' && value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value);
 }
 
-function _formatDate(value) {
-    if (!_isIsoDateLike(value)) {
-        return '';
-    }
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-        return '';
-    }
-    return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(parsed);
-}
 
 export class CRMEntityHoverPreview extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -149,8 +140,20 @@ export class CRMEntityHoverPreview extends PlatformElement {
         this.entityId = '';
         this.anchorRect = null;
         this._entities = this.useResource('crm/entities');
+        this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
         this._portal = null;
         this._onReposition = this._onReposition.bind(this);
+    }
+
+    _formatDate(value) {
+        if (!_isIsoDateLike(value)) {
+            return '';
+        }
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            return '';
+        }
+        return formatPlatformDate(parsed, this._locale.value, { day: '2-digit', month: '2-digit', year: 'numeric' });
     }
 
     connectedCallback() {
@@ -279,7 +282,7 @@ export class CRMEntityHoverPreview extends PlatformElement {
             ? this._entities.byId[this.entityId]
             : null;
         const hasEntity = entity !== undefined && entity !== null;
-        const createdAt = hasEntity && typeof entity.created_at === 'string' ? _formatDate(entity.created_at) : '';
+        const createdAt = hasEntity && typeof entity.created_at === 'string' ? this._formatDate(entity.created_at) : '';
         const description = hasEntity ? this._description(entity) : '';
         const tpl = hasEntity
             ? html`

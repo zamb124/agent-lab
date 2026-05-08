@@ -10,10 +10,11 @@ import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
-import '@platform/lib/components/layout/page-header.js';
 
-const KIND_OPTIONS = ['llm', 'embedding', 'rerank'];
+import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/fields/platform-field.js';
+
+const KIND_ENUM_VALUES = ['llm', 'embedding', 'rerank'];
 
 export class LitserveModelsPage extends PlatformPage {
     static i18nNamespace = 'litserve';
@@ -21,7 +22,6 @@ export class LitserveModelsPage extends PlatformPage {
     static styles = [
         PlatformPage.styles,
         buttonStyles,
-        formStyles,
         css`
             :host {
                 display: flex;
@@ -60,10 +60,7 @@ export class LitserveModelsPage extends PlatformPage {
                 gap: var(--space-3);
                 align-items: end;
             }
-            .add-grid .form-group {
-                margin-bottom: 0;
-            }
-            .models-grid {
+            .add-grid platform-field { min-width: 0; }            .models-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
                 gap: var(--space-4);
@@ -162,9 +159,32 @@ export class LitserveModelsPage extends PlatformPage {
         this._retry = this.useOp('provider_litserve/model_retry');
     }
 
-    _onKindInput(event) { this._kind = event.target.value; }
-    _onHfModelInput(event) { this._hfModelId = event.target.value; }
-    _onApiModelInput(event) { this._apiModelId = event.target.value; }
+    _kindEnumConfig() {
+        return {
+            values: KIND_ENUM_VALUES.map((k) => ({
+                value: k,
+                label: this.t(`models.kind_${k}`),
+            })),
+        };
+    }
+
+    _onKindChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        if (!KIND_ENUM_VALUES.includes(v)) {
+            throw new Error(`LitserveModelsPage._onKindChange: invalid kind "${v}"`);
+        }
+        this._kind = v;
+    }
+
+    _onHfModelChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._hfModelId = v;
+    }
+
+    _onApiModelChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._apiModelId = v;
+    }
 
     _addModel() {
         const hfModelId = this._hfModelId.trim();
@@ -251,30 +271,30 @@ export class LitserveModelsPage extends PlatformPage {
             <div class="page-body">
                 <section class="add-card">
                     <div class="add-grid">
-                        <div class="form-group">
-                            <label class="form-label">${this.t('models.kind')}</label>
-                            <select class="form-input" .value=${this._kind} @input=${this._onKindInput}>
-                                ${KIND_OPTIONS.map((kind) => html`<option value=${kind}>${kind}</option>`)}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">${this.t('models.hf_model')}</label>
-                            <input
-                                class="form-input"
-                                .value=${this._hfModelId}
-                                @input=${this._onHfModelInput}
-                                placeholder=${this.t('models.hf_placeholder')}
-                            />
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">${this.t('models.api_model')}</label>
-                            <input
-                                class="form-input"
-                                .value=${this._apiModelId}
-                                @input=${this._onApiModelInput}
-                                placeholder=${this.t('models.api_placeholder')}
-                            />
-                        </div>
+                        <platform-field
+                            type="enum"
+                            mode="edit"
+                            .label=${this.t('models.kind')}
+                            .value=${this._kind}
+                            .config=${this._kindEnumConfig()}
+                            @change=${this._onKindChange}
+                        ></platform-field>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('models.hf_model')}
+                            .placeholder=${this.t('models.hf_placeholder')}
+                            .value=${this._hfModelId}
+                            @change=${this._onHfModelChange}
+                        ></platform-field>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('models.api_model')}
+                            .placeholder=${this.t('models.api_placeholder')}
+                            .value=${this._apiModelId}
+                            @change=${this._onApiModelChange}
+                        ></platform-field>
                         <button class="btn btn-primary" @click=${this._addModel}>
                             ${this.t('models.add')}
                         </button>

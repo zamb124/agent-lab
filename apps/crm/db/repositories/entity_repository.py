@@ -183,12 +183,17 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
         search_text = self._build_search_text(entity)
         rag_namespace = entity.namespace or "default"
-        await self._rag.upload_text(
-            namespace_id=rag_namespace,
-            text=search_text,
-            document_name=entity.entity_id,
-            metadata=self._rag_chunk_metadata(entity),
-        )
+        try:
+            await self._rag.upload_text(
+                namespace_id=rag_namespace,
+                text=search_text,
+                document_name=entity.entity_id,
+                metadata=self._rag_chunk_metadata(entity),
+            )
+        except Exception as exc:
+            logger.warning(
+                f"RAG indexing failed for entity {entity.entity_id} (will be retried by reembed task): {exc}"
+            )
 
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
         return entity
@@ -238,15 +243,19 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             await session.refresh(merged)
 
         rag_namespace = entity.namespace or "default"
-        await self._rag.delete_document(rag_namespace, entity.entity_id)
-
-        search_text = self._build_search_text(entity)
-        await self._rag.upload_text(
-            namespace_id=rag_namespace,
-            text=search_text,
-            document_name=entity.entity_id,
-            metadata=self._rag_chunk_metadata(entity),
-        )
+        try:
+            await self._rag.delete_document(rag_namespace, entity.entity_id)
+            search_text = self._build_search_text(entity)
+            await self._rag.upload_text(
+                namespace_id=rag_namespace,
+                text=search_text,
+                document_name=entity.entity_id,
+                metadata=self._rag_chunk_metadata(entity),
+            )
+        except Exception as exc:
+            logger.warning(
+                f"RAG re-indexing failed for entity {entity.entity_id} (will be retried by reembed task): {exc}"
+            )
 
         logger.info(f"Updated entity: {entity.entity_id}, type={entity.full_type}")
         return merged

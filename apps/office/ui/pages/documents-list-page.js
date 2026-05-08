@@ -54,18 +54,9 @@ export class OfficeDocumentsListPage extends PlatformPage {
             }
             .page-body {
                 box-sizing: border-box;
-                padding: var(--space-4);
+                padding: 0;
                 flex: 1;
                 min-height: 0;
-            }
-            @media (max-width: 767px) {
-                .page-body {
-                    padding: var(--space-2);
-                    padding-top: 0;
-                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
-                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
-                    padding-bottom: var(--space-2);
-                }
             }
             .head-actions {
                 display: flex;

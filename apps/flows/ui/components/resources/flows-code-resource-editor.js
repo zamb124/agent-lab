@@ -8,6 +8,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-resource-editor.js';
 import '../editors/flows-code-editor.js';
 import '@platform/lib/components/glass-button.js';
@@ -29,6 +30,7 @@ export class FlowsCodeResourceEditor extends PlatformElement {
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             .row { display: flex; align-items: center; gap: var(--space-2); }
+            .row platform-field { flex: 1; min-width: 0; }
             select {
                 padding: var(--space-2);
                 border-radius: var(--radius-md);
@@ -54,10 +56,29 @@ export class FlowsCodeResourceEditor extends PlatformElement {
         this.openModal('flows.code_docs', { language });
     }
 
+    _onLanguageChange(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-code-resource-editor: language change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-code-resource-editor: language detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-code-resource-editor: language string required');
+        }
+        if (!LANGUAGES.includes(v)) {
+            throw new Error('flows-code-resource-editor: language unknown');
+        }
+        this._emitConfig({ language: v });
+    }
+
     render() {
         const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
         const language = LANGUAGES.includes(cfg.language) ? cfg.language : 'python';
         const code = typeof cfg.code === 'string' ? cfg.code : '';
+        const langValues = LANGUAGES.map((l) => ({ value: l, label: l }));
         return html`
             <flows-base-resource-editor
                 .resourceId=${this.resourceId}
@@ -67,13 +88,14 @@ export class FlowsCodeResourceEditor extends PlatformElement {
             >
                 <div slot="settings" class="body">
                     <div class="row">
-                        <div class="field" style="flex:1">
-                            <label>${this.t('code_resource_editor.language')}</label>
-                            <select .value=${language}
-                                @change=${(e) => this._emitConfig({ language: e.target.value })}>
-                                ${LANGUAGES.map((l) => html`<option value=${l} ?selected=${l === language}>${l}</option>`)}
-                            </select>
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .label=${this.t('code_resource_editor.language')}
+                            .value=${language}
+                            .config=${{ values: langValues }}
+                            @change=${this._onLanguageChange}
+                        ></platform-field>
                         <glass-button size="sm" variant="ghost" @click=${() => this._openDocs(language)}>
                             <platform-icon name="info"></platform-icon>
                             ${this.t('code_resource_editor.docs')}

@@ -8,7 +8,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/glass-input.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/layout/page-header.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
@@ -368,26 +368,23 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         if (!_needsModel(draft.provider)) return nothing;
         const opts = this._modelOptions(kind, draft.provider);
         if (!Array.isArray(opts) || opts.length === 0) return nothing;
-        const litserveHint =
-            draft.provider === 'litserve'
-                ? html`<div class="hint">
-                      ${this.t('company_voice_providers_page.model_default_litserve')}
-                  </div>`
-                : nothing;
+        const values = [
+            { value: '', label: this.t('company_voice_providers_page.option_default') },
+            ...opts.map((id) => ({ value: id, label: id })),
+        ];
+        const hint = draft.provider === 'litserve'
+            ? this.t('company_voice_providers_page.model_default_litserve')
+            : '';
         return html`
-            <label>
-                ${this.t('company_voice_providers_page.field_model')}
-                <select
-                    .value=${draft.model}
-                    @change=${(e) => this._setField(kind, 'model', e.target.value)}
-                >
-                    <option value="">
-                        ${this.t('company_voice_providers_page.option_default')}
-                    </option>
-                    ${opts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-                ${litserveHint}
-            </label>
+            <platform-field
+                type="enum"
+                mode="edit"
+                .label=${this.t('company_voice_providers_page.field_model')}
+                .value=${draft.model}
+                .config=${{ values }}
+                .hint=${hint}
+                @change=${(e) => this._setField(kind, 'model', e.detail.value)}
+            ></platform-field>
         `;
     }
 
@@ -421,72 +418,56 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
 
         const cloudOrYandexKey =
             p === 'cloud_ru' || p === 'yandex'
-                ? html`<label>
-                      ${this.t('company_voice_providers_page.field_api_key')}
-                      <glass-input
-                          type="password"
-                          .value=${draft.secrets.api_key}
-                          placeholder=${this._apiKeyPlaceholder(secretsMeta)}
-                          @input=${(e) =>
-                              this._setSecret(kind, 'api_key', e.detail.value)}
-                      ></glass-input>
-                  </label>`
+                ? html`<platform-field
+                      type="string"
+                      input-type="password"
+                      mode="edit"
+                      .label=${this.t('company_voice_providers_page.field_api_key')}
+                      .value=${draft.secrets.api_key}
+                      .placeholder=${this._apiKeyPlaceholder(secretsMeta)}
+                      @change=${(e) => this._setSecret(kind, 'api_key', e.detail.value)}
+                  ></platform-field>`
                 : nothing;
 
         const yandexFolder =
             p === 'yandex'
-                ? html`<label>
-                      ${this.t('company_voice_providers_page.field_folder_id')}
-                      <glass-input
-                          .value=${draft.secrets.folder_id}
-                          @input=${(e) =>
-                              this._setSecret(kind, 'folder_id', e.detail.value)}
-                      ></glass-input>
-                  </label>`
+                ? html`<platform-field
+                      type="string"
+                      mode="edit"
+                      .label=${this.t('company_voice_providers_page.field_folder_id')}
+                      .value=${draft.secrets.folder_id}
+                      @change=${(e) => this._setSecret(kind, 'folder_id', e.detail.value)}
+                  ></platform-field>`
                 : nothing;
 
         const sberBlock =
             p === 'sber'
                 ? html`
-                      <label>
-                          ${this.t('company_voice_providers_page.field_client_id')}
-                          <glass-input
-                              .value=${draft.secrets.client_id}
-                              @input=${(e) =>
-                                  this._setSecret(
-                                      kind,
-                                      'client_id',
-                                      e.detail.value,
-                                  )}
-                          ></glass-input>
-                      </label>
-                      <label>
-                          ${this.t('company_voice_providers_page.field_client_secret')}
-                          <glass-input
-                              type="password"
-                              .value=${draft.secrets.client_secret}
-                              placeholder=${secretsMeta &&
-                              secretsMeta.client_secret_set === true
-                                  ? this.t(
-                                        'company_voice_providers_page.placeholder_secret_set',
-                                    )
-                                  : ''}
-                              @input=${(e) =>
-                                  this._setSecret(
-                                      kind,
-                                      'client_secret',
-                                      e.detail.value,
-                                  )}
-                          ></glass-input>
-                      </label>
-                      <label>
-                          ${this.t('company_voice_providers_page.field_scope')}
-                          <glass-input
-                              .value=${draft.secrets.scope}
-                              @input=${(e) =>
-                                  this._setSecret(kind, 'scope', e.detail.value)}
-                          ></glass-input>
-                      </label>
+                      <platform-field
+                          type="string"
+                          mode="edit"
+                          .label=${this.t('company_voice_providers_page.field_client_id')}
+                          .value=${draft.secrets.client_id}
+                          @change=${(e) => this._setSecret(kind, 'client_id', e.detail.value)}
+                      ></platform-field>
+                      <platform-field
+                          type="string"
+                          input-type="password"
+                          mode="edit"
+                          .label=${this.t('company_voice_providers_page.field_client_secret')}
+                          .value=${draft.secrets.client_secret}
+                          .placeholder=${secretsMeta && secretsMeta.client_secret_set === true
+                              ? this.t('company_voice_providers_page.placeholder_secret_set')
+                              : ''}
+                          @change=${(e) => this._setSecret(kind, 'client_secret', e.detail.value)}
+                      ></platform-field>
+                      <platform-field
+                          type="string"
+                          mode="edit"
+                          .label=${this.t('company_voice_providers_page.field_scope')}
+                          .value=${draft.secrets.scope}
+                          @change=${(e) => this._setSecret(kind, 'scope', e.detail.value)}
+                      ></platform-field>
                   `
                 : nothing;
 
@@ -504,77 +485,62 @@ export class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         const secretsMeta = this._secretsMetaForKind(kind);
         const providers = STT_TTS_UI;
         const busy = this._upsert.busy || this._remove.busy;
+        const providerValues = [
+            { value: '', label: this.t('company_voice_providers_page.option_default') },
+            ...providers.map((p) => ({ value: p, label: p })),
+        ];
+        const responseFormatValues = RESPONSE_FORMATS.map((f) => ({
+            value: f,
+            label: f === '' ? this.t('company_voice_providers_page.option_default') : f,
+        }));
         return html`
             <div class="card">
                 <h3>${this.t(`company_voice_providers_page.title_${kind}`)}</h3>
-                <div class="hint">${this.t(`company_voice_providers_page.hint_${kind}`)}</div>
-                <label>
-                    ${this.t('company_voice_providers_page.field_provider')}
-                    <select
-                        .value=${draft.provider}
-                        @change=${(e) =>
-                            this._setField(kind, 'provider', e.target.value)}
-                    >
-                        <option value="">
-                            ${this.t('company_voice_providers_page.option_default')}
-                        </option>
-                        ${providers.map((p) => html`<option value=${p}>${p}</option>`)}
-                    </select>
-                </label>
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    .label=${this.t('company_voice_providers_page.field_provider')}
+                    .value=${draft.provider}
+                    .config=${{ values: providerValues }}
+                    .hint=${this.t(`company_voice_providers_page.hint_${kind}`)}
+                    @change=${(e) => this._setField(kind, 'provider', e.detail.value)}
+                ></platform-field>
                 ${this._renderModelRow(kind, draft)}
                 ${kind === 'tts'
                     ? html`
-                          <label>
-                              ${this.t('company_voice_providers_page.field_voice')}
-                              <glass-input
-                                  .value=${draft.voice}
-                                  @input=${(e) =>
-                                      this._setField(kind, 'voice', e.detail.value)}
-                              ></glass-input>
-                          </label>
-                          <label>
-                              ${this.t(
-                                  'company_voice_providers_page.field_response_format',
-                              )}
-                              <select
-                                  .value=${draft.response_format}
-                                  @change=${(e) =>
-                                      this._setField(
-                                          kind,
-                                          'response_format',
-                                          e.target.value,
-                                      )}
-                              >
-                                  ${RESPONSE_FORMATS.map(
-                                      (f) =>
-                                          html`<option value=${f}>${f === ''
-                                              ? this.t(
-                                                    'company_voice_providers_page.option_default',
-                                                )
-                                              : f}</option>`,
-                                  )}
-                              </select>
-                          </label>
+                          <platform-field
+                              type="string"
+                              mode="edit"
+                              .label=${this.t('company_voice_providers_page.field_voice')}
+                              .value=${draft.voice}
+                              @change=${(e) => this._setField(kind, 'voice', e.detail.value)}
+                          ></platform-field>
+                          <platform-field
+                              type="enum"
+                              mode="edit"
+                              .label=${this.t('company_voice_providers_page.field_response_format')}
+                              .value=${draft.response_format}
+                              .config=${{ values: responseFormatValues }}
+                              @change=${(e) => this._setField(kind, 'response_format', e.detail.value)}
+                          ></platform-field>
                       `
                     : nothing}
-                <label>
-                    ${this.t('company_voice_providers_page.field_language')}
-                    <glass-input
-                        .value=${draft.language}
-                        placeholder="ru-RU"
-                        @input=${(e) =>
-                            this._setField(kind, 'language', e.detail.value)}
-                    ></glass-input>
-                </label>
-                <label>
-                    ${this.t('company_voice_providers_page.field_sample_rate')}
-                    <glass-input
-                        .value=${draft.sample_rate}
-                        placeholder="16000"
-                        @input=${(e) =>
-                            this._setField(kind, 'sample_rate', e.detail.value)}
-                    ></glass-input>
-                </label>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('company_voice_providers_page.field_language')}
+                    .value=${draft.language}
+                    placeholder="ru-RU"
+                    @change=${(e) => this._setField(kind, 'language', e.detail.value)}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('company_voice_providers_page.field_sample_rate')}
+                    .value=${draft.sample_rate}
+                    placeholder="16000"
+                    @change=${(e) => this._setField(kind, 'sample_rate', e.detail.value)}
+                ></platform-field>
                 ${this._renderCredentials(kind, draft, secretsMeta)}
                 <div class="row">
                     <glass-button

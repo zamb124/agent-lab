@@ -12,6 +12,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import { asObject, asString } from '../../_helpers/flows-resolvers.js';
@@ -46,7 +47,14 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                 width: 100%; box-sizing: border-box;
             }
             .queue-pick { display: flex; gap: var(--space-2); align-items: stretch; }
-            .queue-pick input { flex: 1; }
+            .queue-pick .queue-search-input {
+                flex: 1;
+                min-width: 0;
+            }
+            .queue-pick platform-field {
+                flex: 1;
+                min-width: 0;
+            }
             .queue-list {
                 margin-top: var(--space-1);
                 max-height: 160px; overflow-y: auto;
@@ -90,18 +98,69 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this._emitPatch({ operator_queue_slug: slug });
     }
 
+    _onQueueSearchInput(e) {
+        this._queueSearch = e.target.value;
+    }
+
+    _onSlugField(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-hitl-node-editor: slug change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-hitl-node-editor: slug detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-hitl-node-editor: slug string required');
+        }
+        this._onQueueSlug(v);
+    }
+
     _onHandoffMode(e) {
-        const v = e.target.value === 'takeover' ? 'takeover' : 'single_reply';
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-hitl-node-editor: handoff change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-hitl-node-editor: handoff detail.value');
+        }
+        const raw = d.value;
+        if (typeof raw !== 'string') {
+            throw new Error('flows-hitl-node-editor: handoff string required');
+        }
+        const v = raw === 'takeover' ? 'takeover' : 'single_reply';
         this._emitPatch({ operator_handoff_mode: v });
     }
 
     _onTaskTitle(e) {
-        this._emitPatch({ operator_task_title: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-hitl-node-editor: task title change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-hitl-node-editor: task title detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-hitl-node-editor: task title string required');
+        }
+        this._emitPatch({ operator_task_title: v });
     }
 
     _onUserMessage(e) {
-        const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
-        this._emitPatch({ operator_user_message: value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-hitl-node-editor: user message change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-hitl-node-editor: user message detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-hitl-node-editor: user message string required');
+        }
+        this._emitPatch({ operator_user_message: v });
     }
 
     render() {
@@ -118,6 +177,10 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                 return asString(q.slug).toLowerCase().includes(search)
                     || asString(q.name).toLowerCase().includes(search);
             });
+        const handoffValues = [
+            { value: 'single_reply', label: this.t('hitl_node_editor.single_reply') },
+            { value: 'takeover', label: this.t('hitl_node_editor.takeover') },
+        ];
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -136,12 +199,19 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                         <label>${this.t('hitl_node_editor.queue_slug')}</label>
                         <div class="queue-pick">
                             <input
-                                type="text" placeholder=${this.t('hitl_node_editor.queue_picker')}
+                                type="text"
+                                class="queue-search-input"
+                                data-canon="search-as-you-type"
+                                placeholder=${this.t('hitl_node_editor.queue_picker')}
                                 .value=${this._queueSearch}
-                                @input=${(e) => { this._queueSearch = e.target.value; }}
+                                @input=${this._onQueueSearchInput}
                             />
-                            <input type="text" .value=${slug}
-                                @input=${(e) => this._onQueueSlug(e.target.value)} />
+                            <platform-field
+                                mode="edit"
+                                type="string"
+                                .value=${slug}
+                                @change=${this._onSlugField}
+                            ></platform-field>
                         </div>
                         ${filtered.length > 0 ? html`
                             <div class="queue-list">
@@ -155,17 +225,21 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                             </div>
                         ` : ''}
                     </div>
-                    <div class="field">
-                        <label>${this.t('hitl_node_editor.handoff_mode')}</label>
-                        <select .value=${handoffMode} @change=${this._onHandoffMode}>
-                            <option value="single_reply" ?selected=${handoffMode === 'single_reply'}>${this.t('hitl_node_editor.single_reply')}</option>
-                            <option value="takeover" ?selected=${handoffMode === 'takeover'}>${this.t('hitl_node_editor.takeover')}</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label>${this.t('hitl_node_editor.task_title')}</label>
-                        <input type="text" .value=${taskTitle} @input=${this._onTaskTitle} />
-                    </div>
+                    <platform-field
+                        mode="edit"
+                        type="enum"
+                        .label=${this.t('hitl_node_editor.handoff_mode')}
+                        .value=${handoffMode}
+                        .config=${{ values: handoffValues }}
+                        @change=${this._onHandoffMode}
+                    ></platform-field>
+                    <platform-field
+                        mode="edit"
+                        type="string"
+                        .label=${this.t('hitl_node_editor.task_title')}
+                        .value=${taskTitle}
+                        @change=${this._onTaskTitle}
+                    ></platform-field>
                     <div class="field">
                         <label>${this.t('hitl_node_editor.user_message')}</label>
                         <prompt-editor

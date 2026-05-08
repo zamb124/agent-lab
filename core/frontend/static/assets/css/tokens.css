@@ -260,6 +260,50 @@
     --navbar-collapsed-width: 72px;
     --header-height: 64px;
     --input-height: 48px;
+
+    /* ========== FIELD PILL (единый канон инпутов) ========== */
+    --field-pill-bg: var(--glass-tint-medium);
+    --field-pill-border: var(--border-subtle);
+    --field-pill-radius: 18px;
+    --field-pill-padding-y: 14px;
+    --field-pill-padding-x: 18px;
+    --field-pill-gap: 8px;
+    --field-pill-gap-textarea: 10px;
+    --field-pill-gap-tags: 10px;
+    --field-pill-textarea-min-height: 120px;
+    --field-pill-tag-input-min-width: 140px;
+
+    --field-pill-label-color: var(--text-secondary);
+    --field-pill-label-size: 11px;
+    --field-pill-label-weight: 600;
+    --field-pill-label-letter: 0.04em;
+
+    --field-pill-input-color: var(--text-primary);
+    --field-pill-input-size: 17px;
+    --field-pill-input-weight: 600;
+    --field-pill-input-line: 1.45;
+
+    --field-pill-readonly-muted-size: 14px;
+    --field-pill-muted-color: var(--text-tertiary);
+    --field-pill-hint-color: var(--text-tertiary);
+    --field-pill-hint-size: var(--text-xs);
+
+    --field-pill-tag-chip-bg: var(--glass-tint-strong);
+    --field-pill-tag-count-bg: var(--accent-subtle);
+    --field-pill-tag-count-color: var(--accent);
+    --field-pill-tag-count-size: 12px;
+
+    /* Компактная плашка (сайдбар namespace, узкие строки) */
+    --field-pill-compact-padding-y: 6px;
+    --field-pill-compact-padding-x: 12px;
+    --field-pill-compact-radius: var(--radius-md);
+    --field-pill-compact-gap: 4px;
+    --field-pill-compact-input-size: var(--text-sm);
+    --field-pill-compact-input-weight: var(--font-medium);
+    --field-pill-compact-select-chevron-padding-end: 22px;
+
+    --field-attr-row-gap: var(--space-2);
+
     --button-height: 44px;
     --icon-size-sm: 18px;
     --icon-size-md: 22px;
@@ -534,6 +578,11 @@
     --crm-selected-bg: rgba(153, 166, 249, 0.26);
     --crm-selected-stroke: var(--crm-button-primary-bg);
     --crm-selected-text: #6f7ee8;
+
+    --field-pill-label-color: var(--text-secondary);
+    --field-pill-hint-color: var(--text-secondary);
+    --field-pill-muted-color: var(--text-secondary);
+    --field-pill-tag-count-color: var(--crm-selected-text);
 
     --crm-info-bg: rgba(59, 130, 246, 0.1);
     --crm-info-stroke: rgba(59, 130, 246, 0.22);

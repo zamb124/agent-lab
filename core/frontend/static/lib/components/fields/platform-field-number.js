@@ -1,6 +1,5 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
-import { formStyles } from '../../styles/shared/form.styles.js';
 
 export class PlatformFieldNumber extends PlatformElement {
     static properties = {
@@ -9,24 +8,18 @@ export class PlatformFieldNumber extends PlatformElement {
         disabled: { type: Boolean },
         placeholder: { type: String },
         integer: { type: Boolean },
-        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
-        formStyles,
         css`
-            :host { display: block; }
-
-            .view-value {
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-                font-variant-numeric: tabular-nums;
+            :host {
+                display: block;
+                min-width: 0;
             }
 
-            .empty {
-                color: var(--text-disabled);
-                font-style: italic;
+            .field-pill-readonly-text {
+                font-variant-numeric: tabular-nums;
             }
         `,
     ];
@@ -38,7 +31,6 @@ export class PlatformFieldNumber extends PlatformElement {
         this.disabled = false;
         this.placeholder = '';
         this.integer = false;
-        this.flat = false;
     }
 
     _onInput(e) {
@@ -74,14 +66,14 @@ export class PlatformFieldNumber extends PlatformElement {
         if (this.mode === 'view') {
             const formatted = this._formatDisplay(this.value);
             return formatted != null
-                ? html`<span class="view-value">${formatted}</span>`
-                : html`<span class="view-value empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
+                ? html`<span class="field-pill-readonly-text">${formatted}</span>`
+                : html`<span class="field-pill-empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
         }
 
         return html`
             <input
                 type="number"
-                class="form-input"
+                class="field-pill-input"
                 step=${this.integer ? '1' : 'any'}
                 .value=${this.value != null ? String(this.value) : ''}
                 placeholder=${this.placeholder}

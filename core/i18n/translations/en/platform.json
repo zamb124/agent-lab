@@ -104,6 +104,7 @@
         "boolean_true": "Yes",
         "boolean_false": "No",
         "array_placeholder": "Enter a value and press Enter",
+        "array_remove_value": "Remove value",
         "object_placeholder": "JSON object",
         "external_refs_empty": "No external links",
         "external_refs_record_id": "Record ID",

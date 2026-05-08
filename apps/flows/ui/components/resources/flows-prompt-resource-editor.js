@@ -10,6 +10,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-resource-editor.js';
 import '../editors/flows-json-field-editor.js';
 import '@platform/lib/components/glass-button.js';
@@ -27,14 +28,6 @@ export class FlowsPromptResourceEditor extends PlatformElement {
             .body { padding: 0 var(--space-3); }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
-            textarea {
-                padding: var(--space-2); min-height: 120px; resize: vertical;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                font-family: var(--font-mono, monospace);
-            }
             .preview {
                 padding: var(--space-2);
                 background: var(--glass-solid-medium);
@@ -63,6 +56,21 @@ export class FlowsPromptResourceEditor extends PlatformElement {
         await this._render.run({ template, variables });
     }
 
+    _onTemplate(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-prompt-resource-editor: template change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-prompt-resource-editor: template detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-prompt-resource-editor: template string required');
+        }
+        this._emitConfig({ template: v });
+    }
+
     render() {
         const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
         const template = typeof cfg.template === 'string' ? cfg.template : '';
@@ -77,11 +85,13 @@ export class FlowsPromptResourceEditor extends PlatformElement {
                 @change=${(e) => this.emit('change', e.detail)}
             >
                 <div slot="settings" class="body">
-                    <div class="field">
-                        <label>${this.t('prompt_resource_editor.template')}</label>
-                        <textarea .value=${template}
-                            @input=${(e) => this._emitConfig({ template: e.target.value })}></textarea>
-                    </div>
+                    <platform-field
+                        mode="edit"
+                        type="text"
+                        .label=${this.t('prompt_resource_editor.template')}
+                        .value=${template}
+                        @change=${this._onTemplate}
+                    ></platform-field>
                     <div class="field">
                         <label>${this.t('prompt_resource_editor.variables')}</label>
                         <flows-json-field-editor

@@ -11,6 +11,7 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const FORM_NAME = 'office/document_rename_form';
 const RENAME_OP_NAME = 'office/document_rename';
@@ -75,7 +76,10 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
         this.isDirty = typeof draft.title === 'string' && draft.title.trim() !== curr.trim();
     }
 
-    _onTitleInput(e) { this._form.setField('title', e.target.value); }
+    _onTitleChange(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._form.setField('title', v);
+    }
 
     async _performSave() { this._form.submit(); }
 
@@ -107,14 +111,15 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
         const draft = this._form.draft;
         return html`
             <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
-                <div class="form-group">
-                    <label class="form-label">${this.t('document_rename_modal.label_title')}</label>
-                    <input type="text" class="form-input"
-                           autocomplete="off" spellcheck="false"
-                           .value=${draft.title}
-                           @input=${this._onTitleInput} />
-                    ${this._renderFieldError('title')}
-                </div>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('document_rename_modal.label_title')}
+                    .value=${draft.title}
+                    ?disabled=${this._form.submitting}
+                    @change=${this._onTitleChange}
+                ></platform-field>
+                ${this._renderFieldError('title')}
             </form>
         `;
     }

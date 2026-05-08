@@ -24,6 +24,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '../components/crm-mini-graph.js';
 import '../components/entity-card.js';
 import '../components/crm-related-neighbor-rows.js';
@@ -118,33 +119,19 @@ export class CRMEntityDetailPage extends PlatformPage {
                 color: var(--text-secondary);
                 line-height: 1.35;
             }
-            .detail-template-box {
+            .detail-template-inline {
                 display: inline-flex;
                 flex-direction: row;
                 align-items: center;
-                gap: 10px;
+                gap: var(--space-3);
                 box-sizing: border-box;
-                min-height: 40px;
                 min-width: 0;
                 max-width: min(480px, 100%);
-                padding: 0 14px;
-                background: var(--crm-surface-tint-strong);
-                border-radius: 20px;
-                border: 1px solid var(--crm-stroke);
             }
             .detail-template-select {
                 flex: 1;
                 min-width: 120px;
                 max-width: 260px;
-                height: 32px;
-                border-radius: 10px;
-                border: 1px solid var(--crm-stroke);
-                padding: 0 10px;
-                font-size: 14px;
-                font-weight: 600;
-                color: var(--text-primary);
-                background: var(--crm-surface);
-                box-sizing: border-box;
             }
             .detail-template-pencil {
                 flex-shrink: 0;
@@ -898,16 +885,30 @@ export class CRMEntityDetailPage extends PlatformPage {
         return '';
     }
 
+    _detailTemplateEnumConfig(items) {
+        if (!Array.isArray(items)) {
+            throw new Error('CRMEntityDetailPage._detailTemplateEnumConfig: items must be an array');
+        }
+        const values = [{ value: '', label: this.t('entity_modal.entity_template_pick_placeholder') }];
+        for (const it of items) {
+            if (!it || typeof it.type_id !== 'string' || it.type_id.length === 0) {
+                throw new Error('CRMEntityDetailPage._detailTemplateEnumConfig: type_id required');
+            }
+            const label = typeof it.name === 'string' && it.name.length > 0 ? it.name : it.type_id;
+            values.push({ value: it.type_id, label });
+        }
+        return { values };
+    }
+
     _onToggleTemplatePicker() {
         this._templatePickerOpen = !this._templatePickerOpen;
     }
 
     _onDetailTemplateSelect(ev) {
-        const sel = ev.target;
-        if (!(sel instanceof HTMLSelectElement)) {
-            throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: expected select');
+        if (!ev.detail || typeof ev.detail.value !== 'string') {
+            throw new Error('CRMEntityDetailPage._onDetailTemplateSelect: expected change detail.value string');
         }
-        const typeId = sel.value;
+        const typeId = ev.detail.value;
         if (typeId.length === 0) return;
         const items = this._entityTypes.items;
         const item = items.find((it) => it.type_id === typeId);
@@ -935,40 +936,54 @@ export class CRMEntityDetailPage extends PlatformPage {
         });
         const displayLabel = this._detailTemplateDisplayLabel(entity);
         const selectedTypeId = this._detailTemplateSelectedTypeId(entity);
+        const showInlinePencil = !this._templatePickerOpen || typesLoading;
         return html`
-            <div class="detail-template-box detail-template-box--edit">
+            <div class="detail-template-inline">
                 <span class="detail-template-label">${this.t('entity_card.object_template_label')}</span>
                 ${this._templatePickerOpen
                     ? html`
                         ${typesLoading
                             ? html`<span class="detail-template-value">${this.t('entity_modal.types_loading')}</span>`
                             : html`
-                                <select
+                                <platform-field
                                     class="detail-template-select"
+                                    pill-density="compact"
+                                    type="enum"
+                                    mode="edit"
+                                    label=""
                                     .value=${selectedTypeId}
+                                    .config=${this._detailTemplateEnumConfig(items)}
                                     @change=${this._onDetailTemplateSelect}
                                 >
-                                    <option value="">${this.t('entity_modal.entity_template_pick_placeholder')}</option>
-                                    ${items.map((it) => {
-                                        const label = typeof it.name === 'string' && it.name.length > 0
-                                            ? it.name
-                                            : it.type_id;
-                                        return html`<option value=${it.type_id}>${label}</option>`;
-                                    })}
-                                </select>
+                                    <button
+                                        type="button"
+                                        class="detail-template-pencil"
+                                        slot="suffix"
+                                        title=${this.t('entity_detail_page.edit_template')}
+                                        aria-label=${this.t('entity_detail_page.edit_template')}
+                                        ?disabled=${isBusy}
+                                        @click=${this._onToggleTemplatePicker}
+                                    >
+                                        <platform-icon name="edit" size="16"></platform-icon>
+                                    </button>
+                                </platform-field>
                             `}
                     `
                     : html`<span class="detail-template-value" title=${displayLabel}>${displayLabel}</span>`}
-                <button
-                    type="button"
-                    class="detail-template-pencil"
-                    title=${this.t('entity_detail_page.edit_template')}
-                    aria-label=${this.t('entity_detail_page.edit_template')}
-                    ?disabled=${isBusy}
-                    @click=${this._onToggleTemplatePicker}
-                >
-                    <platform-icon name="edit" size="16"></platform-icon>
-                </button>
+                ${showInlinePencil
+                    ? html`
+                        <button
+                            type="button"
+                            class="detail-template-pencil"
+                            title=${this.t('entity_detail_page.edit_template')}
+                            aria-label=${this.t('entity_detail_page.edit_template')}
+                            ?disabled=${isBusy}
+                            @click=${this._onToggleTemplatePicker}
+                        >
+                            <platform-icon name="edit" size="16"></platform-icon>
+                        </button>
+                    `
+                    : nothing}
             </div>
         `;
     }

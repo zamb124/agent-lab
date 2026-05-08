@@ -7,6 +7,7 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { asObject } from '../../_helpers/flows-resolvers.js';
 
 /** @param {string} provider */
@@ -67,16 +68,6 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
             }
-            .speech-field select,
-            .speech-field input {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-            }
             .speech-subtitle {
                 font-weight: var(--font-semibold);
                 font-size: var(--text-sm);
@@ -102,26 +93,9 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 color: var(--text-primary);
                 border-color: var(--border-medium);
             }
-            .flow-timeout-input {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-            }
-            .flow-timeout-label {
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-            }
             .flow-settings-heading {
                 font-weight: var(--font-semibold);
                 margin-bottom: var(--space-1);
-            }
-            .flow-timeout-hint {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                line-height: 1.4;
             }
             .speech-catalog-pending {
                 font-size: var(--text-xs);
@@ -266,19 +240,42 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return [];
     }
 
-    _renderModelSelect(kind, provider, catalog, currentModel, onPick) {
+    _enumChangeString(e, ctx) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error(`${ctx}: change detail object required`);
+        }
+        if (!('value' in d)) {
+            throw new Error(`${ctx}: detail.value required`);
+        }
+        const raw = d.value;
+        if (typeof raw !== 'string') {
+            throw new Error(`${ctx}: detail.value must be string`);
+        }
+        return raw;
+    }
+
+    _renderModelSelect(kind, provider, catalog, currentModel, onPick, emptyLabelKey) {
         const opts = this._modelOptions(kind, provider, catalog);
         if (opts.length === 0) {
             return nothing;
         }
+        const cur = typeof currentModel === 'string' ? currentModel : '';
+        const values = [
+            { value: '', label: this.t(emptyLabelKey) },
+            ...opts.map((id) => ({ value: id, label: id })),
+        ];
         return html`
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_model')}
-                <select .value=${currentModel} @change=${onPick}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_empty')}</option>
-                    ${opts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_model')}
+                    .value=${cur}
+                    .config=${{ values }}
+                    @change=${onPick}
+                ></platform-field>
+            </div>
         `;
     }
 
@@ -373,14 +370,18 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         const cur = typeof currentStr === 'string' ? currentStr : '';
         const ids = this._mergeStringOption(sortedIds, cur);
         if (ids.length === 0) return nothing;
+        const values = [{ value: '', label: this.t(emptyLabelKey) }, ...ids.map((id) => ({ value: id, label: id }))];
         return html`
-            <label class="speech-field">
-                ${this.t(labelKey)}
-                <select .value=${cur} @change=${onChange}>
-                    <option value="">${this.t(emptyLabelKey)}</option>
-                    ${ids.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t(labelKey)}
+                    .value=${cur}
+                    .config=${{ values }}
+                    @change=${onChange}
+                ></platform-field>
+            </div>
         `;
     }
 
@@ -389,29 +390,43 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         if (ints.length === 0) return nothing;
         const curStr =
             typeof currentNum === 'number' && Number.isFinite(currentNum) ? String(currentNum) : '';
+        const values = [
+            { value: '', label: this.t(emptyLabelKey) },
+            ...ints.map((n) => ({ value: String(n), label: String(n) })),
+        ];
         return html`
-            <label class="speech-field">
-                ${this.t(labelKey)}
-                <select .value=${curStr} @change=${onChange}>
-                    <option value="">${this.t(emptyLabelKey)}</option>
-                    ${ints.map((n) => html`<option value=${String(n)}>${n}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t(labelKey)}
+                    .value=${curStr}
+                    .config=${{ values }}
+                    @change=${onChange}
+                ></platform-field>
+            </div>
         `;
     }
 
-    _renderVadThresholdSelect(currentNum, onChange) {
+    _renderVadThresholdSelect(emptyLabelKey, currentNum, onChange) {
         const { opts, cur } = this._mergeThresholdOpts(
             typeof currentNum === 'number' ? currentNum : NaN,
         );
+        const values = [
+            { value: '', label: this.t(emptyLabelKey) },
+            ...opts.map((v) => ({ value: v, label: v })),
+        ];
         return html`
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_vad_threshold')}
-                <select .value=${cur} @change=${onChange}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_empty')}</option>
-                    ${opts.map((v) => html`<option value=${v}>${v}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_vad_threshold')}
+                    .value=${cur}
+                    .config=${{ values }}
+                    @change=${onChange}
+                ></platform-field>
+            </div>
         `;
     }
 
@@ -423,12 +438,15 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         const commit =
             scope === 'flow'
                 ? (block, field, value) => this._commitFlowSpeech(block, field, value)
-                : (block, field, value) => this._commitBranchSpeech(branchKey ?? '', block, field, value);
+                : (block, field, value) => {
+                    const bk = typeof branchKey === 'string' ? branchKey : '';
+                    this._commitBranchSpeech(bk, block, field, value);
+                };
         return {
             provider: (block) => (e) => {
-                const raw = e.target.value;
-                const t = typeof raw === 'string' ? raw.trim() : '';
-                commit(block, 'provider', t === '' ? null : t);
+                const raw = this._enumChangeString(e, `speech provider (${block})`);
+                const trimmed = raw.trim();
+                commit(block, 'provider', trimmed === '' ? null : trimmed);
                 commit(block, 'model', null);
                 if (block === 'tts') {
                     commit(block, 'voice', null);
@@ -436,26 +454,26 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 }
             },
             modelSelect: (block) => (e) => {
-                const raw = e.target.value;
-                const t = typeof raw === 'string' ? raw.trim() : '';
-                commit(block, 'model', t === '' ? null : t);
+                const raw = this._enumChangeString(e, `speech model (${block})`);
+                const trimmed = raw.trim();
+                commit(block, 'model', trimmed === '' ? null : trimmed);
                 if (block === 'tts') {
                     commit(block, 'voice', null);
                 }
             },
             enumSelect: (block, field) => (e) => {
-                const raw = e.target.value;
-                const t = typeof raw === 'string' ? raw.trim() : '';
-                commit(block, field, t === '' ? null : t);
+                const raw = this._enumChangeString(e, `speech ${block}.${field}`);
+                const trimmed = raw.trim();
+                commit(block, field, trimmed === '' ? null : trimmed);
             },
             intSelect: (block, field) => (e) => {
-                const raw = e.target.value;
-                const t = typeof raw === 'string' ? raw.trim() : '';
-                if (t === '') {
+                const raw = this._enumChangeString(e, `speech int ${block}.${field}`);
+                const trimmed = raw.trim();
+                if (trimmed === '') {
                     commit(block, field, null);
                     return;
                 }
-                const n = parseInt(t, 10);
+                const n = parseInt(trimmed, 10);
                 if (!Number.isFinite(n)) {
                     this.toast('flows:property_panel.speech_invalid_number', { type: 'error' });
                     return;
@@ -463,13 +481,13 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 commit(block, field, n);
             },
             vadThresholdSelect: () => (e) => {
-                const raw = e.target.value;
-                const t = typeof raw === 'string' ? raw.trim() : '';
-                if (t === '') {
+                const raw = this._enumChangeString(e, 'speech vad.threshold');
+                const trimmed = raw.trim();
+                if (trimmed === '') {
                     commit('vad', 'threshold', null);
                     return;
                 }
-                const n = Number(t);
+                const n = Number(trimmed);
                 if (!Number.isFinite(n)) {
                     this.toast('flows:property_panel.speech_invalid_number', { type: 'error' });
                     return;
@@ -477,14 +495,14 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 commit('vad', 'threshold', n);
             },
             responseFormat: (block) => (e) => {
-                const raw = e.target.value;
-                const t = typeof raw === 'string' ? raw.trim() : '';
-                commit(block, 'response_format', t === '' ? null : t);
+                const raw = this._enumChangeString(e, `speech ${block}.response_format`);
+                const trimmed = raw.trim();
+                commit(block, 'response_format', trimmed === '' ? null : trimmed);
             },
             vadProvider: (block) => (e) => {
-                const raw = e.target.value;
-                const t = typeof raw === 'string' ? raw.trim() : '';
-                commit(block, 'provider', t === '' ? null : t);
+                const raw = this._enumChangeString(e, `speech ${block}.provider`);
+                const trimmed = raw.trim();
+                commit(block, 'provider', trimmed === '' ? null : trimmed);
             },
         };
     }
@@ -512,15 +530,35 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         const vadSrOpts = this._vadSampleRateInts(catalog);
         const vadProvOpts = this._vadProviderIds(catalog);
         const h = this._speechHandlers('flow');
+        const sttProvValues = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_empty') },
+            ...provOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const ttsProvValuesFlow = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_empty') },
+            ...provOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const rfValuesFlow = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_empty') },
+            ...rfOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const vadProvValuesFlow = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_empty') },
+            ...vadProvOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const ttsRfStr = typeof tts.response_format === 'string' ? tts.response_format : '';
         return html`
             <div class="speech-subtitle">${this.t('property_panel.speech_section_stt')}</div>
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_provider')}
-                <select .value=${sttProv} @change=${h.provider('stt')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_empty')}</option>
-                    ${provOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_provider')}
+                    .value=${sttProv}
+                    .config=${{ values: sttProvValues }}
+                    @change=${h.provider('stt')}
+                ></platform-field>
+            </div>
             ${_needsSttTtsModel(sttProv)
                 ? this._renderModelSelect(
                       'stt',
@@ -528,6 +566,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       catalog,
                       sttModel,
                       h.modelSelect('stt'),
+                      'property_panel.speech_option_inherit_empty',
                   )
                 : nothing}
             ${this._renderSpeechStringSelect(
@@ -539,13 +578,16 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_tts')}</div>
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_provider')}
-                <select .value=${ttsProv} @change=${h.provider('tts')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_empty')}</option>
-                    ${provOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_provider')}
+                    .value=${ttsProv}
+                    .config=${{ values: ttsProvValuesFlow }}
+                    @change=${h.provider('tts')}
+                ></platform-field>
+            </div>
             ${_needsSttTtsModel(ttsProv)
                 ? this._renderModelSelect(
                       'tts',
@@ -553,6 +595,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       catalog,
                       ttsModel,
                       h.modelSelect('tts'),
+                      'property_panel.speech_option_inherit_empty',
                   )
                 : nothing}
             ${voiceOpts.length > 0
@@ -571,13 +614,16 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 'property_panel.speech_option_inherit_empty',
                 h.enumSelect('tts', 'language'),
             )}
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_response_format')}
-                <select .value=${typeof tts.response_format === 'string' ? tts.response_format : ''} @change=${h.responseFormat('tts')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_empty')}</option>
-                    ${rfOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_response_format')}
+                    .value=${ttsRfStr}
+                    .config=${{ values: rfValuesFlow }}
+                    @change=${h.responseFormat('tts')}
+                ></platform-field>
+            </div>
             ${this._renderSpeechIntSelect(
                 'property_panel.speech_field_sample_rate',
                 ttsSrOpts,
@@ -587,13 +633,16 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_vad')}</div>
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_provider')}
-                <select .value=${vadProv} @change=${h.vadProvider('vad')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_empty')}</option>
-                    ${vadProvOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_provider')}
+                    .value=${vadProv}
+                    .config=${{ values: vadProvValuesFlow }}
+                    @change=${h.vadProvider('vad')}
+                ></platform-field>
+            </div>
             ${this._renderSpeechIntSelect(
                 'property_panel.speech_field_sample_rate',
                 vadSrOpts,
@@ -602,6 +651,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 h.intSelect('vad', 'sample_rate'),
             )}
             ${this._renderVadThresholdSelect(
+                'property_panel.speech_option_inherit_empty',
                 typeof vad.threshold === 'number' ? vad.threshold : NaN,
                 h.vadThresholdSelect(),
             )}
@@ -636,6 +686,23 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         const vadSrOpts = this._vadSampleRateInts(catalog);
         const vadProvOpts = this._vadProviderIds(catalog);
         const h = this._speechHandlers('branch', branchKey);
+        const sttProvValuesBranch = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_flow') },
+            ...provOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const ttsProvValuesBranch = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_flow') },
+            ...provOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const rfValuesBranch = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_flow') },
+            ...rfOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const vadProvValuesBranch = [
+            { value: '', label: this.t('property_panel.speech_option_inherit_flow') },
+            ...vadProvOpts.map((id) => ({ value: id, label: id })),
+        ];
+        const ttsRfStrBranch = typeof tts.response_format === 'string' ? tts.response_format : '';
         return html`
             <div style="font-weight: var(--font-semibold); margin-top: var(--space-3);">${this.t(
                 'property_panel.speech_branch_title',
@@ -644,13 +711,16 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 ${this.t('property_panel.speech_branch_hint')}
             </div>
             <div class="speech-subtitle">${this.t('property_panel.speech_section_stt')}</div>
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_provider')}
-                <select .value=${sttProv} @change=${h.provider('stt')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_flow')}</option>
-                    ${provOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_provider')}
+                    .value=${sttProv}
+                    .config=${{ values: sttProvValuesBranch }}
+                    @change=${h.provider('stt')}
+                ></platform-field>
+            </div>
             ${_needsSttTtsModel(sttProv)
                 ? this._renderModelSelect(
                       'stt',
@@ -658,6 +728,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       catalog,
                       sttModel,
                       h.modelSelect('stt'),
+                      'property_panel.speech_option_inherit_flow',
                   )
                 : nothing}
             ${this._renderSpeechStringSelect(
@@ -669,13 +740,16 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_tts')}</div>
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_provider')}
-                <select .value=${ttsProv} @change=${h.provider('tts')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_flow')}</option>
-                    ${provOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_provider')}
+                    .value=${ttsProv}
+                    .config=${{ values: ttsProvValuesBranch }}
+                    @change=${h.provider('tts')}
+                ></platform-field>
+            </div>
             ${_needsSttTtsModel(ttsProv)
                 ? this._renderModelSelect(
                       'tts',
@@ -683,6 +757,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                       catalog,
                       ttsModel,
                       h.modelSelect('tts'),
+                      'property_panel.speech_option_inherit_flow',
                   )
                 : nothing}
             ${voiceOpts.length > 0
@@ -701,13 +776,16 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 'property_panel.speech_option_inherit_flow',
                 h.enumSelect('tts', 'language'),
             )}
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_response_format')}
-                <select .value=${typeof tts.response_format === 'string' ? tts.response_format : ''} @change=${h.responseFormat('tts')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_flow')}</option>
-                    ${rfOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_response_format')}
+                    .value=${ttsRfStrBranch}
+                    .config=${{ values: rfValuesBranch }}
+                    @change=${h.responseFormat('tts')}
+                ></platform-field>
+            </div>
             ${this._renderSpeechIntSelect(
                 'property_panel.speech_field_sample_rate',
                 ttsSrOpts,
@@ -717,13 +795,16 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
             )}
 
             <div class="speech-subtitle">${this.t('property_panel.speech_section_vad')}</div>
-            <label class="speech-field">
-                ${this.t('property_panel.speech_field_provider')}
-                <select .value=${vadProv} @change=${h.vadProvider('vad')}>
-                    <option value="">${this.t('property_panel.speech_option_inherit_flow')}</option>
-                    ${vadProvOpts.map((id) => html`<option value=${id}>${id}</option>`)}
-                </select>
-            </label>
+            <div class="speech-field">
+                <platform-field
+                    mode="edit"
+                    type="enum"
+                    .label=${this.t('property_panel.speech_field_provider')}
+                    .value=${vadProv}
+                    .config=${{ values: vadProvValuesBranch }}
+                    @change=${h.vadProvider('vad')}
+                ></platform-field>
+            </div>
             ${this._renderSpeechIntSelect(
                 'property_panel.speech_field_sample_rate',
                 vadSrOpts,
@@ -732,6 +813,7 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
                 h.intSelect('vad', 'sample_rate'),
             )}
             ${this._renderVadThresholdSelect(
+                'property_panel.speech_option_inherit_flow',
                 typeof vad.threshold === 'number' ? vad.threshold : NaN,
                 h.vadThresholdSelect(),
             )}
@@ -782,13 +864,23 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
     }
 
     _onFlowTimeout(e) {
-        const v = e.target.value.trim();
-        if (v === '') {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-flow-property-panel: flow_timeout change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-flow-property-panel: flow_timeout detail.value');
+        }
+        const val = d.value;
+        if (val === null) {
             this._editor.patchFlowConfig({ patch: { timeout: null } });
             return;
         }
-        const n = parseInt(v, 10);
-        if (!Number.isFinite(n) || n < 1) {
+        if (typeof val !== 'number' || !Number.isFinite(val)) {
+            throw new Error('flows-flow-property-panel: flow_timeout detail.value number|null');
+        }
+        const n = Math.floor(val);
+        if (n < 1) {
             return;
         }
         const clamped = Math.min(n, 3600);
@@ -801,21 +893,22 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         }
         const state = asObject(this._editor.state);
         const fc = state.flowConfig;
-        const raw = fc && typeof fc.timeout === 'number' ? String(fc.timeout) : '';
+        const timeoutVal =
+            fc && typeof fc === 'object' && typeof fc.timeout === 'number' && Number.isFinite(fc.timeout)
+                ? fc.timeout
+                : null;
         return html`
             <div class="card-inner">
                 <div class="card-title">${this.t('flow_property_panel.card_title')}</div>
                 <div class="flow-settings-heading">${this.t('property_panel.flow_settings_title')}</div>
-                <label class="flow-timeout-label">${this.t('property_panel.flow_timeout_seconds')}</label>
-                <input
-                    type="number"
-                    min="1"
-                    max="3600"
-                    class="flow-timeout-input"
-                    .value=${raw}
-                    @input=${this._onFlowTimeout}
-                />
-                <div class="flow-timeout-hint">${this.t('property_panel.flow_timeout_hint')}</div>
+                <platform-field
+                    mode="edit"
+                    type="integer"
+                    .label=${this.t('property_panel.flow_timeout_seconds')}
+                    .hint=${this.t('property_panel.flow_timeout_hint')}
+                    .value=${timeoutVal}
+                    @change=${this._onFlowTimeout}
+                ></platform-field>
                 ${this._renderSpeechSettings()}
             </div>
         `;

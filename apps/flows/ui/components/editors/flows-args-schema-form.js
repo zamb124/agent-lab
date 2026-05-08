@@ -15,9 +15,12 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-json-field-editor.js';
 
 export class FlowsArgsSchemaForm extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         schema: { type: Object },
         values: { type: Object },
@@ -33,14 +36,6 @@ export class FlowsArgsSchemaForm extends PlatformElement {
             label { font-size: var(--text-sm); color: var(--text-secondary); }
             label .req { color: var(--error); margin-left: 2px; }
             .desc { font-size: var(--text-xs); color: var(--text-tertiary); }
-            input, select {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
-            }
             input[type="checkbox"] { width: auto; }
             .empty {
                 font-size: var(--text-sm);
@@ -88,13 +83,18 @@ export class FlowsArgsSchemaForm extends PlatformElement {
     _renderField(it) {
         const value = this._value(it.key, it.defaultValue);
         if (it.enumValues) {
-            return html`<select
+            const enumStrings = it.enumValues.map((opt) => String(opt));
+            const optObjects = enumStrings.map((s) => ({ value: s, label: s }));
+            const strVal = value === undefined || value === null ? '' : String(value);
+            return html`<platform-field
+                type="enum"
+                mode="edit"
+                label=""
                 ?disabled=${this.readonly}
-                .value=${value === undefined || value === null ? '' : String(value)}
-                @change=${(e) => this._emit(it.key, e.target.value)}
-            >
-                ${it.enumValues.map((opt) => html`<option value=${opt}>${opt}</option>`)}
-            </select>`;
+                .value=${strVal}
+                .config=${{ values: optObjects }}
+                @change=${(e) => this._emit(it.key, e.detail.value)}
+            ></platform-field>`;
         }
         if (it.type === 'boolean') {
             return html`<input
@@ -105,17 +105,17 @@ export class FlowsArgsSchemaForm extends PlatformElement {
             />`;
         }
         if (it.type === 'number' || it.type === 'integer') {
-            const step = it.type === 'integer' ? '1' : 'any';
-            return html`<input
-                type="number" step=${step}
+            const numVal = value === undefined || value === null
+                ? null
+                : (typeof value === 'number' && Number.isFinite(value) ? value : null);
+            return html`<platform-field
+                type=${it.type === 'integer' ? 'integer' : 'number'}
+                mode="edit"
+                label=""
                 ?disabled=${this.readonly}
-                .value=${value === undefined || value === null ? '' : String(value)}
-                @input=${(e) => {
-                    const raw = e.target.value;
-                    const n = it.type === 'integer' ? parseInt(raw, 10) : parseFloat(raw);
-                    this._emit(it.key, Number.isFinite(n) ? n : null);
-                }}
-            />`;
+                .value=${numVal}
+                @change=${(e) => this._emit(it.key, e.detail.value)}
+            ></platform-field>`;
         }
         if (it.type === 'object' || it.type === 'array') {
             const json = value === undefined || value === null
@@ -129,12 +129,14 @@ export class FlowsArgsSchemaForm extends PlatformElement {
                 }}
             ></flows-json-field-editor>`;
         }
-        return html`<input
-            type="text"
+        return html`<platform-field
+            type="string"
+            mode="edit"
+            label=""
             ?disabled=${this.readonly}
             .value=${value === undefined || value === null ? '' : String(value)}
-            @input=${(e) => this._emit(it.key, e.target.value)}
-        />`;
+            @change=${(e) => this._emit(it.key, typeof e.detail.value === 'string' ? e.detail.value : '')}
+        ></platform-field>`;
     }
 
     render() {

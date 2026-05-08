@@ -4,6 +4,8 @@
  * Юридические условия репозитория ассетов нужно проверить отдельно перед продакшеном.
  */
 
+import { indexFromSeed } from './hash-string.js';
+
 /** Базовый URL каталога `png/` в репозитории alohe/avatars. */
 export const PLACEHOLDER_AVATAR_CDN_BASE = 'https://cdn.jsdelivr.net/gh/alohe/avatars/png/';
 
@@ -37,19 +39,13 @@ export const PLACEHOLDER_NON_PERSON_COLLECTION = 'toon';
 export const PLACEHOLDER_MEETING_COLLECTION = 'upstream';
 
 /**
- * Стабильный индекс 0..modulo-1 (тот же множитель 31, что hue в sync-hue).
+ * Стабильный индекс 0..modulo-1 — обёртка над core `indexFromSeed` (общий хеш с
+ * `hueFromString`/sync-аватарами).
  * @param {string} seed
  * @param {number} modulo
  */
 export function placeholderAvatarIndexFromSeed(seed, modulo) {
-    if (modulo <= 0) {
-        throw new Error('placeholderAvatarIndexFromSeed: modulo must be positive');
-    }
-    let h = 0;
-    for (let i = 0; i < seed.length; i += 1) {
-        h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-    }
-    return h % modulo;
+    return indexFromSeed(seed, modulo);
 }
 
 /**

@@ -14,6 +14,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const FORM_NAME = 'rag/namespace_create_form';
 const NAMESPACES_NAME = 'rag/namespaces';
@@ -26,11 +27,6 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
         ...PlatformFormModal.styles,
         css`
             .form-grid { display: grid; gap: var(--space-4); }
-            .hint {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                margin-top: var(--space-1);
-            }
             .footer-actions {
                 display: flex;
                 gap: var(--space-3);
@@ -76,12 +72,14 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
         return false;
     }
 
-    _onNameInput(event) {
-        this._form.setField('name', event.target.value);
+    _onNameChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._form.setField('name', v);
     }
 
-    _onDescriptionInput(event) {
-        this._form.setField('description', event.target.value);
+    _onDescriptionChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._form.setField('description', v);
     }
 
     async _performSave() {
@@ -119,32 +117,28 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
         const draft = this._form.draft;
         return html`
             <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>
-                <div class="form-group">
-                    <label class="form-label">${this.t('namespace_create_modal.label_name')}</label>
-                    <input
-                        type="text"
-                        class="form-input"
-                        autocomplete="off"
-                        spellcheck="false"
-                        placeholder=${this.t('namespace_create_modal.name_placeholder')}
-                        .value=${draft.name}
-                        @input=${this._onNameInput}
-                    />
-                    ${this._renderFieldError('name')}
-                    <div class="hint">${this.t('namespace_create_modal.name_hint')}</div>
-                </div>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('namespace_create_modal.label_name')}
+                    .hint=${this.t('namespace_create_modal.name_hint')}
+                    .placeholder=${this.t('namespace_create_modal.name_placeholder')}
+                    .value=${draft.name}
+                    ?disabled=${this._form.submitting}
+                    @change=${this._onNameChange}
+                ></platform-field>
+                ${this._renderFieldError('name')}
 
-                <div class="form-group">
-                    <label class="form-label">${this.t('namespace_create_modal.label_description')}</label>
-                    <textarea
-                        class="form-textarea"
-                        rows="3"
-                        placeholder=${this.t('namespace_create_modal.description_placeholder')}
-                        .value=${draft.description}
-                        @input=${this._onDescriptionInput}
-                    ></textarea>
-                    ${this._renderFieldError('description')}
-                </div>
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('namespace_create_modal.label_description')}
+                    .placeholder=${this.t('namespace_create_modal.description_placeholder')}
+                    .value=${draft.description}
+                    ?disabled=${this._form.submitting}
+                    @change=${this._onDescriptionChange}
+                ></platform-field>
+                ${this._renderFieldError('description')}
             </form>
         `;
     }

@@ -439,6 +439,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 <input
                     type="text"
                     class="search-input"
+                    data-canon="search-as-you-type"
                     .value=${this._query}
                     placeholder=${this.t('node_types_sidebar.search_placeholder')}
                     @input=${(e) => { this._query = e.target.value; }}

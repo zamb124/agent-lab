@@ -10,8 +10,6 @@ import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-modal.js';
 import '@platform/lib/components/glass-form-modal.js';
 import '@platform/lib/components/glass-button.js';
-import '@platform/lib/components/glass-input.js';
-import '@platform/lib/components/glass-textarea.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/glass-toast.js';
 import '@platform/lib/components/platform-modal-stack.js';

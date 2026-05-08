@@ -194,15 +194,13 @@ export class OfficeApp extends PlatformApp {
             default:
                 content = html`<office-documents-list-page></office-documents-list-page>`;
         }
-        const listOrCatalogs = routeKey === 'documents_list' || routeKey === 'documents_catalogs';
+        /** Редактор: остров без inset + без скролла у `.island-content` (iframe на весь слот). Список, каталоги, витрина сервисов — `padding="md"`, чтобы `<page-header>` и баннер не прилипали к рамке. */
         const islandContentNoScroll = editorMode;
-        const islandFullBleedHeader = listOrCatalogs;
         return html`
             <div class="sidebar"><office-sidebar></office-sidebar></div>
             <div class="main ${editorMode ? 'main--bleed' : ''}">
                 <platform-island
-                    padding=${islandContentNoScroll || islandFullBleedHeader ? 'none' : 'md'}
-                    ?safe-bottom=${!editorMode && (islandContentNoScroll || islandFullBleedHeader)}
+                    padding=${islandContentNoScroll ? 'none' : 'md'}
                     ?content-no-scroll=${islandContentNoScroll}
                 >${content}</platform-island>
             </div>

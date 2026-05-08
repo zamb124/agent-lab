@@ -9,6 +9,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-assistant-message-actions.js';
 import { asArray, asString, isPlainObject, toolCallIconName } from '../../_helpers/flows-resolvers.js';
+import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFlowVoiceHttpOrigin } from '../../_helpers/flow-voice-session.js';
 import {
     readTtsOutputEnabled,
@@ -1116,9 +1117,22 @@ export class ChatMessage extends PlatformElement {
                     .text=${text}
                     voice-base-url=""
                     show-edit
+                    @compose-edit=${this._forwardComposeEditToBus}
                 ></platform-assistant-message-actions>
             </div>
         `;
+    }
+
+    /**
+     * @param {CustomEvent<{ text?: string }>} e
+     */
+    _forwardComposeEditToBus(e) {
+        const detail = e.detail;
+        const text = detail && typeof detail.text === 'string' ? detail.text : '';
+        if (text === '') {
+            return;
+        }
+        this.dispatch('flows/chat/compose_edit', { text }, { source: 'local' });
     }
 
     _continueBreakpoint() {
@@ -1193,11 +1207,7 @@ export class ChatMessage extends PlatformElement {
     }
 
     _formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        return formatFileSize(bytes);
     }
 
     _renderUserInlineRunTrace() {

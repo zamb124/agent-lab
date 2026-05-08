@@ -38,8 +38,10 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
+import { formatDurationSeconds } from '@platform/lib/utils/format-duration.js';
 
 const SCROLL_TOP_THRESHOLD = 60;
 const COPY_LINK_FEEDBACK_MS = 2000;
@@ -1561,7 +1563,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             this.toast('composer.voice_insecure_context', { type: 'warning' });
             return;
         }
-        const id = e.target.value;
+        const id = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         await this._room.switchActiveDevice('audioinput', id);
         this._callPrefs.setDeviceId({ kind: 'audioinput', id });
     }
@@ -1572,14 +1574,14 @@ export class SyncCallOverlayModal extends PlatformModal {
             this.toast('composer.voice_insecure_context', { type: 'warning' });
             return;
         }
-        const id = e.target.value;
+        const id = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         await this._room.switchActiveDevice('videoinput', id);
         this._callPrefs.setDeviceId({ kind: 'videoinput', id });
     }
 
     async _onAudioOutputChange(e) {
         if (!this._room) return;
-        const id = e.target.value;
+        const id = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         await this._room.switchActiveDevice('audiooutput', id);
         this._callPrefs.setDeviceId({ kind: 'audiooutput', id });
     }
@@ -1925,9 +1927,7 @@ export class SyncCallOverlayModal extends PlatformModal {
     }
 
     _formatDuration(sec) {
-        const m = Math.floor(sec / 60).toString().padStart(2, '0');
-        const s = (sec % 60).toString().padStart(2, '0');
-        return `${m}:${s}`;
+        return formatDurationSeconds(sec);
     }
 
     _resolveDisplayName(identity) {
@@ -2039,6 +2039,29 @@ export class SyncCallOverlayModal extends PlatformModal {
         `;
     }
 
+    _deviceEnumConfig(listKey) {
+        const list = this._deviceLists[listKey];
+        if (!Array.isArray(list)) {
+            throw new Error(`SyncCallOverlayModal._deviceEnumConfig: invalid list "${listKey}"`);
+        }
+        if (list.length === 0) {
+            return { values: [{ value: '', label: this.t('call_overlay.no_devices') }] };
+        }
+        const values = [];
+        let i = 0;
+        for (const d of list) {
+            if (!d || typeof d.deviceId !== 'string') {
+                throw new Error('SyncCallOverlayModal._deviceEnumConfig: invalid device entry');
+            }
+            const label = typeof d.label === 'string' && d.label.length > 0
+                ? d.label
+                : this.t('call_overlay.device_fallback', { n: String(i + 1) });
+            values.push({ value: d.deviceId, label });
+            i += 1;
+        }
+        return { values };
+    }
+
     _renderDevicesMenuFields() {
         return html`
             ${_canUseMediaDevices()
@@ -2047,32 +2070,32 @@ export class SyncCallOverlayModal extends PlatformModal {
                     : '')
                 : html`<p class="menu-hint">${this.t('call_overlay.media_devices_insecure_hint')}</p>`}
             <div class="menu-section-title">${this.t('call_overlay.label_mic')}</div>
-            <select .value=${this._activeDeviceId('audioinput')} @change=${this._onAudioInputChange}>
-                ${this._deviceLists.audioinput.length === 0
-                    ? html`<option value="">${this.t('call_overlay.no_devices')}</option>`
-                    : this._deviceLists.audioinput.map((d, i) => html`
-                        <option value=${d.deviceId}>${d.label || this.t('call_overlay.device_fallback', { n: i + 1 })}</option>
-                    `)}
-            </select>
+            <platform-field
+                type="enum"
+                mode="edit"
+                .value=${this._activeDeviceId('audioinput')}
+                .config=${this._deviceEnumConfig('audioinput')}
+                @change=${this._onAudioInputChange}
+            ></platform-field>
             ${this.callType !== 'audio' ? html`
                 <div class="menu-section-title">${this.t('call_overlay.label_camera')}</div>
-                <select .value=${this._activeDeviceId('videoinput')} @change=${this._onVideoInputChange}>
-                    ${this._deviceLists.videoinput.length === 0
-                        ? html`<option value="">${this.t('call_overlay.no_devices')}</option>`
-                        : this._deviceLists.videoinput.map((d, i) => html`
-                            <option value=${d.deviceId}>${d.label || this.t('call_overlay.device_fallback', { n: i + 1 })}</option>
-                        `)}
-                </select>
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    .value=${this._activeDeviceId('videoinput')}
+                    .config=${this._deviceEnumConfig('videoinput')}
+                    @change=${this._onVideoInputChange}
+                ></platform-field>
             ` : ''}
             ${this._audioOutputSupported ? html`
                 <div class="menu-section-title">${this.t('call_overlay.label_speaker')}</div>
-                <select .value=${this._activeDeviceId('audiooutput')} @change=${this._onAudioOutputChange}>
-                    ${this._deviceLists.audiooutput.length === 0
-                        ? html`<option value="">${this.t('call_overlay.no_devices')}</option>`
-                        : this._deviceLists.audiooutput.map((d, i) => html`
-                            <option value=${d.deviceId}>${d.label || this.t('call_overlay.device_fallback', { n: i + 1 })}</option>
-                        `)}
-                </select>
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    .value=${this._activeDeviceId('audiooutput')}
+                    .config=${this._deviceEnumConfig('audiooutput')}
+                    @change=${this._onAudioOutputChange}
+                ></platform-field>
             ` : ''}
         `;
     }
@@ -2244,6 +2267,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 <div class="chat-composer">
                     <textarea
                         class="chat-input"
+                        data-canon="composer"
                         .value=${this._chatInput}
                         @input=${(e) => { this._chatInput = e.target.value; }}
                         @keydown=${this._onChatKeydown}

@@ -104,6 +104,7 @@
         "boolean_true": "Да",
         "boolean_false": "Нет",
         "array_placeholder": "Введите значение и нажмите Enter",
+        "array_remove_value": "Удалить значение",
         "object_placeholder": "JSON объект",
         "external_refs_empty": "Нет внешних ссылок",
         "external_refs_record_id": "ID записи",

@@ -12,7 +12,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
-import '@platform/lib/components/glass-input.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '../components/editors/flows-searchable-combobox.js';
 import { asArray, asString } from '../_helpers/flows-resolvers.js';
@@ -64,7 +64,7 @@ export class FlowsSessionsModal extends PlatformModal {
                 padding-bottom: 2px;
             }
             .flows-sessions-filters-one-row .flows-sessions-cb,
-            .flows-sessions-filters-one-row glass-input {
+            .flows-sessions-filters-one-row platform-field {
                 min-width: 0;
                 width: 100%;
             }
@@ -480,15 +480,15 @@ export class FlowsSessionsModal extends PlatformModal {
                             ariaLabel=${this.t('sessions_modal.filter_flow_aria')}
                             @change=${this._onFlowFilterCombobox}
                         ></flows-searchable-combobox>
-                        <glass-input
-                            .inputTitle=${this.t('sessions_modal.filter_branch_aria')}
+                        <platform-field
+                            type="string"
+                            mode="edit"
                             .value=${this._filterBranchId}
-                            placeholder=${this.t('sessions_modal.filter_branch')}
-                            @input=${(e) => {
-                                const t = e.target;
-                                this._filterBranchId = t && 'value' in t ? t.value : '';
+                            .placeholder=${this.t('sessions_modal.filter_branch')}
+                            @change=${(e) => {
+                                this._filterBranchId = e.detail.value;
                             }}
-                        ></glass-input>
+                        ></platform-field>
                         <div class="flows-sessions-dt">
                             <platform-date-picker
                                 compact

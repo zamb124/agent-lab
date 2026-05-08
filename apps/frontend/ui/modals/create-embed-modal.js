@@ -13,6 +13,7 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const POSITIONS = Object.freeze([
     { value: 'bottom-right', key: 'pos_br' },
@@ -40,7 +41,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         ...PlatformFormModal.styles,
         css`
             .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-            .form-grid .form-group.full { grid-column: 1 / -1; }
+            .form-grid > .full { grid-column: 1 / -1; }
             .hint { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 4px; }
             .radio-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
             .radio-row label {
@@ -53,7 +54,6 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             }
             .radio-row label.checked { background: var(--glass-solid-medium); border-color: var(--accent); }
             .switch-row { display: flex; align-items: center; gap: var(--space-2); }
-            textarea.form-input { min-height: 70px; font-family: var(--font-mono); font-size: var(--text-xs); }
             input[type=color] { width: 60px; height: 36px; padding: 0; border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); }
         `,
     ];
@@ -427,65 +427,76 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             <form @submit=${this._onSubmit}>
                 <div class="form-grid">
                     ${this.renderFieldError('submit')}
-                    <div class="form-group full">
-                        <label class="form-label">${this.t('embed_create_modal.label_name')}</label>
-                        <input
-                            class="form-input"
-                            name="name"
+                    <div class="full">
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_name')}
                             .value=${this._name}
-                            placeholder=${this.t('embed_create_modal.placeholder_name')}
-                            @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
-                            autofocus
-                        />
-                        <div class="hint">${this.t('embed_create_modal.name_hint')}</div>
+                            .placeholder=${this.t('embed_create_modal.placeholder_name')}
+                            .hint=${this.t('embed_create_modal.name_hint')}
+                            @change=${(e) => { this._name = e.detail.value; this.isDirty = true; }}
+                        ></platform-field>
                         ${this.renderFieldError('name')}
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label">${this.t('embed_create_modal.label_flow')}</label>
+                    <div>
                         ${flowsLoading
-                            ? html`<div class="hint">${this.t('embed_create_modal.loading_flows')}</div>`
-                            : html`
-                                <select
-                                    class="form-select"
-                                    .value=${this._flowId}
-                                    @change=${(e) => {
-                                        this._flowId = e.target.value;
-                                        this._skillId = this._initialSkillIdForFlow(this._selectedFlow());
-                                        this.isDirty = true;
-                                    }}
-                                >
-                                    <option value="">${this.t('embed_create_modal.flow_placeholder')}</option>
-                                    ${flows.map((f) => html`
-                                        <option value=${f.flow_id} ?selected=${this._flowId === f.flow_id}>
-                                            ${typeof f.name === 'string' && f.name !== '' ? f.name : f.flow_id}
-                                        </option>
-                                    `)}
-                                </select>
-                            `}
-                        <div class="hint">${this.t('embed_create_modal.flow_hint')}</div>
-                        ${this._flowId
-                            ? html`<div class="hint">${this.t('embed_create_modal.flow_id_technical')}: ${this._flowId}</div>`
-                            : ''}
+                            ? html`<platform-field
+                                  type="enum"
+                                  mode="edit"
+                                  .label=${this.t('embed_create_modal.label_flow')}
+                                  .value=${''}
+                                  .config=${{ values: [] }}
+                                  ?disabled=${true}
+                                  .placeholder=${this.t('embed_create_modal.loading_flows')}
+                              ></platform-field>`
+                            : html`<platform-field
+                                  type="enum"
+                                  mode="edit"
+                                  .label=${this.t('embed_create_modal.label_flow')}
+                                  .value=${this._flowId}
+                                  .config=${{
+                                      values: [
+                                          { value: '', label: this.t('embed_create_modal.flow_placeholder') },
+                                          ...flows.map((f) => ({
+                                              value: f.flow_id,
+                                              label: typeof f.name === 'string' && f.name !== '' ? f.name : f.flow_id,
+                                          })),
+                                      ],
+                                  }}
+                                  .hint=${this.t('embed_create_modal.flow_hint')}
+                                  @change=${(e) => {
+                                      this._flowId = e.detail.value;
+                                      this._skillId = this._initialSkillIdForFlow(this._selectedFlow());
+                                      this.isDirty = true;
+                                  }}
+                              ></platform-field>`}
                         ${this.renderFieldError('flow_id')}
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label">${this.t('embed_create_modal.label_skill')}</label>
+                    <div>
                         ${skillEnabled
-                            ? html`
-                                <select
-                                    class="form-select"
-                                    .value=${this._skillId}
-                                    @change=${(e) => { this._skillId = e.target.value; this.isDirty = true; }}
-                                >
-                                    ${skills.map((s) => html`
-                                        <option value=${s.id} ?selected=${this._skillId === s.id}>${s.name}</option>
-                                    `)}
-                                </select>
-                                <div class="hint">${this.t('embed_create_modal.skill_hint')}</div>
-                            `
-                            : html`<div class="hint">${this.t('embed_create_modal.skill_default_hint')}</div>`}
+                            ? html`<platform-field
+                                  type="enum"
+                                  mode="edit"
+                                  .label=${this.t('embed_create_modal.label_skill')}
+                                  .value=${this._skillId}
+                                  .config=${{
+                                      values: skills.map((s) => ({ value: s.id, label: s.name })),
+                                  }}
+                                  .hint=${this.t('embed_create_modal.skill_hint')}
+                                  @change=${(e) => { this._skillId = e.detail.value; this.isDirty = true; }}
+                              ></platform-field>`
+                            : html`<platform-field
+                                  type="enum"
+                                  mode="edit"
+                                  .label=${this.t('embed_create_modal.label_skill')}
+                                  .value=${''}
+                                  .config=${{ values: [] }}
+                                  ?disabled=${true}
+                                  .hint=${this.t('embed_create_modal.skill_default_hint')}
+                              ></platform-field>`}
                     </div>
 
                     ${this._isSystemCompany()
@@ -506,52 +517,33 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                               </div>
                               ${this._landingVisible
                                   ? html`
-                                        <div class="form-group full">
-                                            <label class="form-label">${this.t(
-                                                'embed_create_modal.label_landing_card_image_url',
-                                            )}</label>
-                                            <input
-                                                class="form-input"
+                                        <div class="full">
+                                            <platform-field
+                                                type="string"
+                                                input-type="url"
+                                                mode="edit"
+                                                .label=${this.t('embed_create_modal.label_landing_card_image_url')}
                                                 .value=${this._landingCardImageUrl}
-                                                placeholder=${this.t(
-                                                    'embed_create_modal.placeholder_landing_card_image_url',
-                                                )}
-                                                @input=${(e) => {
-                                                    this._landingCardImageUrl = e.target.value;
+                                                .placeholder=${this.t('embed_create_modal.placeholder_landing_card_image_url')}
+                                                .hint=${this.t('embed_create_modal.landing_card_image_hint')}
+                                                @change=${(e) => {
+                                                    this._landingCardImageUrl = e.detail.value;
                                                     this.isDirty = true;
                                                 }}
-                                            />
-                                            <div class="hint">${this.t('embed_create_modal.landing_card_image_hint')}</div>
+                                            ></platform-field>
                                             ${this.renderFieldError('landing_image')}
                                         </div>
-                                        <div class="form-group">
-                                            <label class="form-label">${this.t(
-                                                'embed_create_modal.label_landing_sort_order',
-                                            )}</label>
-                                            <input
-                                                class="form-input"
-                                                type="number"
-                                                step="1"
-                                                .value=${String(this._landingSortOrder)}
-                                                @input=${(e) => {
-                                                    const raw = e.target.value.trim();
-                                                    if (raw === '') {
-                                                        this._landingSortOrder = 0;
-                                                        this.isDirty = true;
-                                                        return;
-                                                    }
-                                                    const n = Number(raw);
-                                                    if (!Number.isFinite(n)) {
-                                                        throw new Error(
-                                                            'embed_create_modal: landing_sort_order must be a number',
-                                                        );
-                                                    }
-                                                    this._landingSortOrder = Math.trunc(n);
-                                                    this.isDirty = true;
-                                                }}
-                                            />
-                                            <div class="hint">${this.t('embed_create_modal.landing_sort_order_hint')}</div>
-                                        </div>
+                                        <platform-field
+                                            type="integer"
+                                            mode="edit"
+                                            .label=${this.t('embed_create_modal.label_landing_sort_order')}
+                                            .value=${this._landingSortOrder}
+                                            .hint=${this.t('embed_create_modal.landing_sort_order_hint')}
+                                            @change=${(e) => {
+                                                this._landingSortOrder = typeof e.detail.value === 'number' ? e.detail.value : 0;
+                                                this.isDirty = true;
+                                            }}
+                                        ></platform-field>
                                     `
                                   : ''}
                           `
@@ -569,55 +561,55 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                         ${this._renderRadioRow(THEMES, this._theme, (v) => { this._theme = v; })}
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label">${this.t('embed_create_modal.label_assistant_title')}</label>
-                        <input
-                            class="form-input"
-                            .value=${this._assistantTitle}
-                            placeholder=${this.t('embed_create_modal.placeholder_assistant_title')}
-                            @input=${(e) => { this._assistantTitle = e.target.value; this.isDirty = true; }}
-                        />
-                        <div class="hint">${this.t('embed_create_modal.assistant_title_hint')}</div>
-                    </div>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        .label=${this.t('embed_create_modal.label_assistant_title')}
+                        .value=${this._assistantTitle}
+                        .placeholder=${this.t('embed_create_modal.placeholder_assistant_title')}
+                        .hint=${this.t('embed_create_modal.assistant_title_hint')}
+                        @change=${(e) => { this._assistantTitle = e.detail.value; this.isDirty = true; }}
+                    ></platform-field>
 
-                    <div class="form-group full">
-                        <label class="form-label">${this.t('embed_create_modal.label_greeting_message')}</label>
-                        <textarea
-                            class="form-input"
+                    <div class="full">
+                        <platform-field
+                            type="text"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_greeting_message')}
                             .value=${this._greetingMessage}
-                            placeholder=${this.t('embed_create_modal.placeholder_greeting_message')}
-                            @input=${(e) => { this._greetingMessage = e.target.value; this.isDirty = true; }}
-                        ></textarea>
-                        <div class="hint">${this.t('embed_create_modal.greeting_message_hint')}</div>
+                            .placeholder=${this.t('embed_create_modal.placeholder_greeting_message')}
+                            .hint=${this.t('embed_create_modal.greeting_message_hint')}
+                            @change=${(e) => { this._greetingMessage = e.detail.value; this.isDirty = true; }}
+                        ></platform-field>
                     </div>
 
-                    <div class="form-group full">
-                        <label class="form-label">${this.t('embed_create_modal.label_message_placeholder')}</label>
-                        <input
-                            class="form-input"
+                    <div class="full">
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_message_placeholder')}
                             .value=${this._placeholder}
-                            placeholder=${this.t('embed_create_modal.default_message_placeholder')}
-                            @input=${(e) => { this._placeholder = e.target.value; this.isDirty = true; }}
-                        />
-                        <div class="hint">${this.t('embed_create_modal.message_placeholder_hint')}</div>
+                            .placeholder=${this.t('embed_create_modal.default_message_placeholder')}
+                            .hint=${this.t('embed_create_modal.message_placeholder_hint')}
+                            @change=${(e) => { this._placeholder = e.detail.value; this.isDirty = true; }}
+                        ></platform-field>
                         ${this.renderFieldError('placeholder')}
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label">${this.t('embed_create_modal.label_interface_locale')}</label>
-                        <select
-                            class="form-select"
-                            .value=${this._interfaceLocale}
-                            @change=${(e) => { this._interfaceLocale = e.target.value; this.isDirty = true; }}
-                        >
-                            ${LOCALES.map((l) => html`
-                                <option value=${l.value} ?selected=${this._interfaceLocale === l.value}>
-                                    ${this.t(`embed_create_modal.${l.key}`)}
-                                </option>
-                            `)}
-                        </select>
-                        <div class="hint">${this.t('embed_create_modal.interface_locale_hint')}</div>
-                    </div>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .label=${this.t('embed_create_modal.label_interface_locale')}
+                        .value=${this._interfaceLocale}
+                        .config=${{
+                            values: LOCALES.map((l) => ({
+                                value: l.value,
+                                label: this.t(`embed_create_modal.${l.key}`),
+                            })),
+                        }}
+                        .hint=${this.t('embed_create_modal.interface_locale_hint')}
+                        @change=${(e) => { this._interfaceLocale = e.detail.value; this.isDirty = true; }}
+                    ></platform-field>
 
                     <div class="form-group full">
                         <label class="form-label">${this.t('embed_create_modal.section_voice')}</label>
@@ -651,30 +643,28 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                         <div class="hint">${this.t('embed_create_modal.voice_default_on_hint')}</div>
                     </div>
 
-                    <div class="form-group full">
-                        <label class="form-label">${this.t('embed_create_modal.label_allowed_origins')}</label>
-                        <textarea
-                            class="form-input"
+                    <div class="full">
+                        <platform-field
+                            type="text"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_allowed_origins')}
                             .value=${this._allowedOrigins}
-                            placeholder=${this.t('embed_create_modal.placeholder_allowed_origins')}
-                            @input=${(e) => { this._allowedOrigins = e.target.value; this.isDirty = true; }}
-                        ></textarea>
-                        <div class="hint">${this.t('embed_create_modal.allowed_origins_hint')}</div>
+                            .placeholder=${this.t('embed_create_modal.placeholder_allowed_origins')}
+                            .hint=${this.t('embed_create_modal.allowed_origins_hint')}
+                            @change=${(e) => { this._allowedOrigins = e.detail.value; this.isDirty = true; }}
+                        ></platform-field>
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label">${this.t('embed_create_modal.label_guest_max_user_messages')}</label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="500"
-                            step="1"
-                            class="form-input"
+                    <div>
+                        <platform-field
+                            type="integer"
+                            mode="edit"
+                            .label=${this.t('embed_create_modal.label_guest_max_user_messages')}
                             .value=${this._guestMaxUserMessages}
-                            placeholder=${this.t('embed_create_modal.placeholder_guest_max_user_messages')}
-                            @input=${(e) => { this._guestMaxUserMessages = e.target.value; this.isDirty = true; }}
-                        />
-                        <div class="hint">${this.t('embed_create_modal.guest_max_user_messages_hint')}</div>
+                            .placeholder=${this.t('embed_create_modal.placeholder_guest_max_user_messages')}
+                            .hint=${this.t('embed_create_modal.guest_max_user_messages_hint')}
+                            @change=${(e) => { this._guestMaxUserMessages = String(e.detail.value); this.isDirty = true; }}
+                        ></platform-field>
                         ${this.renderFieldError('guest_max_user_messages')}
                     </div>
 

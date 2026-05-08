@@ -22,6 +22,7 @@ import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ACCESS_REQUESTS_NAME = 'crm/access_requests';
@@ -258,8 +259,11 @@ export class CRMAccessRequestModal extends PlatformModal {
         return item === undefined ? null : item;
     }
 
-    _onMessageInput(e) {
-        const value = String(e.target.value);
+    _onMessageChange(e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('CRMAccessRequestModal: message field expects change detail.value string');
+        }
+        const value = e.detail.value;
         if (value.length <= MESSAGE_MAX) {
             this._message = value;
         } else {
@@ -351,13 +355,14 @@ export class CRMAccessRequestModal extends PlatformModal {
     _renderMessageField() {
         return html`
             <div>
-                <div class="field-label">${this.t('access_request_modal.message_label')}</div>
-                <textarea
-                    class="text-area"
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    label=${this.t('access_request_modal.message_label')}
                     placeholder=${this.t('access_request_modal.message_placeholder')}
                     .value=${this._message}
-                    @input=${this._onMessageInput}
-                ></textarea>
+                    @change=${this._onMessageChange}
+                ></platform-field>
                 <div class="char-count">${this._message.length} / ${MESSAGE_MAX}</div>
             </div>
         `;

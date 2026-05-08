@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class SyncCallLinkEditModal extends PlatformFormModal {
     static modalKind = 'sync.call_link_edit';
@@ -52,24 +53,32 @@ export class SyncCallLinkEditModal extends PlatformFormModal {
 
     renderBody() {
         return html`
-            <div class="form-group">
-                <label class="form-label">${this.t('call_link.field_title')}</label>
-                <input
-                    class="form-input"
-                    type="text"
-                    .value=${this._title}
-                    @input=${(e) => { this._title = e.target.value; this.isDirty = true; }}
-                />
-            </div>
-            <div class="form-group">
-                <label class="form-label">${this.t('call_link.field_scheduled_at')}</label>
-                <input
-                    class="form-input"
-                    type="datetime-local"
-                    .value=${this._scheduledAt}
-                    @input=${(e) => { this._scheduledAt = e.target.value; this.isDirty = true; }}
-                />
-            </div>
+            <platform-field
+                type="string"
+                mode="edit"
+                label=${this.t('call_link.field_title')}
+                .value=${this._title}
+                @change=${(e) => {
+                    if (!e.detail || typeof e.detail.value !== 'string') {
+                        throw new Error('call link edit: title expects detail.value string');
+                    }
+                    this._title = e.detail.value;
+                    this.isDirty = true;
+                }}
+            ></platform-field>
+            <platform-field
+                type="datetime"
+                mode="edit"
+                label=${this.t('call_link.field_scheduled_at')}
+                .value=${this._scheduledAt.length > 0 ? this._scheduledAt : null}
+                @change=${(e) => {
+                    if (!e.detail || typeof e.detail.value !== 'string') {
+                        throw new Error('call link edit: scheduled_at expects detail.value string');
+                    }
+                    this._scheduledAt = e.detail.value;
+                    this.isDirty = true;
+                }}
+            ></platform-field>
         `;
     }
 

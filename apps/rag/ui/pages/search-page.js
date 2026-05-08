@@ -9,8 +9,8 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import '@platform/lib/components/layout/page-header.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 
 const LIMIT_OPTIONS = [3, 5, 10, 20];
@@ -27,15 +27,20 @@ export class SearchPage extends PlatformPage {
     static styles = [
         PlatformPage.styles,
         buttonStyles,
-        formStyles,
         css`
             :host { display: flex; flex-direction: column; height: 100%; }
             .breadcrumbs-wrap { flex-shrink: 0; margin-bottom: var(--space-3); }
             .search-form { display: flex; flex-direction: column; gap: var(--space-4); margin-bottom: var(--space-6); }
-            .form-row { display: flex; gap: var(--space-3); }
-            .search-input-wrapper { position: relative; }
-            .search-input { width: 100%; padding-right: 100px; }
-            .search-btn { position: absolute; right: 4px; top: 4px; bottom: 4px; }
+            .form-row { display: flex; gap: var(--space-3); align-items: flex-start; }
+            .form-row platform-field { flex: 1; min-width: 0; }
+            .form-row .limit-field { max-width: 150px; flex: 0 1 150px; }
+            .query-row {
+                display: flex;
+                flex-direction: row;
+                align-items: flex-end;
+                gap: var(--space-3);
+            }
+            .query-row .query-field { flex: 1; min-width: 0; }
             .results { flex: 1; display: flex; flex-direction: column; gap: var(--space-4); }
             .result-card {
                 padding: var(--space-4); background: var(--glass-solid-subtle);
@@ -73,20 +78,57 @@ export class SearchPage extends PlatformPage {
 
     _runSearch(e) {
         e.preventDefault();
-        if (!this._query || !this._selectedNamespace) {
+        const q = typeof this._query === 'string' ? this._query.trim() : '';
+        const ns = typeof this._selectedNamespace === 'string' ? this._selectedNamespace.trim() : '';
+        if (q.length === 0 || ns.length === 0) {
             this.toast('search_view.fill_all_fields', { type: 'warning' });
             return;
         }
         this._search.run({
-            namespaceId: this._selectedNamespace,
-            query: this._query,
+            namespaceId: ns,
+            query: q,
             limit: this._limit,
         });
     }
 
-    _onNamespaceChange(e) { this._selectedNamespace = e.target.value; }
-    _onLimitChange(e) { this._limit = parseInt(e.target.value, 10); }
-    _onQueryInput(e) { this._query = e.target.value; }
+    _onNamespaceChange(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._selectedNamespace = v;
+    }
+
+    _onLimitChange(e) {
+        const raw = e.detail && e.detail.value != null ? String(e.detail.value) : '';
+        const n = parseInt(raw, 10);
+        if (!Number.isFinite(n)) {
+            throw new Error('SearchPage._onLimitChange: invalid limit');
+        }
+        this._limit = n;
+    }
+
+    _onQueryChange(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._query = v;
+    }
+
+    _namespaceEnumConfig(namespaces) {
+        const opts = [{ value: '', label: this.t('search_view.select_namespace') }];
+        if (!Array.isArray(namespaces)) {
+            throw new Error('SearchPage._namespaceEnumConfig: namespaces must be array');
+        }
+        for (const ns of namespaces) {
+            if (!ns || typeof ns.name !== 'string' || ns.name.length === 0) {
+                throw new Error('SearchPage._namespaceEnumConfig: invalid namespace item');
+            }
+            opts.push({ value: ns.name, label: ns.name });
+        }
+        return { values: opts };
+    }
+
+    _limitEnumConfig() {
+        return {
+            values: LIMIT_OPTIONS.map((n) => ({ value: String(n), label: String(n) })),
+        };
+    }
 
     _renderResults() {
         const result = this._search.lastResult;
@@ -135,41 +177,43 @@ export class SearchPage extends PlatformPage {
 
             <form class="search-form" @submit=${this._runSearch.bind(this)}>
                 <div class="form-row">
-                    <div class="form-group" style="flex: 1;">
-                        <label class="form-label">${this.t('search_view.label_namespace')}</label>
-                        <select class="form-select"
-                                @change=${this._onNamespaceChange}
-                                .value=${this._selectedNamespace}>
-                            <option value="">${this.t('search_view.select_namespace')}</option>
-                            ${namespaces.map((ns) => html`
-                                <option value=${ns.name}>${ns.name}</option>
-                            `)}
-                        </select>
-                    </div>
-                    <div class="form-group" style="max-width: 150px;">
-                        <label class="form-label">${this.t('search_view.label_limit')}</label>
-                        <select class="form-select"
-                                @change=${this._onLimitChange}
-                                .value=${String(this._limit)}>
-                            ${LIMIT_OPTIONS.map((n) => html`<option value=${n}>${n}</option>`)}
-                        </select>
-                    </div>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .label=${this.t('search_view.label_namespace')}
+                        .value=${this._selectedNamespace}
+                        .config=${this._namespaceEnumConfig(namespaces)}
+                        ?disabled=${loading}
+                        @change=${this._onNamespaceChange}
+                    ></platform-field>
+                    <platform-field
+                        class="limit-field"
+                        type="enum"
+                        mode="edit"
+                        .label=${this.t('search_view.label_limit')}
+                        .value=${String(this._limit)}
+                        .config=${this._limitEnumConfig()}
+                        ?disabled=${loading}
+                        @change=${this._onLimitChange}
+                    ></platform-field>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">${this.t('search_view.label_query')}</label>
-                    <div class="search-input-wrapper">
-                        <input class="form-input search-input"
-                               type="text"
-                               placeholder=${this.t('search_view.query_placeholder')}
-                               .value=${this._query}
-                               @input=${this._onQueryInput} />
-                        <button type="submit" class="btn btn-primary search-btn" ?disabled=${loading}>
-                            ${loading
-                                ? this.t('search_view.searching')
-                                : this.t('search_view.find_button')}
-                        </button>
-                    </div>
+                <div class="query-row">
+                    <platform-field
+                        class="query-field"
+                        type="string"
+                        mode="edit"
+                        .label=${this.t('search_view.label_query')}
+                        .placeholder=${this.t('search_view.query_placeholder')}
+                        .value=${this._query}
+                        ?disabled=${loading}
+                        @change=${this._onQueryChange}
+                    ></platform-field>
+                    <button type="submit" class="btn btn-primary search-btn" ?disabled=${loading}>
+                        ${loading
+                            ? this.t('search_view.searching')
+                            : this.t('search_view.find_button')}
+                    </button>
                 </div>
             </form>
 

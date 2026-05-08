@@ -9,6 +9,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-resource-editor.js';
 
 export class FlowsSecretResourceEditor extends PlatformElement {
@@ -44,6 +45,21 @@ export class FlowsSecretResourceEditor extends PlatformElement {
         this.emit('change', { resourceId: this.resourceId, patch: { config: { ...base, ...patch } } });
     }
 
+    _onKey(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-secret-resource-editor: key change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-secret-resource-editor: key detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-secret-resource-editor: key string required');
+        }
+        this._emitConfig({ key: v });
+    }
+
     render() {
         const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
         const key = typeof cfg.key === 'string' ? cfg.key : '';
@@ -56,9 +72,14 @@ export class FlowsSecretResourceEditor extends PlatformElement {
             >
                 <div slot="settings">
                     <div class="field">
-                        <label>${this.t('secret_resource_editor.key')}</label>
-                        <input type="text" placeholder="MY_SECRET_KEY" .value=${key}
-                            @input=${(e) => this._emitConfig({ key: e.target.value })} />
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('secret_resource_editor.key')}
+                            .placeholder=${'MY_SECRET_KEY'}
+                            .value=${key}
+                            @change=${this._onKey}
+                        ></platform-field>
                         <div class="hint">${this.t('secret_resource_editor.hint')}</div>
                     </div>
                 </div>

@@ -3,32 +3,34 @@
  *
  * Два режима рендера, выбираются атрибутом `expanded`:
  *
- * 1. compact: Header (имя) → … → «Запустить» в шапке `flows-floating-panel`
- *    (поиск панели — обход DOM с переходом ShadowRoot→host; иначе fallback).
+ * 1. compact: header (только слот Run) → «Запустить» в шапке `flows-floating-panel`; заголовок панели — `cfg.name` или id;
+ *    хост панели ищется обходом DOM ShadowRoot→host, иначе fallback.
  * 2. модалка «Инструмент» в LLM: `.embedded-tool-run-host` в шапке `flows-embedded-tool-config-modal`.
  * 3. expanded: .panel-main — fallback для Run без floating-panel и без этой модалки.
  * Запуск: `useOp('flows/code_execute')`, UI — `flows-node-run-control` (imperative mount).
  *
  * Эмитит наружу:
  *   - change { nodeId, patch } — patch с top-level полями NodeConfig
- *     (name/description/tags/incoming_policy/exception_as_response/exception_allow_types/files/resources). Type-specific
+ *     (description/tags/incoming_policy/exception_as_response/exception_allow_types/files/resources). Type-specific
  *     патчи приходят через slot='settings' (дочерний редактор сам диспатчит
  *     change на хосте).
  *   - rename-node { oldId, newId }
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
+import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '../editors/flows-state-mapping-editor.js';
-import '../editors/flows-tag-input.js';
 import '../editors/flows-json-field-editor.js';
 import '../flows-node-run-control.js';
+import '@platform/lib/components/fields/platform-field.js';
+import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
 import {
     nextCodeExecuteClientId,
     setCodeExecuteRequestClientId,
@@ -55,10 +57,12 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         _draftId: { state: true },
         _stateDraft: { state: true },
         _mappingTab: { state: true },
+        _addResourcePick: { state: true },
     };
 
     static styles = [
         PlatformElement.styles,
+        fieldPillStyles,
         css`
             :host {
                 display: block;
@@ -127,10 +131,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 padding-bottom: var(--space-3);
                 border-bottom: 1px solid var(--border-subtle);
             }
-            .header-row {
-                display: flex; align-items: center; gap: var(--space-2);
-                flex-wrap: wrap;
-            }
             .header-run-fallback:empty { display: none; }
             .panel-run-fallback:empty { display: none; }
             .panel-run-fallback:not(:empty) {
@@ -141,16 +141,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 margin-bottom: var(--space-2);
                 border-bottom: 1px solid var(--border-subtle);
             }
-            input.name {
-                flex: 1; min-width: 0;
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary); font: inherit;
-                font-weight: var(--font-semibold);
-            }
-
             /* form fields */
             .field { display: flex; flex-direction: column; gap: var(--space-1); }
             .field-label {
@@ -172,37 +162,19 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             .exception-response-head platform-switch {
                 margin-left: auto;
             }
-            input.text, select.policy, input.id-edit {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary); font: inherit;
-                width: 100%;
-                box-sizing: border-box;
+            .field-pill-file-refs-shell {
+                gap: var(--field-pill-gap);
             }
-            input.id-edit, input.text.id-readonly {
+
+            glass-button {
+                flex-shrink: 0;
+            }
+
+            .node-id-rename-input {
                 font-family: var(--font-mono, monospace);
                 font-size: var(--text-sm);
             }
-            input.text.id-readonly {
-                background: var(--glass-solid-subtle);
-                color: var(--text-secondary);
-            }
-            textarea.desc {
-                width: 100%; box-sizing: border-box;
-                padding: var(--space-2);
-                resize: vertical; min-height: 60px;
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary); font: inherit;
-            }
 
-            .id-row {
-                display: flex; align-items: center; gap: var(--space-2);
-            }
-            .id-row input { flex: 1; min-width: 0; }
             .icon-btn {
                 background: none; border: none; padding: 4px;
                 display: inline-flex; align-items: center;
@@ -236,67 +208,8 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 display: inline-flex; align-items: center;
             }
             .item-row .remove:hover { color: var(--error); }
-            .empty {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                padding: var(--space-1) var(--space-2);
-            }
 
-            .file-list {
-                display: flex; flex-direction: column; gap: var(--space-1);
-            }
-            .file-row {
-                display: flex; align-items: center; gap: var(--space-2);
-                padding: var(--space-2);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-            }
-            .file-row .file-icon { flex-shrink: 0; }
-            .file-row .file-info {
-                flex: 1; min-width: 0;
-                display: flex; flex-direction: column; gap: 2px;
-            }
-            .file-row .file-name {
-                font-size: var(--text-sm); color: var(--text-primary);
-                font-weight: var(--font-medium);
-                overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            }
-            .file-row .file-meta {
-                font-size: var(--text-xs); color: var(--text-tertiary);
-            }
-            .file-row .file-remove {
-                background: none; border: none; padding: var(--space-1); cursor: pointer;
-                color: var(--text-tertiary);
-                display: inline-flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-sm);
-                flex-shrink: 0;
-            }
-            .file-row .file-remove:hover { color: var(--error); background: var(--glass-solid-strong); }
-
-            .files-attach {
-                display: flex; align-items: center; gap: var(--space-2);
-            }
-            .files-attach .attach-btn {
-                width: 36px; height: 36px;
-                display: inline-flex; align-items: center; justify-content: center;
-                background: var(--glass-solid-medium);
-                border: 1px dashed var(--glass-border-medium);
-                border-radius: var(--radius-md);
-                color: var(--text-tertiary);
-                cursor: pointer;
-            }
-            .files-attach .attach-btn:hover { color: var(--accent); border-color: var(--accent); }
             input[type="file"] { display: none; }
-
-            .add-row select {
-                width: 100%;
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary); font: inherit;
-            }
 
             .mapping-tabs {
                 display: flex; gap: var(--space-1); margin-bottom: var(--space-2);
@@ -344,6 +257,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._draftId = '';
         this._mappingTab = 'input';
         this._stateDraft = null;
+        this._addResourcePick = '';
         this._fileUpload = this.useOp('flows/file_upload');
         this._nodeExecute = this.useOp('flows/code_execute');
         this._exceptionAbsorbAllowNamesOp = this.useOp('flows/exception_absorb_allow_names');
@@ -531,19 +445,48 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
-    _onName(e) { this._emitPatch({ name: e.target.value }); }
-    _onDescription(e) { this._emitPatch({ description: e.target.value }); }
+    _stringArrayFromChangeDetail(e, ctx) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error(`${ctx}: change detail object required`);
+        }
+        if (!('value' in d)) {
+            throw new Error(`${ctx}: detail.value required`);
+        }
+        if (!Array.isArray(d.value)) {
+            throw new Error(`${ctx}: detail.value must be array`);
+        }
+        const out = [];
+        for (let i = 0; i < d.value.length; i += 1) {
+            if (typeof d.value[i] !== 'string') {
+                throw new Error(`${ctx}: detail.value[${i}] must be string`);
+            }
+            out.push(d.value[i]);
+        }
+        return out;
+    }
+
+    _onDescription(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._emitPatch({ description: v });
+    }
     _onTags(e) {
-        const tags = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
-        this._emitPatch({ tags });
+        this._emitPatch({ tags: this._stringArrayFromChangeDetail(e, 'flows-base-node-editor:tags') });
     }
     _onPolicy(e) {
-        const v = e.target.value === 'all' ? 'all' : 'any';
+        const raw = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        const v = raw === 'all' ? 'all' : 'any';
         this._emitPatch({ incoming_policy: v });
     }
 
     _onNodeTimeout(e) {
-        const raw = e.target.value.trim();
+        let raw = '';
+        const dv = e.detail ? e.detail.value : undefined;
+        if (typeof dv === 'number' && Number.isFinite(dv)) {
+            raw = String(Math.trunc(dv));
+        } else if (typeof dv === 'string') {
+            raw = dv.trim();
+        }
         if (raw === '') {
             this._emitPatch({ node_timeout_seconds: null });
             return;
@@ -572,7 +515,13 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         if (cap === null) {
             return;
         }
-        const raw = e.target.value.trim();
+        let raw = '';
+        const dv = e.detail ? e.detail.value : undefined;
+        if (typeof dv === 'number' && Number.isFinite(dv)) {
+            raw = String(Math.trunc(dv));
+        } else if (typeof dv === 'string') {
+            raw = dv.trim();
+        }
         if (raw === '') {
             this._emitPatch({ max_visits_per_run: null });
             return;
@@ -626,18 +575,23 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             return html`<glass-spinner></glass-spinner>`;
         }
         return html`
-            <flows-tag-input
-                .tags=${Array.isArray(cfg?.exception_allow_types) ? cfg.exception_allow_types : []}
-                .allowedValues=${allowNames}
-                placeholder=${this.t('base_node_editor.exception_allow_types_placeholder')}
+            <platform-field
+                type="array"
+                mode="edit"
+                .label=${this.t('base_node_editor.exception_allow_types')}
+                .hint=${this.t('base_node_editor.exception_allow_types_hint')}
+                .value=${Array.isArray(cfg?.exception_allow_types) ? cfg.exception_allow_types : []}
+                .config=${{ allowed_values: allowNames }}
+                .placeholder=${this.t('base_node_editor.exception_allow_types_placeholder')}
                 @change=${this._onExceptionAllowTypes}
-            ></flows-tag-input>
+            ></platform-field>
         `;
     }
 
     _onExceptionAllowTypes(e) {
-        const types = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
-        this._emitPatch({ exception_allow_types: types });
+        this._emitPatch({
+            exception_allow_types: this._stringArrayFromChangeDetail(e, 'flows-base-node-editor:exception_allow_types'),
+        });
     }
     _onMapping(field, e) {
         const mapping = e.detail?.mapping;
@@ -690,11 +644,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     }
 
     _formatFileSize(bytes) {
-        if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return '';
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-        return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+        return formatFileSize(bytes);
     }
 
     _onRemoveFile(idx) {
@@ -703,8 +653,8 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     }
 
     _onAddResource(e) {
-        const resourceId = e.target.value;
-        e.target.value = '';
+        const resourceId = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._addResourcePick = '';
         if (!resourceId) return;
         const resources = this.nodeConfig?.resources && typeof this.nodeConfig.resources === 'object'
             ? this.nodeConfig.resources
@@ -721,6 +671,34 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const next = { ...resources };
         delete next[key];
         this._emitPatch({ resources: next });
+    }
+
+    _incomingPolicyEnumConfig() {
+        return {
+            values: [
+                { value: 'any', label: this.t('base_node_editor.incoming_policy_any') },
+                { value: 'all', label: this.t('base_node_editor.incoming_policy_all') },
+            ],
+        };
+    }
+
+    _resourceAddEnumConfig(availableResources) {
+        const values = [{ value: '', label: this.t('base_node_editor.resources_add_pick') }];
+        if (!Array.isArray(availableResources)) {
+            throw new Error('flows-base-node-editor: _resourceAddEnumConfig expects array');
+        }
+        for (const r of availableResources) {
+            if (!r || typeof r.resource_id !== 'string' || r.resource_id.length === 0) {
+                throw new Error('flows-base-node-editor: invalid resource item');
+            }
+            const nm = typeof r.name === 'string' ? r.name : r.resource_id;
+            const tp = typeof r.type === 'string' ? r.type : '';
+            values.push({
+                value: r.resource_id,
+                label: `${nm} · ${tp}`,
+            });
+        }
+        return { values };
     }
 
     _stateValue() {
@@ -741,18 +719,8 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     }
 
     _renderHeader() {
-        const cfg = this.nodeConfig;
-        const name = typeof cfg?.name === 'string' ? cfg.name : '';
         return html`
             <div class="header">
-                <div class="header-row">
-                    <input
-                        class="name" type="text"
-                        placeholder=${this.t('base_node_editor.name')}
-                        .value=${name}
-                        @input=${this._onName}
-                    />
-                </div>
                 <div class="header-run-fallback" data-node-run-fallback="compact"></div>
             </div>
         `;
@@ -765,120 +733,150 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const policy = cfg?.incoming_policy === 'all' ? 'all' : 'any';
         const files = Array.isArray(cfg?.files) ? cfg.files : [];
         const visitsCap = this._graphMaxIterationsCap();
+        const idLabel = this.t('base_node_editor.node_id');
         return html`
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_basic')}</div>
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.node_id')}</span>
                     ${this.embedded ? html`
-                        <div class="id-row">
-                            <input class="text id-readonly" type="text" readonly .value=${this.nodeId} />
-                        </div>
+                        <platform-field
+                            type="string"
+                            mode="view"
+                            .label=${idLabel}
+                            .value=${this.nodeId}
+                        ></platform-field>
                     ` : this._editingId ? html`
-                        <div class="id-row">
-                            <input
-                                class="id-edit" type="text"
-                                .value=${this._draftId}
-                                @input=${(e) => { this._draftId = e.target.value; }}
-                                @keydown=${(e) => {
-                                    if (e.key === 'Enter') this._commitRenameId();
-                                    if (e.key === 'Escape') this._cancelRenameId();
-                                }}
-                            />
-                            <glass-button size="sm" variant="primary" @click=${this._commitRenameId}>${this.t('base_node_editor.rename_save')}</glass-button>
-                            <glass-button size="sm" variant="ghost" @click=${this._cancelRenameId}>${this.t('base_node_editor.rename_cancel')}</glass-button>
+                        <div class="field-pill">
+                            <div class="field-pill-head">
+                                <span class="field-pill-label">${idLabel}</span>
+                            </div>
+                            <div class="field-pill-control">
+                                <input
+                                    class="field-pill-input node-id-rename-input"
+                                    type="text"
+                                    data-canon="inline-edit"
+                                    .value=${this._draftId}
+                                    @input=${(e) => { this._draftId = e.target.value; }}
+                                    @keydown=${(e) => {
+                                        if (e.key === 'Enter') this._commitRenameId();
+                                        if (e.key === 'Escape') this._cancelRenameId();
+                                    }}
+                                />
+                                <glass-button size="sm" variant="primary" @click=${this._commitRenameId}>${this.t('base_node_editor.rename_save')}</glass-button>
+                                <glass-button size="sm" variant="ghost" @click=${this._cancelRenameId}>${this.t('base_node_editor.rename_cancel')}</glass-button>
+                            </div>
                         </div>
                     ` : html`
-                        <div class="id-row">
-                            <input class="text id-readonly" type="text" readonly .value=${this.nodeId} />
-                            <button class="icon-btn" type="button" title=${this.t('base_node_editor.rename_id')} @click=${this._startRenameId}>
+                        <platform-field
+                            type="string"
+                            mode="view"
+                            .label=${idLabel}
+                            .value=${this.nodeId}
+                        >
+                            <button
+                                class="icon-btn"
+                                type="button"
+                                slot="suffix"
+                                title=${this.t('base_node_editor.rename_id')}
+                                @click=${this._startRenameId}
+                            >
                                 <platform-icon name="edit" size="14"></platform-icon>
                             </button>
-                        </div>
+                        </platform-field>
                     `}
                 </div>
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.name')}</span>
-                    <input
-                        class="text" type="text"
-                        placeholder=${this.t('base_node_editor.name')}
-                        .value=${typeof cfg?.name === 'string' ? cfg.name : ''}
-                        @input=${this._onName}
-                    />
-                </div>
-                <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.description')}</span>
-                    <textarea
-                        class="desc"
-                        placeholder=${this.t('base_node_editor.description_hint')}
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        .label=${this.t('base_node_editor.description')}
+                        .placeholder=${this.t('base_node_editor.description_hint')}
                         .value=${description}
-                        @input=${this._onDescription}
-                    ></textarea>
+                        @change=${this._onDescription}
+                    ></platform-field>
                 </div>
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.tags')}</span>
-                    <flows-tag-input
-                        .tags=${tags}
-                        placeholder=${this.t('tag_input.placeholder')}
+                    <platform-field
+                        type="array"
+                        mode="edit"
+                        .label=${this.t('base_node_editor.tags')}
+                        .placeholder=${this.t('tag_input.placeholder')}
+                        .value=${tags}
+                        .config=${{ preserve_case: true }}
                         @change=${this._onTags}
-                    ></flows-tag-input>
+                    ></platform-field>
                 </div>
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.files_section')}</span>
-                    ${files.length === 0
-                        ? html`<div class="empty">${this.t('base_node_editor.files_empty')}</div>`
-                        : html`<div class="file-list">
-                            ${files.map((f, i) => {
-                                const fname = typeof f.name === 'string' && f.name !== '' ? f.name : f.file_id;
-                                const fmime = typeof f.mime_type === 'string' ? f.mime_type : '';
-                                const fsize = this._formatFileSize(f.size);
-                                return html`
-                                    <div class="file-row">
-                                        <platform-icon
-                                            class="file-icon"
-                                            file-icon
-                                            name=${resolveFileIconKey(fname, fmime)}
-                                            size="28"
-                                        ></platform-icon>
-                                        <div class="file-info">
-                                            <span class="file-name" title=${fname}>${fname}</span>
-                                            ${fsize
-                                                ? html`<span class="file-meta">${fsize}</span>`
-                                                : ''}
+                    <div class="field-pill field-pill-file-refs-shell">
+                        <div class="field-pill-head">
+                            <span class="field-pill-label">${this.t('base_node_editor.files_section')}</span>
+                        </div>
+                        <div class="field-pill-file-refs-body">
+                            ${files.length === 0
+                                ? html`<p class="field-pill-empty">${this.t('base_node_editor.files_empty')}</p>`
+                                : files.map((f, i) => {
+                                    const fname = typeof f.name === 'string' && f.name !== '' ? f.name : f.file_id;
+                                    const fmime = typeof f.mime_type === 'string' ? f.mime_type : '';
+                                    const fsize = this._formatFileSize(f.size);
+                                    return html`
+                                        <div class="field-pill-file-ref-row">
+                                            <platform-icon
+                                                class="field-pill-file-ref-icon"
+                                                file-icon
+                                                name=${resolveFileIconKey(fname, fmime)}
+                                                size="22"
+                                            ></platform-icon>
+                                            <div class="field-pill-file-ref-info">
+                                                <span class="field-pill-file-ref-line" title=${fname}>
+                                                    <span class="field-pill-file-ref-name">${fname}</span>
+                                                    ${fsize
+                                                        ? html`
+                                                            <span class="field-pill-file-ref-sep">\u00a0\u00b7\u00a0</span>
+                                                            <span class="field-pill-file-ref-meta">${fsize}</span>
+                                                          `
+                                                        : ''}
+                                                </span>
+                                            </div>
+                                            <button
+                                                class="field-pill-file-ref-remove"
+                                                type="button"
+                                                aria-label=${this.t('base_node_editor.files_remove')}
+                                                title=${this.t('base_node_editor.files_remove')}
+                                                @click=${() => this._onRemoveFile(i)}
+                                            >
+                                                <platform-icon name="x" size="16"></platform-icon>
+                                            </button>
                                         </div>
-                                        <button class="file-remove" type="button" title=${this.t('base_node_editor.files_remove')} @click=${() => this._onRemoveFile(i)}>
-                                            <platform-icon name="trash" size="14"></platform-icon>
-                                        </button>
-                                    </div>
-                                `;
-                            })}
-                        </div>`}
-                    <div class="files-attach">
-                        <label class="attach-btn" title=${this.t('base_node_editor.files_section')}>
-                            <platform-icon name="paperclip" size="18"></platform-icon>
-                            <input type="file" @change=${this._onUploadFile} ?disabled=${this._fileUpload.busy} />
-                        </label>
+                                    `;
+                                })}
+                            <div class="field-pill-file-refs-attach">
+                                <label class="field-pill-file-refs-attach-btn" title=${this.t('base_node_editor.files_section')}>
+                                    <platform-icon name="paperclip" size="18"></platform-icon>
+                                    <input type="file" @change=${this._onUploadFile} ?disabled=${this._fileUpload.busy} />
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.incoming_policy')}</span>
-                    <select class="policy" .value=${policy} @change=${this._onPolicy}>
-                        <option value="any" ?selected=${policy === 'any'}>${this.t('base_node_editor.incoming_policy_any')}</option>
-                        <option value="all" ?selected=${policy === 'all'}>${this.t('base_node_editor.incoming_policy_all')}</option>
-                    </select>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .label=${this.t('base_node_editor.incoming_policy')}
+                        .value=${policy}
+                        .config=${this._incomingPolicyEnumConfig()}
+                        @change=${this._onPolicy}
+                    ></platform-field>
                 </div>
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.node_timeout_seconds')}</span>
-                    <input
-                        class="text"
-                        type="number"
-                        min="1"
-                        max="3600"
-                        placeholder=""
-                        .value=${typeof cfg?.node_timeout_seconds === 'number' ? String(cfg.node_timeout_seconds) : ''}
-                        @input=${this._onNodeTimeout}
-                    />
-                    <div class="field-hint">${this.t('base_node_editor.node_timeout_hint')}</div>
+                    <platform-field
+                        type="integer"
+                        mode="edit"
+                        .label=${this.t('base_node_editor.node_timeout_seconds')}
+                        .hint=${this.t('base_node_editor.node_timeout_hint')}
+                        .value=${typeof cfg?.node_timeout_seconds === 'number' ? cfg.node_timeout_seconds : null}
+                        @change=${this._onNodeTimeout}
+                    ></platform-field>
                 </div>
                 ${visitsCap === null ? html`
                 <div class="field">
@@ -889,17 +887,14 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 </div>
                 ` : html`
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.max_visits_per_run')}</span>
-                    <input
-                        class="text"
-                        type="number"
-                        min="1"
-                        max="${visitsCap}"
-                        placeholder=""
-                        .value=${typeof cfg?.max_visits_per_run === 'number' ? String(cfg.max_visits_per_run) : ''}
-                        @input=${this._onMaxVisitsPerRun}
-                    />
-                    <div class="field-hint">${this.t('base_node_editor.max_visits_per_run_hint')}</div>
+                    <platform-field
+                        type="integer"
+                        mode="edit"
+                        .label=${this.t('base_node_editor.max_visits_per_run')}
+                        .hint=${this.t('base_node_editor.max_visits_per_run_hint')}
+                        .value=${typeof cfg?.max_visits_per_run === 'number' ? cfg.max_visits_per_run : null}
+                        @change=${this._onMaxVisitsPerRun}
+                    ></platform-field>
                 </div>
                 `}
                 <div class="field">
@@ -918,9 +913,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 </div>
                 ${cfg?.exception_as_response === true ? html`
                 <div class="field">
-                    <span class="field-label">${this.t('base_node_editor.exception_allow_types')}</span>
                     ${this._renderExceptionAllowTypesControls(cfg)}
-                    <div class="field-hint">${this.t('base_node_editor.exception_allow_types_hint')}</div>
                 </div>
                 ` : ''}
             </div>
@@ -930,13 +923,15 @@ export class FlowsBaseNodeEditor extends PlatformElement {
     _renderResources() {
         const cfg = this.nodeConfig;
         const resources = cfg?.resources && typeof cfg.resources === 'object' ? cfg.resources : {};
+        const resourceIds = Object.keys(resources);
         const allResources = Array.isArray(this._resources.items) ? this._resources.items : [];
         const availableResources = allResources.filter((r) => r && !resources[r.resource_id]);
+        const resourcesAttachHint = resourceIds.length === 0 ? this.t('base_node_editor.resources_empty') : '';
         return html`
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_resources')}</div>
-                ${Object.keys(resources).length === 0
-                    ? html`<div class="empty">${this.t('base_node_editor.resources_empty')}</div>`
+                ${resourceIds.length === 0
+                    ? nothing
                     : html`<div class="item-list">
                         ${Object.entries(resources).map(([key, ref]) => {
                             const def = allResources.find((r) => r && r.resource_id === (ref && typeof ref.resource_id === 'string' ? ref.resource_id : key));
@@ -952,12 +947,15 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         })}
                     </div>`}
                 <div class="add-row">
-                    <select @change=${this._onAddResource}>
-                        <option value="">${this.t('base_node_editor.resources_add_pick')}</option>
-                        ${availableResources.map((r) => html`
-                            <option value=${r.resource_id}>${r.name} · ${r.type}</option>
-                        `)}
-                    </select>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .label=${this.t('base_node_editor.resources_add_field')}
+                        .hint=${resourcesAttachHint}
+                        .value=${this._addResourcePick}
+                        .config=${this._resourceAddEnumConfig(availableResources)}
+                        @change=${this._onAddResource}
+                    ></platform-field>
                 </div>
             </div>
         `;

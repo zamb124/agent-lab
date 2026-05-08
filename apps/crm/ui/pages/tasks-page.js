@@ -1125,6 +1125,7 @@ export class CRMTasksPage extends CRMNamespacePage {
                             <input
                                 class="search-input"
                                 type="text"
+                                data-canon="search-as-you-type"
                                 style="flex:1;min-width:0;width:100%;box-sizing:border-box"
                                 placeholder=${this.t('search.placeholder')}
                                 .value=${this._filter}
@@ -1187,6 +1188,7 @@ export class CRMTasksPage extends CRMNamespacePage {
                         <input
                             class="search-input"
                             type="text"
+                            data-canon="search-as-you-type"
                             placeholder=${this.t('search.placeholder')}
                             .value=${this._filter}
                             @input=${this._onSearchInput}

@@ -241,6 +241,61 @@ if rg -q "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.js'; then
     rg -n "${RESOURCES_NULLISH_PATTERN}" apps -g '*.resource.js' >&2 || true
 fi
 
+# 16. Field canon (raw <input>/<textarea>/<select>) — отдельный детектор
+#     scripts/check_field_canon.sh (make check-field-canon). Здесь: п.17 (.form-*/.field-pill*
+#     CSS в apps/<svc>/ui/**) и 18 (импорт glass-input/glass-textarea).
+
+# 17. Локальные .form-* / .field-pill* CSS правила в apps/<svc>/ui/** запрещены —
+#     стили только в core/frontend/static/lib/styles/shared/field-pill.styles.js;
+#     кастомизация — токены --field-pill-* в core/frontend/static/assets/css/tokens.css.
+PILL_CSS_PATTERN='\.(form-(input|textarea|select|group|label)|field-pill(-(input|textarea|select|label|empty|readonly-text|readonly-muted|readonly-inline)|--(textarea|tags))?)\s*[\{,]'
+if rg -nP "${PILL_CSS_PATTERN}" apps -g '*.js' >/dev/null 2>&1; then
+    fail "локальные .form-*/.field-pill* CSS правила в apps/<svc>/ui/**.js запрещены — стили только в core/frontend/static/lib/styles/shared/field-pill.styles.js (токены --field-pill-* в tokens.css)"
+    rg -nP "${PILL_CSS_PATTERN}" apps -g '*.js' >&2 || true
+fi
+
+# 18. Импорт удалённых glass-input / glass-textarea — запрещён.
+GLASS_INPUT_PATTERN="from\s+['\"]@platform/lib/components/glass-(input|textarea)\.js['\"]"
+if rg -nP "${GLASS_INPUT_PATTERN}" apps core -g '*.js' >/dev/null 2>&1; then
+    fail "импорт @platform/lib/components/glass-(input|textarea).js запрещён — компоненты удалены в PHASE 1.5; используйте <platform-field type='string|text' input-type='...'>"
+    rg -nP "${GLASS_INPUT_PATTERN}" apps core -g '*.js' >&2 || true
+fi
+
+# 19. Utility canon: локальные дубли core форматтеров / валидаторов / escape / hash в apps/<svc>/ui/**.
+#     Вся «общая» утильность (formatFileSize / formatDuration / formatPlatformNumber /
+#     formatPlatformDate / escapeHtml / hashString31 / EMAIL_RE / digitsOnly /
+#     placeholder-storage-keys) живёт в core/frontend/static/lib/utils/.
+#     Локальная копия — нарушение DRY и канона.
+APPS_UI_GLOBS=( apps -g '*.js' --glob 'apps/*/ui/**' )
+
+# 19a. Hardcoded 'ru-RU' в Intl.* / toLocaleString / toLocaleDateString.
+RUHARDCODE_PATTERN="Intl\.(NumberFormat|DateTimeFormat)\(\s*['\"]ru-RU['\"]|toLocale(Date|Time)?String\(\s*['\"]ru-RU['\"]"
+if rg -nP "${RUHARDCODE_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
+    fail "hardcoded 'ru-RU' в Intl.* / toLocaleString запрещён — используйте core/utils/format-platform-{number,date}.js с локалью из state.i18n"
+    rg -nP "${RUHARDCODE_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+
+# 19b. Локальный EMAIL regex / digitsOnly / phone проверка.
+EMAIL_RE_PATTERN="\bEMAIL_RE\b\s*=\s*/|\b_digitsOnly\s*\(|/\^\[\^\\\\s@\]\+@"
+if rg -nP "${EMAIL_RE_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
+    fail "локальный EMAIL_RE / _digitsOnly / email regex запрещён — используйте core/utils/validators.js (isValidEmail, digitsOnly, isValidPhone, EMAIL_RE)"
+    rg -nP "${EMAIL_RE_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+
+# 19c. Локальный escapeHtml.
+ESCAPE_HTML_PATTERN="function\s+escapeHtml\s*\(|const\s+escapeHtml\s*=\s*function|const\s+escapeHtml\s*=\s*\("
+if rg -nP "${ESCAPE_HTML_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
+    fail "локальный escapeHtml запрещён — используйте core/utils/escape-html.js"
+    rg -nP "${ESCAPE_HTML_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+
+# 19d. Локальный hash*31 цикл вне core/.
+LOCAL_HASH_PATTERN="h\s*=\s*\(\s*h\s*\*\s*31\s*\+\s*[a-zA-Z_]+\.charCodeAt"
+if rg -nP "${LOCAL_HASH_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
+    fail "локальный hash*31 цикл запрещён — используйте core/utils/hash-string.js (hashString31, hueFromString, indexFromSeed)"
+    rg -nP "${LOCAL_HASH_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

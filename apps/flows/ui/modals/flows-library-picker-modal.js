@@ -11,7 +11,7 @@ import { html, css, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
-import '@platform/lib/components/glass-input.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import { embedAssistantMarkdownToHtml } from '@platform/lib/embed-chat/embed-chat-markdown.js';
@@ -381,8 +381,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _onSearchInput(e) {
-        const v = e.target;
-        this._search = typeof v.value === 'string' ? v.value : '';
+        this._search = typeof e.detail?.value === 'string' ? e.detail.value : '';
     }
 
     _setTag(t) {
@@ -489,12 +488,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             <div class="bar">
                 ${tagRow}
                 <div class="search-wrap">
-                    <glass-input
-                        type="search"
+                    <platform-field
+                        type="string"
+                        input-type="search"
+                        mode="edit"
                         .value=${this._search}
-                        @input=${this._onSearchInput}
-                        placeholder=${this.t('tool_picker_modal.search_placeholder')}
-                    ></glass-input>
+                        .placeholder=${this.t('tool_picker_modal.search_placeholder')}
+                        @change=${this._onSearchInput}
+                    ></platform-field>
                 </div>
             </div>
         `;

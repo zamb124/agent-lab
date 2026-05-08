@@ -20,12 +20,15 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-json-field-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
 const REASONING_LEVELS = Object.freeze(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 
 export class FlowsLlmConfigEditor extends PlatformElement {
+    static i18nNamespace = 'flows';
+
     static properties = {
         config: { type: Object },
         _showAdvanced: { state: true },
@@ -62,34 +65,6 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 max-width: 100%;
             }
             .full { grid-column: 1 / -1; }
-            label {
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                line-height: 1.2;
-            }
-            input, select {
-                padding: 4px var(--space-2);
-                font-size: var(--text-sm);
-                line-height: 1.2;
-                height: 28px;
-                border-radius: var(--radius-sm);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font-family: inherit;
-                width: 100%;
-                min-width: 0;
-                max-width: 100%;
-                box-sizing: border-box;
-            }
-            input::placeholder {
-                color: var(--text-tertiary);
-                opacity: 0.7;
-            }
-            input:focus, select:focus {
-                outline: none;
-                border-color: var(--accent);
-            }
             details {
                 margin-top: var(--space-2);
                 padding: var(--space-2);
@@ -151,11 +126,11 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         return typeof v === 'string' ? v : '';
     }
 
-    _readNumberOrEmpty(field) {
+    _readNumberField(field) {
         const cfg = this.config;
-        if (!cfg || typeof cfg !== 'object') return '';
+        if (!cfg || typeof cfg !== 'object') return null;
         const v = cfg[field];
-        return typeof v === 'number' && Number.isFinite(v) ? String(v) : '';
+        return typeof v === 'number' && Number.isFinite(v) ? v : null;
     }
 
     _emitPatch(patch) {
@@ -176,17 +151,16 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this._emitPatch({ [field]: v });
     }
 
-    _onNumber(field, raw, isInt = false) {
-        if (raw === '' || raw === null || raw === undefined) {
+    _onNumberField(field, detailValue) {
+        if (detailValue === null || detailValue === undefined) {
             const base = this.config && typeof this.config === 'object' ? this.config : {};
             const next = { ...base };
             delete next[field];
             this.emit('change', { config: next });
             return;
         }
-        const n = isInt ? parseInt(raw, 10) : parseFloat(raw);
-        if (!Number.isFinite(n)) return;
-        this._emitPatch({ [field]: n });
+        if (typeof detailValue !== 'number' || !Number.isFinite(detailValue)) return;
+        this._emitPatch({ [field]: detailValue });
     }
 
     _onJson(field, parsed) {
@@ -226,60 +200,75 @@ export class FlowsLlmConfigEditor extends PlatformElement {
             : '{}';
         const models = this._modelsList();
         const providers = this._providersList();
+        const providerEnumValues = [
+            { value: '', label: '—' },
+            ...providers.map((p) => ({ value: p, label: p })),
+        ];
+        const modelEnumValues = [
+            { value: '', label: '—' },
+            ...models.map((m) => {
+                const optValue = typeof m === 'string' ? m : asString(typeof m.value === 'string' && m.value.length > 0 ? m.value : m.id);
+                let optLabel;
+                if (typeof m === 'string') optLabel = m;
+                else if (typeof m.label === 'string' && m.label.length > 0) optLabel = m.label;
+                else if (typeof m.value === 'string' && m.value.length > 0) optLabel = m.value;
+                else optLabel = String(m.id);
+                return { value: optValue, label: optLabel };
+            }),
+        ];
+        const reasoningEnumValues = REASONING_LEVELS.map((lv) => (lv === ''
+            ? { value: '', label: '—' }
+            : { value: lv, label: lv }));
         return html`
             <div class="grid">
                 <div class="field">
-                    <label>${this.t('llm_config_editor.provider')}</label>
-                    <select
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .label=${this.t('llm_config_editor.provider')}
                         .value=${provider}
-                        @change=${(e) => this._onString('provider', e.target.value)}
-                    >
-                        <option value="">—</option>
-                        ${providers.map((p) => html`<option value=${p} ?selected=${provider === p}>${p}</option>`)}
-                    </select>
+                        .config=${{ values: providerEnumValues }}
+                        @change=${(e) => this._onString('provider', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                    ></platform-field>
                 </div>
                 <div class="field">
-                    <label>${this.t('llm_config_editor.model')}</label>
                     ${models.length > 0
-                        ? html`<select
+                        ? html`<platform-field
+                            type="enum"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.model')}
                             .value=${model}
-                            @change=${(e) => this._onString('model', e.target.value)}
-                          >
-                            <option value="">—</option>
-                            ${models.map((m) => {
-                                const value = typeof m === 'string' ? m : asString(typeof m.value === 'string' && m.value.length > 0 ? m.value : m.id);
-                                let label;
-                                if (typeof m === 'string') label = m;
-                                else if (typeof m.label === 'string' && m.label.length > 0) label = m.label;
-                                else if (typeof m.value === 'string' && m.value.length > 0) label = m.value;
-                                else label = m.id;
-                                return html`<option value=${value} ?selected=${value === model}>${label}</option>`;
-                            })}
-                          </select>`
-                        : html`<input
-                            type="text"
-                            placeholder=${this.t('llm_config_editor.placeholder_model')}
+                            .config=${{ values: modelEnumValues }}
+                            @change=${(e) => this._onString('model', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                        ></platform-field>`
+                        : html`<platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.model')}
+                            .placeholder=${this.t('llm_config_editor.placeholder_model')}
                             .value=${model}
-                            @input=${(e) => this._onString('model', e.target.value)}
-                          />`}
+                            @change=${(e) => this._onString('model', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                        ></platform-field>`}
                 </div>
                 <div class="field">
-                    <label>${this.t('llm_config_editor.temperature')}</label>
-                    <input
-                        type="number" min="0" max="2" step="0.1"
-                        placeholder=${this.t('llm_config_editor.placeholder_temperature')}
-                        .value=${this._readNumberOrEmpty('temperature')}
-                        @input=${(e) => this._onNumber('temperature', e.target.value)}
-                    />
+                    <platform-field
+                        type="number"
+                        mode="edit"
+                        .label=${this.t('llm_config_editor.temperature')}
+                        .placeholder=${this.t('llm_config_editor.placeholder_temperature')}
+                        .value=${this._readNumberField('temperature')}
+                        @change=${(e) => this._onNumberField('temperature', e.detail.value)}
+                    ></platform-field>
                 </div>
                 <div class="field">
-                    <label>${this.t('llm_config_editor.max_tokens')}</label>
-                    <input
-                        type="number" min="0" step="1"
-                        placeholder=${this.t('llm_config_editor.placeholder_max_tokens')}
-                        .value=${this._readNumberOrEmpty('max_tokens')}
-                        @input=${(e) => this._onNumber('max_tokens', e.target.value, true)}
-                    />
+                    <platform-field
+                        type="integer"
+                        mode="edit"
+                        .label=${this.t('llm_config_editor.max_tokens')}
+                        .placeholder=${this.t('llm_config_editor.placeholder_max_tokens')}
+                        .value=${this._readNumberField('max_tokens')}
+                        @change=${(e) => this._onNumberField('max_tokens', e.detail.value)}
+                    ></platform-field>
                 </div>
             </div>
 
@@ -287,77 +276,85 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                 <summary>${this.t('llm_config_editor.advanced')}</summary>
                 <div class="grid">
                     <div class="field full">
-                        <label>${this.t('llm_config_editor.api_key')}</label>
-                        <input
-                            type="password"
-                            autocomplete="off"
-                            placeholder="@var:KEY"
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            input-type="password"
+                            .label=${this.t('llm_config_editor.api_key')}
+                            .placeholder="@var:KEY"
                             .value=${apiKey}
-                            @input=${(e) => this._onString('api_key', e.target.value)}
-                        />
+                            @change=${(e) => this._onString('api_key', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                        ></platform-field>
                     </div>
                     <div class="field full">
-                        <label>${this.t('llm_config_editor.base_url')}</label>
-                        <input
-                            type="text"
-                            placeholder="https://api.example.com/v1"
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.base_url')}
+                            .placeholder="https://api.example.com/v1"
                             .value=${baseUrl}
-                            @input=${(e) => this._onString('base_url', e.target.value)}
-                        />
+                            @change=${(e) => this._onString('base_url', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                        ></platform-field>
                     </div>
                     <div class="field">
-                        <label>${this.t('llm_config_editor.top_p')}</label>
-                        <input
-                            type="number" min="0" max="1" step="0.05"
-                            placeholder=${this.t('llm_config_editor.placeholder_top_p')}
-                            .value=${this._readNumberOrEmpty('top_p')}
-                            @input=${(e) => this._onNumber('top_p', e.target.value)}
-                        />
+                        <platform-field
+                            type="number"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.top_p')}
+                            .placeholder=${this.t('llm_config_editor.placeholder_top_p')}
+                            .value=${this._readNumberField('top_p')}
+                            @change=${(e) => this._onNumberField('top_p', e.detail.value)}
+                        ></platform-field>
                     </div>
                     <div class="field">
-                        <label>${this.t('llm_config_editor.top_k')}</label>
-                        <input
-                            type="number" min="0" step="1"
-                            placeholder=${this.t('llm_config_editor.placeholder_top_k')}
-                            .value=${this._readNumberOrEmpty('top_k')}
-                            @input=${(e) => this._onNumber('top_k', e.target.value, true)}
-                        />
+                        <platform-field
+                            type="integer"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.top_k')}
+                            .placeholder=${this.t('llm_config_editor.placeholder_top_k')}
+                            .value=${this._readNumberField('top_k')}
+                            @change=${(e) => this._onNumberField('top_k', e.detail.value)}
+                        ></platform-field>
                     </div>
                     <div class="field">
-                        <label>${this.t('llm_config_editor.frequency_penalty')}</label>
-                        <input
-                            type="number" min="-2" max="2" step="0.1"
-                            placeholder=${this.t('llm_config_editor.placeholder_frequency_penalty')}
-                            .value=${this._readNumberOrEmpty('frequency_penalty')}
-                            @input=${(e) => this._onNumber('frequency_penalty', e.target.value)}
-                        />
+                        <platform-field
+                            type="number"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.frequency_penalty')}
+                            .placeholder=${this.t('llm_config_editor.placeholder_frequency_penalty')}
+                            .value=${this._readNumberField('frequency_penalty')}
+                            @change=${(e) => this._onNumberField('frequency_penalty', e.detail.value)}
+                        ></platform-field>
                     </div>
                     <div class="field">
-                        <label>${this.t('llm_config_editor.presence_penalty')}</label>
-                        <input
-                            type="number" min="-2" max="2" step="0.1"
-                            placeholder=${this.t('llm_config_editor.placeholder_presence_penalty')}
-                            .value=${this._readNumberOrEmpty('presence_penalty')}
-                            @input=${(e) => this._onNumber('presence_penalty', e.target.value)}
-                        />
+                        <platform-field
+                            type="number"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.presence_penalty')}
+                            .placeholder=${this.t('llm_config_editor.placeholder_presence_penalty')}
+                            .value=${this._readNumberField('presence_penalty')}
+                            @change=${(e) => this._onNumberField('presence_penalty', e.detail.value)}
+                        ></platform-field>
                     </div>
                     <div class="field">
-                        <label>${this.t('llm_config_editor.seed')}</label>
-                        <input
-                            type="number" step="1"
-                            placeholder=${this.t('llm_config_editor.placeholder_seed')}
-                            .value=${this._readNumberOrEmpty('seed')}
-                            @input=${(e) => this._onNumber('seed', e.target.value, true)}
-                        />
+                        <platform-field
+                            type="integer"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.seed')}
+                            .placeholder=${this.t('llm_config_editor.placeholder_seed')}
+                            .value=${this._readNumberField('seed')}
+                            @change=${(e) => this._onNumberField('seed', e.detail.value)}
+                        ></platform-field>
                     </div>
                     <div class="field">
-                        <label>${this.t('llm_config_editor.reasoning_effort')}</label>
-                        <select
+                        <platform-field
+                            type="enum"
+                            mode="edit"
+                            .label=${this.t('llm_config_editor.reasoning_effort')}
                             .value=${reasoning}
-                            @change=${(e) => this._onString('reasoning_effort', e.target.value)}
-                        >
-                            ${REASONING_LEVELS.map((lv) => html`<option value=${lv} ?selected=${reasoning === lv}>${lv === '' ? '—' : lv}</option>`)}
-                        </select>
+                            .config=${{ values: reasoningEnumValues }}
+                            @change=${(e) => this._onString('reasoning_effort', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                        ></platform-field>
                     </div>
                     <div class="field full extra">
                         <label>${this.t('llm_config_editor.extra_request_body')}</label>

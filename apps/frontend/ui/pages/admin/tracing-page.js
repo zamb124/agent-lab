@@ -10,6 +10,7 @@ import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-trace-viewer.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const FACETS = Object.freeze([
     { key: 'companies',   field: 'company_id',     labelKey: 'tracing_page.filter_company' },
@@ -42,24 +43,7 @@ export class FrontendTracingPage extends PlatformPage {
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
             }
-            .field { position: relative; display: flex; flex-direction: column; gap: var(--space-1); }
-            .field label {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-            }
-            input {
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                padding: var(--space-2) var(--space-3);
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                width: 100%;
-                box-sizing: border-box;
-            }
-            input:focus { outline: none; border-color: var(--accent); }
+            .field { position: relative; display: block; min-width: 0; }
 
             .suggest {
                 position: absolute;
@@ -245,8 +229,13 @@ export class FrontendTracingPage extends PlatformPage {
     _onFacetFocus(facetKey) {
         this._activeFacet = facetKey;
         const filters = this._filters();
-        const value = filters[FACETS.find((f) => f.key === facetKey).field] || '';
-        if (value && value.length >= 2) {
+        const facet = FACETS.find((f) => f.key === facetKey);
+        if (!facet) {
+            throw new Error(`frontend-tracing-page: unknown facet key ${facetKey}`);
+        }
+        const raw = filters[facet.field];
+        const value = typeof raw === 'string' ? raw : '';
+        if (value.length >= 2) {
             const context = {};
             if (facetKey !== 'companies' && filters.company_id) context.company_id = filters.company_id;
             if (facetKey !== 'namespaces' && filters.namespace) context.namespace = filters.namespace;
@@ -260,19 +249,37 @@ export class FrontendTracingPage extends PlatformPage {
     }
 
     _renderFacetField({ key, field, labelKey }, filters) {
-        const value = filters[field] || '';
+        const raw = filters[field];
+        const value = typeof raw === 'string' ? raw : '';
         const items = this._facets.items(key);
-        const isOpen = this._activeFacet === key && value && value.length >= 2;
+        const isOpen = this._activeFacet === key && value.length >= 2;
         return html`
             <div class="field">
-                <label>${this.t(labelKey)}</label>
-                <input
-                    type="text"
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    input-type="search"
+                    .label=${this.t(labelKey)}
                     .value=${value}
-                    @input=${(e) => this._onFilterInput(field, key, e.target.value)}
-                    @focus=${() => this._onFacetFocus(key)}
-                    @blur=${() => setTimeout(() => { this._activeFacet = null; }, 180)}
-                />
+                    @change=${(e) => {
+                        const v = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this._onFilterInput(field, key, v);
+                    }}
+                    @platform-field-managed-focus-in=${() => this._onFacetFocus(key)}
+                    @platform-field-managed-focus-out=${(e) => {
+                        const d = e.detail;
+                        const rt = d && 'relatedTarget' in d ? d.relatedTarget : null;
+                        const wrap = e.currentTarget.parentElement;
+                        if (rt instanceof Node && wrap !== null && wrap.contains(rt)) {
+                            return;
+                        }
+                        setTimeout(() => {
+                            if (this._activeFacet === key) {
+                                this._activeFacet = null;
+                            }
+                        }, 180);
+                    }}
+                ></platform-field>
                 ${isOpen ? html`
                     <div class="suggest">
                         ${this._facets.loading(key)
@@ -291,15 +298,21 @@ export class FrontendTracingPage extends PlatformPage {
         `;
     }
 
-    _renderTimeField(field, labelKey, value) {
+    _renderTimeField(field, labelKey, filters) {
+        const raw = filters[field];
+        const value = typeof raw === 'string' ? raw : '';
         return html`
             <div class="field">
-                <label>${this.t(labelKey)}</label>
-                <input
-                    type="datetime-local"
+                <platform-field
+                    type="datetime"
+                    mode="edit"
+                    .label=${this.t(labelKey)}
                     .value=${value}
-                    @input=${(e) => this._onFilterInput(field, null, e.target.value)}
-                />
+                    @change=${(e) => {
+                        const v = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this._onFilterInput(field, null, v);
+                    }}
+                ></platform-field>
             </div>
         `;
     }
@@ -310,8 +323,8 @@ export class FrontendTracingPage extends PlatformPage {
             <div class="hint">${this.t('tracing_page.facet_hint')}</div>
             <div class="filters">
                 ${FACETS.map((f) => this._renderFacetField(f, filters))}
-                ${this._renderTimeField('from_time', 'tracing_page.filter_from', filters.from_time || '')}
-                ${this._renderTimeField('to_time', 'tracing_page.filter_to', filters.to_time || '')}
+                ${this._renderTimeField('from_time', 'tracing_page.filter_from', filters)}
+                ${this._renderTimeField('to_time', 'tracing_page.filter_to', filters)}
             </div>
             <div class="actions">
                 <button class="btn primary" @click=${() => this._apply()}>

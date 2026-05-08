@@ -7,6 +7,7 @@
 import { html } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class FrontendTopupModal extends PlatformFormModal {
     static modalKind = 'frontend.billing_topup';
@@ -18,7 +19,7 @@ export class FrontendTopupModal extends PlatformFormModal {
 
     constructor() {
         super();
-        this._amount = '';
+        this._amount = null;
         this.size = 'sm';
         this._topup = this.useOp('frontend/billing_topup');
     }
@@ -30,13 +31,13 @@ export class FrontendTopupModal extends PlatformFormModal {
 
     validateForm() {
         const errors = {};
-        const raw = this._amount;
-        if (!raw) {
+        const amount =
+            typeof this._amount === 'number' && Number.isFinite(this._amount) ? this._amount : null;
+        if (amount === null) {
             errors.amount = this.t('topup_modal.err_amount_required');
             return errors;
         }
-        const amount = Number(raw);
-        if (Number.isNaN(amount) || amount <= 0) {
+        if (amount <= 0) {
             errors.amount = this.t('topup_modal.err_amount_invalid');
         } else if (amount < 100) {
             errors.amount = this.t('topup_modal.err_amount_min');
@@ -45,24 +46,34 @@ export class FrontendTopupModal extends PlatformFormModal {
     }
 
     async handleSubmit() {
-        this._topup.run({ amount: Number(this._amount) });
+        if (typeof this._amount !== 'number' || !Number.isFinite(this._amount)) {
+            throw new Error('FrontendTopupModal.handleSubmit: amount is required');
+        }
+        this._topup.run({ amount: this._amount });
         this.closeAfterSave();
     }
 
     renderBody() {
+        const amountNum = typeof this._amount === 'number' && Number.isFinite(this._amount) ? this._amount : null;
         return html`
             <form @submit=${this._onSubmit} @input=${() => { this.isDirty = true; }}>
                 <div class="form-group">
-                    <label class="form-label">${this.t('topup_modal.label_amount')}</label>
-                    <input
+                    <platform-field
                         type="number"
-                        class="form-input"
-                        name="amount"
-                        .value=${this._amount}
-                        @input=${(e) => { this._amount = e.target.value; }}
-                        min="100"
-                        autofocus
-                    />
+                        mode="edit"
+                        label=${this.t('topup_modal.label_amount')}
+                        .value=${amountNum}
+                        @change=${(e) => {
+                            if (!e.detail) {
+                                throw new Error('topup modal: amount change expects detail');
+                            }
+                            const v = e.detail.value;
+                            if (v !== null && typeof v !== 'number') {
+                                throw new Error('topup modal: amount expects numeric detail.value or null');
+                            }
+                            this._amount = v;
+                        }}
+                    ></platform-field>
                     <small>${this.t('topup_modal.amount_hint')}</small>
                     ${this.renderFieldError('amount')}
                 </div>
@@ -71,7 +82,11 @@ export class FrontendTopupModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        const canSubmit = Number(this._amount) >= 100 && !this.loading;
+        const canSubmit =
+            typeof this._amount === 'number'
+            && Number.isFinite(this._amount)
+            && this._amount >= 100
+            && !this.loading;
         return html`
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" @click=${() => this.close()}>

@@ -17,6 +17,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-json-field-editor.js';
 import '../editors/flows-state-mapping-editor.js';
@@ -69,7 +70,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
                 display: grid;
                 grid-template-columns: 1.4fr 1fr 1fr 60px 30px;
                 gap: var(--space-1);
-                align-items: center;
+                align-items: end;
                 padding: var(--space-1);
                 border-bottom: 1px solid var(--border-subtle);
             }
@@ -104,16 +105,97 @@ export class FlowsExternalApiEditor extends PlatformElement {
     }
 
     _onString(field, e) {
-        this._emitPatch({ [field]: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-external-api-editor: string field change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error(`flows-external-api-editor: ${field} detail.value`);
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error(`flows-external-api-editor: ${field} string required`);
+        }
+        this._emitPatch({ [field]: v });
     }
 
     _onMethod(e) {
-        this._emitPatch({ method: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-external-api-editor: method change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-external-api-editor: method detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-external-api-editor: method string required');
+        }
+        this._emitPatch({ method: v });
     }
 
     _onTimeout(e) {
-        const v = parseFloat(e.target.value);
-        this._emitPatch({ timeout: Number.isFinite(v) ? v : 30.0 });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-external-api-editor: timeout change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-external-api-editor: timeout detail.value');
+        }
+        const v = d.value;
+        if (v === null) {
+            this._emitPatch({ timeout: 30.0 });
+            return;
+        }
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+            throw new Error('flows-external-api-editor: timeout number|null required');
+        }
+        this._emitPatch({ timeout: v });
+    }
+
+    _onParamName(idx, e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-external-api-editor: param name change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-external-api-editor: param name detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-external-api-editor: param name string required');
+        }
+        this._updateParam(idx, { name: v });
+    }
+
+    _onParamLocation(idx, e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-external-api-editor: param location change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-external-api-editor: param location detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-external-api-editor: param location string required');
+        }
+        this._updateParam(idx, { location: v });
+    }
+
+    _onParamType(idx, e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-external-api-editor: param type change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-external-api-editor: param type detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-external-api-editor: param type string required');
+        }
+        this._updateParam(idx, { type: v });
     }
 
     _onHeaders(parsed) {
@@ -158,17 +240,37 @@ export class FlowsExternalApiEditor extends PlatformElement {
         return html`
             <details>
                 <summary>${this.t('external_api_editor.parameters')}</summary>
-                ${params.map((p, idx) => html`
+                ${params.map((p, idx) => {
+                    const loc = typeof p.location === 'string' ? p.location : 'body';
+                    const ptype = typeof p.type === 'string' ? p.type : 'string';
+                    const locationValues = PARAM_LOCATIONS.map((locId) => ({
+                        value: locId,
+                        label: this.t(`external_api_editor.location_${locId}`),
+                    }));
+                    const typeValues = PARAM_TYPES.map((t) => ({ value: t, label: t }));
+                    return html`
                     <div class="param-row">
-                        <input type="text" placeholder=${this.t('external_api_editor.parameter_name')}
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .placeholder=${this.t('external_api_editor.parameter_name')}
                             .value=${typeof p.name === 'string' ? p.name : ''}
-                            @input=${(e) => this._updateParam(idx, { name: e.target.value })} />
-                        <select @change=${(e) => this._updateParam(idx, { location: e.target.value })}>
-                            ${PARAM_LOCATIONS.map((l) => html`<option value=${l} ?selected=${p.location === l}>${this.t(`external_api_editor.location_${l}`)}</option>`)}
-                        </select>
-                        <select @change=${(e) => this._updateParam(idx, { type: e.target.value })}>
-                            ${PARAM_TYPES.map((t) => html`<option value=${t} ?selected=${p.type === t}>${t}</option>`)}
-                        </select>
+                            @change=${(e) => this._onParamName(idx, e)}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .value=${loc}
+                            .config=${{ values: locationValues }}
+                            @change=${(e) => this._onParamLocation(idx, e)}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .value=${ptype}
+                            .config=${{ values: typeValues }}
+                            @change=${(e) => this._onParamType(idx, e)}
+                        ></platform-field>
                         <label class="req">
                             <input type="checkbox" ?checked=${Boolean(p.required)}
                                 @change=${(e) => this._updateParam(idx, { required: e.target.checked })} />
@@ -178,7 +280,8 @@ export class FlowsExternalApiEditor extends PlatformElement {
                             <platform-icon name="trash" size="xs"></platform-icon>
                         </button>
                     </div>
-                `)}
+                `;
+                })}
                 <glass-button class="add-btn" size="sm" variant="ghost" @click=${this._addParam}>
                     <platform-icon name="plus"></platform-icon>
                     ${this.t('external_api_editor.parameter_add')}
@@ -200,6 +303,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
             ? JSON.stringify(cfg.auth_headers, null, 2) : '{}';
         const stateMapping = cfg.state_mapping && typeof cfg.state_mapping === 'object'
             ? cfg.state_mapping : {};
+        const methodValues = HTTP_METHODS.map((m) => ({ value: m, label: m }));
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -215,29 +319,45 @@ export class FlowsExternalApiEditor extends PlatformElement {
             >
                 <div slot="settings">
                     <div class="grid">
-                        <div class="field">
-                            <label>${this.t('external_api_editor.name')}</label>
-                            <input type="text" .value=${name} @input=${(e) => this._onString('name', e)} />
-                        </div>
-                        <div class="field">
-                            <label>${this.t('external_api_editor.method')}</label>
-                            <select .value=${method} @change=${this._onMethod}>
-                                ${HTTP_METHODS.map((m) => html`<option value=${m} ?selected=${m === method}>${m}</option>`)}
-                            </select>
-                        </div>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('external_api_editor.name')}
+                            .value=${name}
+                            @change=${(e) => this._onString('name', e)}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .label=${this.t('external_api_editor.method')}
+                            .value=${method}
+                            .config=${{ values: methodValues }}
+                            @change=${this._onMethod}
+                        ></platform-field>
                     </div>
-                    <div class="field">
-                        <label>${this.t('external_api_editor.url')}</label>
-                        <input type="text" placeholder="https://api.example.com/{path}" .value=${url} @input=${(e) => this._onString('url', e)} />
-                    </div>
-                    <div class="field">
-                        <label>${this.t('external_api_editor.description')}</label>
-                        <input type="text" .value=${description} @input=${(e) => this._onString('description', e)} />
-                    </div>
-                    <div class="field">
-                        <label>${this.t('external_api_editor.timeout')}</label>
-                        <input type="number" min="0" step="0.5" .value=${String(timeout)} @input=${this._onTimeout} />
-                    </div>
+                    <platform-field
+                        mode="edit"
+                        type="string"
+                        input-type="url"
+                        .label=${this.t('external_api_editor.url')}
+                        .placeholder=${'https://api.example.com/{path}'}
+                        .value=${url}
+                        @change=${(e) => this._onString('url', e)}
+                    ></platform-field>
+                    <platform-field
+                        mode="edit"
+                        type="string"
+                        .label=${this.t('external_api_editor.description')}
+                        .value=${description}
+                        @change=${(e) => this._onString('description', e)}
+                    ></platform-field>
+                    <platform-field
+                        mode="edit"
+                        type="number"
+                        .label=${this.t('external_api_editor.timeout')}
+                        .value=${timeout}
+                        @change=${this._onTimeout}
+                    ></platform-field>
                     <details>
                         <summary>${this.t('external_api_editor.headers')}</summary>
                         <flows-json-field-editor

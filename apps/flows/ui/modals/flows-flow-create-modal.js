@@ -21,6 +21,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const FLOW_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -147,24 +148,13 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
-                padding: 0 var(--space-3);
-                height: 32px;
                 width: clamp(220px, 28vw, 360px);
-                border-radius: var(--radius-full);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
             }
-            .header-search:focus-within {
-                border-color: var(--accent);
-                color: var(--text-primary);
+            .header-search platform-field {
+                flex: 1;
+                min-width: 0;
             }
-            .header-search input {
-                flex: 1; min-width: 0;
-                background: transparent; border: none; outline: none;
-                color: var(--text-primary); font: inherit;
-            }
-            .header-search input::placeholder { color: var(--text-tertiary); }
             .section-title {
                 font-size: var(--text-base);
                 font-weight: var(--font-semibold);
@@ -186,6 +176,8 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             }
             .card {
                 position: relative;
+                box-sizing: border-box;
+                height: 168px;
                 padding: var(--space-3) var(--space-4) var(--space-4);
                 border-radius: var(--radius-xl);
                 background: var(--glass-solid-subtle);
@@ -195,7 +187,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);
-                min-height: 168px;
+                overflow: hidden;
             }
             .card:hover { background: var(--glass-solid-medium); transform: translateY(-1px); }
             .card[active] {
@@ -203,6 +195,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 box-shadow: 0 0 0 1px var(--accent);
             }
             .card-icon {
+                flex-shrink: 0;
                 width: 56px;
                 height: 56px;
                 border-radius: var(--radius-lg);
@@ -215,11 +208,22 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 font-size: var(--text-base);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
+                flex-shrink: 0;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
             }
             .card-desc {
                 font-size: var(--text-sm);
                 color: var(--text-secondary);
                 line-height: 1.4;
+                flex: 1;
+                min-height: 0;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 3;
+                overflow: hidden;
             }
             .empty-row {
                 grid-column: 1 / -1;
@@ -343,12 +347,19 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         return html`
             <label class="header-search">
                 <platform-icon name="search" size="14"></platform-icon>
-                <input
-                    type="text"
+                <platform-field
+                    type="string"
+                    mode="edit"
                     .value=${this._query}
                     placeholder=${this.t('flow_create_modal.search_placeholder')}
-                    @input=${(e) => { this._query = e.target.value; }}
-                />
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-flow-create-modal: search expects string detail.value');
+                        }
+                        this._query = v;
+                    }}
+                ></platform-field>
             </label>
         `;
     }
@@ -429,30 +440,55 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 </div>
                 <div class="field">
                     <label>${this.t('flow_create_modal.field_flow_id')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${this._flowId}
                         placeholder="my_flow"
-                        @input=${(e) => { this._flowId = e.target.value; this.isDirty = true; }}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-flow-create-modal: flow_id expects string detail.value');
+                            }
+                            this._flowId = v;
+                            this.isDirty = true;
+                        }}
+                    ></platform-field>
                     ${this._flowId && !validId
                         ? html`<div class="form-error">${this.t('flow_create_modal.err_flow_id_pattern')}</div>`
                         : ''}
                 </div>
                 <div class="field">
                     <label>${this.t('flow_create_modal.field_name')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${this._name}
-                        @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-flow-create-modal: name expects string detail.value');
+                            }
+                            this._name = v;
+                            this.isDirty = true;
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="field">
                     <label>${this.t('flow_create_modal.field_description')}</label>
-                    <textarea
+                    <platform-field
+                        type="text"
+                        mode="edit"
                         .value=${this._description}
-                        @input=${(e) => { this._description = e.target.value; this.isDirty = true; }}
-                    ></textarea>
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-flow-create-modal: description expects string detail.value');
+                            }
+                            this._description = v;
+                            this.isDirty = true;
+                        }}
+                    ></platform-field>
                 </div>
             </div>
         `;

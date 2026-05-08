@@ -4,7 +4,9 @@ alwaysApply: false
 ---
 # Data Type Components (`platform-field`)
 
-`<platform-field>` — **единственный** допустимый способ ввода и отображения типизированных значений атрибутов в UI. Компонент-диспетчер делегирует рендеринг подкомпоненту по `type`.
+`<platform-field>` — **единственный** допустимый способ ввода и отображения **любого поля формы** на платформе: типизированные атрибуты CRM, имя/email/url/password/query/description/comment в любом сервисе. Компонент-диспетчер делегирует рендеринг подкомпоненту по `type`. Диспетчер всегда рендерит оболочку **pill** (`class="field-pill"`): при непустом `label` сверху — `field-pill-label`, затем подкомпонент. Подкомпонент **не** дублирует pill; внутри используются классы `field-pill-input` / `field-pill-textarea` / `field-pill-select` (edit) и `field-pill-readonly-text` / `field-pill-empty` (view), плюс узкие варианты (`enum-chip`, `view-json`, чипы массива).
+
+`<glass-input>` / `<glass-textarea>` **удалены** в PHASE 1.5; импортировать запрещено (детектор `scripts/check_ui_canon.sh` п.18).
 
 ## Файлы
 
@@ -44,11 +46,25 @@ alwaysApply: false
 | `value` | `any` | Типизированное значение |
 | `mode` | `'view' \| 'edit'` | view = readonly |
 | `label` | `string` | Опц. |
-| `config` | `object` | По типу. Для `enum` — `{ values: [...] }` |
-| `placeholder` | `string` | Edit-режим |
+| `config` | `object` | По типу. Для `enum` — `{ values: [...] }`: массив строк ИЛИ `{value, label}` объектов. Для отображения human-readable label с техническим value — обязательно `{value, label}`. Для **`array`**: опционально **`allowed_values: string[]`** (непустой — режим чипов + `select` только из списка, `data-canon="combobox"`); **`preserve_case: true`** — свободный ввод через `<tag-input>` без приведения к lower case (иначе как в CRM — lower case). |
+| `placeholder` | `string` | Edit-режим; для `array` пробрасывается в `<tag-input>` / подпись добавления в режиме `allowed_values` |
 | `disabled` | `boolean` | — |
+| `inputType` | `'text'\|'email'\|'password'\|'url'\|'tel'\|'search'` | Только при `type='string'` — нативный `<input type=...>`. Default `'text'`. Любое другое значение — `throw`. |
+| `hint` | `string` | Подсказка-tooltip рядом с `label` (рисуется через `<platform-help-hint>`). **НЕ** always-visible div — содержимое появляется при наведении/фокусе на «?». Локальный `<div class="hint">…</div>` под полем формы запрещён. |
+| `pillDensity` | `'default' \| 'compact'` | Плотность оболочки pill: `compact` — уменьшенные отступы, радиус и кегль (сайдбар namespace и узкие строки). Атрибут `pill-density`. Иное значение — `throw`. |
 
 `@change` — `detail.value` содержит **типизированное** значение (`number` для number/integer, `boolean` для boolean, `Array` для array, …).
+
+**Слот `suffix`**: в light DOM потомок с `slot="suffix"` рендерится справа от значения в строке `.field-pill-control` (инлайн-действие, напр. «редактировать» в view). Пустой слот не ломает вёрстку.
+
+### Фокус в `type="string"` (edit)
+
+Внутренний `<input>` рендерится в Shadow DOM `platform-field-string`, поэтому нативные `focus`/`blur` не всплывают к хостам снаружи. Для родительского UX (popover suggestions, см. admin tracing facets) допустимо слушать на `<platform-field>`:
+
+| Событие | Композиция | `detail` |
+|---|---|---|
+| `platform-field-managed-focus-in` | `bubbles: true`, `composed: true` | — |
+| `platform-field-managed-focus-out` | `bubbles: true`, `composed: true` | `{ relatedTarget }` (как у `FocusEvent.relatedTarget`) |
 
 ## Импорт
 
@@ -60,26 +76,45 @@ Side-effect import: диспетчер автоматически импорти
 
 ## i18n (namespace `platform`)
 
-`platform_field.empty_value`, `boolean_true`/`boolean_false`, `array_placeholder`, `object_placeholder`, `external_refs_*` (empty, record_id, last_seen, account_key, raw_version, readonly).
+`platform_field.empty_value`, `boolean_true`/`boolean_false`, `array_placeholder`, `array_remove_value`, `object_placeholder`, `external_refs_*` (empty, record_id, last_seen, account_key, raw_version, readonly).
 
 ## Обязательные правила
 
-1. **Атрибуты с известным типом** (схема `required_fields` / `optional_fields`) — **только** `<platform-field type=...>`. Голый `<input type="text">` для типизированных значений запрещён.
+1. **Любое поле формы на платформе** — `<platform-field>`. Это включает: типизированные атрибуты CRM, обычные имя/email/url/password/query/description/comment в `apps/<svc>/ui/{pages,modals,components}/**` для всех сервисов. Голый `<input type="text">`, `<textarea>`, `<select>` — запрещены (whitelist — только spec-widgets с `data-canon=...` и `<input>` с `type` из набора `file|hidden|range|color|checkbox|radio|search`).
 2. **Отображение значений** — `<platform-field mode="view" .type=${...} .value=${...}>`. Строковая интерполяция `${value}` для значений атрибутов запрещена.
 3. **Новый тип данных:**
    1. `platform-field-{type}.js` в `core/frontend/static/lib/components/fields/`.
    2. Регистрация в `FIELD_TYPE_MAP` и `switch` в `platform-field.js`.
    3. `type_id` в `SCHEMA_OPTIONS_RESPONSE` в `apps/crm/api/namespaces.py`.
    4. Проверка в `_check_field_type` в `apps/crm/services/entity_service.py`.
-4. **Наследование** — все подкомпоненты наследуют `PlatformElement`; используют `PlatformElement.styles`, `formStyles`, при необходимости `buttonStyles`.
+4. **Стили подкомпонентов** — только `PlatformElement.styles` (включает `form.styles.js` и слой `fieldPillStyles`). При необходимости — второй литовский `css` в `static styles` для узких случаев (`enum-chip`, monospace в `object`). Атрибута `flat` нет.
+5. **`inputType`** — допустимые значения только `text|email|password|url|tel|search`. Любое другое — `throw` в `platform-field-string`.
+6. **Классы `form-input` / `field-pill-input` на сыром `<input>`** не заменяют `<platform-field>` и не считаются исключением для `scripts/check_field_canon.sh`: либо `<platform-field>`, либо whitelist `input type=` / `data-canon` из раздела «CI». Локальный `css` с `.form-*` / `.field-pill*` в `apps/**` запрещён (`scripts/check_ui_canon.sh` п.17).
+
+## CI (`make check-field-canon`)
+
+`scripts/check_field_canon.sh` сканирует `apps/<svc>/ui/{pages,modals,components}/**/*.js`.
+
+| Тег | Разрешено без `<platform-field>` |
+|---|---|
+| `<input>` | `type` в наборе `file`, `hidden`, `range`, `color`, `checkbox`, `radio`, `search` **или** атрибут `data-canon` |
+| `<textarea>` | только с атрибутом `data-canon` |
+| `<select>` | только `data-canon="combobox"` |
+
+Иные сырые теги — нарушение. Классы `field-pill-input`/`field-pill-textarea`/`field-pill-select` в литералах приложений только внутренние классы подкомпонентов core; в `apps/**` их на сырой разметке нет по канону (`main.mdc`: Pill canon полей).
 
 ## Запрещено
 
-- `<input type="text">` для boolean/number/date/enum.
+- `<input type="text">` для boolean/number/date/enum **и** для plain string-полей формы.
 - `<input type="checkbox">` вместо `<platform-switch>` через `platform-field-boolean`.
 - Нативный `<input type="date">` / `datetime-local` вместо `platform-field-date` (`<platform-date-picker>`).
 - Самодельные select/dropdown для enum вместо `platform-field-enum`.
 - `JSON.stringify(value)` в шаблоне вместо `platform-field type="object" mode="view"`.
+- Импорт `@platform/lib/components/glass-input.js` или `@platform/lib/components/glass-textarea.js` (файлы удалены в PHASE 1.5).
+- Атрибут `flat` на `<tag-input>` или любом подкомпоненте — удалён, pill-режим единственный.
+- Локальный `css\`...\`` блок в `apps/**` с правилами `.form-input` / `.form-textarea` / `.form-select` / `.form-group` / `.form-label` / `.field-pill*` — стили только в `core/frontend/static/lib/styles/shared/field-pill.styles.js`, кастомизация через токены `--field-pill-*` в `core/frontend/static/assets/css/tokens.css`.
+- Always-visible `<div class="hint">${this.t('...')}</div>` под `<platform-field>`/`form-group` — описание поля передаётся через `.hint=${...}` (рисуется как hover-tooltip `<platform-help-hint>` рядом с label). Локальный `.hint` CSS-класс допустим только для нефилдовых описаний (info-баннеры в card/section).
+- В `enum` для динамических списков (выбор flow_id, provider, и т.д.) — массив строк только если value читаемое; для технических id обязателен `{value, label}` (иначе пользователь видит сырой id вместо имени).
 
 ## Связанные файлы
 

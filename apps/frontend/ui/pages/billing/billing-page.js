@@ -17,6 +17,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
+import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 import { FrontendTopupModal } from '../../modals/topup-modal.js';
 
 const PLAN_KEYS = Object.freeze(['free', 'basic', 'premium', 'enterprise']);
@@ -24,13 +25,6 @@ const PLAN_KEYS = Object.freeze(['free', 'basic', 'premium', 'enterprise']);
 function _planTranslationKey(plan) {
     const p = typeof plan === 'string' && plan !== '' ? plan : 'free';
     return `tariff_plans.${p.toLowerCase()}.name`;
-}
-
-function _formatCurrency(value) {
-    if (value === undefined || value === null) return '—';
-    const n = Number(value);
-    if (Number.isNaN(n)) return String(value);
-    return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 }
 
 function _percent(spent, budget) {
@@ -135,7 +129,19 @@ export class FrontendBillingPage extends PlatformPage {
         this._usage = this.useOp('frontend/billing_usage');
         this._history = this.useOp('frontend/billing_history');
         this._planChange = this.useOp('frontend/billing_plan_change');
+        this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
         this._loaded = false;
+    }
+
+    _formatCurrency(value) {
+        if (value === undefined || value === null) {
+            return '—';
+        }
+        const n = Number(value);
+        if (!Number.isFinite(n)) {
+            return String(value);
+        }
+        return formatPlatformNumber(n, this._locale.value, { maximumFractionDigits: 2 });
     }
 
     updated() {
@@ -172,19 +178,19 @@ export class FrontendBillingPage extends PlatformPage {
 
                 <glass-card><div class="stat">
                     <div class="stat-label">${this.t('current_plan.balance')}</div>
-                    <div class="stat-value">${_formatCurrency(balance)} ${this.t('frontend_console.currency_rub')}</div>
+                    <div class="stat-value">${this._formatCurrency(balance)} ${this.t('frontend_console.currency_rub')}</div>
                 </div></glass-card>
 
                 <glass-card><div class="stat">
                     <div class="stat-label">${this.t('budget_usage.spent_this_month')}</div>
-                    <div class="stat-value">${_formatCurrency(spent)} ${this.t('frontend_console.currency_rub')}</div>
+                    <div class="stat-value">${this._formatCurrency(spent)} ${this.t('frontend_console.currency_rub')}</div>
                     ${budget && budget > 0
                         ? html`
                             <div class="progress ${pct >= 100 ? 'over' : ''}">
                                 <div style="width: ${pct}%"></div>
                             </div>
                             <div class="stat-meta">
-                                ${pct}% ${this.t('budget_usage.used')} · ${this.t('current_plan.monthly_limit')}: ${_formatCurrency(budget)}
+                                ${pct}% ${this.t('budget_usage.used')} · ${this.t('current_plan.monthly_limit')}: ${this._formatCurrency(budget)}
                             </div>
                         `
                         : html`<div class="stat-meta">${this.t('current_plan.no_limit')}</div>`
@@ -223,7 +229,7 @@ export class FrontendBillingPage extends PlatformPage {
                 <div class="grid">
                     <glass-card><div class="stat">
                         <div class="stat-label">${this.t('usage_stats.total_cost')}</div>
-                        <div class="stat-value">${_formatCurrency(usage.total_cost)} ${this.t('frontend_console.currency_rub')}</div>
+                        <div class="stat-value">${this._formatCurrency(usage.total_cost)} ${this.t('frontend_console.currency_rub')}</div>
                     </div></glass-card>
                     <glass-card><div class="stat">
                         <div class="stat-label">${this.t('usage_stats.total_calls')}</div>
@@ -248,7 +254,7 @@ export class FrontendBillingPage extends PlatformPage {
                                     <tr>
                                         <td>${resource}</td>
                                         <td class="num">${info.calls || 0}</td>
-                                        <td class="num">${_formatCurrency(info.cost)}</td>
+                                        <td class="num">${this._formatCurrency(info.cost)}</td>
                                     </tr>
                                 `)}
                             </tbody>
@@ -273,7 +279,7 @@ export class FrontendBillingPage extends PlatformPage {
                                     <tr>
                                         <td><platform-user-chip user-id=${user}></platform-user-chip></td>
                                         <td class="num">${info.calls || 0}</td>
-                                        <td class="num">${_formatCurrency(info.cost)}</td>
+                                        <td class="num">${this._formatCurrency(info.cost)}</td>
                                     </tr>
                                 `)}
                             </tbody>
@@ -345,7 +351,7 @@ export class FrontendBillingPage extends PlatformPage {
                             return html`
                                 <tr>
                                     <td>${p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</td>
-                                    <td class="num">${_formatCurrency(p.amount)}</td>
+                                    <td class="num">${this._formatCurrency(p.amount)}</td>
                                     <td>${this._historyProviderLabel(p)}</td>
                                     <td>${note === '' ? '—' : note}</td>
                                     <td><span class="status-tag ${status}">${statusLabel}</span></td>

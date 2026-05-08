@@ -20,6 +20,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const COLOR_VAR = Object.freeze({
     warning_bg: 'var(--warning-bg)',
@@ -115,20 +116,11 @@ export class FlowsStickyNote extends PlatformElement {
                 padding: var(--space-2);
                 box-sizing: border-box;
                 position: relative;
+                display: flex;
+                flex-direction: column;
             }
             :host([collapsed]) .body { display: none; }
-            textarea {
-                width: 100%;
-                height: 100%;
-                background: transparent;
-                border: none;
-                outline: none;
-                resize: none;
-                font: inherit;
-                font-size: var(--text-sm);
-                color: var(--text-primary);
-                box-sizing: border-box;
-            }
+            :host([collapsed]) .body { display: none; }
 
             .resize-handle {
                 position: absolute;
@@ -187,7 +179,18 @@ export class FlowsStickyNote extends PlatformElement {
     }
 
     _onInput(e) {
-        this.emit('change', { noteId: this.noteId, text: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-sticky-note: change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-sticky-note: detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-sticky-note: detail.value must be string');
+        }
+        this.emit('change', { noteId: this.noteId, text: v });
     }
 
     _onToggleCollapse() {
@@ -262,12 +265,14 @@ export class FlowsStickyNote extends PlatformElement {
         return html`
             ${this._renderHeader()}
             <div class="body">
-                <textarea
+                <platform-field
+                    mode="edit"
+                    type="text"
                     .value=${this.text}
-                    placeholder=${this.t('canvas.sticky_note.placeholder')}
-                    @input=${this._onInput}
+                    .placeholder=${this.t('canvas.sticky_note.placeholder')}
+                    @change=${this._onInput}
                     @pointerdown=${(e) => e.stopPropagation()}
-                ></textarea>
+                ></platform-field>
             </div>
             <div class="resize-handle" @pointerdown=${this._onResizeStart}></div>
         `;

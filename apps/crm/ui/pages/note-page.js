@@ -18,7 +18,6 @@
  *   - `cancel`                  → mode=`view` (или navigate('notes') для draft).
  *   - `saved` { entity }        → mode=`view` + перезагрузка card.
  *   - `created` { entity }      → navigate на новый id.
- *   - `show-graph`              → openModal('crm.note_graph').
  *   - `delete-note`             → openModal('crm.entity_delete', redirectRoute='notes').
  *   - `entity-open` { entityId} → toast (страница entity-detail в G/4).
  */
@@ -403,10 +402,6 @@ export class CRMNotePage extends CRMNamespacePage {
         this.navigate('entity', { itemId: entityId });
     }
 
-    _onShowGraph() {
-        this.openModal('crm.note_graph', { noteId: this.noteId });
-    }
-
     _onDeleteNote() {
         this.openModal('crm.entity_delete', { entityId: this.noteId, redirectRoute: 'notes' });
     }
@@ -735,7 +730,6 @@ export class CRMNotePage extends CRMNamespacePage {
                     .mobileHeaderPanel=${this._mobileHeaderPanel}
                     mode="view"
                     @entity-open=${this._onEntityOpen}
-                    @show-graph=${this._onShowGraph}
                     @delete-note=${this._onDeleteNote}
                     @edit-note=${this._onEditNote}
                     @refresh-summary=${this._onRefreshSummary}

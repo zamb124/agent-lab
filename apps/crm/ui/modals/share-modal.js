@@ -30,6 +30,7 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const GRANTS_LIST_OP = 'crm/entity_grants_list';
@@ -455,7 +456,10 @@ export class CRMShareModal extends PlatformModal {
     }
 
     _onExpiresAtInput(e) {
-        this._expiresAt = e.target.value;
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('share-modal: expires field expects change detail.value string');
+        }
+        this._expiresAt = e.detail.value;
     }
 
     _onUserQueryInput(e) {
@@ -477,7 +481,10 @@ export class CRMShareModal extends PlatformModal {
     }
 
     _onCompanyIdInput(e) {
-        this._companyId = e.target.value;
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('share-modal: company id field expects change detail.value string');
+        }
+        this._companyId = e.detail.value;
     }
 
     _validateBeforeSubmit() {
@@ -721,6 +728,7 @@ export class CRMShareModal extends PlatformModal {
                             <input
                                 type="text"
                                 class="text-input"
+                                data-canon="search-as-you-type"
                                 placeholder=${this.t('share_modal.user_placeholder')}
                                 .value=${this._userQuery}
                                 @input=${this._onUserQueryInput}
@@ -750,30 +758,26 @@ export class CRMShareModal extends PlatformModal {
 
     _renderCompanyInput() {
         return html`
-            <div>
-                <div class="field-label">${this.t('share_modal.company_id_label')}</div>
-                <input
-                    type="text"
-                    class="text-input"
-                    placeholder=${this.t('share_modal.company_id_placeholder')}
-                    .value=${this._companyId}
-                    @input=${this._onCompanyIdInput}
-                />
-            </div>
+            <platform-field
+                type="string"
+                mode="edit"
+                label=${this.t('share_modal.company_id_label')}
+                placeholder=${this.t('share_modal.company_id_placeholder')}
+                .value=${this._companyId}
+                @change=${this._onCompanyIdInput}
+            ></platform-field>
         `;
     }
 
     _renderExpiresInput() {
         return html`
-            <div>
-                <div class="field-label">${this.t('share_modal.expires_label')}</div>
-                <input
-                    type="date"
-                    class="date-input"
-                    .value=${this._expiresAt}
-                    @change=${this._onExpiresAtInput}
-                />
-            </div>
+            <platform-field
+                type="date"
+                mode="edit"
+                label=${this.t('share_modal.expires_label')}
+                .value=${this._expiresAt}
+                @change=${this._onExpiresAtInput}
+            ></platform-field>
         `;
     }
 

@@ -1,12 +1,12 @@
 /**
- * Smoke: flows-tag-input — Enter добавляет, Backspace удаляет, эмит change.
+ * Smoke: tag-input — Enter добавляет, Backspace удаляет, эмит change.
  */
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
-import '../../../../apps/flows/ui/components/editors/flows-tag-input.js';
+import '@platform/lib/components/tag-input.js';
 
-describe('flows-tag-input', () => {
+describe('tag-input', () => {
     beforeEach(() => {
         resetPlatformState();
         bootstrapTestBus();
@@ -14,10 +14,10 @@ describe('flows-tag-input', () => {
     afterEach(() => fixtureCleanup());
 
     it('Enter добавляет тег', async () => {
-        const el = await fixture(html`<flows-tag-input .tags=${['foo']}></flows-tag-input>`);
+        const el = await fixture(html`<tag-input .tags=${['foo']}></tag-input>`);
         let last = null;
         el.addEventListener('change', (e) => { last = e.detail; });
-        const input = el.shadowRoot.querySelector('input');
+        const input = el.shadowRoot.querySelector('.tag-input');
         input.value = 'bar';
         input.dispatchEvent(new Event('input'));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -25,20 +25,20 @@ describe('flows-tag-input', () => {
     });
 
     it('Backspace удаляет последний при пустом draft', async () => {
-        const el = await fixture(html`<flows-tag-input .tags=${['foo', 'bar']}></flows-tag-input>`);
+        const el = await fixture(html`<tag-input .tags=${['foo', 'bar']}></tag-input>`);
         let last = null;
         el.addEventListener('change', (e) => { last = e.detail; });
-        const input = el.shadowRoot.querySelector('input');
+        const input = el.shadowRoot.querySelector('.tag-input');
         input.value = '';
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
         expect(last).to.deep.equal({ tags: ['foo'] });
     });
 
     it('игнорирует дубль', async () => {
-        const el = await fixture(html`<flows-tag-input .tags=${['foo']}></flows-tag-input>`);
+        const el = await fixture(html`<tag-input .tags=${['foo']}></tag-input>`);
         let last = null;
         el.addEventListener('change', (e) => { last = e.detail; });
-        const input = el.shadowRoot.querySelector('input');
+        const input = el.shadowRoot.querySelector('.tag-input');
         input.value = 'foo';
         input.dispatchEvent(new Event('input'));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

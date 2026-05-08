@@ -13,6 +13,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-cron-field.js';
 import '@platform/lib/components/platform-timezone-picker.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const PROVIDER_AMOCRM = 'amocrm';
 
@@ -91,14 +92,11 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
                 color: var(--text-secondary);
                 margin-bottom: var(--space-1);
             }
-            .input {
+            .field platform-field {
+                display: block;
                 width: 100%;
                 box-sizing: border-box;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
+                min-width: 0;
             }
             platform-cron-field,
             platform-timezone-picker {
@@ -320,8 +318,8 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
         return found !== undefined ? found : null;
     }
 
-    _onSubInput(e) {
-        this._subdomainDraft = e.target.value;
+    _onSubdomainChange(e) {
+        this._subdomainDraft = typeof e.detail.value === 'string' ? e.detail.value : '';
     }
 
     _amocrmOauthCallbackUrl() {
@@ -535,15 +533,15 @@ export class CRMSpaceIntegrationsPage extends PlatformPage {
                             : this.t('integrations_page.status_disconnected')}
                     </p>
                     <div class="field">
-                        <label class="field-label">${this.t('space_detail_page.amocrm_subdomain_label')}</label>
-                        <input
-                            class="input"
-                            type="text"
-                            autocomplete="off"
-                            placeholder=${this.t('space_detail_page.amocrm_subdomain_placeholder')}
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            input-type="text"
+                            .label=${this.t('space_detail_page.amocrm_subdomain_label')}
+                            .placeholder=${this.t('space_detail_page.amocrm_subdomain_placeholder')}
                             .value=${this._subdomainDraft}
-                            @input=${this._onSubInput}
-                        />
+                            @change=${this._onSubdomainChange}
+                        ></platform-field>
                     </div>
                     <p class="hint">${this.t('integrations_page.amocrm_oauth_credentials')}</p>
                     <p class="hint">${this.t('integrations_page.amocrm_oauth_redirect')}</p>

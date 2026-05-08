@@ -27,6 +27,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const STATUSES = Object.freeze(['open', 'claimed', 'user_dialog', 'awaiting_agent', 'completed', 'cancelled']);
@@ -457,18 +458,24 @@ export class OperatorPage extends PlatformPage {
             ${isAdmin
                 ? html`
                     <div class="queue-form">
-                        <input
-                            type="text"
-                            placeholder=${this.t('operator.queue_name_placeholder')}
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .placeholder=${this.t('operator.queue_name_placeholder')}
                             .value=${this._queueName}
-                            @input=${(e) => { this._queueName = e.target.value; }}
-                        />
-                        <input
-                            type="text"
-                            placeholder=${this.t('operator.queue_slug_placeholder')}
+                            @change=${(e) => {
+                                this._queueName = typeof e.detail.value === 'string' ? e.detail.value : '';
+                            }}
+                        ></platform-field>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .placeholder=${this.t('operator.queue_slug_placeholder')}
                             .value=${this._queueSlug}
-                            @input=${(e) => { this._queueSlug = e.target.value; }}
-                        />
+                            @change=${(e) => {
+                                this._queueSlug = typeof e.detail.value === 'string' ? e.detail.value : '';
+                            }}
+                        ></platform-field>
                         <glass-button @click=${this._createQueue}>${this.t('operator.queue_create')}</glass-button>
                     </div>
                 `
@@ -630,6 +637,7 @@ export class OperatorPage extends PlatformPage {
                 <input
                     type="text"
                     class="composer-input"
+                    data-canon="composer"
                     placeholder=${mode === 'takeover'
                         ? this.t('operator.placeholder_composer')
                         : this.t('operator.placeholder_single_reply')}

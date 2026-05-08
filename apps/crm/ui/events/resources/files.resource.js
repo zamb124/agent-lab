@@ -9,23 +9,9 @@
  * `source_file_id` / `source_file_ids` в payload `taskKnowledgeImportStartOp`.
  */
 
-import { createAsyncOp } from '@platform/lib/events/index.js';
-import { httpRequest } from '@platform/lib/events/http.js';
+import { createMultipartFileUploadOp } from '@platform/lib/events/index.js';
 
-export const fileUploadOp = createAsyncOp({
+export const fileUploadOp = createMultipartFileUploadOp({
     name: 'crm/file_upload',
-    silent: true,
-    restMirror: { method: 'POST', path: '/crm/api/v1/files/' },
-    request: async ({ payload }) => {
-        if (!payload || !(payload.file instanceof File)) {
-            throw new Error('fileUploadOp: { file: File } required');
-        }
-        const formData = new FormData();
-        formData.append('file', payload.file);
-        return await httpRequest({
-            method: 'POST',
-            url: '/crm/api/v1/files/',
-            body: formData,
-        });
-    },
+    url: '/crm/api/v1/files/',
 });

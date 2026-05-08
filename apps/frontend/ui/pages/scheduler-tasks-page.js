@@ -15,6 +15,7 @@ import { frontendIslandPageBodyStyles } from '../styles/frontend-island-page-bod
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendCreateSchedulerTaskModal } from '../modals/create-scheduler-task-modal.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const STATUSES = Object.freeze(['pending', 'paused', 'executed', 'cancelled', 'failed']);
 
@@ -171,6 +172,18 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         this._redis.run({ task_id: t.id });
     }
 
+    _statusFilterEnumConfig() {
+        return {
+            values: [
+                { value: '', label: this.t('scheduler_page.filter_all_status') },
+                ...STATUSES.map((s) => ({
+                    value: s,
+                    label: s,
+                })),
+            ],
+        };
+    }
+
     _formatSchedule(t) {
         const type = t.schedule_type || (t.cron ? 'cron' : (t.interval_seconds ? 'interval' : 'one_time'));
         if (type === 'cron') return this.t('scheduler_page.schedule_cron', { cron: t.cron || '' });
@@ -182,35 +195,48 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
     _renderFilters() {
         return html`
             <div class="filters">
-                <label>
-                    <span>${this.t('scheduler_page.filter_status')}</span>
-                    <select
-                        class="form-select"
-                        .value=${this._filterStatus}
-                        @change=${(e) => { this._filterStatus = e.target.value; this._reload(); }}
-                    >
-                        <option value="">${this.t('scheduler_page.filter_all_status')}</option>
-                        ${STATUSES.map((s) => html`<option value=${s} ?selected=${this._filterStatus === s}>${s}</option>`)}
-                    </select>
-                </label>
-                <label>
-                    <span>${this.t('scheduler_page.filter_service')}</span>
-                    <input
-                        class="form-input"
-                        .value=${this._filterService}
-                        @change=${(e) => { this._filterService = e.target.value; this._reload(); }}
-                        placeholder=${this.t('scheduler_page.prompt_target')}
-                    />
-                </label>
-                <label>
-                    <span>${this.t('scheduler_page.filter_task')}</span>
-                    <input
-                        class="form-input"
-                        .value=${this._filterTask}
-                        @change=${(e) => { this._filterTask = e.target.value; this._reload(); }}
-                        placeholder=${this.t('scheduler_page.prompt_task')}
-                    />
-                </label>
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    label=${this.t('scheduler_page.filter_status')}
+                    .value=${this._filterStatus}
+                    .config=${this._statusFilterEnumConfig()}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('scheduler tasks: status filter expects detail.value string');
+                        }
+                        this._filterStatus = e.detail.value;
+                        this._reload();
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    label=${this.t('scheduler_page.filter_service')}
+                    placeholder=${this.t('scheduler_page.prompt_target')}
+                    .value=${this._filterService}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('scheduler tasks: service filter expects detail.value string');
+                        }
+                        this._filterService = e.detail.value;
+                        this._reload();
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    label=${this.t('scheduler_page.filter_task')}
+                    placeholder=${this.t('scheduler_page.prompt_task')}
+                    .value=${this._filterTask}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('scheduler tasks: task filter expects detail.value string');
+                        }
+                        this._filterTask = e.detail.value;
+                        this._reload();
+                    }}
+                ></platform-field>
             </div>
         `;
     }

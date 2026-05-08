@@ -11,6 +11,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendSystemAccessModal } from '../../modals/system-access-modal.js';
 import { FrontendBalanceGrantModal } from '../../modals/balance-grant-modal.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const TABS = Object.freeze(['companies', 'prices_rules', 'usage']);
 
@@ -151,18 +152,6 @@ export class FrontendBillingAdminPage extends PlatformPage {
             }
             .state.forbidden, .state.unavailable { border-color: var(--warning); }
             .state-title { font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
-
-            textarea {
-                width: 100%; min-height: 280px;
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                padding: var(--space-3);
-                color: var(--text-primary);
-                font-family: var(--font-mono);
-                font-size: var(--text-xs);
-                box-sizing: border-box;
-            }
         `,
         frontendIslandPageBodyStyles,
     ];
@@ -282,6 +271,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 <div class="input-wrap">
                     <input
                         type="text"
+                        data-canon="combobox"
                         placeholder=${this.t('platform_billing_page.billing_company_search_placeholder')}
                         .value=${this._companyQuery}
                         @input=${(e) => this._onCompanyInput(e.target.value)}
@@ -429,12 +419,51 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 <tbody>
                     ${rows.map((r, idx) => html`
                         <tr>
-                            <td><input class="row-input" .value=${r.category}
-                                @input=${(e) => { rows[idx].category = e.target.value; onChange([...rows]); }} /></td>
-                            <td><input class="row-input" .value=${r.resource_name}
-                                @input=${(e) => { rows[idx].resource_name = e.target.value; onChange([...rows]); }} /></td>
-                            <td><input class="row-input" type="number" step="0.0001" .value=${r.price}
-                                @input=${(e) => { rows[idx].price = e.target.value; onChange([...rows]); }} /></td>
+                            <td>
+                                <platform-field
+                                    type="string"
+                                    mode="edit"
+                                    label=""
+                                    .value=${r.category}
+                                    @change=${(e) => {
+                                        if (!e.detail || typeof e.detail.value !== 'string') {
+                                            throw new Error('billing prices: category expects detail.value string');
+                                        }
+                                        rows[idx].category = e.detail.value;
+                                        onChange([...rows]);
+                                    }}
+                                ></platform-field>
+                            </td>
+                            <td>
+                                <platform-field
+                                    type="string"
+                                    mode="edit"
+                                    label=""
+                                    .value=${r.resource_name}
+                                    @change=${(e) => {
+                                        if (!e.detail || typeof e.detail.value !== 'string') {
+                                            throw new Error('billing prices: resource_name expects detail.value string');
+                                        }
+                                        rows[idx].resource_name = e.detail.value;
+                                        onChange([...rows]);
+                                    }}
+                                ></platform-field>
+                            </td>
+                            <td>
+                                <platform-field
+                                    type="number"
+                                    mode="edit"
+                                    label=""
+                                    .value=${Number(r.price)}
+                                    @change=${(e) => {
+                                        if (!e.detail || e.detail.value === null || typeof e.detail.value !== 'number') {
+                                            throw new Error('billing prices: price expects numeric detail.value');
+                                        }
+                                        rows[idx].price = String(e.detail.value);
+                                        onChange([...rows]);
+                                    }}
+                                ></platform-field>
+                            </td>
                             <td><button class="btn" @click=${() => { rows.splice(idx, 1); onChange([...rows]); }}>
                                 ${this.t('platform_billing_page.price_remove_row')}
                             </button></td>
@@ -533,10 +562,18 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 <section>
                     <div class="section-title">${this.t('platform_billing_page.section_settlement_rules')}</div>
                     <p class="hint">${this.t('platform_billing_page.hint_settlement_company_scope')}</p>
-                    <textarea
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        label=""
                         .value=${this._rulesDraft || ''}
-                        @input=${(e) => { this._rulesDraft = e.target.value; }}
-                    ></textarea>
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing rules: draft expects detail.value string');
+                            }
+                            this._rulesDraft = e.detail.value;
+                        }}
+                    ></platform-field>
                     <div class="actions">
                         <button class="btn primary" ?disabled=${this._rulesSave.busy}
                             @click=${() => this._saveRules()}>
@@ -588,7 +625,10 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return html`
             <div class="field">
                 <label>${this.t(labelKey)}</label>
-                <input class="row-input" type="text" .value=${value}
+                <input class="row-input"
+                    type="text"
+                    data-canon="combobox"
+                    .value=${value}
                     @input=${(e) => this._onUsageFilter(field, facet, e.target.value)}
                     @blur=${() => setTimeout(() => { this._usageFacetOpen = null; }, 180)} />
                 ${isOpen ? html`
@@ -611,9 +651,18 @@ export class FrontendBillingAdminPage extends PlatformPage {
         const value = this._usageFilters[field] || '';
         return html`
             <div class="field">
-                <label>${this.t(labelKey)}</label>
-                <input class="row-input" type="datetime-local" .value=${value}
-                    @input=${(e) => this._onUsageFilter(field, null, e.target.value)} />
+                <platform-field
+                    type="datetime"
+                    mode="edit"
+                    label=${this.t(labelKey)}
+                    .value=${value.length > 0 ? value : null}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('billing usage: time filter expects detail.value string');
+                        }
+                        this._onUsageFilter(field, null, e.detail.value);
+                    }}
+                ></platform-field>
             </div>
         `;
     }

@@ -616,7 +616,6 @@
         "download": "Скачать",
         "attachment_remove": "Удалить вложение",
         "action_attachments": "Открыть вложения",
-        "action_show_graph": "Показать граф связей",
         "action_delete": "Удалить заметку",
         "action_edit": "Редактировать",
         "date_prefix": "от {{date}}",

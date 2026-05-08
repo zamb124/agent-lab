@@ -14,6 +14,7 @@ import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-body.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const PROVIDER_OPTIONS = Object.freeze(['openrouter', 'provider_litserve']);
 
@@ -64,21 +65,6 @@ export class FrontendSettingsPage extends PlatformPage {
             }
 
             .form { display: flex; flex-direction: column; gap: var(--space-4); max-width: 720px; }
-            .form-group { display: flex; flex-direction: column; gap: 4px; }
-            .form-group label { color: var(--text-secondary); font-size: var(--text-sm); }
-            .form-group small { color: var(--text-tertiary); font-size: var(--text-xs); }
-            .form-input, .form-select, .form-textarea {
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                color: var(--text-primary);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                font-size: var(--text-sm);
-                font-family: inherit;
-            }
-            .form-input:read-only { opacity: 0.7; }
-            .form-textarea { font-family: var(--font-mono); font-size: var(--text-xs); min-height: 100px; }
-            .form-input.error, .form-textarea.error { border-color: var(--error); }
             .field-error { color: var(--error); font-size: var(--text-xs); }
 
             .toggle-row {
@@ -239,6 +225,18 @@ export class FrontendSettingsPage extends PlatformPage {
         `;
     }
 
+    _ragProviderEnumConfig() {
+        return {
+            values: [
+                { value: '', label: '\u2014' },
+                ...PROVIDER_OPTIONS.map((p) => ({
+                    value: p,
+                    label: this.t(`settings_page.provider_${p}`),
+                })),
+            ],
+        };
+    }
+
     _renderCompanyTab(company) {
         const ragDefaultProvider = (company.rag_embedding && company.rag_embedding.default_provider) || '';
         const ragDefaultModel = (company.rag_embedding && company.rag_embedding.default_model) || '';
@@ -258,26 +256,38 @@ export class FrontendSettingsPage extends PlatformPage {
             <section>
                 <h3>${this.t('settings_page.company_section')}</h3>
                 <div class="form">
-                    <div class="form-group">
-                        <label>${this.t('settings_page.label_company_name')}</label>
-                        <input class="form-input"
-                            .value=${this._name}
-                            @input=${(e) => { this._name = e.target.value; }}
-                        />
-                    </div>
-                    <div class="form-group">
-                        <label>${this.t('settings_page.label_subdomain')}</label>
-                        <input class="form-input" readonly .value=${company.subdomain || ''} />
-                        <small>${this.t('settings_page.subdomain_help')}</small>
-                    </div>
-                    <div class="form-group">
-                        <label>${this.t('settings_page.label_monthly_budget')}</label>
-                        <input type="number" min="0" class="form-input"
-                            .value=${String(this._monthlyBudget)}
-                            @input=${(e) => { this._monthlyBudget = Number(e.target.value); }}
-                        />
-                        <small>${this.t('settings_page.budget_help')}</small>
-                    </div>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('settings_page.label_company_name')}
+                        .value=${this._name}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('settings: company name expects detail.value string');
+                            }
+                            this._name = e.detail.value;
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="view"
+                        label=${this.t('settings_page.label_subdomain')}
+                        .value=${company.subdomain || ''}
+                    ></platform-field>
+                    <small>${this.t('settings_page.subdomain_help')}</small>
+                    <platform-field
+                        type="integer"
+                        mode="edit"
+                        label=${this.t('settings_page.label_monthly_budget')}
+                        .value=${this._monthlyBudget}
+                        @change=${(e) => {
+                            if (!e.detail || e.detail.value === null || typeof e.detail.value !== 'number') {
+                                throw new Error('settings: monthly budget expects integer detail.value');
+                            }
+                            this._monthlyBudget = e.detail.value;
+                        }}
+                    ></platform-field>
+                    <small>${this.t('settings_page.budget_help')}</small>
                 </div>
             </section>
 
@@ -292,31 +302,35 @@ export class FrontendSettingsPage extends PlatformPage {
                         />
                         <label for="rag-toggle">${this.t('settings_page.rag_override_enable')}</label>
                     </div>
-                    <div class="form-group">
-                        <label>${this.t('settings_page.rag_provider_label')}</label>
-                        <select class="form-select"
-                            ?disabled=${!this._ragEnabled}
-                            .value=${this._ragProvider}
-                            @change=${(e) => { this._ragProvider = e.target.value; }}
-                        >
-                            <option value="">—</option>
-                            ${PROVIDER_OPTIONS.map((p) => html`
-                                <option value=${p} ?selected=${this._ragProvider === p}>
-                                    ${this.t(`settings_page.provider_${p}`)}
-                                </option>
-                            `)}
-                        </select>
-                        <small>${this.t('settings_page.rag_provider_default', { provider: ragDefaultProvider })}</small>
-                    </div>
-                    <div class="form-group">
-                        <label>${this.t('settings_page.rag_model_label')}</label>
-                        <input class="form-input"
-                            ?disabled=${!this._ragEnabled}
-                            .value=${this._ragModel}
-                            @input=${(e) => { this._ragModel = e.target.value; }}
-                        />
-                        <small>${this.t('settings_page.rag_model_default', { model: ragDefaultModel })}</small>
-                    </div>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        label=${this.t('settings_page.rag_provider_label')}
+                        ?disabled=${!this._ragEnabled}
+                        .value=${this._ragProvider}
+                        .config=${this._ragProviderEnumConfig()}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('settings: rag provider expects detail.value string');
+                            }
+                            this._ragProvider = e.detail.value;
+                        }}
+                    ></platform-field>
+                    <small>${this.t('settings_page.rag_provider_default', { provider: ragDefaultProvider })}</small>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('settings_page.rag_model_label')}
+                        ?disabled=${!this._ragEnabled}
+                        .value=${this._ragModel}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('settings: rag model expects detail.value string');
+                            }
+                            this._ragModel = e.detail.value;
+                        }}
+                    ></platform-field>
+                    <small>${this.t('settings_page.rag_model_default', { model: ragDefaultModel })}</small>
                 </div>
             </section>
 
@@ -324,13 +338,20 @@ export class FrontendSettingsPage extends PlatformPage {
                 <h3>${this.t('settings_page.metadata_title')}</h3>
                 <div class="section-help">${this.t('settings_page.metadata_help')}</div>
                 <div class="form">
-                    <div class="form-group">
-                        <textarea class="form-textarea ${this._metadataError ? 'error' : ''}"
-                            .value=${this._metadataJson}
-                            @input=${(e) => { this._metadataJson = e.target.value; this._metadataError = ''; }}
-                        ></textarea>
-                        ${this._metadataError ? html`<div class="field-error">${this._metadataError}</div>` : ''}
-                    </div>
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        label=""
+                        .value=${this._metadataJson}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('settings: metadata expects detail.value string');
+                            }
+                            this._metadataJson = e.detail.value;
+                            this._metadataError = '';
+                        }}
+                    ></platform-field>
+                    ${this._metadataError ? html`<div class="field-error">${this._metadataError}</div>` : ''}
                 </div>
             </section>
 

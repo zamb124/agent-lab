@@ -10,6 +10,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-json-field-editor.js';
 import '../editors/flows-args-schema-form.js';
@@ -272,13 +273,35 @@ export class FlowsMcpNodeEditor extends PlatformElement {
     }
 
     _onServer(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-mcp-node-editor: server_id change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-mcp-node-editor: server_id detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-mcp-node-editor: server_id string required');
+        }
         this._draftGenFullId = null;
-        this._emitPatch({ server_id: e.target.value, tool_name: '' });
+        this._emitPatch({ server_id: v, tool_name: '' });
     }
 
     _onTool(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-mcp-node-editor: tool_name change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-mcp-node-editor: tool_name detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-mcp-node-editor: tool_name string required');
+        }
         this._draftGenFullId = null;
-        this._emitPatch({ tool_name: e.target.value });
+        this._emitPatch({ tool_name: v });
     }
 
     _onHeaders(parsed) {
@@ -360,6 +383,14 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         const loaded = this._resolveLoadedToolRecord(serverId, toolName);
         const schema = this._toolSchema(loaded);
         const headersJson = JSON.stringify(b.headers, null, 2);
+        const serverValues = [
+            { value: '', label: '—' },
+            ...servers.map((s) => ({ value: s.server_id, label: s.name })),
+        ];
+        const toolValues = [
+            { value: '', label: '—' },
+            ...toolOptions.map((o) => ({ value: o.value, label: o.label })),
+        ];
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -382,15 +413,13 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                     <div class="field">
                         <label>${this.t('mcp_node_editor.server_id')}</label>
                         <div class="row">
-                            <select @change=${this._onServer}>
-                                <option value="">—</option>
-                                ${servers.map((s) => html`
-                                    <option
-                                        value=${s.server_id}
-                                        ?selected=${s.server_id === serverId}
-                                    >${s.name}</option>
-                                `)}
-                            </select>
+                            <platform-field
+                                mode="edit"
+                                type="enum"
+                                .value=${serverId}
+                                .config=${{ values: serverValues }}
+                                @change=${this._onServer}
+                            ></platform-field>
                             <glass-button size="sm" variant="ghost" ?disabled=${!serverId || this._sync.busy}
                                 @click=${() => this._onSync(serverId)}>
                                 <platform-icon name="refresh"></platform-icon>
@@ -400,15 +429,13 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                     </div>
                     <div class="field">
                         <label>${this.t('mcp_node_editor.tool_name')}</label>
-                        <select @change=${this._onTool}>
-                            <option value="">—</option>
-                            ${toolOptions.map((o) => html`
-                                <option
-                                    value=${o.value}
-                                    ?selected=${o.value === toolName}
-                                >${o.label}</option>
-                            `)}
-                        </select>
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .value=${toolName}
+                            .config=${{ values: toolValues }}
+                            @change=${this._onTool}
+                        ></platform-field>
                     </div>
                     ${schema ? html`
                         <details>

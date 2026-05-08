@@ -222,6 +222,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/companies/*/voice-providers/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/companies/*/voice-providers", context_type="api", auth_required=True),
     RouteRule("/frontend/api/companies/*/voice-providers/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/voice-providers/catalog", context_type="api", auth_required=True),
     RouteRule("/*/api/companies/*/voice-providers", context_type="api", auth_required=True),
     RouteRule("/*/api/companies/*/voice-providers/*", context_type="api", auth_required=True),
     
@@ -452,6 +453,7 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/api/companies/*/voice-providers/*",
     "/frontend/api/companies/*/voice-providers",
     "/frontend/api/companies/*/voice-providers/*",
+    "/frontend/api/voice-providers/catalog",
     "/*/api/companies/*/voice-providers",
     "/*/api/companies/*/voice-providers/*",
     "/api/invites/accept",

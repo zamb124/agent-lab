@@ -104,6 +104,20 @@ describe('createForm: reducer', () => {
         expect(next.errors).toEqual({ name: 'svc:form.name_required' });
     });
 
+    it('submittingClearOnEventTypes снимает submitting после внешнего события', () => {
+        const extOk = 'svc/widgets/created';
+        const f = createForm(opts({ submittingClearOnEventTypes: [extOk] }));
+        const opened = f.reducer(f.slice.initial, { type: f.events.OPENED, payload: null, id: 'o1', meta: {} });
+        const submitting = f.reducer(opened, { type: f.events.SUBMIT_REQUESTED, payload: null, id: 's1', meta: {} });
+        expect(submitting.submitting).toBe(true);
+        const cleared = f.reducer(submitting, { type: extOk, payload: { item: { id: '1' } }, id: 'c1', meta: {} });
+        expect(cleared.submitting).toBe(false);
+    });
+
+    it('submittingClearOnEventTypes — пустая строка в массиве — throw', () => {
+        expect(() => createForm(opts({ submittingClearOnEventTypes: [''] }))).toThrow(/submittingClearOnEventTypes/);
+    });
+
     it('RESET возвращает draft = initial', () => {
         const f = createForm(opts());
         const opened = f.reducer(f.slice.initial, { type: f.events.OPENED, payload: { initial: { name: 'x' } }, id: 'o1', meta: {} });

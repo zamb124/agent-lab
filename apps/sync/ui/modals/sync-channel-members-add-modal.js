@@ -9,6 +9,7 @@ import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class SyncChannelMembersAddModal extends PlatformFormModal {
     static modalKind = 'sync.channel_members_add';
@@ -63,15 +64,19 @@ export class SyncChannelMembersAddModal extends PlatformFormModal {
     renderBody() {
         const filtered = this._filteredMembers();
         return html`
-            <div class="form-group">
-                <input
-                    class="form-input"
-                    type="text"
-                    placeholder=${this.t('channel_members_add.search_placeholder')}
-                    .value=${this._query}
-                    @input=${(e) => { this._query = e.target.value; }}
-                />
-            </div>
+            <platform-field
+                type="string"
+                mode="edit"
+                label=""
+                placeholder=${this.t('channel_members_add.search_placeholder')}
+                .value=${this._query}
+                @change=${(e) => {
+                    if (!e.detail || typeof e.detail.value !== 'string') {
+                        throw new Error('sync channel members add: query expects detail.value string');
+                    }
+                    this._query = e.detail.value;
+                }}
+            ></platform-field>
             <div class="members">
                 ${filtered.map((m) => html`
                     <div

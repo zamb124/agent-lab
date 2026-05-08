@@ -16,9 +16,7 @@ from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.company_voice_providers import (
     router as company_voice_providers_router,
 )
-from apps.frontend.api.voice_providers_catalog import (
-    router as voice_providers_catalog_router,
-)
+from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.public_site import router as public_site_router
@@ -309,6 +307,7 @@ async def get_llms_txt(container: ContainerDep) -> PlainTextResponse:
     base_url = _get_platform_public_base_url()
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
 
+
 # SPA fallback (все неизвестные пути → index.html)
 @app.get("/")
 @app.get("/{full_path:path}")
@@ -327,12 +326,13 @@ async def serve_spa(container: ContainerDep, full_path: str = ""):
     )
     if full_path.startswith(excluded) or full_path in ("manifest.json", "sw.js", "offline.html"):
         raise HTTPException(status_code=404)
-    
+
     index_path = ui_path / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    
+
     return {"message": "Frontend UI not built yet"}
+
 
 if __name__ == "__main__":
     import uvicorn

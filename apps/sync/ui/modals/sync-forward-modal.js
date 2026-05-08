@@ -13,6 +13,7 @@ import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import './../components/sync-channel-row.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class SyncForwardModal extends PlatformModal {
     static modalKind = 'sync.forward';
@@ -117,15 +118,19 @@ export class SyncForwardModal extends PlatformModal {
     renderBody() {
         const channels = this._filteredChannels();
         return html`
-            <div class="form-group">
-                <input
-                    class="form-input"
-                    type="text"
-                    .value=${this._query}
-                    @input=${(e) => { this._query = e.target.value; }}
-                    placeholder=${this.t('sidebar.direct_search_placeholder')}
-                />
-            </div>
+            <platform-field
+                type="string"
+                mode="edit"
+                label=""
+                placeholder=${this.t('sidebar.direct_search_placeholder')}
+                .value=${this._query}
+                @change=${(e) => {
+                    if (!e.detail || typeof e.detail.value !== 'string') {
+                        throw new Error('sync forward: query expects detail.value string');
+                    }
+                    this._query = e.detail.value;
+                }}
+            ></platform-field>
             ${channels.length === 0
                 ? html`<div class="empty">${this.t('chat_view.no_other_channels')}</div>`
                 : html`<div class="list">

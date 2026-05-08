@@ -242,6 +242,7 @@ export class CRMGraphSearchPill extends PlatformElement {
             <div class="pill">
                 <input
                     type="text"
+                    data-canon="search-as-you-type"
                     .value=${this.query}
                     placeholder=${this.t('graph.search_placeholder_short')}
                     @input=${this._onInput}

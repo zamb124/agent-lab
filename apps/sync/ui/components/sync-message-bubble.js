@@ -28,6 +28,7 @@ import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-audio-message-player.js';
 import { parseMentionsToSegments } from '../_helpers/sync-mention-text.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
+import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
 const FILE_DOWNLOAD_BASE = '/sync/api/v1/files/download';
@@ -54,13 +55,6 @@ function _reactionsGroupedByEmoji(raw) {
     return [...map.entries()].map(([emoji, user_ids]) => ({ emoji, user_ids }));
 }
 
-function _formatBytes(n, t) {
-    if (typeof n !== 'number' || n < 0) return '';
-    if (n < 1024) return t('bubble.file_size_b', { n });
-    if (n < 1024 * 1024) return t('bubble.file_size_kb', { n: (n / 1024).toFixed(1) });
-    if (n < 1024 * 1024 * 1024) return t('bubble.file_size_mb', { n: (n / (1024 * 1024)).toFixed(1) });
-    return t('bubble.file_size_gb', { n: (n / (1024 * 1024 * 1024)).toFixed(2) });
-}
 
 export class SyncMessageBubble extends PlatformElement {
     static properties = {
@@ -805,7 +799,7 @@ export class SyncMessageBubble extends PlatformElement {
         else name = this.t('bubble.file_fallback');
         const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
         const size = data && typeof data.size === 'number'
-            ? _formatBytes(data.size, (k, v) => this.t(k, v))
+            ? formatFileSize(data.size)
             : '';
         return html`
             <div class="file">

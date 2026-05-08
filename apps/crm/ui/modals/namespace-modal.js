@@ -26,6 +26,7 @@ import { setPlatformNamespaceSelection } from '@platform/lib/utils/platform-name
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const CREATE_FORM = 'crm/namespace_create_form';
 const EDIT_FORM = 'crm/namespace_edit_form';
@@ -92,6 +93,18 @@ export class CRMNamespaceModal extends PlatformFormModal {
         css`
             .form-grid { display: grid; gap: var(--space-4); }
 
+            /* Layout-only row: avoids stacking .form-group pill chrome with inner .field-pill from platform-field. */
+            .crm-namespace-field-row {
+                display: flex;
+                flex-direction: column;
+                gap: var(--field-pill-gap);
+                margin-bottom: var(--space-6);
+                min-width: 0;
+            }
+            .crm-namespace-field-row:last-child {
+                margin-bottom: 0;
+            }
+
             .template-grid {
                 display: grid;
                 gap: var(--space-2);
@@ -152,14 +165,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 align-items: center;
                 gap: var(--space-2);
                 flex-wrap: wrap;
-            }
-            .form-label-row .form-label {
-                margin: 0;
-            }
-            .form-label {
-                font-size: var(--text-sm);
-                font-weight: 600;
-                color: var(--text-secondary);
             }
 
             .empty-templates {
@@ -637,7 +642,10 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _onExpiresAtInput(e) {
-        this._grantExpiresAt = e.target.value;
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('namespace-modal: expires field expects change detail.value string');
+        }
+        this._grantExpiresAt = e.detail.value;
     }
 
     _onUserQueryInput(e) {
@@ -659,7 +667,10 @@ export class CRMNamespaceModal extends PlatformFormModal {
     }
 
     _onCompanyIdInput(e) {
-        this._grantCompanyId = e.target.value;
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('namespace-modal: company id field expects change detail.value string');
+        }
+        this._grantCompanyId = e.detail.value;
     }
 
     _validateGrantBeforeSubmit() {
@@ -800,12 +811,14 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._createForm.setField('template_id', template_id);
     }
 
-    _onNameInput(event) {
-        this._createForm.setField('name', event.target.value);
+    _onNameChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._createForm.setField('name', v);
     }
 
-    _onDescriptionInput(event) {
-        this._activeForm().setField('description', event.target.value);
+    _onDescriptionChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._activeForm().setField('description', v);
     }
 
     _onOpenSpaceSettings() {
@@ -1038,33 +1051,33 @@ export class CRMNamespaceModal extends PlatformFormModal {
                     <div class="hint">${this.t('namespace_modal.template_hint')}</div>
                 </div>
 
-                <div class="form-group">
+                <div class="crm-namespace-field-row">
                     ${this._formLabelWithHint('namespace_modal.label_name', 'namespace_modal.label_name_hint')}
-                    <input
-                        type="text"
-                        class="form-input"
-                        autocomplete="off"
-                        spellcheck="false"
-                        placeholder=${this.t('namespace_modal.name_placeholder')}
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        .hint=${this.t('namespace_modal.name_hint')}
+                        .placeholder=${this.t('namespace_modal.name_placeholder')}
                         .value=${draft.name}
-                        @input=${this._onNameInput}
-                    />
+                        ?disabled=${this._createForm.submitting}
+                        @change=${this._onNameChange}
+                    ></platform-field>
                     ${this._renderFieldError('name')}
-                    <div class="hint">${this.t('namespace_modal.name_hint')}</div>
                 </div>
 
-                <div class="form-group">
+                <div class="crm-namespace-field-row">
                     ${this._formLabelWithHint(
                         'namespace_modal.label_description',
                         'namespace_modal.label_description_hint',
                     )}
-                    <textarea
-                        class="form-textarea"
-                        rows="3"
-                        placeholder=${this.t('namespace_modal.description_placeholder')}
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        .placeholder=${this.t('namespace_modal.description_placeholder')}
                         .value=${draft.description}
-                        @input=${this._onDescriptionInput}
-                    ></textarea>
+                        ?disabled=${this._createForm.submitting}
+                        @change=${this._onDescriptionChange}
+                    ></platform-field>
                     ${this._renderFieldError('description')}
                 </div>
             </form>
@@ -1094,7 +1107,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
         const nsItem = this._namespaceItemForEdit();
         return html`
             <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>
-                <div class="form-group">
+                <div class="crm-namespace-field-row">
                     ${this._formLabelWithHint('namespace_modal.label_name', 'namespace_modal.label_name_readonly_hint')}
                     <span class="name-readonly">
                         <platform-icon name="folder" size="14"></platform-icon>
@@ -1102,23 +1115,25 @@ export class CRMNamespaceModal extends PlatformFormModal {
                     </span>
                 </div>
 
-                <div class="form-group">
+                <div class="crm-namespace-field-row">
                     ${this._formLabelWithHint(
                         'namespace_modal.label_description',
                         'namespace_modal.label_description_hint',
                     )}
-                    <textarea
-                        class="form-textarea"
-                        rows="4"
-                        placeholder=${this.t('namespace_modal.description_placeholder')}
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        .hint=${this.t('namespace_modal.label_description_hint')}
+                        .placeholder=${this.t('namespace_modal.description_placeholder')}
                         .value=${draft.description}
-                        @input=${this._onDescriptionInput}
-                    ></textarea>
+                        ?disabled=${this._update.busy}
+                        @change=${this._onDescriptionChange}
+                    ></platform-field>
                 </div>
 
                 ${nsItem !== null ? this._renderEditIntegrationsRow(nsItem) : nothing}
 
-                <div class="form-group">
+                <div class="crm-namespace-field-row">
                     ${this._renderEditabilityBadge()}
                 </div>
             </form>
@@ -1268,6 +1283,7 @@ export class CRMNamespaceModal extends PlatformFormModal {
                             <input
                                 type="text"
                                 class="text-input"
+                                data-canon="search-as-you-type"
                                 placeholder=${this.t('namespace_modal.grants_user_placeholder')}
                                 .value=${this._grantUserQuery}
                                 @input=${this._onUserQueryInput}
@@ -1297,30 +1313,26 @@ export class CRMNamespaceModal extends PlatformFormModal {
 
     _renderCompanyInput() {
         return html`
-            <div>
-                <div class="field-label">${this.t('namespace_modal.grants_company_id_label')}</div>
-                <input
-                    type="text"
-                    class="text-input"
-                    placeholder=${this.t('namespace_modal.grants_company_id_placeholder')}
-                    .value=${this._grantCompanyId}
-                    @input=${this._onCompanyIdInput}
-                />
-            </div>
+            <platform-field
+                type="string"
+                mode="edit"
+                label=${this.t('namespace_modal.grants_company_id_label')}
+                placeholder=${this.t('namespace_modal.grants_company_id_placeholder')}
+                .value=${this._grantCompanyId}
+                @change=${this._onCompanyIdInput}
+            ></platform-field>
         `;
     }
 
     _renderExpiresInput() {
         return html`
-            <div>
-                <div class="field-label">${this.t('namespace_modal.grants_expires_label')}</div>
-                <input
-                    type="date"
-                    class="date-input"
-                    .value=${this._grantExpiresAt}
-                    @change=${this._onExpiresAtInput}
-                />
-            </div>
+            <platform-field
+                type="date"
+                mode="edit"
+                label=${this.t('namespace_modal.grants_expires_label')}
+                .value=${this._grantExpiresAt}
+                @change=${this._onExpiresAtInput}
+            ></platform-field>
         `;
     }
 

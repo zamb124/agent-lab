@@ -17,6 +17,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const SCOPE_COMPANY = 'company';
@@ -42,18 +43,6 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            .field input[type='text'],
-            .field textarea {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-            }
-            .field textarea { min-height: 80px; resize: vertical; }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
-            .checkbox-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
         `,
     ];
 
@@ -92,29 +81,43 @@ export class FlowsVariableEditorModal extends PlatformFormModal {
         const editing = this.variableKey.length > 0;
         return html`
             <div class="field">
-                <label>${this.t('variable_editor_modal.field_key')}</label>
-                <input
-                    type="text"
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('variable_editor_modal.field_key')}
                     .value=${this._key}
                     ?disabled=${editing}
-                    @input=${(e) => { this._key = e.target.value; this.isDirty = true; }}
-                />
+                    @change=${(e) => {
+                        if (!editing) {
+                            this._key = typeof e.detail.value === 'string' ? e.detail.value : '';
+                            this.isDirty = true;
+                        }
+                    }}
+                ></platform-field>
             </div>
             <div class="field">
-                <label>${this.t('variable_editor_modal.field_value')}</label>
-                <textarea
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('variable_editor_modal.field_value')}
                     .value=${this._value}
-                    @input=${(e) => { this._value = e.target.value; this.isDirty = true; }}
-                ></textarea>
+                    @change=${(e) => {
+                        this._value = typeof e.detail.value === 'string' ? e.detail.value : '';
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
-            <div class="checkbox-row">
-                <input
-                    type="checkbox"
-                    id="flows-var-secret"
-                    .checked=${this._secret}
-                    @change=${(e) => { this._secret = e.target.checked; this.isDirty = true; }}
-                />
-                <label for="flows-var-secret">${this.t('variable_editor_modal.field_secret')}</label>
+            <div class="field">
+                <platform-field
+                    type="boolean"
+                    mode="edit"
+                    .label=${this.t('variable_editor_modal.field_secret')}
+                    .value=${this._secret}
+                    @change=${(e) => {
+                        this._secret = Boolean(e.detail.value);
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
         `;
     }

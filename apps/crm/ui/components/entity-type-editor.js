@@ -36,6 +36,7 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-icon-picker.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import './schema-field-builder.js';
 import { buildSchemaFromRows } from './schema-field-builder.js';
@@ -126,18 +127,6 @@ export class CRMEntityTypeEditor extends PlatformElement {
                 margin: 0;
             }
 
-            .input, .select, .textarea {
-                width: 100%;
-                box-sizing: border-box;
-                padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                background: var(--crm-surface);
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-            }
-            .input.mono, .select.mono { font-family: var(--font-mono); }
-            .textarea { min-height: 76px; resize: vertical; }
             .flags-col {
                 display: flex;
                 flex-direction: column;
@@ -276,14 +265,38 @@ export class CRMEntityTypeEditor extends PlatformElement {
         this.emit('draft-changed', { typeDraft: next });
     }
 
-    _onParentTypeChange(event) {
-        const value = event && event.target ? String(event.target.value) : '';
-        const next = { ...this.typeDraft, parent_type_id: value };
+    _parentEnumConfig() {
+        const none = { value: '', label: this.t('templates_page.field_parent_none') };
+        const ids = Array.isArray(this.parentTypeOptions) ? this.parentTypeOptions : [];
+        const opts = ids.map((typeId) => ({ value: typeId, label: typeId }));
+        return { values: [none, ...opts] };
+    }
+
+    _onParentTypeDetailChange(value) {
+        const v = typeof value === 'string' ? value : '';
+        const next = { ...this.typeDraft, parent_type_id: v };
         if (entityTypeNoteSubtreeLocked(next, this.entityTypeCatalogRows)) {
             next.is_context_anchor = false;
             next.is_voice_target = false;
         }
         this.emit('draft-changed', { typeDraft: next });
+    }
+
+    _weightCoefficientNumeric() {
+        const n = parseFloat(String(this.typeDraft.weight_coefficient));
+        return Number.isFinite(n) ? n : null;
+    }
+
+    _onWeightCoefficientChange(e) {
+        const v = e.detail.value;
+        if (v === null) {
+            this._emitDraftField('weight_coefficient', '');
+            return;
+        }
+        if (typeof v !== 'number' || Number.isNaN(v)) {
+            throw new Error('CRMEntityTypeEditor: weight_coefficient change requires a finite number');
+        }
+        this._emitDraftField('weight_coefficient', String(v));
     }
 
     _onSchemaRowsChanged(section, rows) {
@@ -370,45 +383,36 @@ export class CRMEntityTypeEditor extends PlatformElement {
                 `}
                 ${!schemaReady ? html`<div class="empty">${this.t('templates_page.loading_schema')}</div>` : ''}
                 <div class="grid-2">
-                    <div class="field">
-                        ${this._fieldLabelWithHint(
-                            'templates_page.field_type_id',
-                            'templates_page.field_type_id_hint',
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        .label=${this.t('templates_page.field_type_id')}
+                        .hint=${this.t('templates_page.field_type_id_hint')}
+                        .value=${this.typeDraft.type_id}
+                        ?disabled=${editing || this.savingType}
+                        @change=${(e) => this._emitDraftField('type_id', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        .label=${this.t('templates_page.field_type_name')}
+                        .hint=${this.t('templates_page.field_type_name_hint')}
+                        .value=${this.typeDraft.name}
+                        ?disabled=${this.savingType}
+                        @change=${(e) => this._emitDraftField('name', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                    ></platform-field>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .label=${this.t('templates_page.field_parent')}
+                        .hint=${this.t('templates_page.field_parent_hint')}
+                        .config=${this._parentEnumConfig()}
+                        .value=${this.typeDraft.parent_type_id}
+                        ?disabled=${this.savingType}
+                        @change=${(e) => this._onParentTypeDetailChange(
+                            typeof e.detail.value === 'string' ? e.detail.value : '',
                         )}
-                        <input
-                            class="input mono"
-                            .value=${this.typeDraft.type_id}
-                            ?disabled=${editing}
-                            @input=${(e) => this._emitDraftField('type_id', e.target.value)}
-                        />
-                    </div>
-                    <div class="field">
-                        ${this._fieldLabelWithHint(
-                            'templates_page.field_type_name',
-                            'templates_page.field_type_name_hint',
-                        )}
-                        <input
-                            class="input"
-                            .value=${this.typeDraft.name}
-                            @input=${(e) => this._emitDraftField('name', e.target.value)}
-                        />
-                    </div>
-                    <div class="field">
-                        ${this._fieldLabelWithHint(
-                            'templates_page.field_parent',
-                            'templates_page.field_parent_hint',
-                        )}
-                        <select
-                            class="select mono"
-                            .value=${this.typeDraft.parent_type_id}
-                            @change=${this._onParentTypeChange}
-                        >
-                            <option value="">${this.t('templates_page.field_parent_none')}</option>
-                            ${this.parentTypeOptions.map((typeId) => html`
-                                <option value=${typeId} ?selected=${typeId === this.typeDraft.parent_type_id}>${typeId}</option>
-                            `)}
-                        </select>
-                    </div>
+                    ></platform-field>
                     <div class="field">
                         ${this._fieldLabelWithHint('templates_page.field_icon', 'templates_page.field_icon_hint')}
                         <platform-icon-picker
@@ -428,20 +432,15 @@ export class CRMEntityTypeEditor extends PlatformElement {
                             @change=${this._onPaletteColorChange}
                         ></platform-palette-color-picker>
                     </div>
-                    <div class="field">
-                        ${this._fieldLabelWithHint(
-                            'templates_page.field_weight',
-                            'templates_page.field_weight_hint',
-                        )}
-                        <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            class="input mono"
-                            .value=${this.typeDraft.weight_coefficient}
-                            @input=${(e) => this._emitDraftField('weight_coefficient', e.target.value)}
-                        />
-                    </div>
+                    <platform-field
+                        type="number"
+                        mode="edit"
+                        .label=${this.t('templates_page.field_weight')}
+                        .hint=${this.t('templates_page.field_weight_hint')}
+                        .value=${this._weightCoefficientNumeric()}
+                        ?disabled=${this.savingType}
+                        @change=${this._onWeightCoefficientChange}
+                    ></platform-field>
                     <div class="field">
                         ${this._fieldLabelWithHint('templates_page.field_flags', 'templates_page.field_flags_hint')}
                         <div class="flags-col">
@@ -500,25 +499,30 @@ export class CRMEntityTypeEditor extends PlatformElement {
                             ? html`<div class="hint">${this.t('templates_page.note_semantics_flags_locked_hint')}</div>`
                             : ''}
                     </div>
-                    <div class="field">
-                        ${this._fieldLabelWithHint(
-                            'templates_page.field_description',
-                            'templates_page.field_description_hint',
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        .label=${this.t('templates_page.field_description')}
+                        .hint=${this.t('templates_page.field_description_hint')}
+                        .value=${this.typeDraft.description}
+                        ?disabled=${this.savingType}
+                        @change=${(e) => this._emitDraftField(
+                            'description',
+                            typeof e.detail.value === 'string' ? e.detail.value : '',
                         )}
-                        <textarea
-                            class="textarea"
-                            .value=${this.typeDraft.description}
-                            @input=${(e) => this._emitDraftField('description', e.target.value)}
-                        ></textarea>
-                    </div>
-                    <div class="field">
-                        ${this._fieldLabelWithHint('templates_page.field_prompt', 'templates_page.field_prompt_hint')}
-                        <textarea
-                            class="textarea"
-                            .value=${this.typeDraft.prompt}
-                            @input=${(e) => this._emitDraftField('prompt', e.target.value)}
-                        ></textarea>
-                    </div>
+                    ></platform-field>
+                    <platform-field
+                        type="text"
+                        mode="edit"
+                        .label=${this.t('templates_page.field_prompt')}
+                        .hint=${this.t('templates_page.field_prompt_hint')}
+                        .value=${this.typeDraft.prompt}
+                        ?disabled=${this.savingType}
+                        @change=${(e) => this._emitDraftField(
+                            'prompt',
+                            typeof e.detail.value === 'string' ? e.detail.value : '',
+                        )}
+                    ></platform-field>
                     ${this.showNamespaces ? html`
                         <div class="field">
                             ${this._fieldLabelWithHint(

@@ -7,6 +7,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
     static i18nNamespace = 'crm';
@@ -54,26 +55,6 @@ export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
                 flex: 1;
                 min-width: 0;
             }
-            .nf-select {
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
-                color: var(--text-primary);
-                padding: var(--space-2) var(--space-3);
-                font: inherit;
-                font-size: var(--text-sm);
-                width: 100%;
-                box-sizing: border-box;
-            }
-            .nf-select:focus {
-                outline: none;
-                border-color: var(--accent);
-                box-shadow: 0 0 0 1px var(--accent);
-            }
-            .nf-select:disabled {
-                opacity: 0.55;
-                cursor: not-allowed;
-            }
             .nf-hint {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
@@ -88,15 +69,25 @@ export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
         this.disabled = false;
     }
 
-    _onModeChange(e) {
-        const el = e.target;
-        if (!(el instanceof HTMLSelectElement)) {
-            return;
+    _voiceModeEnumConfig() {
+        return {
+            values: [
+                { value: 'self', label: this.t('namespace_note_defaults.voice_mode_self') },
+                { value: 'none', label: this.t('namespace_note_defaults.voice_mode_none') },
+                { value: 'last', label: this.t('namespace_note_defaults.voice_mode_last') },
+            ],
+        };
+    }
+
+    _onModeFieldChange(e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('CRMNamespaceNoteDefaultsFields: voice mode expects change detail.value string');
         }
-        const v = el.value;
-        if (v === 'none' || v === 'last' || v === 'self') {
-            this.emit('default-note-voice-change', { value: v });
+        const v = e.detail.value;
+        if (v !== 'none' && v !== 'last' && v !== 'self') {
+            throw new Error(`CRMNamespaceNoteDefaultsFields: invalid voice mode '${v}'`);
         }
+        this.emit('default-note-voice-change', { value: v });
     }
 
     _onShowUiChange(e) {
@@ -134,17 +125,16 @@ export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
                         label=${this.t('templates_page.field_hint_button_aria')}
                     ></platform-help-hint>
                 </div>
-                <select
+                <platform-field
                     id="nf-voice-mode"
-                    class="nf-select mono"
+                    type="enum"
+                    mode="edit"
+                    label=""
                     .value=${mode}
+                    .config=${this._voiceModeEnumConfig()}
                     ?disabled=${dis}
-                    @change=${this._onModeChange}
-                >
-                    <option value="self">${this.t('namespace_note_defaults.voice_mode_self')}</option>
-                    <option value="none">${this.t('namespace_note_defaults.voice_mode_none')}</option>
-                    <option value="last">${this.t('namespace_note_defaults.voice_mode_last')}</option>
-                </select>
+                    @change=${this._onModeFieldChange}
+                ></platform-field>
                 <p class="nf-hint">${this.t('namespace_note_defaults.voice_mode_hint')}</p>
             </div>
             <div class="nf-field">

@@ -12,6 +12,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const SERVER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/;
@@ -545,59 +546,98 @@ export class FlowsMcpServersModal extends PlatformModal {
         const phUrl = isEdit ? '' : this.t('mcp_servers_modal.placeholder_url');
         const phDesc = isEdit ? '' : this.t('mcp_servers_modal.placeholder_description');
         const phHeaders = isEdit ? '' : this.t('mcp_servers_modal.placeholder_headers');
+        const transportEnumConfig = {
+            values: TRANSPORT_TYPES.map((t) => ({
+                value: t,
+                label: this._transportLabel(t),
+            })),
+        };
         return html`
             <div class="mcp-form">
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.label_id')}</label>
                     <span class="hint">${this.t('mcp_servers_modal.hint_id')}</span>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${f.server_id}
                         placeholder=${phId}
                         ?disabled=${isEdit}
-                        @input=${(e) => { this._form = { ...this._form, server_id: e.target.value }; }}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-mcp-servers-modal: server_id expects string detail.value');
+                            }
+                            this._form = { ...this._form, server_id: v };
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.label_name')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${f.name}
                         placeholder=${phName}
-                        @input=${(e) => { this._form = { ...this._form, name: e.target.value }; }}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-mcp-servers-modal: name expects string detail.value');
+                            }
+                            this._form = { ...this._form, name: v };
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.label_url')}</label>
                     <span class="hint">${this.t('mcp_servers_modal.hint_url')}</span>
-                    <input
-                        type="url"
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        input-type="url"
                         .value=${f.url}
                         placeholder=${phUrl}
-                        @input=${(e) => { this._form = { ...this._form, url: e.target.value }; }}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-mcp-servers-modal: url expects string detail.value');
+                            }
+                            this._form = { ...this._form, url: v };
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.label_transport')}</label>
                     <span class="hint">${this.t('mcp_servers_modal.hint_transport')}</span>
-                    <select
-                        @change=${(e) => { this._form = { ...this._form, transport_type: e.target.value }; }}
-                    >
-                        ${TRANSPORT_TYPES.map((t) => html`
-                            <option value=${t} ?selected=${f.transport_type === t}>
-                                ${this._transportLabel(t)}
-                            </option>
-                        `)}
-                    </select>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .value=${f.transport_type}
+                        .config=${transportEnumConfig}
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-mcp-servers-modal: transport_type expects string detail.value');
+                            }
+                            this._form = { ...this._form, transport_type: v };
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.label_description')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${f.description}
                         placeholder=${phDesc}
-                        @input=${(e) => { this._form = { ...this._form, description: e.target.value }; }}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-mcp-servers-modal: description expects string detail.value');
+                            }
+                            this._form = { ...this._form, description: v };
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="mcp-field">
                     <label>${this.t('mcp_servers_modal.label_headers')}</label>
@@ -613,11 +653,20 @@ export class FlowsMcpServersModal extends PlatformModal {
                             ${this.t('mcp_servers_modal.preset_basic')}
                         </button>
                     </div>
-                    <textarea
+                    <platform-field
+                        type="text"
+                        mode="edit"
                         .value=${f.headers_json}
                         placeholder=${phHeaders}
-                        @input=${(e) => { this._form = { ...this._form, headers_json: e.target.value }; this._formError = null; }}
-                    ></textarea>
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-mcp-servers-modal: headers_json expects string detail.value');
+                            }
+                            this._form = { ...this._form, headers_json: v };
+                            this._formError = null;
+                        }}
+                    ></platform-field>
                 </div>
                 ${this._formError
                     ? html`<div class="mcp-form-err" role="alert">${this._formError}</div>`

@@ -11,6 +11,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const UPLOAD_OP_NAME = 'office/document_upload';
 
@@ -95,7 +96,10 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
         if (file) this._file = file;
     }
 
-    _onTitleInput(e) { this._title = e.target.value; }
+    _onTitleChange(e) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._title = v;
+    }
 
     _onDragOver(e) { e.preventDefault(); this._dragOver = true; }
     _onDragLeave(e) { e.preventDefault(); this._dragOver = false; }
@@ -153,14 +157,15 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
                 ${this._file ? html`
                     <div class="selected">${this.t('document_upload_modal.selected_file', { name: this._file.name })}</div>
                 ` : ''}
-                <div class="form-group">
-                    <label class="form-label">${this.t('document_upload_modal.label_title')}</label>
-                    <input type="text" class="form-input"
-                           autocomplete="off" spellcheck="false"
-                           placeholder=${this.t('document_upload_modal.title_placeholder')}
-                           .value=${this._title}
-                           @input=${this._onTitleInput} />
-                </div>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('document_upload_modal.label_title')}
+                    .placeholder=${this.t('document_upload_modal.title_placeholder')}
+                    .value=${this._title}
+                    ?disabled=${this._upload.busy}
+                    @change=${this._onTitleChange}
+                ></platform-field>
             </form>
         `;
     }

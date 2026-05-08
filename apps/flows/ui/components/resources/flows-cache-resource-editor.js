@@ -8,6 +8,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-resource-editor.js';
 
 export class FlowsCacheResourceEditor extends PlatformElement {
@@ -44,6 +45,41 @@ export class FlowsCacheResourceEditor extends PlatformElement {
         this.emit('change', { resourceId: this.resourceId, patch: { config: { ...base, ...patch } } });
     }
 
+    _emitConfigFromNamespace(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-cache-resource-editor: namespace change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-cache-resource-editor: namespace detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-cache-resource-editor: namespace string required');
+        }
+        this._emitConfig({ namespace: v });
+    }
+
+    _emitConfigFromTtl(e) {
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-cache-resource-editor: ttl change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-cache-resource-editor: ttl detail.value');
+        }
+        const v = d.value;
+        if (v === null) {
+            this._emitConfig({ ttl: 0 });
+            return;
+        }
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+            throw new Error('flows-cache-resource-editor: ttl number required');
+        }
+        const rounded = Math.floor(v);
+        this._emitConfig({ ttl: rounded >= 0 ? rounded : 0 });
+    }
+
     render() {
         const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
         const namespace = typeof cfg.namespace === 'string' ? cfg.namespace : '';
@@ -56,19 +92,20 @@ export class FlowsCacheResourceEditor extends PlatformElement {
                 @change=${(e) => this.emit('change', e.detail)}
             >
                 <div slot="settings" class="body">
-                    <div class="field">
-                        <label>${this.t('cache_resource_editor.namespace')}</label>
-                        <input type="text" .value=${namespace}
-                            @input=${(e) => this._emitConfig({ namespace: e.target.value })} />
-                    </div>
-                    <div class="field">
-                        <label>${this.t('cache_resource_editor.ttl')}</label>
-                        <input type="number" min="0" step="1" .value=${String(ttl)}
-                            @input=${(e) => {
-                                const v = parseInt(e.target.value, 10);
-                                this._emitConfig({ ttl: Number.isFinite(v) && v >= 0 ? v : 0 });
-                            }} />
-                    </div>
+                    <platform-field
+                        mode="edit"
+                        type="string"
+                        .label=${this.t('cache_resource_editor.namespace')}
+                        .value=${namespace}
+                        @change=${this._emitConfigFromNamespace}
+                    ></platform-field>
+                    <platform-field
+                        mode="edit"
+                        type="integer"
+                        .label=${this.t('cache_resource_editor.ttl')}
+                        .value=${ttl}
+                        @change=${this._emitConfigFromTtl}
+                    ></platform-field>
                 </div>
             </flows-base-resource-editor>
         `;

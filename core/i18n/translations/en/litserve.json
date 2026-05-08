@@ -10,7 +10,9 @@
     "models": {
         "title": "Model registry",
         "subtitle": "Local LitServe models (LLM, embedding, rerank)",
-        "kind": "Kind",
+        "kind_llm": "LLM",
+        "kind_embedding": "Embedding",
+        "kind_rerank": "Rerank",
         "hf_model": "HuggingFace ID",
         "api_model": "API ID",
         "hf_placeholder": "e.g. Qwen/Qwen3-Embedding-8B",

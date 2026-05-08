@@ -1,7 +1,5 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
-import { formStyles } from '../../styles/shared/form.styles.js';
-import '../glass-input.js';
 import '../platform-date-picker.js';
 
 const ISO_DATE_VALUE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -13,28 +11,23 @@ export class PlatformFieldDate extends PlatformElement {
         mode: { type: String },
         disabled: { type: Boolean },
         datetime: { type: Boolean },
-        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
-        formStyles,
         css`
-            :host { display: block; }
-
-            :host([flat]) {
+            :host {
+                display: block;
                 width: 100%;
+                min-width: 0;
             }
 
-            .view-value {
-                font-size: var(--text-sm);
-                color: var(--text-primary);
+            .field-pill-readonly-text {
                 font-variant-numeric: tabular-nums;
             }
 
-            .empty {
-                color: var(--text-disabled);
-                font-style: italic;
+            platform-date-picker {
+                width: 100%;
             }
         `,
     ];
@@ -45,21 +38,11 @@ export class PlatformFieldDate extends PlatformElement {
         this.mode = 'view';
         this.disabled = false;
         this.datetime = false;
-        this.flat = false;
     }
 
     _onChange(e) {
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value: e.target.value },
-            bubbles: true,
-            composed: true,
-        }));
-    }
-
-    _onGlassInputChange(e) {
-        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
-        this.dispatchEvent(new CustomEvent('change', {
-            detail: { value: v },
             bubbles: true,
             composed: true,
         }));
@@ -95,8 +78,8 @@ export class PlatformFieldDate extends PlatformElement {
         if (this.mode === 'view') {
             const formatted = this._formatDisplay(this.value);
             return formatted
-                ? html`<span class="view-value">${formatted}</span>`
-                : html`<span class="view-value empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
+                ? html`<span class="field-pill-readonly-text">${formatted}</span>`
+                : html`<span class="field-pill-empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
         }
 
         const pickerMode = this.datetime ? 'datetime' : 'date';
@@ -104,23 +87,14 @@ export class PlatformFieldDate extends PlatformElement {
 
         if (!this._storedStringMatchesIsoFormat(raw)) {
             const display = typeof raw === 'string' ? raw : String(raw);
-            if (this.flat === true) {
-                return html`
-                    <input
-                        type="text"
-                        class="form-input"
-                        .value=${display}
-                        ?disabled=${this.disabled}
-                        @input=${this._onFreeformDateInput}
-                    />
-                `;
-            }
             return html`
-                <glass-input
+                <input
+                    type="text"
+                    class="field-pill-input"
                     .value=${display}
                     ?disabled=${this.disabled}
-                    @change=${this._onGlassInputChange}
-                ></glass-input>
+                    @input=${this._onFreeformDateInput}
+                />
             `;
         }
 
@@ -130,7 +104,7 @@ export class PlatformFieldDate extends PlatformElement {
                 value-format="iso"
                 .value=${raw || null}
                 ?disabled=${this.disabled}
-                ?embedded=${this.flat === true}
+                ?embedded=${true}
                 @change=${this._onChange}
             ></platform-date-picker>
         `;

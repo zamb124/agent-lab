@@ -4,7 +4,8 @@
  *
  *   - `view` (default): read-only представление с markdown, AI-summary,
  *     сайдбар (задачи, связанные объекты). Вложения — только из шапки
- *     (popover), не дублируются в колонке. Шапка: attachments / graph / edit / delete.
+ *     (popover), не дублируются в колонке. Шапка: attachments / edit / delete.
+ *     Граф связей — блок «Окружение заметки» ниже основного текста.
  *   - `edit`: inline-форма поверх той же сущности — title, описание (с
  *     голосовым вводом), дата, теги, аплоад вложений. На сохранение шлёт
  *     `entitiesResource.create` (для note === null) или
@@ -21,8 +22,6 @@
  *
  * Эмитит:
  *   - `edit-note`                — клик по карандашу в шапке view.
- *   - `show-graph`               — клик по иконке графа в шапке view (модалка 3D).
- *                                В теле view также блок mind map / 3D под текстом заметки.
  *   - `delete-note`              — клик по корзине в шапке view.
  *   - `entity-open` { entityId, entity_type? } — клик по связанной сущности или превью графа.
  *   - `cancel`                   — отмена в edit-режиме.
@@ -38,6 +37,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { selectCrmSidebarOrDefaultNamespace } from '../utils/crm-namespace-select.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-spinner.js';
 import './entity-hover-preview.js';
@@ -56,6 +56,9 @@ import {
 } from '../utils/related-entity-presenter.js';
 import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
 import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
+import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
+import { escapeHtml as _escapeHtmlCanon } from '@platform/lib/utils/escape-html.js';
+import { formatPlatformDate, formatPlatformTime } from '@platform/lib/utils/format-platform-date.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_UPDATE_OP = 'crm/entity_update';
@@ -71,28 +74,13 @@ let NOTE_ATTACHMENT_INPUT_SEQ = 0;
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
 const ENTITY_LINK_REGEX = /\[([^\]]+)\]\(entity:([^)]+)\)/g;
 
-const NOTE_DATE_FORMAT = new Intl.DateTimeFormat('ru-RU', {
+const NOTE_DATE_OPTIONS = Object.freeze({
     day: '2-digit',
     month: 'long',
     year: 'numeric',
 });
 
-const SUMMARY_TIME_FORMAT = new Intl.DateTimeFormat('ru-RU', {
-    hour: '2-digit',
-    minute: '2-digit',
-});
-
-function escapeHtml(text) {
-    if (typeof text !== 'string') {
-        return '';
-    }
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
+const escapeHtml = _escapeHtmlCanon;
 
 const MENTION_PLACEHOLDER_OPEN = '\u0001MENTION\u0002';
 const MENTION_PLACEHOLDER_CLOSE = '\u0001/MENTION\u0002';
@@ -132,16 +120,7 @@ function renderMarkdownToHtml(text) {
 }
 
 function formatBytes(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-        return '';
-    }
-    if (value < 1024) {
-        return `${value} B`;
-    }
-    if (value < 1024 * 1024) {
-        return `${(value / 1024).toFixed(1)} KB`;
-    }
-    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+    return formatFileSize(value);
 }
 
 function _getFileExtension(filename) {
@@ -533,6 +512,8 @@ export class CRMNoteCardView extends PlatformElement {
 
             /* ================== note content (markdown) ================== */
             .markdown {
+                box-sizing: border-box;
+                min-height: 220px;
                 color: var(--text-primary);
                 font-size: 16px;
                 line-height: 20px;
@@ -1037,11 +1018,6 @@ export class CRMNoteCardView extends PlatformElement {
             }
 
             /* ================== EDIT inputs ================== */
-            .edit-field {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-            }
             .note-semantics-edit {
                 display: flex;
                 flex-direction: column;
@@ -1056,19 +1032,13 @@ export class CRMNoteCardView extends PlatformElement {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
                     gap: var(--space-3);
-                    align-items: end;
+                    align-items: start;
                 }
                 .note-semantics-edit.semantics-toolbar .semantics-field {
                     min-width: 0;
                 }
-                .note-semantics-edit.semantics-toolbar .semantics-input,
-                .note-semantics-edit.semantics-toolbar .subtype-select {
-                    padding: 8px 34px 8px 10px;
-                    font-size: 13px;
-                    line-height: 18px;
-                }
-                .note-semantics-edit.semantics-toolbar .subtype-select {
-                    padding-right: 10px;
+                .note-semantics-edit.semantics-toolbar platform-field {
+                    min-width: 0;
                 }
             }
             .semantics-hint {
@@ -1081,26 +1051,10 @@ export class CRMNoteCardView extends PlatformElement {
             .note-semantics-edit .semantics-field.picker-field .entity-search-wrap {
                 position: relative;
             }
-            .semantics-input,
-            .subtype-select {
-                width: 100%;
+            .semantics-picker-pill .entity-search-wrap input[data-canon='search-as-you-type'] {
                 box-sizing: border-box;
-                padding: 10px 36px 10px 14px;
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                background: var(--crm-note-input-bg);
-                color: var(--text-primary);
-                font-size: 15px;
-                line-height: 20px;
-                font-family: inherit;
-                outline: none;
-            }
-            .semantics-input:focus,
-            .subtype-select:focus {
-                border-color: var(--accent);
-            }
-            .subtype-select {
-                padding-right: 14px;
+                width: 100%;
+                padding-right: 36px;
             }
             .semantics-clear {
                 position: absolute;
@@ -1153,32 +1107,16 @@ export class CRMNoteCardView extends PlatformElement {
             .meta-pill.context-pill {
                 border-color: var(--glass-border-medium);
             }
-            .edit-label {
-                font-size: 12px;
-                line-height: 15px;
-                color: var(--crm-note-text-muted);
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-            }
             .description-edit-wrap {
                 position: relative;
             }
-            .description-edit {
-                width: 100%;
+            .note-description-pill .description-edit {
                 box-sizing: border-box;
+                width: 100%;
                 min-height: 220px;
-                padding: 16px 56px 16px 16px;
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                background: var(--crm-note-input-bg);
-                color: var(--text-primary);
-                font-size: 16px;
-                line-height: 20px;
-                font-family: inherit;
+                padding-right: 56px;
                 resize: vertical;
-                outline: none;
             }
-            .description-edit:focus { border-color: var(--accent); }
             .voice-btn {
                 position: absolute;
                 top: 12px;
@@ -1202,24 +1140,14 @@ export class CRMNoteCardView extends PlatformElement {
                 display: grid;
                 grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
                 gap: var(--space-4);
+                align-items: start;
             }
             @media (max-width: 700px) {
                 .edit-row { grid-template-columns: 1fr; }
             }
-            .date-input {
-                width: 100%;
-                box-sizing: border-box;
-                padding: 10px 16px;
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-lg);
-                background: var(--crm-note-input-bg);
-                color: var(--text-primary);
-                font-size: 16px;
-                line-height: 20px;
-                font-family: inherit;
-                outline: none;
+            .edit-row platform-field {
+                min-width: 0;
             }
-            .date-input:focus { border-color: var(--accent); }
 
             .tags-wrap {
                 display: flex;
@@ -1229,6 +1157,11 @@ export class CRMNoteCardView extends PlatformElement {
                 border: 1px solid var(--crm-stroke);
                 border-radius: var(--radius-lg);
                 background: var(--crm-note-input-bg);
+            }
+            .tags-field-pill .tags-wrap {
+                border: none;
+                background: transparent;
+                padding: 0;
             }
             .tag-chip {
                 display: inline-flex;
@@ -1478,6 +1411,13 @@ export class CRMNoteCardView extends PlatformElement {
         this._uploadTargetMode = 'edit';
 
         this._crmSidebarDefaultNsSel = this.select(selectCrmSidebarOrDefaultNamespace);
+        this._localeSel = this.select((s) => {
+            const loc = s.i18n && typeof s.i18n.locale === 'string' ? s.i18n.locale.trim() : '';
+            if (loc.length > 0) {
+                return loc;
+            }
+            return 'en';
+        });
     }
 
     connectedCallback() {
@@ -1954,6 +1894,11 @@ export class CRMNoteCardView extends PlatformElement {
         this._hydrateGraphEditorsFromCard();
     }
 
+    _activeLocale() {
+        const raw = this._localeSel.value;
+        return typeof raw === 'string' && raw.length > 0 ? raw : 'en';
+    }
+
     _formatNoteDate(value) {
         if (typeof value !== 'string' || value.length === 0) {
             return '';
@@ -1962,7 +1907,7 @@ export class CRMNoteCardView extends PlatformElement {
         if (Number.isNaN(parsed.getTime())) {
             return value;
         }
-        return NOTE_DATE_FORMAT.format(parsed);
+        return formatPlatformDate(parsed, this._activeLocale(), NOTE_DATE_OPTIONS);
     }
 
     _formatSummaryTime(value) {
@@ -1973,7 +1918,7 @@ export class CRMNoteCardView extends PlatformElement {
         if (Number.isNaN(parsed.getTime())) {
             return '';
         }
-        return SUMMARY_TIME_FORMAT.format(parsed);
+        return formatPlatformTime(parsed, this._activeLocale());
     }
 
     _summaryText() {
@@ -2238,8 +2183,6 @@ export class CRMNoteCardView extends PlatformElement {
             this._closeMention();
         }
     }
-    _onDateChange(e) { this._editDate = e.target.value; }
-
     _extractMentionedIds(text) {
         const ids = new Set();
         if (typeof text !== 'string' || text.length === 0) return ids;
@@ -2471,6 +2414,41 @@ export class CRMNoteCardView extends PlatformElement {
         this._contextSearchOpen = false;
     }
 
+    _subtypeEnumConfig(subtypes) {
+        if (!Array.isArray(subtypes)) {
+            throw new Error('CRMNoteCardView._subtypeEnumConfig: subtypes must be an array');
+        }
+        const values = [{ value: '', label: this.t('note_edit.subtype_plain') }];
+        for (let i = 0; i < subtypes.length; i += 1) {
+            const tid = subtypes[i];
+            if (typeof tid !== 'string') {
+                throw new Error('CRMNoteCardView._subtypeEnumConfig: subtype id must be a string');
+            }
+            values.push({ value: tid, label: this._subtypeNameByTypeId(tid) });
+        }
+        return { values };
+    }
+
+    _onEditSubtypeChange(e) {
+        const v = e.detail.value;
+        if (typeof v !== 'string') {
+            throw new Error('CRMNoteCardView._onEditSubtypeChange: expected string detail.value');
+        }
+        this._editSubtype = v;
+    }
+
+    _onEditDateChange(e) {
+        const v = e.detail.value;
+        if (v === null || v === undefined) {
+            this._editDate = '';
+            return;
+        }
+        if (typeof v !== 'string') {
+            throw new Error('CRMNoteCardView._onEditDateChange: expected string or null detail.value');
+        }
+        this._editDate = v;
+    }
+
     _onClearVoicePick() {
         this._editVoiceEntityId = '';
         this._voiceSearchQuery = '';
@@ -2487,14 +2465,6 @@ export class CRMNoteCardView extends PlatformElement {
         this._contextSearchFilteredNoMatch = false;
     }
 
-    _onSubtypeChange(e) {
-        const el = e.target;
-        if (!(el instanceof HTMLSelectElement)) {
-            return;
-        }
-        this._editSubtype = el.value;
-    }
-
     _renderEditNoteSemantics() {
         const subtypes = this._noteFamilySubtypeSelectableIdsSorted();
         const showVoice = this._showNoteVoiceAuthorUi() === true && this._voiceTargetTypeIdSet().size > 0;
@@ -2506,27 +2476,29 @@ export class CRMNoteCardView extends PlatformElement {
             <div class="note-semantics-edit semantics-toolbar">
                 ${subtypes.length > 0
                     ? html`
-                        <div class="edit-field semantics-field">
-                            <label class="edit-label">${this.t('note_edit.field_note_kind')}</label>
-                            <select class="subtype-select" .value=${this._editSubtype} @change=${this._onSubtypeChange}>
-                                <option value="">${this.t('note_edit.subtype_plain')}</option>
-                                ${subtypes.map(
-                                    (tid) => html`
-                                        <option value=${tid}>${this._subtypeNameByTypeId(tid)}</option>
-                                    `,
-                                )}
-                            </select>
+                        <div class="semantics-field">
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                .label=${this.t('note_edit.field_note_kind')}
+                                .config=${this._subtypeEnumConfig(subtypes)}
+                                .value=${this._editSubtype}
+                                @change=${this._onEditSubtypeChange}
+                            ></platform-field>
                         </div>
                     `
                     : ''}
                 ${showVoice
                     ? html`
-                        <div class="edit-field semantics-field picker-field">
-                            <label class="edit-label">${this.t('note_edit.field_voice_author')}</label>
+                        <div class="semantics-field picker-field field-pill semantics-picker-pill">
+                            <div class="field-pill-head">
+                                <span class="field-pill-label">${this.t('note_edit.field_voice_author')}</span>
+                            </div>
                             <div class="entity-search-wrap">
                                 <input
                                     type="text"
-                                    class="semantics-input"
+                                    class="field-pill-input"
+                                    data-canon="search-as-you-type"
                                     placeholder=${this.t('note_edit.voice_author_search')}
                                     .value=${this._voiceSearchQuery}
                                     @focus=${() => { this._voiceSearchOpen = true; this._runVoiceEntitySearch(); }}
@@ -2558,12 +2530,15 @@ export class CRMNoteCardView extends PlatformElement {
                     : ''}
                 ${showContext
                     ? html`
-                        <div class="edit-field semantics-field picker-field">
-                            <label class="edit-label">${this.t('note_edit.field_context_anchor')}</label>
+                        <div class="semantics-field picker-field field-pill semantics-picker-pill">
+                            <div class="field-pill-head">
+                                <span class="field-pill-label">${this.t('note_edit.field_context_anchor')}</span>
+                            </div>
                             <div class="entity-search-wrap">
                                 <input
                                     type="text"
-                                    class="semantics-input"
+                                    class="field-pill-input"
+                                    data-canon="search-as-you-type"
                                     placeholder=${this._contextAnchorSearchPlaceholder()}
                                     .value=${this._contextSearchQuery}
                                     @focus=${() => {
@@ -3308,14 +3283,6 @@ export class CRMNoteCardView extends PlatformElement {
                             ${this._renderAttachmentsHeaderButton('view')}
                             <button
                                 type="button"
-                                class="round-btn"
-                                title=${this.t('note_view.action_show_graph')}
-                                @click=${() => this.emit('show-graph')}
-                            >
-                                <platform-icon name="git-branch" size="20"></platform-icon>
-                            </button>
-                            <button
-                                type="button"
                                 class="round-btn danger"
                                 title=${this.t('note_view.action_delete')}
                                 @click=${() => this.emit('delete-note')}
@@ -3518,6 +3485,7 @@ export class CRMNoteCardView extends PlatformElement {
                     <platform-icon name="plus" size="18"></platform-icon>
                     <input
                         type="text"
+                        data-canon="composer"
                         placeholder=${this.t('note_view.task_add_placeholder')}
                         @keydown=${this._onTaskAddKeydown}
                     />
@@ -3552,6 +3520,7 @@ export class CRMNoteCardView extends PlatformElement {
                             <input
                                 class="title-input"
                                 type="text"
+                                data-canon="inline-edit"
                                 placeholder=${this.t('note_edit.placeholder_title')}
                                 .value=${this._editName}
                                 @input=${this._onNameInput}
@@ -3586,11 +3555,14 @@ export class CRMNoteCardView extends PlatformElement {
 
                     ${this._renderEditNoteSemantics()}
 
-                    <div class="edit-field">
-                        <label class="edit-label">${this.t('note_edit.field_description')}</label>
+                    <div class="field-pill field-pill--textarea note-description-pill">
+                        <div class="field-pill-head">
+                            <span class="field-pill-label">${this.t('note_edit.field_description')}</span>
+                        </div>
                         <div class="description-edit-wrap">
                             <textarea
-                                class="description-edit"
+                                class="field-pill-textarea description-edit"
+                                data-canon="mention"
                                 placeholder=${this.t('note_edit.placeholder_description')}
                                 .value=${this._editDescription}
                                 @input=${this._onDescriptionInput}
@@ -3615,17 +3587,17 @@ export class CRMNoteCardView extends PlatformElement {
                     </div>
 
                     <div class="edit-row">
-                        <div class="edit-field">
-                            <label class="edit-label">${this.t('note_edit.field_date')}</label>
-                            <input
-                                class="date-input"
-                                type="date"
-                                .value=${this._editDate}
-                                @change=${this._onDateChange}
-                            />
-                        </div>
-                        <div class="edit-field">
-                            <label class="edit-label">${this.t('note_edit.field_tags')}</label>
+                        <platform-field
+                            type="date"
+                            mode="edit"
+                            .label=${this.t('note_edit.field_date')}
+                            .value=${this._editDate.length > 0 ? this._editDate : null}
+                            @change=${this._onEditDateChange}
+                        ></platform-field>
+                        <div class="field-pill tags-field-pill">
+                            <div class="field-pill-head">
+                                <span class="field-pill-label">${this.t('note_edit.field_tags')}</span>
+                            </div>
                             <div class="tags-wrap">
                                 ${this._editTags.map((tag) => html`
                                     <span class="tag-chip">
@@ -3638,6 +3610,7 @@ export class CRMNoteCardView extends PlatformElement {
                                 <input
                                     type="text"
                                     class="tag-input"
+                                    data-canon="composer"
                                     placeholder=${this.t('note_edit.placeholder_tag')}
                                     .value=${this._tagDraft}
                                     @input=${this._onTagDraftInput}

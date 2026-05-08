@@ -4,17 +4,16 @@
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 
-import '@platform/lib/components/glass-input.js';
-import '@platform/lib/components/glass-textarea.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/fields/platform-field.js';
+import { isValidEmail } from '@platform/lib/utils/validators.js';
 
 const SUPPORT_EMAIL = 'zambas124@gmail.com';
 const MAX_SUBJECT = 200;
 const MAX_MESSAGE = 12000;
 const MAX_MAILTO_HREF = 1950;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class SupportPage extends PlatformPage {
     static i18nNamespace = 'frontend';
@@ -165,15 +164,15 @@ export class SupportPage extends PlatformPage {
     }
 
     _onReplyInput(e) {
-        this._replyEmail = e.target.value;
+        this._replyEmail = e.detail.value;
     }
 
     _onSubjectInput(e) {
-        this._subject = e.target.value;
+        this._subject = e.detail.value;
     }
 
     _onMessageInput(e) {
-        this._message = e.target.value;
+        this._message = e.detail.value;
     }
 
     _goHome() {
@@ -190,7 +189,7 @@ export class SupportPage extends PlatformPage {
             return { i18nKey: 'support_page.err_message' };
         }
         const re = this._replyEmail.trim();
-        if (re.length > 0 && !EMAIL_RE.test(re)) {
+        if (re.length > 0 && !isValidEmail(re)) {
             return { i18nKey: 'support_page.err_reply_email' };
         }
         return null;
@@ -256,48 +255,28 @@ export class SupportPage extends PlatformPage {
                 <glass-card>
                     <p class="section-title">${this.t('support_page.form_section_title')}</p>
                     <form @submit=${this._submit}>
-                        <div class="field">
-                            <label for="sp-reply">${this.t('support_page.field_reply_email')}</label>
-                            <glass-input
-                                id="sp-reply"
-                                type="email"
-                                name="contact"
-                                autocomplete="email"
-                                .value=${this._replyEmail}
-                                @input=${this._onReplyInput}
-                            ></glass-input>
-                        </div>
-                        <div class="field">
-                            <label for="sp-subj"
-                                >${this.t('support_page.field_subject')}
-                                <span class="req" aria-label=${this.t('support_page.required_aria')}>${this.t(
-                                    'support_page.required_mark',
-                                )}</span></label
-                            >
-                            <glass-input
-                                id="sp-subj"
-                                type="text"
-                                name="subject"
-                                .value=${this._subject}
-                                @input=${this._onSubjectInput}
-                                maxlength=${MAX_SUBJECT}
-                            ></glass-input>
-                        </div>
-                        <div class="field">
-                            <label for="sp-msg"
-                                >${this.t('support_page.field_message')}
-                                <span class="req" aria-label=${this.t('support_page.required_aria')}>${this.t(
-                                    'support_page.required_mark',
-                                )}</span></label
-                            >
-                            <glass-textarea
-                                id="sp-msg"
-                                name="message"
-                                .value=${this._message}
-                                @input=${this._onMessageInput}
-                                maxlength=${MAX_MESSAGE}
-                            ></glass-textarea>
-                        </div>
+                        <platform-field
+                            type="string"
+                            input-type="email"
+                            mode="edit"
+                            .label=${this.t('support_page.field_reply_email')}
+                            .value=${this._replyEmail}
+                            @change=${this._onReplyInput}
+                        ></platform-field>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            .label=${this.t('support_page.field_subject') + ' ' + this.t('support_page.required_mark')}
+                            .value=${this._subject}
+                            @change=${this._onSubjectInput}
+                        ></platform-field>
+                        <platform-field
+                            type="text"
+                            mode="edit"
+                            .label=${this.t('support_page.field_message') + ' ' + this.t('support_page.required_mark')}
+                            .value=${this._message}
+                            @change=${this._onMessageInput}
+                        ></platform-field>
                         <div class="actions">
                             <glass-button type="submit">${this.t('support_page.submit')}</glass-button>
                         </div>

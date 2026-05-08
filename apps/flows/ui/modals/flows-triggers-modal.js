@@ -12,6 +12,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import './flows-trigger-editor-modal.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 export class FlowsTriggersModal extends PlatformModal {
     static modalKind = 'flows.triggers';
@@ -53,23 +54,9 @@ export class FlowsTriggersModal extends PlatformModal {
             .trg-test-panel {
                 margin-bottom: var(--space-4);
             }
-            .trg-test-panel label {
+            .trg-test-panel platform-field {
                 display: block;
-                font-size: var(--text-sm);
-                color: var(--text-secondary);
-                margin-bottom: var(--space-2);
-            }
-            .trg-test-textarea {
                 width: 100%;
-                min-height: 80px;
-                font-family: var(--font-mono, ui-monospace, monospace);
-                font-size: var(--text-xs);
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-tint-subtle);
-                color: var(--text-primary);
-                box-sizing: border-box;
             }
             .trg-test-out {
                 margin-top: var(--space-3);
@@ -198,7 +185,11 @@ export class FlowsTriggersModal extends PlatformModal {
     }
 
     _onTestSampleInput(e) {
-        this._testSampleJson = e.target.value;
+        const v = e.detail.value;
+        if (typeof v !== 'string') {
+            throw new TypeError('flows-triggers-modal: test sample expects string detail.value');
+        }
+        this._testSampleJson = v;
     }
 
     _renderRows() {
@@ -284,14 +275,13 @@ export class FlowsTriggersModal extends PlatformModal {
                 : null;
         return html`
             <div class="trg-test-panel">
-                <label for="trg-test-json">${this.t('triggers_modal.test_sample_label')}</label>
-                <textarea
-                    id="trg-test-json"
-                    class="trg-test-textarea"
-                    spellcheck="false"
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    .label=${this.t('triggers_modal.test_sample_label')}
                     .value=${this._testSampleJson}
-                    @input=${this._onTestSampleInput}
-                ></textarea>
+                    @change=${this._onTestSampleInput}
+                ></platform-field>
             </div>
             <table class="trg-table">
                 <thead>

@@ -36,6 +36,7 @@ import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/layout/page-header.js';
+import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import '../pages/entity-detail-page.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
@@ -1046,6 +1047,13 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
         this._authSel = this.select((s) => s.auth.user);
         this._routeKeySel = this.select((s) => s.router.routeKey);
+        this._localeSel = this.select((s) => {
+            const loc = s.i18n && typeof s.i18n.locale === 'string' ? s.i18n.locale.trim() : '';
+            if (loc.length > 0) {
+                return loc;
+            }
+            return 'en';
+        });
         this._onEmbeddedDetailLeftGraphTab = () => {
             const ns = this._currentNamespace();
             this._entityTypes.load({ namespace: crmNamespaceForOptionalQuery(ns) });
@@ -1414,8 +1422,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
     _formatDate(dateString) {
         if (!dateString) return '';
-        const d = new Date(dateString);
-        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        const raw = this._localeSel.value;
+        const locale = typeof raw === 'string' && raw.length > 0 ? raw : 'en';
+        return formatPlatformDate(dateString, locale, { day: 'numeric', month: 'short' });
     }
 
     _searchScorePercent(entity) {
@@ -1596,6 +1605,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                             <input
                                 class="search-input"
                                 type="text"
+                                data-canon="search-as-you-type"
                                 style="flex:1;min-width:0;width:100%;box-sizing:border-box"
                                 placeholder=${this.t('entities.search_placeholder')}
                                 .value=${this._query}
@@ -1674,6 +1684,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                         <input
                             class="search-input"
                             type="text"
+                            data-canon="search-as-you-type"
                             placeholder=${this.t('entities.search_placeholder')}
                             .value=${this._query}
                             @input=${this._onSearchInput}
@@ -1810,6 +1821,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                             <input
                                 type="text"
                                 class="tag-filter-input"
+                                data-canon="inline-edit"
                                 placeholder=${this.t('entity_filters.tags_placeholder')}
                                 .value=${this._tagInput}
                                 @input=${this._onTagInputChange}

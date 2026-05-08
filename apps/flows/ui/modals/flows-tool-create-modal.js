@@ -6,6 +6,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/fields/platform-field.js';
 import '../components/editors/flows-code-editor.js';
 import { asString } from '../_helpers/flows-resolvers.js';
 
@@ -27,13 +28,11 @@ export class FlowsToolCreateModal extends PlatformFormModal {
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            .field input {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                margin-bottom: var(--space-3);
             }
         `,
     ];
@@ -53,16 +52,31 @@ export class FlowsToolCreateModal extends PlatformFormModal {
     renderBody() {
         return html`
             <div class="field">
-                <label>${this.t('tool_create_modal.field_id')}</label>
-                <input type="text" .value=${this._toolId} @input=${(e) => { this._toolId = e.target.value; this.isDirty = true; }} />
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('tool_create_modal.field_id')}
+                    .value=${this._toolId}
+                    @change=${(e) => { this._toolId = asString(e.detail.value); this.isDirty = true; }}
+                ></platform-field>
             </div>
             <div class="field">
-                <label>${this.t('tool_create_modal.field_name')}</label>
-                <input type="text" .value=${this._name} @input=${(e) => { this._name = e.target.value; this.isDirty = true; }} />
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('tool_create_modal.field_name')}
+                    .value=${this._name}
+                    @change=${(e) => { this._name = asString(e.detail.value); this.isDirty = true; }}
+                ></platform-field>
             </div>
             <div class="field">
-                <label>${this.t('tool_create_modal.field_description')}</label>
-                <input type="text" .value=${this._description} @input=${(e) => { this._description = e.target.value; this.isDirty = true; }} />
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('tool_create_modal.field_description')}
+                    .value=${this._description}
+                    @change=${(e) => { this._description = asString(e.detail.value); this.isDirty = true; }}
+                ></platform-field>
             </div>
             <div class="field">
                 <label>${this.t('tool_create_modal.field_code')}</label>

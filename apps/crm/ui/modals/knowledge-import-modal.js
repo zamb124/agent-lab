@@ -29,6 +29,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const MAX_INLINE_TEXT = 100000;
 const CHUNK_MIN = 2000;
@@ -445,6 +446,20 @@ export class CRMKnowledgeImportModal extends PlatformModal {
         }
     }
 
+    _onPasteTextFieldChange(e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('CRMKnowledgeImportModal: paste field expects change detail.value string');
+        }
+        this._pasteText = e.detail.value;
+    }
+
+    _onChunkMaxCharsFieldChange(e) {
+        if (!e.detail || e.detail.value === null || typeof e.detail.value !== 'number') {
+            throw new Error('CRMKnowledgeImportModal: chunk field expects numeric change detail.value');
+        }
+        this._setChunkMaxChars(String(e.detail.value));
+    }
+
     _setSplitByHeadings(value) {
         this._splitByHeadings = Boolean(value);
     }
@@ -631,14 +646,14 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                     `
                     : ''}
 
-                <label class="ki-label">${this.t('knowledge_import_modal.paste_label')}</label>
-                <textarea
-                    class="ki-textarea"
-                    rows="6"
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    label=${this.t('knowledge_import_modal.paste_label')}
                     placeholder=${this.t('knowledge_import_modal.paste_placeholder')}
                     .value=${this._pasteText}
-                    @input=${(e) => { this._pasteText = e.target.value; }}
-                ></textarea>
+                    @change=${this._onPasteTextFieldChange}
+                ></platform-field>
                 <div class="ki-hint ${textOver ? 'ki-hint--err' : ''}">
                     ${this.t('knowledge_import_modal.paste_count', {
                         len: String(this._pasteText.length),
@@ -671,15 +686,14 @@ export class CRMKnowledgeImportModal extends PlatformModal {
                             max: String(CHUNK_MAX),
                         })}</div>
                     </div>
-                    <input
-                        type="number"
-                        class="ki-input ki-input--num"
-                        min=${CHUNK_MIN}
-                        max=${CHUNK_MAX}
-                        step="1000"
-                        .value=${String(this._chunkMaxChars)}
-                        @change=${(e) => this._setChunkMaxChars(e.target.value)}
-                    />
+                    <platform-field
+                        type="integer"
+                        mode="edit"
+                        label=""
+                        placeholder=""
+                        .value=${this._chunkMaxChars}
+                        @change=${this._onChunkMaxCharsFieldChange}
+                    ></platform-field>
                 </div>
             </div>
         `;

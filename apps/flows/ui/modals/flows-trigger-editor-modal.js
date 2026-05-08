@@ -23,6 +23,7 @@ import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-cron-field.js';
 import '@platform/lib/components/platform-timezone-picker.js';
+import '@platform/lib/components/fields/platform-field.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { TRIGGER_TYPES } from '../constants/trigger-types.js';
 
@@ -661,41 +662,61 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
 
     _renderConfigTab() {
         const editing = Boolean(this.trigger);
+        const branchEnumConfig = { values: this._branchSelectRows() };
         return html`
             <div class="field">
                 <label>${this.t('trigger_editor_modal.field_branch')}</label>
-                <select
+                <platform-field
+                    type="enum"
+                    mode="edit"
                     .value=${this._branchId}
+                    .config=${branchEnumConfig}
                     @change=${(e) => {
-                    this._branchId = e.target.value;
-                    this.isDirty = true;
-                }}
-                >
-                    ${this._branchSelectRows().map(
-        (o) => html`<option value=${o.value}>${o.label}</option>`,
-    )}
-                </select>
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-trigger-editor-modal: branch_id expects string detail.value');
+                        }
+                        this._branchId = v;
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
                 <span class="hint">${this.t('trigger_editor_modal.hint_branch')}</span>
             </div>
 
             <div class="field">
                 <label>${this.t('trigger_editor_modal.field_id')}</label>
-                <input
-                    type="text"
+                <platform-field
+                    type="string"
+                    mode="edit"
                     .value=${this._triggerId}
                     ?disabled=${editing}
                     placeholder=${this.t('trigger_editor_modal.field_id_placeholder')}
-                    @input=${(e) => { this._triggerId = e.target.value; this.isDirty = true; }}
-                />
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-trigger-editor-modal: trigger_id expects string detail.value');
+                        }
+                        this._triggerId = v;
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
             <div class="field">
                 <label>${this.t('trigger_editor_modal.field_name')}</label>
-                <input
-                    type="text"
+                <platform-field
+                    type="string"
+                    mode="edit"
                     .value=${this._name}
                     placeholder=${this.t('trigger_editor_modal.field_name_placeholder')}
-                    @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
-                />
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-trigger-editor-modal: name expects string detail.value');
+                        }
+                        this._name = v;
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
             <div class="field">
                 <label>${this.t('trigger_editor_modal.field_type')}</label>
@@ -746,22 +767,36 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_telegram')}</div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_bot_token')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${asString(c.bot_token)}
                         placeholder=${this.t('trigger_editor_modal.field_bot_token_placeholder')}
-                        @input=${(e) => this._setConfig('bot_token', e.target.value)}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: bot_token expects string detail.value');
+                            }
+                            this._setConfig('bot_token', v);
+                        }}
+                    ></platform-field>
                     <span class="hint">${this.t('trigger_editor_modal.hint_bot_token')}</span>
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_allowed_users')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${allowedUsers}
                         placeholder=${this.t('trigger_editor_modal.field_allowed_users_placeholder')}
-                        @input=${(e) => this._setConfigList('allowed_users', e.target.value, 'int')}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: allowed_users expects string detail.value');
+                            }
+                            this._setConfigList('allowed_users', v, 'int');
+                        }}
+                    ></platform-field>
                     <span class="hint">${this.t('trigger_editor_modal.hint_allowed_users')}</span>
                 </div>
             </div>
@@ -794,12 +829,19 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_initial_content')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${asString(c.initial_content)}
                         placeholder=${this.t('trigger_editor_modal.field_initial_content_placeholder')}
-                        @input=${(e) => this._setConfig('initial_content', e.target.value)}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: initial_content expects string detail.value');
+                            }
+                            this._setConfig('initial_content', v);
+                        }}
+                    ></platform-field>
                 </div>
             </div>
         `;
@@ -813,22 +855,36 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_webhook')}</div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_secret_token')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${asString(c.secret_token)}
                         placeholder=${this.t('trigger_editor_modal.field_secret_token_placeholder')}
-                        @input=${(e) => this._setConfig('secret_token', e.target.value)}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: secret_token expects string detail.value');
+                            }
+                            this._setConfig('secret_token', v);
+                        }}
+                    ></platform-field>
                     <span class="hint">${this.t('trigger_editor_modal.hint_secret_token')}</span>
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_allowed_ips')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${allowedIps}
                         placeholder=${this.t('trigger_editor_modal.field_allowed_ips_placeholder')}
-                        @input=${(e) => this._setConfigList('allowed_ips', e.target.value, 'string')}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: allowed_ips expects string detail.value');
+                            }
+                            this._setConfigList('allowed_ips', v, 'string');
+                        }}
+                    ></platform-field>
                     <span class="hint">${this.t('trigger_editor_modal.hint_allowed_ips')}</span>
                 </div>
             </div>
@@ -838,45 +894,79 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
     _renderEmailConfig() {
         const c = this._config;
         const provider = typeof c.provider === 'string' && c.provider.length > 0 ? c.provider : 'imap';
+        const providerEnumConfig = {
+            values: [
+                { value: 'imap', label: this.t('trigger_editor_modal.provider_imap') },
+                { value: 'mailgun', label: this.t('trigger_editor_modal.provider_mailgun') },
+            ],
+        };
         return html`
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_email')}</div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_provider')}</label>
-                    <select
+                    <platform-field
+                        type="enum"
+                        mode="edit"
                         .value=${provider}
-                        @change=${(e) => this._setConfig('provider', e.target.value)}
-                    >
-                        <option value="imap" ?selected=${provider === 'imap'}>${this.t('trigger_editor_modal.provider_imap')}</option>
-                        <option value="mailgun" ?selected=${provider === 'mailgun'}>${this.t('trigger_editor_modal.provider_mailgun')}</option>
-                    </select>
+                        .config=${providerEnumConfig}
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: provider expects string detail.value');
+                            }
+                            this._setConfig('provider', v);
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_imap_host')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${asString(c.imap_host)}
                         placeholder=${this.t('trigger_editor_modal.field_imap_host_placeholder')}
-                        @input=${(e) => this._setConfig('imap_host', e.target.value)}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: imap_host expects string detail.value');
+                            }
+                            this._setConfig('imap_host', v);
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_imap_user')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${asString(c.imap_user)}
                         placeholder=${this.t('trigger_editor_modal.field_imap_user_placeholder')}
-                        @input=${(e) => this._setConfig('imap_user', e.target.value)}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: imap_user expects string detail.value');
+                            }
+                            this._setConfig('imap_user', v);
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_imap_password')}</label>
-                    <input
-                        type="password"
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        input-type="password"
                         .value=${asString(c.imap_password)}
                         placeholder=${this.t('trigger_editor_modal.field_imap_password_placeholder')}
-                        @input=${(e) => this._setConfig('imap_password', e.target.value)}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: imap_password expects string detail.value');
+                            }
+                            this._setConfig('imap_password', v);
+                        }}
+                    ></platform-field>
                 </div>
             </div>
         `;
@@ -889,12 +979,19 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_redis')}</div>
                 <div class="field">
                     <label>${this.t('trigger_editor_modal.field_channel')}</label>
-                    <input
-                        type="text"
+                    <platform-field
+                        type="string"
+                        mode="edit"
                         .value=${asString(c.channel)}
                         placeholder=${this.t('trigger_editor_modal.field_channel_placeholder')}
-                        @input=${(e) => this._setConfig('channel', e.target.value)}
-                    />
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-trigger-editor-modal: channel expects string detail.value');
+                            }
+                            this._setConfig('channel', v);
+                        }}
+                    ></platform-field>
                 </div>
                 <div class="checkbox-row">
                     <input
@@ -929,21 +1026,33 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     ? html`<div class="mapping-empty">${this.t('trigger_editor_modal.mapping_empty')}</div>`
                     : this._outputMapping.map((m, idx) => html`
                         <div class="mapping-row">
-                            <input
-                                type="text"
+                            <platform-field
+                                type="string"
+                                mode="edit"
                                 .value=${m.state}
                                 placeholder=${this.t('trigger_editor_modal.mapping_placeholder_state')}
-                                @input=${(e) => this._updateMapping(idx, 'state', e.target.value)}
-                                style="padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); background: var(--glass-tint-subtle); color: var(--text-primary);"
-                            />
+                                @change=${(e) => {
+                                    const v = e.detail.value;
+                                    if (typeof v !== 'string') {
+                                        throw new TypeError('flows-trigger-editor-modal: mapping state expects string detail.value');
+                                    }
+                                    this._updateMapping(idx, 'state', v);
+                                }}
+                            ></platform-field>
                             <span class="mapping-arrow">→</span>
-                            <input
-                                type="text"
+                            <platform-field
+                                type="string"
+                                mode="edit"
                                 .value=${m.payload}
                                 placeholder=${this.t('trigger_editor_modal.mapping_placeholder_payload')}
-                                @input=${(e) => this._updateMapping(idx, 'payload', e.target.value)}
-                                style="padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); background: var(--glass-tint-subtle); color: var(--text-primary);"
-                            />
+                                @change=${(e) => {
+                                    const v = e.detail.value;
+                                    if (typeof v !== 'string') {
+                                        throw new TypeError('flows-trigger-editor-modal: mapping payload expects string detail.value');
+                                    }
+                                    this._updateMapping(idx, 'payload', v);
+                                }}
+                            ></platform-field>
                             <button
                                 type="button"
                                 class="icon-btn danger"
@@ -1081,35 +1190,56 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const allowedIds = new Set(channelOptions.map((c) => c.id));
         const showLegacyChannel = !allowedIds.has(action.channel);
         const mappingEntries = Object.entries(action.mapping);
+        const channelEnumValues = [];
+        if (showLegacyChannel) {
+            channelEnumValues.push({
+                value: action.channel,
+                label: `${action.channel} (${this.t('trigger_editor_modal.output_channel_legacy')})`,
+            });
+        }
+        for (const ch of channelOptions) {
+            channelEnumValues.push({
+                value: ch.id,
+                label: this.t(`trigger_editor_modal.${ch.labelKey}`),
+            });
+        }
+        const channelEnumConfig = { values: channelEnumValues };
+        const actionEnumConfig = {
+            values: OUTPUT_ACTIONS.map((a) => ({
+                value: a.id,
+                label: this.t(`trigger_editor_modal.${a.labelKey}`),
+            })),
+        };
         return html`
             <div class="output-action-item">
                 <div class="output-action-content">
                     <div class="output-action-header">
-                        <select
+                        <platform-field
+                            type="enum"
+                            mode="edit"
                             .value=${action.channel}
-                            @change=${(e) => this._updateOutputAction(idx, 'channel', e.target.value)}
-                        >
-                            ${showLegacyChannel
-                                ? html`<option value=${action.channel} ?selected=${true}>
-                                    ${action.channel} (${this.t('trigger_editor_modal.output_channel_legacy')})
-                                </option>`
-                                : nothing}
-                            ${channelOptions.map((ch) => html`
-                                <option value=${ch.id} ?selected=${ch.id === action.channel && !showLegacyChannel}>
-                                    ${this.t(`trigger_editor_modal.${ch.labelKey}`)}
-                                </option>
-                            `)}
-                        </select>
-                        <select
+                            .config=${channelEnumConfig}
+                            @change=${(e) => {
+                                const v = e.detail.value;
+                                if (typeof v !== 'string') {
+                                    throw new TypeError('flows-trigger-editor-modal: output channel expects string detail.value');
+                                }
+                                this._updateOutputAction(idx, 'channel', v);
+                            }}
+                        ></platform-field>
+                        <platform-field
+                            type="enum"
+                            mode="edit"
                             .value=${action.action}
-                            @change=${(e) => this._updateOutputAction(idx, 'action', e.target.value)}
-                        >
-                            ${OUTPUT_ACTIONS.map((a) => html`
-                                <option value=${a.id} ?selected=${a.id === action.action}>
-                                    ${this.t(`trigger_editor_modal.${a.labelKey}`)}
-                                </option>
-                            `)}
-                        </select>
+                            .config=${actionEnumConfig}
+                            @change=${(e) => {
+                                const v = e.detail.value;
+                                if (typeof v !== 'string') {
+                                    throw new TypeError('flows-trigger-editor-modal: output action expects string detail.value');
+                                }
+                                this._updateOutputAction(idx, 'action', v);
+                            }}
+                        ></platform-field>
                     </div>
 
                     <div class="field">
@@ -1118,21 +1248,33 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                             ? html`<div class="mapping-empty">${this.t('trigger_editor_modal.mapping_empty')}</div>`
                             : mappingEntries.map(([key, value]) => html`
                                 <div class="mapping-row">
-                                    <input
-                                        type="text"
+                                    <platform-field
+                                        type="string"
+                                        mode="edit"
                                         .value=${key}
                                         placeholder=${this.t('trigger_editor_modal.output_mapping_param_placeholder')}
-                                        @change=${(e) => this._renameOutputMappingKey(idx, key, e.target.value)}
-                                        style="padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); background: var(--glass-tint-subtle); color: var(--text-primary);"
-                                    />
+                                        @change=${(e) => {
+                                            const v = e.detail.value;
+                                            if (typeof v !== 'string') {
+                                                throw new TypeError('flows-trigger-editor-modal: output mapping key expects string detail.value');
+                                            }
+                                            this._renameOutputMappingKey(idx, key, v);
+                                        }}
+                                    ></platform-field>
                                     <span class="mapping-arrow">→</span>
-                                    <input
-                                        type="text"
+                                    <platform-field
+                                        type="string"
+                                        mode="edit"
                                         .value=${value}
                                         placeholder=${this.t('trigger_editor_modal.output_mapping_value_placeholder')}
-                                        @input=${(e) => this._setOutputMappingValue(idx, key, e.target.value)}
-                                        style="padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--glass-border-subtle); background: var(--glass-tint-subtle); color: var(--text-primary);"
-                                    />
+                                        @change=${(e) => {
+                                            const v = e.detail.value;
+                                            if (typeof v !== 'string') {
+                                                throw new TypeError('flows-trigger-editor-modal: output mapping value expects string detail.value');
+                                            }
+                                            this._setOutputMappingValue(idx, key, v);
+                                        }}
+                                    ></platform-field>
                                     <button
                                         type="button"
                                         class="icon-btn danger"
@@ -1150,12 +1292,19 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
 
                     <div class="field">
                         <label>${this.t('trigger_editor_modal.output_condition_label')}</label>
-                        <input
-                            type="text"
+                        <platform-field
+                            type="string"
+                            mode="edit"
                             .value=${action.condition}
                             placeholder=${this.t('trigger_editor_modal.output_condition_placeholder')}
-                            @input=${(e) => this._updateOutputAction(idx, 'condition', e.target.value)}
-                        />
+                            @change=${(e) => {
+                                const v = e.detail.value;
+                                if (typeof v !== 'string') {
+                                    throw new TypeError('flows-trigger-editor-modal: output condition expects string detail.value');
+                                }
+                                this._updateOutputAction(idx, 'condition', v);
+                            }}
+                        ></platform-field>
                         <span class="hint">${this.t('trigger_editor_modal.output_condition_hint')}</span>
                     </div>
                 </div>

@@ -477,6 +477,23 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     connectedCallback() {
         super.connectedCallback();
+        this.useEvent('flows/chat/compose_edit', (ev) => {
+            const p = ev.payload && typeof ev.payload === 'object' ? ev.payload : null;
+            const text = p && typeof p.text === 'string' ? p.text : '';
+            if (text === '') {
+                return;
+            }
+            this._ui.setInputText({ text });
+            void this.updateComplete.then(() => {
+                const ta = this.renderRoot?.querySelector('#flows-exec-compose-textarea');
+                if (!(ta instanceof HTMLTextAreaElement)) {
+                    throw new Error('flows-execution-panel: compose textarea missing');
+                }
+                ta.focus();
+                const len = text.length;
+                ta.setSelectionRange(len, len);
+            });
+        });
         if (typeof window !== 'undefined') {
             window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsExecPref);
             window.addEventListener('storage', this._onTtsExecStorage);
@@ -639,24 +656,6 @@ export class FlowsExecutionPanel extends PlatformElement {
 
     _onInputChange(e) {
         this._ui.setInputText({ text: asString(e.target.value) });
-    }
-
-    _onChatComposeEdit(e) {
-        const detail = e.detail;
-        const text = detail && typeof detail.text === 'string' ? detail.text : '';
-        if (text === '') {
-            return;
-        }
-        this._ui.setInputText({ text });
-        void this.updateComplete.then(() => {
-            const ta = this.renderRoot?.querySelector('#flows-exec-compose-textarea');
-            if (!(ta instanceof HTMLTextAreaElement)) {
-                throw new Error('flows-execution-panel: compose textarea missing');
-            }
-            ta.focus();
-            const len = text.length;
-            ta.setSelectionRange(len, len);
-        });
     }
 
     /**
@@ -1170,11 +1169,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                 d && typeof d.task_id === 'string' ? d.task_id : null;
             const context_id =
                 d && typeof d.context_id === 'string' ? d.context_id : null;
-            this.dispatch(
-                'flows/chat/a2a_interrupted',
-                { task_id, context_id },
-                { source: 'local' },
-            );
+            this.dispatch('flows/chat/a2a_interrupted', { task_id, context_id }, { source: 'local' });
         };
         this._voiceA2aSettledHandler = onVoiceA2aSettled;
         this._voiceA2aAbortedHandler = onVoiceA2aAborted;
@@ -1414,7 +1409,6 @@ export class FlowsExecutionPanel extends PlatformElement {
                                         },
                                         (message) => html`
                                             <chat-message
-                                                @compose-edit=${this._onChatComposeEdit}
                                                 .role=${asString(message.role)}
                                                 .content=${typeof message.content === 'string' ? message.content : ''}
                                                 .timestamp=${asString(message.timestamp)}
@@ -1451,6 +1445,7 @@ export class FlowsExecutionPanel extends PlatformElement {
                                 <textarea
                                     id="flows-exec-compose-textarea"
                                     class="flows-exec-compose-textarea"
+                                    data-canon="composer"
                                     .value=${ui.inputText}
                                     placeholder=${this.t(placeholderKey)}
                                     @input=${this._onInputChange}

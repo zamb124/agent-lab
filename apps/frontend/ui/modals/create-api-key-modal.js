@@ -9,6 +9,7 @@
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const SCOPE_DEFS = Object.freeze([
     { id: 'agents:read',  name_key: 'api_key_modal.scope_agents_read_name',  desc_key: 'api_key_modal.scope_agents_read_desc' },
@@ -89,15 +90,20 @@ export class FrontendCreateApiKeyModal extends PlatformFormModal {
         return html`
             <form @submit=${this._onSubmit}>
                 <div class="form-group">
-                    <label class="form-label">${this.t('api_key_modal.label_name')}</label>
-                    <input
-                        class="form-input"
-                        name="name"
-                        .value=${this._name}
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        label=${this.t('api_key_modal.label_name')}
                         placeholder=${this.t('api_key_modal.placeholder_name')}
-                        @input=${(e) => { this._name = e.target.value; this.isDirty = true; }}
-                        autofocus
-                    />
+                        .value=${this._name}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('api-key-create: name expects detail.value string');
+                            }
+                            this._name = e.detail.value;
+                            this.isDirty = true;
+                        }}
+                    ></platform-field>
                     ${this.renderFieldError('name')}
                 </div>
                 <div class="form-group">

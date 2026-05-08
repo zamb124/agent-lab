@@ -14,6 +14,9 @@
  *   - initial: { [field]: value } — обязательно (zero-guess)
  *   - submitEvent: string — тип события, в которое передаём draft (или payload
  *     из buildPayload)
+ *   - submittingClearOnEventTypes?: string[] — после SUBMIT_REQUESTED сбрасывать
+ *     submitting при любом из этих типов событий (например CREATED / CREATE_FAILED
+ *     у createResourceCollection), иначе submitting остаётся true до OPENED.
  *   - buildPayload?: (draft) => any — опционально; по умолчанию {...draft}
  *
  * Возвращает:
@@ -27,6 +30,8 @@
  *      пересчитывает ошибку конкретного поля
  *   3. dispatch SUBMIT_REQUESTED — фабрика валидирует draft; если ок →
  *      диспатчит submitEvent с payload, иначе → SUBMIT_INVALID { errors }
+ *   3b. при указанных submittingClearOnEventTypes — приём CREATED/CREATE_FAILED
+ *      (и др.) сбрасывает submitting
  *   4. dispatch CLOSED — обнуляет slice
  */
 
@@ -65,6 +70,16 @@ export function createForm(options) {
     const buildPayload = typeof options.buildPayload === 'function'
         ? options.buildPayload
         : (draft) => ({ ...draft });
+
+    const submittingClearOnEventTypes = Array.isArray(options.submittingClearOnEventTypes)
+        ? options.submittingClearOnEventTypes
+        : [];
+    for (const t of submittingClearOnEventTypes) {
+        if (typeof t !== 'string' || t.length === 0) {
+            throw new Error(`createForm(${name}): submittingClearOnEventTypes must be non-empty strings`);
+        }
+    }
+    const _submittingClearSet = new Set(submittingClearOnEventTypes);
 
     const sliceKey = options.sliceKey || deriveSliceKey(name);
     registerResourceName(name, 'form');
@@ -133,8 +148,12 @@ export function createForm(options) {
                     errors: freeze(event.payload.errors),
                 });
             }
-            default:
+            default: {
+                if (state.submitting && _submittingClearSet.has(event.type)) {
+                    return freeze({ ...state, submitting: false });
+                }
                 return state;
+            }
         }
     }
 

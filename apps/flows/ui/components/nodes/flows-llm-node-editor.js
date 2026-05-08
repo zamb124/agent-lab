@@ -11,7 +11,8 @@
  *   4. Режим вывода — toggle Tools / Structured Output (`cfg.structured_output`).
  *   5a. Tools-режим (`structured_output=false`):
  *       - ReAct loop (`cfg.react`: loop_mode + max_iterations в одной строке;
- *         при explicit — exit_tool + strict в одной строке; reminder_message);
+ *         при explicit — exit_tool как enum (`finish` + tools ноды, имена совпадают
+ *         с LLM-calling именем `sanitize(tool_id)` как в backend) + strict; reminder_message);
  *       - Инструменты (`cfg.tools: ToolReference[]`): chips (иконка + имя) + выбор из библиотеки.
  *   5b. Structured-режим (`structured_output=true`):
  *       - Output JSON Schema (`cfg.output_schema`).
@@ -25,6 +26,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import '../editors/flows-llm-config-editor.js';
@@ -36,6 +38,7 @@ import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { getNodeTypeMeta } from '../../constants/node-icons.js';
 import { getToolRefVisualMeta, getToolLabel, normalizeToolRef as normalizeVisualToolRef } from '../../_helpers/flows-tool-visual.js';
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
+import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
 
@@ -299,17 +302,51 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _onReactLoopMode(e) {
-        this._reactPatch({ loop_mode: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-llm-node-editor: react.loop_mode change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-llm-node-editor: react.loop_mode detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-llm-node-editor: react.loop_mode string required');
+        }
+        this._reactPatch({ loop_mode: v });
     }
 
     _onReactMaxIter(e) {
-        const n = parseInt(e.target.value, 10);
-        if (!Number.isFinite(n)) return;
-        this._reactPatch({ max_iterations: n });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-llm-node-editor: react.max_iterations change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-llm-node-editor: react.max_iterations detail.value');
+        }
+        const v = d.value;
+        if (v === null) {
+            return;
+        }
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+            throw new Error('flows-llm-node-editor: react.max_iterations number required');
+        }
+        this._reactPatch({ max_iterations: Math.floor(v) });
     }
 
     _onReactExitTool(e) {
-        this._reactPatch({ exit_tool: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-llm-node-editor: react.exit_tool change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-llm-node-editor: react.exit_tool detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-llm-node-editor: react.exit_tool string required');
+        }
+        this._reactPatch({ exit_tool: v });
     }
 
     _onReactStrict(e) {
@@ -321,7 +358,18 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _onReactReminder(e) {
-        this._reactPatch({ reminder_message: e.target.value });
+        const d = e.detail;
+        if (d === null || typeof d !== 'object') {
+            throw new Error('flows-llm-node-editor: react.reminder change detail');
+        }
+        if (!('value' in d)) {
+            throw new Error('flows-llm-node-editor: react.reminder detail.value');
+        }
+        const v = d.value;
+        if (typeof v !== 'string') {
+            throw new Error('flows-llm-node-editor: react.reminder string required');
+        }
+        this._reactPatch({ reminder_message: v });
     }
 
     _onPickTool() {
@@ -522,14 +570,50 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
+    _exitToolEnumConfig(exitTool) {
+        if (typeof exitTool !== 'string' || exitTool.length === 0) {
+            throw new Error('flows-llm-node-editor: exit_tool string required');
+        }
+        const finishValue = 'finish';
+        const byValue = new Map();
+        byValue.set(finishValue, {
+            value: finishValue,
+            label: this.t('llm_node_editor.react_exit_tool_option_finish'),
+        });
+        const tools = Array.isArray(this.nodeConfig?.tools) ? this.nodeConfig.tools : [];
+        for (const entry of tools) {
+            const tid = this._toolEntryId(entry);
+            if (tid.length === 0) {
+                continue;
+            }
+            const callName = sanitizeToolName(tid);
+            if (byValue.has(callName)) {
+                continue;
+            }
+            const baseLabel = getToolLabel(entry);
+            const label =
+                baseLabel !== callName
+                    ? `${baseLabel} (${callName})`
+                    : baseLabel;
+            byValue.set(callName, { value: callName, label });
+        }
+        if (!byValue.has(exitTool)) {
+            byValue.set(exitTool, { value: exitTool, label: exitTool });
+        }
+        return { values: Array.from(byValue.values()) };
+    }
+
     _renderReactSection() {
         if (this.nodeConfig?.structured_output) return '';
         const react = this.nodeConfig?.react && typeof this.nodeConfig.react === 'object' ? this.nodeConfig.react : {};
         const loopMode = react.loop_mode === 'explicit' ? 'explicit' : 'auto';
         const maxIter = typeof react.max_iterations === 'number' ? react.max_iterations : 10;
-        const exitTool = typeof react.exit_tool === 'string' ? react.exit_tool : 'finish';
+        const exitTool =
+            typeof react.exit_tool === 'string' && react.exit_tool.length > 0 ? react.exit_tool : 'finish';
         const strict = react.strict === undefined ? true : Boolean(react.strict);
         const reminder = typeof react.reminder_message === 'string' ? react.reminder_message : '';
+        const loopModeValues = REACT_LOOP_MODES.map((m) => ({ value: m, label: m }));
+        const exitToolEnum = loopMode === 'explicit' ? this._exitToolEnumConfig(exitTool) : null;
         return html`
             <section class="block">
                 <h4 class="block-title">${this.t('llm_node_editor.section_react')}</h4>
@@ -537,20 +621,35 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                     <div class="react-composite-row">
                         <div class="field react-field-grow">
                             <label>${this.t('llm_node_editor.react_loop_mode')}</label>
-                            <select .value=${loopMode} @change=${this._onReactLoopMode}>
-                                ${REACT_LOOP_MODES.map((m) => html`<option value=${m} ?selected=${m === loopMode}>${m}</option>`)}
-                            </select>
+                            <platform-field
+                                mode="edit"
+                                type="enum"
+                                .value=${loopMode}
+                                .config=${{ values: loopModeValues }}
+                                @change=${this._onReactLoopMode}
+                            ></platform-field>
                         </div>
                         <div class="field react-field-tight">
                             <label>${this.t('llm_node_editor.react_max_iterations')}</label>
-                            <input type="number" min="1" step="1" .value=${String(maxIter)} @input=${this._onReactMaxIter} />
+                            <platform-field
+                                mode="edit"
+                                type="integer"
+                                .value=${maxIter}
+                                @change=${this._onReactMaxIter}
+                            ></platform-field>
                         </div>
                     </div>
                     ${loopMode === 'explicit' ? html`
                         <div class="react-exit-strict-row">
                             <div class="field react-field-grow">
                                 <label>${this.t('llm_node_editor.react_exit_tool')}</label>
-                                <input type="text" .value=${exitTool} @input=${this._onReactExitTool} />
+                                <platform-field
+                                    mode="edit"
+                                    type="enum"
+                                    .value=${exitTool}
+                                    .config=${exitToolEnum}
+                                    @change=${this._onReactExitTool}
+                                ></platform-field>
                             </div>
                             <platform-switch
                                 size="sm"
@@ -561,7 +660,12 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                         </div>
                         <div class="field">
                             <label>${this.t('llm_node_editor.react_reminder')}</label>
-                            <input type="text" .value=${reminder} @input=${this._onReactReminder} />
+                            <platform-field
+                                mode="edit"
+                                type="string"
+                                .value=${reminder}
+                                @change=${this._onReactReminder}
+                            ></platform-field>
                         </div>
                     ` : ''}
                 </div>

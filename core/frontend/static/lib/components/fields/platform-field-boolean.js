@@ -7,29 +7,26 @@ export class PlatformFieldBoolean extends PlatformElement {
         value: { type: Boolean },
         mode: { type: String },
         disabled: { type: Boolean },
-        flat: { type: Boolean, reflect: true },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
-            :host { display: block; }
-
-            :host([flat]) {
-                padding: 2px 0;
+            :host {
+                display: block;
+                min-width: 0;
             }
 
             .view-value {
                 font-size: var(--text-sm);
-                color: var(--text-primary);
             }
 
-            .view-true { color: var(--success); }
-            .view-false { color: var(--text-secondary); }
+            .view-true {
+                color: var(--success);
+            }
 
-            .empty {
-                color: var(--text-disabled);
-                font-style: italic;
+            .view-false {
+                color: var(--text-secondary);
             }
         `,
     ];
@@ -39,7 +36,6 @@ export class PlatformFieldBoolean extends PlatformElement {
         this.value = false;
         this.mode = 'view';
         this.disabled = false;
-        this.flat = false;
     }
 
     _onChange(e) {
@@ -53,13 +49,13 @@ export class PlatformFieldBoolean extends PlatformElement {
     render() {
         if (this.mode === 'view') {
             if (this.value == null) {
-                return html`<span class="view-value empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
+                return html`<span class="field-pill-empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;
             }
             const label = this.value
                 ? (this.t('platform_field.boolean_true') || 'platform_field.boolean_true')
                 : (this.t('platform_field.boolean_false') || 'platform_field.boolean_false');
             const cls = this.value ? 'view-true' : 'view-false';
-            return html`<span class="view-value ${cls}">${label}</span>`;
+            return html`<span class="field-pill-readonly-text view-value ${cls}">${label}</span>`;
         }
 
         return html`

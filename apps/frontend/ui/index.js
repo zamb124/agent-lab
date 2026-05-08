@@ -8,8 +8,6 @@
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-card.js';
-import '@platform/lib/components/glass-input.js';
-import '@platform/lib/components/glass-textarea.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-switch.js';

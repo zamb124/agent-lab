@@ -1,6 +1,6 @@
 .PHONY: help dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
-.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon build-i18n
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon build-i18n
 .PHONY: clean-i18n-unused base
 .PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
 
@@ -98,6 +98,11 @@ test-rag:
 
 check-ui-canon:
 	@./scripts/check_ui_canon.sh
+
+# Field canon: запрет сырых <input>/<textarea>/<select> в apps/<svc>/ui/{pages,modals,components}/**
+# кроме whitelist type= и data-canon (см. scripts/check_field_canon.sh). Не входит в check-events-canon.
+check-field-canon:
+	@./scripts/check_field_canon.sh
 
 check-logging:
 	@./scripts/check_logging_canon.sh

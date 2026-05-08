@@ -325,6 +325,7 @@ export class FlowsSearchableCombobox extends PlatformElement {
         return html`
             <div class="root">
                 <input
+                    data-canon="combobox"
                     type="text"
                     .value=${this._input}
                     placeholder=${this.placeholder}

@@ -424,18 +424,31 @@ class PgVectorProvider(BaseRAGProvider):
         chunks = [pair[0] for pair in chunk_pairs]
         chunk_metas = [pair[1] for pair in chunk_pairs]
 
-        embeddings = await self._embedding_service.generate_embeddings(chunks)
-        embedding_tokens = self._embedding_service.count_tokens(chunks)
         index_profile_config = metadata.get("index_profile_config")
         if index_profile_config is not None and not isinstance(index_profile_config, dict):
             raise ValueError("index_profile_config должен быть объектом")
         indexing_runtime: Dict[str, Any] = dict(index_profile_config or {})
-        indexing_runtime["embedding"] = self._embedding_service.runtime_snapshot(
-            embedding_tokens=embedding_tokens
-        )
+
+        # Если embedding-сервис недоступен — сохраняем чанки с embedding=NULL.
+        # crm_reembed_stale_documents_tick / rag_reembed_stale_documents_tick подберут их
+        # когда сервис восстановится (ищут embedding_model IS NULL).
+        try:
+            embeddings: List[Optional[List[float]]] = await self._embedding_service.generate_embeddings(chunks)
+            embedding_tokens = self._embedding_service.count_tokens(chunks)
+            embedding_model: Optional[str] = self._embedding_model_name()
+            indexing_runtime["embedding"] = self._embedding_service.runtime_snapshot(
+                embedding_tokens=embedding_tokens
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Embedding unavailable for '{document_name}' in '{namespace_id}': {exc}. "
+                "Storing chunks without embeddings — reembed task will retry."
+            )
+            embeddings = [None] * len(chunks)
+            embedding_model = None
+            indexing_runtime["embedding"] = {"pending": True, "error": str(exc)[:200]}
 
         rows = []
-        embedding_model = self._embedding_model_name()
         for i, (chunk, emb, chunk_meta) in enumerate(zip(chunks, embeddings, chunk_metas)):
             chunk_row_id = uuid.uuid5(
                 uuid.NAMESPACE_URL,

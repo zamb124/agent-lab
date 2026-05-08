@@ -1,5 +1,6 @@
 /**
- * TagInput - редактор тегов с поддержкой Enter, запятой и Backspace
+ * TagInput — редактор тегов с поддержкой Enter, запятой и Backspace.
+ * Pill-режим единственный (атрибут `flat` удалён в PHASE 1.5).
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
@@ -10,24 +11,28 @@ export class TagInput extends PlatformElement {
         css`
             :host {
                 display: block;
+                min-width: 0;
+                width: 100%;
             }
-            
+
             .tag-container {
                 display: flex;
                 flex-wrap: wrap;
-                gap: var(--space-2);
-                padding: var(--space-2);
-                min-height: 40px;
-                background: var(--glass-tint-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
+                gap: var(--space-1);
+                padding: 0;
+                min-height: 0;
+                background: transparent;
+                border: none;
+                border-radius: 0;
                 cursor: text;
             }
-            
+
             .tag-container:focus-within {
-                border-color: var(--accent);
+                outline: none;
+                border: none;
+                box-shadow: none;
             }
-            
+
             .tag {
                 display: flex;
                 align-items: center;
@@ -38,7 +43,7 @@ export class TagInput extends PlatformElement {
                 background: var(--accent-subtle);
                 border-radius: var(--radius-sm);
             }
-            
+
             .tag-remove {
                 display: flex;
                 align-items: center;
@@ -53,62 +58,45 @@ export class TagInput extends PlatformElement {
                 cursor: pointer;
                 transition: all var(--duration-fast) var(--easing-default);
             }
-            
+
             .tag-remove:hover {
                 color: var(--error);
                 background: var(--error-bg);
             }
-            
+
             .tag-input {
                 flex: 1;
                 min-width: 100px;
-                padding: var(--space-1);
-                font-size: var(--text-sm);
-                color: var(--text-primary);
+                padding: 2px 0;
+                font-size: var(--field-pill-input-size);
+                font-weight: var(--field-pill-input-weight);
+                color: var(--field-pill-input-color);
                 background: transparent;
                 border: none;
                 outline: none;
             }
-            
+
             .tag-input::placeholder {
-                color: var(--text-tertiary);
+                color: var(--field-pill-muted-color);
+                font-weight: var(--font-normal);
             }
-
-            :host([flat]) .tag-container {
-                gap: var(--space-1);
-                padding: 0;
-                min-height: 0;
-                background: transparent;
-                border: none;
-                border-radius: 0;
-            }
-
-            :host([flat]) .tag-container:focus-within {
-                border: none;
-                box-shadow: none;
-            }
-
-            :host([flat]) .tag-input {
-                font-size: 16px;
-                font-weight: 500;
-                padding: 2px 0;
-            }
-        `
+        `,
     ];
 
     static properties = {
         tags: { type: Array },
         placeholder: { type: String },
         readonly: { type: Boolean },
-        flat: { type: Boolean, reflect: true },
+        /** Если true — только trim без toLowerCase (контракт platform-field-array `config.preserve_case`). По умолчанию lower-case как в CRM. */
+        preserveCase: { type: Boolean, attribute: 'preserve-case' },
     };
 
     constructor() {
         super();
         this.tags = [];
-        this.placeholder = 'Добавить тег...';
+        this.placeholder = '';
         this.readonly = false;
-        this.flat = false;
+        this.preserveCase = false;
     }
 
     _getTags() {
@@ -123,8 +111,16 @@ export class TagInput extends PlatformElement {
         this.tags = Array.isArray(tags) ? [...tags] : [];
     }
 
+    _normalizeIncomingTag(tag) {
+        const trimmed = typeof tag === 'string' ? tag.trim() : '';
+        if (this.preserveCase) {
+            return trimmed;
+        }
+        return trimmed.toLowerCase();
+    }
+
     _addTag(tag) {
-        const trimmed = tag.trim().toLowerCase();
+        const trimmed = this._normalizeIncomingTag(tag);
         const currentTags = this._getTags();
         if (trimmed && !currentTags.includes(trimmed)) {
             this.tags = [...currentTags, trimmed];
@@ -174,9 +170,9 @@ export class TagInput extends PlatformElement {
                     <span class="tag">
                         ${tag}
                         ${!this.readonly ? html`
-                            <button 
-                                type="button" 
-                                class="tag-remove" 
+                            <button
+                                type="button"
+                                class="tag-remove"
                                 @click=${(e) => { e.stopPropagation(); this._removeTag(i); }}
                             >×</button>
                         ` : ''}
@@ -186,6 +182,7 @@ export class TagInput extends PlatformElement {
                     <input
                         type="text"
                         class="tag-input"
+                        data-canon="tag-input"
                         placeholder=${tags.length === 0 ? this.placeholder : ''}
                         @keydown=${this._onKeyDown}
                         @blur=${this._onBlur}

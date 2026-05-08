@@ -36,6 +36,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-deployment-version.js';
+import '@platform/lib/components/fields/platform-field.js';
 
 const NAMESPACES_NAME = 'office/namespaces';
 const INTEGRATION_OP = 'office/integration_status';
@@ -106,42 +107,39 @@ export class OfficeSidebar extends PlatformElement {
                 padding: var(--space-3);
             }
             .namespace-selector {
-                display: flex; align-items: center;
+                display: flex;
+                flex-direction: column;
                 gap: var(--space-2);
-                padding: var(--space-2);
-                margin-bottom: var(--space-4);
-                background: var(--glass-solid-medium);
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-lg);
+                margin-bottom: var(--space-3);
                 width: 100%;
+                min-width: 0;
                 box-sizing: border-box;
             }
+            .namespace-selector-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                width: 100%;
+            }
             .namespace-label {
-                font-size: 10px;
-                font-weight: 600;
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
                 color: var(--text-tertiary);
-                white-space: nowrap;
+                line-height: 1.2;
+                align-self: stretch;
             }
-            .namespace-selector select {
-                flex: 1;
+            .namespace-selector-row platform-field {
+                flex: 1 1 0;
                 min-width: 0;
-                background: transparent;
-                border: none;
-                color: var(--text-primary);
-                font-size: var(--text-sm);
-                font-weight: 500;
-                cursor: pointer;
-                outline: none;
-                padding: var(--space-1) var(--space-2);
-                overflow: hidden;
-                text-overflow: ellipsis;
+                display: block;
             }
-            .namespace-selector select:disabled { opacity: 0.55; cursor: not-allowed; }
             .namespace-add-btn {
                 display: flex; align-items: center; justify-content: center;
                 width: 24px; height: 24px;
+                flex-shrink: 0;
                 border: none;
                 background: var(--accent);
                 color: var(--text-inverse, white);
@@ -204,10 +202,44 @@ export class OfficeSidebar extends PlatformElement {
         return '';
     }
 
+    _namespaceEnumConfig(items, noNamespaces) {
+        if (noNamespaces) {
+            return {
+                values: [{ value: '', label: this.t('sidebar.namespace_empty_placeholder') }],
+            };
+        }
+        if (!Array.isArray(items)) {
+            throw new Error('OfficeSidebar._namespaceEnumConfig: items must be an array');
+        }
+        const values = [];
+        for (const ns of items) {
+            if (!ns || typeof ns.name !== 'string' || ns.name.length === 0) {
+                throw new Error('OfficeSidebar._namespaceEnumConfig: invalid namespace item');
+            }
+            values.push({ value: ns.name, label: ns.name });
+        }
+        return { values };
+    }
+
+    _namespaceFieldValue(sidebarSel, items) {
+        if (!Array.isArray(items) || items.length === 0) return '';
+        if (typeof sidebarSel === 'string' && sidebarSel !== 'all') {
+            const hit = items.find((ns) => ns && ns.name === sidebarSel);
+            if (hit && typeof hit.name === 'string') return hit.name;
+        }
+        const first = items[0];
+        if (!first || typeof first.name !== 'string') {
+            throw new Error('OfficeSidebar._namespaceFieldValue: invalid first namespace');
+        }
+        return first.name;
+    }
+
     _onNamespaceChange(e) {
         const cid = this._companyId();
         if (!cid) return;
-        const name = e.target.value.trim();
+        const detail = e.detail;
+        const raw = detail && typeof detail.value === 'string' ? detail.value : '';
+        const name = raw.trim();
         if (!name) return;
         setPlatformNamespaceSelection(cid, name);
         this._documents.clearFilter(null);
@@ -262,6 +294,8 @@ export class OfficeSidebar extends PlatformElement {
         const actionsDisabled = !integrationConfigured || !this._activeCatalogId();
         const refreshDisabled = !this._documents.state.loadedCatalogIds.length;
         const noNamespaces = items.length === 0;
+        const nsValue = this._namespaceFieldValue(sidebarSel, items);
+        const nsConfig = this._namespaceEnumConfig(items, noNamespaces);
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/documents_logo.svg"
@@ -275,27 +309,24 @@ export class OfficeSidebar extends PlatformElement {
                 <div slot="header">
                     <div class="namespace-selector" data-hide-collapsed>
                         <span class="namespace-label">${this.t('sidebar.namespace_label')}</span>
-                        <select
-                            ?disabled=${!companyId || isEditor || noNamespaces}
-                            @change=${this._onNamespaceChange}
-                        >
-                            ${noNamespaces ? html`
-                                <option value="" selected disabled>
-                                    ${this.t('sidebar.namespace_empty_placeholder')}
-                                </option>
-                            ` : ''}
-                            ${items.map((ns) => html`
-                                <option value=${ns.name} ?selected=${sidebarSel !== 'all' && ns.name === sidebarSel}>
-                                    ${ns.name}
-                                </option>
-                            `)}
-                        </select>
-                        <button type="button"
-                                class="namespace-add-btn"
-                                title=${this.t('sidebar.create_namespace_tooltip')}
-                                @click=${this._openCreateNamespaceModal}>
-                            <platform-icon name="plus" size="14"></platform-icon>
-                        </button>
+                        <div class="namespace-selector-row">
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                label=""
+                                pill-density="compact"
+                                .value=${nsValue}
+                                .config=${nsConfig}
+                                ?disabled=${!companyId || isEditor || noNamespaces}
+                                @change=${this._onNamespaceChange}
+                            ></platform-field>
+                            <button type="button"
+                                    class="namespace-add-btn"
+                                    title=${this.t('sidebar.create_namespace_tooltip')}
+                                    @click=${this._openCreateNamespaceModal}>
+                                <platform-icon name="plus" size="14"></platform-icon>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <button class="nav-item ${this._isList() ? 'active' : ''}"

@@ -11,16 +11,8 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 import './dashboard-stat-tile.js';
-
-const CURRENCY_FORMATTER = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
-
-function _formatCurrency(value) {
-    if (value === null || value === undefined || value === '') return null;
-    const n = Number(value);
-    if (Number.isNaN(n)) return null;
-    return CURRENCY_FORMATTER.format(n);
-}
 
 export class DashboardStatStrip extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -43,7 +35,19 @@ export class DashboardStatStrip extends PlatformElement {
         this._usage = this.useOp('frontend/billing_usage');
         this._status = this.useOp('frontend/services_status_load');
         this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
+        this._locale = this.select((s) => typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en');
         this._loaded = false;
+    }
+
+    _formatCurrency(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        const n = Number(value);
+        if (!Number.isFinite(n)) {
+            return null;
+        }
+        return formatPlatformNumber(n, this._locale.value, { maximumFractionDigits: 2 });
     }
 
     updated() {
@@ -62,13 +66,13 @@ export class DashboardStatStrip extends PlatformElement {
     }
 
     _balanceValue(subscription) {
-        const formatted = subscription ? _formatCurrency(subscription.balance) : null;
+        const formatted = subscription ? this._formatCurrency(subscription.balance) : null;
         if (formatted === null) return this.t('console_home.stat_loading');
         return `${formatted} ${this.t('console_home.currency_rub')}`;
     }
 
     _spentValue(subscription) {
-        const formatted = subscription ? _formatCurrency(subscription.current_month_spent) : null;
+        const formatted = subscription ? this._formatCurrency(subscription.current_month_spent) : null;
         if (formatted === null) return this.t('console_home.stat_loading');
         return `${formatted} ${this.t('console_home.currency_rub')}`;
     }

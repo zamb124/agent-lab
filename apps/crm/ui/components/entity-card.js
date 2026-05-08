@@ -18,8 +18,10 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './crm-related-entity-cards.js';
 import './crm-related-neighbor-rows.js';
@@ -138,6 +140,7 @@ export class CRMEntityCard extends PlatformElement {
 
     static styles = [
         PlatformElement.styles,
+        fieldPillStyles,
         css`
             :host {
                 display: flex;
@@ -376,134 +379,27 @@ export class CRMEntityCard extends PlatformElement {
                 grid-template-columns: 1fr 1fr;
                 gap: var(--space-3);
             }
+            .ecard-status-view {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .ecard-status-view-body {
+                min-height: 28px;
+                display: flex;
+                align-items: center;
+            }
+            .ecard-desc-empty {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-1);
+                margin-top: var(--space-2);
+            }
             @media (max-width: 640px) {
                 .edit-name-status-row {
                     grid-template-columns: 1fr;
                 }
-            }
-            .field-pill {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                padding: 14px 18px;
-                border-radius: 18px;
-                box-sizing: border-box;
-                background: var(--glass-tint-medium);
-                border: 1px solid var(--border-subtle);
-            }
-            .field-pill--textarea {
-                gap: 10px;
-            }
-            .field-pill--tags {
-                gap: 10px;
-            }
-            .field-pill--tags .tags-row {
-                min-height: 28px;
-            }
-            .field-pill--tags .tag-input {
-                flex: 1;
-                min-width: 140px;
-                margin: 0;
-                padding: 2px 0;
-                border: none;
-                border-radius: 0;
-                background: transparent;
-                box-shadow: none;
-                font-family: inherit;
-                font-size: 16px;
-                font-weight: 500;
-                color: var(--text-primary);
-            }
-            .field-pill--tags .tag-input:focus {
-                outline: none;
-            }
-            .field-pill--tags .tag-input::placeholder {
-                color: var(--text-tertiary);
-                font-weight: 400;
-            }
-            .field-pill--tags .tag-chip {
-                border: none;
-                background: var(--glass-tint-strong);
-            }
-            .field-pill-tags-head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-2);
-            }
-            .field-pill-label {
-                font-size: 11px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                color: var(--text-secondary);
-            }
-            :host-context([data-theme="light"]) .field-pill-label {
-                color: var(--text-tertiary);
-            }
-            .field-pill-input,
-            .field-pill-textarea,
-            .field-pill-select {
-                width: 100%;
-                border: none;
-                background: transparent;
-                font-family: inherit;
-                font-size: 16px;
-                font-weight: 500;
-                color: var(--text-primary);
-                padding: 0;
-                margin: 0;
-            }
-            .field-pill-textarea {
-                resize: vertical;
-                min-height: 120px;
-                line-height: 1.5;
-                font-weight: 400;
-            }
-            .field-pill-input:focus,
-            .field-pill-textarea:focus,
-            .field-pill-select:focus {
-                outline: none;
-            }
-            .field-pill-select {
-                cursor: pointer;
-            }
-            .field-pill-readonly-text {
-                font-size: 16px;
-                font-weight: 500;
-                color: var(--text-primary);
-                line-height: 1.45;
-                white-space: pre-wrap;
-                word-break: break-word;
-                margin: 0;
-            }
-            .field-pill-readonly-muted {
-                font-size: 14px;
-                font-weight: 400;
-                color: var(--text-tertiary);
-                margin: 0;
-            }
-            .field-pill-readonly-inline {
-                display: flex;
-                align-items: center;
-                min-height: 24px;
-            }
-            .tag-count-badge {
-                flex-shrink: 0;
-                min-width: 22px;
-                height: 22px;
-                padding: 0 6px;
-                border-radius: 11px;
-                background: var(--accent-subtle);
-                color: var(--accent);
-                font-size: 12px;
-                font-weight: 700;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-            }
-            :host-context([data-theme="light"]) .tag-count-badge {
-                color: var(--crm-selected-text);
             }
             .edit-attrs-grid .attrs-grid {
                 display: grid;
@@ -512,15 +408,6 @@ export class CRMEntityCard extends PlatformElement {
                 padding: 0;
                 border: none;
                 background: transparent;
-            }
-            .edit-attrs-grid .attr-row {
-                display: grid;
-                gap: var(--space-2);
-                padding: 14px 18px;
-                border-radius: 18px;
-                box-sizing: border-box;
-                background: var(--glass-tint-medium);
-                border: 1px solid var(--border-subtle);
             }
             @media (max-width: 720px) {
                 .edit-attrs-grid .attrs-grid {
@@ -581,6 +468,11 @@ export class CRMEntityCard extends PlatformElement {
                 background: var(--crm-surface-tint);
                 border-bottom: 1px solid var(--crm-stroke);
             }
+            .sheet-cell-head--inline {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
             .sheet-cell-body {
                 padding: var(--space-3);
                 background: var(--crm-surface);
@@ -599,18 +491,6 @@ export class CRMEntityCard extends PlatformElement {
             }
             .sheet-cell-body .description-field[readonly] {
                 min-height: 1.5em;
-            }
-
-            .form-select {
-                width: 100%;
-                max-width: 360px;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-full);
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface);
-                color: var(--text-primary);
-                font-family: inherit;
-                font-size: var(--text-sm);
             }
 
             .hero {
@@ -855,7 +735,6 @@ export class CRMEntityCard extends PlatformElement {
                 display: grid;
                 gap: var(--space-1);
             }
-            .attr-hint { color: var(--text-tertiary); font-size: var(--text-xs); }
 
             .tags-row {
                 display: flex;
@@ -1428,21 +1307,29 @@ export class CRMEntityCard extends PlatformElement {
 
     updated(_changed) {
         super.updated(_changed);
-        if (!(this.panelMode === MODE_EDIT && this.surface === 'page' && this.hostToolbar)) {
-            return;
+        if (this.surface !== 'page' || !this.hostToolbar) return;
+        if (this.panelMode === MODE_EDIT) {
+            const form = this._editForm;
+            const draft = form.draft;
+            const has_name = typeof draft.name === 'string' && draft.name.trim().length > 0;
+            this.emit('crm-entity-card-toolbar-state', {
+                saveDisabled: this._loadingCard || form.submitting || !has_name,
+                submitting: form.submitting,
+            });
+            this.emit('crm-entity-card-storage-type-draft', {
+                entity_type: typeof draft.entity_type === 'string' ? draft.entity_type : '',
+                entity_subtype: typeof draft.entity_subtype === 'string' ? draft.entity_subtype : '',
+            });
         }
-        const form = this._editForm;
-        const draft = form.draft;
-        const has_name = typeof draft.name === 'string' && draft.name.trim().length > 0;
-        const saveDisabled = this._loadingCard || form.submitting || !has_name;
-        this.emit('crm-entity-card-toolbar-state', {
-            saveDisabled,
-            submitting: form.submitting,
-        });
-        this.emit('crm-entity-card-storage-type-draft', {
-            entity_type: typeof draft.entity_type === 'string' ? draft.entity_type : '',
-            entity_subtype: typeof draft.entity_subtype === 'string' ? draft.entity_subtype : '',
-        });
+        if (this.panelMode === MODE_CREATE) {
+            const form = this._createForm;
+            const draft = form.draft;
+            const has_name = typeof draft.name === 'string' && draft.name.trim().length > 0;
+            this.emit('crm-entity-card-toolbar-state', {
+                saveDisabled: this._step === 'type' || form.submitting || !has_name,
+                submitting: form.submitting,
+            });
+        }
     }
 
     _syncDirty() {
@@ -1683,9 +1570,45 @@ export class CRMEntityCard extends PlatformElement {
         return null;
     }
 
+    _entityStatusEnumConfig() {
+        return {
+            values: ENTITY_STATUS_VALUES.map((value) => ({
+                value,
+                label: this.t(`entities.status.${value}`),
+            })),
+        };
+    }
+
+    _onDraftNamePlatformChange(e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('CRMEntityCard: name field expects change detail.value string');
+        }
+        this._activeForm().setField('name', e.detail.value);
+    }
+
+    _onDraftDescriptionPlatformChange(e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('CRMEntityCard: description field expects change detail.value string');
+        }
+        this._activeForm().setField('description', e.detail.value);
+    }
+
     _onNameInput(event) { this._activeForm().setField('name', event.target.value); }
-    _onDescriptionInput(event) { this._activeForm().setField('description', event.target.value); }
-    _onStatusInput(event) { this._editForm.setField('status', event.target.value); }
+
+    _onDescriptionInput(event) {
+        this._activeForm().setField('description', event.target.value);
+    }
+
+    _onStatusInput(e) {
+        if (!e.detail || typeof e.detail.value !== 'string') {
+            throw new Error('CRMEntityCard._onStatusInput: expected change detail.value string');
+        }
+        const v = e.detail.value;
+        if (!ENTITY_STATUS_VALUES.includes(v)) {
+            throw new Error(`CRMEntityCard._onStatusInput: unsupported status '${v}'`);
+        }
+        this._editForm.setField('status', v);
+    }
 
     _onAttrChange(fieldKey, event) {
         if (fieldKey === 'external_refs') return;
@@ -1730,10 +1653,17 @@ export class CRMEntityCard extends PlatformElement {
     }
 
     triggerSave() {
-        if (this.panelMode !== MODE_EDIT) {
-            throw new Error('CRMEntityCard.triggerSave: panelMode must be edit');
+        if (this.panelMode !== MODE_EDIT && this.panelMode !== MODE_CREATE) {
+            throw new Error('CRMEntityCard.triggerSave: panelMode must be edit or create');
         }
         this._performSave();
+    }
+
+    triggerCreateCancel() {
+        if (this.panelMode !== MODE_CREATE) {
+            throw new Error('CRMEntityCard.triggerCreateCancel: panelMode must be create');
+        }
+        this.emit('create-cancelled', {});
     }
 
     triggerEditCancel() {
@@ -1834,7 +1764,6 @@ export class CRMEntityCard extends PlatformElement {
                                     .value=${value}
                                     mode=${uiMode}
                                     .label=${key}
-                                    ?flat=${editable}
                                     ?disabled=${readOnlyExternal}
                                     @change=${editable ? (event) => this._onAttrChange(key, event) : undefined}
                                 ></platform-field>
@@ -1853,6 +1782,10 @@ export class CRMEntityCard extends PlatformElement {
                     const value = attributes[key];
                     const readOnlyExternal = key === 'external_refs';
                     const editable = uiMode === 'edit' && !readOnlyExternal;
+                    const hintText =
+                        def && typeof def.description === 'string' && def.description.length > 0
+                            ? def.description
+                            : '';
                     return html`
                         <div class="attr-row">
                             <platform-field
@@ -1860,14 +1793,11 @@ export class CRMEntityCard extends PlatformElement {
                                 .value=${value === undefined ? null : value}
                                 mode=${uiMode}
                                 .label=${this._fieldLabel(key, def) + (required ? ' *' : '')}
+                                .hint=${hintText}
                                 .config=${this._fieldConfig(def)}
-                                ?flat=${editable}
                                 ?disabled=${readOnlyExternal}
                                 @change=${editable ? (event) => this._onAttrChange(key, event) : undefined}
                             ></platform-field>
-                            ${def && typeof def.description === 'string' && def.description.length > 0
-                                ? html`<div class="attr-hint">${def.description}</div>`
-                                : nothing}
                         </div>
                     `;
                 })}
@@ -1899,7 +1829,9 @@ export class CRMEntityCard extends PlatformElement {
             return html`
                 <div class="field-pill field-pill--tags">
                     <div class="field-pill-tags-head">
-                        <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
+                        <div class="field-pill-head">
+                            <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
+                        </div>
                         <span class="tag-count-badge">${tagCount}</span>
                     </div>
                     ${inner}
@@ -1937,6 +1869,7 @@ export class CRMEntityCard extends PlatformElement {
                     <input
                         type="text"
                         class="tag-input"
+                        data-canon="inline-edit"
                         .value=${this._tagDraft}
                         placeholder=${this.t('entity_modal.tag_placeholder')}
                         @input=${this._onTagInput}
@@ -1944,32 +1877,37 @@ export class CRMEntityCard extends PlatformElement {
                     />
                 </div>
         `;
-        const tagHintCreate = this.panelMode === MODE_CREATE
-            ? html`<div class="attr-hint">${this.t('entity_modal.tag_hint')}</div>`
-            : nothing;
+        const tagHintIcon =
+            this.panelMode === MODE_CREATE
+                ? html`<platform-help-hint .text=${this.t('entity_modal.tag_hint')}></platform-help-hint>`
+                : nothing;
         if (pill) {
             const tagCount = tags.length;
             return html`
                 <div class="field-pill field-pill--tags">
                     <div class="field-pill-tags-head">
-                        <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
+                        <div class="field-pill-head">
+                            <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
+                            ${tagHintIcon}
+                        </div>
                         <span class="tag-count-badge">${tagCount}</span>
                     </div>
                     ${tagsRowEdit}
                 </div>
-                ${tagHintCreate}
             `;
         }
         const tagBody = html`
                 ${tagsRowEdit}
-                ${tagHintCreate}
         `;
         if (omitLabel) {
             return tagBody;
         }
         return html`
             <div class="form-row">
-                <label class="form-label">${this.t('entity_modal.label_tags')}</label>
+                <div class="field-pill-head">
+                    <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
+                    ${tagHintIcon}
+                </div>
                 ${tagBody}
             </div>
         `;
@@ -2128,6 +2066,7 @@ export class CRMEntityCard extends PlatformElement {
                     <input
                         type="text"
                         class="title-field"
+                        data-canon="inline-edit"
                         ?readonly=${readonly}
                         autocomplete="off"
                         spellcheck="false"
@@ -2157,15 +2096,26 @@ export class CRMEntityCard extends PlatformElement {
             <div class="sheet-block">
                 <div class="sheet-cell-head">${this.t('entity_modal.label_description')}</div>
                 <div class="sheet-cell-body">
-                    <textarea
-                        class="description-field"
-                        ?readonly=${readonly}
-                        rows="4"
-                        placeholder=${this.t('entity_modal.description_placeholder')}
-                        .value=${descriptionValue}
-                        @input=${readonly ? undefined : this._onDescriptionInput}
-                    ></textarea>
-                    ${this._renderFieldError('description')}
+                    ${readonly
+                        ? html`
+                            <platform-field
+                                type="text"
+                                mode="view"
+                                label=""
+                                .value=${descriptionValue}
+                            ></platform-field>
+                        `
+                        : html`
+                            <platform-field
+                                type="text"
+                                mode="edit"
+                                label=""
+                                placeholder=${this.t('entity_modal.description_placeholder')}
+                                .value=${descriptionValue}
+                                @change=${this._onDraftDescriptionPlatformChange}
+                            ></platform-field>
+                            ${this._renderFieldError('description')}
+                        `}
                 </div>
             </div>
             ${showStatusRow
@@ -2280,8 +2230,44 @@ export class CRMEntityCard extends PlatformElement {
         }
     }
 
-    _onAddRelTypeChange(event) { this._addRelType = event.target.value; }
-    _onAddRelDirectionChange(event) { this._addRelDirection = event.target.value; }
+    _onAddRelTypeChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        this._addRelType = v;
+    }
+
+    _onAddRelDirectionChange(event) {
+        const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
+        if (v !== 'outgoing' && v !== 'incoming') {
+            throw new Error('CRMEntityCard._onAddRelDirectionChange: invalid direction');
+        }
+        this._addRelDirection = v;
+    }
+
+    _addRelationshipDirectionEnumConfig() {
+        return {
+            values: [
+                { value: 'outgoing', label: this.t('entity_modal.direction_outgoing') },
+                { value: 'incoming', label: this.t('entity_modal.direction_incoming') },
+            ],
+        };
+    }
+
+    _addRelationshipTypeEnumConfig(types) {
+        if (!Array.isArray(types)) {
+            throw new Error('CRMEntityCard._addRelationshipTypeEnumConfig: types must be an array');
+        }
+        const values = [{ value: '', label: this.t('entity_modal.type_pick_placeholder') }];
+        for (const rt of types) {
+            if (!rt || typeof rt.type_id !== 'string' || rt.type_id.length === 0) {
+                throw new Error('CRMEntityCard._addRelationshipTypeEnumConfig: invalid type');
+            }
+            if (!(typeof rt.name === 'string' && rt.name.length > 0)) {
+                throw new Error('CRMEntityCard._addRelationshipTypeEnumConfig: type name required');
+            }
+            values.push({ value: rt.type_id, label: rt.name });
+        }
+        return { values };
+    }
 
     _onAddRelTargetQueryInput(event) {
         const value = event.target.value;
@@ -2343,19 +2329,23 @@ export class CRMEntityCard extends PlatformElement {
         return html`
             <div class="rel-add">
                 <div class="row">
-                    <select class="form-select" .value=${this._addRelDirection} @change=${this._onAddRelDirectionChange}>
-                        <option value="outgoing">${this.t('entity_modal.direction_outgoing')}</option>
-                        <option value="incoming">${this.t('entity_modal.direction_incoming')}</option>
-                    </select>
-                    <select class="form-select" .value=${this._addRelType} @change=${this._onAddRelTypeChange}>
-                        <option value="" disabled>${this.t('entity_modal.type_pick_placeholder')}</option>
-                        ${types.map((rt) => html`
-                            <option value=${rt.type_id}>${rt.name}</option>
-                        `)}
-                    </select>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .value=${this._addRelDirection}
+                        .config=${this._addRelationshipDirectionEnumConfig()}
+                        @change=${this._onAddRelDirectionChange}
+                    ></platform-field>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        .value=${this._addRelType}
+                        .config=${this._addRelationshipTypeEnumConfig(types)}
+                        @change=${this._onAddRelTypeChange}
+                    ></platform-field>
                     <input
                         type="text"
-                        class="form-input"
+                        data-canon="search-as-you-type"
                         .value=${this._addRelTargetQuery}
                         placeholder=${this.t('entity_modal.target_search_placeholder')}
                         @input=${this._onAddRelTargetQueryInput}
@@ -2703,25 +2693,36 @@ export class CRMEntityCard extends PlatformElement {
                                     : nothing}
                             </div>
                             <div class="edit-name-status-row">
-                                <div class="field-pill">
-                                    <span class="field-pill-label">${this.t('entity_modal.label_name')}</span>
-                                    <div class="field-pill-readonly-text">${nameValue}</div>
-                                </div>
-                                <div class="field-pill">
-                                    <span class="field-pill-label">${this.t('entity_modal.label_status')}</span>
-                                    <div class="field-pill-readonly-inline">
+                                <platform-field
+                                    type="string"
+                                    mode="view"
+                                    label=${this.t('entity_modal.label_name')}
+                                    .value=${nameValue}
+                                ></platform-field>
+                                <div class="ecard-status-view">
+                                    <span class="section-title text-only">${this.t('entity_modal.label_status')}</span>
+                                    <div class="ecard-status-view-body">
                                         ${showStatusPill
                                             ? html`<span class="status-badge ${statusNorm}">${this.t(this._entityStatusLabelKey(statusNorm))}</span>`
                                             : html`<span class="field-pill-readonly-muted">${this.t('entity_card.view_status_empty')}</span>`}
                                     </div>
                                 </div>
                             </div>
-                            <div class="field-pill field-pill--textarea">
-                                <span class="field-pill-label">${this.t('entity_modal.label_description')}</span>
-                                ${descTrimmed.length > 0
-                                    ? html`<div class="field-pill-readonly-text">${descRaw}</div>`
-                                    : html`<p class="field-pill-readonly-muted">${this.t('entity_detail_page.empty_description')}</p>`}
-                            </div>
+                            ${descTrimmed.length > 0
+                                ? html`
+                                    <platform-field
+                                        type="text"
+                                        mode="view"
+                                        label=${this.t('entity_modal.label_description')}
+                                        .value=${descRaw}
+                                    ></platform-field>
+                                `
+                                : html`
+                                    <div class="ecard-desc-empty">
+                                        <span class="section-title text-only">${this.t('entity_modal.label_description')}</span>
+                                        <p class="field-pill-readonly-muted">${this.t('entity_detail_page.empty_description')}</p>
+                                    </div>
+                                `}
                             ${this._renderTagsSection({ pill: true })}
                             <div class="edit-attrs-block">
                                 <h3 class="edit-subheading">${this.t('entity_modal.label_attributes')}</h3>
@@ -2827,7 +2828,101 @@ export class CRMEntityCard extends PlatformElement {
         `;
     }
 
+    _renderCreateBodyPage() {
+        if (this._step === 'type') {
+            return html`
+                <div class="scroll">${this._renderTypeStep()}</div>
+                ${this.hostToolbar ? nothing : html`
+                    <div class="footer-actions">
+                        <button type="button" class="btn" @click=${() => this.emit('create-cancelled', {})}>
+                            ${this.t('entity_modal.action_cancel')}
+                        </button>
+                    </div>
+                `}
+            `;
+        }
+        const type = this._selectedType();
+        if (!type) {
+            return html`<div class="scroll"><div class="empty-hint">${this.t('entity_modal.type_missing')}</div></div>`;
+        }
+        const form = this._createForm;
+        const draft = form.draft;
+        const typeIcon = typeof type.icon === 'string' && type.icon.length > 0 ? type.icon : 'folder';
+        const has_name = typeof draft.name === 'string' && draft.name.trim().length > 0;
+        const disabled = form.submitting || !has_name;
+        return html`
+            <form class="scroll" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
+                <div class="edit-page-sheet">
+                    ${this.hostToolbar ? nothing : html`
+                        <div class="edit-page-toolbar">
+                            <h1 class="edit-page-title">${this.t('entity_detail_page.create_title')}</h1>
+                            <div class="edit-page-toolbar-right">
+                                <div class="edit-template-box">
+                                    <span class="edit-template-label">${this.t('entity_card.object_template_label')}</span>
+                                    <span class="edit-template-value">${type.name}</span>
+                                </div>
+                                <button type="button" class="change-link" @click=${this._onChangeType}>
+                                    ${this.t('entity_modal.change_type')}
+                                </button>
+                                <button type="button" class="btn-pill-ghost" @click=${() => this.emit('create-cancelled', {})}>
+                                    ${this.t('entity_modal.action_cancel')}
+                                </button>
+                                <button type="submit" class="btn-pill-primary" ?disabled=${disabled}>
+                                    ${form.submitting
+                                        ? this.t('entity_modal.action_saving')
+                                        : this.t('entity_modal.action_create')}
+                                </button>
+                            </div>
+                        </div>
+                    `}
+                    <div class="entity-card-layout-container ${this.compactStack ? 'entity-card-layout-container--force-stack' : ''}">
+                    <div class="edit-two-col">
+                        <aside class="edit-aside">
+                            <div class="edit-avatar-wrap">
+                                <platform-icon name=${typeIcon} size="140"></platform-icon>
+                            </div>
+                        </aside>
+                        <div class="edit-fields">
+                            <div class="edit-fields-heading-row">
+                                <h2 class="edit-fields-heading">${this.t('entity_card.object_data_section')}</h2>
+                            </div>
+                            <div class="edit-name-status-row">
+                                <platform-field
+                                    type="string"
+                                    mode="edit"
+                                    label=${this.t('entity_modal.label_name')}
+                                    placeholder=${this.t('entity_modal.name_placeholder')}
+                                    .value=${draft.name}
+                                    @change=${this._onDraftNamePlatformChange}
+                                ></platform-field>
+                                ${this._renderFieldError('name')}
+                            </div>
+                            <platform-field
+                                type="text"
+                                mode="edit"
+                                label=${this.t('entity_modal.label_description')}
+                                placeholder=${this.t('entity_modal.description_placeholder')}
+                                .value=${draft.description}
+                                @change=${this._onDraftDescriptionPlatformChange}
+                            ></platform-field>
+                            ${this._renderFieldError('description')}
+                            ${this._renderTagsSection({ pill: true })}
+                            <div class="edit-attrs-block">
+                                <h3 class="edit-subheading">${this.t('entity_modal.label_attributes')}</h3>
+                                <div class="edit-attrs-grid">${this._renderAttributesSection()}</div>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            </form>
+        `;
+    }
+
     _renderCreateBody() {
+        if (this.surface === 'page') {
+            return this._renderCreateBodyPage();
+        }
         if (this._step === 'type') {
             return html`<div class="scroll">${this._renderTypeStep()}</div>`;
         }
@@ -2851,7 +2946,10 @@ export class CRMEntityCard extends PlatformElement {
                     <div class="sheet-cell-body">${this._renderAttributesSection()}</div>
                 </div>
                 <div class="sheet-block">
-                    <div class="sheet-cell-head">${this.t('entity_modal.label_tags')}</div>
+                    <div class="sheet-cell-head sheet-cell-head--inline">
+                        <span>${this.t('entity_modal.label_tags')}</span>
+                        <platform-help-hint .text=${this.t('entity_modal.tag_hint')}></platform-help-hint>
+                    </div>
                     <div class="sheet-cell-body">${this._renderTagsSection({ omitLabel: true })}</div>
                 </div>
             </form>
@@ -2915,39 +3013,35 @@ export class CRMEntityCard extends PlatformElement {
                                     : nothing}
                             </div>
                             <div class="edit-name-status-row">
-                                <label class="field-pill">
-                                    <span class="field-pill-label">${this.t('entity_modal.label_name')}</span>
-                                    <input
-                                        type="text"
-                                        class="field-pill-input"
-                                        autocomplete="off"
-                                        spellcheck="false"
+                                <div>
+                                    <platform-field
+                                        type="string"
+                                        mode="edit"
+                                        label=${this.t('entity_modal.label_name')}
                                         placeholder=${this.t('entity_modal.name_placeholder')}
                                         .value=${draft.name}
-                                        @input=${this._onNameInput}
-                                    />
+                                        @change=${this._onDraftNamePlatformChange}
+                                    ></platform-field>
                                     ${this._renderFieldError('name')}
-                                </label>
-                                <label class="field-pill">
-                                    <span class="field-pill-label">${this.t('entity_modal.label_status')}</span>
-                                    <select class="field-pill-select" .value=${draft.status} @change=${this._onStatusInput}>
-                                        ${ENTITY_STATUS_VALUES.map((value) => html`
-                                            <option value=${value}>${this.t(`entities.status.${value}`)}</option>
-                                        `)}
-                                    </select>
-                                </label>
+                                </div>
+                                <platform-field
+                                    type="enum"
+                                    mode="edit"
+                                    label=${this.t('entity_modal.label_status')}
+                                    .value=${draft.status}
+                                    .config=${this._entityStatusEnumConfig()}
+                                    @change=${this._onStatusInput}
+                                ></platform-field>
                             </div>
-                            <label class="field-pill field-pill--textarea">
-                                <span class="field-pill-label">${this.t('entity_modal.label_description')}</span>
-                                <textarea
-                                    class="field-pill-textarea"
-                                    rows="5"
-                                    placeholder=${this.t('entity_modal.description_placeholder')}
-                                    .value=${draft.description}
-                                    @input=${this._onDescriptionInput}
-                                ></textarea>
-                                ${this._renderFieldError('description')}
-                            </label>
+                            <platform-field
+                                type="text"
+                                mode="edit"
+                                label=${this.t('entity_modal.label_description')}
+                                placeholder=${this.t('entity_modal.description_placeholder')}
+                                .value=${draft.description}
+                                @change=${this._onDraftDescriptionPlatformChange}
+                            ></platform-field>
+                            ${this._renderFieldError('description')}
                             ${this._renderTagsSection({ pill: true })}
                             <div class="edit-attrs-block">
                                 <h3 class="edit-subheading">${this.t('entity_modal.label_attributes')}</h3>
@@ -2988,14 +3082,14 @@ export class CRMEntityCard extends PlatformElement {
                 ${this._renderTypeBadge()}
                 ${this._renderHero(this._entityData, draft.name, draft.description)}
                 <div class="sheet-block">
-                    <div class="sheet-cell-head">${this.t('entity_modal.label_status')}</div>
-                    <div class="sheet-cell-body">
-                        <select class="form-select" .value=${draft.status} @change=${this._onStatusInput}>
-                            ${ENTITY_STATUS_VALUES.map((value) => html`
-                                <option value=${value}>${this.t(`entities.status.${value}`)}</option>
-                            `)}
-                        </select>
-                    </div>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        label=${this.t('entity_modal.label_status')}
+                        .value=${draft.status}
+                        .config=${this._entityStatusEnumConfig()}
+                        @change=${this._onStatusInput}
+                    ></platform-field>
                 </div>
                 <div class="sheet-block">
                     <div class="sheet-cell-head">${this.t('entity_modal.label_attributes')}</div>
@@ -3015,6 +3109,9 @@ export class CRMEntityCard extends PlatformElement {
     _renderFooter() {
         if (this.panelMode === MODE_VIEW) return nothing;
         if (this.panelMode === MODE_EDIT && this.surface === 'page') {
+            return nothing;
+        }
+        if (this.panelMode === MODE_CREATE && this.surface === 'page') {
             return nothing;
         }
         if (this.panelMode === MODE_CREATE && this._step === 'type') {

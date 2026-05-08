@@ -21,6 +21,7 @@ import '@platform/lib/components/platform-icon.js';
 import { SYNC_MESSAGE_TEXT_MAX_CHARS } from './_helpers/sync-limits.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
+import { formatDurationMs } from '@platform/lib/utils/format-duration.js';
 
 const TYPING_DEBOUNCE_MS = 1500;
 
@@ -28,13 +29,7 @@ const VOICE_DRAFT_WAVE_HEIGHTS_PX = Object.freeze([
     12, 20, 14, 24, 16, 22, 10, 26, 18, 14, 20, 16, 22, 12, 24, 18,
 ]);
 
-function formatVoiceDurationMs(ms) {
-    const n = typeof ms === 'number' && ms > 0 ? ms : 0;
-    const totalSec = Math.floor(n / 1000);
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-}
+const formatVoiceDurationMs = formatDurationMs;
 
 export class SyncMessageComposer extends PlatformElement {
     static properties = {
@@ -782,6 +777,7 @@ export class SyncMessageComposer extends PlatformElement {
                     <platform-icon name="paperclip" size="22"></platform-icon>
                 </button>
                 <textarea
+                    data-canon="composer"
                     rows="1"
                     .value=${this._draft}
                     @input=${this._onInput}
