@@ -91,6 +91,8 @@ export class FlowsCodeDocsModal extends PlatformModal {
 
     static properties = {
         ...PlatformModal.properties,
+        language: { type: String },
+        documentationPerspective: { type: String },
         _search: { state: true },
     };
 
@@ -262,6 +264,8 @@ export class FlowsCodeDocsModal extends PlatformModal {
     constructor() {
         super();
         this.size = 'full';
+        this.language = 'python';
+        this.documentationPerspective = 'editor';
         this._search = '';
         this._docsOp = this.useOp('flows/code_documentation');
     }
@@ -270,7 +274,11 @@ export class FlowsCodeDocsModal extends PlatformModal {
         super.willUpdate(changed);
         if (changed.has('open') && this.open) {
             this._search = '';
-            void this._docsOp.run({});
+            const lang = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'python';
+            const persp = typeof this.documentationPerspective === 'string' && this.documentationPerspective.length > 0
+                ? this.documentationPerspective
+                : 'editor';
+            void this._docsOp.run({ language: lang, perspective: persp });
         }
     }
 

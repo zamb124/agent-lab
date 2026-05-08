@@ -2,6 +2,8 @@ import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 
 export class PlatformFieldText extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: String },
         mode: { type: String },

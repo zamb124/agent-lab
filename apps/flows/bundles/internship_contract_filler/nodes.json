@@ -43,7 +43,8 @@
     ],
     "llm": {
       "model": "qwen/qwen3.5-397b-a17b",
-      "temperature": 0.2
+      "temperature": 0.2,
+      "provider": "openrouter"
     }
   }
 ]

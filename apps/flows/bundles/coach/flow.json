@@ -3,7 +3,11 @@
   "name": "Демо: фитнес-тренер",
   "description": "Публичное демо: структура тренировки, техника, нагрузка и восстановление. Не медицинская консультация.",
   "version": "1.0.0",
-  "tags": ["demo", "landing", "fitness"],
+  "tags": [
+    "demo",
+    "landing",
+    "fitness"
+  ],
   "permission": [],
   "branches": {},
   "store_card_image": "coach.jpg",
@@ -15,9 +19,15 @@
       "prompt": "prompts/main.md",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.3
+        "temperature": 0.3,
+        "provider": "openrouter"
       },
-      "tools": ["ask_user", "read_file", "create_file", "calculator"],
+      "tools": [
+        "ask_user",
+        "read_file",
+        "create_file",
+        "calculator"
+      ],
       "output_key": "response"
     }
   },

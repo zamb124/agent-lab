@@ -4,6 +4,8 @@ import { PlatformElement } from '../../platform-element/index.js';
 const ALLOWED_INPUT_TYPES = Object.freeze(['text', 'email', 'password', 'url', 'tel', 'search']);
 
 export class PlatformFieldString extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: String },
         mode: { type: String },

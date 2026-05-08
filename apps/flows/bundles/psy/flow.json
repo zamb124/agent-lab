@@ -3,7 +3,11 @@
   "name": "Демо: психологический ориентир",
   "description": "Публичное демо: выслушать, нормализовать, предложить безопасные шаги. Не психотерапия и не кризисная линия.",
   "version": "1.0.0",
-  "tags": ["demo", "landing", "psychology"],
+  "tags": [
+    "demo",
+    "landing",
+    "psychology"
+  ],
   "permission": [],
   "branches": {},
   "store_card_image": "psy.jpg",
@@ -15,9 +19,15 @@
       "prompt": "prompts/main.md",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.35
+        "temperature": 0.35,
+        "provider": "openrouter"
       },
-      "tools": ["ask_user", "read_file", "create_file", "calculator"],
+      "tools": [
+        "ask_user",
+        "read_file",
+        "create_file",
+        "calculator"
+      ],
       "output_key": "response"
     }
   },

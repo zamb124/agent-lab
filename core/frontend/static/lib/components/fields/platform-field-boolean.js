@@ -3,6 +3,8 @@ import { PlatformElement } from '../../platform-element/index.js';
 import '../platform-switch.js';
 
 export class PlatformFieldBoolean extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: Boolean },
         mode: { type: String },

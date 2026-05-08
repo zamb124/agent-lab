@@ -139,7 +139,15 @@ describe('crm-entity-card', () => {
         const root = el.shadowRoot;
         const text = (root && root.textContent) ? root.textContent : '';
         expect(text.includes('entity_modal.status_')).to.equal(false);
-        const firstOpt = root.querySelector('select.form-select option[value="active"]');
+        const statusRow = root.querySelector('.edit-name-status-row');
+        const sheetStatus = root.querySelector('.sheet-block platform-field[type="enum"]');
+        const statusField = (statusRow && statusRow.querySelector('platform-field[type="enum"]')) || sheetStatus;
+        expect(statusField, 'status platform-field').to.exist;
+        const pfEnum = statusField.shadowRoot && statusField.shadowRoot.querySelector('platform-field-enum');
+        expect(pfEnum, 'platform-field-enum').to.exist;
+        const statusInner = pfEnum.shadowRoot && pfEnum.shadowRoot.querySelector('select');
+        expect(statusInner, 'status select inside platform-field').to.exist;
+        const firstOpt = statusInner.querySelector('option[value="active"]');
         expect(firstOpt, 'status option').to.exist;
         expect((firstOpt.textContent || '').length > 0).to.equal(true);
         expect((firstOpt.textContent || '').includes('Актив')).to.equal(true);

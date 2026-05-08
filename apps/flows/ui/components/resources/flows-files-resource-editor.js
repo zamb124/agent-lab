@@ -20,6 +20,7 @@ export class FlowsFilesResourceEditor extends PlatformElement {
     static properties = {
         resourceId: { type: String },
         resource: { type: Object },
+        compactHeader: { type: Boolean, reflect: true, attribute: 'compact-header' },
     };
 
     static styles = [
@@ -44,6 +45,7 @@ export class FlowsFilesResourceEditor extends PlatformElement {
         super();
         this.resourceId = '';
         this.resource = null;
+        this.compactHeader = false;
     }
 
     _emitConfig(patch) {
@@ -79,6 +81,7 @@ export class FlowsFilesResourceEditor extends PlatformElement {
                 .resourceId=${this.resourceId}
                 .resource=${this.resource}
                 .resourceType=${'files'}
+                .compactHeader=${this.compactHeader}
                 @change=${(e) => this.emit('change', e.detail)}
             >
                 <div slot="settings" class="body">

@@ -4,7 +4,7 @@ alwaysApply: false
 ---
 # Flows — краткий справочник
 
-## NodeType (8 типов)
+## NodeType (9 типов)
 
 | Тип | Описание |
 |-----|----------|
@@ -16,6 +16,7 @@ alwaysApply: false
 | mcp | MCP tool |
 | channel | Отправка сообщений (Telegram, Webhook, Email) |
 | hitl_node | Пауза до оператора очереди (`OperatorHandoffService`, `operator_task`) |
+| resource | Pass-through: `ResourceNode` не меняет `ExecutionState`; `node.resources` участвует в merge через `resource_resolver`, как у прочих нод |
 
 Очереди и задачи оператора: таблицы `operator_queues`, `operator_queue_members`, `operator_tasks` (БД flows), API **`/flows/api/v1/operator/...`**. Тул **`hitl_operator_task`** и нода **`hitl_node`** создают строку задачи и **`FlowInterrupt`** с **`OperatorTaskInterrupt`**; **`InterruptManager.apply_interrupt`** сохраняет опциональный **`correlation_id`**. Завершение: **`POST .../operator/tasks/{id}/complete`** → **`process_flow_task.kiq`** с **`is_resume=True`** и снимком контекста из задачи.
 

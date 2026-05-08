@@ -7,12 +7,13 @@
  *   - operator_task_title
  *   - operator_user_message (с подсказкой `@var:`)
  *
- * Picker очередей: search + список через useResource('flows/operator_queues').
+ * Очередь: flows-searchable-combobox + useResource('flows/operator_queues').
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../editors/flows-searchable-combobox.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import { asObject, asString } from '../../_helpers/flows-resolvers.js';
@@ -29,7 +30,6 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
-        _queueSearch: { state: true },
     };
 
     static styles = [
@@ -38,39 +38,15 @@ export class FlowsHitlNodeEditor extends PlatformElement {
             :host { display: block; height: 100%; min-height: 0; }
             .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
             label { font-size: var(--text-sm); color: var(--text-secondary); }
-            input, select {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
-            }
-            .queue-pick { display: flex; gap: var(--space-2); align-items: stretch; }
-            .queue-pick .queue-search-input {
-                flex: 1;
-                min-width: 0;
-            }
-            .queue-pick platform-field {
-                flex: 1;
-                min-width: 0;
-            }
-            .queue-list {
+            .queue-combo {
                 margin-top: var(--space-1);
-                max-height: 160px; overflow-y: auto;
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                background: var(--glass-solid-medium);
             }
-            .queue-item {
-                padding: var(--space-1) var(--space-2);
-                cursor: pointer;
-                font-size: var(--text-sm);
-                display: flex; justify-content: space-between; gap: var(--space-2);
+            .hitl-handoff-task-stack {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-5);
+                margin-bottom: var(--space-5);
             }
-            .queue-item:hover { background: var(--glass-solid-strong); }
-            .queue-item .slug { color: var(--text-tertiary); font-family: var(--font-mono, monospace); font-size: var(--text-xs); }
-            .queue-item[active] { background: var(--accent-subtle); color: var(--accent); }
         `,
     ];
 
@@ -86,7 +62,6 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this.previewExecutionState = null;
         this.expanded = false;
         this.embedded = false;
-        this._queueSearch = '';
         this._queues = this.useResource('flows/operator_queues', { autoload: true });
     }
 
@@ -94,27 +69,19 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
-    _onQueueSlug(slug) {
-        this._emitPatch({ operator_queue_slug: slug });
-    }
-
-    _onQueueSearchInput(e) {
-        this._queueSearch = e.target.value;
-    }
-
-    _onSlugField(e) {
+    _onQueueCombobox(e) {
         const d = e.detail;
         if (d === null || typeof d !== 'object') {
-            throw new Error('flows-hitl-node-editor: slug change detail');
+            throw new Error('flows-hitl-node-editor: queue combobox detail');
         }
         if (!('value' in d)) {
-            throw new Error('flows-hitl-node-editor: slug detail.value');
+            throw new Error('flows-hitl-node-editor: queue combobox detail.value');
         }
         const v = d.value;
         if (typeof v !== 'string') {
-            throw new Error('flows-hitl-node-editor: slug string required');
+            throw new Error('flows-hitl-node-editor: queue slug string required');
         }
-        this._onQueueSlug(v);
+        this._emitPatch({ operator_queue_slug: v });
     }
 
     _onHandoffMode(e) {
@@ -170,13 +137,16 @@ export class FlowsHitlNodeEditor extends PlatformElement {
         const taskTitle = typeof cfg.operator_task_title === 'string' ? cfg.operator_task_title : '';
         const userMessage = typeof cfg.operator_user_message === 'string' ? cfg.operator_user_message : '';
         const queues = Array.isArray(this._queues.items) ? this._queues.items : [];
-        const filtered = this._queueSearch.trim().length === 0
-            ? queues
-            : queues.filter((q) => {
-                const search = this._queueSearch.toLowerCase();
-                return asString(q.slug).toLowerCase().includes(search)
-                    || asString(q.name).toLowerCase().includes(search);
-            });
+        const queueOptions = queues.reduce((acc, q) => {
+            const slugVal = asString(q.slug);
+            if (slugVal.length === 0) {
+                return acc;
+            }
+            const nameVal = asString(q.name);
+            const label = nameVal.length > 0 ? nameVal : slugVal;
+            acc.push({ value: slugVal, label });
+            return acc;
+        }, []);
         const handoffValues = [
             { value: 'single_reply', label: this.t('hitl_node_editor.single_reply') },
             { value: 'takeover', label: this.t('hitl_node_editor.takeover') },
@@ -197,51 +167,34 @@ export class FlowsHitlNodeEditor extends PlatformElement {
                 <div slot="settings">
                     <div class="field">
                         <label>${this.t('hitl_node_editor.queue_slug')}</label>
-                        <div class="queue-pick">
-                            <input
-                                type="text"
-                                class="queue-search-input"
-                                data-canon="search-as-you-type"
-                                placeholder=${this.t('hitl_node_editor.queue_picker')}
-                                .value=${this._queueSearch}
-                                @input=${this._onQueueSearchInput}
-                            />
-                            <platform-field
-                                mode="edit"
-                                type="string"
-                                .value=${slug}
-                                @change=${this._onSlugField}
-                            ></platform-field>
-                        </div>
-                        ${filtered.length > 0 ? html`
-                            <div class="queue-list">
-                                ${filtered.map((q) => html`
-                                    <div class="queue-item" ?active=${q.slug === slug}
-                                        @click=${() => this._onQueueSlug(q.slug)}>
-                                        <span>${q.name}</span>
-                                        <span class="slug">${q.slug}</span>
-                                    </div>
-                                `)}
-                            </div>
-                        ` : ''}
+                        <flows-searchable-combobox
+                            class="queue-combo"
+                            .value=${slug}
+                            .options=${queueOptions}
+                            placeholder=${this.t('hitl_node_editor.queue_picker')}
+                            emptyLabel=${this.t('hitl_node_editor.queue_clear')}
+                            ariaLabel=${this.t('hitl_node_editor.queue_aria')}
+                            @change=${this._onQueueCombobox}
+                        ></flows-searchable-combobox>
                     </div>
-                    <platform-field
-                        mode="edit"
-                        type="enum"
-                        .label=${this.t('hitl_node_editor.handoff_mode')}
-                        .value=${handoffMode}
-                        .config=${{ values: handoffValues }}
-                        @change=${this._onHandoffMode}
-                    ></platform-field>
-                    <platform-field
-                        mode="edit"
-                        type="string"
-                        .label=${this.t('hitl_node_editor.task_title')}
-                        .value=${taskTitle}
-                        @change=${this._onTaskTitle}
-                    ></platform-field>
+                    <div class="hitl-handoff-task-stack">
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .label=${this.t('hitl_node_editor.handoff_mode')}
+                            .value=${handoffMode}
+                            .config=${{ values: handoffValues }}
+                            @change=${this._onHandoffMode}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="string"
+                            .label=${this.t('hitl_node_editor.task_title')}
+                            .value=${taskTitle}
+                            @change=${this._onTaskTitle}
+                        ></platform-field>
+                    </div>
                     <div class="field">
-                        <label>${this.t('hitl_node_editor.user_message')}</label>
                         <prompt-editor
                             .value=${userMessage}
                             .variables=${this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {}}

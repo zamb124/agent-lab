@@ -3,7 +3,11 @@
   "name": "Ассистент Лары Швед",
   "description": "Эмпатичный ассистент психолога Лары Швед с доступом к базе знаний через RAG",
   "version": "1.0.0",
-  "tags": ["psychology", "assistant", "rag"],
+  "tags": [
+    "psychology",
+    "assistant",
+    "rag"
+  ],
   "branches": {},
   "entry": "main",
   "nodes": {
@@ -13,7 +17,8 @@
       "prompt": "prompts/base.md",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.2
+        "temperature": 0.2,
+        "provider": "openrouter"
       },
       "resources": {
         "kb": {

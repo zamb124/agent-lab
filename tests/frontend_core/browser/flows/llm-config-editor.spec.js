@@ -28,8 +28,8 @@ describe('flows-llm-config-editor', () => {
         await elementUpdated(el);
         const fields = el.shadowRoot.querySelectorAll('.grid > .field');
         expect(fields.length).to.be.greaterThanOrEqual(4);
-        const numbers = el.shadowRoot.querySelectorAll('input[type="number"]');
-        expect(numbers.length).to.be.greaterThanOrEqual(2);
+        const numberFields = el.shadowRoot.querySelectorAll('platform-field[type="number"], platform-field[type="integer"]');
+        expect(numberFields.length).to.be.greaterThanOrEqual(2);
     });
 
     it('advanced секция содержит password+url+seed+reasoning_effort', async () => {
@@ -37,14 +37,14 @@ describe('flows-llm-config-editor', () => {
             <flows-llm-config-editor .config=${{ api_key: '@var:K' }}></flows-llm-config-editor>
         `);
         await elementUpdated(el);
-        const details = el.shadowRoot.querySelector('details');
-        expect(details).to.not.be.null;
-        details.open = true;
-        await elementUpdated(el);
-        expect(el.shadowRoot.querySelector('input[type="password"]')).to.not.be.null;
+        const apiPf = el.shadowRoot.querySelector('platform-field[input-type="password"]');
+        expect(apiPf).to.not.be.null;
+        const apiInner = apiPf.shadowRoot.querySelector('platform-field-string');
+        expect(apiInner).to.not.be.null;
+        expect(apiInner.shadowRoot.querySelector('input[type="password"]')).to.not.be.null;
         expect(el.shadowRoot.querySelector('flows-json-field-editor')).to.not.be.null;
-        const selects = el.shadowRoot.querySelectorAll('select');
-        expect(selects.length).to.be.greaterThanOrEqual(2);
+        const enumFields = el.shadowRoot.querySelectorAll('platform-field[type="enum"]');
+        expect(enumFields.length).to.be.greaterThanOrEqual(2);
     });
 
     it('emit change удаляет ключ при пустом значении провайдера', async () => {
@@ -53,10 +53,19 @@ describe('flows-llm-config-editor', () => {
         `);
         await elementUpdated(el);
         let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
-        const select = el.shadowRoot.querySelector('select');
-        select.value = '';
-        select.dispatchEvent(new Event('change'));
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'config')) {
+                last = e.detail;
+            }
+        });
+        const providerPf = el.shadowRoot.querySelector('.grid > .field:nth-child(1) platform-field[type="enum"]');
+        expect(providerPf).to.not.be.null;
+        const providerEnum = providerPf.shadowRoot.querySelector('platform-field-enum');
+        expect(providerEnum).to.not.be.null;
+        const sel = providerEnum.shadowRoot.querySelector('select');
+        expect(sel).to.not.be.null;
+        sel.value = '';
+        sel.dispatchEvent(new Event('change'));
         expect(last.config).to.deep.equal({});
     });
 });

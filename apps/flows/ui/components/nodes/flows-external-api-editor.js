@@ -78,8 +78,18 @@ export class FlowsExternalApiEditor extends PlatformElement {
                 display: flex; justify-content: center;
             }
             .param-row button.del {
-                background: none; border: none; padding: 0; cursor: pointer;
+                background: none; border: none; padding: var(--space-1); cursor: pointer;
                 color: var(--text-tertiary);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 28px;
+                box-sizing: border-box;
+                line-height: 0;
+            }
+            .param-row button.del platform-icon {
+                --icon-size: 16px;
             }
             .param-row button.del:hover { color: var(--error); }
             .add-btn { margin-top: var(--space-2); }
@@ -277,7 +287,7 @@ export class FlowsExternalApiEditor extends PlatformElement {
                         </label>
                         <button class="del" title=${this.t('external_api_editor.parameter_remove')}
                             @click=${() => this._removeParam(idx)}>
-                            <platform-icon name="trash" size="xs"></platform-icon>
+                            <platform-icon name="trash" .size=${16}></platform-icon>
                         </button>
                     </div>
                 `;

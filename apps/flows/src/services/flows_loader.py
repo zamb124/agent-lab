@@ -823,6 +823,7 @@ class FlowsLoader:
                 "external_api",
                 "remote_flow",
                 "code",
+                "resource",
             }
             if exec_kind in inline_node_types:
                 logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")

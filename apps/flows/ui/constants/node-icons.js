@@ -12,6 +12,7 @@
 
 export const NODE_TYPE_META = Object.freeze({
     llm_node:     { icon: 'llm_node', category: 'core' },
+    resource:     { icon: 'box', category: 'flow' },
     code:         { icon: 'code',     category: 'core' },
     formatter:    { icon: 'sparkle',  category: 'core' },
     external_api: { icon: 'globe',    category: 'integrations' },

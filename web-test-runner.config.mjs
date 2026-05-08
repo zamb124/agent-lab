@@ -2,12 +2,14 @@ import { importMapsPlugin } from '@web/dev-server-import-maps';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { browserTestDevMiddleware } from './web-test-runner.middleware.mjs';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default {
     rootDir,
     files: ['tests/frontend_core/browser/**/*.spec.js'],
+    middleware: [browserTestDevMiddleware],
     nodeResolve: true,
     plugins: [
         importMapsPlugin({

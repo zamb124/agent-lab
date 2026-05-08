@@ -5,8 +5,14 @@
     "name": "Агент заказов",
     "description": "Обрабатывает вопросы о заказах",
     "prompt_file": "prompts/order.md",
-    "tools": ["ask_user"],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.2}
+    "tools": [
+      "ask_user"
+    ],
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.2,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "example_complaint_agent",
@@ -14,8 +20,14 @@
     "name": "Агент жалоб",
     "description": "Обрабатывает жалобы пользователей",
     "prompt_file": "prompts/complaint.md",
-    "tools": ["ask_user"],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.3}
+    "tools": [
+      "ask_user"
+    ],
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.3,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "graph_tester",
@@ -24,7 +36,11 @@
     "description": "Тестирует графовый flow ведя диалог как пользователь. Завершает диалог маркером [TEST_COMPLETE].",
     "prompt_file": "prompts/graph_tester.md",
     "tools": [],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.5}
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.5,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "graph_judge",
@@ -33,6 +49,10 @@
     "description": "Оценивает качество диалога с графовым flow. Выставляет оценку по критериям.",
     "prompt_file": "prompts/graph_judge.md",
     "tools": [],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.1}
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.1,
+      "provider": "openrouter"
+    }
   }
 ]

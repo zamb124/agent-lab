@@ -121,10 +121,21 @@ describe('node editors — top-level NodeConfig contract', () => {
         `);
         await elementUpdated(el);
         let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
-        const select = el.shadowRoot.querySelector('flows-base-node-editor').querySelector('select');
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const channelPf = base.querySelector('.grid platform-field[type="enum"]');
+        expect(channelPf, 'channel enum field').to.not.be.null;
+        const pfEnum = channelPf.shadowRoot.querySelector('platform-field-enum');
+        expect(pfEnum, 'channel platform-field-enum').to.not.be.null;
+        const select = pfEnum.shadowRoot.querySelector('select');
+        expect(select, 'channel select').to.not.be.null;
         select.value = 'webhook';
         select.dispatchEvent(new Event('change'));
+        expect(last, 'editor change event').to.exist;
         expect(last.patch).to.have.property('channel', 'webhook');
         expect(last.patch).to.have.property('channel_config').that.deep.equals({});
     });
@@ -138,11 +149,20 @@ describe('node editors — top-level NodeConfig contract', () => {
         `);
         await elementUpdated(el);
         let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
-        const inputs = el.shadowRoot.querySelector('flows-base-node-editor').querySelectorAll('input[type="text"]');
-        const slugInput = inputs[1];
-        slugInput.value = 'support';
-        slugInput.dispatchEvent(new Event('input'));
+        el.addEventListener('change', (e) => {
+            if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, 'patch')) {
+                last = e.detail;
+            }
+        });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const combo = base.querySelector('flows-searchable-combobox.queue-combo');
+        expect(combo, 'operator queue flows-searchable-combobox').to.not.be.null;
+        const slugInp = combo.shadowRoot.querySelector('input');
+        expect(slugInp).to.not.be.null;
+        slugInp.value = 'support';
+        slugInp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        combo.flush();
+        expect(last, 'editor change event').to.exist;
         expect(last.patch).to.deep.equal({ operator_queue_slug: 'support' });
     });
 
@@ -170,8 +190,9 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-mcp-node-editor>
         `);
         await elementUpdated(el);
-        const selects = el.shadowRoot.querySelector('flows-base-node-editor').querySelectorAll('select');
-        expect(selects.length).to.be.greaterThanOrEqual(2);
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        const enumFields = base.querySelectorAll('platform-field[type="enum"]');
+        expect(enumFields.length).to.be.greaterThanOrEqual(2);
     });
 
     it('flows-flow-node-editor — toggle ручного ID', async () => {
@@ -203,7 +224,7 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(last.patch).to.have.property('url', null);
     });
 
-    it('flows-base-node-editor — rename emit события', async () => {
+    it('flows-base-node-editor — id ноды только для чтения (rename отключён)', async () => {
         const node = { node_id: 'a', type: 'code', name: 'A' };
         const el = await fixture(html`
             <flows-base-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
@@ -211,13 +232,8 @@ describe('node editors — top-level NodeConfig contract', () => {
             </flows-base-node-editor>
         `);
         await elementUpdated(el);
-        let renamed = null;
-        el.addEventListener('rename-node', (e) => { renamed = e.detail; });
-        el._editingId = true;
-        el._draftId = 'a_renamed';
-        await elementUpdated(el);
-        el._commitRenameId();
-        expect(renamed).to.deep.equal({ oldId: 'a', newId: 'a_renamed' });
+        expect(el.shadowRoot.querySelector('.node-id-rename-input')).to.be.null;
+        expect(el.shadowRoot.querySelector('.icon-btn')).to.be.null;
     });
 
     it('flows-base-node-editor — compact: одна колонка без panel-layout', async () => {

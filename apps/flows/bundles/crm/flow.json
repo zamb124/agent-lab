@@ -14,7 +14,8 @@
       "prompt": "prompts/main.md",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.2
+        "temperature": 0.2,
+        "provider": "openrouter"
       },
       "tools": [],
       "output_key": "response"
@@ -31,7 +32,8 @@
           "prompt": "prompts/analyze.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.1
+            "temperature": 0.1,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,
@@ -50,7 +52,8 @@
           "prompt": "prompts/summarize.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.3
+            "temperature": 0.3,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,
@@ -69,7 +72,8 @@
           "prompt": "prompts/summarize_chunk.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.3
+            "temperature": 0.3,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,
@@ -88,7 +92,8 @@
           "prompt": "prompts/summarize_merge.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.2
+            "temperature": 0.2,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,
@@ -107,7 +112,8 @@
           "prompt": "prompts/period_summarize_merge.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.2
+            "temperature": 0.2,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,
@@ -126,7 +132,8 @@
           "prompt": "prompts/summarize_attachment.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.1
+            "temperature": 0.1,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,
@@ -145,7 +152,8 @@
           "prompt": "prompts/deduplicate.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.1
+            "temperature": 0.1,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,
@@ -164,7 +172,8 @@
           "prompt": "prompts/deduplicate_batch.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.1
+            "temperature": 0.1,
+            "provider": "openrouter"
           },
           "tools": [],
           "structured_output": true,

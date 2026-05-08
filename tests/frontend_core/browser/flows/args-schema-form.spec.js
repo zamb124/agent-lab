@@ -22,10 +22,16 @@ describe('flows-args-schema-form', () => {
         const schema = { name: { type: 'string', description: 'имя', required: true } };
         const el = await fixture(html`<flows-args-schema-form .schema=${schema} .values=${{}}></flows-args-schema-form>`);
         let last = null;
-        el.addEventListener('change', (e) => { last = e.detail; });
-        const input = el.shadowRoot.querySelector('input[type="text"]');
+        el.addEventListener('change', (e) => {
+            if (e.detail && typeof e.detail.values === 'object' && e.detail.values !== null) {
+                last = e.detail;
+            }
+        });
+        const pf = el.shadowRoot.querySelector('platform-field[type="string"]');
+        const inner = pf.shadowRoot.querySelector('platform-field-string');
+        const input = inner.shadowRoot.querySelector('input');
         input.value = 'Vova';
-        input.dispatchEvent(new Event('input'));
+        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         expect(last).to.deep.equal({ values: { name: 'Vova' } });
     });
 

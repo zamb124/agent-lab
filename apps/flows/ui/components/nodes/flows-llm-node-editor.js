@@ -6,7 +6,8 @@
  *      `{var|default}`, `{for ... endfor}`, `@var:`, `@state:`, hover-tooltip
  *      со значением переменной из `flowVariables`, автокомплитом по `{` и
  *      `@var:`, режимами Preview / Split / Fullscreen).
- *   2. LLM конфигурация (`flows-llm-config-editor` поверх `cfg.llm_override`).
+ *   2. LLM (`flows-llm-config-editor`): база — `llm_resource_key` в сайдбаре «Закреплённые ресурсы»;
+ *      при заданном ключе форма только для чтения и показывает слитый конфиг ресурса ветки/каталога.
  *   3. Фильтр сообщений (`cfg.messages_filter`: 'all' | 'own' | string[]).
  *   4. Режим вывода — toggle Tools / Structured Output (`cfg.structured_output`).
  *   5a. Tools-режим (`structured_output=false`):
@@ -24,7 +25,7 @@
  * (их нет в модели — это поля ToolReference / get_mock_for_node).
  */
 
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
@@ -35,6 +36,7 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
+import { resolveResourceForPanel } from '../../_helpers/flows-branch-resource.js';
 import { getNodeTypeMeta } from '../../constants/node-icons.js';
 import { getToolRefVisualMeta, getToolLabel, normalizeToolRef as normalizeVisualToolRef } from '../../_helpers/flows-tool-visual.js';
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
@@ -197,6 +199,14 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this.expanded = false;
         this.embedded = false;
         this._editor = this.useOp('flows/editor');
+        this._resources = this.useResource('flows/resources');
+        this._branchResourcesSlice = this.select((s) => {
+            const bd = s.flowsEditor?.branchData;
+            if (!bd || typeof bd.resources !== 'object') {
+                return null;
+            }
+            return bd.resources;
+        });
         this._pendingFromCanvas = this.select((s) => {
             const ed = s.flowsEditor;
             if (!ed || typeof ed !== 'object') {
@@ -251,8 +261,177 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     _onLlmConfigChange(e) {
         const cfg = e.detail?.config && typeof e.detail.config === 'object' ? e.detail.config : null;
         if (cfg === null) return;
-        const isEmpty = Object.keys(cfg).length === 0;
-        this._emitPatch({ llm_override: isEmpty ? null : cfg });
+        const key = this._currentLlmResourceKey();
+        const stripped = { ...cfg };
+        delete stripped.llm_resource_key;
+        const merged = key.length > 0 ? { ...stripped, llm_resource_key: key } : stripped;
+        const isEmpty = Object.keys(merged).length === 0;
+        this._emitPatch({ llm_override: isEmpty ? null : merged });
+    }
+
+    _flowBranchResources() {
+        const st = asObject(this._editor.state);
+        const bd = st.branchData;
+        if (!isPlainObject(bd) || !isPlainObject(bd.resources)) {
+            return {};
+        }
+        return bd.resources;
+    }
+
+    /**
+     * @param {object | null} refRaw
+     * @param {{ resource_id?: string, name?: string, type?: string }[]} catalog
+     */
+    _branchRefIsLlm(refRaw, catalog) {
+        if (!isPlainObject(refRaw)) {
+            return false;
+        }
+        const inlineType = typeof refRaw.type === 'string' ? refRaw.type.trim() : '';
+        if (inlineType === 'llm') {
+            return true;
+        }
+        const rid = typeof refRaw.resource_id === 'string' ? refRaw.resource_id.trim() : '';
+        if (rid.length === 0) {
+            return false;
+        }
+        const def = catalog.find((r) => r && r.resource_id === rid);
+        return Boolean(def && def.type === 'llm');
+    }
+
+    _currentLlmResourceKey() {
+        const ov = this.nodeConfig?.llm_override;
+        const lm = this.nodeConfig?.llm;
+        const bag = isPlainObject(ov) ? ov : (isPlainObject(lm) ? lm : null);
+        if (!isPlainObject(bag)) {
+            return '';
+        }
+        const raw = bag.llm_resource_key;
+        return typeof raw === 'string' ? raw.trim() : '';
+    }
+
+    _applyLlmResourceKeyToNode(nextKey) {
+        const k = typeof nextKey === 'string' ? nextKey.trim() : '';
+        if (k.length === 0) {
+            throw new Error('flows-llm-node-editor: bind base resource requires non-empty resource id');
+        }
+        const catalog = Array.isArray(this._resources.items) ? this._resources.items : [];
+        const flowRes = this._flowBranchResources();
+        const resources = this.nodeConfig?.resources && typeof this.nodeConfig.resources === 'object'
+            ? { ...this.nodeConfig.resources }
+            : {};
+        const rawOv = this.nodeConfig?.llm_override;
+        const rawLlm = this.nodeConfig?.llm;
+        const ov = isPlainObject(rawOv)
+            ? { ...rawOv }
+            : (isPlainObject(rawLlm) ? { ...rawLlm } : {});
+
+        if (
+            Object.prototype.hasOwnProperty.call(flowRes, k)
+            && this._branchRefIsLlm(flowRes[k], catalog)
+        ) {
+            const next = { ...resources };
+            for (const [key, ref] of Object.entries(next)) {
+                const rid = ref && typeof ref.resource_id === 'string' ? ref.resource_id : key;
+                const d = catalog.find((r) => r && r.resource_id === rid);
+                if (d && d.type === 'llm') {
+                    delete next[key];
+                }
+            }
+            ov.llm_resource_key = k;
+            this._emitPatch({
+                resources: next,
+                llm_override: ov,
+            });
+            return;
+        }
+
+        const def = catalog.find((r) => r && r.resource_id === k);
+        if (def && def.type === 'llm') {
+            const next = { ...resources };
+            for (const [key, ref] of Object.entries(next)) {
+                const rid = ref && typeof ref.resource_id === 'string' ? ref.resource_id : key;
+                const d = catalog.find((r) => r && r.resource_id === rid);
+                if (d && d.type === 'llm') {
+                    delete next[key];
+                }
+            }
+            next[k] = { resource_id: k };
+            ov.llm_resource_key = k;
+            this._emitPatch({
+                resources: next,
+                llm_override: ov,
+            });
+            return;
+        }
+
+        ov.llm_resource_key = k;
+        this._emitPatch({ llm_override: ov });
+    }
+
+    _legacySingleUnboundLlmResourceId() {
+        const existing = this._currentLlmResourceKey();
+        if (existing.length > 0) {
+            return null;
+        }
+        const catalog = Array.isArray(this._resources.items) ? this._resources.items : [];
+        const resources = this.nodeConfig?.resources && typeof this.nodeConfig.resources === 'object'
+            ? this.nodeConfig.resources
+            : {};
+        const flowRes = this._flowBranchResources();
+        /** @type {string[]} */
+        const found = [];
+        const seen = new Set();
+        for (const [key, ref] of Object.entries(resources)) {
+            const rid = ref && typeof ref.resource_id === 'string' && ref.resource_id.length > 0
+                ? ref.resource_id
+                : key;
+            if (typeof rid !== 'string' || rid.length === 0 || seen.has(rid)) {
+                continue;
+            }
+            let isLlm = false;
+            if (Object.prototype.hasOwnProperty.call(flowRes, rid) && this._branchRefIsLlm(flowRes[rid], catalog)) {
+                isLlm = true;
+            } else {
+                const def = catalog.find((r) => r && r.resource_id === rid);
+                if (def && def.type === 'llm') {
+                    isLlm = true;
+                }
+            }
+            if (isLlm) {
+                seen.add(rid);
+                found.push(rid);
+            }
+        }
+        if (found.length !== 1) {
+            return null;
+        }
+        return found[0];
+    }
+
+    _llmConfigForEditor() {
+        const cfg = asObject(this.nodeConfig);
+        const override = isPlainObject(cfg.llm_override) ? cfg.llm_override : null;
+        const fallback = isPlainObject(cfg.llm) ? cfg.llm : null;
+        const llm = override !== null ? override : (fallback !== null ? fallback : {});
+        const { llm_resource_key: _drop, ...rest } = llm;
+        return rest;
+    }
+
+    _resolvedLlmConfigForPinnedResource(resourceKey) {
+        if (typeof resourceKey !== 'string' || resourceKey.length === 0) {
+            return {};
+        }
+        const state = this._editor.state;
+        if (!isPlainObject(state)) {
+            return {};
+        }
+        const items = Array.isArray(this._resources.items) ? this._resources.items : [];
+        const resolved = resolveResourceForPanel(resourceKey, state, items);
+        if (resolved === null) {
+            return {};
+        }
+        const rcfg = resolved.resource?.config;
+        return isPlainObject(rcfg) ? rcfg : {};
     }
 
     _filterMode() {
@@ -472,17 +651,34 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _renderLlmSection() {
-        const cfg = asObject(this.nodeConfig);
-        const override = isPlainObject(cfg.llm_override) ? cfg.llm_override : null;
-        const fallback = isPlainObject(cfg.llm) ? cfg.llm : null;
-        const llm = override !== null ? override : (fallback !== null ? fallback : {});
+        void this._branchResourcesSlice.value;
+        const resourceKey = this._currentLlmResourceKey();
+        const legacyRid = this._legacySingleUnboundLlmResourceId();
+        const pinned = resourceKey.length > 0;
+        const llmForEditor = pinned
+            ? this._resolvedLlmConfigForPinnedResource(resourceKey)
+            : this._llmConfigForEditor();
         return html`
             <section class="block">
-                <h4 class="block-title">${this.t('llm_node_editor.section_llm')}</h4>
-                <flows-llm-config-editor
-                    .config=${llm}
-                    @change=${this._onLlmConfigChange}
-                ></flows-llm-config-editor>
+                <h4 class="block-title">${pinned
+                    ? this.t('llm_node_editor.section_llm_from_branch', { id: resourceKey })
+                    : this.t('llm_node_editor.section_llm')}</h4>
+                <div class="block-card">
+                    ${legacyRid !== null ? html`
+                        <div class="row" style="align-items:center;gap:var(--space-2);flex-wrap:wrap;">
+                            <span class="block-hint">${this.t('llm_node_editor.llm_resource_legacy_hint')}</span>
+                            <glass-button size="sm" variant="secondary" type="button"
+                                @click=${() => this._applyLlmResourceKeyToNode(legacyRid)}>
+                                ${this.t('llm_node_editor.llm_resource_legacy_bind')}
+                            </glass-button>
+                        </div>
+                    ` : ''}
+                    <flows-llm-config-editor
+                        .config=${llmForEditor}
+                        ?readOnly=${pinned}
+                        @change=${pinned ? nothing : this._onLlmConfigChange}
+                    ></flows-llm-config-editor>
+                </div>
             </section>
         `;
     }

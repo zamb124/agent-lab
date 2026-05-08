@@ -5,6 +5,8 @@
  * Внутри использует `<flows-code-editor language='json'>`. При невалидном
  * JSON помечает контейнер `data-invalid` и не диспатчит change. На каждый
  * успешный парсинг → `emit('change', { value, parsed })`.
+ *
+ * Слот `toolbar-start` проксируется в `<flows-code-editor>` (левая часть шапки).
  */
 
 import { html, css } from 'lit';
@@ -29,6 +31,11 @@ export class FlowsJsonFieldEditor extends PlatformElement {
                 color: var(--error);
                 font-size: var(--text-xs);
                 margin-top: var(--space-1);
+            }
+            ::slotted([slot="toolbar-start"]) {
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-primary);
             }
         `,
     ];
@@ -63,7 +70,9 @@ export class FlowsJsonFieldEditor extends PlatformElement {
                     ?readonly=${this.readonly}
                     .value=${this.value}
                     @change=${this._onChange}
-                ></flows-code-editor>
+                >
+                    <slot name="toolbar-start" slot="toolbar-start"></slot>
+                </flows-code-editor>
                 ${this._invalid ? html`<div class="error">${this._error}</div>` : ''}
             </div>
         `;

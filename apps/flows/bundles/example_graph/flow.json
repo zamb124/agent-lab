@@ -2,12 +2,12 @@
   "id": "example_graph",
   "name": "Пример графового flow",
   "description": "Skills (merge/replace), маршрутизация code→ветки; HITL: ветка operator → hitl_node single_reply (очередь example_hitl), ветка takeover → hitl_node takeover (полный перехват диалога). Напишите «оператор» или «перехват»/«takeover».",
-    "tags": [
-        "example",
-        "graph",
-        "branching",
-        "modes"
-    ],
+  "tags": [
+    "example",
+    "graph",
+    "branching",
+    "modes"
+  ],
   "permission": [],
   "entry": "classifier",
   "nodes": {
@@ -19,7 +19,8 @@
       "type": "llm_node",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.2
+        "temperature": 0.2,
+        "provider": "openrouter"
       },
       "prompt": "Ты обрабатываешь заказы. Спроси номер заказа если не указан.",
       "tools": [
@@ -32,7 +33,8 @@
       "type": "llm_node",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.2
+        "temperature": 0.2,
+        "provider": "openrouter"
       },
       "prompt": "Ты обрабатываешь жалобы. Спроси детали если не указаны.",
       "tools": [
@@ -45,7 +47,8 @@
       "type": "llm_node",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.2
+        "temperature": 0.2,
+        "provider": "openrouter"
       },
       "prompt": "Ты отвечаешь на общие вопросы.",
       "tools": []
@@ -308,7 +311,8 @@
           "prompt": "Ты общий процессор. Ответь на вопрос.",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.2
+            "temperature": 0.2,
+            "provider": "openrouter"
           },
           "tools": []
         }

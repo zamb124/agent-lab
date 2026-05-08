@@ -4,7 +4,7 @@
  * Два режима рендера, выбираются атрибутом `expanded`:
  *
  * 1. compact: header (только слот Run) → «Запустить» в шапке `flows-floating-panel`; заголовок панели — `cfg.name` или id;
- *    хост панели ищется обходом DOM ShadowRoot→host, иначе fallback.
+ *    хост панели ищется обходом DOM ShadowRoot→host, иначе fallback. Для `nodeType === 'resource'` рядом с Run монтируется `platform-help-hint` (ресурсы на графе).
  * 2. модалка «Инструмент» в LLM: `.embedded-tool-run-host` в шапке `flows-embedded-tool-config-modal`.
  * 3. expanded: .panel-main — fallback для Run без floating-panel и без этой модалки.
  * Запуск: `useOp('flows/code_execute')`, UI — `flows-node-run-control` (imperative mount).
@@ -14,7 +14,9 @@
  *     (description/tags/incoming_policy/exception_as_response/exception_allow_types/files/resources). Type-specific
  *     патчи приходят через slot='settings' (дочерний редактор сам диспатчит
  *     change на хосте).
- *   - rename-node { oldId, newId }
+ *
+ * Секция «Закреплённые ресурсы» не показывается для ноды `resource`: на графе это
+ * уже ресурс, вложенные закрепления с той же ноды не редактируются.
  */
 
 import { html, css, nothing } from 'lit';
@@ -53,8 +55,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         expanded: { type: Boolean, reflect: true },
         /** Редактирование вложенного tool: без смены node id */
         embedded: { type: Boolean, reflect: true },
-        _editingId: { state: true },
-        _draftId: { state: true },
         _stateDraft: { state: true },
         _mappingTab: { state: true },
         _addResourcePick: { state: true },
@@ -170,19 +170,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 flex-shrink: 0;
             }
 
-            .node-id-rename-input {
-                font-family: var(--font-mono, monospace);
-                font-size: var(--text-sm);
-            }
-
-            .icon-btn {
-                background: none; border: none; padding: 4px;
-                display: inline-flex; align-items: center;
-                color: var(--text-tertiary); cursor: pointer;
-                border-radius: var(--radius-md);
-            }
-            .icon-btn:hover { color: var(--accent); background: var(--glass-solid-medium); }
-
             /* File and resource lists */
             .item-list {
                 display: flex; flex-direction: column; gap: var(--space-1);
@@ -253,8 +240,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this.previewExecutionState = null;
         this.expanded = false;
         this.embedded = false;
-        this._editingId = false;
-        this._draftId = '';
         this._mappingTab = 'input';
         this._stateDraft = null;
         this._addResourcePick = '';
@@ -264,7 +249,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._executionLimitsOp = this.useOp('flows/execution_limits');
         this._codeExecuteClientId = nextCodeExecuteClientId();
         this._resources = this.useResource('flows/resources', { autoload: true });
+        this._flowEditor = this.useOp('flows/editor');
         this._nodeRunControlEl = null;
+        this._resourceGraphHintEl = null;
         this._onNodeRunFired = () => { void this._runNodeTest(); };
         this._onNodeRunOpenFullEvent = (e) => { this._onOpenExecuteFull(e); };
     }
@@ -284,6 +271,10 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             this._nodeRunControlEl.remove();
             this._nodeRunControlEl = null;
         }
+        if (this._resourceGraphHintEl) {
+            this._resourceGraphHintEl.remove();
+            this._resourceGraphHintEl = null;
+        }
         super.disconnectedCallback();
     }
 
@@ -302,6 +293,24 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         el.addEventListener('open-full', this._onNodeRunOpenFullEvent);
         this._nodeRunControlEl = el;
         return el;
+    }
+
+    _ensureResourceGraphHint() {
+        if (this._resourceGraphHintEl) {
+            return this._resourceGraphHintEl;
+        }
+        const hint = document.createElement('platform-help-hint');
+        this._resourceGraphHintEl = hint;
+        return hint;
+    }
+
+    _syncResourceGraphHintProps() {
+        const hint = this._resourceGraphHintEl;
+        if (!hint) {
+            return;
+        }
+        hint.label = this.t('resource_node_editor.help_label');
+        hint.text = this.t('resource_node_editor.help_body');
     }
 
     _syncNodeRunControlProps() {
@@ -398,8 +407,21 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         } else {
             target = this.renderRoot?.querySelector?.('[data-node-run-fallback="compact"]') ?? null;
         }
-        if (target && el.parentElement !== target) {
+        if (!target) {
+            if (this._resourceGraphHintEl) {
+                this._resourceGraphHintEl.remove();
+            }
+            return;
+        }
+        if (el.parentElement !== target) {
             target.appendChild(el);
+        }
+        if (this.nodeType === 'resource') {
+            const hint = this._ensureResourceGraphHint();
+            this._syncResourceGraphHintProps();
+            target.insertBefore(hint, el);
+        } else if (this._resourceGraphHintEl) {
+            this._resourceGraphHintEl.remove();
         }
     }
 
@@ -598,25 +620,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._emitPatch({ [field]: isPlainObject(mapping) ? mapping : {} });
     }
 
-    _startRenameId() {
-        if (this.embedded) {
-            return;
-        }
-        this._editingId = true;
-        this._draftId = this.nodeId;
-    }
-    _commitRenameId() {
-        const draft = asString(this._draftId).trim();
-        this._editingId = false;
-        if (!draft || draft === this.nodeId) return;
-        if (!/^[a-zA-Z0-9_]+$/.test(draft)) {
-            this.toast('flows:base_node_editor.rename_invalid', { type: 'error' });
-            return;
-        }
-        this.emit('rename-node', { oldId: this.nodeId, newId: draft });
-    }
-    _cancelRenameId() { this._editingId = false; }
-
     async _onUploadFile(e) {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
@@ -652,6 +655,95 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this._emitPatch({ files: files.filter((_, i) => i !== idx) });
     }
 
+    _flowBranchResources() {
+        const st = asObject(this._flowEditor.state);
+        const bd = st.branchData;
+        if (!isPlainObject(bd) || !isPlainObject(bd.resources)) {
+            return {};
+        }
+        return bd.resources;
+    }
+
+    /**
+     * @param {object | null} refRaw
+     * @param {{ resource_id?: string, name?: string, type?: string }[]} catalog
+     */
+    _branchRefIsLlm(refRaw, catalog) {
+        if (!isPlainObject(refRaw)) {
+            return false;
+        }
+        const inlineType = typeof refRaw.type === 'string' ? refRaw.type.trim() : '';
+        if (inlineType === 'llm') {
+            return true;
+        }
+        const rid = typeof refRaw.resource_id === 'string' ? refRaw.resource_id.trim() : '';
+        if (rid.length === 0) {
+            return false;
+        }
+        const def = catalog.find((r) => r && r.resource_id === rid);
+        return Boolean(def && def.type === 'llm');
+    }
+
+    /**
+     * @param {string} key
+     * @param {object} refRaw
+     * @param {{ resource_id?: string, name?: string, type?: string }[]} catalog
+     */
+    _branchRefAttachLabel(key, refRaw, catalog) {
+        if (!isPlainObject(refRaw)) {
+            return key;
+        }
+        const rid = typeof refRaw.resource_id === 'string' ? refRaw.resource_id.trim() : '';
+        let title = '';
+        if (rid.length > 0) {
+            const def = catalog.find((r) => r && r.resource_id === rid);
+            title = def && typeof def.name === 'string' && def.name.length > 0 ? def.name.trim() : rid;
+        } else {
+            const inlineName = typeof refRaw.name === 'string' ? refRaw.name.trim() : '';
+            title = inlineName.length > 0 ? inlineName : '';
+        }
+        const typePart = 'llm';
+        const redundantTitle = !title
+            || title === key
+            || title.toLowerCase() === typePart;
+        if (redundantTitle) {
+            return `${key} · ${typePart}`;
+        }
+        return `${title} · ${typePart} · ${key}`;
+    }
+
+    /**
+     * @param {Record<string, object>} flowRes
+     * @param {Record<string, object>} resources
+     * @param {string} presetKey
+     * @param {{ resource_id?: string, name?: string, type?: string }[]} catalog
+     * @returns {{ value: string, label: string }[]}
+     */
+    _llmBranchAttachOptions(flowRes, resources, presetKey, catalog) {
+        /** @type {{ value: string, label: string }[]} */
+        const out = [];
+        const pk = typeof presetKey === 'string' ? presetKey.trim() : '';
+        for (const [key, refRaw] of Object.entries(flowRes)) {
+            if (typeof key !== 'string' || key.length === 0) {
+                continue;
+            }
+            if (!this._branchRefIsLlm(refRaw, catalog)) {
+                continue;
+            }
+            if (pk.length > 0 && pk === key) {
+                continue;
+            }
+            if (Object.prototype.hasOwnProperty.call(resources, key)) {
+                continue;
+            }
+            out.push({
+                value: key,
+                label: this._branchRefAttachLabel(key, refRaw, catalog),
+            });
+        }
+        return out;
+    }
+
     _onAddResource(e) {
         const resourceId = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         this._addResourcePick = '';
@@ -660,8 +752,55 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             ? this.nodeConfig.resources
             : {};
         if (resources[resourceId]) return;
-        const next = { ...resources, [resourceId]: { resource_id: resourceId } };
-        this._emitPatch({ resources: next });
+        const catalog = Array.isArray(this._resources.items) ? this._resources.items : [];
+        const flowRes = this._flowBranchResources();
+        const patch = {};
+
+        if (
+            this.nodeType === 'llm_node'
+            && Object.prototype.hasOwnProperty.call(flowRes, resourceId)
+            && this._branchRefIsLlm(flowRes[resourceId], catalog)
+        ) {
+            const next = { ...resources };
+            for (const [key, ref] of Object.entries(next)) {
+                const rid = ref && typeof ref.resource_id === 'string' ? ref.resource_id : key;
+                const d = catalog.find((r) => r && r.resource_id === rid);
+                if (d && d.type === 'llm') {
+                    delete next[key];
+                }
+            }
+            patch.resources = next;
+            const ov = this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
+                ? { ...this.nodeConfig.llm_override }
+                : {};
+            ov.llm_resource_key = resourceId;
+            patch.llm_override = ov;
+            this._emitPatch(patch);
+            return;
+        }
+
+        const def = catalog.find((r) => r && r.resource_id === resourceId);
+
+        if (this.nodeType === 'llm_node' && def && def.type === 'llm') {
+            const next = { ...resources };
+            for (const [key, ref] of Object.entries(next)) {
+                const rid = ref && typeof ref.resource_id === 'string' ? ref.resource_id : key;
+                const d = catalog.find((r) => r && r.resource_id === rid);
+                if (d && d.type === 'llm') {
+                    delete next[key];
+                }
+            }
+            next[resourceId] = { resource_id: resourceId };
+            patch.resources = next;
+            const ov = this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
+                ? { ...this.nodeConfig.llm_override }
+                : {};
+            ov.llm_resource_key = resourceId;
+            patch.llm_override = ov;
+        } else {
+            patch.resources = { ...resources, [resourceId]: { resource_id: resourceId } };
+        }
+        this._emitPatch(patch);
     }
 
     _onRemoveResource(key) {
@@ -670,7 +809,16 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             : {};
         const next = { ...resources };
         delete next[key];
-        this._emitPatch({ resources: next });
+        const patch = { resources: next };
+        const ov = this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
+            ? { ...this.nodeConfig.llm_override }
+            : {};
+        const presetKey = typeof ov.llm_resource_key === 'string' ? ov.llm_resource_key.trim() : '';
+        if (presetKey === key) {
+            delete ov.llm_resource_key;
+            patch.llm_override = Object.keys(ov).length > 0 ? ov : null;
+        }
+        this._emitPatch(patch);
     }
 
     _incomingPolicyEnumConfig() {
@@ -682,14 +830,26 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         };
     }
 
-    _resourceAddEnumConfig(availableResources) {
+    _resourceAddEnumConfig(availableResources, branchAttachOptions) {
         const values = [{ value: '', label: this.t('base_node_editor.resources_add_pick') }];
         if (!Array.isArray(availableResources)) {
             throw new Error('flows-base-node-editor: _resourceAddEnumConfig expects array');
         }
+        const branchByValue = new Map();
+        if (Array.isArray(branchAttachOptions)) {
+            for (const o of branchAttachOptions) {
+                if (!o || typeof o.value !== 'string' || o.value.length === 0 || typeof o.label !== 'string') {
+                    throw new Error('flows-base-node-editor: invalid branch attach option');
+                }
+                branchByValue.set(o.value, o);
+            }
+        }
         for (const r of availableResources) {
             if (!r || typeof r.resource_id !== 'string' || r.resource_id.length === 0) {
                 throw new Error('flows-base-node-editor: invalid resource item');
+            }
+            if (branchByValue.has(r.resource_id)) {
+                continue;
             }
             const nm = typeof r.name === 'string' ? r.name : r.resource_id;
             const tp = typeof r.type === 'string' ? r.type : '';
@@ -697,6 +857,11 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 value: r.resource_id,
                 label: `${nm} · ${tp}`,
             });
+        }
+        if (branchByValue.size > 0) {
+            for (const o of branchByValue.values()) {
+                values.push({ value: o.value, label: o.label });
+            }
         }
         return { values };
     }
@@ -738,52 +903,12 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_basic')}</div>
                 <div class="field">
-                    ${this.embedded ? html`
-                        <platform-field
-                            type="string"
-                            mode="view"
-                            .label=${idLabel}
-                            .value=${this.nodeId}
-                        ></platform-field>
-                    ` : this._editingId ? html`
-                        <div class="field-pill">
-                            <div class="field-pill-head">
-                                <span class="field-pill-label">${idLabel}</span>
-                            </div>
-                            <div class="field-pill-control">
-                                <input
-                                    class="field-pill-input node-id-rename-input"
-                                    type="text"
-                                    data-canon="inline-edit"
-                                    .value=${this._draftId}
-                                    @input=${(e) => { this._draftId = e.target.value; }}
-                                    @keydown=${(e) => {
-                                        if (e.key === 'Enter') this._commitRenameId();
-                                        if (e.key === 'Escape') this._cancelRenameId();
-                                    }}
-                                />
-                                <glass-button size="sm" variant="primary" @click=${this._commitRenameId}>${this.t('base_node_editor.rename_save')}</glass-button>
-                                <glass-button size="sm" variant="ghost" @click=${this._cancelRenameId}>${this.t('base_node_editor.rename_cancel')}</glass-button>
-                            </div>
-                        </div>
-                    ` : html`
-                        <platform-field
-                            type="string"
-                            mode="view"
-                            .label=${idLabel}
-                            .value=${this.nodeId}
-                        >
-                            <button
-                                class="icon-btn"
-                                type="button"
-                                slot="suffix"
-                                title=${this.t('base_node_editor.rename_id')}
-                                @click=${this._startRenameId}
-                            >
-                                <platform-icon name="edit" size="14"></platform-icon>
-                            </button>
-                        </platform-field>
-                    `}
+                    <platform-field
+                        type="string"
+                        mode="view"
+                        .label=${idLabel}
+                        .value=${this.nodeId}
+                    ></platform-field>
                 </div>
                 <div class="field">
                     <platform-field
@@ -858,6 +983,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         </div>
                     </div>
                 </div>
+                ${this.nodeType === 'resource' ? nothing : html`
                 <div class="field">
                     <platform-field
                         type="enum"
@@ -868,6 +994,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         @change=${this._onPolicy}
                     ></platform-field>
                 </div>
+                `}
                 <div class="field">
                     <platform-field
                         type="integer"
@@ -920,26 +1047,66 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         `;
     }
 
+    _shouldShowPinnedResourcesSection() {
+        return this.nodeType !== 'resource';
+    }
+
     _renderResources() {
         const cfg = this.nodeConfig;
         const resources = cfg?.resources && typeof cfg.resources === 'object' ? cfg.resources : {};
         const resourceIds = Object.keys(resources);
         const allResources = Array.isArray(this._resources.items) ? this._resources.items : [];
         const availableResources = allResources.filter((r) => r && !resources[r.resource_id]);
-        const resourcesAttachHint = resourceIds.length === 0 ? this.t('base_node_editor.resources_empty') : '';
+        const flowRes = this._flowBranchResources();
+        const ov = cfg?.llm_override && typeof cfg.llm_override === 'object' ? cfg.llm_override : {};
+        const presetRaw = ov.llm_resource_key;
+        const presetKey = typeof presetRaw === 'string' ? presetRaw.trim() : '';
+        const catalog = allResources;
+        const showBranchPresetRow = this.nodeType === 'llm_node'
+            && presetKey.length > 0
+            && Object.prototype.hasOwnProperty.call(flowRes, presetKey)
+            && this._branchRefIsLlm(flowRes[presetKey], catalog)
+            && !Object.prototype.hasOwnProperty.call(resources, presetKey);
+        const branchAttachOptions = this.nodeType === 'llm_node'
+            ? this._llmBranchAttachOptions(flowRes, resources, presetKey, catalog)
+            : [];
+        const resourcesAttachHintParts = [];
+        if (resourceIds.length === 0 && !showBranchPresetRow) {
+            resourcesAttachHintParts.push(this.t('base_node_editor.resources_empty'));
+        }
+        if (this.nodeType === 'llm_node') {
+            resourcesAttachHintParts.push(this.t('base_node_editor.resources_section_llm_node_hint'));
+        }
+        const resourcesAttachHint = resourcesAttachHintParts.join(' ');
+        const rem = this.t('base_node_editor.resources_remove');
+        const branchRowTitle = showBranchPresetRow
+            ? this._branchRefAttachLabel(presetKey, flowRes[presetKey], catalog)
+            : '';
         return html`
             <div class="section">
                 <div class="section-title">${this.t('base_node_editor.section_resources')}</div>
-                ${resourceIds.length === 0
+                ${typeof this._resources.error === 'string' && this._resources.error.length > 0
+            ? html`<div class="field-hint">${this._resources.error}</div>`
+            : nothing}
+                ${resourceIds.length === 0 && !showBranchPresetRow
                     ? nothing
                     : html`<div class="item-list">
+                        ${showBranchPresetRow ? html`
+                            <div class="item-row">
+                                <span class="grow">${branchRowTitle}</span>
+                                <span class="meta">${presetKey}</span>
+                                <button class="remove" type="button" title=${rem} @click=${() => this._onRemoveResource(presetKey)}>
+                                    <platform-icon name="trash" size="14"></platform-icon>
+                                </button>
+                            </div>
+                        ` : nothing}
                         ${Object.entries(resources).map(([key, ref]) => {
                             const def = allResources.find((r) => r && r.resource_id === (ref && typeof ref.resource_id === 'string' ? ref.resource_id : key));
                             return html`
                                 <div class="item-row">
                                     <span class="grow">${def ? def.name : key}</span>
                                     <span class="meta">${def ? def.type : ''}</span>
-                                    <button class="remove" type="button" title=${this.t('base_node_editor.resources_remove')} @click=${() => this._onRemoveResource(key)}>
+                                    <button class="remove" type="button" title=${rem} @click=${() => this._onRemoveResource(key)}>
                                         <platform-icon name="trash" size="14"></platform-icon>
                                     </button>
                                 </div>
@@ -953,7 +1120,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         .label=${this.t('base_node_editor.resources_add_field')}
                         .hint=${resourcesAttachHint}
                         .value=${this._addResourcePick}
-                        .config=${this._resourceAddEnumConfig(availableResources)}
+                        .config=${this._resourceAddEnumConfig(availableResources, branchAttachOptions)}
                         @change=${this._onAddResource}
                     ></platform-field>
                 </div>
@@ -1033,13 +1200,13 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 <div class="panel-layout">
                     <div class="panel-sidebar">
                         ${this._renderBasic()}
-                        ${this._renderResources()}
+                        ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
                         ${this._renderInputState()}
                     </div>
                     <div class="panel-main">
                         <div class="panel-run-fallback" data-node-run-fallback="expanded"></div>
                         ${this._renderSettingsSlot()}
-                        ${this._renderMapping()}
+                        ${this.nodeType === 'resource' ? nothing : this._renderMapping()}
                     </div>
                 </div>
             `;
@@ -1048,9 +1215,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             <div class="compact">
                 ${this._renderHeader()}
                 ${this._renderBasic()}
-                ${this._renderResources()}
+                ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
                 ${this._renderSettingsSlot()}
-                ${this._renderMapping()}
+                ${this.nodeType === 'resource' ? nothing : this._renderMapping()}
                 ${this._renderInputState()}
             </div>
         `;

@@ -217,6 +217,18 @@
       name: {{ .Values.platformSecretName }}
       key: llm-openrouter-api-key
       optional: true
+- name: LLM__YANDEX__API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-yandex-api-key
+      optional: true
+- name: LLM__YANDEX__FOLDER_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: llm-yandex-folder-id
+      optional: true
 - name: VOICE__STT__CLOUD_RU__API_KEY
   valueFrom:
     secretKeyRef:

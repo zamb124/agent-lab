@@ -10,7 +10,7 @@
  * Атрибут `dock-stack`: вложена в правый столб `.editor-right-rail` под карточкой flow —
  * растягивается по высоте (`flex: 1`), без абсолютного позиционирования у `:host`.
  * В `.header-actions-host` (слева от «свернуть») `flows-base-node-editor`
- * монтирует `flows-node-run-control`.
+ * монтирует `flows-node-run-control`; `flows-resource-property-panel` — кнопку удаления ресурса.
  *
  * Слот по умолчанию для содержимого (property-panel или resource-property-panel).
  */
@@ -134,6 +134,7 @@ export class FlowsFloatingPanel extends PlatformElement {
             .header-actions-host {
                 display: flex;
                 align-items: center;
+                gap: var(--space-2);
                 flex-shrink: 0;
             }
             .header-actions-host:empty {
@@ -166,7 +167,7 @@ export class FlowsFloatingPanel extends PlatformElement {
                 padding: 0;
             }
             :host([expanded]) .panel-body {
-                overflow: hidden;
+                overflow: auto;
                 padding: 0;
             }
             .panel-body[data-lara-glow] {

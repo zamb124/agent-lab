@@ -11,6 +11,7 @@ export const resourcesBundleResource = createResourceCollection({
     baseUrl: '/flows/api/v1/resources',
     idField: 'resource_id',
     operations: ['list', 'get', 'create', 'remove'],
+    listFetchAllPages: true,
     toastKeys: {
         create: 'flows:toast.resource_created',
         create_error: 'flows:toast.resource_create_error',
@@ -18,7 +19,7 @@ export const resourcesBundleResource = createResourceCollection({
         remove_error: 'flows:toast.resource_remove_error',
     },
     listQuery: (payload) => {
-        const query = {};
+        const query = { limit: 200, offset: 0 };
         if (payload && typeof payload === 'object' && typeof payload.type === 'string') {
             query.type = payload.type;
         }

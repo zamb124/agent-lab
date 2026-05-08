@@ -69,8 +69,12 @@ class TestCodeCompletions:
         assert text.strip().startswith("#")
         assert "llm" in text
         assert "state" in text
+        assert "doc-entry" in text
         assert "doc-platform-tools" in text
         assert "calculator" in text
+        r_node = await client.get("/flows/api/v1/code/documentation?perspective=node")
+        assert r_node.status_code == 200
+        assert "doc-entry" in r_node.text
 
 
 class TestCodeValidate:

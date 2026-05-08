@@ -23,6 +23,7 @@ export class FlowsHttpResourceEditor extends PlatformElement {
     static properties = {
         resourceId: { type: String },
         resource: { type: Object },
+        compactHeader: { type: Boolean, reflect: true, attribute: 'compact-header' },
     };
 
     static styles = [
@@ -47,6 +48,7 @@ export class FlowsHttpResourceEditor extends PlatformElement {
         super();
         this.resourceId = '';
         this.resource = null;
+        this.compactHeader = false;
     }
 
     _emitConfig(patch) {
@@ -111,6 +113,7 @@ export class FlowsHttpResourceEditor extends PlatformElement {
                 .resourceId=${this.resourceId}
                 .resource=${this.resource}
                 .resourceType=${'http'}
+                .compactHeader=${this.compactHeader}
                 @change=${(e) => this.emit('change', e.detail)}
             >
                 <div slot="settings" class="body">

@@ -36,6 +36,8 @@ jq -n \
   --arg grafanaAdminPassword "${GRAFANA_ADMIN_PASSWORD:-}" \
   --arg llmBothubApiKey "${LLM_BOTHUB_API_KEY:-}" \
   --arg llmOpenrouterApiKey "${LLM_OPENROUTER_API_KEY:-}" \
+  --arg llmYandexApiKey "${LLM_YANDEX_API_KEY:-}" \
+  --arg llmYandexFolderId "${LLM_YANDEX_FOLDER_ID:-}" \
   --arg sttCloudRuApiKey "${STT_CLOUD_RU_API_KEY:-}" \
   --arg sttYandexApiKey "${STT_YANDEX_API_KEY:-}" \
   --arg sttYandexFolderId "${STT_YANDEX_FOLDER_ID:-}" \
@@ -81,6 +83,8 @@ jq -n \
     grafanaAdminPassword: $grafanaAdminPassword,
     llmBothubApiKey: $llmBothubApiKey,
     llmOpenrouterApiKey: $llmOpenrouterApiKey,
+    llmYandexApiKey: $llmYandexApiKey,
+    llmYandexFolderId: $llmYandexFolderId,
     sttCloudRuApiKey: $sttCloudRuApiKey,
     sttYandexApiKey: $sttYandexApiKey,
     sttYandexFolderId: $sttYandexFolderId,

@@ -1371,6 +1371,8 @@ class BaseChannel(ABC):
                     description = "Code нода"
                 elif node_type == NodeType.LLM_NODE.value:
                     description = "ReAct агент"
+                elif node_type == NodeType.RESOURCE.value:
+                    description = "Ресурс на графе"
                 elif node_type == NodeType.HITL_NODE.value:
                     description = "Оператор очереди"
                 

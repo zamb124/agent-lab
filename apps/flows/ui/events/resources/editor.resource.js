@@ -306,7 +306,6 @@ export const editorResource = createAsyncOp({
         STICKY_NOTE_UPDATED: 'sticky_note_updated',
         STICKY_NOTE_REMOVED: 'sticky_note_removed',
         BREAKPOINT_TOGGLED: 'breakpoint_toggled',
-        NODE_ID_CHANGED: 'node_id_changed',
         NODE_DELETED: 'node_deleted',
         PENDING_NODE_TOOL_CLEARED: 'pending_node_tool_cleared',
     },
@@ -343,7 +342,6 @@ export const editorResource = createAsyncOp({
         updateStickyNote: 'sticky_note_updated',
         removeStickyNote: 'sticky_note_removed',
         toggleBreakpoint: 'breakpoint_toggled',
-        renameNodeId: 'node_id_changed',
         removeNode: 'node_deleted',
         clearPendingNodeTool: 'pending_node_tool_cleared',
     },
@@ -775,52 +773,6 @@ export const editorResource = createAsyncOp({
             const nodeId = p.node_id;
             if (typeof nodeId !== 'string' || nodeId.length === 0) return state;
             return { ...state, breakpointHitNodeId: nodeId };
-        }
-
-        if (t === 'flows/editor/node_id_changed') {
-            const oldId = p.oldId;
-            const newId = p.newId;
-            if (typeof oldId !== 'string' || oldId.length === 0) return state;
-            if (typeof newId !== 'string' || newId.length === 0) return state;
-            if (oldId === newId) return state;
-            const data = state.branchData;
-            if (!data || typeof data !== 'object') return state;
-            const nodes = data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
-            if (!(oldId in nodes)) return state;
-            if (newId in nodes) return state;
-            const nextNodes = {};
-            for (const [id, node] of Object.entries(nodes)) {
-                const targetId = id === oldId ? newId : id;
-                if (id !== oldId || !node || typeof node !== 'object') {
-                    nextNodes[targetId] = node && typeof node === 'object' ? { ...node, node_id: targetId } : node;
-                    continue;
-                }
-                const prevName = typeof node.name === 'string' ? node.name : '';
-                const syncNameToId = prevName === '' || prevName === oldId;
-                nextNodes[targetId] = syncNameToId
-                    ? { ...node, node_id: targetId, name: newId }
-                    : { ...node, node_id: targetId };
-            }
-            const edges = Array.isArray(data.edges) ? data.edges : [];
-            const nextEdges = edges.map((edge) => {
-                if (!edge || typeof edge !== 'object') return edge;
-                const fromNode = edge.from_node === oldId ? newId : edge.from_node;
-                const toNode = edge.to_node === oldId ? newId : edge.to_node;
-                if (fromNode === edge.from_node && toNode === edge.to_node) return edge;
-                return { ...edge, from_node: fromNode, to_node: toNode };
-            });
-            const entry = data.entry === oldId ? newId : data.entry;
-            return {
-                ...state,
-                branchData: { ...data, nodes: nextNodes, edges: nextEdges, entry },
-                selectedNodeId: state.selectedNodeId === oldId ? newId : state.selectedNodeId,
-                multiSelection: state.multiSelection.map((id) => (id === oldId ? newId : id)),
-                entryNodeId: state.entryNodeId === oldId ? newId : state.entryNodeId,
-                breakpointNodeIds: state.breakpointNodeIds.map((id) => (id === oldId ? newId : id)),
-                runningNodeIds: state.runningNodeIds.map((id) => (id === oldId ? newId : id)),
-                completedNodeIds: state.completedNodeIds.map((id) => (id === oldId ? newId : id)),
-                isDirty: true,
-            };
         }
 
         if (t === 'flows/editor/node_deleted') {

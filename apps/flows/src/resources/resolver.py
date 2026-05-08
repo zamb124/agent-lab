@@ -16,6 +16,10 @@ from apps.flows.src.models import (
     ResourceDefinition,
     ResourceReference,
 )
+from apps.flows.src.resources.merge import (
+    merge_flow_skill_node_resource_maps,
+    merge_shared_definition_config_with_patch,
+)
 from apps.flows.src.resources.providers import (
     BaseResourceProvider,
     CodeResourceProvider,
@@ -85,11 +89,9 @@ class ResourceResolver:
         node_resources = node_resources or {}
         variables = variables or {}
         
-        # Мержим по приоритету
-        merged: Dict[str, ResourceReference] = {}
-        merged.update(flow_resources)
-        merged.update(skill_resources)
-        merged.update(node_resources)
+        merged = merge_flow_skill_node_resource_maps(
+            flow_resources, skill_resources, node_resources
+        )
         
         # Резолвим каждый ресурс
         resolved: Dict[str, Any] = {}
@@ -145,7 +147,11 @@ class ResourceResolver:
             
             # Применяем override если есть
             if ref.config:
-                merged_config = {**definition.config, **ref.config}
+                merged_config = merge_shared_definition_config_with_patch(
+                    definition.type,
+                    definition.config,
+                    ref.config,
+                )
                 definition = ResourceDefinition(
                     resource_id=definition.resource_id,
                     type=definition.type,

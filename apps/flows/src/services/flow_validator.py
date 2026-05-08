@@ -21,6 +21,21 @@ from core.urn import extract_id
 logger = get_logger(__name__)
 
 
+def _edge_endpoint_ids(edge: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    """from_node/to_node или legacy from/to."""
+    fn = edge.get("from_node")
+    if fn is None:
+        fn = edge.get("from")
+    tn = edge.get("to_node")
+    if tn is None:
+        tn = edge.get("to")
+    if not isinstance(fn, str) or fn == "":
+        fn = None
+    if not isinstance(tn, str) or tn == "":
+        tn = None
+    return (fn, tn)
+
+
 class ValidationSeverity(str, Enum):
     ERROR = "error"
     WARNING = "warning"
@@ -170,6 +185,24 @@ class FlowValidator:
                     message=f"Edge to '{to_node}' ссылается на несуществующую ноду",
                     details={"edge": edge},
                 )
+
+        for edge in edges:
+            if not isinstance(edge, dict):
+                continue
+            e_from, e_to = _edge_endpoint_ids(edge)
+            for label, nid in (("from", e_from), ("to", e_to)):
+                if not nid:
+                    continue
+                if nid not in node_ids:
+                    continue
+                ncfg = nodes.get(nid) or {}
+                if ncfg.get("type") == "resource":
+                    result.add_error(
+                        code="edge_involves_resource_node",
+                        message=f"Ребро не может соединяться с нодой type=resource ('{nid}')",
+                        node_id=nid,
+                        details={"edge": edge, "endpoint": label},
+                    )
         
         # Проверка достижимости нод от entry
         if entry and entry in node_ids:
@@ -185,9 +218,22 @@ class FlowValidator:
                 )
         
         # Проверка что граф имеет выход
-        nodes_with_outgoing = {e.get("from") for e in edges if e.get("from")}
-        terminal_nodes = node_ids - nodes_with_outgoing
-        edges_to_null = [e for e in edges if e.get("to") is None]
+        execution_node_ids = {
+            nid
+            for nid in node_ids
+            if (nodes.get(nid) or {}).get("type") != "resource"
+        }
+        nodes_with_outgoing: Set[str] = set()
+        for e in edges:
+            if not isinstance(e, dict):
+                continue
+            ef, _et = _edge_endpoint_ids(e)
+            if ef:
+                nodes_with_outgoing.add(ef)
+        terminal_nodes = execution_node_ids - nodes_with_outgoing
+        edges_to_null = [
+            e for e in edges if isinstance(e, dict) and _edge_endpoint_ids(e)[1] is None
+        ]
         
         if not terminal_nodes and not edges_to_null:
             result.add_error(
@@ -208,14 +254,15 @@ class FlowValidator:
     ) -> None:
         incoming_edge_count: Dict[str, int] = {}
         for edge in edges:
-            from_n = edge.get("from")
-            to_n = edge.get("to")
+            from_n, to_n = _edge_endpoint_ids(edge)
             if from_n and to_n:
                 incoming_edge_count[to_n] = incoming_edge_count.get(to_n, 0) + 1
         for target, edge_n in incoming_edge_count.items():
             if edge_n < 2:
                 continue
             cfg = nodes.get(target) or {}
+            if cfg.get("type") == "resource":
+                continue
             if "incoming_policy" not in cfg:
                 result.add_error(
                     code="fan_in_without_incoming_policy",

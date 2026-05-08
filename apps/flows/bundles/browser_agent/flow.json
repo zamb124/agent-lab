@@ -54,7 +54,12 @@
           "description": "Закрыть сессию и освободить ресурсы.",
           "type": "mcp"
         }
-      ]
+      ],
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     }
   },
   "edges": [
@@ -69,4 +74,3 @@
   ],
   "variables": {}
 }
-

@@ -7,6 +7,8 @@ import '../tag-input.js';
  * `config.preserve_case: true` — без toLowerCase при свободном вводе (см. tag-input preserve-case).
  */
 export class PlatformFieldArray extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: Array },
         mode: { type: String },

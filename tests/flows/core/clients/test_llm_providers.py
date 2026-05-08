@@ -128,6 +128,10 @@ class TestDetectProvider:
         result = _detect_provider("http://127.0.0.1:8014/v1")
         assert result == "provider_litserve"
 
+    def test_detect_provider_yandex(self):
+        result = _detect_provider("https://llm.api.cloud.yandex.net/v1")
+        assert result == "yandex"
+
     def test_detect_provider_none_for_unknown(self):
         """None для неизвестного URL."""
         result = _detect_provider("https://custom.llm.provider/v1")
@@ -331,6 +335,7 @@ class TestLlmNodeLLMConfig:
                 provider="bothub",
                 api_key="sk-node-api-key",
                 base_url="https://bothub.chat/api/v2/openai/v1",
+                folder_id=None,
                 max_tokens=None,
                 state=state,
             )
@@ -375,6 +380,7 @@ class TestLlmNodeLLMConfig:
                 provider="openrouter",
                 api_key="@var:my_key",
                 base_url="@var:my_url",
+                folder_id=None,
                 max_tokens=None,
                 state=state,
             )
@@ -884,6 +890,135 @@ class TestLLMModelsServiceRealAPI:
         print(f"Извлечено {len(models)} моделей: {models[:10]}...")
 
 
+class TestGetLLMYandex:
+    def test_get_llm_yandex_sets_api_key_headers(self):
+        with disable_testing_mode():
+            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+                mock_settings.return_value.llm.default_model = "yandexgpt"
+                mock_settings.return_value.llm.models = {}
+                mock_settings.return_value.llm.temperature = 0.2
+                mock_settings.return_value.llm.max_tokens = None
+                mock_settings.return_value.llm.timeout = 120.0
+                mock_settings.return_value.llm.provider = "yandex"
+                mock_settings.return_value.llm.yandex = MagicMock(
+                    api_key="AQVN-key",
+                    folder_id="folder-1",
+                    base_url="https://llm.api.cloud.yandex.net/v1",
+                )
+                mock_settings.return_value.llm.openrouter = None
+                mock_settings.return_value.llm.bothub = None
+                mock_settings.return_value.llm.openai = None
+                mock_settings.return_value.provider_litserve = MagicMock()
+
+                client = get_llm(model_name="yandexgpt")
+                assert isinstance(client, LLMClient)
+                assert client.default_headers["Authorization"] == "Api-Key AQVN-key"
+                assert client.default_headers["x-folder-id"] == "folder-1"
+                assert client.base_url == "https://llm.api.cloud.yandex.net/v1"
+
+    def test_get_llm_yandex_missing_folder_raises(self):
+        with disable_testing_mode():
+            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+                mock_settings.return_value.llm.default_model = "m"
+                mock_settings.return_value.llm.models = {}
+                mock_settings.return_value.llm.temperature = 0.2
+                mock_settings.return_value.llm.max_tokens = None
+                mock_settings.return_value.llm.timeout = 120.0
+                mock_settings.return_value.llm.provider = "yandex"
+                mock_settings.return_value.llm.yandex = MagicMock(
+                    api_key="AQVN-key",
+                    folder_id="",
+                    base_url="https://llm.api.cloud.yandex.net/v1",
+                )
+                mock_settings.return_value.llm.openrouter = None
+                mock_settings.return_value.llm.bothub = None
+                mock_settings.return_value.llm.openai = None
+                mock_settings.return_value.provider_litserve = MagicMock()
+
+                with pytest.raises(ValueError, match="folder_id"):
+                    get_llm(model_name="m")
+
+    def test_get_llm_yandex_custom_key_uses_override_folder_and_uri(self):
+        with disable_testing_mode():
+            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+                mock_settings.return_value.llm.default_model = "yandexgpt"
+                mock_settings.return_value.llm.models = {}
+                mock_settings.return_value.llm.temperature = 0.2
+                mock_settings.return_value.llm.max_tokens = None
+                mock_settings.return_value.llm.timeout = 120.0
+                mock_settings.return_value.llm.provider = "openai"
+                mock_settings.return_value.llm.yandex = MagicMock(
+                    api_key="platform",
+                    folder_id="platform-folder",
+                    base_url="https://llm.api.cloud.yandex.net/v1",
+                )
+                mock_settings.return_value.llm.openrouter = None
+                mock_settings.return_value.llm.bothub = None
+                mock_settings.return_value.llm.openai = MagicMock(base_url="https://api.openai.com/v1")
+                mock_settings.return_value.provider_litserve = MagicMock()
+
+                client = get_llm(
+                    model_name="gpt://other/yandexgpt-5.1/latest",
+                    api_key="user-key",
+                    provider="yandex",
+                    base_url="https://llm.api.cloud.yandex.net/v1",
+                    folder_id="user-folder",
+                )
+                assert isinstance(client, LLMClient)
+                assert client.default_headers["x-folder-id"] == "user-folder"
+                assert client.model == "gpt://user-folder/yandexgpt-5.1/latest"
+
+    def test_get_llm_yandex_custom_key_falls_back_platform_folder(self):
+        with disable_testing_mode():
+            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+                mock_settings.return_value.llm.default_model = "yandexgpt"
+                mock_settings.return_value.llm.models = {}
+                mock_settings.return_value.llm.temperature = 0.2
+                mock_settings.return_value.llm.max_tokens = None
+                mock_settings.return_value.llm.timeout = 120.0
+                mock_settings.return_value.llm.provider = "openai"
+                mock_settings.return_value.llm.yandex = MagicMock(
+                    api_key="platform",
+                    folder_id="platform-folder",
+                    base_url="https://llm.api.cloud.yandex.net/v1",
+                )
+                mock_settings.return_value.llm.openrouter = None
+                mock_settings.return_value.llm.bothub = None
+                mock_settings.return_value.llm.openai = MagicMock(base_url="https://api.openai.com/v1")
+                mock_settings.return_value.provider_litserve = MagicMock()
+
+                client = get_llm(
+                    model_name="gpt://stale/yandexgpt-5.1/latest",
+                    api_key="user-key",
+                    provider="yandex",
+                    base_url="https://llm.api.cloud.yandex.net/v1",
+                )
+                assert client.default_headers["x-folder-id"] == "platform-folder"
+                assert client.model == "gpt://platform-folder/yandexgpt-5.1/latest"
+
+    def test_get_llm_yandex_custom_key_without_any_folder_raises(self):
+        with disable_testing_mode():
+            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+                mock_settings.return_value.llm.default_model = "yandexgpt"
+                mock_settings.return_value.llm.models = {}
+                mock_settings.return_value.llm.temperature = 0.2
+                mock_settings.return_value.llm.max_tokens = None
+                mock_settings.return_value.llm.timeout = 120.0
+                mock_settings.return_value.llm.provider = "openai"
+                mock_settings.return_value.llm.yandex = None
+                mock_settings.return_value.llm.openrouter = None
+                mock_settings.return_value.llm.bothub = None
+                mock_settings.return_value.llm.openai = MagicMock(base_url="https://api.openai.com/v1")
+                mock_settings.return_value.provider_litserve = MagicMock()
+
+                with pytest.raises(ValueError, match="folder_id"):
+                    get_llm(
+                        model_name="gpt://b1/x/y",
+                        api_key="user-key",
+                        provider="yandex",
+                        base_url="https://llm.api.cloud.yandex.net/v1",
+                    )
+
 class TestGetDefaultBaseUrl:
     """Тесты _get_default_base_url."""
 
@@ -918,6 +1053,12 @@ class TestGetDefaultBaseUrl:
 
         result = _get_default_base_url("provider_litserve", mock_settings)
         assert result == "http://127.0.0.1:8014/v1"
+
+    def test_get_default_base_url_yandex(self):
+        mock_settings = MagicMock()
+        mock_settings.llm.yandex = MagicMock(base_url="https://llm.api.cloud.yandex.net/v1")
+        result = _get_default_base_url("yandex", mock_settings)
+        assert result == "https://llm.api.cloud.yandex.net/v1"
 
     def test_get_default_base_url_fallback(self):
         """Fallback на OpenAI для неизвестного провайдера."""

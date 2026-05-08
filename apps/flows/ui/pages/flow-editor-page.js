@@ -58,6 +58,10 @@ export class FlowEditorPage extends PlatformPage {
                 position: relative;
                 display: flex;
                 flex-direction: column;
+                /* Содержит z-index детей (тулбар 6, execution 5): иначе они бьются с rail (5)
+                   на уровне .editor-shell и перекрывают модалку/развёрнутую панель справа. */
+                isolation: isolate;
+                z-index: 0;
             }
             .editor-right-rail {
                 position: absolute;

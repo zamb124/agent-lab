@@ -162,7 +162,6 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
         this.isDirty = true;
     }
 
-    _noopRename() {}
     _noopNode() {
         this.toast('flows:embedded_tool_config.toast_cannot_delete', { type: 'info' });
     }
@@ -222,7 +221,6 @@ export class FlowsEmbeddedToolConfigModal extends PlatformFormModal {
             expanded: true,
             embedded: true,
             onChange: (e) => this._onNodeChange(e),
-            onRename: (e) => this._noopRename(e),
             onDelete: (e) => this._noopNode(e),
             onDuplicate: (e) => this._noopNode(e),
         });

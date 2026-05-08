@@ -31,8 +31,9 @@ export class SidebarSection extends PlatformElement {
                 display: none;
             }
 
-            .section-header--custom {
+            .section-header.section-header--custom {
                 justify-content: stretch;
+                padding: var(--space-2) 0;
             }
         `
     ];

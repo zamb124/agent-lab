@@ -21,7 +21,12 @@
         "browser_duckduckgo_links",
         "browser_page_markdown"
       ],
-      "output_key": "response"
+      "output_key": "response",
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     }
   },
   "edges": [

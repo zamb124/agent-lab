@@ -23,7 +23,8 @@
       "prompt": "prompts/main.md",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.2
+        "temperature": 0.2,
+        "provider": "openrouter"
       },
       "tools": [
         "ask_user",
@@ -60,7 +61,8 @@
           "prompt": "prompts/code_focus.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.15
+            "temperature": 0.15,
+            "provider": "openrouter"
           },
           "tools": [
             "ask_user",
@@ -87,7 +89,8 @@
           "prompt": "prompts/with_rag.md",
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.2
+            "temperature": 0.2,
+            "provider": "openrouter"
           },
           "tools": [
             "ask_user",

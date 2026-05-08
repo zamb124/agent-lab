@@ -28,6 +28,8 @@ DATABASE__SHARED_URL=...
 DATABASE__FLOWS_URL=...
 DATABASE__REDIS_URL=...
 LLM__OPENROUTER__API_KEY=...
+LLM__YANDEX__API_KEY=...
+LLM__YANDEX__FOLDER_ID=...
 VOICE__STT__CLOUD_RU__API_KEY=...
 SERVER__PORT=8001
 SERVER__FLOWS_SERVICE_URL=http://localhost:8001
@@ -51,7 +53,7 @@ LEGAL__COMPANY_NAME_RU=...
 | **`calls`** | LiveKit/TURN. `calls.speech_to_chat` (`SpeechToChatConfig`). Finalize записи: `finalize_recording_egress_poll_interval_seconds`, `finalize_recording_egress_wait_timeout_seconds`. |
 | **`transcribe_audio_redis_lock_ttl_seconds`** | TTL Redis lock авто-STT в sync worker. |
 | **`ws_presence_heartbeat_interval_seconds`** / **`_ttl_seconds`** / **`sync_taskiq_wait_result_timeout_seconds`** | Sync WS presence и `task.wait_result` из HTTP/WS. Валидатор: TTL ≥ 2×heartbeat + 1с. |
-| **`llm`** | `provider`, `default_model`, `openrouter`/`bothub`/…. Опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id; **каталог цен в JSON не храним**. |
+| **`llm`** | `provider`, `default_model`, `openrouter`/`bothub`/`yandex`/…. Опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id; **каталог цен в JSON не храним**. |
 | **`billing`** | См. ниже. |
 | **`provider_litserve`** | LitServe OpenAI-совместимый API (`api.base_url` корнем `…/v1`, процесс `apps/provider_litserve/main`). Для RAG-клиентов — `infra.gateway_port`. |
 | **`rag`** | `embedding`/`reranker` — `provider` + вложенный `api`. Локальные веса — `provider: provider_litserve`. `providers.agentset` — `api_key`, `base_url`, опц. `embedding_api_key`. См. `rag.mdc`. |
@@ -94,7 +96,7 @@ settings.server.get_service_url("flows")
 
 ## Секреты
 
-Только в ENV / секрет-хранилище, не в коммитимом `conf.json`. Прод (GitHub Actions → Helm): `LLM_BOTHUB_API_KEY` / `LLM_OPENROUTER_API_KEY` в GitHub Secrets → Kubernetes Secret `platform-secrets` → ENV `LLM__BOTHUB__API_KEY` / `LLM__OPENROUTER__API_KEY` через `valueFrom.secretKeyRef` в `agentlab.appEnv` (`.github/workflows/deploy.yml`, `deploy/helm/agent-lab/templates/_helpers.tpl`). Пустое ENV не перетирает JSON (`env_ignore_empty`, `remove_env_overridden_values`).
+Только в ENV / секрет-хранилище, не в коммитимом `conf.json`. Прод (GitHub Actions → Helm): `LLM_BOTHUB_API_KEY` / `LLM_OPENROUTER_API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` в GitHub Secrets → Kubernetes Secret `platform-secrets` → ENV `LLM__BOTHUB__API_KEY` / `LLM__OPENROUTER__API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` через `valueFrom.secretKeyRef` в `agentlab.appEnv` (`.github/workflows/deploy.yml`, `deploy/helm/agent-lab/templates/_helpers.tpl`). Пустое ENV не перетирает JSON (`env_ignore_empty`, `remove_env_overridden_values`).
 
 ## Куки auth и тенанты
 

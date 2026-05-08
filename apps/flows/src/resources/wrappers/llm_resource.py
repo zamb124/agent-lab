@@ -6,6 +6,7 @@ LLMResource - wrapper для llm ресурса.
 
 from typing import Any, Dict, List, Optional
 
+from apps.flows.src.runtime.llm_byok import is_llm_byok_resource
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.context import get_context
 from core.logging import get_logger
@@ -51,6 +52,9 @@ class LLMResource:
         max_tokens: Optional[int] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        folder_id: Optional[str] = None,
+        extra_request_body: Optional[Dict[str, Any]] = None,
+        extra_request_headers: Optional[Dict[str, str]] = None,
     ):
         self.provider = provider
         self.model = model
@@ -58,6 +62,13 @@ class LLMResource:
         self.max_tokens = max_tokens
         self.api_key = api_key
         self.base_url = base_url
+        self.folder_id = folder_id
+        self._extra_body = (
+            dict(extra_request_body) if extra_request_body else None
+        )
+        self._extra_headers = (
+            dict(extra_request_headers) if extra_request_headers else None
+        )
         self._client = None
     
     def _get_client(self):
@@ -70,9 +81,15 @@ class LLMResource:
                 provider=self.provider,
                 api_key=self.api_key,
                 base_url=self.base_url,
+                folder_id=self.folder_id,
             )
         return self._client
     
+    def _billing_resource_name(self) -> str:
+        if is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
+            return "llm:byok"
+        return f"llm:{self.model}"
+
     async def complete(
         self,
         prompt: str,
@@ -91,18 +108,29 @@ class LLMResource:
             Сгенерированный текст
         """
         client = self._get_client()
-        await _require_balance_for_llm_resource()
+        if not is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
+            await _require_balance_for_llm_resource()
 
+        br_name = self._billing_resource_name()
         async with traced_operation(
             "flows.llm_resource.complete",
             event_type="llm.complete",
             operation_category="llm",
             billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=f"llm:{self.model}",
+            billing_resource_name=br_name,
             billing_quantity=1,
             billing_pending_settlement=True,
         ):
-            response = await client.chat(prompt)
+            chat_kw: Dict[str, Any] = {}
+            if temperature is not None:
+                chat_kw["temperature"] = temperature
+            if max_tokens is not None:
+                chat_kw["max_tokens"] = max_tokens
+            if self._extra_body is not None:
+                chat_kw["extra_body"] = self._extra_body
+            if self._extra_headers is not None:
+                chat_kw["extra_headers"] = self._extra_headers
+            response = await client.chat(prompt, **chat_kw)
             return self._extract_text(response)
     
     async def chat(
@@ -123,18 +151,29 @@ class LLMResource:
             Ответ модели
         """
         client = self._get_client()
-        await _require_balance_for_llm_resource()
+        if not is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
+            await _require_balance_for_llm_resource()
 
+        br_name = self._billing_resource_name()
         async with traced_operation(
             "flows.llm_resource.chat",
             event_type="llm.chat",
             operation_category="llm",
             billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=f"llm:{self.model}",
+            billing_resource_name=br_name,
             billing_quantity=1,
             billing_pending_settlement=True,
         ):
-            response = await client.chat(messages)
+            chat_kw: Dict[str, Any] = {}
+            if temperature is not None:
+                chat_kw["temperature"] = temperature
+            if max_tokens is not None:
+                chat_kw["max_tokens"] = max_tokens
+            if self._extra_body is not None:
+                chat_kw["extra_body"] = self._extra_body
+            if self._extra_headers is not None:
+                chat_kw["extra_headers"] = self._extra_headers
+            response = await client.chat(messages, **chat_kw)
             return self._extract_text(response)
     
     def _extract_text(self, response: Any) -> str:
@@ -163,14 +202,16 @@ class LLMResource:
             Ответ с tool_calls если есть
         """
         client = self._get_client()
-        await _require_balance_for_llm_resource()
+        if not is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
+            await _require_balance_for_llm_resource()
 
+        br_name = self._billing_resource_name()
         async with traced_operation(
             "flows.llm_resource.chat_with_tools",
             event_type="llm.chat_with_tools",
             operation_category="llm",
             billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name=f"llm:{self.model}",
+            billing_resource_name=br_name,
             billing_quantity=1,
             billing_pending_settlement=True,
         ):

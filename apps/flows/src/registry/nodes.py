@@ -19,6 +19,7 @@ from apps.flows.src.runtime.nodes import (
     MCPNode,
     ChannelNode,
     HitlNode,
+    ResourceNode,
 )
 
 
@@ -101,7 +102,8 @@ def create_default_node_registry() -> NodeRegistry:
     registry.register(NodeType.MCP, MCPNode, {"description": "MCP tool"})
     registry.register(NodeType.CHANNEL, ChannelNode, {"description": "Отправка в канал (Telegram, Email, Webhook)"})
     registry.register(NodeType.HITL_NODE, HitlNode, {"description": "Оператор очереди (пауза до специалиста)"})
-    
+    registry.register(NodeType.RESOURCE, ResourceNode, {"description": "Нода-ресурс на графе (pass-through)"})
+
     return registry
 
 

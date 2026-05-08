@@ -1,17 +1,15 @@
 /**
  * flows-code-node-editor — редактор code-ноды.
  *
- * Поля: `code`, `args_schema` (NodeConfig / CodeNode).
- * Вкладки «Код» / «Схема» — одинаковая шапка `flows-code-editor` (slot toolbar-start + Save / Fullscreen).
+ * Поля: `code`, `args_schema`, `language` (NodeConfig / CodeNode).
+ * Область кода — `flows-code-workbench` (общий UI с code-ресурсом).
  * Если в данных был только `tool_id` без `code`, при открытии подставляется исходник из реестра, `tool_id` сбрасывается.
  */
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
-import '../editors/flows-code-editor.js';
-import '@platform/lib/components/glass-button.js';
-import '@platform/lib/components/platform-icon.js';
+import '../editors/flows-code-workbench.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class FlowsCodeNodeEditor extends PlatformElement {
@@ -28,9 +26,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         previewExecutionState: { type: Object },
         expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
-        _mainTab: { state: true },
-        _schemaInvalid: { state: true },
-        _schemaError: { state: true },
+        _hydrateKey: { state: true },
     };
 
     static styles = [
@@ -45,43 +41,6 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 gap: 0;
-            }
-            .toolbar-start-wrap {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-2);
-                width: 100%;
-                box-sizing: border-box;
-            }
-            .main-tabs {
-                display: flex;
-                gap: var(--space-1);
-                flex-wrap: wrap;
-            }
-            .main-tab {
-                padding: 6px 14px;
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-md);
-                color: var(--text-secondary);
-                font-size: var(--text-sm);
-                font-weight: var(--font-medium);
-                cursor: pointer;
-            }
-            .main-tab[active] {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                border-color: var(--accent-subtle);
-            }
-            .schema-editor-wrap[data-invalid] flows-code-editor {
-                border-color: var(--error);
-            }
-            .schema-error {
-                color: var(--error);
-                font-size: var(--text-xs);
-                margin-top: var(--space-1);
             }
         `,
     ];
@@ -98,20 +57,14 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         this.previewExecutionState = null;
         this.expanded = false;
         this.embedded = false;
-        this._mainTab = 'code';
-        this._schemaInvalid = false;
-        this._schemaError = '';
-        this._toolSource = this.useOp('flows/code_tool_source');
         this._hydrateKey = '';
+        this._toolSource = this.useOp('flows/code_tool_source');
     }
 
     willUpdate(changed) {
         super.willUpdate?.(changed);
         if (changed.has('nodeId')) {
-            this._mainTab = 'code';
             this._hydrateKey = '';
-            this._schemaInvalid = false;
-            this._schemaError = '';
         }
     }
 
@@ -153,64 +106,36 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         this.emit('change', { nodeId: this.nodeId, patch });
     }
 
-    _onCodeChange(e) {
-        this._emitPatch({ code: asString(e.detail?.value), tool_id: null });
-    }
-
-    _onSchemaEditorChange(e) {
-        const value = asString(e.detail?.value);
-        try {
-            const parsed = value.trim().length === 0 ? null : JSON.parse(value);
-            this._schemaInvalid = false;
-            this._schemaError = '';
-            this._emitPatch({ args_schema: parsed });
-        } catch (err) {
-            this._schemaInvalid = true;
-            this._schemaError = err.message;
+    _onWorkbenchChange(e) {
+        const d = e.detail;
+        if (!d || typeof d !== 'object' || !('type' in d)) {
+            throw new Error('flows-code-node-editor: code-workbench-change detail');
         }
-    }
-
-    _openDocs() {
-        this.openModal('flows.code_docs', { language: 'python' });
-    }
-
-    _renderToolbarStart() {
-        return html`
-            <div class="toolbar-start-wrap">
-                <div class="main-tabs" role="tablist">
-                    <button
-                        type="button"
-                        class="main-tab"
-                        role="tab"
-                        ?active=${this._mainTab === 'code'}
-                        @click=${() => { this._mainTab = 'code'; }}
-                    >
-                        ${this.t('code_node_editor.tab_code')}
-                    </button>
-                    <button
-                        type="button"
-                        class="main-tab"
-                        role="tab"
-                        ?active=${this._mainTab === 'schema'}
-                        @click=${() => { this._mainTab = 'schema'; }}
-                    >
-                        ${this.t('code_node_editor.tab_schema')}
-                    </button>
-                </div>
-                <glass-button size="sm" variant="ghost" @click=${this._openDocs}>
-                    <platform-icon name="info"></platform-icon>
-                    ${this.t('code_node_editor.docs')}
-                </glass-button>
-            </div>
-        `;
+        if (d.type === 'code') {
+            this._emitPatch({ code: asString(d.value), tool_id: null });
+            return;
+        }
+        if (d.type === 'args_schema') {
+            this._emitPatch({ args_schema: d.args_schema });
+            return;
+        }
+        if (d.type === 'language') {
+            if (typeof d.language !== 'string' || d.language.length === 0) {
+                throw new Error('flows-code-node-editor: language required');
+            }
+            this._emitPatch({ language: d.language });
+            return;
+        }
+        throw new Error('flows-code-node-editor: unknown code-workbench-change type');
     }
 
     render() {
-        const code = typeof this.nodeConfig?.code === 'string' ? this.nodeConfig.code : '';
-        const argsSchema = this.nodeConfig?.args_schema && typeof this.nodeConfig.args_schema === 'object'
-            ? this.nodeConfig.args_schema
+        const cfg = this.nodeConfig && typeof this.nodeConfig === 'object' ? this.nodeConfig : {};
+        const code = typeof cfg.code === 'string' ? cfg.code : '';
+        const argsSchema = cfg.args_schema && typeof cfg.args_schema === 'object' && !Array.isArray(cfg.args_schema)
+            ? cfg.args_schema
             : {};
-        const schemaText = JSON.stringify(argsSchema, null, 2);
+        const language = typeof cfg.language === 'string' && cfg.language.length > 0 ? cfg.language : 'python';
         return html`
             <flows-base-node-editor
                 .nodeId=${this.nodeId}
@@ -225,26 +150,15 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                 ?embedded=${this.embedded}
             >
                 <div slot="settings" class="settings-wrap">
-                    ${this._mainTab === 'code' ? html`
-                        <flows-code-editor
-                            language="python"
-                            .value=${code}
-                            @change=${this._onCodeChange}
-                        >
-                            <div slot="toolbar-start">${this._renderToolbarStart()}</div>
-                        </flows-code-editor>
-                    ` : html`
-                        <div class="schema-editor-wrap" ?data-invalid=${this._schemaInvalid}>
-                            <flows-code-editor
-                                language="json"
-                                .value=${schemaText}
-                                @change=${this._onSchemaEditorChange}
-                            >
-                                <div slot="toolbar-start">${this._renderToolbarStart()}</div>
-                            </flows-code-editor>
-                            ${this._schemaInvalid ? html`<div class="schema-error">${this._schemaError}</div>` : ''}
-                        </div>
-                    `}
+                    <flows-code-workbench
+                        variant="node"
+                        .scopeKey=${this.nodeId}
+                        documentation-perspective="node"
+                        .code=${code}
+                        .language=${language}
+                        .argsSchema=${argsSchema}
+                        @code-workbench-change=${this._onWorkbenchChange}
+                    ></flows-code-workbench>
                 </div>
             </flows-base-node-editor>
         `;

@@ -2,8 +2,16 @@
   "id": "internship_contract_filler",
   "name": "Заполнение договора стажировки",
   "description": "Собирает данные у пользователя и формирует заполненный договор стажировки в DOCX.",
-  "tags": ["documents", "docx", "contract", "internship"],
-  "permission": ["admin", "developers"],
+  "tags": [
+    "documents",
+    "docx",
+    "contract",
+    "internship"
+  ],
+  "permission": [
+    "admin",
+    "developers"
+  ],
   "branches": {},
   "entry": "prepare_prompt_context",
   "nodes": {
@@ -21,7 +29,12 @@
           "url": "http://localhost:8001/static/templates/internship_contract_ru.docx",
           "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         }
-      ]
+      ],
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     }
   },
   "edges": [

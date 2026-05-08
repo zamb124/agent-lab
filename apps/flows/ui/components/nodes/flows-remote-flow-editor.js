@@ -34,16 +34,6 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
         PlatformElement.styles,
         css`
             :host { display: block; height: 100%; min-height: 0; }
-            .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-            label { font-size: var(--text-sm); color: var(--text-secondary); }
-            input {
-                padding: var(--space-2);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary); font: inherit;
-                width: 100%; box-sizing: border-box;
-            }
             .toggle button {
                 padding: 4px 12px;
                 background: var(--glass-solid-subtle);
@@ -55,6 +45,15 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
             }
             .toggle button[active] { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent-subtle); }
             .row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
+            .remote-flow-endpoint-stack {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-5);
+                margin-bottom: var(--space-5);
+            }
+            .field-auth-headers {
+                margin-bottom: var(--space-3);
+            }
         `,
     ];
 
@@ -170,39 +169,44 @@ export class FlowsRemoteFlowEditor extends PlatformElement {
                             ${this.t('remote_flow_editor.mode_id')}
                         </button>
                     </div>
-                    ${mode === 'url' ? html`
+                    <div class="remote-flow-endpoint-stack">
+                        ${mode === 'url'
+                            ? html`
+                                <platform-field
+                                    mode="edit"
+                                    type="string"
+                                    input-type="url"
+                                    .label=${this.t('remote_flow_editor.url')}
+                                    .placeholder=${'https://api.example.com/a2a'}
+                                    .value=${url}
+                                    @change=${this._onUrl}
+                                ></platform-field>
+                            `
+                            : html`
+                                <platform-field
+                                    mode="edit"
+                                    type="string"
+                                    .label=${this.t('remote_flow_editor.flow_id')}
+                                    .value=${flowIdValue}
+                                    @change=${this._onFlowId}
+                                ></platform-field>
+                            `}
                         <platform-field
                             mode="edit"
                             type="string"
-                            input-type="url"
-                            .label=${this.t('remote_flow_editor.url')}
-                            .placeholder=${'https://api.example.com/a2a'}
-                            .value=${url}
-                            @change=${this._onUrl}
+                            .label=${this.t('remote_flow_editor.branch_id')}
+                            .placeholder=${'default'}
+                            .value=${branchId}
+                            @change=${this._onBranchId}
                         ></platform-field>
-                    ` : html`
-                        <platform-field
-                            mode="edit"
-                            type="string"
-                            .label=${this.t('remote_flow_editor.flow_id')}
-                            .value=${flowIdValue}
-                            @change=${this._onFlowId}
-                        ></platform-field>
-                    `}
-                    <platform-field
-                        mode="edit"
-                        type="string"
-                        .label=${this.t('remote_flow_editor.branch_id')}
-                        .placeholder=${'default'}
-                        .value=${branchId}
-                        @change=${this._onBranchId}
-                    ></platform-field>
-                    <div class="field">
-                        <label>${this.t('remote_flow_editor.auth_headers')}</label>
+                    </div>
+                    <div class="field-auth-headers">
                         <flows-json-field-editor
                             .value=${authHeaders}
                             @change=${(e) => { if (e.detail && 'parsed' in e.detail) this._onAuthHeaders(e.detail.parsed); }}
-                        ></flows-json-field-editor>
+                        >
+                            <span slot="toolbar-start">${this.t('remote_flow_editor.auth_headers')}</span>
+                        </flows-json-field-editor>
                     </div>
                 </div>
             </flows-base-node-editor>

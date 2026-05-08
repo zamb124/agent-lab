@@ -13,7 +13,8 @@
       "prompt": "Отвечай на вопросы. Отправь ответ через send_telegram.",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.2
+        "temperature": 0.2,
+        "provider": "openrouter"
       },
       "tools": [
         {

@@ -12,6 +12,7 @@ export class FlowsLlmResourceEditor extends PlatformElement {
     static properties = {
         resourceId: { type: String },
         resource: { type: Object },
+        compactHeader: { type: Boolean, reflect: true, attribute: 'compact-header' },
     };
 
     constructor() {
@@ -32,6 +33,7 @@ export class FlowsLlmResourceEditor extends PlatformElement {
                 .resourceId=${this.resourceId}
                 .resource=${this.resource}
                 .resourceType=${'llm'}
+                .compactHeader=${this.compactHeader}
                 @change=${(e) => this.emit('change', e.detail)}
             >
                 <div slot="settings">

@@ -15,13 +15,23 @@
         "type": "code",
         "description": "Форматирует приветствие с именем пользователя",
         "args_schema": {
-          "name": {"type": "string", "description": "Имя пользователя"},
-          "style": {"type": "string", "description": "Стиль приветствия: formal или casual"}
+          "name": {
+            "type": "string",
+            "description": "Имя пользователя"
+          },
+          "style": {
+            "type": "string",
+            "description": "Стиль приветствия: formal или casual"
+          }
         },
         "code": "async def execute(args, state):\n    name = args.get('name', 'Гость')\n    style = args.get('style', 'casual')\n    if style == 'formal':\n        return f'Уважаемый {name}, добро пожаловать!'\n    return f'Привет, {name}!'"
       }
     ],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.3}
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.3,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "explicit_finish_agent",
@@ -29,8 +39,16 @@
     "name": "Нода с явным завершением (строгий)",
     "description": "Строгий EXPLICIT режим: если LLM вернёт текст без finish - получит reminder и должен исправиться.",
     "prompt": "Ты ассистент-калькулятор.\n\nДОСТУПНЫЕ ИНСТРУМЕНТЫ:\n- calculator: выполняет математические вычисления\n- ask_user: задать уточняющий вопрос пользователю\n- finish: ОБЯЗАТЕЛЬНО вызови для завершения и возврата ответа\n\nПРАВИЛА:\n1. Если запрос неясен - используй ask_user для уточнения\n2. Когда пользователь просит посчитать - используй calculator\n3. После получения результата - ОБЯЗАТЕЛЬНО вызови finish(answer='...')\n4. НИКОГДА не отвечай текстом напрямую - только через finish\n\nПример 1 (ясный запрос):\nПользователь: Сколько будет 2+2?\n1. Вызываешь calculator(expression='2+2') -> получаешь 4\n2. Вызываешь finish(answer='2+2 = 4')\n\nПример 2 (нужно уточнение):\nПользователь: Посчитай\n1. Вызываешь ask_user(question='Что именно посчитать?')\n2. Пользователь: 5*5\n3. Вызываешь calculator(expression='5*5') -> получаешь 25\n4. Вызываешь finish(answer='5*5 = 25')",
-    "tools": ["calculator", "ask_user", "finish"],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.1},
+    "tools": [
+      "calculator",
+      "ask_user",
+      "finish"
+    ],
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.1,
+      "provider": "openrouter"
+    },
     "react": {
       "loop_mode": "explicit",
       "exit_tool": "finish",
@@ -45,8 +63,15 @@
     "name": "Нода с явным завершением (нестрогий)",
     "description": "Нестрогий EXPLICIT режим (strict=false): текст без finish тоже принимается как ответ.",
     "prompt": "Ты помощник. Используй calculator для вычислений. Желательно завершай через finish, но текстовый ответ тоже допустим.",
-    "tools": ["calculator", "finish"],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.2},
+    "tools": [
+      "calculator",
+      "finish"
+    ],
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.2,
+      "provider": "openrouter"
+    },
     "react": {
       "loop_mode": "explicit",
       "exit_tool": "finish",
@@ -60,8 +85,15 @@
     "name": "Subflow-помощник",
     "description": "Вложенный llm_node для сбора информации от пользователя. Задаёт уточняющие вопросы и возвращает собранные данные.",
     "prompt_file": "prompts/subflow.md",
-    "tools": ["ask_user", "reason"],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.2}
+    "tools": [
+      "ask_user",
+      "reason"
+    ],
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.2,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "evaluation_tester",
@@ -70,7 +102,11 @@
     "description": "Тестирует flow ведя диалог как пользователь. Завершает диалог когда собрал достаточно информации для оценки.",
     "prompt_file": "prompts/evaluation_tester.md",
     "tools": [],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.5}
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.5,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "evaluation_judge",
@@ -79,7 +115,11 @@
     "description": "Оценивает качество диалога между тестером и тестируемым flow. Выставляет оценку по критериям.",
     "prompt_file": "prompts/evaluation_judge.md",
     "tools": [],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.1}
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.1,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "example_hitl_tool_agent",
@@ -87,8 +127,16 @@
     "name": "HITL: тул hitl_operator_task",
     "description": "ReAct-агент с эскалацией в очередь операторов через hitl_operator_task (демо-очередь example_hitl).",
     "prompt_file": "prompts/hitl_tool.md",
-    "tools": ["calculator", "ask_user", "hitl_operator_task"],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.2}
+    "tools": [
+      "calculator",
+      "ask_user",
+      "hitl_operator_task"
+    ],
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.2,
+      "provider": "openrouter"
+    }
   },
   {
     "id": "example_gdocs_agent",
@@ -108,6 +156,10 @@
       "gdocs_delete_range",
       "gdocs_share_document"
     ],
-    "llm": {"model": "qwen/qwen3.5-397b-a17b", "temperature": 0.2}
+    "llm": {
+      "model": "qwen/qwen3.5-397b-a17b",
+      "temperature": 0.2,
+      "provider": "openrouter"
+    }
   }
 ]

@@ -549,6 +549,7 @@ class PlatformTracer:
         provider_reported_cost: Optional[float] = None,
         provider_upstream_inference_cost: Optional[float] = None,
         settlement_quantity_rub: Optional[int] = None,
+        billing_resource_name: Optional[str] = None,
     ) -> None:
         """Записывает результат LLM вызова в span и помечает для billing settlement."""
         total_tokens = input_tokens + output_tokens
@@ -577,10 +578,11 @@ class PlatformTracer:
 
         span_attrs = getattr(span, "attributes", None) or {}
         model = span_attrs.get(attr.ATTR_LLM_MODEL, "unknown")
+        resource_name = billing_resource_name if billing_resource_name else f"llm:{model}"
         span.set_attributes(
             {
                 attr.ATTR_BILLING_USAGE_TYPE: "llm_request",
-                attr.ATTR_BILLING_RESOURCE_NAME: f"llm:{model}",
+                attr.ATTR_BILLING_RESOURCE_NAME: resource_name,
                 attr.ATTR_BILLING_QUANTITY: total_tokens,
                 attr.ATTR_BILLING_PENDING_SETTLEMENT: True,
             }

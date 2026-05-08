@@ -6,6 +6,8 @@ const ISO_DATE_VALUE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_DATETIME_VALUE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
 export class PlatformFieldDate extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: String },
         mode: { type: String },

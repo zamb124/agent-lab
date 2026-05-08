@@ -292,6 +292,8 @@ jobs:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           LLM_BOTHUB_API_KEY: ${{ secrets.LLM_BOTHUB_API_KEY }}
           LLM_OPENROUTER_API_KEY: ${{ secrets.LLM_OPENROUTER_API_KEY }}
+          LLM_YANDEX_API_KEY: ${{ secrets.LLM__YANDEX__API_KEY }}
+          LLM_YANDEX_FOLDER_ID: ${{ secrets.LLM__YANDEX__FOLDER_ID }}
           STT_CLOUD_RU_API_KEY: ${{ secrets.STT__CLOUD_RU__API_KEY }}
           STT_YANDEX_API_KEY: ${{ secrets.VOICE__STT__YANDEX__API_KEY }}
           STT_YANDEX_FOLDER_ID: ${{ secrets.VOICE__STT__YANDEX__FOLDER_ID }}

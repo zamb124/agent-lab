@@ -64,9 +64,20 @@ def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
                     "(rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
                 )
                 return llm_key
+    if getattr(settings.llm, "provider", None) == "yandex":
+        yc = getattr(settings.llm, "yandex", None)
+        if yc is not None:
+            llm_key = _normalize_embedding_api_key(getattr(yc, "api_key", None))
+            if llm_key:
+                logger.info(
+                    "pgvector: для embeddings используется llm.yandex.api_key "
+                    "(rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
+                )
+                return llm_key
     raise ValueError(
         "Нужен rag.providers.pgvector.embedding_api_key (OpenRouter sk-or-...) "
-        "или llm.openrouter.api_key при llm.provider=openrouter. "
+        "или llm.openrouter.api_key при llm.provider=openrouter, "
+        "или llm.yandex.api_key при llm.provider=yandex. "
         "При rag.embedding.provider=provider_litserve ключ из pgvector не обязателен. "
         "Плейсхолдеры YOUR_* из conf.json не считаются ключом. "
         "ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
@@ -133,6 +144,19 @@ class PgVectorProvider(BaseRAGProvider):
         if not dimension:
             raise ValueError("embedding.dimension обязателен в конфигурации")
 
+        embedding_extra_headers = None
+        root_for_yandex_check = (embedding_base_url or "").strip()
+        if "llm.api.cloud.yandex.net" in root_for_yandex_check:
+            from core.config.llm_openai_compat import yandex_provider_http_headers
+
+            yc = get_settings().llm.yandex
+            if yc is None:
+                raise ValueError(
+                    "Embedding base_url указывает на llm.api.cloud.yandex.net: задайте блок llm.yandex "
+                    "(api_key, folder_id)."
+                )
+            embedding_extra_headers = yandex_provider_http_headers(yc)
+
         self._embedding_service = EmbeddingService(
             api_key=api_key,
             models=[model],
@@ -140,6 +164,7 @@ class PgVectorProvider(BaseRAGProvider):
             timeout=timeout,
             dimension=dimension,
             mrl_output_dimension=mrl_output_dimension,
+            extra_headers=embedding_extra_headers,
         )
 
         if (

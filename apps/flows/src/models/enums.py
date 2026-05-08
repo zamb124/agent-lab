@@ -41,6 +41,7 @@ class NodeType(str, Enum):
     MCP = "mcp"                     # MCP Tool как нода
     CHANNEL = "channel"             # Отправка сообщений в каналы (Telegram, Email)
     HITL_NODE = "hitl_node"         # Передача диалога оператору очереди (operator_task)
+    RESOURCE = "resource"           # Нода-ресурс на графе (привязка flow/skill resources; pass-through)
 
 
 class ReactToolRole(str, Enum):

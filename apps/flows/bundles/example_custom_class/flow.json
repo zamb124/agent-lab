@@ -18,7 +18,8 @@
       ],
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.3
+        "temperature": 0.3,
+        "provider": "openrouter"
       }
     },
     "preprocessor": {
@@ -30,7 +31,8 @@
       ],
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.5
+        "temperature": 0.5,
+        "provider": "openrouter"
       }
     }
   },

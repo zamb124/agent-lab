@@ -8,7 +8,7 @@
 
 from core.logging import get_logger
 import tiktoken
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING
@@ -70,6 +70,7 @@ class EmbeddingService:
         timeout: int = 15,
         dimension: Optional[int] = None,
         mrl_output_dimension: Optional[int] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ):
         if not api_key:
             raise ValueError("API key обязателен для EmbeddingService")
@@ -87,6 +88,7 @@ class EmbeddingService:
                 )
         
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
+        self._extra_headers: Dict[str, str] = dict(extra_headers) if extra_headers else {}
         
         # Список моделей для fallback
         if models:
@@ -131,6 +133,8 @@ class EmbeddingService:
             "HTTP-Referer": "https://humanitec.ru",
             "X-Title": "Humanitec RAG",
         }
+        if self._extra_headers:
+            headers = {**headers, **self._extra_headers}
         
         try:
             async with get_httpx_client(

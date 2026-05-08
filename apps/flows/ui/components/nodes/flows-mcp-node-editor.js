@@ -404,7 +404,6 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                 ?expanded=${this.expanded}
                 ?embedded=${this.embedded}
                 @change=${(e) => this.emit('change', e.detail)}
-                @rename-node=${(e) => this.emit('rename-node', e.detail)}
                 @delete-node=${(e) => this.emit('delete-node', e.detail)}
                 @duplicate-node=${(e) => this.emit('duplicate-node', e.detail)}
             >

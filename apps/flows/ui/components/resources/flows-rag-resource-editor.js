@@ -21,6 +21,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
     static properties = {
         resourceId: { type: String },
         resource: { type: Object },
+        compactHeader: { type: Boolean, reflect: true, attribute: 'compact-header' },
     };
 
     static styles = [
@@ -53,6 +54,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
         super();
         this.resourceId = '';
         this.resource = null;
+        this.compactHeader = false;
     }
 
     _emitConfig(patch) {
@@ -118,6 +120,7 @@ export class FlowsRagResourceEditor extends PlatformElement {
                 .resourceId=${this.resourceId}
                 .resource=${this.resource}
                 .resourceType=${'rag'}
+                .compactHeader=${this.compactHeader}
                 @change=${(e) => this.emit('change', e.detail)}
             >
                 <div slot="settings" class="body">

@@ -66,7 +66,8 @@
     "usd_to_rub_rate": 85.0,
     "resource_base_prices": {
       "llm": {
-        "*": 0.0001
+        "*": 0.0001,
+        "byok": 0
       },
       "embedding": {
         "*": 5e-05
@@ -221,6 +222,11 @@
     "bothub": {
       "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQ2MDlhMGUzLTRlZWMtNDNkYS05MTVmLTBmODIwYmMzYzA2OCIsImlzRGV2ZWxvcGVyIjp0cnVlLCJpYXQiOjE3NjUyODMyNzksImV4cCI6MjA4MDg1OTI3OX0.VhTw2NjuStn_LjhrxNOoDOP00XQNSjAMU6jkiK8mjjQ",
       "base_url": "https://bothub.chat/api/v2/openai/v1"
+    },
+    "yandex": {
+      "api_key": "YOUR_YANDEX_API_KEY",
+      "folder_id": "b1go18q7gmbn3vmrqp0f",
+      "base_url": "https://llm.api.cloud.yandex.net/v1"
     },
     "default_model": "x-ai/grok-code-fast-1",
     "default_summarization_model": "x-ai/grok-4-fast",

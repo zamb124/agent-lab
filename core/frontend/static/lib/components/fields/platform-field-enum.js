@@ -46,6 +46,8 @@ function _normalizeOption(raw) {
 }
 
 export class PlatformFieldEnum extends PlatformElement {
+    static i18nNamespace = 'platform';
+
     static properties = {
         value: { type: String },
         mode: { type: String },

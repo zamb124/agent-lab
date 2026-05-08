@@ -393,6 +393,8 @@ platformSecrets:
   grafanaAdminPassword: ""
   llmBothubApiKey: ""
   llmOpenrouterApiKey: ""
+  llmYandexApiKey: ""
+  llmYandexFolderId: ""
   sttCloudRuApiKey: ""
   sttYandexApiKey: ""
   sttYandexFolderId: ""

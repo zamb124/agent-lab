@@ -17,7 +17,9 @@
  * UX:
  *   - drag нод pointermove с snap-to-guide;
  *   - drag-create узла из <flows-node-types-sidebar>:
- *     `application/x-flow-node-type` для нод, `application/x-flow-resource-type` для ресурсов;
+ *     `application/x-flow-node-type` для нод, `application/x-flow-resource-type` для ресурсов
+ *     (drop на канву / порт / тело ноды; ресурс на ноде — flow resource + ссылка в node.resources;
+ *      ресурс на пустой канве — flow resource + нода type `resource` с привязкой);
  *   - draw edges с output-порта на input-порт;
  *   - zoom: ctrl + wheel; pan: пробел/middle-mouse-drag/tool=pan;
  *   - select: click; multi-select: shift+drag по фону → bounding-rect;
@@ -91,6 +93,9 @@ export class FlowsFlowCanvas extends PlatformElement {
         _spacePressed: { state: true },
         _pan: { state: true },
         _hoverEdgeIndex: { state: true },
+        _paletteDndActive: { state: true },
+        _paletteDndHoverNodeId: { state: true },
+        _paletteDndMode: { state: true },
     };
 
     static styles = [
@@ -461,6 +466,13 @@ export class FlowsFlowCanvas extends PlatformElement {
                 filter: drop-shadow(0 0 12px var(--accent));
             }
             svg.canvas-host[data-link-mode] { cursor: crosshair; }
+
+            svg.canvas-host[data-palette-dnd-active] { cursor: copy; }
+            g.node[data-palette-drop-target] .node-card {
+                stroke: var(--success);
+                stroke-width: 2.5;
+                filter: drop-shadow(0 0 12px color-mix(in srgb, var(--success) 38%, transparent));
+            }
         `,
     ];
 
@@ -474,6 +486,9 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._spacePressed = false;
         this._pan = null;
         this._hoverEdgeIndex = -1;
+        this._paletteDndActive = false;
+        this._paletteDndHoverNodeId = null;
+        this._paletteDndMode = null;
         this._editor = this.useOp('flows/editor');
         this._bulkDelete = this.useOp('flows/editor_bulk_delete');
         this._stickyUpsert = this.useOp('flows/sticky_note_upsert');
@@ -484,17 +499,20 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._pointerDownAt = null;
         this._pointerMoved = false;
         this._lastAutoFitKey = null;
+        this._onDocumentDragEnd = this._onDocumentDragEnd.bind(this);
     }
 
     connectedCallback() {
         super.connectedCallback();
         document.addEventListener('keydown', this._onDocKeyDown);
         document.addEventListener('keyup', this._onDocKeyUp);
+        document.addEventListener('dragend', this._onDocumentDragEnd);
     }
 
     disconnectedCallback() {
         document.removeEventListener('keydown', this._onDocKeyDown);
         document.removeEventListener('keyup', this._onDocKeyUp);
+        document.removeEventListener('dragend', this._onDocumentDragEnd);
         super.disconnectedCallback();
     }
 
@@ -541,6 +559,45 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (!ctm) return { x: 0, y: 0 };
         const local = pt.matrixTransform(ctm.inverse());
         return { x: local.x, y: local.y };
+    }
+
+    _inferPaletteDndMode(e) {
+        const types = e.dataTransfer?.types;
+        if (!types) return null;
+        const hasNode = types.includes('application/x-flow-node-type');
+        const hasRes = types.includes('application/x-flow-resource-type');
+        if (hasRes) return 'resource';
+        if (hasNode) return 'node';
+        return null;
+    }
+
+    _clearPaletteDndVisual() {
+        if (!this._paletteDndActive && this._paletteDndHoverNodeId == null && this._paletteDndMode == null) {
+            return;
+        }
+        this._paletteDndActive = false;
+        this._paletteDndHoverNodeId = null;
+        this._paletteDndMode = null;
+        this.requestUpdate();
+    }
+
+    _onDocumentDragEnd() {
+        this._clearPaletteDndVisual();
+    }
+
+    _findNodeAtLocal(local) {
+        const nodes = this._nodes();
+        let hit = null;
+        for (const [id, node] of Object.entries(nodes)) {
+            const x = asNumber(node.pos_x);
+            const y = asNumber(node.pos_y);
+            const w = NODE_W;
+            const h = getNodeCanvasHeight(node);
+            if (local.x >= x && local.x <= x + w && local.y >= y && local.y <= y + h) {
+                hit = id;
+            }
+        }
+        return hit;
     }
 
     /* ===== Document hotkeys ===== */
@@ -777,7 +834,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         if (e.button !== 0 || side !== 'out') return;
         e.stopPropagation();
         const node = this._nodes()[nodeId];
-        if (!node) return;
+        if (!node || this._isResourceNode(node)) return;
         const start = this._portCoords(node, 'out');
         this._connection = { fromNode: nodeId, x1: start.x, y1: start.y, x2: start.x, y2: start.y };
         this.renderRoot.querySelector('svg.canvas-host').setPointerCapture(e.pointerId);
@@ -925,12 +982,20 @@ export class FlowsFlowCanvas extends PlatformElement {
             const targetNodeId = target?.dataset?.nodeId;
             const targetSide = target?.dataset?.portSide;
             if (targetNodeId && targetSide === 'in' && targetNodeId !== this._connection.fromNode) {
-                const data = this._branchData();
-                const edges = [...asArray(data.edges), { from_node: this._connection.fromNode, to_node: targetNodeId }];
-                const next = { ...data, edges };
-                this._editor.updateBranchData({ data: next });
-                this._editor.pushHistory({ snapshot: next });
-                this._editor.setDirty({ dirty: true });
+                const nodes = this._nodes();
+                const fromNodeId = this._connection.fromNode;
+                const fromN = nodes[fromNodeId];
+                const toN = nodes[targetNodeId];
+                if (this._isResourceNode(fromN) || this._isResourceNode(toN)) {
+                    this.toast('flows:canvas.resource_node_no_edges', { type: 'warning' });
+                } else {
+                    const data = this._branchData();
+                    const edges = [...asArray(data.edges), { from_node: fromNodeId, to_node: targetNodeId }];
+                    const next = { ...data, edges };
+                    this._editor.updateBranchData({ data: next });
+                    this._editor.pushHistory({ snapshot: next });
+                    this._editor.setDirty({ dirty: true });
+                }
             }
             this._connection = null;
             this._pointerDownAt = null;
@@ -1075,11 +1140,75 @@ export class FlowsFlowCanvas extends PlatformElement {
 
     /* ===== Drag-and-drop create ===== */
     _onDragOver(e) {
-        const types = e.dataTransfer.types;
-        if (types.includes('application/x-flow-node-type') || types.includes('application/x-flow-resource-type')) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
+        const mode = this._inferPaletteDndMode(e);
+        if (!mode) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        let dirty = false;
+        if (!this._paletteDndActive) {
+            this._paletteDndActive = true;
+            dirty = true;
         }
+        if (this._paletteDndMode !== mode) {
+            this._paletteDndMode = mode;
+            dirty = true;
+        }
+        if (mode === 'resource') {
+            const local = this._localPoint(e.clientX, e.clientY);
+            const hit = this._findNodeAtLocal(local);
+            if (this._paletteDndHoverNodeId !== hit) {
+                this._paletteDndHoverNodeId = hit;
+                dirty = true;
+            }
+        } else if (this._paletteDndHoverNodeId != null) {
+            this._paletteDndHoverNodeId = null;
+            dirty = true;
+        }
+        if (dirty) this.requestUpdate();
+    }
+
+    _onNodeCardDragOver(e, nodeId) {
+        const mode = this._inferPaletteDndMode(e);
+        if (!mode) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        let dirty = false;
+        if (!this._paletteDndActive) {
+            this._paletteDndActive = true;
+            dirty = true;
+        }
+        if (this._paletteDndMode !== mode) {
+            this._paletteDndMode = mode;
+            dirty = true;
+        }
+        if (mode === 'resource' && this._paletteDndHoverNodeId !== nodeId) {
+            this._paletteDndHoverNodeId = nodeId;
+            dirty = true;
+        }
+        if (dirty) this.requestUpdate();
+    }
+
+    _onNodeCardDragLeave(e, nodeId) {
+        const mode = this._inferPaletteDndMode(e);
+        if (mode !== 'resource') return;
+        const rel = e.relatedTarget;
+        if (rel instanceof Node && e.currentTarget.contains(rel)) return;
+        if (this._paletteDndHoverNodeId === nodeId) {
+            this._paletteDndHoverNodeId = null;
+            this.requestUpdate();
+        }
+    }
+
+    _onNodeCardDrop(e, nodeId) {
+        const nodeType = e.dataTransfer.getData('application/x-flow-node-type');
+        const resourceType = e.dataTransfer.getData('application/x-flow-resource-type');
+        if (!nodeType && !resourceType) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this._clearPaletteDndVisual();
+        const local = this._localPoint(e.clientX, e.clientY);
+        this._applyPaletteDrop({ local, nodeType, resourceType, htmlTargetNodeId: nodeId });
     }
 
     _onDrop(e) {
@@ -1087,7 +1216,13 @@ export class FlowsFlowCanvas extends PlatformElement {
         const resourceType = e.dataTransfer.getData('application/x-flow-resource-type');
         if (!nodeType && !resourceType) return;
         e.preventDefault();
+        this._clearPaletteDndVisual();
         const local = this._localPoint(e.clientX, e.clientY);
+        this._applyPaletteDrop({ local, nodeType, resourceType, htmlTargetNodeId: null });
+    }
+
+    _applyPaletteDrop(ctx) {
+        const { local, nodeType, resourceType, htmlTargetNodeId } = ctx;
         const data = this._branchData();
         if (nodeType) {
             if (nodeType === 'code') {
@@ -1119,13 +1254,53 @@ export class FlowsFlowCanvas extends PlatformElement {
             return;
         }
         if (resourceType) {
-            const id = genId('r');
-            const resources = { ...asObject(data.resources), [id]: { type: resourceType, name: resourceType, config: {} } };
-            const next = { ...data, resources };
+            const rid = genId('r');
+            const flowResources = { ...asObject(data.resources), [rid]: { type: resourceType, name: resourceType, config: {} } };
+            let nextNodes = { ...asObject(data.nodes) };
+            let attachId = typeof htmlTargetNodeId === 'string' && htmlTargetNodeId.length > 0
+                ? htmlTargetNodeId
+                : this._findNodeAtLocal(local);
+            if (!nextNodes[attachId]) {
+                attachId = null;
+            }
+            let newWrapperNodeId = null;
+            if (attachId) {
+                const target = nextNodes[attachId];
+                const prevRes = isPlainObject(target.resources) ? { ...target.resources } : {};
+                prevRes[rid] = { resource_id: rid };
+                nextNodes = { ...nextNodes, [attachId]: { ...target, resources: prevRes } };
+            } else {
+                newWrapperNodeId = genId('n');
+                nextNodes = {
+                    ...nextNodes,
+                    [newWrapperNodeId]: {
+                        type: 'resource',
+                        name: resourceType,
+                        pos_x: local.x - NODE_W / 2,
+                        pos_y: local.y - NODE_H / 2,
+                        resources: { [rid]: { resource_id: rid } },
+                    },
+                };
+            }
+            let next = { ...data, resources: flowResources, nodes: nextNodes };
+            if (newWrapperNodeId !== null) {
+                const ent = typeof next.entry === 'string' ? next.entry : '';
+                if (ent.length === 0 || !nextNodes[ent]) {
+                    next = { ...next, entry: newWrapperNodeId };
+                }
+            }
             this._editor.updateBranchData({ data: next });
             this._editor.pushHistory({ snapshot: next });
             this._editor.setDirty({ dirty: true });
-            this._editor.selectResource({ resourceId: id });
+            if (attachId) {
+                this._editor.selectNode({ nodeId: attachId });
+                const tnode = nextNodes[attachId];
+                const nm = typeof tnode.name === 'string' && tnode.name.length > 0 ? tnode.name : attachId;
+                this.toast('flows:canvas.resource_attached_to_node', { type: 'success', vars: { resource: resourceType, node: nm } });
+            } else if (newWrapperNodeId !== null) {
+                this._editor.selectNode({ nodeId: newWrapperNodeId });
+                this.toast('flows:canvas.resource_dropped_new_node', { type: 'success', vars: { resource: resourceType } });
+            }
         }
     }
 
@@ -1387,6 +1562,11 @@ export class FlowsFlowCanvas extends PlatformElement {
         this.requestUpdate();
     }
 
+    /** Нода `resource` не соединяется рёбрами исполнения. */
+    _isResourceNode(node) {
+        return isPlainObject(node) && node.type === 'resource';
+    }
+
     /* ===== Render ===== */
     _renderFanInBadge(id, node) {
         const policy = node.incoming_policy === 'all' ? 'all' : 'any';
@@ -1452,10 +1632,17 @@ export class FlowsFlowCanvas extends PlatformElement {
         else if (isPlainObject(state.erroredNodes) && state.erroredNodes[id]) runtimeState = 'error';
         else if (asArray(state.completedNodeIds).includes(id)) runtimeState = 'completed';
         const isInherited = asArray(state.inheritedNodeIds).includes(id);
-        const showFanIn = inDegree >= 2;
+        const isResource = this._isResourceNode(node);
+        const showFanInEffective = !isResource && inDegree >= 2;
         const hasToolStrip = canvasTools.length > 0;
         const foBody = html`
-            <div xmlns="http://www.w3.org/1999/xhtml" class="node-card-content ${hasToolStrip ? 'has-tools' : ''}">
+            <div
+                xmlns="http://www.w3.org/1999/xhtml"
+                class="node-card-content ${hasToolStrip ? 'has-tools' : ''}"
+                @dragover=${(ev) => this._onNodeCardDragOver(ev, id)}
+                @dragleave=${(ev) => this._onNodeCardDragLeave(ev, id)}
+                @drop=${(ev) => this._onNodeCardDrop(ev, id)}
+            >
                 <div class="node-card-main">
                     <div class="node-icon-wrap" data-cat=${meta.category}>
                         <platform-icon name=${meta.icon} size="18"></platform-icon>
@@ -1500,6 +1687,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 ?data-multi-selected=${isMulti}
                 ?data-inherited=${isInherited}
                 data-state=${asString(runtimeState)}
+                ?data-palette-drop-target=${this._paletteDndMode === 'resource' && this._paletteDndHoverNodeId === id}
                 @pointerdown=${(e) => this._onPointerDownNode(e, id)}
                 @contextmenu=${(e) => this._onContextMenu(e, 'node', id)}
                 @dblclick=${() => this._editor.selectNode({ nodeId: id })}
@@ -1508,21 +1696,23 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <foreignObject x="0" y="0" width=${NODE_W} height=${h}>${foBody}</foreignObject>
                 ${hasBp ? svg`<circle class="badge-bp-circle" cx=${NODE_W - 8} cy="8" r="5"></circle>` : ''}
                 ${isInherited ? svg`<text class="badge-inherited" x="6" y=${h - 6} font-size="10">↑</text>` : ''}
-                ${showFanIn
+                ${showFanInEffective
                     ? this._renderFanInBadge(id, node)
-                    : svg`
+                    : (!isResource ? svg`
                         <circle
                             class="port in"
                             cx="0" cy=${h / 2} r=${PORT_R}
                             data-node-id=${id} data-port-side="in"
                         ></circle>
-                    `}
+                    ` : '')}
+                ${!isResource ? svg`
                 <circle
                     class="port"
                     cx=${NODE_W} cy=${h / 2} r=${PORT_R}
                     data-node-id=${id} data-port-side="out"
                     @pointerdown=${(e) => this._onPointerDownPort(e, id, 'out')}
                 ></circle>
+                ` : ''}
             </g>
         `;
     }
@@ -1702,12 +1892,16 @@ export class FlowsFlowCanvas extends PlatformElement {
     _renderContextMenu() {
         const menu = this._state().contextMenu;
         if (!menu) return '';
+        const nodes = this._nodes();
+        const tid = typeof menu.targetId === 'string' ? menu.targetId : '';
+        const resourceNode = menu.target === 'node' && tid.length > 0 && this._isResourceNode(nodes[tid]);
         return html`
             <flows-canvas-context-menu
                 .x=${menu.x}
                 .y=${menu.y}
                 target=${menu.target}
                 target-id=${asString(menu.targetId)}
+                .resourceNode=${resourceNode}
                 @action=${this._onContextMenuAction}
                 @close=${() => this._editor.closeContextMenu({})}
             ></flows-canvas-context-menu>
@@ -1732,7 +1926,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             if (!nodes[from] || !nodes[to]) continue;
             fromIds.add(from);
         }
-        const orphanNodes = Object.entries(nodes).filter(([id]) => !fromIds.has(id));
+        const orphanNodes = Object.entries(nodes).filter(([nid, n]) => !fromIds.has(nid) && !this._isResourceNode(n));
         const entryId = typeof state.entryNodeId === 'string' && state.entryNodeId.length > 0
             ? state.entryNodeId
             : (typeof skillsData.entry === 'string' && skillsData.entry.length > 0 ? skillsData.entry : null);
@@ -1753,6 +1947,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                 data-tool=${activeTool}
                 ?data-pan-active=${panActive}
                 ?data-link-mode=${linkMode}
+                ?data-palette-dnd-active=${this._paletteDndActive}
                 @wheel=${this._onWheel}
                 @pointerdown=${this._onPointerDownBackground}
                 @pointermove=${this._onPointerMove}

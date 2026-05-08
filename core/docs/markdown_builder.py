@@ -39,6 +39,39 @@ def _escape_html_text(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _entry_point_section_lines(lang: str, perspective: str) -> list[str]:
+    """Секция «точка входа» для ноды code и inline tool (execute_tool), не codegen run(state)."""
+    if lang != "python":
+        return []
+    if perspective not in ("editor", "node", "tool"):
+        return []
+    sample_execute = """def execute(args, state):
+    return {}"""
+    sample_tool_class = """class MyTool(BaseTool):
+    async def run(self, args, state):
+        return {}"""
+    return [
+        '<h2 id="doc-entry">Точка входа (нода <code>code</code> и inline tool)</h2>',
+        "",
+        "Один и тот же рантайм: `PythonCodeRunner.execute_tool`. Не путать с codegen-путём "
+        "`async def run(state): ...` (`PythonCodeRunner.execute`, другой контракт).",
+        "",
+        "В порядке приоритета компилятор ищет:",
+        "",
+        "1. Класс, наследник `BaseTool`, с методом `run(self, args, state)`.",
+        "2. Функцию `execute` (sync или async) с аргументами `args` и при необходимости `state`.",
+        "3. Иначе — **последнюю** top-level функцию в файле; `args` маппятся в параметры по имени.",
+        "",
+        "**Пример (функция):**",
+        "",
+        _fence_python(sample_execute),
+        "**Пример (класс):**",
+        "",
+        _fence_python(sample_tool_class),
+        "",
+    ]
+
+
 def build_documentation_markdown(
     response: DocumentationResponse,
     *,
@@ -50,11 +83,13 @@ def build_documentation_markdown(
     """
     lang = response.language
     persp = response.perspective
+    entry_lines = _entry_point_section_lines(lang, persp)
     h1 = title or f"Документация inline-кода ({lang}, ракурс: {persp})"
 
-    toc: list[str] = [
-        "- [Глобальные объекты](#doc-globals)",
-    ]
+    toc: list[str] = []
+    if entry_lines:
+        toc.append("- [Точка входа (code / tool)](#doc-entry)")
+    toc.append("- [Глобальные объекты](#doc-globals)")
     if response.runtime_namespace_extras is not None:
         toc.append("- [Доп. символы sandbox](#doc-runtime-namespace)")
     toc_tail = [
@@ -75,6 +110,8 @@ def build_documentation_markdown(
         *toc,
         "",
     ]
+    if entry_lines:
+        lines.extend(entry_lines)
 
     lines.append('<h2 id="doc-globals">Глобальные объекты</h2>')
     lines.append("")

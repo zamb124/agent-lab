@@ -252,3 +252,32 @@ async def test_flow_validator_warns_fan_in_without_policy() -> None:
     result = await validator.validate(nodes, edges, "a", {}, flow_id="x")
     codes = {e.code for e in result.errors}
     assert "fan_in_without_incoming_policy" in codes
+
+
+@pytest.mark.asyncio
+async def test_flow_validator_rejects_edge_involving_resource_node() -> None:
+    from apps.flows.src.services.flow_validator import FlowValidator
+
+    validator = FlowValidator()
+    nodes = {
+        "a": {"type": "code", "code": "def execute(a,s): return {}"},
+        "r": {"type": "resource", "resources": {}},
+    }
+    edges = [{"from": "a", "to": "r"}]
+    result = await validator.validate(nodes, edges, "a", {}, flow_id="x")
+    codes = {e.code for e in result.errors}
+    assert "edge_involves_resource_node" in codes
+
+
+@pytest.mark.asyncio
+async def test_flow_validator_no_exit_ignores_isolated_resource_node() -> None:
+    from apps.flows.src.services.flow_validator import FlowValidator
+
+    validator = FlowValidator()
+    nodes = {
+        "a": {"type": "code", "code": "def execute(a,s): return {}"},
+        "r": {"type": "resource"},
+    }
+    edges = [{"from": "a", "to": None}]
+    result = await validator.validate(nodes, edges, "a", {}, flow_id="x")
+    assert not any(e.code == "no_exit" for e in result.errors)

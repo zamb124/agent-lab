@@ -10,6 +10,10 @@
  *
  * Slot 'settings' — type-specific поля (`config: dict`).
  *
+ * `compactHeader` — карточка закреплённого ресурса на resource-ноде: без шапки
+ * (id / имя / описание / теги); только `slot settings`. Метаданные ресурса — в каталоге
+ * или в панели ресурса.
+ *
  * Эмитит наружу `change { resourceId, patch }` — patch содержит изменённые
  * top-level поля ресурса (name, description, tags) или config (от слота).
  */
@@ -23,12 +27,16 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         resourceId: { type: String },
         resource: { type: Object },
         resourceType: { type: String },
+        compactHeader: { type: Boolean, reflect: true, attribute: 'compact-header' },
     };
 
     static styles = [
         PlatformElement.styles,
         css`
             :host { display: block; padding: var(--space-3); color: var(--text-primary); }
+            :host([compact-header]) {
+                padding: 0;
+            }
             .header {
                 display: flex; flex-direction: column; gap: var(--space-2);
                 padding-bottom: var(--space-3);
@@ -66,6 +74,7 @@ export class FlowsBaseResourceEditor extends PlatformElement {
         this.resourceId = '';
         this.resource = null;
         this.resourceType = '';
+        this.compactHeader = false;
     }
 
     _emitPatch(patch) {
@@ -119,6 +128,9 @@ export class FlowsBaseResourceEditor extends PlatformElement {
 
     render() {
         if (!this.resource) return html`<div>${this.t('property_panel.select_resource')}</div>`;
+        if (this.compactHeader) {
+            return html`<slot name="settings"></slot>`;
+        }
         const name = typeof this.resource.name === 'string' ? this.resource.name : this.resourceId;
         const description = typeof this.resource.description === 'string' ? this.resource.description : '';
         const tags = Array.isArray(this.resource.tags) ? this.resource.tags : [];

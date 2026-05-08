@@ -67,6 +67,7 @@ UI-фабрика `chatSendOp`/`chatCancelOp` (`transport: 'http'`, `apps/flows/
 | `mcp` | `MCPNode` | MCP tools |
 | `channel` | `ChannelNode` | Отправка (Telegram, Webhook) |
 | `hitl_node` | `HitlNode` | Human-in-the-loop, очередь оператора |
+| `resource` | `ResourceNode` | Нода-ресурс на графе (`node.resources`); рантайм pass-through, merge ресурсов через тот же путь, что у остальных нод |
 
 В `nodes[*].type` допускаются **только** значения из таблицы. Строк `tool` / `function` как типа ноды графа **нет** (`tool`/`function` — wire-формат OpenAI в сообщениях).
 
@@ -159,7 +160,15 @@ Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 | `http` | `HTTPResource` | HTTP-клиент с `base_url` |
 | `secret` | `str` | Секрет из variables |
 
-Иерархия: Flow → Branch → Node (каждый уровень переопределяет предыдущий). Shared из БД: `{"resource_id": "shared_faq_rag"}` или с переопределением: `{"resource_id": "shared_rag", "override_config": {...}}`. Объекты доступны как переменные в inline-коде и LlmNode tools (`await kb.search(...)`, `await storage.write(...)`, `await cache.get(...)`).
+Иерархия слоёв (инвариант merge): **L0** `FlowConfig.resources` (база), **L1** `BranchConfig.resources` (skill/variant), **L2** `NodeConfig.resources`. Для одного логического ключа карты **склеиваются по ключам**: последующий слой перекрывает предыдущий при конфликте **разных ссылок** на тот же ключ; реализация — `merge_flow_skill_node_resource_maps` (`apps/flows/src/resources/merge.py`), тот же порядок, что в `ResourceResolver.resolve_for_node`.
+
+**Shared из БД:** `{"resource_id": "shared_faq_rag"}` или с переопределением полей: `{"resource_id": "shared_rag", "config": {...}}`. Поле `config` у reference — **типизированный patch** к материализованному shared: для `ResourceType.LLM` слияние через `LLMResourcePatch` (extra=forbid), deep merge `extra_request_body`, поверхностное объединение `extra_request_headers`; для остальных типов — shallow `{**base, **patch}` с последующей строгой `parse_typed_resource_config` (`merge_shared_definition_config_with_patch`). Два inline под одним ключом с **разными** `type` — ошибка на валидации, не «тихий» выбор победителя.
+
+Inline на слое — полный `config` целевого типа. **Типизированный union** конфигов: `ResourceConfigUnion` + фабрика `parse_typed_resource_config(type, dict)` (`apps/flows/src/models/resource.py`).
+
+**LLM resource island:** оверлей `node.llm` на привязанный LLM в карте ветки использует те же правила patch, что и shared override (`merge_llm_resource_config_with_patch` / `merge_llm_resource_patch_dicts` в `apps/flows/src/resources/merge_llm.py`).
+
+Объекты доступны как переменные в inline-коде и LlmNode tools (`await kb.search(...)`, `await storage.write(...)`, `await cache.get(...)`).
 
 ## Bundles
 
@@ -170,7 +179,19 @@ Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
 - `output_schema_file: "schemas/bar.json"` → `output_schema` (поле `output_schema_file` удаляется);
 - `store_card_image: "assets/card.png"` → S3 (публичный объект); в `FlowConfig` сохраняется `store_card_image_url`. Строка `https://...` в `store_card_image` — готовый URL без повторной загрузки. Альтернатива: `store_card_image_url` в `flow.json`.
 
+`FlowsLoader` читает секцию `defaults.llm` из `apps/flows/registry.yaml` (мерж в `NodeLLMOverride` при загрузке из `nodes.json`); там должен быть явный `provider` (платформенный slug: `openrouter`, `openai`, `bothub`, `provider_litserve`, `yandex`).
+
 В JSON ноды `llm` — `llm_override` (не `llm_config`).
+
+Явная маршрутизация через платформенный провайдер в одной строке `model`: префикс `<slug>:` (первое вхождение `:`), где `slug` ∈ `openrouter` | `openai` | `bothub` | `provider_litserve` | `yandex`, затем id модели для этого шлюза (например `openrouter:openai/gpt-4o`). Узор `vendor/model` без такого префикса не трогается. Явное поле `provider` у ноды в bundle предпочтительно; при полном отсутствии сработает слияние `defaults.llm` из registry, иначе — глобальный `settings.llm.provider`. Нормализация при парсинге: `NodeLLMOverride` и `get_llm`.
+
+**Yandex:** при собственном `api_key` в `llm_override` или LLM-ресурсе укажите `folder_id` каталога облака (если не достаточно глобального `llm.yandex.folder_id`). Перед запросом сегмент каталога в идентификаторе вида `gpt://…` / `emb://…` приводится к этому `folder_id`, чтобы совпадал с заголовком `x-folder-id`.
+
+**Доп. тело и заголовки HTTP:** в `NodeLLMOverride` и `LLMResourceConfig` поля `extra_request_body` и `extra_request_headers` (для заголовков — объект только со строковыми ключами и строковыми значениями; в значениях поддерживается `@var:` с резолвом из `ExecutionState.variables` на вызове ноды). В `LLMClient` дополнительные поля JSON-тела и заголовков мержатся **последними** и **перекрывают** всё, что собрал рантайм, включая `Authorization`, `Content-Type` и провайдерские `default_headers`. В логах маскируются чувствительные заголовки (в т.ч. вида `*api-key*`).
+
+**Пресет LLM из ресурсов графа:** опциональное поле `llm_resource_key` в `NodeLLMOverride` — ключ из словаря `resources` после мержа flow → skill → node. В UI: у `llm_node` в `node.resources` остаётся одно закрепление каталожного `llm` (при выборе другого LLM в списке предыдущее снимается и заменяется); закрепление выставляет `llm_resource_key`. Если ключ пуст, а в merge **ровно один** LLM (inline или shared), рантайм подставляет его перед `LlmNodeRunner` (`infer_unique_llm_resource_key_from_merged_maps`). При нескольких LLM в merge без явного ключа merge не выполняется. Базовая конфигурация из `ResourceType.LLM` подмешивается асинхронно; поля ноды с непустыми значениями перекрывают базу. Явный ключ указывает на несуществующую запись или не-`llm` — ошибка (zero-guess).
+
+**BYOK (свой ключ / endpoint):** если в эффективном переопределении ноды непустые `api_key` и/или `base_url`, pre-flight проверки баланса перед вызовом LLM в ноде не выполняется; в биллинге span используется `llm:byok` вместо `llm:{model}`. Аналогично для `LLMResource` при собственных `api_key`/`base_url` в конфиге ресурса. Базовая цена — `billing.resource_base_prices.llm.byok` (типично `0`).
 
 **HITL в bundles:** demo-очередь slug `example_hitl` создаётся при `init_company_resources` и при `TESTING=true` после `load_flows_to_db` — `ensure_example_hitl_queue` (`apps/flows/src/services/operator_demo_queue.py`). Примеры — `example_react`, `example_graph` (нода `hitl_node`).
 

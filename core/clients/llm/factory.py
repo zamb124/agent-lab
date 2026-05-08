@@ -34,6 +34,9 @@ from a2a.types import (
 from a2a.utils.message import get_message_text, new_agent_text_message
 
 from core.config import get_settings
+from core.config.base import BaseSettings
+from core.config.openai_v1_base_url import normalize_openai_v1_base_url
+from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
 from core.config.testing import is_testing as _is_testing
 from core.clients.llm.logging import log_llm_stream_response
 from core.logging import get_logger
@@ -45,6 +48,7 @@ from core.clients.llm.mock import (
     _global_mock_registry,
     get_global_mock_llm,
 )
+from core.clients.llm.model_routing import split_provider_prefixed_model
 
 logger = get_logger(__name__)
 
@@ -53,10 +57,52 @@ T = TypeVar("T", bound=BaseModel)
 
 def _masked_headers(headers: Dict[str, str]) -> Dict[str, str]:
     sanitized = dict(headers)
-    auth_header = sanitized.get("Authorization")
-    if auth_header:
-        sanitized["Authorization"] = "Bearer ***"
+    for key in list(sanitized.keys()):
+        lk = key.lower()
+        if lk == "authorization" or lk in ("api-key", "x-api-key") or lk.endswith("-api-key"):
+            sanitized[key] = "***"
     return sanitized
+
+
+def _yandex_openai_root(settings: BaseSettings) -> str:
+    cfg = settings.llm.yandex
+    if cfg is None:
+        return normalize_openai_v1_base_url("https://llm.api.cloud.yandex.net/v1")
+    return yandex_llm_openai_root_from_provider_cfg(cfg)
+
+
+def _yandex_auth_headers(*, api_key: str, folder_id: str) -> Dict[str, str]:
+    fid = folder_id.strip()
+    if not fid:
+        raise ValueError("Yandex LLM: folder_id пуст")
+    key = api_key.strip()
+    if not key:
+        raise ValueError("Yandex LLM: api_key пуст")
+    return {
+        "Authorization": f"Api-Key {key}",
+        "x-folder-id": fid,
+    }
+
+
+_YANDEX_MODEL_URI_PREFIXES = ("gpt://", "emb://")
+
+
+def normalize_yandex_resource_model_uri(model: str, folder_id: str) -> str:
+    """Заменяет сегмент каталога в gpt:// и emb:// на folder_id (согласование с x-folder-id)."""
+    fid = folder_id.strip()
+    if not fid:
+        return model
+    for prefix in _YANDEX_MODEL_URI_PREFIXES:
+        if not model.startswith(prefix):
+            continue
+        rest = model[len(prefix) :]
+        if "/" not in rest:
+            return model
+        old_folder, tail = rest.split("/", 1)
+        if old_folder == fid:
+            return model
+        return f"{prefix}{fid}/{tail}"
+    return model
 
 
 def _pretty_json(data: Dict[str, Any]) -> str:
@@ -371,6 +417,7 @@ class LLMClient:
         seed: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream-first метод вызова LLM.
@@ -392,17 +439,20 @@ class LLMClient:
             seed: Seed для детерминизма
             reasoning_effort: Усилие reasoning (OpenAI-совместимые API)
             extra_body: Доп. поля JSON-тела; мержатся последними (перекрывают остальное)
+            extra_headers: Доп. HTTP заголовки; мерж последним (перекрывают Authorization и default_headers)
         """
         task_id = task_id or str(uuid.uuid4())
         context_id = context_id or task_id
 
         openai_messages = _messages_to_openai(messages)
 
-        headers = {
+        headers: Dict[str, str] = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            **self.default_headers,
         }
+        headers.update(self.default_headers)
+        if extra_headers:
+            headers.update(extra_headers)
 
         actual_temperature = temperature if temperature is not None else self.temperature
         actual_max_tokens = max_tokens if max_tokens is not None else self.max_tokens
@@ -676,6 +726,8 @@ class LLMClient:
         messages: List[Message],
         json_output: bool = False,
         max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> str | Dict[str, Any]:
         """
         Non-streaming вызов LLM.
@@ -686,28 +738,36 @@ class LLMClient:
             messages: Список A2A сообщений (может содержать FilePart)
             json_output: Запросить JSON формат ответа
             max_tokens: Максимальное количество токенов
-            
+            extra_body: Доп. поля JSON-тела; мержатся последними
+            extra_headers: Доп. HTTP заголовки; мерж последним
+
         Returns:
             Строка или dict (при json_output=True)
         """
         openai_messages = _messages_to_openai(messages)
-        
-        headers = {
+
+        headers: Dict[str, str] = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            **self.default_headers,
         }
-        
+        headers.update(self.default_headers)
+        if extra_headers:
+            headers.update(extra_headers)
+
         body: Dict[str, Any] = {
             "model": self.model,
             "messages": openai_messages,
             "temperature": self.temperature,
             "max_tokens": max_tokens or self.max_tokens or 4096,
         }
-        
+
         if json_output:
             body["response_format"] = {"type": "json_object"}
-        
+
+        if extra_body:
+            for key, val in extra_body.items():
+                body[key] = val
+
         logger.info(f"LLM invoke: model={self.model}, messages={len(openai_messages)}, json_output={json_output}")
         logger.info(
             "LLM INVOKE REQUEST:\n"
@@ -755,6 +815,7 @@ class LLMClient:
         seed: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> T: ...
 
     @overload
@@ -774,6 +835,7 @@ class LLMClient:
         seed: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> Message: ...
 
     async def chat(
@@ -792,6 +854,7 @@ class LLMClient:
         seed: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> Message | T:
         """
         Единый метод вызова LLM.
@@ -871,6 +934,7 @@ class LLMClient:
             seed=seed,
             reasoning_effort=reasoning_effort,
             extra_body=extra_body,
+            extra_headers=extra_headers,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
                 if (
@@ -942,8 +1006,8 @@ def _detect_provider(base_url: Optional[str]) -> Optional[str]:
         return "openrouter"
     if "bothub.chat" in base_url:
         return "bothub"
-    if "openai.com" in base_url:
-        return "openai"
+    if "llm.api.cloud.yandex.net" in base_url:
+        return "yandex"
     return None
 
 
@@ -953,6 +1017,7 @@ def get_llm(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    folder_id: Optional[str] = None,
     max_tokens: Optional[int] = None,
     state: Optional["ExecutionState"] = None,
 ) -> LLMClient | MockLLM:
@@ -962,14 +1027,19 @@ def get_llm(
     Args:
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub, provider_litserve)
+        provider: Провайдер (openai, openrouter, bothub, provider_litserve, yandex)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
+        folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
         max_tokens: Лимит токенов ответа (если None — из настроек модели / глобальных)
         state: ExecutionState для резолюции @var:
     """
     settings = get_settings()
     model = model_name or settings.llm.default_model
+    split_prov, split_model = split_provider_prefixed_model(provider, model)
+    if split_prov is not None:
+        provider = split_prov
+    model = split_model if split_model is not None else model
 
     _testing = _is_testing()
 
@@ -985,6 +1055,7 @@ def get_llm(
     # Резолвим @var: если указаны
     resolved_api_key = _resolve_var(api_key, state)
     resolved_base_url = _resolve_var(base_url, state)
+    resolved_folder_id = _resolve_var(folder_id, state)
     
     model_config = settings.llm.models.get(model)
     temp = (
@@ -1003,14 +1074,40 @@ def get_llm(
     if resolved_api_key:
         actual_provider = provider or _detect_provider(resolved_base_url) or settings.llm.provider
         actual_base_url = resolved_base_url or _get_default_base_url(actual_provider, settings)
-        
-        default_headers = {}
+
+        default_headers: Dict[str, str] = {}
         if actual_provider == "openrouter" and settings.llm.openrouter:
             default_headers = {
                 "HTTP-Referer": settings.llm.openrouter.site_url,
                 "X-Title": settings.llm.openrouter.site_name,
             }
-        
+        if actual_provider == "yandex":
+            yc = settings.llm.yandex
+            platform_fid = (
+                str(yc.folder_id).strip()
+                if yc and yc.folder_id and str(yc.folder_id).strip()
+                else ""
+            )
+            override_fid = (
+                str(resolved_folder_id).strip()
+                if resolved_folder_id and str(resolved_folder_id).strip()
+                else ""
+            )
+            effective_folder = override_fid or platform_fid
+            if not effective_folder:
+                raise ValueError(
+                    "Yandex LLM: задайте folder_id в переопределении ноды/ресурса "
+                    "или llm.yandex.folder_id"
+                )
+            default_headers = _yandex_auth_headers(
+                api_key=resolved_api_key,
+                folder_id=effective_folder,
+            )
+            model = normalize_yandex_resource_model_uri(model, effective_folder)
+
+        if actual_provider == "yandex":
+            actual_base_url = normalize_openai_v1_base_url(str(actual_base_url).strip())
+
         logger.info(f"[get_llm] Using custom api_key for provider={actual_provider}, base_url={actual_base_url}")
         return LLMClient(
             model=model,
@@ -1075,6 +1172,27 @@ def get_llm(
             llm_provider=actual_provider,
         )
 
+    if actual_provider == "yandex":
+        cfg = settings.llm.yandex
+        if not cfg or not cfg.api_key:
+            raise ValueError("Yandex LLM API key не настроен")
+        if not cfg.folder_id or not str(cfg.folder_id).strip():
+            raise ValueError("Yandex LLM folder_id не настроен")
+        fid = str(cfg.folder_id).strip()
+        model = normalize_yandex_resource_model_uri(model, fid)
+        root = _yandex_openai_root(settings)
+        auth = _yandex_auth_headers(api_key=str(cfg.api_key), folder_id=fid)
+        return LLMClient(
+            model=model,
+            api_key=str(cfg.api_key).strip(),
+            base_url=root,
+            temperature=temp,
+            max_tokens=resolved_max_tokens,
+            timeout=timeout,
+            default_headers=auth,
+            llm_provider=actual_provider,
+        )
+
     if actual_provider == "provider_litserve":
         cfg = settings.provider_litserve
         base_url = cfg.resolve_openai_v1_base_url()
@@ -1091,7 +1209,7 @@ def get_llm(
     raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")
 
 
-def _get_default_base_url(provider: str, settings) -> str:
+def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
     """Возвращает base_url по умолчанию для провайдера."""
     if provider == "openrouter":
         return settings.llm.openrouter.base_url if settings.llm.openrouter else "https://openrouter.ai/api/v1"
@@ -1099,6 +1217,8 @@ def _get_default_base_url(provider: str, settings) -> str:
         return settings.llm.bothub.base_url if settings.llm.bothub else "https://bothub.chat/api/v2/openai/v1"
     if provider == "openai":
         return settings.llm.openai.base_url if settings.llm.openai else "https://api.openai.com/v1"
+    if provider == "yandex":
+        return _yandex_openai_root(settings)
     if provider == "provider_litserve":
         return settings.provider_litserve.resolve_openai_v1_base_url()
     return "https://api.openai.com/v1"
@@ -1111,6 +1231,7 @@ def get_llm_for_state(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    folder_id: Optional[str] = None,
     max_tokens: Optional[int] = None,
 ) -> LLMClient | MockLLM:
     """
@@ -1120,9 +1241,10 @@ def get_llm_for_state(
         state: ExecutionState
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub, provider_litserve)
+        provider: Провайдер (openai, openrouter, bothub, provider_litserve, yandex)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
+        folder_id: Каталог Yandex Cloud при кастомном api_key / override
         max_tokens: Лимит токенов ответа для ноды
         
     Returns:
@@ -1148,6 +1270,7 @@ def get_llm_for_state(
         provider=provider,
         api_key=api_key,
         base_url=base_url,
+        folder_id=folder_id,
         max_tokens=max_tokens,
         state=state,
     )
@@ -1210,6 +1333,25 @@ def get_vision_llm(
             base_url=cfg.base_url,
             temperature=0.1,
             timeout=timeout,
+        )
+
+    if provider == "yandex":
+        cfg = settings.llm.yandex
+        if not cfg or not cfg.api_key:
+            raise ValueError("Yandex LLM API key не настроен")
+        if not cfg.folder_id or not str(cfg.folder_id).strip():
+            raise ValueError("Yandex LLM folder_id не настроен")
+        root = _yandex_openai_root(settings)
+        auth = _yandex_auth_headers(api_key=str(cfg.api_key), folder_id=str(cfg.folder_id))
+        model_norm = normalize_yandex_resource_model_uri(model_name, str(cfg.folder_id).strip())
+        return LLMClient(
+            model=model_norm,
+            api_key=str(cfg.api_key).strip(),
+            base_url=root,
+            temperature=0.1,
+            timeout=timeout,
+            default_headers=auth,
+            llm_provider=provider,
         )
 
     if provider == "provider_litserve":

@@ -11,6 +11,7 @@
  *   - readonly: boolean
  *   - placeholder: string (опц.)
  *   - showToolbar: boolean (шапка: полноэкран, подсказка про сохранение)
+ *   - headerOnly: boolean — только шапка (слот + Save/Fullscreen), без CodeMirror (для соседнего контента под шапкой)
  *   - slot `toolbar-start` — светлый DOM слева в шапке (вкладки «Код»/«Схема» и т.п.).
  *   - completionContext: object (опц.) — передаётся в payload `flows/code_completions`.
  *
@@ -44,6 +45,7 @@ export class FlowsCodeEditor extends PlatformElement {
         readonly: { type: Boolean },
         placeholder: { type: String },
         showToolbar: { type: Boolean, attribute: 'show-toolbar' },
+        headerOnly: { type: Boolean, reflect: true, attribute: 'header-only' },
         fillParent: { type: Boolean, reflect: true, attribute: 'fill-parent' },
         fullscreen: { type: Boolean, reflect: true, attribute: 'fullscreen' },
         completionContext: { type: Object, attribute: false },
@@ -61,6 +63,12 @@ export class FlowsCodeEditor extends PlatformElement {
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 font-family: var(--font-mono, monospace);
+            }
+            :host([header-only]) {
+                min-height: 0;
+            }
+            :host([header-only]) .editor-root {
+                min-height: 0;
             }
             :host([fullscreen]) {
                 position: fixed;
@@ -134,13 +142,15 @@ export class FlowsCodeEditor extends PlatformElement {
             }
             .editor-header {
                 display: flex;
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 align-items: center;
                 justify-content: space-between;
                 gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
                 background: var(--glass-tint-medium);
                 border-bottom: 1px solid var(--border-subtle);
+                overflow-x: auto;
+                scrollbar-width: thin;
             }
             .editor-header-leading {
                 flex: 1 1 auto;
@@ -150,14 +160,14 @@ export class FlowsCodeEditor extends PlatformElement {
             }
             .editor-header-trailing {
                 display: flex;
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 align-items: center;
                 gap: var(--space-2);
                 flex: 0 0 auto;
             }
             .header-actions {
                 display: flex;
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 align-items: center;
                 gap: var(--space-2);
             }
@@ -203,6 +213,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this.readonly = false;
         this.placeholder = '';
         this.showToolbar = true;
+        this.headerOnly = false;
         this.fillParent = false;
         this.fullscreen = false;
         this.completionContext = null;
@@ -226,7 +237,7 @@ export class FlowsCodeEditor extends PlatformElement {
         super.connectedCallback();
         window.addEventListener('keydown', this._onWindowKeydown, true);
         this.updateComplete.then(() => {
-            if (!this.isConnected) {
+            if (!this.isConnected || this.headerOnly) {
                 return;
             }
             void this._ensureEditorMounted();
@@ -245,6 +256,17 @@ export class FlowsCodeEditor extends PlatformElement {
 
     updated(changed) {
         super.updated?.(changed);
+        if (changed.has('headerOnly')) {
+            if (this.headerOnly) {
+                if (this._editorView) {
+                    this._editorView.destroy();
+                    this._editorView = null;
+                }
+                this._initInFlight = null;
+            } else if (!this._editorView && this.isConnected) {
+                void this._ensureEditorMounted();
+            }
+        }
         if (this._editorView && (changed.has('fillParent') || changed.has('fullscreen'))) {
             queueMicrotask(() => {
                 if (this._editorView) {
@@ -296,6 +318,9 @@ export class FlowsCodeEditor extends PlatformElement {
     }
 
     async _ensureEditorMounted() {
+        if (this.headerOnly) {
+            return;
+        }
         if (this._editorView) {
             return;
         }
@@ -319,7 +344,7 @@ export class FlowsCodeEditor extends PlatformElement {
 
     async _init(host) {
         const cm = await loadCodeMirror();
-        if (!this.isConnected || this._editorView) {
+        if (!this.isConnected || this._editorView || this.headerOnly) {
             return;
         }
         this._cm = cm;
@@ -492,9 +517,13 @@ export class FlowsCodeEditor extends PlatformElement {
                         </div>
                     `
                     : ''}
+                ${this.headerOnly
+                    ? ''
+                    : html`
                 <div id="cm-wrap">
                     <div id="cm-host"></div>
                 </div>
+                `}
             </div>
         `;
     }

@@ -6,8 +6,6 @@
  *
  * Действия от base-node-editor:
  *   - 'change' { nodeId, patch } → updateBranchData(merge node)
- *   - 'rename-node' { oldId, newId } → renameNodeId(action) + bus event
- *     `flows/editor/node_id_changed` → reducer обновляет nodes/edges/entry
  *   - 'delete-node' { nodeId } → bulk_delete + локальный removeNode
  *   - 'duplicate-node' { nodeId } → клонирует node под новым id
  */
@@ -73,19 +71,6 @@ export class FlowsPropertyPanel extends PlatformElement {
         this._editor.pushHistory({ snapshot: { ...skillsData, nodes } });
     }
 
-    _onRenameNode(e) {
-        const { oldId, newId } = isPlainObject(e.detail) ? e.detail : {};
-        if (typeof oldId !== 'string' || typeof newId !== 'string') return;
-        const state = this._editor.state;
-        const nodes = state?.branchData?.nodes;
-        if (!nodes || !(oldId in nodes)) return;
-        if (newId in nodes) {
-            this.toast('flows:base_node_editor.rename_collision', { type: 'error' });
-            return;
-        }
-        this._editor.renameNodeId({ oldId, newId });
-    }
-
     async _onDeleteNode(e) {
         const { nodeId } = isPlainObject(e.detail) ? e.detail : {};
         if (typeof nodeId !== 'string' || !nodeId) return;
@@ -146,7 +131,6 @@ export class FlowsPropertyPanel extends PlatformElement {
             expanded,
             embedded: false,
             onChange: (e) => this._onChange(e),
-            onRename: (e) => this._onRenameNode(e),
             onDelete: (e) => this._onDeleteNode(e),
             onDuplicate: (e) => this._onDuplicateNode(e),
         });

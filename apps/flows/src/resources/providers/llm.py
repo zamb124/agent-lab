@@ -52,4 +52,7 @@ class LLMResourceProvider(BaseResourceProvider):
             max_tokens=config.max_tokens,
             api_key=config.api_key,
             base_url=config.base_url,
+            folder_id=config.folder_id,
+            extra_request_body=config.extra_request_body,
+            extra_request_headers=config.extra_request_headers,
         )

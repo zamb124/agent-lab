@@ -15,7 +15,7 @@ Tools = inline-конфиги внутри ноды / `FlowConfig`. Встрое
 ## Документация для редактора кода
 
 - **`GET /flows/api/v1/code/completions`** — JSON: модули, globals, builtins, `module_methods`, `state_fields`, шаблоны, `platform_tools` (тулы из `tool_repository` текущей компании + недостающие из процессного `ToolRegistry`).
-- **`GET /flows/api/v1/code/documentation`** — то же + Markdown-секция platform tools (`language`, `perspective`).
+- **`GET /flows/api/v1/code/documentation`** — Markdown (`language`, `perspective`: `editor` \| `node` \| `tool`). Первый якорь `#doc-entry`: графовая нода `type=code` и inline tool с LLM исполняются через **`PythonCodeRunner.execute_tool`** (тот же контракт: `execute` / `BaseTool` / последняя top-level функция). Не путать с codegen-путём **`PythonCodeRunner.execute`** / `async def run(state)`.
 - Сборка тулов — `apps/flows/src/services/platform_tool_docs.py`; MD — `core/docs/markdown_builder.py`; UI — `code-docs-modal`.
 
 ## Встроенные тулы
@@ -36,6 +36,8 @@ Tools = inline-конфиги внутри ноды / `FlowConfig`. Встрое
 ## Материализация
 
 Единый путь — `ToolRegistry.materialize` (алиас `create_tool`). Сначала проверяется builtin `FunctionTool` (если в конфиге нет inline `code`); при совпадении возвращается напрямую. Если в конфиге есть `code` (FlowsLoader инлайнит из `tool_repository`) — создаётся `CodeTool`: `exec` в namespace из `PythonNamespaceBuilder`. Код опирается только на whitelist (`eval.mdc`). `CodeTool` не регистрируется отдельным классом в `ToolRegistry.register`; при необходимости скрыт от completions через `listed_in_platform_tool_docs=False`.
+
+**Нода графа `code`:** рантайм `CodeNode` вызывает тот же `execute_tool`, что и `CodeTool` (см. `apps/flows/src/runtime/nodes.py`). Контракт точки входа совпадает с inline tool, не с `run(state)`.
 
 Состав sandbox namespace тут не дублируется — SSOT `apps/flows/src/eval/namespace.py`, проверка `make check-inline-docs`, справка редактора — `core/docs/data/python/globals.py`. Чтение файлов — `await reader.read(...)`; запись — `await writer.write(...)` / `create_file`.
 

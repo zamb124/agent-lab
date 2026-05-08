@@ -140,6 +140,46 @@ class LLMModelsService:
         logger.info(f"OpenAI: получено {len(models)} моделей")
         return models
 
+    async def _fetch_yandex_models(self) -> List[str]:
+        """Запрос моделей от Yandex OpenAI-совместимого API."""
+        settings = get_settings()
+        cfg = settings.llm.yandex
+        if not cfg or not cfg.api_key:
+            logger.warning("Yandex LLM API key не настроен")
+            return []
+        if not cfg.folder_id or not str(cfg.folder_id).strip():
+            logger.warning("Yandex LLM folder_id не настроен")
+            return []
+
+        from core.config.llm_openai_compat import (
+            yandex_llm_openai_root_from_provider_cfg,
+            yandex_provider_http_headers,
+        )
+
+        base = yandex_llm_openai_root_from_provider_cfg(cfg)
+        url = f"{base}/models"
+        headers = {
+            **yandex_provider_http_headers(cfg),
+            "Content-Type": "application/json",
+        }
+
+        from core.http.client import request_with_strategy, ProxyStrategy
+
+        response = await request_with_strategy(
+            "GET",
+            url,
+            headers=headers,
+            timeout=30.0,
+            strategy=ProxyStrategy.DIRECT_FIRST,
+            direct_attempts=3,
+            proxy_attempts=3,
+        )
+        response.raise_for_status()
+        data = response.json()
+        models = [item["id"] for item in data.get("data", [])]
+        logger.info(f"Yandex LLM: получено {len(models)} моделей")
+        return models
+
     async def _fetch_provider_litserve_models(self) -> List[str]:
         """Запрос моделей от provider_litserve OpenAI-совместимого API."""
         settings = get_settings()
@@ -163,6 +203,8 @@ class LLMModelsService:
             return await self._fetch_openrouter_models()
         elif provider == "openai":
             return await self._fetch_openai_models()
+        elif provider == "yandex":
+            return await self._fetch_yandex_models()
         elif provider == "provider_litserve":
             return await self._fetch_provider_litserve_models()
         else:
@@ -218,6 +260,9 @@ class LLMModelsService:
         if settings.llm.openai and settings.llm.openai.api_key:
             results["openai"] = await self.sync_models_by_provider("openai")
 
+        if settings.llm.yandex and settings.llm.yandex.api_key and settings.llm.yandex.folder_id:
+            results["yandex"] = await self.sync_models_by_provider("yandex")
+
         # provider_litserve
         provider_cfg = settings.provider_litserve
         if provider_cfg.api.base_url:
@@ -242,8 +287,8 @@ class LLMModelsService:
         """Список реально настроенных LLM-провайдеров из conf.json.
 
         Провайдер считается настроенным, если в `settings.llm.<provider>` присутствует
-        api_key (для openai/openrouter/bothub) либо если для provider_litserve
-        задан base_url. Тот же критерий используется в `sync_all_providers`.
+        api_key (для openai/openrouter/bothub), для yandex — ещё и непустой folder_id,
+        либо если для provider_litserve задан base_url.
         """
         settings = get_settings()
         providers: List[str] = []
@@ -253,6 +298,13 @@ class LLMModelsService:
             providers.append("openrouter")
         if settings.llm.bothub and settings.llm.bothub.api_key:
             providers.append("bothub")
+        if (
+            settings.llm.yandex
+            and settings.llm.yandex.api_key
+            and settings.llm.yandex.folder_id
+            and str(settings.llm.yandex.folder_id).strip()
+        ):
+            providers.append("yandex")
         if settings.provider_litserve.api.base_url:
             providers.append("provider_litserve")
         return providers

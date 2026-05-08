@@ -16,19 +16,39 @@
   "nodes": {
     "main": {
       "type": "llm_node",
-      "node_id": "example_main_agent"
+      "node_id": "example_main_agent",
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     },
     "direct_subflow": {
       "type": "llm_node",
-      "node_id": "example_subflow"
+      "node_id": "example_subflow",
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     },
     "explicit_loop": {
       "type": "llm_node",
-      "node_id": "explicit_finish_agent"
+      "node_id": "explicit_finish_agent",
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     },
     "explicit_relaxed": {
       "type": "llm_node",
-      "node_id": "explicit_relaxed_agent"
+      "node_id": "explicit_relaxed_agent",
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     }
   },
   "edges": [
@@ -414,7 +434,8 @@
           ],
           "llm": {
             "model": "qwen/qwen3.5-397b-a17b",
-            "temperature": 0.3
+            "temperature": 0.3,
+            "provider": "openrouter"
           }
         }
       },
@@ -545,7 +566,12 @@
       "nodes": {
         "hitl_tool_main": {
           "type": "llm_node",
-          "node_id": "example_hitl_tool_agent"
+          "node_id": "example_hitl_tool_agent",
+          "llm": {
+            "provider": "openrouter",
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          }
         }
       },
       "nodes_mode": "merge",
@@ -593,7 +619,12 @@
       "nodes": {
         "gdocs_main": {
           "type": "llm_node",
-          "node_id": "example_gdocs_agent"
+          "node_id": "example_gdocs_agent",
+          "llm": {
+            "provider": "openrouter",
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.2
+          }
         }
       },
       "nodes_mode": "merge",

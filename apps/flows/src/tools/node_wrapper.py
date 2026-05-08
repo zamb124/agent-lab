@@ -45,6 +45,7 @@ def _infer_node_type_for_tool(node: "BaseNode") -> str:
         LlmNode,
         MCPNode,
         RemoteFlowNode,
+        ResourceNode,
     )
 
     if isinstance(node, LlmNode):
@@ -61,6 +62,8 @@ def _infer_node_type_for_tool(node: "BaseNode") -> str:
         return NodeType.MCP.value
     if isinstance(node, ChannelNode):
         return NodeType.CHANNEL.value
+    if isinstance(node, ResourceNode):
+        return NodeType.RESOURCE.value
     raise ValueError(
         f"Не удалось определить type ноды для as_tool: {type(node).__name__}, "
         "задайте 'type' в config"

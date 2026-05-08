@@ -20,7 +20,12 @@
     },
     "plan_queries": {
       "type": "llm_node",
-      "prompt": "Сгенерируй ровно 3 поисковых запроса по вопросу пользователя. Верни строго JSON без markdown: {\"queries\":[\"...\",\"...\",\"...\"]}"
+      "prompt": "Сгенерируй ровно 3 поисковых запроса по вопросу пользователя. Верни строго JSON без markdown: {\"queries\":[\"...\",\"...\",\"...\"]}",
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     },
     "prepare_inputs": {
       "type": "code",
@@ -68,7 +73,12 @@
           },
           "code": "async def execute(args, state):\n    query = args.get(\"query\")\n    if not isinstance(query, str) or query.strip() == \"\":\n        raise ValueError(\"query обязателен\")\n    raw_limit = args.get(\"limit\", 8)\n    limit = int(raw_limit)\n    if limit < 1 or limit > 16:\n        raise ValueError(\"limit должен быть от 1 до 16\")\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id отсутствует в state\")\n    client = RagClient()\n    return await client.search(namespace_id.strip(), query.strip(), limit=limit)\n"
         }
-      ]
+      ],
+      "llm": {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.2
+      }
     },
     "fetch_pages_markdown": {
       "type": "code",

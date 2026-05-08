@@ -460,6 +460,7 @@
     "temperature": "Temperature",
     "max_tokens": "Max tokens",
     "api_key": "API key",
+    "folder_id": "Folder ID (Yandex Cloud)",
     "base_url": "Base URL",
     "top_p": "Top-P",
     "top_k": "Top-K",
@@ -468,7 +469,16 @@
     "seed": "Seed",
     "reasoning_effort": "Reasoning effort",
     "extra_request_body": "Extra request body (JSON)",
+    "extra_request_headers": "Extra HTTP headers",
+    "extra_header_name": "Name",
+    "extra_header_name_placeholder": "Authorization, X-Custom-Header…",
+    "extra_header_value": "Value",
+    "extra_header_value_placeholder": "String or @var:KEY",
+    "extra_header_add": "Add header",
+    "extra_header_remove": "Remove header",
+    "merge_layers_hint": "Extra body fields and headers are merged last and override platform defaults (including Authorization and Content-Type).",
     "advanced": "Advanced",
+    "placeholder_folder_id": "Cloud folder id, e.g. b1g…",
     "placeholder_model": "e.g. gpt-4o",
     "placeholder_temperature": "e.g. 0.7",
     "placeholder_max_tokens": "e.g. 4096",
@@ -502,6 +512,9 @@
     "action_add_tool": "Add tool",
     "section_prompt": "Prompt",
     "section_llm": "LLM config",
+    "section_llm_from_branch": "LLM configuration [{{id}}]",
+    "llm_resource_legacy_hint": "One LLM resource is pinned on the node but not set as the base. Bind it to apply at runtime.",
+    "llm_resource_legacy_bind": "Use as base",
     "section_messages_filter": "Messages filter",
     "section_structured": "Structured output",
     "section_output_mode": "Output mode",
@@ -526,6 +539,12 @@
     "react_reminder": "Reminder message",
     "tools_add_library": "From library"
   },
+  "resource_node_editor": {
+    "help_label": "Resources on the graph",
+    "help_body": "Edit the resource definitions linked to this node on the graph. Resource-type nodes do not have a separate list to pin more resources.",
+    "section_definitions": "Pinned resource definitions",
+    "unresolved": "Could not open resource definition \"{{id}}\": missing on branch or in catalog."
+  },
   "code_node_editor": {
     "field_code": "Code (Python)",
     "field_parameters_schema": "Parameters schema (JSON)",
@@ -537,7 +556,12 @@
     "args_schema": "Args schema",
     "schema_form": "Form",
     "schema_json": "JSON",
-    "docs": "Documentation"
+    "docs": "Documentation",
+    "execute_tool_hint": "Same contract as inline tools: entry point execute(args, state) or a BaseTool subclass; async is optional. See Documentation.",
+    "execute_tool_hint_aria": "Help: code node entry point"
+  },
+  "code_workbench": {
+    "tab_params": "Parameters"
   },
   "code_node_drop_modal": {
     "title": "Code node",
@@ -807,8 +831,6 @@
     "select_node": "Select a node to edit",
     "select_resource": "Select a resource to edit",
     "action_delete_resource": "Delete resource",
-    "rename_node_id_title": "Rename node ID",
-    "rename_node_id_confirm": "Rename",
     "delete_node_title": "Delete node",
     "delete_node_confirm": "Delete"
   },
@@ -836,11 +858,6 @@
     "exception_allow_types": "Allowed exception types",
     "exception_allow_types_placeholder": "Select exception type",
     "exception_allow_types_hint": "Empty list: when enabled, any exception type matches. Otherwise only the types you pick from the platform list.",
-    "rename_id": "Rename ID",
-    "rename_save": "Save",
-    "rename_cancel": "Cancel",
-    "rename_invalid": "ID may contain only ASCII letters, digits and _",
-    "rename_collision": "ID already exists",
     "files_section": "Attached files",
     "files_empty": "No files",
     "files_remove": "Remove file",
@@ -849,6 +866,7 @@
     "resources_add_field": "Attach resource",
     "resources_add_pick": "+ Attach resource…",
     "resources_remove": "Remove resource",
+    "resources_section_llm_node_hint": "Catalog and branch-canvas LLMs share the dropdown below. Branch items end with the graph resource key; picking one sets llm_resource_key. A catalog LLM is pinned on node.resources.",
     "action_duplicate": "Duplicate",
     "action_delete": "Delete",
     "action_validate": "Validate",
@@ -1010,7 +1028,9 @@
     "handoff_mode_single_reply": "Single reply",
     "handoff_mode_takeover": "Dialog takeover",
     "queue_slug": "Operator queue",
-    "queue_picker": "Search queue…",
+    "queue_picker": "Search or enter queue slug…",
+    "queue_clear": "No queue",
+    "queue_aria": "Choose operator queue",
     "handoff_mode": "Handoff mode",
     "single_reply": "Single reply",
     "takeover": "Dialog takeover",
@@ -1126,6 +1146,9 @@
       "inherited": "Inherited",
       "entry": "Entry node"
     },
+    "resource_dropped_new_node": "Resource \"{{resource}}\" added: new resource node on canvas",
+    "resource_attached_to_node": "Resource \"{{resource}}\" linked to node \"{{node}}\"",
+    "resource_node_no_edges": "Resource nodes cannot be connected on the graph",
     "smart_guides": {
       "enabled": "Smart guides on",
       "disabled": "Smart guides off"

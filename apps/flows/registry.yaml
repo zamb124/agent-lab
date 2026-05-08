@@ -133,6 +133,7 @@ tools:
 # Общие настройки по умолчанию
 defaults:
   llm:
+    provider: openrouter
     model: gpt-4o
     temperature: 0.2
   channels:

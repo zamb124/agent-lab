@@ -30,8 +30,18 @@ export const codeDocumentationOp = createAsyncOp({
     name: 'flows/code_documentation',
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/code/documentation' },
-    request: async () => {
-        return httpRequest({ method: 'GET', url: '/flows/api/v1/code/documentation' });
+    request: async ({ payload }) => {
+        const query = payload && typeof payload === 'object' ? payload : {};
+        const params = new URLSearchParams();
+        for (const [k, v] of Object.entries(query)) {
+            if (v === null || v === undefined) continue;
+            params.append(k, String(v));
+        }
+        const qs = params.toString();
+        return httpRequest({
+            method: 'GET',
+            url: `/flows/api/v1/code/documentation${qs ? `?${qs}` : ''}`,
+        });
     },
 });
 

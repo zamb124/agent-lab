@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.clients.llm.model_routing import split_provider_prefixed_model
 from core.models import StrictBaseModel
 from core.urn import extract_id
 from apps.flows.src.constants.execution_limits import (
@@ -63,8 +64,12 @@ class NodeLLMOverride(StrictBaseModel):
     model: Optional[str] = Field(default=None, description="Модель (если None - из global LLMConfig)")
     temperature: Optional[float] = Field(default=None, description="Температура генерации")
     max_tokens: Optional[int] = Field(default=None, description="Максимум токенов в ответе")
-    provider: Optional[str] = Field(default=None, description="Провайдер: openai, openrouter, bothub")
+    provider: Optional[str] = Field(default=None, description="Провайдер: openai, openrouter, bothub, provider_litserve, yandex")
     api_key: Optional[str] = Field(default=None, description="API ключ (напрямую или @var:my_key)")
+    folder_id: Optional[str] = Field(
+        default=None,
+        description="Yandex Cloud folder id (каталог); для провайдера yandex с собственным api_key обязателен, если не задан llm.yandex.folder_id",
+    )
     base_url: Optional[str] = Field(default=None, description="Base URL провайдера (напрямую или @var:my_url)")
     top_p: Optional[float] = Field(default=None, description="Nucleus sampling top_p")
     top_k: Optional[int] = Field(default=None, description="Top-K семплирование")
@@ -76,7 +81,17 @@ class NodeLLMOverride(StrictBaseModel):
     ] = Field(default=None, description="Усилие reasoning (OpenAI-совместимые модели)")
     extra_request_body: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Доп. поля тела POST /chat/completions; мержатся поверх полей из контролов",
+        description="Доп. поля тела POST /chat/completions; мерж последним, перекрывает поля рантайма",
+    )
+    extra_request_headers: Optional[Dict[str, str]] = Field(
+        default=None,
+        description=(
+            "Доп. HTTP заголовки; мерж последним, перекрывает в т.ч. Authorization и default_headers провайдера"
+        ),
+    )
+    llm_resource_key: Optional[str] = Field(
+        default=None,
+        description="Ключ LLM-ресурса в flow/skill/node resources; база конфига, поля override не-None перекрывают",
     )
 
     @field_validator("extra_request_body", mode="before")
@@ -87,6 +102,38 @@ class NodeLLMOverride(StrictBaseModel):
         if isinstance(v, dict):
             return v
         raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
+
+    @field_validator("extra_request_headers", mode="before")
+    @classmethod
+    def _extra_headers_must_be_object(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if not isinstance(v, dict):
+            raise ValueError("extra_request_headers должен быть объектом JSON, не массивом и не скаляром")
+        for key, val in v.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("extra_request_headers: ключи — непустые строки")
+            if not isinstance(val, str):
+                raise ValueError("extra_request_headers: значения должны быть строками")
+        return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _split_provider_prefixed_model(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        prov_raw = data.get("provider")
+        prov_set = prov_raw is not None and isinstance(prov_raw, str) and prov_raw.strip() != ""
+        if prov_set:
+            return data
+        model_raw = data.get("model")
+        split_prov, split_model = split_provider_prefixed_model(None, model_raw if isinstance(model_raw, str) else None)
+        if split_prov is None:
+            return data
+        out = dict(data)
+        out["provider"] = split_prov
+        out["model"] = split_model
+        return out
 
 
 class NodeConfig(StrictBaseModel):
@@ -106,6 +153,7 @@ class NodeConfig(StrictBaseModel):
     - NodeType.EXTERNAL_API: вызов HTTP API
     - NodeType.MCP: MCP tool
     - NodeType.HITL_NODE: пауза до оператора очереди
+    - NodeType.RESOURCE: нода-ресурс на графе (привязка resources; рантайм pass-through)
     """
 
     model_config = ConfigDict(json_schema_extra={"storage_prefix": "node"}, populate_by_name=True)
@@ -324,3 +372,19 @@ class NodeConfig(StrictBaseModel):
                 f"max_visits_per_run: максимум {cap} (graph_max_iterations), получено {iv}"
             )
         return iv
+
+    @model_validator(mode="after")
+    def validate_resource_node_excludes_agent_surface(self) -> "NodeConfig":
+        if self.type != NodeType.RESOURCE:
+            return self
+        if self.prompt is not None and str(self.prompt).strip():
+            raise ValueError("resource node: prompt must be empty")
+        if self.tools:
+            raise ValueError("resource node: tools must be empty")
+        if self.react is not None:
+            raise ValueError("resource node: react is not allowed")
+        if self.structured_output:
+            raise ValueError("resource node: structured_output must be False")
+        if self.llm_override is not None:
+            raise ValueError("resource node: llm / llm_override is not allowed")
+        return self

@@ -11,6 +11,7 @@
 - RemoteFlowNode - внешний flow по A2A протоколу
 - ExternalAPINode - вызов внешнего HTTP API
 - MCPNode - вызов MCP tool
+- ResourceNode - нода-ресурс на графе (identity / pass-through)
 """
 
 from __future__ import annotations
@@ -27,6 +28,10 @@ from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
+from apps.flows.src.runtime.llm_resource_override import (
+    infer_unique_llm_resource_key_from_merged_maps,
+    resolve_llm_override_with_resource_key,
+)
 from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from core.clients.llm import get_llm
@@ -624,7 +629,8 @@ class LlmNode(BaseNode):
         llm = self._get_llm(state)
         prompt = self.llm_node_prompt or ""
 
-        config = self._node_config or self._create_default_config()
+        base = self._node_config or self._create_default_config()
+        config = await self._resolve_effective_node_config(base, state)
 
         self._runner = LlmNodeRunner(
             node_config=config,
@@ -661,6 +667,7 @@ class LlmNode(BaseNode):
         provider = None
         api_key = None
         base_url = None
+        folder_id = None
 
         if self._node_config and self._node_config.llm_override:
             override = self._node_config.llm_override
@@ -669,12 +676,14 @@ class LlmNode(BaseNode):
             provider = override.provider
             api_key = override.api_key
             base_url = override.base_url
+            folder_id = override.folder_id
         elif self.llm_config_dict:
             model = self.llm_config_dict.get("model")
             temp = self.llm_config_dict.get("temperature")
             provider = self.llm_config_dict.get("provider")
             api_key = self.llm_config_dict.get("api_key")
             base_url = self.llm_config_dict.get("base_url")
+            folder_id = self.llm_config_dict.get("folder_id")
 
         logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
         max_tok = None
@@ -687,9 +696,56 @@ class LlmNode(BaseNode):
             provider=provider,
             api_key=api_key,
             base_url=base_url,
+            folder_id=folder_id,
             max_tokens=max_tok,
             state=state,
         )
+
+    async def _resolve_effective_node_config(
+        self, base: NodeConfig, state: Optional[ExecutionState]
+    ) -> NodeConfig:
+        ov = base.llm_override
+        if not ov:
+            return base
+        explicit = ov.llm_resource_key and str(ov.llm_resource_key).strip()
+        if state is None:
+            if explicit:
+                raise ValueError("ExecutionState обязателен при заданном llm_resource_key")
+            return base
+        container = get_container()
+        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
+            state.session_flow_id,
+            state.branch_id,
+            state.flow_config_version,
+        )
+        node_resources_raw = self.config.get("resources", {}) or {}
+        repo = container.resource_repository
+        if explicit:
+            merged_ov = await resolve_llm_override_with_resource_key(
+                llm_override=ov,
+                flow_resources=flow_resources or {},
+                skill_resources=skill_resources,
+                node_resources_raw=node_resources_raw,
+                repository=repo,
+            )
+            return base.model_copy(update={"llm_override": merged_ov})
+        inferred = await infer_unique_llm_resource_key_from_merged_maps(
+            flow_resources=flow_resources or {},
+            skill_resources=skill_resources,
+            node_resources_raw=node_resources_raw,
+            repository=repo,
+        )
+        if inferred is None:
+            return base
+        ov_with_key = ov.model_copy(update={"llm_resource_key": inferred})
+        merged_ov = await resolve_llm_override_with_resource_key(
+            llm_override=ov_with_key,
+            flow_resources=flow_resources or {},
+            skill_resources=skill_resources,
+            node_resources_raw=node_resources_raw,
+            repository=repo,
+        )
+        return base.model_copy(update={"llm_override": merged_ov})
 
     def _create_default_config(self) -> NodeConfig:
         """Создает конфигурацию по умолчанию."""
@@ -1302,6 +1358,19 @@ class HitlNode(BaseNode):
             ),
             correlation_id=cid,
         )
+
+
+class ResourceNode(BaseNode):
+    """
+    Нода-ресурс на графе: позиция на канве и привязка записей resources у ноды.
+    Рантайм не вызывает LLM и не мутирует state; merge ресурсов при использовании
+    остаётся на ResourceResolver у исполняемых нод и tools.
+    """
+
+    name = "resource"
+
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> None:
+        return None
 
 
 def _infer_node_type_from_fields(node_config: Dict[str, Any]) -> None:

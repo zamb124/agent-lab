@@ -3,7 +3,11 @@
   "name": "Юридический аналитик (РФ)",
   "description": "ИИ-аналитик по праву РФ: структурированный разбор, ориентиры по реестрам и НПА. Не замена очной консультации; требуется сверка с актуальными источниками.",
   "version": "1.2.0",
-  "tags": ["demo", "landing", "law"],
+  "tags": [
+    "demo",
+    "landing",
+    "law"
+  ],
   "permission": [],
   "branches": {},
   "store_card_image": "lawyer.jpg",
@@ -15,7 +19,8 @@
       "prompt": "prompts/main.md",
       "llm": {
         "model": "qwen/qwen3.5-397b-a17b",
-        "temperature": 0.18
+        "temperature": 0.18,
+        "provider": "openrouter"
       },
       "tools": [
         "ask_user",

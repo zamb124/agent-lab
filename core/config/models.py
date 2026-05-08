@@ -1392,6 +1392,17 @@ class BothubProviderConfig(BaseModel):
     base_url: str = Field(default="https://bothub.chat/api/v2/openai/v1")
 
 
+class YandexLLMProviderConfig(BaseModel):
+    """Yandex Cloud Foundation Models (OpenAI-совместимый endpoint): Api-Key + x-folder-id."""
+
+    api_key: Optional[str] = Field(default=None)
+    folder_id: Optional[str] = Field(
+        default=None,
+        description="Идентификатор каталога Yandex Cloud (заголовок x-folder-id)",
+    )
+    base_url: str = Field(default="https://llm.api.cloud.yandex.net/v1")
+
+
 class ModelConfig(BaseModel):
     """Конфигурация модели — переопределение temperature/max_tokens для конкретной модели"""
 
@@ -1402,7 +1413,10 @@ class ModelConfig(BaseModel):
 class LLMConfig(BaseModel):
     """Конфигурация LLM с поддержкой нескольких провайдеров"""
 
-    provider: str = Field(default="openai", description="Провайдер: openai, openrouter, bothub, provider_litserve")
+    provider: str = Field(
+        default="openai",
+        description="Провайдер: openai, openrouter, bothub, provider_litserve, yandex",
+    )
     default_model: str = Field(default="gpt-4o")
     vision_model: str = Field(
         default="gemini-2.5-pro-preview", description="Модель для multimodal/vision запросов"
@@ -1413,6 +1427,7 @@ class LLMConfig(BaseModel):
     openai: Optional[OpenAIProviderConfig] = Field(default=None)
     openrouter: Optional[OpenRouterProviderConfig] = Field(default=None)
     bothub: Optional[BothubProviderConfig] = Field(default=None)
+    yandex: Optional[YandexLLMProviderConfig] = Field(default=None)
     models: Dict[str, ModelConfig] = Field(default_factory=dict)
 
 

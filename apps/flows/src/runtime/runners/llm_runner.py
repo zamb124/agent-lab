@@ -27,9 +27,10 @@ from apps.flows.src.runtime.a2a_messages import (
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
+from apps.flows.src.runtime.llm_byok import is_llm_byok_override
 from apps.flows.src.runtime.llm_override_params import (
+    resolve_override_stream_kwargs,
     split_llm_override_for_client,
-    stream_kwargs_from_override,
 )
 from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
@@ -360,12 +361,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         if actx.user is None or not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
         container = get_container()
-        await container.billing_service.require_balance_for_billable_operation(
-            actx.active_company.company_id,
-            str(actx.user.user_id).strip(),
-            operation_code=BALANCE_BLOCK_OPERATION_LLM,
-            notification_service="flows",
-        )
+        override = self.node_config.llm_override if self.node_config else None
+        if not is_llm_byok_override(override):
+            await container.billing_service.require_balance_for_billable_operation(
+                actx.active_company.company_id,
+                str(actx.user.user_id).strip(),
+                operation_code=BALANCE_BLOCK_OPERATION_LLM,
+                notification_service="flows",
+            )
 
         # Определяем режим: structured_output или tools
         structured_output = self.node_config.structured_output if self.node_config else False
@@ -425,6 +428,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                         llm, stream_kw, max_tok = self._resolve_llm_client(state)
                         llm_provider = getattr(llm, "llm_provider", None)
+                        byok = is_llm_byok_override(
+                            self.node_config.llm_override if self.node_config else None
+                        )
+                        billing_res: Optional[str] = "llm:byok" if byok else None
 
                         async with tracer.llm_call_span(
                             model,
@@ -514,6 +521,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 provider_reported_cost=provider_reported_cost,
                                 provider_upstream_inference_cost=provider_upstream_inference_cost,
                                 settlement_quantity_rub=settlement_quantity_rub,
+                                billing_resource_name=billing_res,
                             )
 
                         if tool_calls:
@@ -740,7 +748,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self, state: ExecutionState
     ) -> tuple[LLMClient | MockLLM, Dict[str, Any], Optional[int]]:
         override = self.node_config.llm_override if self.node_config else None
-        model, temp, provider, api_key, base_url, max_tok = split_llm_override_for_client(override)
+        model, temp, provider, api_key, base_url, max_tok, folder_id = split_llm_override_for_client(
+            override
+        )
         llm = get_llm_for_state(
             state,
             model_name=model,
@@ -748,9 +758,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             provider=provider,
             api_key=api_key,
             base_url=base_url,
+            folder_id=folder_id,
             max_tokens=max_tok,
         )
-        stream_kw = stream_kwargs_from_override(override)
+        stream_kw = resolve_override_stream_kwargs(override, state)
         return llm, stream_kw, max_tok
 
     async def _call_llm(

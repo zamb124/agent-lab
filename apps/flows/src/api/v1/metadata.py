@@ -79,6 +79,16 @@ _NODE_TYPES: list[Dict[str, Any]] = [
         "outputs": 1,
     },
     {
+        "category": "integrations",
+        "type": "resource",
+        "name": "Resource Node",
+        "icon": "box",
+        "description": "Ресурс на графе (pass-through)",
+        "color": "#a78bfa",
+        "inputs": 1,
+        "outputs": 1,
+    },
+    {
         "category": "channels",
         "type": "channel",
         "name": "Channel",

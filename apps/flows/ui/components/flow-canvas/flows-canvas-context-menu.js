@@ -16,6 +16,25 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 
+const RESOURCE_NODE_MENU_EXCLUDE = new Set(['toggle_entry', 'advanced_incoming_policy']);
+
+function collapseContextMenuSeparators(items) {
+    const out = [];
+    for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        if (item.kind === 'separator') {
+            if (out.length === 0 || out[out.length - 1].kind === 'separator') {
+                continue;
+            }
+        }
+        out.push(item);
+    }
+    while (out.length > 0 && out[out.length - 1].kind === 'separator') {
+        out.pop();
+    }
+    return out;
+}
+
 const NODE_ITEMS = Object.freeze([
     { kind: 'open_properties', icon: 'edit' },
     { kind: 'toggle_entry',    icon: 'play' },
@@ -47,6 +66,7 @@ export class FlowsCanvasContextMenu extends PlatformElement {
         y: { type: Number },
         target: { type: String },
         targetId: { type: String, attribute: 'target-id' },
+        resourceNode: { type: Boolean },
     };
 
     static styles = [
@@ -91,6 +111,7 @@ export class FlowsCanvasContextMenu extends PlatformElement {
         this.y = 0;
         this.target = 'background';
         this.targetId = '';
+        this.resourceNode = false;
         this._onDocPointerDown = this._onDocPointerDown.bind(this);
         this._onDocKeyDown = this._onDocKeyDown.bind(this);
     }
@@ -120,7 +141,12 @@ export class FlowsCanvasContextMenu extends PlatformElement {
     }
 
     _items() {
-        if (this.target === 'node') return NODE_ITEMS;
+        if (this.target === 'node') {
+            const base = this.resourceNode
+                ? NODE_ITEMS.filter((i) => !RESOURCE_NODE_MENU_EXCLUDE.has(i.kind))
+                : NODE_ITEMS;
+            return collapseContextMenuSeparators(base);
+        }
         if (this.target === 'edge') return EDGE_ITEMS;
         return BACKGROUND_ITEMS;
     }

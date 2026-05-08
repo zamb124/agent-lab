@@ -40,6 +40,7 @@ import './components/chat/flows-chat-run-trace.js';
 
 // Универсальные редакторы
 import './components/editors/flows-code-editor.js';
+import './components/editors/flows-code-workbench.js';
 import './components/editors/flows-json-field-editor.js';
 import './components/editors/flows-llm-config-editor.js';
 import './components/editors/flows-llm-mocks-editor.js';
@@ -55,6 +56,7 @@ import './components/nodes/flows-channel-node-editor.js';
 import './components/nodes/flows-flow-node-editor.js';
 import './components/nodes/flows-mcp-node-editor.js';
 import './components/nodes/flows-hitl-node-editor.js';
+import './components/nodes/flows-resource-node-editor.js';
 import './components/nodes/flows-external-api-editor.js';
 import './components/nodes/flows-remote-flow-editor.js';
 
