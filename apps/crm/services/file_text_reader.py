@@ -40,3 +40,16 @@ async def load_text_and_name_from_stored_file_id(file_id: str) -> tuple[str, str
     reader = FileReader()
     result = await reader.read(raw, file_name=name)
     return _join_pages(result.pages), name
+
+
+async def load_text_from_bytes(raw: bytes, file_name: str) -> str:
+    """Извлечь текст из байтов файла (без чтения из storage)."""
+    if not isinstance(raw, (bytes, bytearray)):
+        raise ValueError("raw must be bytes")
+    data = bytes(raw)
+    if len(data) == 0:
+        raise ValueError("raw file bytes empty")
+    nm = str(file_name).strip() if file_name else "file"
+    reader = FileReader()
+    result = await reader.read(data, file_name=nm)
+    return _join_pages(result.pages)

@@ -46,6 +46,8 @@ from apps.crm.constants_graph import (
     PLATFORM_USER_ID_ATTR,
 )
 from apps.crm.services.attachment_service import AttachmentService
+from apps.crm.services.file_text_reader import load_text_and_name_from_stored_file_id
+from apps.crm.services.note_attachment_description import merge_attachment_extracted_into_description
 from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_summary_ws_broadcast import (
@@ -932,6 +934,26 @@ class EntityService:
             **kwargs
         )
 
+        if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID and entity.attachment_ids:
+            merged_desc: Optional[str] = entity.description
+            for fid in entity.attachment_ids:
+                try:
+                    text, att_name = await load_text_and_name_from_stored_file_id(fid)
+                except Exception as exc:
+                    logger.warning(
+                        "note create: attachment text extract failed",
+                        entity_id=entity.entity_id,
+                        file_id=fid,
+                        error=str(exc),
+                    )
+                    continue
+                merged_desc = merge_attachment_extracted_into_description(
+                    merged_desc,
+                    att_name,
+                    text,
+                )
+            entity.description = merged_desc
+
         await self._entity_repo.create(entity)
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
 
@@ -1170,6 +1192,7 @@ class EntityService:
         old_note_date = entity.note_date.isoformat() if entity.note_date is not None else None
         old_namespace = entity.namespace
         is_note = entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
+        old_attachment_ids = list(entity.attachment_ids or []) if is_note else []
 
         next_namespace = self._resolve_namespace_for_write(
             updates["namespace"] if "namespace" in updates else entity.namespace
@@ -1209,7 +1232,29 @@ class EntityService:
             if value is not None:
                 setattr(entity, key, value)
         entity.namespace = next_namespace
-        
+
+        if is_note and "attachment_ids" in updates:
+            prior = frozenset(old_attachment_ids)
+            added = [x for x in (entity.attachment_ids or []) if x not in prior]
+            merged_desc: Optional[str] = entity.description
+            for fid in added:
+                try:
+                    text, att_name = await load_text_and_name_from_stored_file_id(fid)
+                except Exception as exc:
+                    logger.warning(
+                        "note update: new attachment text extract failed",
+                        entity_id=entity_id,
+                        file_id=fid,
+                        error=str(exc),
+                    )
+                    continue
+                merged_desc = merge_attachment_extracted_into_description(
+                    merged_desc,
+                    att_name,
+                    text,
+                )
+            entity.description = merged_desc
+
         entity.updated_at = datetime.now(timezone.utc)
         await self._entity_repo.update(entity)
         

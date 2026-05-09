@@ -12,6 +12,8 @@ from core.context import get_context
 from core.logging import get_logger
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.file_text_reader import load_text_from_bytes
+from apps.crm.services.note_attachment_description import merge_attachment_extracted_into_description
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.entity_repository import EntityRepository
@@ -87,7 +89,24 @@ class AttachmentService:
         
         if document_id not in entity.attachment_ids:
             entity.attachment_ids.append(document_id)
-        
+
+        if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
+            try:
+                raw_text = await load_text_from_bytes(file_data, filename)
+            except Exception as exc:
+                logger.warning(
+                    "note attachment: text extract failed",
+                    entity_id=entity_id,
+                    filename=filename,
+                    error=str(exc),
+                )
+                raw_text = ""
+            entity.description = merge_attachment_extracted_into_description(
+                entity.description,
+                filename,
+                raw_text,
+            )
+
         entity.updated_at = datetime.now(timezone.utc)
         await self._entity_repo.update(entity)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:

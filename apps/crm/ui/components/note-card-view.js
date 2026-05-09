@@ -3,11 +3,12 @@
  * свойство `mode`:
  *
  *   - `view` (default): read-only представление с markdown, AI-summary,
- *     сайдбар (задачи, связанные объекты). Вложения — только из шапки
- *     (popover), не дублируются в колонке. Шапка: attachments / edit / delete.
+ *     сайдбар (задачи, связанные объекты). Вложения — из шапки (popover).
+ *     Текст вложений подставляется в тело заметки на сервере при загрузке.
+ *     Шапка: attachments / edit / delete.
  *     Граф связей — блок ниже основного текста, высота области превью `100dvh`.
- *   - `edit`: inline-форма поверх той же сущности — title, описание (с
- *     голосовым вводом), дата, теги, аплоад вложений. На сохранение шлёт
+ *   - `edit`: inline-форма — title, описание (с голосовым вводом), дата, теги,
+ *     аплоад вложений. Текст из файлов добавляется в описание на сервере.
  *     `entitiesResource.create` (для note === null) или
  *     `entityUpdateOp.run({ id, body })` (для существующей заметки).
  *
@@ -1157,13 +1158,6 @@ export class CRMNoteCardView extends PlatformElement {
                 font-family: inherit;
             }
             .tag-input::placeholder { color: var(--crm-note-text-muted); }
-
-            /* legacy inline attachments block is disabled: attachments live in header popover */
-            .attachments-edit,
-            .attachment-edit-row,
-            .upload-btn {
-                display: none !important;
-            }
 
             .form-error {
                 padding: 10px 16px;
@@ -2888,6 +2882,55 @@ export class CRMNoteCardView extends PlatformElement {
         `;
     }
 
+    _renderAttachmentRow(item, mode) {
+        if (mode !== 'view' && mode !== 'edit') {
+            throw new Error('CRMNoteCardView._renderAttachmentRow: mode must be "view" or "edit"');
+        }
+        const iconName = _resolveAttachmentIconName(item.filename, item.contentType);
+        const metaParts = [];
+        const bytes = formatBytes(item.sizeBytes);
+        if (bytes.length > 0) metaParts.push(bytes);
+        if (item.status.length > 0) metaParts.push(item.status);
+        const metaText = metaParts.join(' · ');
+        return html`
+            <div class="attachments-popover-row">
+                <platform-icon name=${iconName} size="16"></platform-icon>
+                <div class="attachments-popover-info">
+                    <p class="attachments-popover-name">${item.filename}</p>
+                    <p class="attachments-popover-meta">${metaText}</p>
+                </div>
+                <div class="attachments-popover-actions">
+                    ${item.downloadUrl.length > 0 ? html`
+                        <a
+                            class="attachment-action-btn"
+                            href=${item.downloadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download=${item.filename}
+                            title=${this.t('note_view.download')}
+                        >
+                            <platform-icon name="import" size="14"></platform-icon>
+                        </a>
+                    ` : nothing}
+                    ${item.canDelete ? html`
+                        <button
+                            type="button"
+                            class="attachment-action-btn"
+                            title=${mode === 'edit'
+                                ? this.t('note_edit.attachment_remove')
+                                : this.t('note_view.attachment_remove')}
+                            @click=${() => mode === 'edit'
+                                ? this._onDeleteEditAttachment(item.id)
+                                : this._onDeleteViewAttachment(item.id)}
+                        >
+                            <platform-icon name="trash" size="14"></platform-icon>
+                        </button>
+                    ` : nothing}
+                </div>
+            </div>
+        `;
+    }
+
     _renderAttachmentsPopover(mode) {
         const items = this._attachmentItemsForMode(mode);
         return html`
@@ -2899,51 +2942,7 @@ export class CRMNoteCardView extends PlatformElement {
             >
                 ${items.length === 0
                     ? html`<div class="attachments-popover-empty">${this.t('note_view.attachments_empty_popover')}</div>`
-                    : items.map((item) => {
-                        const iconName = _resolveAttachmentIconName(item.filename, item.contentType);
-                        const metaParts = [];
-                        const bytes = formatBytes(item.sizeBytes);
-                        if (bytes.length > 0) metaParts.push(bytes);
-                        if (item.status.length > 0) metaParts.push(item.status);
-                        const metaText = metaParts.join(' · ');
-                        return html`
-                            <div class="attachments-popover-row">
-                                <platform-icon name=${iconName} size="16"></platform-icon>
-                                <div class="attachments-popover-info">
-                                    <p class="attachments-popover-name">${item.filename}</p>
-                                    <p class="attachments-popover-meta">${metaText}</p>
-                                </div>
-                                <div class="attachments-popover-actions">
-                                    ${item.downloadUrl.length > 0 ? html`
-                                        <a
-                                            class="attachment-action-btn"
-                                            href=${item.downloadUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            download=${item.filename}
-                                            title=${this.t('note_view.download')}
-                                        >
-                                            <platform-icon name="import" size="14"></platform-icon>
-                                        </a>
-                                    ` : nothing}
-                                    ${item.canDelete ? html`
-                                        <button
-                                            type="button"
-                                            class="attachment-action-btn"
-                                            title=${mode === 'edit'
-                                                ? this.t('note_edit.attachment_remove')
-                                                : this.t('note_view.attachment_remove')}
-                                            @click=${() => mode === 'edit'
-                                                ? this._onDeleteEditAttachment(item.id)
-                                                : this._onDeleteViewAttachment(item.id)}
-                                        >
-                                            <platform-icon name="trash" size="14"></platform-icon>
-                                        </button>
-                                    ` : nothing}
-                                </div>
-                            </div>
-                        `;
-                    })}
+                    : items.map((item) => this._renderAttachmentRow(item, mode))}
             </div>
         `;
     }
@@ -2981,7 +2980,8 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _validateEdit() {
-        if (this._editName.trim().length === 0 && this._editDescription.trim().length === 0) {
+        const hasAttachments = this._editAttachmentIds.length > 0;
+        if (this._editName.trim().length === 0 && this._editDescription.trim().length === 0 && !hasAttachments) {
             return this.t('note_edit.err_name_or_description_required');
         }
         return null;
