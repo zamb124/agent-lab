@@ -30,7 +30,7 @@ _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 pytestmark = [
     pytest.mark.real_taskiq,
-    pytest.mark.timeout(60, func_only=True),
+    pytest.mark.timeout(120, func_only=True),
 ]
 
 

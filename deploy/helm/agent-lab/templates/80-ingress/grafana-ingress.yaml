@@ -9,11 +9,12 @@ metadata:
     traefik.ingress.kubernetes.io/router.priority: "1000"
 {{- if .Values.applications.frontend.enabled }}
     {{- /*
-      Traefik: Middleware CRD в том же namespace, что и Ingress — только имя ресурса + @kubernetescrd.
-      Префикс "<namespace>/" в аннотации даёт несуществующее имя middleware → роут Grafana не создаётся,
-      HTTPS на grafana.<domain> попадает на platform-frontend (wildcard *.domain → главная landing).
+      Traefik v3 (MicroK8s ingress): в annotation router.middlewares CRD Middleware задаётся как
+      "<k8s-namespace>-<middleware.metadata.name>@kubernetescrd" (см. doc v3.6, пример default-stripPrefix@kubernetescrd).
+      Вариант "имя@kubernetescrd" без префикса namespace даёт ERR "middleware does not exist", роут Grafana не поднимается,
+      HTTPS на grafana.<domain> уходит на platform-frontend (*.domain catch-all → главная).
     */}}
-    traefik.ingress.kubernetes.io/router.middlewares: "grafana-forward-auth@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Values.namespace }}-grafana-forward-auth@kubernetescrd"
 {{- end }}
   # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
 spec:

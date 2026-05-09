@@ -9,6 +9,10 @@
 import pytest
 from io import BytesIO
 
+# Несколько HTTP + эмбеддинг/поиск за один тест; глобальный timeout=5s ловит SIGALRM,
+# фикстура rag_client закрывает httpx-клиент при teardown — возможен RuntimeError на await post.
+pytestmark = pytest.mark.timeout(60)
+
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
