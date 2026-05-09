@@ -291,15 +291,15 @@ litserve:
   ttsDefaultApiModelId: silero-tts-v5-5-ru
   vadDefaultApiModelId: silero-vad-v5
   resources:
-    # Память: GigaAM v3 (~2.5 Gi RSS), Silero TTS v5 (~300 Mi RSS), Silero VAD (~120 Mi),
-    # Qwen embedding + rerank + малый LLM в LitServe (см. conf provider_litserve.infra).
-    # При CPU-режиме выше RSS; при GPU — часть в VRAM, целиться в 8Gi request / 24Gi limit.
+    # Память: GigaAM v3, Silero TTS/VAD, Qwen3-Reranker-8B, chat 1.5B, Qwen3-Embedding-8B.
+    # Эмбеддинг на CPU: веса 8B в fp32 порядка ~32 GiB только модель; limits должен быть выше суммы RSS.
+    # allocatable памяти ноды (kubelet) должен быть >= limits.memory, иначе Pod Pending.
     requests:
-      cpu: "1"
-      memory: 8Gi
+      cpu: "2"
+      memory: 28Gi
     limits:
-      cpu: "4"
-      memory: 24Gi
+      cpu: "8"
+      memory: 52Gi
 
 # NVIDIA k8s-device-plugin DaemonSet публикует nvidia.com/gpu в Allocatable.
 # Host-драйвер и containerd drop-in ставит deploy/scripts/bootstrap-gpu-worker.sh.
