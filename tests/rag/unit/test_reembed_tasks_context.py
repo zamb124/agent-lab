@@ -17,7 +17,7 @@ async def test_rag_reembed_task_sets_and_clears_system_context(monkeypatch) -> N
             self.calls: list[dict[str, object]] = []
 
         def _embedding_model_name(self) -> str:
-            return "qwen/qwen3-embedding-8b"
+            return "qwen/qwen3-embedding-4b"
 
         async def reembed_stale_documents(self, *, batch_size: int, target_embedding_model: str) -> int:
             self.calls.append(
@@ -63,13 +63,13 @@ async def test_rag_reembed_task_sets_and_clears_system_context(monkeypatch) -> N
     assert provider.calls == [
         {
             "batch_size": 13,
-            "target_embedding_model": "qwen/qwen3-embedding-8b",
+            "target_embedding_model": "qwen/qwen3-embedding-4b",
         }
     ]
     assert result == {
         "skipped": False,
         "scheduler_task_id": "sched-1",
-        "target_embedding_model": "qwen/qwen3-embedding-8b",
+        "target_embedding_model": "qwen/qwen3-embedding-4b",
         "batch_size": 13,
         "reembedded": 5,
     }

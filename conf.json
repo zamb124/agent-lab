@@ -338,7 +338,7 @@
     "embedding": {
       "provider": "provider_litserve",
       "api": {
-        "model": "qwen/qwen3-embedding-8b",
+        "model": "qwen/qwen3-embedding-4b",
         "dimension": 1024,
         "mrl_output_dimension": 1024
       }
@@ -487,8 +487,8 @@
           "max_length": 8192,
           "model_batch_size": 4,
           "model_id": "Qwen/Qwen3-Reranker-8B",
-          "embedding_model_id": "Qwen/Qwen3-Embedding-8B",
-          "embedding_openai_model_id": "qwen/qwen3-embedding-8b",
+          "embedding_model_id": "Qwen/Qwen3-Embedding-4B",
+          "embedding_openai_model_id": "qwen/qwen3-embedding-4b",
           "rerank_openai_model_id": "qwen/qwen3-reranker-8b",
           "embedding_model_ids": [],
           "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",

@@ -280,19 +280,19 @@ litserve:
   port: 8014
   serviceName: provider-litserve
   # PVC под HF cache: GigaAM v3 (~3 Gi), Silero TTS v5 (~150 Mi), Silero VAD (~50 Mi),
-  # Qwen3-Embedding-8B, Qwen3-Reranker-8B, малый chat-Qwen (~1.5B) + запас
+  # Qwen3-Embedding-4B, Qwen3-Reranker-8B, малый chat-Qwen (~1.5B) + запас
   # (gigaam/silero-tts/silero-vad/qwen/flagllm) → берём 100Gi.
   modelCacheSize: 100Gi
   modelId: Qwen/Qwen3-Reranker-8B
-  embeddingModelId: Qwen/Qwen3-Embedding-8B
+  embeddingModelId: Qwen/Qwen3-Embedding-4B
   # API id дефолтных моделей (поля stt_default_api_model_id и т.д. в
   # ProviderLitserveInfraConfig). ENV: PROVIDER_LITSERVE__INFRA__STT_DEFAULT_API_MODEL_ID и т.д.
   sttDefaultApiModelId: gigaam-v3-rnnt-ru
   ttsDefaultApiModelId: silero-tts-v5-5-ru
   vadDefaultApiModelId: silero-vad-v5
   resources:
-    # Память: GigaAM v3, Silero TTS/VAD, Qwen3-Reranker-8B, chat 1.5B, Qwen3-Embedding-8B.
-    # Эмбеддинг на CPU: веса 8B в fp32 порядка ~32 GiB только модель; limits должен быть выше суммы RSS.
+    # Память: GigaAM v3, Silero TTS/VAD, Qwen3-Reranker-8B, chat 1.5B, Qwen3-Embedding-4B.
+    # Эмбеддинг на CPU: 4B заметно легче 8B; limits всё же с запасом под суммарный RSS воркеров.
     # allocatable памяти ноды (kubelet) должен быть >= limits.memory, иначе Pod Pending.
     requests:
       cpu: "2"

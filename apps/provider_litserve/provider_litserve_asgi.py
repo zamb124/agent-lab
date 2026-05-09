@@ -112,11 +112,11 @@ def create_provider_litserve_asgi_app(
                 openapi_examples={
                     "single": {
                         "summary": "Один текст",
-                        "value": {"model": "qwen/qwen3-embedding-8b", "input": "пример"},
+                        "value": {"model": "qwen/qwen3-embedding-4b", "input": "пример"},
                     },
                     "batch": {
                         "summary": "Несколько текстов",
-                        "value": {"model": "qwen/qwen3-embedding-8b", "input": ["a", "b"]},
+                        "value": {"model": "qwen/qwen3-embedding-4b", "input": ["a", "b"]},
                     },
                 },
             ),
