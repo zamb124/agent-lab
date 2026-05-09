@@ -5,7 +5,7 @@
  *   - `view` (default): read-only представление с markdown, AI-summary,
  *     сайдбар (задачи, связанные объекты). Вложения — только из шапки
  *     (popover), не дублируются в колонке. Шапка: attachments / edit / delete.
- *     Граф связей — блок «Окружение заметки» ниже основного текста.
+ *     Граф связей — блок ниже основного текста, высота области превью `100dvh`.
  *   - `edit`: inline-форма поверх той же сущности — title, описание (с
  *     голосовым вводом), дата, теги, аплоад вложений. На сохранение шлёт
  *     `entitiesResource.create` (для note === null) или
@@ -592,64 +592,18 @@ export class CRMNoteCardView extends PlatformElement {
             }
 
             /* ================== inline graph (view) ================== */
-            .note-graph-inline {
+            .note-graph-preview-host {
+                height: 100dvh;
+                min-height: 100dvh;
+                flex-shrink: 0;
                 display: flex;
                 flex-direction: column;
+                min-width: 0;
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 overflow: hidden;
-                flex-shrink: 0;
-            }
-            .note-graph-inline-head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-4);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                background: var(--glass-tint-subtle);
-            }
-            .note-graph-inline-title {
-                margin: 0;
-                font-size: var(--text-sm);
-                font-weight: 700;
-                letter-spacing: 0.02em;
-                color: var(--text-primary);
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-            }
-            .note-graph-inline .graph-mode-switch {
-                display: flex;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                background: var(--glass-tint-subtle);
-                flex-shrink: 0;
-            }
-            .note-graph-inline .graph-mode-switch button {
-                flex: 1;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-medium);
-                background: var(--glass-solid-medium);
-                color: var(--text-secondary);
-                font-size: var(--text-xs);
-                font-weight: 600;
-                cursor: pointer;
-            }
-            .note-graph-inline .graph-mode-switch button.active {
-                border-color: var(--accent);
-                background: var(--accent-subtle);
-                color: var(--text-primary);
-            }
-            .note-graph-preview-host {
-                height: min(360px, 42vh);
-                min-height: 240px;
-                display: flex;
-                flex-direction: column;
-                min-width: 0;
+                box-sizing: border-box;
             }
             .note-graph-preview-host crm-mini-graph {
                 flex: 1 1 0%;
@@ -3135,44 +3089,26 @@ export class CRMNoteCardView extends PlatformElement {
                 : '';
         const vm = this._graphView.value.viewMode;
         return html`
-            <section class="note-graph-inline" aria-label=${this.t('note_view.graph_inline_title')}>
-                <div class="note-graph-inline-head">
-                    <h3 class="note-graph-inline-title">
-                        <platform-icon name="git-branch" size="18"></platform-icon>
-                        ${this.t('note_view.graph_inline_title')}
-                    </h3>
-                </div>
-                <div class="graph-mode-switch" role="group">
-                    <button
-                        type="button"
-                        class=${vm === 'mindmap' ? 'active' : ''}
-                        @click=${() => {
-                            this._graphView.setViewMode({ viewMode: 'mindmap' });
-                        }}
-                    >
-                        ${this.t('graph.view_mode_mindmap')}
-                    </button>
-                    <button
-                        type="button"
-                        class=${vm === '3d' ? 'active' : ''}
-                        @click=${() => {
-                            this._graphView.setViewMode({ viewMode: '3d' });
-                        }}
-                    >
-                        ${this.t('graph.view_mode_3d')}
-                    </button>
-                </div>
-                <div class="note-graph-preview-host">
-                    <crm-mini-graph
-                        fill-container
-                        .entityId=${noteId}
-                        namespace=${entityNs}
-                        .viewMode=${vm}
-                        @entity-open=${(e) =>
-                            this._emitEntityOpen(e.detail.entityId, e.detail.entity_type)}
-                    ></crm-mini-graph>
-                </div>
-            </section>
+            <div class="note-graph-preview-host">
+                <crm-mini-graph
+                    fill-container
+                    embed-chrome
+                    show-view-mode-toggle
+                    .entityId=${noteId}
+                    namespace=${entityNs}
+                    .viewMode=${vm}
+                    @view-mode-request=${(e) => {
+                        const d = e.detail;
+                        const next = d && typeof d.viewMode === 'string' ? d.viewMode.trim() : '';
+                        if (next !== 'mindmap' && next !== '3d') {
+                            throw new Error('NoteCardView: view-mode-request requires viewMode mindmap|3d');
+                        }
+                        this._graphView.setViewMode({ viewMode: next });
+                    }}
+                    @entity-open=${(e) =>
+                        this._emitEntityOpen(e.detail.entityId, e.detail.entity_type)}
+                ></crm-mini-graph>
+            </div>
         `;
     }
 

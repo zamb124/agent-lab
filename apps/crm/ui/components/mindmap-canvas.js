@@ -15,6 +15,9 @@
  *   `height = naturalH * z`, выравнивание `xMidYMin meet`; `.viewport` прокручивается
  *   и по горизонтали, и по вертикали.
  *
+ * Поведение overscroll по умолчанию — цепочка к родителю, чтобы прокрутка страницы (текст
+ * заметки над превью) не блокировалась контейнером превью.
+ *
  * Управление масштабом в compact-режиме — снаружи через property `compactZoom`. Колесо мыши
  * с зажатым Ctrl/Meta эмитит `compact-zoom-change` { value } (обычное колесо — нативный скролл
  * `.viewport`).
@@ -372,7 +375,6 @@ export class CRMMindmapCanvas extends PlatformElement {
             :host([compact]) .viewport {
                 overflow: auto;
                 touch-action: pan-x pan-y;
-                overscroll-behavior: contain;
             }
             .scene {
                 width: 100%;

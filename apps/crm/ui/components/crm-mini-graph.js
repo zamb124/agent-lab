@@ -6,6 +6,9 @@
  * диапазон 0.5..3): кнопки `−` / процент-с-кликом-на-сброс / `+`. Текущее значение
  * прокидывается в `<crm-mindmap-canvas .compactZoom=${...}>`; событие `compact-zoom-change`
  * от canvas (Ctrl/⌘ + колесо) обновляет локальный state.
+ *
+ * `embed-chrome` — без рамки у хоста; глубина/зум компактно слева сверху, «Открыть полностью» справа сверху.
+ * `show-view-mode-toggle` — переключатель mindmap/3d в оверлее; родитель слушает `view-mode-request`.
  */
 
 import { html, css, nothing } from 'lit';
@@ -41,6 +44,10 @@ export class CRMMiniGraph extends PlatformElement {
         maxDepth: { type: Number },
         initialDisplayDepth: { type: Number },
         fillContainer: { type: Boolean, reflect: true, attribute: 'fill-container' },
+        /** Без рамки у хоста; embed: глубина/зум слева сверху, полный экран справа сверху. */
+        embedChrome: { type: Boolean, reflect: true, attribute: 'embed-chrome' },
+        /** Переключатель mindmap / 3d внутри оверлея; режим — через событие view-mode-request. */
+        showViewModeToggle: { type: Boolean, reflect: true, attribute: 'show-view-mode-toggle' },
         width: { type: String },
         height: { type: String },
         _displayDepth: { state: true },
@@ -71,6 +78,13 @@ export class CRMMiniGraph extends PlatformElement {
                 height: 100%;
                 max-height: none;
                 align-self: stretch;
+            }
+
+            :host([embed-chrome]) {
+                border: none;
+                border-radius: 0;
+                background: transparent;
+                overflow: visible;
             }
 
             .mini-box {
@@ -192,6 +206,125 @@ export class CRMMiniGraph extends PlatformElement {
             .mini-open-full:hover {
                 background: var(--glass-solid-strong);
             }
+
+            .mini-box-embed {
+                position: relative;
+            }
+
+            .mini-embed-floating-top {
+                position: absolute;
+                z-index: 2;
+                top: var(--space-2);
+                left: var(--space-2);
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                flex-wrap: nowrap;
+                gap: var(--space-1);
+                max-width: min(72%, calc(100% - 7.5rem));
+                pointer-events: none;
+                box-sizing: border-box;
+            }
+
+            .mini-embed-floating-top > * {
+                pointer-events: auto;
+            }
+
+            .mini-depth-toolbar--floating {
+                border-bottom: none;
+                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-full);
+                background: var(--glass-solid-medium);
+                box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+                flex-wrap: wrap;
+                max-width: 100%;
+                justify-content: flex-start;
+                padding: 3px 8px;
+                gap: 4px;
+            }
+
+            .mini-depth-toolbar--floating .mini-depth-btn {
+                width: 22px;
+                height: 22px;
+                font-size: 14px;
+            }
+
+            .mini-depth-toolbar--floating .mini-depth-label {
+                min-width: 0;
+                font-size: 10px;
+                line-height: 1.2;
+                max-width: 9.5rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .mini-depth-toolbar--floating .mini-toolbar-sep {
+                margin: 2px 3px;
+            }
+
+            .mini-depth-toolbar--floating .mini-zoom-label {
+                font-size: 10px;
+                min-width: 2.25rem;
+            }
+
+            .mini-view-mode-switch {
+                display: inline-flex;
+                gap: 2px;
+                padding: 3px 6px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-solid-medium);
+                box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+                flex-shrink: 0;
+            }
+
+            .mini-view-mode-switch button {
+                padding: 2px 8px;
+                border-radius: var(--radius-full);
+                border: 1px solid transparent;
+                background: transparent;
+                color: var(--text-secondary);
+                font-size: 10px;
+                font-weight: 600;
+                cursor: pointer;
+                white-space: nowrap;
+                line-height: 1.3;
+            }
+
+            .mini-view-mode-switch button.active {
+                border-color: var(--accent);
+                background: var(--accent-subtle);
+                color: var(--text-primary);
+            }
+
+            .mini-footer--floating {
+                position: absolute;
+                z-index: 2;
+                top: var(--space-2);
+                right: var(--space-2);
+                bottom: auto;
+                left: auto;
+                border: none;
+                padding: 0;
+                background: transparent;
+            }
+
+            .mini-open-full--embed {
+                padding: 4px 10px;
+                gap: 4px;
+                font-size: 10px;
+                box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+            }
+
+            .mini-open-full--embed platform-icon {
+                --icon-size: 12px;
+            }
+
+            .mini-box-embed .mini-empty {
+                flex: 1 1 0%;
+                min-height: 120px;
+            }
         `,
     ];
 
@@ -203,6 +336,8 @@ export class CRMMiniGraph extends PlatformElement {
         this.maxDepth = API_MAX_DEPTH;
         this.initialDisplayDepth = 1;
         this.fillContainer = false;
+        this.embedChrome = false;
+        this.showViewModeToggle = false;
         this.width = '100%';
         this.height = '240px';
         this._displayDepth = 1;
@@ -227,6 +362,7 @@ export class CRMMiniGraph extends PlatformElement {
 
     firstUpdated() {
         super.firstUpdated?.();
+        this._syncHostAriaLabel();
         this._syncEntityTypesForNamespace();
         if (this._trimEntityId().length > 0) {
             this._loadGraph();
@@ -234,6 +370,9 @@ export class CRMMiniGraph extends PlatformElement {
     }
 
     updated(changed) {
+        if (changed.has('embedChrome') || changed.has('showViewModeToggle')) {
+            this._syncHostAriaLabel();
+        }
         if (changed.has('namespace')) {
             this._syncEntityTypesForNamespace();
         }
@@ -396,6 +535,24 @@ export class CRMMiniGraph extends PlatformElement {
             query: '',
         });
         this.navigate('graph', {}, { search });
+    }
+
+    _requestViewMode(next) {
+        if (next !== 'mindmap' && next !== '3d') {
+            throw new Error('CRMMiniGraph._requestViewMode: viewMode must be mindmap or 3d');
+        }
+        if (next === this._resolvedViewMode()) {
+            return;
+        }
+        this.emit('view-mode-request', { viewMode: next });
+    }
+
+    _syncHostAriaLabel() {
+        if (this.embedChrome && this.showViewModeToggle) {
+            this.setAttribute('aria-label', this.t('note_view.graph_inline_title'));
+        } else {
+            this.removeAttribute('aria-label');
+        }
     }
 
     _resolvedViewMode() {
@@ -850,39 +1007,49 @@ export class CRMMiniGraph extends PlatformElement {
         const error = this._graphOp.error;
         const entityIdTrim = this._trimEntityId();
         const vm = this._resolvedViewMode();
+        const embed = this.embedChrome === true;
 
         if (entityIdTrim.length === 0) {
             return html`<div class="mini-box mini-empty">${this.t('graph.empty_need_entity')}</div>`;
         }
 
         const footerBtn = html`
-            <button type="button" class="mini-open-full" @click=${() => this._openFullWorkspace()}>
-                <platform-icon name="fullscreen" size="14"></platform-icon>
+            <button
+                type="button"
+                class=${embed ? 'mini-open-full mini-open-full--embed' : 'mini-open-full'}
+                @click=${() => this._openFullWorkspace()}
+            >
+                <platform-icon name="fullscreen" size=${embed ? '12' : '14'}></platform-icon>
                 ${this.t('graph.mini_open_full')}
             </button>
         `;
 
+        const boxClass = embed ? 'mini-box mini-box-embed' : 'mini-box';
+        const footerBar = embed
+            ? html`<div class="mini-footer mini-footer--floating">${footerBtn}</div>`
+            : html`<div class="mini-footer">${footerBtn}</div>`;
+
         if (this._graphOp.busy) {
             return html`
-                <div class="mini-box">
+                <div class=${boxClass}>
                     <div class="mini-empty" style="flex:1;min-height:0;">${this.t('graph.mini_loading')}</div>
-                    <div class="mini-footer">${footerBtn}</div>
+                    ${footerBar}
                 </div>
             `;
         }
         if (error) {
             return html`
-                <div class="mini-box">
+                <div class=${boxClass}>
                     <div class="mini-empty" style="flex:1;min-height:0;">${error}</div>
-                    <div class="mini-footer">${footerBtn}</div>
+                    ${footerBar}
                 </div>
             `;
         }
         if (fetchedNodes.length === 0) {
             return html`
-                <div class="mini-box">
+                <div class=${boxClass}>
                     <div class="mini-empty" style="flex:1;min-height:0;">${this.t('graph.mini_no_edges')}</div>
-                    <div class="mini-footer">${footerBtn}</div>
+                    ${footerBar}
                 </div>
             `;
         }
@@ -921,26 +1088,58 @@ export class CRMMiniGraph extends PlatformElement {
               `
             : nothing;
 
-        const toolbar = html`
-            <div class="mini-depth-toolbar">
-                <button
-                    type="button"
-                    class="mini-depth-btn"
-                    title=${this.t('graph.mini_depth_less')}
-                    ?disabled=${!canDecrease}
-                    @click=${this._onDecreaseDepth}
-                >\u2212</button>
-                <span class="mini-depth-label">${depthLabel}</span>
-                <button
-                    type="button"
-                    class="mini-depth-btn"
-                    title=${this.t('graph.mini_depth_more')}
-                    ?disabled=${!canIncrease}
-                    @click=${this._onIncreaseDepth}
-                >+</button>
-                ${zoomBlock}
-            </div>
+        const toolbarBody = html`
+            <button
+                type="button"
+                class="mini-depth-btn"
+                title=${this.t('graph.mini_depth_less')}
+                ?disabled=${!canDecrease}
+                @click=${this._onDecreaseDepth}
+            >\u2212</button>
+            <span class="mini-depth-label">${depthLabel}</span>
+            <button
+                type="button"
+                class="mini-depth-btn"
+                title=${this.t('graph.mini_depth_more')}
+                ?disabled=${!canIncrease}
+                @click=${this._onIncreaseDepth}
+            >+</button>
+            ${zoomBlock}
         `;
+
+        const toolbarBlock = embed
+            ? nothing
+            : html`<div class="mini-depth-toolbar">${toolbarBody}</div>`;
+
+        const viewModePill = this.showViewModeToggle
+            ? html`
+                <div class="mini-view-mode-switch" role="group">
+                    <button
+                        type="button"
+                        class=${vm === 'mindmap' ? 'active' : ''}
+                        @click=${() => this._requestViewMode('mindmap')}
+                    >
+                        ${this.t('graph.view_mode_mindmap')}
+                    </button>
+                    <button
+                        type="button"
+                        class=${vm === '3d' ? 'active' : ''}
+                        @click=${() => this._requestViewMode('3d')}
+                    >
+                        ${this.t('graph.view_mode_3d')}
+                    </button>
+                </div>
+            `
+            : nothing;
+
+        const floatingCluster = embed
+            ? html`
+                <div class="mini-embed-floating-top">
+                    <div class="mini-depth-toolbar mini-depth-toolbar--floating">${toolbarBody}</div>
+                    ${viewModePill}
+                </div>
+            `
+            : nothing;
 
         if (vm === 'mindmap') {
             const mm = this._mindmapDisplayPayload();
@@ -954,9 +1153,10 @@ export class CRMMiniGraph extends PlatformElement {
                 && typeof mm.rootId === 'string'
                 && mm.rootId.length > 0;
             return html`
-                <div class="mini-box">
-                    ${toolbar}
+                <div class=${boxClass}>
+                    ${toolbarBlock}
                     <div class="mini-canvas-wrap" style="min-height:180px;">
+                        ${floatingCluster}
                         ${showMm
                             ? html`
                                   <crm-mindmap-canvas
@@ -976,18 +1176,19 @@ export class CRMMiniGraph extends PlatformElement {
                               `
                             : html`<div class="mini-empty">${this.t('graph.empty_graph')}</div>`}
                     </div>
-                    <div class="mini-footer">${footerBtn}</div>
+                    ${footerBar}
                 </div>
             `;
         }
 
         return html`
-            <div class="mini-box">
-                ${toolbar}
+            <div class=${boxClass}>
+                ${toolbarBlock}
                 <div class="mini-canvas-wrap">
+                    ${floatingCluster}
                     <div class="mini-canvas"></div>
                 </div>
-                <div class="mini-footer">${footerBtn}</div>
+                ${footerBar}
             </div>
         `;
     }
