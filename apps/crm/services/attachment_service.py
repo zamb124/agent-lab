@@ -198,10 +198,7 @@ class AttachmentService:
                     "download_url": "",
                 })
                 continue
-            display_name = (
-                response.get("filename")
-                or response.get("document_name")
-            )
+            display_name = response.get("filename") or response.get("document_name")
             extra = response.get("extra_metadata")
             if not display_name and isinstance(extra, dict):
                 candidate = extra.get("filename")
