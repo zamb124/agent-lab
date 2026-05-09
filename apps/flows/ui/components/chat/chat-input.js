@@ -6,6 +6,11 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
+import {
+    readTtsOutputEnabled,
+    TTS_OUTPUT_CHANGED_EVENT,
+    TTS_OUTPUT_STORAGE_KEY,
+} from '@platform/lib/voice/tts-output-pref.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class ChatInput extends PlatformElement {
@@ -289,6 +294,33 @@ export class ChatInput extends PlatformElement {
         this.cancelBusy = false;
         this._value = '';
         this._selectedFiles = [];
+        this._onTtsPrefChatInput = () => {
+            this.ttsOutputEnabled = readTtsOutputEnabled();
+            this.requestUpdate();
+        };
+        this._onTtsStorageChatInput = (e) => {
+            if (e.storageArea === window.localStorage && e.key === TTS_OUTPUT_STORAGE_KEY) {
+                this.ttsOutputEnabled = readTtsOutputEnabled();
+                this.requestUpdate();
+            }
+        };
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        if (typeof window !== 'undefined') {
+            window.addEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefChatInput);
+            window.addEventListener('storage', this._onTtsStorageChatInput);
+            this.ttsOutputEnabled = readTtsOutputEnabled();
+        }
+    }
+
+    disconnectedCallback() {
+        if (typeof window !== 'undefined') {
+            window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefChatInput);
+            window.removeEventListener('storage', this._onTtsStorageChatInput);
+        }
+        super.disconnectedCallback();
     }
 
     get textareaEl() {
