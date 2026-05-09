@@ -1351,6 +1351,15 @@ class TasksConfig(BaseModel):
     broker_url: str = "redis://localhost:6379/0"
     result_backend_url: Optional[str] = None
     max_workers: int = 4
+    default_retry_count: int = Field(
+        default=3,
+        ge=1,
+        le=100,
+        description=(
+            "Верхняя граница повторов SimpleRetryMiddleware, когда у задачи нет метки max_retries "
+            "(fallback через labels таска)."
+        ),
+    )
 
 
 class CalendarSyncConfig(BaseModel):

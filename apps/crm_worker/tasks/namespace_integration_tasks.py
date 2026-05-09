@@ -45,6 +45,7 @@ def _notification_cancelled_title(label: str, *, job: str) -> str:
     return f"{label}: импорт сущностей отменён"
 
 
+# Без broker retry: длинный пайплайн и WS; повтор без явной идемпотентности по этапам даёт дубли UI.
 @broker.task
 async def run_namespace_integration_job(
     task_id: str,

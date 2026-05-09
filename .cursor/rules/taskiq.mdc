@@ -1,11 +1,20 @@
 ---
-description: "TaskIQ: брокеры воркеров, FIFO per session, scheduler control-plane, контракт задач"
+description: "TaskIQ: брокеры воркеров, FIFO per session, retry middleware, scheduler control-plane, контракт задач"
 alwaysApply: false
 globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 ---
 # TaskIQ
 
-Единая система очередей платформы поверх Redis Streams. Подробности конфигурации Redis — `database.mdc`/`configuration.mdc` (`settings.database.redis_url`, ENV `DATABASE__REDIS_URL`).
+Единая система очередей платформы поверх Redis Streams.
+
+## Два URL Redis
+
+| Назначение | Настройка | Пример ENV |
+|---|---|---|
+| Стримы TaskIQ + result backend + scheduler prefix `platform_schedules` | `settings.tasks.broker_url` | `TASKS__BROKER_URL` |
+| Session lock (FIFO per session), sync presence и прочий доменный Redis | `settings.database.redis_url` | `DATABASE__REDIS_URL` |
+
+Подробности изоляции БД/Redis — `database.mdc` / `configuration.mdc`.
 
 ## Брокеры воркеров
 
@@ -19,7 +28,13 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 | sync_worker | `apps/sync/realtime/broker.py` | `sync` |
 | crm_worker | `apps/crm_worker/broker.py` | `crm` |
 
-Фабрика брокера — `core/tasks/broker.py` (`RedisStreamBroker` + `RedisAsyncResultBackend` + `ListRedisScheduleSource` + `SessionLockMiddleware`).
+Фабрика — `core/tasks/broker.py::create_broker`: `RedisStreamBroker` + `RedisAsyncResultBackend` (TTL 3600 с) + middleware:
+
+1. **LoggingMiddleware** — логирование, контракт меток; в `on_error` учитывает `_taskiq_retry_count` и `_retries` (контракт SimpleRetry).
+2. **SessionLockMiddleware** — FIFO per `session_id` через `database.redis_url`.
+3. **SimpleRetryMiddleware** — повторы по `retry_on_error` / `max_retries` задачи; `default_retry_count` из `TasksConfig` (`tasks.default_retry_count`, ENV `TASKS__DEFAULT_RETRY_COUNT`), когда у задачи нет своего лимита через метки TaskIQ.
+
+Порядок регистрации важен: в receiver при ошибке `on_error` идёт по **обратному** порядку — сначала SimpleRetry (решение о повторной `kiq`), затем SessionLock (снятие lock), затем Logging.
 
 При старте `flows_worker` в `_initialize_worker_state` вызывается `set_billing_service(container.billing_service)` (как у `crm_worker`): без этого `invoke_llm` и задачи с `get_billing_service()` падают в процессе воркера.
 
@@ -35,6 +50,8 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 
 Новая задача, попадающая в Redis-расписание: импорт модуля в `apps/scheduler/scheduler.py` + имя в одном из `_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES` / `_IDLE_SCHEDULER_REQUIRED_TASK_NAMES` / `_CRM_SCHEDULER_REQUIRED_TASK_NAMES`. Для `execute_inline_code` ключ — `apps.flows.src.tasks.eval_task:execute_inline_code`.
 
+**Воркер обязан импортировать тот же модуль**, иначе при выполнении будет «task is not found». Пример: `crm_reembed_stale_documents_tick` — модуль `apps.crm_worker.tasks.reembed_tasks` в `apps/crm_worker/worker.py`.
+
 `QueueAwareTaskiqScheduler` (`core/scheduler/scheduler.py`): при срабатывании записи вызывает `AsyncKicker` на **брокере целевой очереди** (по `labels['queue_name']`). Иначе `RedisStreamBroker.kick` падает в fallback на stream `flows_worker`, и `flows_worker` получает сообщения с именами idle-задач без handler (warning «task is not found»).
 
 `SchedulerService` (`core/scheduler/service.py`) для `AsyncKicker` получает брокер через `broker_for_queue(queue_name)`, заданный в `apps/scheduler/container.py` (`scheduler_broker_for_queue`): очередь → модуль брокера. Иначе постановка задач только на `idle` некорректна.
@@ -43,9 +60,15 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 
 `SessionLockMiddleware`: задачи одной `session_id` выполняются последовательно.
 
-Алгоритм: `SETNX session_lock:{session_id}` (атомарный lock, TTL 5 мин) → выполнение → `DEL session_lock:{session_id}`. Если lock занят — задача возвращается в очередь с задержкой 100 ms. TTL — защита от зависших воркеров.
+Алгоритм (подробно — `core/tasks/session_lock.py`): если у сообщения есть `session_id` в kwargs или второй позиционный строковый аргумент — `SETNX session_lock:{session_id}` (TTL **300** с). Если lock занят — **блокирующее ожидание** на воркере с backoff **50–2000** ms до **60** с; при таймауте — ошибка в логе (`session_lock.wait_timeout`). После выполнения или при ошибке — `DEL` lock.
 
-## Создание и вызов задачи
+Redis для lock — **`database.redis_url`**, не `tasks.broker_url`.
+
+## Ретраи ошибок выполнения
+
+Параметры декоратора **`retry_on_error`** / **`max_retries`** (и смежные метки TaskIQ) выполняют повтор **только при наличии `SimpleRetryMiddleware`** на брокере. Платформа подключает его в `create_broker`. Без middleware повторов не будет (контракт проверяется в `tests/core/test_taskiq_retry_middleware.py` на `InMemoryBroker`).
+
+Задачи с многоэтапным UI/WS без явной идемпотентности по шагам могут **намеренно** не использовать broker retry — помечены комментарием в коде (`process_note_task`, namespace integration, knowledge import, sync notification tasks).
 
 ```python
 from apps.flows_worker.broker import broker
@@ -61,7 +84,7 @@ if result.is_err:
 return result.return_value
 ```
 
-`retry_on_error=True` — для критичных задач. Для расписаний → `kicker().schedule_by_time/cron/interval`.
+Для расписаний → `kicker().schedule_by_time/cron/interval`.
 
 ## Контракт `process_flow_task`
 
@@ -104,10 +127,10 @@ await process_flow_task.kiq(
 ## КРИТИЧНЫЕ ПРАВИЛА
 
 1. Брокер — **только** из модуля воркера (`apps.<name>_worker.broker` / `apps.sync.realtime.broker`). Свой `RedisStreamBroker` запрещён.
-2. `InMemoryBroker` в проде запрещён.
+2. `InMemoryBroker` в проде запрещён (допустим только узкий контракт-тест на retry middleware).
 3. Создание задачи — **только** `.kiq()`.
 4. Тесты инициализируют брокер через session-фикстуру (`broker.startup()` / `broker.shutdown()`).
-5. `retry_on_error=True` для критичных задач.
+5. `retry_on_error=True` для задач с flaky IO имеет смысл **после** регистрации `SimpleRetryMiddleware` на брокере (делает `create_broker`).
 6. Задачи с одним `session_id` выполняются строго последовательно.
 7. Запланированные flow-срабатывания идут через `execute_scheduled_task`, не через `process_flow_task.schedule_by_time`.
 8. Recurring/cron в сервисах — через scheduler API, не локальный цикл.

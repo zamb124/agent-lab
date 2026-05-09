@@ -60,6 +60,7 @@ async def _notify_task_user(
     )
 
 
+# Без broker retry: многоэтапный импорт и WS; broker retry без идемпотентности по чанкам даёт дубли сущностей/UI.
 @broker.task
 async def run_knowledge_import_task(
     task_id: str,

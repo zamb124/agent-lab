@@ -213,9 +213,11 @@ class LoggingMiddleware(TaskiqMiddleware):
         exception: BaseException,
     ) -> None:
         duration_ms = self._duration_ms(message)
-        retry_count = message.labels.get("_taskiq_retry_count")
+        retry_raw = message.labels.get("_taskiq_retry_count")
+        if retry_raw is None:
+            retry_raw = message.labels.get("_retries")
         try:
-            retry_value: int | None = int(retry_count) if retry_count is not None else None
+            retry_value: int | None = int(retry_raw) if retry_raw is not None else None
         except (TypeError, ValueError):
             retry_value = None
 

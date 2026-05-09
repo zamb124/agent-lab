@@ -1,4 +1,10 @@
-"""TaskIQ задачи realtime слоя Sync."""
+"""TaskIQ задачи realtime слоя Sync.
+
+Ретраи: ``retry_on_error`` / ``max_retries`` у задачи работают только при ``SimpleRetryMiddleware``
+на брокере (``core/tasks/broker.py::create_broker``).
+Задачи транскрипции здесь без broker retry: удержание lock по сообщению в Redis и семантика шагов
+обрабатывают временные сбои отдельно от очереди TaskIQ.
+"""
 
 from __future__ import annotations
 

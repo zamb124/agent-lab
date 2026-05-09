@@ -15,6 +15,7 @@ from typing import Optional
 from taskiq_redis import RedisStreamBroker, RedisAsyncResultBackend, ListRedisScheduleSource
 from taskiq import TaskiqScheduler, TaskiqState
 from taskiq.events import TaskiqEvents
+from taskiq.middlewares.simple_retry_middleware import SimpleRetryMiddleware
 
 try:
     import redis.asyncio as redis
@@ -67,6 +68,16 @@ def create_broker(
     if queue_name:
         broker_kwargs["queue_name"] = queue_name
 
+    # Порядок middleware (TaskIQ receiver):
+    # - pre_execute: по порядку регистрации — Logging → SessionLock → SimpleRetry (без pre_execute).
+    # - on_error: в обратном порядке — SimpleRetry первым (решение о повторной kiq), затем SessionLock
+    #   (снятие lock при ошибке), затем Logging.
+    retry_middleware = SimpleRetryMiddleware(
+        default_retry_count=settings.tasks.default_retry_count,
+        default_retry_label=False,
+        no_result_on_retry=True,
+    )
+
     broker = (
         RedisStreamBroker(**broker_kwargs)
         .with_result_backend(result_backend)
@@ -76,6 +87,7 @@ def create_broker(
                 service_name=effective_service,
             ),
             session_lock_middleware,
+            retry_middleware,
         )
     )
 

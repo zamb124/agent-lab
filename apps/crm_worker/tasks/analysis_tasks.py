@@ -54,6 +54,7 @@ async def _notify_analyze_stage(
     )
 
 
+# Без broker retry: этапы анализа и WS; повтор без отдельной идемпотентности по task_id даёт дубли UI.
 @broker.task
 async def process_note_task(
     task_id: str,

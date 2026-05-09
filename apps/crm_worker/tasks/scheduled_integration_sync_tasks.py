@@ -25,6 +25,8 @@ logger = get_logger(__name__)
 @broker.task(
     task_name=SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
     queue_name="crm",
+    retry_on_error=True,
+    max_retries=2,
 )
 async def scheduled_namespace_integration_unified_sync(
     scheduler_task_id: str,
