@@ -7,8 +7,9 @@
   Ingress, поэтому без разделения все routers получают равный приоритет 1
   и порядок выбора маршрута становится недетерминированным (выигрывает /).
   
-  Subdomain-specific Ingress (livekit/grafana/onlyoffice) используют priority=100
-  и побеждают для своих host'ов поверх wildcard *.humanitec.ru.
+  Subdomain-specific Ingress (livekit/grafana/onlyoffice) используют priority=1000.
+  platform-frontend: priority=-100 — иначе Traefik отдаёт wildcard *.humanitec.ru выше
+  точного host (grafana.humanitec.ru и т.д.), см. traefik/traefik#4161.
 */}}
 ---
 apiVersion: networking.k8s.io/v1
@@ -119,7 +120,7 @@ metadata:
   name: platform-frontend
   namespace: {{ .Values.namespace }}
   annotations:
-    traefik.ingress.kubernetes.io/router.priority: "1"
+    traefik.ingress.kubernetes.io/router.priority: "-100"
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:

@@ -95,12 +95,12 @@ Alembic миграции — **Helm hook Job** `migrations` (`post-install`, `po
 
 | Хост | TLS Secret | Маршруты |
 |---|---|---|
-| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `/flows`, `/crm`, `/rag`, `/sync`, `/documents`, `/scheduler`, `/voice`, `/litserve`, `/` — только если соответствующий сервис включён в `values.yaml` (`applications.*.enabled` / `litserve.enabled`); `templates/80-ingress/platform-ingress.yaml`; **Traefik:** у этого Ingress `router.priority: "1"`, иначе wildcard `*.humanitec.ru` перехватывает трафик вида `livekit.humanitec.ru` раньше отдельных Ingress. |
-| `livekit.humanitec.ru` | `platform-tls` | `/` → livekit:7880; `router.priority: "100"` |
-| `onlyoffice.humanitec.ru` | `platform-tls` | `/` → onlyoffice:80; `router.priority: "100"` |
-| `grafana.humanitec.ru` | `platform-tls` | `/` → grafana:3000; `router.priority: "100"` |
+| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | `platform-services`: префиксы `/flows`, `/crm`, … — `router.priority: "10"`; `platform-frontend`: catch-all `/` — `router.priority: "-100"`. Низкий приоритет у frontend обязателен: иначе Traefik отдаёт wildcard `*.humanitec.ru` выше точного host (`grafana.humanitec.ru` и т.д.) и на поддоменах сервисов открывается SPA вместо целевого backend (см. traefik/traefik#4161). |
+| `livekit.humanitec.ru` | `platform-tls` | `/` → livekit:7880; `router.priority: "1000"` |
+| `onlyoffice.humanitec.ru` | `platform-tls` | `/` → onlyoffice:80; `router.priority: "1000"` |
+| `grafana.humanitec.ru` | `platform-tls` | `/` → grafana:3000; `router.priority: "1000"` |
 
-Dedicated Ingress (livekit, onlyoffice, grafana) задают `traefik.ingress.kubernetes.io/router.priority: "100"` выше, чем platform (`"1"`).
+Отдельные Ingress (livekit, onlyoffice, grafana): `traefik.ingress.kubernetes.io/router.priority: "1000"` — выше `platform-services` (`10`) и `platform-frontend` (`-100`).
 
 `Deployment/livekit` использует `hostNetwork` и занятые порты на ноде — **strategy `Recreate`**, не `RollingUpdate`: иначе новый под зависает в `Pending`, пока жив старый.
 

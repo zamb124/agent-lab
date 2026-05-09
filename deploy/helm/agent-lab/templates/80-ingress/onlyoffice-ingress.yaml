@@ -6,7 +6,7 @@ metadata:
   name: onlyoffice
   namespace: {{ .Values.namespace }}
   annotations:
-    traefik.ingress.kubernetes.io/router.priority: "100"
+    traefik.ingress.kubernetes.io/router.priority: "1000"
   # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
 spec:
   ingressClassName: {{ .Values.ingress.className }}
