@@ -1,30 +1,32 @@
 """
-HTTP-клиент реранкера (OpenAI-совместимый POST на HTTP-gateway RAG и аналоги).
+Пост-retrieval реранк: HTTP-клиент и применение после vector retrieve.
 
-``endpoint_url`` — полный URL эндпоинта (например ``http://host:8014/v1/rerank``), как в ``provider_litserve_rerank_http_url``.
-
-Контракт: POST JSON с полями ``query`` и ``passages`` (тексты чанков в порядке
-кандидатов); ответ 200 с полем ``scores`` — числа той же длины, что и ``passages``.
-Учёт использования: tiktoken (как у ``EmbeddingService``) и ``BillingService`` при наличии контекста user/company.
+Единая реализация для RAG API, CRM, worker и любых вызывающих из core/apps.
 """
 
 from __future__ import annotations
 
-from core.logging import get_logger
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any, List, Optional
 
 import httpx
 import tiktoken
 
+from core.config.base import BaseSettings
 from core.context import get_context
 from core.http import get_httpx_client
+from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.rag.models import RAGSearchResult
+from core.rag.openai_http_contracts import provider_litserve_rerank_http_url
+from core.rag_indexing_schema import IndexProfileSearchDefaults
 
 if TYPE_CHECKING:
     from core.billing.service import BillingService
 
 logger = get_logger(__name__)
+
+
 class RerankerClientError(Exception):
     """Ошибка вызова реранкера; ``status_code`` — 422 или 503 для HTTP API."""
 
@@ -35,12 +37,14 @@ class RerankerClientError(Exception):
         self.detail = detail
         super().__init__(str(detail))
 
+
 def _response_body_as_detail(response: httpx.Response) -> Any:
     try:
         return response.json()
     except Exception:
         text = response.text
         return {"message": text[:8000] if text else ""}
+
 
 class RerankerHTTPClient:
     """Асинхронный клиент к сервису реранкера."""
@@ -62,7 +66,6 @@ class RerankerHTTPClient:
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def count_tokens(self, query: str, passages: List[str]) -> int:
-        """Число токенов по запросу и пассажам (оценка для биллинга)."""
         total = len(self._tokenizer.encode(query))
         for text in passages:
             total += len(self._tokenizer.encode(text))
@@ -116,11 +119,6 @@ class RerankerHTTPClient:
         *,
         max_candidates: int | None = None,
     ) -> list[RAGSearchResult]:
-        """
-        Пересортировывает результаты по скорам реранкера.
-
-        Результаты без изменений, если список пуст.
-        """
         if not results:
             return []
         if not endpoint_url or not endpoint_url.strip():
@@ -231,3 +229,108 @@ class RerankerHTTPClient:
                 )
             )
         return out
+
+
+def rerank_options(
+    request_rerank: bool | None,
+    profile_sd: IndexProfileSearchDefaults | None,
+    settings: BaseSettings,
+) -> tuple[bool, str | None, int | None]:
+    effective_sd = profile_sd
+    if effective_sd is None:
+        effective_sd = settings.rag.document_indexing.search_defaults
+
+    prof = effective_sd.reranker if effective_sd is not None else None
+    if request_rerank is not None:
+        enabled = request_rerank
+    elif prof is not None:
+        enabled = prof.enabled
+    else:
+        enabled = True
+
+    url: str | None = None
+    if prof is not None and prof.url and (u := prof.url.strip()):
+        url = u
+    if url is None:
+        rr = settings.rag.reranker
+        if rr.base_url and (u := rr.base_url.strip()):
+            url = u
+        elif rr.provider == "provider_litserve":
+            url = provider_litserve_rerank_http_url(
+                settings.provider_litserve.resolve_openai_v1_base_url()
+            )
+
+    max_candidates = prof.max_candidates if prof is not None else None
+    return enabled, url, max_candidates
+
+
+async def apply_rerank_after_retrieve(
+    *,
+    results: list[RAGSearchResult],
+    query: str,
+    provider_name: str,
+    request_rerank: bool | None,
+    profile_sd: IndexProfileSearchDefaults | None,
+    settings: BaseSettings,
+) -> list[RAGSearchResult]:
+    enabled, url, max_candidates = rerank_options(request_rerank, profile_sd, settings)
+    if not enabled:
+        return results
+    if provider_name != "pgvector":
+        raise RerankerClientError(
+            status_code=422,
+            detail="rerank поддерживается только для провайдера pgvector",
+        )
+    if not url:
+        raise RerankerClientError(
+            status_code=422,
+            detail="rerank включён, но URL реранкера не задан (профиль или rag.reranker.base_url)",
+        )
+    rr = settings.rag.reranker
+    client = RerankerHTTPClient(
+        timeout_seconds=rr.timeout_seconds,
+        cost_per_1m_tokens=rr.cost_per_1m_tokens,
+        platform_markup=rr.platform_markup,
+        billing_resource_id=rr.billing_model_id,
+    )
+    return await client.rerank(url, query, results, max_candidates=max_candidates)
+
+
+async def apply_rerank_after_retrieve_grouped(
+    *,
+    results_by_namespace: dict[str, list[RAGSearchResult]],
+    namespace_order: list[str],
+    query: str,
+    provider_name: str,
+    request_rerank: bool | None,
+    profile_sd: IndexProfileSearchDefaults | None,
+    settings: BaseSettings,
+) -> dict[str, list[RAGSearchResult]]:
+    empty = {ns: list(results_by_namespace.get(ns, [])) for ns in namespace_order}
+    flat = [r for ns in namespace_order for r in results_by_namespace.get(ns, [])]
+    if not flat:
+        return empty
+
+    reranked = await apply_rerank_after_retrieve(
+        results=flat,
+        query=query,
+        provider_name=provider_name,
+        request_rerank=request_rerank,
+        profile_sd=profile_sd,
+        settings=settings,
+    )
+    by_ns: dict[str, list[RAGSearchResult]] = defaultdict(list)
+    for item in reranked:
+        by_ns[item.namespace].append(item)
+    for bucket in by_ns.values():
+        bucket.sort(key=lambda r: r.score, reverse=True)
+    return {ns: by_ns.get(ns, []) for ns in namespace_order}
+
+
+__all__ = [
+    "RerankerClientError",
+    "RerankerHTTPClient",
+    "apply_rerank_after_retrieve",
+    "apply_rerank_after_retrieve_grouped",
+    "rerank_options",
+]

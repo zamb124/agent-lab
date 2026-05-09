@@ -34,12 +34,12 @@ import {
 } from '@platform/lib/utils/platform-namespace.js';
 import { resolveDisplayName } from '../_helpers/sync-id-resolvers.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
+import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import './sync-channel-row.js';
 import './sync-direct-member-row.js';
-import '@platform/lib/components/fields/platform-field.js';
 
 export class SyncSidebar extends PlatformElement {
     static i18nNamespace = 'sync';
@@ -114,57 +114,6 @@ export class SyncSidebar extends PlatformElement {
             .adhoc-btn:hover { transform: translateY(-1px); }
             .adhoc-btn:active { transform: translateY(0); }
             .adhoc-btn:disabled { opacity: 0.6; cursor: wait; transform: none; box-shadow: none; }
-
-            .ns-section {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-                margin-bottom: var(--space-2);
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-            }
-            .ns-section-controls {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                min-width: 0;
-                width: 100%;
-            }
-            .ns-label {
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: var(--text-tertiary);
-                line-height: 1.2;
-                align-self: stretch;
-            }
-            .ns-section-controls platform-field {
-                flex: 1 1 0;
-                min-width: 0;
-                display: block;
-            }
-            .ns-edit-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 24px;
-                height: 24px;
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                flex-shrink: 0;
-                box-sizing: border-box;
-                transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
-                background: transparent;
-                color: var(--text-secondary);
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-            }
-            .ns-edit-btn:hover {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                border-color: var(--accent);
-            }
 
             .search-box {
                 display: flex;
@@ -259,7 +208,7 @@ export class SyncSidebar extends PlatformElement {
                 box-sizing: border-box;
             }
 
-            platform-service-sidebar[collapsed] .ns-section,
+            platform-service-sidebar[collapsed] platform-sidebar-namespace-select,
             platform-service-sidebar[collapsed] .search-box,
             platform-service-sidebar[collapsed] .section-header,
             platform-service-sidebar[collapsed] .section-subheader { display: none; }
@@ -490,31 +439,17 @@ export class SyncSidebar extends PlatformElement {
                     </button>
                 </div>
                 <div class="header-area">
-                    <div class="ns-section">
-                        <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
-                        <div class="ns-section-controls">
-                            <platform-field
-                                type="enum"
-                                mode="edit"
-                                label=""
-                                class="ns-select"
-                                pill-density="compact"
-                                .value=${selectValue}
-                                .config=${this._namespaceEnumHeaderConfig()}
-                                @change=${this._onNamespaceChange}
-                            ></platform-field>
-                            ${selectValue !== '' && this._activeNamespaceItem() !== null ? html`
-                                <button
-                                    type="button"
-                                    class="ns-edit-btn"
-                                    @click=${this._onEditActiveNamespace}
-                                    title=${this.t('sidebar.edit_namespace_tooltip')}
-                                >
-                                    <platform-icon name="settings" size="14"></platform-icon>
-                                </button>
-                            ` : ''}
-                        </div>
-                    </div>
+                    <platform-sidebar-namespace-select
+                        .label=${this.t('sidebar.namespace_label')}
+                        .value=${selectValue}
+                        .config=${this._namespaceEnumHeaderConfig()}
+                        ?show-edit=${selectValue !== '' && this._activeNamespaceItem() !== null}
+                        ?show-add=${false}
+                        edit-icon="settings"
+                        edit-title=${this.t('sidebar.edit_namespace_tooltip')}
+                        @change=${this._onNamespaceChange}
+                        @edit-request=${this._onEditActiveNamespace}
+                    ></platform-sidebar-namespace-select>
                     <div class="search-box">
                         <platform-icon name="search" size="14"></platform-icon>
                         <input

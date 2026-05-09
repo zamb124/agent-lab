@@ -22,7 +22,9 @@ from core.rag.rag_worker_tasks_port import RagWorkerTasksPort
 
 logger = get_logger(__name__)
 COMPANY_ID_HEADER = "X-Company-Id"
-_SEARCH_REQUEST_OPTION_KEYS = frozenset({"channels", "rrf_k", "per_channel_top_k", "rerank"})
+_SEARCH_REQUEST_OPTION_KEYS = frozenset(
+    {"channels", "rrf_k", "per_channel_top_k", "rerank", "retrieval"}
+)
 
 def _filter_search_options(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not raw:

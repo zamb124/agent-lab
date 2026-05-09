@@ -2,7 +2,7 @@
 HTTP-контракты ``provider_litserve`` для OpenAPI и проверок ответов.
 
 Семантика совпадает с ``openai_server_contracts`` и с тем, что потребляют
-``EmbeddingService`` / ``RerankerHTTPClient`` в ``apps/rag``.
+``EmbeddingService`` / ``RerankerHTTPClient`` (``core/rag/post_retrieval_rerank.py``).
 """
 
 from __future__ import annotations

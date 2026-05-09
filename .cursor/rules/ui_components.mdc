@@ -219,7 +219,9 @@ registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-
 
 - `setPlatformNamespaceSelection(companyId, name)` диспатчит `CoreEvents.UI_NAMESPACE_SELECT_REQUESTED`. `ui.effect.js` персистит выбор в `localStorage` и эмитит `UI_NAMESPACE_CHANGED` + `UI_DOCUMENTS_RELOAD_REQUESTED`.
 - Подписка — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`, не `window.addEventListener('office-documents-list-reload')`.
-- Селектор в шапке service sidebar (CRM / Office / Sync): колонка — подпись (`ns-label` / `namespace-label`) отдельной строкой, затем ряд `ns-section-controls` / `namespace-selector-row` с `<platform-field type="enum" mode="edit" label="" pill-density="compact">` (`flex: 1 1 0; min-width: 0`) и иконками действий. Не оборачивать в отдельный блок с фоном и бордером вокруг поля: один визуальный контур — `field-pill` у `platform-field`, иначе «капсула в капсуле» и обрезание текста в `<select>`.
+- Селектор в шапке `platform-service-sidebar` (CRM / Office / Sync) — только `<platform-sidebar-namespace-select>`: `core/frontend/static/lib/components/layout/platform-sidebar-namespace-select.js`. Внутри уже `platform-field` `type="enum"`, `mode="edit"`, `pill-density="compact"`, плюс опциональные кнопки (`show-edit`, `show-add`, `edit-icon`). События: `change` (как у `platform-field`), `edit-request`, `add-request`. Подписи и `config`/`value`/`disabled` передаёт родитель; модалки и `setPlatformNamespaceSelection` остаются в сервисе.
+- Темизация кнопок — CSS-переменные на предке (часто `platform-service-sidebar` в сервисе): `--platform-namespace-add-background`, `--platform-namespace-add-color`, `--platform-namespace-edit-stroke`, `--platform-namespace-edit-fg`, `--platform-namespace-edit-hover-bg`, `--platform-namespace-edit-hover-fg`, `--platform-namespace-edit-hover-stroke` (дефолты в `:host` компонента).
+- Не оборачивать enum в отдельный блок с фоном и бордером вокруг поля: один визуальный контур — `field-pill` у `platform-field`. Скрытие при `collapsed`: правило на хосте, например `platform-service-sidebar[collapsed] platform-sidebar-namespace-select { display: none }`.
 
 ### Запреты sidebar/breadcrumbs/namespace
 

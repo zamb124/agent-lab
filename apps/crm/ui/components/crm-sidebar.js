@@ -28,7 +28,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import '@platform/lib/components/platform-notification-manager.js';
-import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
 import {
     buildDefaultSidebarNav,
     dropCrmSidebarLegacyTopLevelNodes,
@@ -165,72 +165,12 @@ export class CRMSidebar extends PlatformElement {
                 --sidebar-logo-text-gradient: var(--crm-main-gradient);
                 --sidebar-logo-text-clip: text;
                 --sidebar-logo-text-fill: transparent;
-            }
-
-            .ns-section {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-                margin-bottom: var(--space-3);
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-            }
-            .ns-section-controls {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                min-width: 0;
-                width: 100%;
-            }
-            .ns-label {
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: var(--text-tertiary);
-                line-height: 1.2;
-                align-self: stretch;
-            }
-            .ns-field-wrap {
-                flex: 1 1 0;
-                min-width: 0;
-            }
-            .ns-add-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 24px;
-                height: 24px;
-                border: none;
-                background: var(--crm-main-gradient);
-                color: var(--text-inverse);
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                transition: transform var(--duration-fast);
-                flex-shrink: 0;
-            }
-            .ns-add-btn:hover { transform: scale(1.05); }
-            .ns-edit-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 24px;
-                height: 24px;
-                border: 1px solid var(--crm-stroke);
-                background: transparent;
-                color: var(--text-secondary);
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                transition: background var(--duration-fast),
-                            color var(--duration-fast),
-                            border-color var(--duration-fast);
-                flex-shrink: 0;
-            }
-            .ns-edit-btn:hover {
-                background: var(--crm-selected-bg);
-                color: var(--crm-selected-text);
-                border-color: var(--crm-selected-stroke);
+                --platform-namespace-add-background: var(--crm-main-gradient);
+                --platform-namespace-edit-stroke: var(--crm-stroke);
+                --platform-namespace-edit-fg: var(--text-secondary);
+                --platform-namespace-edit-hover-bg: var(--crm-selected-bg);
+                --platform-namespace-edit-hover-fg: var(--crm-selected-text);
+                --platform-namespace-edit-hover-stroke: var(--crm-selected-stroke);
             }
 
             .nav-section { margin-bottom: var(--space-6); }
@@ -295,7 +235,7 @@ export class CRMSidebar extends PlatformElement {
                 min-width: 0;
             }
 
-            platform-service-sidebar[collapsed] .ns-section,
+            platform-service-sidebar[collapsed] platform-sidebar-namespace-select,
             platform-service-sidebar[collapsed] .nav-label,
             platform-service-sidebar[collapsed] .nav-title { display: none; }
             platform-service-sidebar[collapsed] .nav-item { justify-content: center; padding: var(--space-3); }
@@ -522,39 +462,17 @@ export class CRMSidebar extends PlatformElement {
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
                 <div slot="header">
-                    <div class="ns-section">
-                        <span class="ns-label">${this.t('sidebar.namespace_label')}</span>
-                        <div class="ns-section-controls">
-                            <platform-field
-                                class="ns-field-wrap"
-                                type="enum"
-                                mode="edit"
-                                label=""
-                                pill-density="compact"
-                                .value=${selectValue}
-                                .config=${this._namespaceDropdownConfig(items)}
-                                @change=${this._onNamespaceChange}
-                            ></platform-field>
-                            ${selectValue !== '' ? html`
-                                <button
-                                    class="ns-edit-btn"
-                                    type="button"
-                                    title=${this.t('sidebar.edit_space_tooltip')}
-                                    @click=${() => this._openEditNamespace(selectValue)}
-                                >
-                                    <platform-icon name="edit" size="14"></platform-icon>
-                                </button>
-                            ` : ''}
-                            <button
-                                class="ns-add-btn"
-                                type="button"
-                                title=${this.t('sidebar.create_space_tooltip')}
-                                @click=${this._openCreateNamespace}
-                            >
-                                <platform-icon name="plus" size="14"></platform-icon>
-                            </button>
-                        </div>
-                    </div>
+                    <platform-sidebar-namespace-select
+                        .label=${this.t('sidebar.namespace_label')}
+                        .value=${selectValue}
+                        .config=${this._namespaceDropdownConfig(items)}
+                        ?show-edit=${selectValue !== ''}
+                        edit-title=${this.t('sidebar.edit_space_tooltip')}
+                        add-title=${this.t('sidebar.create_space_tooltip')}
+                        @change=${this._onNamespaceChange}
+                        @edit-request=${() => this._openEditNamespace(selectValue)}
+                        @add-request=${this._openCreateNamespace}
+                    ></platform-sidebar-namespace-select>
                 </div>
 
                 ${treeNodes === null ? html`

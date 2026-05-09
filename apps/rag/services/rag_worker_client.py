@@ -82,6 +82,13 @@ class RAGWorkerClient:
         limit: int = 5,
         filters: Optional[Dict[str, Any]] = None,
         timeout: float = 10.0,
+        company_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        channels: Optional[Dict[str, Any]] = None,
+        rrf_k: Optional[int] = None,
+        per_channel_top_k: Optional[int] = None,
+        rerank: Optional[bool] = None,
+        retrieval: Optional[bool] = None,
     ) -> List[Dict[str, Any]]:
         """Синхронный поиск через RAG Worker с ожиданием результата."""
         logger.info(f"RAG: поиск в namespace {namespace_id}, query='{query[:50]}'")
@@ -91,6 +98,13 @@ class RAGWorkerClient:
             query=query,
             limit=limit,
             filters=filters,
+            company_id=company_id,
+            user_id=user_id,
+            channels=channels,
+            rrf_k=rrf_k,
+            per_channel_top_k=per_channel_top_k,
+            rerank=rerank,
+            retrieval=retrieval,
         ).wait_result(timeout=timeout)
 
         logger.info(f"RAG: поиск завершен, найдено {len(result)} результатов")
@@ -103,6 +117,13 @@ class RAGWorkerClient:
         query: str,
         limit: int = 5,
         filters: Optional[Dict[str, Any]] = None,
+        company_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        channels: Optional[Dict[str, Any]] = None,
+        rrf_k: Optional[int] = None,
+        per_channel_top_k: Optional[int] = None,
+        rerank: Optional[bool] = None,
+        retrieval: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Асинхронный поиск через RAG Worker без ожидания результата."""
         task = await search_task.kiq(
@@ -110,6 +131,13 @@ class RAGWorkerClient:
             query=query,
             limit=limit,
             filters=filters,
+            company_id=company_id,
+            user_id=user_id,
+            channels=channels,
+            rrf_k=rrf_k,
+            per_channel_top_k=per_channel_top_k,
+            rerank=rerank,
+            retrieval=retrieval,
         )
 
         logger.info(f"RAG: задача поиска, task_id={task.task_id}")

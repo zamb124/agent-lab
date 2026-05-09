@@ -9,11 +9,14 @@ from pydantic import BaseModel
 from core.logging import get_logger
 from core.rag.base_provider import validate_metadata_filters
 from core.rag.models import RAGSearchResult
-from core.context import get_context
 from core.rag.factory import get_rag_provider
+from core.rag.post_retrieval_rerank import (
+    apply_rerank_after_retrieve,
+    apply_rerank_after_retrieve_grouped,
+    RerankerClientError,
+)
 from core.billing.exceptions import BillingBalanceBlockedError
 from apps.rag.config import get_rag_settings
-from apps.rag.services.rerank_after_retrieve import apply_rerank_after_retrieve, RerankerClientError
 from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
 
@@ -32,6 +35,7 @@ class SearchRequest(BaseModel):
     rrf_k: Optional[int] = None
     per_channel_top_k: Optional[int] = None
     rerank: Optional[bool] = None
+    retrieval: Optional[bool] = None
 
 
 class SearchResponse(BaseModel):
@@ -79,6 +83,8 @@ async def search_in_namespace(
             search_kwargs["per_channel_top_k"] = request.per_channel_top_k
         if request.rerank is not None:
             search_kwargs["rerank"] = request.rerank
+        if request.retrieval is not None:
+            search_kwargs["retrieval"] = request.retrieval
 
         results = await rag_provider.search(
             namespace_id=namespace_id,
@@ -108,7 +114,7 @@ async def search_in_namespace(
     except BillingBalanceBlockedError:
         raise
     except RerankerClientError as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e.detail))
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -117,10 +123,17 @@ async def search_in_namespace(
 
 
 class GlobalSearchRequest(BaseModel):
-    """Запрос на глобальный поиск"""
+    """Запрос на глобальный поиск (опции поиска совпадают с namespace search, кроме namespace_id)."""
+
     query: str
     namespace_ids: List[str]
     limit: int = 5
+    filters: Optional[Dict[str, Any]] = None
+    channels: Optional[Dict[str, Any]] = None
+    rrf_k: Optional[int] = None
+    per_channel_top_k: Optional[int] = None
+    rerank: Optional[bool] = None
+    retrieval: Optional[bool] = None
 
 
 class GlobalSearchResponse(BaseModel):
@@ -163,11 +176,37 @@ async def global_search(
     try:
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
-        
+
+        search_kwargs: Dict[str, Any] = {}
+        if request.filters is not None:
+            validate_metadata_filters(request.filters)
+        if request.channels is not None:
+            search_kwargs["channels"] = request.channels
+        if request.rrf_k is not None:
+            search_kwargs["rrf_k"] = request.rrf_k
+        if request.per_channel_top_k is not None:
+            search_kwargs["per_channel_top_k"] = request.per_channel_top_k
+        if request.rerank is not None:
+            search_kwargs["rerank"] = request.rerank
+        if request.retrieval is not None:
+            search_kwargs["retrieval"] = request.retrieval
+
         results = await rag_provider.search_multiple_namespaces(
             namespace_ids=valid_namespace_ids,
             query=request.query,
-            limit=request.limit
+            limit=request.limit,
+            filters=request.filters,
+            **search_kwargs,
+        )
+
+        results = await apply_rerank_after_retrieve_grouped(
+            results_by_namespace=results,
+            namespace_order=valid_namespace_ids,
+            query=request.query,
+            provider_name=provider_name,
+            request_rerank=request.rerank,
+            profile_sd=None,
+            settings=settings,
         )
         
         total_results = sum(len(r) for r in results.values())
@@ -180,6 +219,8 @@ async def global_search(
         )
     except BillingBalanceBlockedError:
         raise
+    except RerankerClientError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

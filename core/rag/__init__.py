@@ -33,6 +33,11 @@ from .parsing import parse_document_bytes
 from .rag_resource import RAGResource
 from .rag_resource_bind import RagResourceBindParams
 from .rag_worker_tasks_port import RagWorkerTasksPort
+from .post_retrieval_rerank import (
+    RerankerClientError,
+    apply_rerank_after_retrieve,
+    apply_rerank_after_retrieve_grouped,
+)
 from .providers import AgentsetRAGProvider, PgVectorProvider
 from .repository import RAGRepository
 from .services import EmbeddingService
@@ -63,6 +68,9 @@ __all__ = [
     "get_default_rag_provider",
     "get_rag_provider",
     "RAGRepository",
+    "RerankerClientError",
+    "apply_rerank_after_retrieve",
+    "apply_rerank_after_retrieve_grouped",
     "AgentsetRAGProvider",
     "PgVectorProvider",
     "EmbeddingService",

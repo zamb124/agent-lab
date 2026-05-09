@@ -2,7 +2,7 @@
 Общий контракт OpenAI-совместимого HTTP для RAG-клиентов.
 
 - URL реранка при ``provider_litserve``: ``provider_litserve_rerank_http_url``.
-- Клиенты: ``EmbeddingService`` (POST ``.../embeddings``), ``apps.rag.services.reranker_client.RerankerHTTPClient``.
+- Клиенты: ``EmbeddingService`` (POST ``.../embeddings``), ``core.rag.post_retrieval_rerank.RerankerHTTPClient``.
 
 Тела запросов и ответы сервера LitServe: ``apps.provider_litserve.openai_server_contracts``.
 """

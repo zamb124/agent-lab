@@ -36,7 +36,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-deployment-version.js';
-import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
 
 const NAMESPACES_NAME = 'office/namespaces';
 const INTEGRATION_OP = 'office/integration_status';
@@ -106,49 +106,7 @@ export class OfficeSidebar extends PlatformElement {
                 justify-content: center;
                 padding: var(--space-3);
             }
-            .namespace-selector {
-                display: flex;
-                flex-direction: column;
-                gap: var(--space-2);
-                margin-bottom: var(--space-3);
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-            }
-            .namespace-selector-row {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                min-width: 0;
-                width: 100%;
-            }
-            .namespace-label {
-                font-size: var(--text-xs);
-                font-weight: var(--font-semibold);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: var(--text-tertiary);
-                line-height: 1.2;
-                align-self: stretch;
-            }
-            .namespace-selector-row platform-field {
-                flex: 1 1 0;
-                min-width: 0;
-                display: block;
-            }
-            .namespace-add-btn {
-                display: flex; align-items: center; justify-content: center;
-                width: 24px; height: 24px;
-                flex-shrink: 0;
-                border: none;
-                background: var(--accent);
-                color: var(--text-inverse, white);
-                border-radius: var(--radius-md);
-                cursor: pointer;
-                transition: all var(--duration-fast);
-            }
-            .namespace-add-btn:hover { transform: scale(1.05); }
-            platform-service-sidebar[collapsed] .namespace-selector { display: none; }
+            platform-service-sidebar[collapsed] platform-sidebar-namespace-select { display: none; }
         `,
     ];
 
@@ -307,27 +265,16 @@ export class OfficeSidebar extends PlatformElement {
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
                 <div slot="header">
-                    <div class="namespace-selector" data-hide-collapsed>
-                        <span class="namespace-label">${this.t('sidebar.namespace_label')}</span>
-                        <div class="namespace-selector-row">
-                            <platform-field
-                                type="enum"
-                                mode="edit"
-                                label=""
-                                pill-density="compact"
-                                .value=${nsValue}
-                                .config=${nsConfig}
-                                ?disabled=${!companyId || isEditor || noNamespaces}
-                                @change=${this._onNamespaceChange}
-                            ></platform-field>
-                            <button type="button"
-                                    class="namespace-add-btn"
-                                    title=${this.t('sidebar.create_namespace_tooltip')}
-                                    @click=${this._openCreateNamespaceModal}>
-                                <platform-icon name="plus" size="14"></platform-icon>
-                            </button>
-                        </div>
-                    </div>
+                    <platform-sidebar-namespace-select
+                        .label=${this.t('sidebar.namespace_label')}
+                        .value=${nsValue}
+                        .config=${nsConfig}
+                        ?disabled=${!companyId || isEditor || noNamespaces}
+                        ?show-edit=${false}
+                        add-title=${this.t('sidebar.create_namespace_tooltip')}
+                        @change=${this._onNamespaceChange}
+                        @add-request=${this._openCreateNamespaceModal}
+                    ></platform-sidebar-namespace-select>
                 </div>
                 <button class="nav-item ${this._isList() ? 'active' : ''}"
                         type="button"

@@ -31,7 +31,9 @@ from sqlalchemy import (
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
 from core.context import get_context
+from core.config import get_settings
 from core.rag import RAGRepository
+from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
@@ -691,6 +693,15 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 query=query,
                 limit=max(limit * 4, limit),
                 filters=search_filters,
+            )
+            settings = get_settings()
+            search_results = await apply_rerank_after_retrieve(
+                results=search_results,
+                query=query,
+                provider_name="pgvector",
+                request_rerank=None,
+                profile_sd=None,
+                settings=settings,
             )
             if not search_results:
                 logger.info(f"search_with_similarity('{query[:50]}...') -> 0 entities")

@@ -102,9 +102,7 @@ apps/rag/
 │   ├── documents.py
 │   └── search.py
 ├── services/
-│   ├── rag_worker_tasks_adapter.py
-│   ├── rerank_after_retrieve.py
-│   └── reranker_client.py
+│   └── rag_worker_tasks_adapter.py
 └── ui/
     ├── index.html
     ├── index.js
@@ -115,6 +113,8 @@ apps/rag/
     ├── services/rag-api.service.js
     └── store/rag.store.js
 ```
+
+Реранк после retrieve: **`core/rag/post_retrieval_rerank.py`**.
 
 ## Запуск
 

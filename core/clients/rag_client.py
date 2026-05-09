@@ -74,6 +74,11 @@ class RagClient:
         limit: int = 5,
         filters: Optional[Dict[str, Any]] = None,
         provider: Optional[str] = None,
+        channels: Optional[Dict[str, Any]] = None,
+        rrf_k: Optional[int] = None,
+        per_channel_top_k: Optional[int] = None,
+        rerank: Optional[bool] = None,
+        retrieval: Optional[bool] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {}
         if provider is not None:
@@ -81,6 +86,16 @@ class RagClient:
         body: Dict[str, Any] = {"query": query, "limit": limit}
         if filters is not None:
             body["filters"] = filters
+        if channels is not None:
+            body["channels"] = channels
+        if rrf_k is not None:
+            body["rrf_k"] = rrf_k
+        if per_channel_top_k is not None:
+            body["per_channel_top_k"] = per_channel_top_k
+        if rerank is not None:
+            body["rerank"] = rerank
+        if retrieval is not None:
+            body["retrieval"] = retrieval
         seg = quote(namespace_id, safe="")
         return await self._http.post(
             "rag",
@@ -96,13 +111,36 @@ class RagClient:
         *,
         limit: int = 5,
         provider: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        channels: Optional[Dict[str, Any]] = None,
+        rrf_k: Optional[int] = None,
+        per_channel_top_k: Optional[int] = None,
+        rerank: Optional[bool] = None,
+        retrieval: Optional[bool] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {}
         if provider is not None:
             params["provider"] = provider
+        body: Dict[str, Any] = {
+            "namespace_ids": namespace_ids,
+            "query": query,
+            "limit": limit,
+        }
+        if filters is not None:
+            body["filters"] = filters
+        if channels is not None:
+            body["channels"] = channels
+        if rrf_k is not None:
+            body["rrf_k"] = rrf_k
+        if per_channel_top_k is not None:
+            body["per_channel_top_k"] = per_channel_top_k
+        if rerank is not None:
+            body["rerank"] = rerank
+        if retrieval is not None:
+            body["retrieval"] = retrieval
         return await self._http.post(
             "rag",
             f"{_API_PREFIX}/search",
-            json={"namespace_ids": namespace_ids, "query": query, "limit": limit},
+            json=body,
             params=params or None,
         )

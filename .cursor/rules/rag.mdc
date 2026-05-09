@@ -12,11 +12,13 @@ globs:
 
 Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — единый `core/files/reader/FileReader` (`FileReadResult`); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
 
-Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,services,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services}`.
+Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,services,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank}`.
 
 ## Контракт
 
-- `core/rag/base_provider.py::BaseRAGProvider` — namespaces (`create/delete/list/get`), documents (`add/delete/list/get`), `search(query, namespace?, top_k, filters)`. Реализации: `core/rag/providers/{pgvector,agentset}_provider.py`.
+- `core/rag/base_provider.py::BaseRAGProvider` — namespaces (`create/delete/list/get`), documents (`add/delete/list/get`), `search(query, namespace?, top_k, filters, **kwargs)`. Реализации: `core/rag/providers/{pgvector,agentset}_provider.py`.
+- **Пост-retrieval реранк (только pgvector):** `core/rag/post_retrieval_rerank.py` — `apply_rerank_after_retrieve`, `apply_rerank_after_retrieve_grouped`, `RerankerHTTPClient`. Вызывается после `search` на HTTP-слое RAG, в CRM семантическом поиске сущностей, в `search_task` воркера. Дубли логики реранка в `apps/*` запрещены.
+- Опциональные поля тела поиска: `channels`, `rrf_k`, `per_channel_top_k`, `rerank`, `retrieval` (см. `SearchRequest`, `GlobalSearchRequest`, `RagClient`, `RAGRepository.search_namespace`). Поле `retrieval` зарезервировано для будущей обработки в `PgVectorProvider`; реализация — только в `core/rag`.
 - Модели: `RAGDocument`, `RAGSearchResult`, `RAGNamespace` (Pydantic) + `VectorDocument`, `DocumentProcessingStatus` (SQLAlchemy в БД процесса RAG, `database.rag_url`).
 
 ## Правила (обязательно)

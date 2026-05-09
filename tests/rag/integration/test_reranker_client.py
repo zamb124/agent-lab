@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
 
-from apps.rag.services.reranker_client import RerankerClientError, RerankerHTTPClient
+from core.rag.post_retrieval_rerank import RerankerClientError, RerankerHTTPClient
 from core.context import clear_context, set_context
 from core.models.billing_models import UsageType
 from core.models.context_models import Context, Language
@@ -44,7 +44,7 @@ class _ASGIClientCM:
 
 def _install_gateway_client(monkeypatch: pytest.MonkeyPatch, app: FastAPI) -> None:
     monkeypatch.setattr(
-        "apps.rag.services.reranker_client.get_httpx_client",
+        "core.rag.post_retrieval_rerank.get_httpx_client",
         lambda **kw: _ASGIClientCM(app),
     )
 
