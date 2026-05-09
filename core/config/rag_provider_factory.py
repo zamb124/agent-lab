@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from core.config.base import BaseSettings, get_settings
 from core.context import get_context
-from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
 
 if TYPE_CHECKING:
     from core.rag.base_provider import BaseRAGProvider
@@ -72,6 +71,8 @@ def resolve_rag_provider_bundle(
                 embedding_override.provider = override["provider"]
                 embedding_override.api.model = override["model"]
                 emb = embedding_override
+        from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
+
         embedding_runtime = build_rag_embedding_runtime_dict(emb, llm, pls)
     return ResolvedRagProvider(
         provider_key=key,
