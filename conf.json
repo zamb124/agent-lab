@@ -476,6 +476,7 @@
           "host": "0.0.0.0",
           "gateway_port": 8014,
           "accelerator": "auto",
+          "embedding_accelerator": "auto",
           "workers_per_device": 1,
           "request_timeout_seconds": 300.0,
           "fast_queue": false,

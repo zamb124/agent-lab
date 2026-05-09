@@ -6,6 +6,13 @@
           "lightpanda": null
         }
       }
+    },
+    "provider_litserve": {
+      "provider_litserve": {
+        "infra": {
+          "embedding_accelerator": "cpu"
+        }
+      }
     }
   }
 }

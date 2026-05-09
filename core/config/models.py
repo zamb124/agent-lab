@@ -1123,6 +1123,14 @@ class ProviderLitserveInfraConfig(BaseModel):
             "cuda — cuda:0; на GPU-ноде с Docker передайте через compose --gpus и драйвер на хосте."
         ),
     )
+    embedding_accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
+        default="auto",
+        description=(
+            "Устройство только для POST /v1/embeddings (SentenceTransformer). "
+            "auto — то же, что выбрано глобальным accelerator для воркера; "
+            "cpu — принудительно RAM/CPU (если Qwen3-Embedding-8B не помещается в VRAM)."
+        ),
+    )
     workers_per_device: int = 1
     request_timeout_seconds: float = 300.0
     fast_queue: bool = False

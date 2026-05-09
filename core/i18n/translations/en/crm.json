@@ -1090,8 +1090,12 @@
             "analyze_already_running": "AI analysis for this note is already running",
             "analyze_start_failed": "Failed to start AI analysis",
             "analyze_started": "AI analysis started",
+            "voice_empty": "No speech recognized or recording is empty",
             "voice_failed": "Voice recognition failed",
-            "voice_stopped": "Voice recording finished"
+            "voice_started": "Recording started",
+            "voice_stopped": "Voice recording finished",
+            "voice_unavailable_https": "Microphone recording requires HTTPS or localhost",
+            "voice_unavailable_recorder": "This browser does not support microphone recording"
         },
         "notes_list": {
             "failed": "Failed"

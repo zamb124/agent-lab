@@ -145,15 +145,13 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
             .head-row { display: flex; flex-direction: column; gap: 2px; }
             .subtitle { color: var(--text-secondary); font-size: var(--text-sm); font-weight: var(--font-normal); }
             .header-search {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
                 width: clamp(220px, 28vw, 360px);
-                color: var(--text-secondary);
             }
             .header-search platform-field {
-                flex: 1;
-                min-width: 0;
+                width: 100%;
+            }
+            .header-search platform-icon[slot='prefix'] {
+                color: var(--text-tertiary);
             }
             .section-title {
                 font-size: var(--text-base);
@@ -345,11 +343,12 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
     renderHeaderActions() {
         if (this._step !== 1) return '';
         return html`
-            <label class="header-search">
-                <platform-icon name="search" size="14"></platform-icon>
+            <div class="header-search">
                 <platform-field
                     type="string"
                     mode="edit"
+                    pill-density="compact"
+                    input-type="search"
                     .value=${this._query}
                     placeholder=${this.t('flow_create_modal.search_placeholder')}
                     @change=${(e) => {
@@ -359,8 +358,10 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                         }
                         this._query = v;
                     }}
-                ></platform-field>
-            </label>
+                >
+                    <platform-icon slot="prefix" name="search" size="14"></platform-icon>
+                </platform-field>
+            </div>
         `;
     }
 

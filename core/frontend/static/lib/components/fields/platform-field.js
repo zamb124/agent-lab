@@ -231,6 +231,7 @@ export class PlatformField extends PlatformElement {
                     `
                     : nothing}
                 <div class="field-pill-control">
+                    <slot name="prefix"></slot>
                     <div class="field-pill-control-main">${this._renderField()}</div>
                     <slot name="suffix"></slot>
                 </div>

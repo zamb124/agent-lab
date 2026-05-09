@@ -98,6 +98,18 @@ describe('platform-field dispatcher', () => {
         expect(el.shadowRoot.querySelector('platform-help-hint')).to.be.null;
     });
 
+    it('slot prefix: элемент с slot=prefix попадает в named slot', async () => {
+        const el = await fixture(html`
+            <platform-field type="string" mode="edit" value="">
+                <span slot="prefix" class="prefix-marker">P</span>
+            </platform-field>
+        `);
+        const slotEl = el.shadowRoot.querySelector('slot[name="prefix"]');
+        expect(slotEl).to.exist;
+        const assigned = slotEl.assignedElements().find((n) => n.classList.contains('prefix-marker'));
+        expect(assigned).to.exist;
+    });
+
     it('slot suffix: элемент с slot=suffix попадает в named slot', async () => {
         const el = await fixture(html`
             <platform-field type="string" mode="view" label="L" value="id1">

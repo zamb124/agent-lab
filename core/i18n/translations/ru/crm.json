@@ -1090,8 +1090,12 @@
             "analyze_already_running": "AI-анализ для этой заметки уже выполняется",
             "analyze_start_failed": "Не удалось запустить AI-анализ",
             "analyze_started": "AI-анализ запущен",
+            "voice_empty": "Речь не распознана или запись пустая",
             "voice_failed": "Не удалось распознать голос",
-            "voice_stopped": "Голосовая запись завершена"
+            "voice_started": "Запись с микрофона началась",
+            "voice_stopped": "Голосовая запись завершена",
+            "voice_unavailable_https": "Запись с микрофона доступна только по HTTPS или на localhost",
+            "voice_unavailable_recorder": "Браузер не поддерживает запись с микрофона"
         },
         "notes_list": {
             "failed": "Failed"

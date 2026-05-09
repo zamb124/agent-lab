@@ -55,6 +55,8 @@ alwaysApply: false
 
 `@change` — `detail.value` содержит **типизированное** значение (`number` для number/integer, `boolean` для boolean, `Array` для array, …).
 
+**Слот `prefix`**: в light DOM потомок с `slot="prefix"` рендерится слева от значения в строке `.field-pill-control` (напр. иконка поиска). Пустой слот не ломает вёрстку.
+
 **Слот `suffix`**: в light DOM потомок с `slot="suffix"` рендерится справа от значения в строке `.field-pill-control` (инлайн-действие, напр. «редактировать» в view). Пустой слот не ломает вёрстку.
 
 ### Фокус в `type="string"` (edit)

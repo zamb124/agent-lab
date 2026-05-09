@@ -142,6 +142,7 @@ export const fieldPillStyles = css`
         display: block;
     }
 
+    slot[name='prefix']::slotted(*),
     slot[name='suffix']::slotted(*) {
         flex-shrink: 0;
     }
