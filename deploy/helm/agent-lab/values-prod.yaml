@@ -20,9 +20,11 @@ observability:
   tempo:
     storage: 50Gi
 
-# PVC litserve-model-cache: GigaAM v3 (~3Gi) + Silero TTS v5 (~150Mi) + Silero VAD (~50Mi)
-# + Qwen3-Embedding-8B + Qwen3-Reranker-8B + запас = 100Gi минимум.
-# При изменении размера существующего PVC нужен migrate-pvc.sh (microk8s-hostpath
-# не поддерживает allowVolumeExpansion в-месте).
+# PVC litserve-model-cache: текущий размер зафиксирован на 50Gi.
+# Целевой размер — 100Gi (GigaAM v3 + Silero TTS/VAD + Qwen3 embedding/reranker + запас).
+# microk8s-hostpath не поддерживает allowVolumeExpansion, поэтому resize в-месте невозможен.
+# Для увеличения до 100Gi выполнить:
+#   bash deploy/scripts/migrate-pvc.sh provider-litserve master
+# После успешной миграции обновить значение до 100Gi и закоммитить.
 litserve:
-  modelCacheSize: 100Gi
+  modelCacheSize: 50Gi
