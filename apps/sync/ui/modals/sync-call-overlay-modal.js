@@ -784,6 +784,8 @@ export class SyncCallOverlayModal extends PlatformModal {
         /** После тапа «свернуть» игнорировать сброс, пока не закончится жест (ложный hit на трубку). */
         this._suppressHangupUntil = 0;
         this._cameraEnabledBeforeScreenShare = true;
+        this._roomDisconnecting = false;
+        this._roomConnectRequestId = 0;
 
         this._tokenOp = this.useOp('sync/call_token');
         this._statusOp = this.useOp('sync/call_status');
@@ -934,12 +936,15 @@ export class SyncCallOverlayModal extends PlatformModal {
 
     async _connectRoom() {
         if (!this.callId) return;
+        const connectRequestId = ++this._roomConnectRequestId;
+        this._roomDisconnecting = false;
         try {
             let tokenResult = this._prefetchedLiveKitBundle();
             if (tokenResult === null) {
                 try {
                     await this._tokenOp.run({ call_id: this.callId });
                 } catch (err) {
+                    if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
                     this._status = 'error';
                     this._error = err && typeof err.message === 'string' ? err.message : this.t('call_overlay.err_token_failed');
                     this._connecting = false;
@@ -947,46 +952,56 @@ export class SyncCallOverlayModal extends PlatformModal {
                 }
                 tokenResult = this._tokenOp.lastResult;
             }
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             if (!tokenResult || typeof tokenResult.token !== 'string' || typeof tokenResult.livekit_url !== 'string') {
+                if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
                 this._status = 'error';
                 this._error = this.t('call_overlay.err_livekit_required');
                 this._connecting = false;
                 return;
             }
             const lk = await import('@livekit/client');
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             this._lk = lk;
-            this._room = new lk.Room({
+            const room = new lk.Room({
                 adaptiveStream: true,
                 dynacast: true,
                 publishDefaults: lk.ScreenSharePresets
                     ? { screenShareEncoding: lk.ScreenSharePresets.h1080fps30.encoding }
                     : undefined,
             });
+            this._room = room;
             const ev = lk.RoomEvent;
-            this._room.on(ev.ParticipantConnected, () => this._syncParticipants());
-            this._room.on(ev.ParticipantDisconnected, () => this._syncParticipants());
-            this._room.on(ev.TrackSubscribed, () => this._syncParticipants());
-            this._room.on(ev.TrackUnsubscribed, () => this._syncParticipants());
-            this._room.on(ev.LocalTrackPublished, () => this._syncParticipants());
-            this._room.on(ev.LocalTrackUnpublished, () => this._syncParticipants());
-            this._room.on(ev.Disconnected, () => this._onRoomDisconnected());
+            room.on(ev.ParticipantConnected, () => this._syncParticipants());
+            room.on(ev.ParticipantDisconnected, () => this._syncParticipants());
+            room.on(ev.TrackSubscribed, () => this._syncParticipants());
+            room.on(ev.TrackUnsubscribed, () => this._syncParticipants());
+            room.on(ev.LocalTrackPublished, () => this._syncParticipants());
+            room.on(ev.LocalTrackUnpublished, () => this._syncParticipants());
+            room.on(ev.Disconnected, () => this._onRoomDisconnected());
 
-            await this._room.connect(tokenResult.livekit_url, tokenResult.token);
+            await room.connect(tokenResult.livekit_url, tokenResult.token);
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             if (_canUseMediaDevices()) {
-                await this._room.localParticipant.enableCameraAndMicrophone();
+                await room.localParticipant.enableCameraAndMicrophone();
+                if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
                 const prefs = this._prefsSel.value;
                 const wantCamera = this.callType === 'audio' ? false : (prefs ? prefs.cameraEnabled !== false : true);
-                await this._room.localParticipant.setCameraEnabled(wantCamera);
+                await room.localParticipant.setCameraEnabled(wantCamera);
+                if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
                 this._camOff = !wantCamera;
                 this._micMuted = false;
             } else {
+                if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
                 this.toast('composer.voice_insecure_context', { type: 'warning' });
                 this._camOff = true;
                 this._micMuted = true;
             }
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             this._status = 'active';
             this._connecting = false;
             await this._loadDeviceLists();
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             this._syncParticipants();
             try {
                 await this._statusOp.run({ call_id: this.callId });
@@ -994,6 +1009,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 // не критично — без admin-меню overlay работает.
             }
         } catch (err) {
+            if (connectRequestId !== this._roomConnectRequestId || this._roomDisconnecting) return;
             this._status = 'error';
             this._error = err && typeof err.message === 'string' ? err.message : this.t('call_overlay.err_connect_failed');
             this._connecting = false;
@@ -1006,8 +1022,12 @@ export class SyncCallOverlayModal extends PlatformModal {
         this._removePipFallbackVideo();
         this._closeSharePipDocumentWindow();
         if (this._room) {
+            this._roomDisconnecting = true;
+            this._roomConnectRequestId += 1;
+            try { this._room.removeAllListeners?.(); } catch (_err) { /* noop */ }
             try { this._room.disconnect(); } catch (_err) { /* noop */ }
             this._room = null;
+            this._roomDisconnecting = false;
         }
         this._lk = null;
         this._tiles = [];

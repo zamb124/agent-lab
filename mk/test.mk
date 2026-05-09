@@ -1,6 +1,6 @@
 .PHONY: test test-all test-up test-down test-reset test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
 
-WORKERS ?= 3
+WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
 PYTEST_MAX_WORKER_RESTART ?= 0
 RUN_UI_IN_TEST ?= 0

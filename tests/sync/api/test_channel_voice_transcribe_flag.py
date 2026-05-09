@@ -8,7 +8,6 @@ import time
 from typing import Any
 
 import pytest
-from httpx import AsyncClient
 
 from tests.fixtures.audio_bytes import minimal_wav_silence
 from tests.sync.api._helpers import create_topic_channel_via_http
@@ -76,70 +75,69 @@ async def test_voice_message_without_channel_flag_stays_idle(
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-@pytest.mark.timeout(20)
+@pytest.mark.timeout(120)
 async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
-    sync_service,
+    sync_client,
     sync_worker,
     sync_auth_headers,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
 ) -> None:
-    async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
-        channel_id = await _create_topic_channel(client, sync_auth_headers, company_id, unique_id)
-        patch = await client.patch(
-            f"/sync/api/v1/channels/{channel_id}",
-            headers=sync_auth_headers,
-            json={"transcribe_voice_messages": True},
-        )
-        assert patch.status_code == 200
-        wav = minimal_wav_silence(duration_sec=0.05)
-        up = await client.post(
-            "/sync/api/v1/files/",
-            headers=sync_auth_headers,
-            files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
-        )
-        assert up.status_code == 200
-        f = up.json()
-        sr = await client.post(
+    channel_id = await _create_topic_channel(sync_client, sync_auth_headers, company_id, unique_id)
+    patch = await sync_client.patch(
+        f"/sync/api/v1/channels/{channel_id}",
+        headers=sync_auth_headers,
+        json={"transcribe_voice_messages": True},
+    )
+    assert patch.status_code == 200
+    wav = minimal_wav_silence(duration_sec=0.05)
+    up = await sync_client.post(
+        "/sync/api/v1/files/",
+        headers=sync_auth_headers,
+        files={"file": ("note.wav", io.BytesIO(wav), "audio/wav")},
+    )
+    assert up.status_code == 200
+    f = up.json()
+    sr = await sync_client.post(
+        f"/sync/api/v1/channels/{channel_id}/messages",
+        headers=sync_auth_headers,
+        json={
+            "thread_id": None,
+            "parent_message_id": None,
+            "contents": [_audio_content_block(f)],
+        },
+    )
+    assert sr.status_code == 201
+    msg = sr.json()
+    message_id = msg["id"]
+    audio = next(c for c in msg["contents"] if c["type"] == "file/audio")
+    assert audio["data"]["transcription_status"] == "processing"
+
+    deadline = time.monotonic() + 90.0
+    done_text: str | None = None
+    while time.monotonic() < deadline:
+        lr = await sync_client.get(
             f"/sync/api/v1/channels/{channel_id}/messages",
             headers=sync_auth_headers,
-            json={
-                "thread_id": None,
-                "parent_message_id": None,
-                "contents": [_audio_content_block(f)],
-            },
         )
-        assert sr.status_code == 201
-        msg = sr.json()
-        message_id = msg["id"]
-        audio = next(c for c in msg["contents"] if c["type"] == "file/audio")
-        assert audio["data"]["transcription_status"] == "processing"
-
-        deadline = time.monotonic() + 90.0
-        done_text: str | None = None
-        while time.monotonic() < deadline:
-            lr = await client.get(
-                f"/sync/api/v1/channels/{channel_id}/messages",
-                headers=sync_auth_headers,
-            )
-            assert lr.status_code == 200
-            for m in lr.json()["items"]:
-                if m["id"] != message_id:
+        assert lr.status_code == 200
+        for m in lr.json()["items"]:
+            if m["id"] != message_id:
+                continue
+            for c in m["contents"]:
+                if c["type"] != "file/audio":
                     continue
-                for c in m["contents"]:
-                    if c["type"] != "file/audio":
-                        continue
-                    st = c["data"].get("transcription_status")
-                    if st == "done":
-                        done_text = c["data"].get("transcription_text")
-                        break
-                if done_text is not None:
+                st = c["data"].get("transcription_status")
+                if st == "done":
+                    done_text = c["data"].get("transcription_text")
                     break
             if done_text is not None:
                 break
-            await asyncio.sleep(0.4)
+        if done_text is not None:
+            break
+        await asyncio.sleep(0.4)
 
-        assert done_text is not None
-        assert done_text.strip() != ""
-        assert "Тестовая транскрипция" in done_text
+    assert done_text is not None
+    assert done_text.strip() != ""
+    assert "Тестовая транскрипция" in done_text

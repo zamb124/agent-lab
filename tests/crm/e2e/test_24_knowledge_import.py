@@ -408,40 +408,37 @@ class TestKnowledgeImportE2E:
         chunk_marker = f"KN_E2E_GRAPH_CHUNK_{unique_id}"
         note_title = f"Заметка граф {unique_id}"
         task_name = f"Задача граф {unique_id}"
+        payload = {
+            "note": {
+                "entity_type": "note",
+                "name": note_title,
+                "description": f"Описание {chunk_marker}",
+            },
+            "entities": [
+                {
+                    "entity_type": "task",
+                    "name": task_name,
+                    "description": "Задача из импорта графом",
+                    "attributes": {"origin": "knowledge_import"},
+                },
+            ],
+            "relationships": [
+                {
+                    "source_type": "note",
+                    "source_name": note_title,
+                    "target_type": "task",
+                    "target_name": task_name,
+                    "relationship_type": "mentions",
+                    "weight": 1.0,
+                    "confidence": 0.9,
+                },
+            ],
+            "metadata": _META,
+        }
         await mock_llm_redis(
             [
-                {
-                    "type": "text",
-                    "content": json.dumps(
-                        {
-                            "note": {
-                                "entity_type": "note",
-                                "name": note_title,
-                                "description": f"Описание {chunk_marker}",
-                            },
-                            "entities": [
-                                {
-                                    "entity_type": "task",
-                                    "name": task_name,
-                                    "description": "Задача из импорта графом",
-                                    "attributes": {"origin": "knowledge_import"},
-                                },
-                            ],
-                            "relationships": [
-                                {
-                                    "source_type": "note",
-                                    "source_name": note_title,
-                                    "target_type": "task",
-                                    "target_name": task_name,
-                                    "relationship_type": "mentions",
-                                    "weight": 1.0,
-                                    "confidence": 0.9,
-                                },
-                            ],
-                            "metadata": _META,
-                        }
-                    ),
-                }
+                {"type": "text", "content": json.dumps(payload)},
+                {"type": "text", "content": json.dumps(payload)},
             ]
         )
         await _ensure_import_namespace(crm_client, auth_headers_system, ns)

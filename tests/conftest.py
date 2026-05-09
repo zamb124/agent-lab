@@ -109,24 +109,32 @@ _DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
 _DB_SETUP_LOCK_TIMEOUT_SEC = int(os.environ.get("PLATFORM_TEST_DB_LOCK_TIMEOUT", "1800"))
 
 
-def _real_taskiq_lane(node: Node) -> str:
-    """Доменная полоса очереди mock_llm в Redis для real_taskiq.
+def _real_taskiq_mock_llm_lane(node: Node) -> str:
+    """Суффикс Redis-ключа mock_llm:responses:<lane> для процесса, где исполняется MockLLM.
 
-    Должна совпадать с суффиксом MOCK_LLM_REDIS_KEY у соответствующего TaskIQ worker
-    и uvicorn session-сервисов (tests/fixtures/workers.py, tests/fixtures/services.py).
+    CRM analyze/dedup/graph вызывают LLM через A2A на flows (apps.flows), очередь там же,
+    что у tests/flows — lane ``flows``. TaskIQ crm_worker только дергает EntityService и HTTP flows.
     """
     path = str(node.path).replace("\\", "/")
-    if "test_lara_crm_tools.py" in path:
-        return "crm"
-    if "/tests/crm/" in path:
-        return "crm"
     if "/tests/sync/" in path:
         return "sync"
     if "/tests/rag/" in path:
         return "rag"
-    if "/tests/frontend/" in path:
-        return "flows"
     return "flows"
+
+
+def _real_taskiq_xdist_lane(node: Node) -> str:
+    """Суффикс pytest-xdist_group для real_taskiq (очередь Redis по consumers).
+
+    CRM + flows + frontend делят одну очередь mock_llm:responses:flows — группа flows_llm,
+    иначе при параллельных gw ответы из Redis крадут друг у друга.
+    """
+    path = str(node.path).replace("\\", "/")
+    if "/tests/sync/" in path:
+        return "sync"
+    if "/tests/rag/" in path:
+        return "rag"
+    return "flows_llm"
 
 
 async def _alembic_version_ready(db_url: str) -> bool:
@@ -628,17 +636,15 @@ def pytest_configure(config):
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list) -> None:
     """
-    Тесты с маркером real_taskiq передают ответы LLM через Redis; очередь изолирована
-    по доменным полосам mock_llm:responses:<lane> (flows/crm/sync/rag), см.
-    MOCK_LLM_REDIS_KEY в session TaskIQ workers и uvicorn (fixtures).
+    Тесты с маркером real_taskiq передают ответы LLM через Redis; ключ mock_llm:responses:<lane>
+    задаётся MOCK_LLM_REDIS_KEY у session workers и uvicorn (fixtures).
 
-    Раньше все real_taskiq были в одной xdist_group — при --dist=loadgroup они
-    выполнялись строго по очереди на одном gw. Полосы позволяют параллелить gw:
-    CRM и flows не делят одну очередь в Redis.
+    xdist_group отделён от «папки теста»: CRM использует ту же очередь Redis, что flows
+    (LLM в CRM analyze идёт через A2A на flows), поэтому суффикс группы flows_llm объединяет
+    tests/crm, tests/flows и tests/frontend; sync и rag остаются отдельными полосами.
 
-    SessionServerManager убирает PYTEST_XDIST_WORKER из env дочерних процессов;
-    ключ очереди задаётся MOCK_LLM_REDIS_KEY. Фикстура mock_llm_redis для
-    real_taskiq пишет в ключ полосы теста (_real_taskiq_lane).
+    SessionServerManager сбрасывает PYTEST_XDIST_WORKER у subprocess; фикстура mock_llm_redis
+    для real_taskiq пишет в ключ по _real_taskiq_mock_llm_lane.
 
     tryfirst=True обязателен: xdist remote.py тоже регистрирует
     pytest_collection_modifyitems и добавляет @gname к nodeid по существующим
@@ -646,7 +652,7 @@ def pytest_collection_modifyitems(items: list) -> None:
     """
     for item in items:
         if item.get_closest_marker("real_taskiq"):
-            lane = _real_taskiq_lane(item)
+            lane = _real_taskiq_xdist_lane(item)
             item.add_marker(pytest.mark.xdist_group(f"real_taskiq_{lane}"))
             if item.get_closest_marker("timeout") is None:
                 item.add_marker(pytest.mark.timeout(120, func_only=True))
@@ -836,9 +842,8 @@ async def mock_llm_redis(container, request):
 
     НЕ использовать с sync_tools!
 
-    Для real_taskiq тестов ключ очереди mock_llm:responses:<lane> по пути теста
-    (_real_taskiq_lane), согласован с MOCK_LLM_REDIS_KEY у TaskIQ worker и uvicorn
-    session-сервисов. PYTEST_XDIST_WORKER в дочерних процессах сброшен.
+    Для real_taskiq ключ mock_llm:responses:<lane> по _real_taskiq_mock_llm_lane
+    (tests/crm используют lane flows — LLM на сервисе flows через A2A).
 
     Usage:
         async def test_integration(mock_llm_redis):
@@ -850,7 +855,7 @@ async def mock_llm_redis(container, request):
 
     is_real_taskiq = request.node.get_closest_marker("real_taskiq") is not None
     key_override = (
-        f"mock_llm:responses:{_real_taskiq_lane(request.node)}"
+        f"mock_llm:responses:{_real_taskiq_mock_llm_lane(request.node)}"
         if is_real_taskiq
         else None
     )

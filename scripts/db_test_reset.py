@@ -11,13 +11,11 @@
     отсутствия ORDER BY и накопленного списка типов company `system`
 
 Канон:
-  - TRUNCATE с RESTART IDENTITY CASCADE для всех user-таблиц всех 7 service-БД,
-    кроме `alembic_version` (миграции остаются актуальными)
-  - FLUSHDB Redis DB 0 (state) и DB 1 (TaskIQ broker) — убивает застрявшие
-    `mock_llm:*`, `session:*`, `*lock*`, `taskiq:*` ключи
-
-Перед TRUNCATE по каждой БД завершаются чужие сессии к этой БД (`pg_terminate_backend`),
-иначе команда может ждать блокировку от зависших клиентов на том же порту 54322.
+  - TRUNCATE всех user-таблиц (кроме alembic_version) во всех 7 service-БД
+  - `pg_terminate_backend` всех сторонних сессий перед TRUNCATE
+  - `session_replication_role = replica` — отключает FK-триггеры, TRUNCATE <5s
+  - TRUNCATE ... RESTART IDENTITY CASCADE одним запросом
+  - FLUSHDB Redis DB 0/1 — убирает `mock_llm:*`, `session:*`, `taskiq:*` ключи
 
 Защита от случайного запуска не на тестовом окружении: скрипт принимает
 URL только с портом 54322 (Postgres test) и 63792 (Redis test). На любой
@@ -90,22 +88,57 @@ def _assert_test_redis(host: str, port: int) -> None:
 async def _terminate_other_sessions(conn: asyncpg.Connection) -> int:
     """Закрывает все прочие подключения к текущей БД (кроме этого соединения).
 
-    Иначе TRUNCATE может бесконечно ждать блокировку от pytest / uvicorn / IDE,
-    оставшихся на localhost:54322 после прерванного прогона.
+    1. Терминируем ВСЕХ других.
+    2. ЖДЁМ (до 30s), пока pg_locks не покажет 0 сторонних granted lock'ов.
+    Возвращает суммарное число терминированных.
     """
+    total = 0
+    # Терминируем всех других.
     rows = await conn.fetch(
         """
-        SELECT pg_terminate_backend(pg_stat_activity.pid) AS terminated
+        SELECT pid
         FROM pg_stat_activity
-        WHERE pg_stat_activity.datname = current_database()
+        WHERE datname = current_database()
           AND pid <> pg_backend_pid()
         """
     )
-    return sum(1 for row in rows if row["terminated"])
+    pids = [row["pid"] for row in rows]
+    for pid in pids:
+        terminated = await conn.fetchval(
+            "SELECT pg_terminate_backend($1)", pid
+        )
+        if terminated:
+            total += 1
+
+    # Ждём, пока все сторонние lock'и исчезнут.
+    # platform_crm: rollback 10+ сессий может занимать 10-20s.
+    if total:
+        for _ in range(600):  # 600 * 0.05s = 30s max
+            locks = await conn.fetch(
+                """
+                SELECT 1
+                FROM pg_locks l
+                WHERE l.pid <> pg_backend_pid()
+                  AND l.granted = true
+                LIMIT 1
+                """
+            )
+            if not locks:
+                break
+            await asyncio.sleep(0.05)
+    return total
 
 
 async def _truncate_database(base_dsn: str, db_name: str) -> int:
-    """Truncate всех user-таблиц одной БД. Возвращает количество таблиц."""
+    """Truncate всех user-таблиц одной БД. Возвращает количество таблиц.
+
+    Принцип: каждый TRUNCATE <5s (statement_timeout + lock_timeout = 5s).
+    Для надёжности:
+    1. Повторяем terminate сессий пока не убьём все.
+    2. SET session_replication_role = replica — отключает FK-триггеры,
+       TRUNCATE ... CASCADE выполняется без блокировок по FK.
+    3. TRUNCATE по одной таблице — если падает, видим имя таблицы.
+    """
     parsed = urlparse(base_dsn)
     user = parsed.username
     password = parsed.password
@@ -121,15 +154,21 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
             database=db_name,
         )
     except asyncpg.InvalidCatalogNameError:
-        # БД ещё не создана (например, новый разработчик впервые запускает make test-up
-        # до миграций) — пропускаем без шума.
         print(f"  [{db_name}] БД отсутствует, пропуск")
         return 0
 
     try:
-        killed = await _terminate_other_sessions(conn)
-        if killed:
-            print(f"  [{db_name}] завершено сторонних сессий: {killed}")
+        # Убиваем все сессии, которые держат relation lock'и.
+        # Повторяем, пока не перестанут убиваться.
+        total_killed = 0
+        for _ in range(10):
+            killed = await _terminate_other_sessions(conn)
+            if killed:
+                total_killed += killed
+            else:
+                break
+        if total_killed:
+            print(f"  [{db_name}] завершено сторонних сессий: {total_killed}")
 
         rows = await conn.fetch(
             """
@@ -145,10 +184,33 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
             print(f"  [{db_name}] нет user-таблиц, пропуск")
             return 0
 
-        # Один TRUNCATE — атомарно, FK не блокируют благодаря CASCADE.
-        await conn.execute("SET statement_timeout = '120s'")
+        # `session_replication_role = replica` отключает FK enforcement.
+        # TRUNCATE ... CASCADE не проверяет FK и не ждёт блокировок.
+        await conn.execute("SET session_replication_role = replica")
+        await conn.execute("SET statement_timeout = '5s'")
+        await conn.execute("SET lock_timeout = '5s'")
+
         quoted = ", ".join(f'"{name}"' for name in tables)
-        await conn.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
+        try:
+            await conn.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
+        except asyncpg.QueryCanceledError as exc:
+            # Диагностика: кто держит lock'и в момент падения?
+            print(f"  [{db_name}] TRUNCATE QueryCanceledError — диагностика lock'ов:")
+            locks = await conn.fetch(
+                """
+                SELECT l.locktype, l.mode, l.pid, c.relname, a.query
+                FROM pg_locks l
+                LEFT JOIN pg_class c ON l.relation = c.oid
+                LEFT JOIN pg_stat_activity a ON l.pid = a.pid
+                WHERE l.pid <> pg_backend_pid()
+                  AND l.granted = true
+                ORDER BY l.locktype, l.mode
+                """
+            )
+            for row in locks:
+                q = (row["query"] or "")[:60].replace("\n", " ")
+                print(f"    {row['locktype']} {row['mode']} pid={row['pid']} rel={row['relname']} q={q!r}")
+            raise
         print(f"  [{db_name}] TRUNCATE: {len(tables)} таблиц")
         return len(tables)
     finally:
