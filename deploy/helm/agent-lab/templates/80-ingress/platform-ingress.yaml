@@ -22,8 +22,36 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
+          {{- /*
+            Порядок путей критичен: более специфичные API/health-пути сервисов
+            идут ПЕРВЫМИ — они побеждают при совпадении с более длинным префиксом.
+            SPA-пути (без /api) ведут на frontend, который отдаёт index.html
+            и передаёт управление клиентскому роутеру.
+          */}}
+
           {{- if $.Values.applications.flows.enabled }}
-          - path: /flows
+          - path: /flows/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.flows.serviceName }}
+                port:
+                  number: {{ $.Values.applications.flows.port }}
+          - path: /flows/health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.flows.serviceName }}
+                port:
+                  number: {{ $.Values.applications.flows.port }}
+          - path: /flows/docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.flows.serviceName }}
+                port:
+                  number: {{ $.Values.applications.flows.port }}
+          - path: /flows/openapi.json
             pathType: Prefix
             backend:
               service:
@@ -31,8 +59,30 @@ spec:
                 port:
                   number: {{ $.Values.applications.flows.port }}
           {{- end }}
+
           {{- if $.Values.applications.crm.enabled }}
-          - path: /crm
+          - path: /crm/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.crm.serviceName }}
+                port:
+                  number: {{ $.Values.applications.crm.port }}
+          - path: /crm/health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.crm.serviceName }}
+                port:
+                  number: {{ $.Values.applications.crm.port }}
+          - path: /crm/docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.crm.serviceName }}
+                port:
+                  number: {{ $.Values.applications.crm.port }}
+          - path: /crm/openapi.json
             pathType: Prefix
             backend:
               service:
@@ -40,8 +90,30 @@ spec:
                 port:
                   number: {{ $.Values.applications.crm.port }}
           {{- end }}
+
           {{- if $.Values.applications.rag.enabled }}
-          - path: /rag
+          - path: /rag/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.rag.serviceName }}
+                port:
+                  number: {{ $.Values.applications.rag.port }}
+          - path: /rag/health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.rag.serviceName }}
+                port:
+                  number: {{ $.Values.applications.rag.port }}
+          - path: /rag/docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.rag.serviceName }}
+                port:
+                  number: {{ $.Values.applications.rag.port }}
+          - path: /rag/openapi.json
             pathType: Prefix
             backend:
               service:
@@ -49,8 +121,30 @@ spec:
                 port:
                   number: {{ $.Values.applications.rag.port }}
           {{- end }}
+
           {{- if $.Values.applications.sync.enabled }}
-          - path: /sync
+          - path: /sync/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.sync.serviceName }}
+                port:
+                  number: {{ $.Values.applications.sync.port }}
+          - path: /sync/health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.sync.serviceName }}
+                port:
+                  number: {{ $.Values.applications.sync.port }}
+          - path: /sync/docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.sync.serviceName }}
+                port:
+                  number: {{ $.Values.applications.sync.port }}
+          - path: /sync/openapi.json
             pathType: Prefix
             backend:
               service:
@@ -58,8 +152,30 @@ spec:
                 port:
                   number: {{ $.Values.applications.sync.port }}
           {{- end }}
+
           {{- if $.Values.applications.office.enabled }}
-          - path: /documents
+          - path: /documents/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.office.serviceName }}
+                port:
+                  number: {{ $.Values.applications.office.port }}
+          - path: /documents/health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.office.serviceName }}
+                port:
+                  number: {{ $.Values.applications.office.port }}
+          - path: /documents/docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.office.serviceName }}
+                port:
+                  number: {{ $.Values.applications.office.port }}
+          - path: /documents/openapi.json
             pathType: Prefix
             backend:
               service:
@@ -67,9 +183,31 @@ spec:
                 port:
                   number: {{ $.Values.applications.office.port }}
           {{- end }}
+
           {{- $sched := index $.Values.applications "scheduler-api" }}
           {{- if $sched.enabled }}
-          - path: /scheduler
+          - path: /scheduler/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $sched.serviceName }}
+                port:
+                  number: {{ $sched.port }}
+          - path: /scheduler/health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $sched.serviceName }}
+                port:
+                  number: {{ $sched.port }}
+          - path: /scheduler/docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $sched.serviceName }}
+                port:
+                  number: {{ $sched.port }}
+          - path: /scheduler/openapi.json
             pathType: Prefix
             backend:
               service:
@@ -77,8 +215,30 @@ spec:
                 port:
                   number: {{ $sched.port }}
           {{- end }}
+
           {{- if $.Values.applications.voice.enabled }}
-          - path: /voice
+          - path: /voice/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.voice.serviceName }}
+                port:
+                  number: {{ $.Values.applications.voice.port }}
+          - path: /voice/health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.voice.serviceName }}
+                port:
+                  number: {{ $.Values.applications.voice.port }}
+          - path: /voice/docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.applications.voice.serviceName }}
+                port:
+                  number: {{ $.Values.applications.voice.port }}
+          - path: /voice/openapi.json
             pathType: Prefix
             backend:
               service:
@@ -86,8 +246,16 @@ spec:
                 port:
                   number: {{ $.Values.applications.voice.port }}
           {{- end }}
+
           {{- if $.Values.litserve.enabled }}
-          - path: /litserve
+          - path: /litserve/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Values.litserve.serviceName }}
+                port:
+                  number: {{ $.Values.litserve.port }}
+          - path: /litserve/health
             pathType: Prefix
             backend:
               service:
@@ -95,7 +263,9 @@ spec:
                 port:
                   number: {{ $.Values.litserve.port }}
           {{- end }}
+
           {{- if $.Values.applications.frontend.enabled }}
+          {{- /* Фронтенд обрабатывает все SPA-пути: /flows, /crm, /sync, /rag и т.д. */}}
           - path: /
             pathType: Prefix
             backend:
