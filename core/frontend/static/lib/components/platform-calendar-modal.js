@@ -281,6 +281,7 @@ export class PlatformCalendarModal extends PlatformModal {
             :host {
                 --calendar-sidebar-width: 420px;
                 --calendar-grid-columns: 7;
+                --calendar-toolbar-control-size: 34px;
             }
 
             :host([open]) .modal-overlay {
@@ -419,8 +420,11 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .btn-icon {
-                width: 34px;
-                height: 34px;
+                box-sizing: border-box;
+                width: var(--calendar-toolbar-control-size);
+                height: var(--calendar-toolbar-control-size);
+                min-width: var(--calendar-toolbar-control-size);
+                min-height: var(--calendar-toolbar-control-size);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 border-radius: var(--radius-md);
@@ -429,6 +433,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                flex-shrink: 0;
             }
 
             .btn-icon:hover {
@@ -437,19 +442,36 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .view-segment {
+                box-sizing: border-box;
                 display: inline-flex;
+                align-items: stretch;
+                height: var(--calendar-toolbar-control-size);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-md);
                 overflow: hidden;
+                flex-shrink: 0;
             }
 
             .view-segment button {
+                box-sizing: border-box;
                 border: none;
+                border-right: 1px solid var(--glass-border-subtle);
                 background: transparent;
                 color: var(--text-secondary);
-                padding: 6px 10px;
-                font-size: var(--text-xs);
+                margin: 0;
+                padding: 0 12px;
+                height: 100%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: var(--text-sm);
+                line-height: 1;
+                font-weight: var(--font-medium);
                 cursor: pointer;
+            }
+
+            .view-segment button:last-child {
+                border-right: none;
             }
 
             .view-segment button.active {
@@ -474,18 +496,19 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .btn-calendar-create {
-                width: 40px;
-                height: 40px;
-                min-width: 40px;
-                min-height: 40px;
+                box-sizing: border-box;
+                width: var(--calendar-toolbar-control-size);
+                height: var(--calendar-toolbar-control-size);
+                min-width: var(--calendar-toolbar-control-size);
+                min-height: var(--calendar-toolbar-control-size);
                 padding: 0;
                 border-radius: 50%;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 22px;
                 line-height: 1;
                 font-weight: var(--font-semibold);
+                flex-shrink: 0;
             }
 
             .btn.btn-primary.btn-calendar-create {
@@ -3976,7 +3999,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _renderIntegrationsMenuBlock(v, headerStyle = false) {
         const btnClass = headerStyle ? 'header-btn' : 'btn-icon';
-        const iconSize = headerStyle ? '16' : '20';
+        const iconSize = '16';
         return html`
             <div class="integrations-menu-anchor">
                 <button
@@ -4138,7 +4161,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                 aria-label=${v('create_event')}
                                 @click=${() => this._openCreateEventDialog(parseDateInputLocal(this._anchorDate))}
                             >
-                                <platform-icon name="plus" size="20"></platform-icon>
+                                <platform-icon name="plus" size="16"></platform-icon>
                             </button>
                             ${this._renderIntegrationsMenuBlock(v, false)}
                         </div>

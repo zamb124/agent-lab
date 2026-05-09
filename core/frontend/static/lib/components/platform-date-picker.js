@@ -209,7 +209,7 @@ export class PlatformDatePicker extends PlatformElement {
             }
 
             :host([embedded]) .trigger {
-                min-height: 24px;
+                min-height: var(--field-pill-number-spin-height);
                 border: none;
                 border-radius: 0;
                 background: transparent;

@@ -1050,10 +1050,17 @@ export class CRMNoteCardView extends PlatformElement {
             }
             .note-semantics-edit .semantics-field.picker-field .entity-search-wrap {
                 position: relative;
+                display: flex;
+                align-items: center;
+                min-height: 0;
+                width: 100%;
+                box-sizing: border-box;
             }
             .semantics-picker-pill .entity-search-wrap input[data-canon='search-as-you-type'] {
                 box-sizing: border-box;
-                width: 100%;
+                flex: 1;
+                min-width: 0;
+                width: auto;
                 padding-right: 36px;
             }
             .semantics-clear {
@@ -1162,6 +1169,7 @@ export class CRMNoteCardView extends PlatformElement {
                 border: none;
                 background: transparent;
                 padding: 0;
+                align-items: center;
             }
             .tag-chip {
                 display: inline-flex;
@@ -2490,83 +2498,91 @@ export class CRMNoteCardView extends PlatformElement {
                     : ''}
                 ${showVoice
                     ? html`
-                        <div class="semantics-field picker-field field-pill semantics-picker-pill">
+                        <div class="semantics-field picker-field field-pill semantics-picker-pill" data-mode="edit">
                             <div class="field-pill-head">
                                 <span class="field-pill-label">${this.t('note_edit.field_voice_author')}</span>
                             </div>
-                            <div class="entity-search-wrap">
-                                <input
-                                    type="text"
-                                    class="field-pill-input"
-                                    data-canon="search-as-you-type"
-                                    placeholder=${this.t('note_edit.voice_author_search')}
-                                    .value=${this._voiceSearchQuery}
-                                    @focus=${() => { this._voiceSearchOpen = true; this._runVoiceEntitySearch(); }}
-                                    @input=${this._onVoiceSearchInput}
-                                />
-                                ${this._editVoiceEntityId.length > 0
-                                    ? html`
-                                        <button type="button" class="semantics-clear" @click=${this._onClearVoicePick}>
-                                            <platform-icon name="close" size="12"></platform-icon>
-                                        </button>
-                                    `
-                                    : ''}
-                                ${this._voiceSearchOpen
-                                    ? this._renderEntityPickerPopover(
-                                        'voice',
-                                        this._voiceSearchLoading,
-                                        0,
-                                        'note_edit.entity_search_min',
-                                        this._voiceSearchResults,
-                                        (it) => this._onPickVoiceSearchItem(it),
-                                        this._voiceSearchFilteredNoMatch === true
-                                            ? 'note_edit.entity_search_none_matching_voice'
-                                            : 'note_edit.entity_search_none',
-                                    )
-                                    : ''}
+                            <div class="field-pill-control">
+                                <div class="field-pill-control-main">
+                                    <div class="entity-search-wrap">
+                                        <input
+                                            type="text"
+                                            class="field-pill-input"
+                                            data-canon="search-as-you-type"
+                                            placeholder=${this.t('note_edit.voice_author_search')}
+                                            .value=${this._voiceSearchQuery}
+                                            @focus=${() => { this._voiceSearchOpen = true; this._runVoiceEntitySearch(); }}
+                                            @input=${this._onVoiceSearchInput}
+                                        />
+                                        ${this._editVoiceEntityId.length > 0
+                                            ? html`
+                                                <button type="button" class="semantics-clear" @click=${this._onClearVoicePick}>
+                                                    <platform-icon name="close" size="12"></platform-icon>
+                                                </button>
+                                            `
+                                            : ''}
+                                        ${this._voiceSearchOpen
+                                            ? this._renderEntityPickerPopover(
+                                                'voice',
+                                                this._voiceSearchLoading,
+                                                0,
+                                                'note_edit.entity_search_min',
+                                                this._voiceSearchResults,
+                                                (it) => this._onPickVoiceSearchItem(it),
+                                                this._voiceSearchFilteredNoMatch === true
+                                                    ? 'note_edit.entity_search_none_matching_voice'
+                                                    : 'note_edit.entity_search_none',
+                                            )
+                                            : ''}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     `
                     : ''}
                 ${showContext
                     ? html`
-                        <div class="semantics-field picker-field field-pill semantics-picker-pill">
+                        <div class="semantics-field picker-field field-pill semantics-picker-pill" data-mode="edit">
                             <div class="field-pill-head">
                                 <span class="field-pill-label">${this.t('note_edit.field_context_anchor')}</span>
                             </div>
-                            <div class="entity-search-wrap">
-                                <input
-                                    type="text"
-                                    class="field-pill-input"
-                                    data-canon="search-as-you-type"
-                                    placeholder=${this._contextAnchorSearchPlaceholder()}
-                                    .value=${this._contextSearchQuery}
-                                    @focus=${() => {
-                                        this._contextSearchOpen = true;
-                                        this._runContextEntitySearch();
-                                    }}
-                                    @input=${this._onContextSearchInput}
-                                />
-                                ${this._editContextEntityId.length > 0
-                                    ? html`
-                                        <button type="button" class="semantics-clear" @click=${this._onClearContextPick}>
-                                            <platform-icon name="close" size="12"></platform-icon>
-                                        </button>
-                                    `
-                                    : ''}
-                                ${this._contextSearchOpen
-                                    ? this._renderEntityPickerPopover(
-                                        'context',
-                                        this._contextSearchLoading,
-                                        0,
-                                        'note_edit.entity_search_min',
-                                        this._contextSearchResults,
-                                        (it) => this._onPickContextSearchItem(it),
-                                        this._contextSearchFilteredNoMatch === true
-                                            ? 'note_edit.entity_search_none_matching_anchor'
-                                            : 'note_edit.entity_search_none',
-                                    )
-                                    : ''}
+                            <div class="field-pill-control">
+                                <div class="field-pill-control-main">
+                                    <div class="entity-search-wrap">
+                                        <input
+                                            type="text"
+                                            class="field-pill-input"
+                                            data-canon="search-as-you-type"
+                                            placeholder=${this._contextAnchorSearchPlaceholder()}
+                                            .value=${this._contextSearchQuery}
+                                            @focus=${() => {
+                                                this._contextSearchOpen = true;
+                                                this._runContextEntitySearch();
+                                            }}
+                                            @input=${this._onContextSearchInput}
+                                        />
+                                        ${this._editContextEntityId.length > 0
+                                            ? html`
+                                                <button type="button" class="semantics-clear" @click=${this._onClearContextPick}>
+                                                    <platform-icon name="close" size="12"></platform-icon>
+                                                </button>
+                                            `
+                                            : ''}
+                                        ${this._contextSearchOpen
+                                            ? this._renderEntityPickerPopover(
+                                                'context',
+                                                this._contextSearchLoading,
+                                                0,
+                                                'note_edit.entity_search_min',
+                                                this._contextSearchResults,
+                                                (it) => this._onPickContextSearchItem(it),
+                                                this._contextSearchFilteredNoMatch === true
+                                                    ? 'note_edit.entity_search_none_matching_anchor'
+                                                    : 'note_edit.entity_search_none',
+                                            )
+                                            : ''}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     `
@@ -3594,28 +3610,32 @@ export class CRMNoteCardView extends PlatformElement {
                             .value=${this._editDate.length > 0 ? this._editDate : null}
                             @change=${this._onEditDateChange}
                         ></platform-field>
-                        <div class="field-pill tags-field-pill">
+                        <div class="field-pill tags-field-pill" data-mode="edit">
                             <div class="field-pill-head">
                                 <span class="field-pill-label">${this.t('note_edit.field_tags')}</span>
                             </div>
-                            <div class="tags-wrap">
-                                ${this._editTags.map((tag) => html`
-                                    <span class="tag-chip">
-                                        ${tag}
-                                        <button type="button" @click=${() => this._onRemoveTag(tag)}>
-                                            <platform-icon name="close" size="10"></platform-icon>
-                                        </button>
-                                    </span>
-                                `)}
-                                <input
-                                    type="text"
-                                    class="tag-input"
-                                    data-canon="composer"
-                                    placeholder=${this.t('note_edit.placeholder_tag')}
-                                    .value=${this._tagDraft}
-                                    @input=${this._onTagDraftInput}
-                                    @keydown=${this._onTagDraftKeydown}
-                                />
+                            <div class="field-pill-control">
+                                <div class="field-pill-control-main">
+                                    <div class="tags-wrap">
+                                        ${this._editTags.map((tag) => html`
+                                            <span class="tag-chip">
+                                                ${tag}
+                                                <button type="button" @click=${() => this._onRemoveTag(tag)}>
+                                                    <platform-icon name="close" size="10"></platform-icon>
+                                                </button>
+                                            </span>
+                                        `)}
+                                        <input
+                                            type="text"
+                                            class="tag-input"
+                                            data-canon="composer"
+                                            placeholder=${this.t('note_edit.placeholder_tag')}
+                                            .value=${this._tagDraft}
+                                            @input=${this._onTagDraftInput}
+                                            @keydown=${this._onTagDraftKeydown}
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

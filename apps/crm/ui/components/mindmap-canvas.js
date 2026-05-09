@@ -24,7 +24,7 @@
  * двойной клик — `node-dblclick`; ПКМ — `node-contextmenu` { node, screenX, screenY }.
  */
 
-import { html, svg, css } from 'lit';
+import { html, svg, css, unsafeCSS } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import { readMindmapView, writeMindmapView } from '../utils/mindmap-view-preference.js';
@@ -35,6 +35,8 @@ const V_GAP_SIBLINGS = 36;
 const ROOT_CENTER_FILL = '#64748b';
 const ICON_SLOT = 34;
 const NODE_H = 44;
+/** Скругление ноды в user space SVG и в CSS foreignObject; обводка рисуется отдельным inset-rect. */
+const MM_NODE_CORNER_RX = 12;
 
 const BRANCH_PALETTE = [
     '#22c55e',
@@ -422,7 +424,7 @@ export class CRMMindmapCanvas extends PlatformElement {
                 height: 100%;
                 padding: 0 12px 0 8px;
                 box-sizing: border-box;
-                border-radius: 12px;
+                border-radius: ${unsafeCSS(`${MM_NODE_CORNER_RX}px`)};
                 font-family: var(--font-sans, system-ui);
                 font-size: 13px;
                 font-weight: 600;
@@ -991,6 +993,11 @@ export class CRMMindmapCanvas extends PlatformElement {
                 ringStroke = '#f59e0b';
             }
             const sw = isSel ? 3 : 2;
+            const inset = sw / 2;
+            const innerW = p.w - sw;
+            const innerH = p.h - sw;
+            const rxStroke =
+                innerW > 0 && innerH > 0 ? Math.max(0, MM_NODE_CORNER_RX - inset) : 0;
             const fillBg = isRoot ? accent : '#ffffff';
             const fo = html`
                 <div xmlns="http://www.w3.org/1999/xhtml" class=${innerCls}>
@@ -1026,13 +1033,27 @@ export class CRMMindmapCanvas extends PlatformElement {
                     <rect
                         width="${p.w}"
                         height="${p.h}"
-                        rx="12"
-                        ry="12"
+                        rx="${MM_NODE_CORNER_RX}"
+                        ry="${MM_NODE_CORNER_RX}"
                         fill=${fillBg}
                         fill-opacity="${isRoot ? 1 : 0.94}"
-                        stroke=${ringStroke}
-                        stroke-width="${sw}"
                     />
+                    ${innerW > 0 && innerH > 0
+                        ? svg`
+                            <rect
+                                x="${inset}"
+                                y="${inset}"
+                                width="${innerW}"
+                                height="${innerH}"
+                                rx="${rxStroke}"
+                                ry="${rxStroke}"
+                                fill="none"
+                                stroke=${ringStroke}
+                                stroke-width="${sw}"
+                                stroke-linejoin="round"
+                            />
+                        `
+                        : null}
                     <foreignObject class="mm-fo" x="0" y="0" width="${p.w}" height="${p.h}">
                         ${fo}
                     </foreignObject>

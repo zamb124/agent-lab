@@ -19,8 +19,10 @@ export class TagInput extends PlatformElement {
                 display: flex;
                 flex-wrap: wrap;
                 gap: var(--space-1);
+                align-items: center;
                 padding: 0;
-                min-height: 0;
+                min-height: var(--field-pill-number-spin-height);
+                box-sizing: border-box;
                 background: transparent;
                 border: none;
                 border-radius: 0;

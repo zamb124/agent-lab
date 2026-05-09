@@ -52,7 +52,8 @@ export const fieldPillStyles = css`
     }
 
     .field-pill--tags .tags-row {
-        min-height: 28px;
+        min-height: var(--field-pill-number-spin-height);
+        box-sizing: border-box;
     }
 
     .field-pill--tags .tag-input {
