@@ -2,7 +2,7 @@
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
+.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
 
 # ============================================================================
 # Конфигурация
@@ -222,6 +222,19 @@ k8s-rollback:
 # Снять блокировку Helm pending-* без rollback приложений (удалить только зависшие release Secret).
 k8s-helm-clear-pending:
 	HELM_NAMESPACE=$(K8S_NAMESPACE) HELM_RELEASE=$(K8S_RELEASE) bash deploy/scripts/helm_clear_pending_release.sh
+
+# Adopt orphan-ресурсов в release / удаление legacy перед helm upgrade.
+# Решает 'invalid ownership metadata; missing key app.kubernetes.io/managed-by'.
+# Параметры: ORPHANS="ingress/foo ingress/bar"  LEGACY="ingress/old"
+# Пример:
+#   make k8s-helm-adopt-orphans \
+#     ORPHANS="ingress/platform-services ingress/platform-frontend" \
+#     LEGACY="ingress/platform"
+k8s-helm-adopt-orphans:
+	HELM_NAMESPACE=$(K8S_NAMESPACE) HELM_RELEASE=$(K8S_RELEASE) \
+		bash deploy/scripts/helm_adopt_orphan_resources.sh \
+		$(addprefix --delete-legacy=,$(LEGACY)) \
+		$(ORPHANS)
 
 # Полное удаление чарта (PVC сохраняются — их удалять вручную).
 k8s-uninstall:
