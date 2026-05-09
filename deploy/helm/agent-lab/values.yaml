@@ -373,7 +373,7 @@ observability:
   tempo:
     enabled: true
     nodeName: master
-    image: grafana/tempo:v2.9.2
+    image: grafana/tempo:2.9.2
     storage: 50Gi
   grafana:
     enabled: true
