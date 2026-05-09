@@ -38,6 +38,8 @@ function _slugify(text) {
 export class CompanyModal extends PlatformFormModal {
     static modalKind = 'platform.company_create';
 
+    static i18nNamespace = 'platform';
+
     static properties = {
         ...PlatformFormModal.properties,
         companyName: { state: true },

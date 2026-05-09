@@ -8,7 +8,12 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.priority: "1000"
 {{- if .Values.applications.frontend.enabled }}
-    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s/grafana-forward-auth@kubernetescrd" .Values.namespace | quote }}
+    {{- /*
+      Traefik: Middleware CRD в том же namespace, что и Ingress — только имя ресурса + @kubernetescrd.
+      Префикс "<namespace>/" в аннотации даёт несуществующее имя middleware → роут Grafana не создаётся,
+      HTTPS на grafana.<domain> попадает на platform-frontend (wildcard *.domain → главная landing).
+    */}}
+    traefik.ingress.kubernetes.io/router.middlewares: "grafana-forward-auth@kubernetescrd"
 {{- end }}
   # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
 spec:
