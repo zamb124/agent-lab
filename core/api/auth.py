@@ -606,12 +606,11 @@ async def grafana_auth_check(request: Request):
     """
     Проверка доступа к Grafana: только пользователи company_id == 'system'.
 
-    Вызывается nginx auth_request (annotation на grafana-ingress) — не
-    пользователем напрямую. AuthMiddleware уже отработал к моменту вызова
-    и положил token_data в request.state.
+    Вызывается Traefik ForwardAuth (Middleware на Ingress grafana), не браузером напрямую.
+    AuthMiddleware уже отработал к моменту вызова и положил token_data в request.state.
 
-    При успехе возвращает 200 + заголовок X-Auth-User (email пользователя),
-    который nginx пробрасывает в Grafana как X-WEBAUTH-USER (auth.proxy).
+    При успехе возвращает 200 + заголовок X-Auth-User (email или user_id), который Traefik
+    пробрасывает в Grafana как auth.proxy (GF_AUTH_PROXY_HEADER_NAME).
     """
     token_data = getattr(request.state, "token_data", None)
     if not token_data:

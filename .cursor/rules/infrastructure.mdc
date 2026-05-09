@@ -169,7 +169,7 @@ CI (`.github/workflows/deploy.yml`, `workflow_dispatch` или push в `main`):
 
 **Сбор трейсов:** OTLP gRPC `alloy:4317` (`OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317` в `agentlab.appEnv`); Alloy форвардит в Tempo через `tempo.platform.svc.cluster.local:4317`.
 
-**Авторизация Grafana:** `auth.proxy` — заголовок `X-Auth-User` от nginx. Production: frontend `/api/auth/grafana-check` + JWT cookie + проверка `company_id == "system"` через отдельный auth-snippet в Ingress (внешняя настройка, не в чарте).
+**Авторизация Grafana:** `auth.proxy` в Grafana (`GF_AUTH_PROXY_HEADER_NAME=X-Auth-User`). Traefik `Middleware` `forwardAuth` на Ingress `grafana` вызывает `http://frontend.<namespace>.svc.cluster.local:<port>/frontend/api/auth/grafana-check`; тот же JWT cookie, что у платформы; только `company_id == "system"`. Ответ 200 с заголовком `X-Auth-User` Traefik пробрасывает в Grafana. Хост `grafana.<domain>` не является тенантом: `core.utils.domain.extract_tenant_subdomain` исключает субдомен `grafana`, иначе в production `CompanyResolver` отдавал бы 404 до handler. Шаблоны: [`deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml), аннотация на [`grafana-ingress.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-ingress.yaml). При `applications.frontend.enabled=false` middleware не создаётся и аннотация не ставится.
 
 **Корреляция:** `trace_id` в логах (Loki) → Derived Field → Tempo waterfall. Поиск:
 

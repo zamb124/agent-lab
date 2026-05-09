@@ -9,7 +9,7 @@ from fastapi import Request, HTTPException
 
 from core.config import settings
 from core.models.identity_models import Company
-from core.utils.domain import extract_subdomain
+from core.utils.domain import extract_subdomain, extract_tenant_subdomain
 from core.utils.tokens import TokenData
 
 logger = get_logger(__name__)
@@ -126,7 +126,7 @@ class CompanyResolver:
         company_repo = self.container.company_repository
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
-        subdomain = self._extract_subdomain(host)
+        subdomain = extract_tenant_subdomain(host)
 
         if subdomain:
             company_id = await subdomain_repo.get_company_id(subdomain)

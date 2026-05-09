@@ -157,7 +157,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             .react-composite-row {
                 display: flex;
                 flex-wrap: wrap;
-                align-items: flex-end;
+                align-items: stretch;
                 gap: var(--space-3);
             }
             .react-composite-row > platform-field {

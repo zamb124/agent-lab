@@ -130,6 +130,11 @@ export const fieldPillStyles = css`
         overflow: visible;
     }
 
+    /* Однострочные edit-контролы (enum, string, number+spin и т.д.) — одна высота; токен — --field-pill-number-spin-height. */
+    .field-pill[data-mode='edit'] > .field-pill-control {
+        min-height: var(--field-pill-number-spin-height);
+    }
+
     .field-pill-control-main {
         flex: 1;
         min-width: 0;
@@ -415,6 +420,7 @@ export const fieldPillStyles = css`
         gap: var(--field-pill-number-gap);
         width: 100%;
         min-width: 0;
+        min-height: var(--field-pill-number-spin-height);
         box-sizing: border-box;
     }
 
@@ -500,12 +506,20 @@ export const fieldPillStyles = css`
 
     .field-pill-enum-wrap {
         position: relative;
+        display: flex;
+        align-items: stretch;
         width: 100%;
         min-width: 0;
+        height: var(--field-pill-number-spin-height);
+        min-height: var(--field-pill-number-spin-height);
         box-sizing: border-box;
     }
 
     .field-pill-enum-input {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        align-self: stretch;
         padding-right: 28px;
         cursor: text;
     }

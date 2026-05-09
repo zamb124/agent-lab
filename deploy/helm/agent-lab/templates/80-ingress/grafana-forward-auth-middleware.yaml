@@ -1,0 +1,14 @@
+{{- if and .Values.ingress.enabled .Values.observability.grafana.enabled .Values.applications.frontend.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: grafana-forward-auth
+  namespace: {{ .Values.namespace }}
+spec:
+  forwardAuth:
+    address: http://frontend.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.applications.frontend.port }}/frontend/api/auth/grafana-check
+    trustForwardHeader: true
+    authResponseHeaders:
+      - X-Auth-User
+{{- end }}

@@ -5,6 +5,7 @@ import pytest
 from core.utils.domain import (
     extract_base_domain,
     extract_subdomain,
+    extract_tenant_subdomain,
     get_cookie_domain,
     get_host_with_port,
     get_protocol,
@@ -62,6 +63,16 @@ def test_get_cookie_domain_localhost_shared_across_subdomains() -> None:
 
 def test_extract_subdomain_on_ip() -> None:
     assert extract_subdomain("127.0.0.1:8002") is None
+
+
+def test_extract_tenant_subdomain_grafana_host_not_tenant() -> None:
+    assert extract_subdomain("grafana.humanitec.ru") == "grafana"
+    assert extract_tenant_subdomain("grafana.humanitec.ru") is None
+    assert extract_tenant_subdomain("grafana.agents-lab.ru") is None
+
+
+def test_extract_tenant_subdomain_company_unchanged() -> None:
+    assert extract_tenant_subdomain("acme.humanitec.ru") == "acme"
 
 
 def test_unknown_hostname_still_primary_domain() -> None:

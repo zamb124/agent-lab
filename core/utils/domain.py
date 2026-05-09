@@ -111,6 +111,22 @@ def extract_subdomain(host: str) -> str | None:
     return None
 
 
+INFRA_NON_TENANT_SUBDOMAINS: frozenset[str] = frozenset({"grafana"})
+
+
+def extract_tenant_subdomain(host: str) -> str | None:
+    """
+    Субдомен для привязки к компании (тенант).
+
+    Хосты вида grafana.<base_domain> — инфраструктурные Ingress, не тенанты:
+    для них возвращается None, чтобы JWT/X-Company-Id определяли компанию.
+    """
+    label = extract_subdomain(host)
+    if label and label in INFRA_NON_TENANT_SUBDOMAINS:
+        return None
+    return label
+
+
 def is_local(host: str) -> bool:
     """Локальная разработка: localhost, lvh.me, loopback/private/link-local IP."""
     base = extract_base_domain(host)

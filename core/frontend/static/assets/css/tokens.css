@@ -313,6 +313,7 @@
     /* Числовое поле (platform-field-number): колонка шагов вместо нативных стрелок */
     --field-pill-number-gap: var(--space-2);
     --field-pill-number-spin-width: 30px;
+    /* Высота spin = канон min-height однострочного edit-ряда в `.field-pill-control` (enum, string, number). */
     --field-pill-number-spin-height: 40px;
     --field-pill-number-spin-radius: var(--radius-sm);
     --field-pill-number-spin-border: var(--glass-border-subtle);
