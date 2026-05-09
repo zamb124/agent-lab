@@ -121,6 +121,8 @@ export class CRMGraphWorkspace extends PlatformElement {
         _mergeAnchorId: { state: true },
         _entitiesById: { state: true },
         _loading: { state: true },
+        /** @type {string[]} предыдущие корни графа при drill (mind map и 3D) */
+        _mindmapRootStack: { state: true },
     };
 
     static styles = [
@@ -160,7 +162,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             .mindmap-overlay-title {
                 position: absolute;
                 z-index: 12;
-                top: 20px;
+                top: 80px;
                 left: 20px;
                 max-width: min(420px, calc(100% - 120px));
                 padding: 12px 14px;
@@ -186,6 +188,47 @@ export class CRMGraphWorkspace extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+            }
+
+            .mindmap-overlay-title-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .mindmap-overlay-title-text {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .mindmap-back-btn {
+                flex-shrink: 0;
+                width: 32px;
+                height: 32px;
+                margin: 0;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--glass-border-medium);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-strong);
+                color: var(--text-primary);
+                box-shadow: var(--glass-shadow-subtle);
+                cursor: pointer;
+                pointer-events: auto;
+            }
+
+            .mindmap-back-btn:hover {
+                border-color: var(--accent);
+                background: var(--glass-solid-strong);
+                color: var(--accent);
+                box-shadow: var(--glass-shadow-medium);
+            }
+
+            .mindmap-back-btn:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
             }
 
             .state-overlay {
@@ -372,6 +415,11 @@ export class CRMGraphWorkspace extends PlatformElement {
                 }
                 crm-graph-legend { left: 8px; bottom: 8px; }
                 .overlay-meta { display: none; }
+                .mindmap-overlay-title {
+                    top: 104px;
+                    left: 8px;
+                    max-width: min(420px, calc(100% - 24px));
+                }
             }
         `,
     ];
@@ -418,6 +466,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._loading = false;
         this._searchDebounceTimer = null;
         this._timelineReloadTimer = null;
+        this._mindmapRootStack = [];
         this._pendingPathLookups = null;
         this._lastNamespaceLoaded = undefined;
         this._crmNamespaceSel = this.select(selectCrmApiNamespace);
@@ -581,10 +630,15 @@ export class CRMGraphWorkspace extends PlatformElement {
             this._graphView.setMaxDepth({ maxDepth: parsed.depth });
             dirty = true;
         }
-        if (parsed.root !== null && parsed.root !== this._selectedRootId) {
-            this._selectedRootId = parsed.root;
-            this._defaultOverviewActive = false;
-            dirty = true;
+        if (parsed.root !== null) {
+            const cur =
+                typeof this._selectedRootId === 'string' ? this._selectedRootId.trim() : '';
+            if (parsed.root !== cur) {
+                this._mindmapRootStack = [];
+                this._selectedRootId = parsed.root;
+                this._defaultOverviewActive = false;
+                dirty = true;
+            }
         }
         if (parsed.query !== this._entitySearchQuery) {
             this._entitySearchQuery = parsed.query;
@@ -787,6 +841,11 @@ export class CRMGraphWorkspace extends PlatformElement {
             } else {
                 this._mindmapErrorKey = '';
             }
+        } else if (this._canvasView === '3d') {
+            const rid3 = typeof this._selectedRootId === 'string' ? this._selectedRootId.trim() : '';
+            if (rid3.length > 0) {
+                this._rootLabelMindmap = this._rootLabelFromGraph(response, rid3);
+            }
         }
         const pending = this._pendingSearchFocusId;
         if (typeof pending === 'string' && pending.length > 0) {
@@ -873,6 +932,10 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._graphEdges = filtered;
         this._shortestPathEdges = [];
         this._loading = false;
+        const ridRel = typeof this._selectedRootId === 'string' ? this._selectedRootId.trim() : '';
+        if (ridRel.length > 0 && this._canvasView === '3d') {
+            this._rootLabelMindmap = this._rootLabelFromGraph({ nodes: this._graphNodes }, ridRel);
+        }
     }
 
     _onShortestPathLoaded(response) {
@@ -1305,6 +1368,13 @@ export class CRMGraphWorkspace extends PlatformElement {
         if (id.length === 0) {
             throw new Error('CRMGraphWorkspace._applyGraphFromNode: nodeId required');
         }
+        if (this._canvasView === 'mindmap' || this._canvasView === '3d') {
+            const prev =
+                typeof this._selectedRootId === 'string' ? this._selectedRootId.trim() : '';
+            if (prev.length > 0 && prev !== id) {
+                this._mindmapRootStack = [...this._mindmapRootStack, prev];
+            }
+        }
         this._defaultOverviewActive = false;
         this._selectedRootId = id;
         this._graphDataMode = 'influence';
@@ -1322,6 +1392,26 @@ export class CRMGraphWorkspace extends PlatformElement {
             },
         });
         this._selectedNodeId = id;
+        this._syncGraphLocationSearch();
+        this._rebuildGraphByMode();
+    }
+
+    _onGraphRootBackClick() {
+        if (this._canvasView !== 'mindmap' && this._canvasView !== '3d') {
+            return;
+        }
+        if (!Array.isArray(this._mindmapRootStack) || this._mindmapRootStack.length === 0) {
+            return;
+        }
+        const prevRoot = this._mindmapRootStack[this._mindmapRootStack.length - 1];
+        if (typeof prevRoot !== 'string' || prevRoot.trim().length === 0) {
+            throw new Error('CRMGraphWorkspace._onGraphRootBackClick: invalid stack entry');
+        }
+        const nextStack = this._mindmapRootStack.slice(0, -1);
+        this._mindmapRootStack = nextStack;
+        const trimmed = prevRoot.trim();
+        this._selectedRootId = trimmed;
+        this._selectedNodeId = trimmed;
         this._syncGraphLocationSearch();
         this._rebuildGraphByMode();
     }
@@ -1502,6 +1592,7 @@ export class CRMGraphWorkspace extends PlatformElement {
             return;
         }
         if (actionId === 'reset_view') {
+            this._mindmapRootStack = [];
             this._entitySearchQuery = '';
             this._timelineStartPercent = 0;
             this._timelineEndPercent = 100;
@@ -1637,11 +1728,32 @@ export class CRMGraphWorkspace extends PlatformElement {
                       `
                     : nothing}
 
-                ${this._canvasView === 'mindmap'
+                ${this._canvasView === 'mindmap' || this._canvasView === '3d'
                     ? html`
                           <div class="mindmap-overlay-title">
-                              <h2>${this.t('mindmap.overlay_title')}</h2>
-                              <div class="root-line">${this._rootLabelMindmap}</div>
+                              <div class="mindmap-overlay-title-row">
+                                  ${this._mindmapRootStack.length > 0
+                                      ? html`
+                                            <button
+                                                type="button"
+                                                class="mindmap-back-btn"
+                                                title=${this.t('mindmap.back')}
+                                                aria-label=${this.t('mindmap.back_aria')}
+                                                @click=${this._onGraphRootBackClick}
+                                            >
+                                                <platform-icon name="chevron-left" size="20"></platform-icon>
+                                            </button>
+                                        `
+                                      : nothing}
+                                  <div class="mindmap-overlay-title-text">
+                                      <h2>
+                                          ${this._canvasView === 'mindmap'
+                                              ? this.t('mindmap.overlay_title')
+                                              : this.t('graph.view_mode_3d')}
+                                      </h2>
+                                      <div class="root-line">${this._rootLabelMindmap}</div>
+                                  </div>
+                              </div>
                           </div>
                       `
                     : nothing}

@@ -2741,13 +2741,6 @@ export class CRMNoteCardView extends PlatformElement {
         input.click();
     }
 
-    _onAttachmentTriggerKeydown(event) {
-        if (event.key !== 'Enter' && event.key !== ' ') {
-            return;
-        }
-        event.preventDefault();
-        this._onUploadClick('edit');
-    }
     _onUploadFiles(e) {
         const fileList = e.target.files;
         if (fileList === null) return;
@@ -2912,12 +2905,10 @@ export class CRMNoteCardView extends PlatformElement {
         const isOpen = this._attachmentsPopoverOpen && this._attachmentsPopoverMode === mode;
         const buttonTitle = editMode ? this.t('note_edit.attachment_add') : this.t('note_view.action_attachments');
         const handleClick = () => {
-            this._onUploadClick(mode);
             if (isOpen) {
                 this._closeAttachmentsPopover();
-                return;
             }
-            this._openAttachmentsPopover(mode);
+            this._onUploadClick(mode);
         };
         return html`
             <div
@@ -2927,33 +2918,17 @@ export class CRMNoteCardView extends PlatformElement {
                 @focusin=${() => this._openAttachmentsPopover(mode)}
                 @focusout=${this._onAttachmentsFocusOut}
             >
-                ${editMode
-                    ? html`
-                        <label
-                            class="round-btn"
-                            title=${buttonTitle}
-                            for=${this._attachmentInputId}
-                            tabindex="0"
-                            @click=${handleClick}
-                            @keydown=${this._onAttachmentTriggerKeydown}
-                        >
-                            <platform-icon name="paperclip" size="20"></platform-icon>
-                            <span class="attachments-badge">${count}</span>
-                        </label>
-                    `
-                    : html`
-                        <button
-                            type="button"
-                            class="round-btn"
-                            title=${buttonTitle}
-                            aria-haspopup="menu"
-                            aria-expanded=${String(isOpen)}
-                            @click=${handleClick}
-                        >
-                            <platform-icon name="paperclip" size="20"></platform-icon>
-                            <span class="attachments-badge">${count}</span>
-                        </button>
-                    `}
+                <button
+                    type="button"
+                    class="round-btn"
+                    title=${buttonTitle}
+                    aria-haspopup="menu"
+                    aria-expanded=${String(isOpen)}
+                    @click=${handleClick}
+                >
+                    <platform-icon name="paperclip" size="20"></platform-icon>
+                    <span class="attachments-badge">${count}</span>
+                </button>
                 ${isOpen ? this._renderAttachmentsPopover(mode) : nothing}
             </div>
         `;

@@ -1465,7 +1465,17 @@ export class CRMEntityCard extends PlatformElement {
         }
     }
 
+    _isStaleEntityCardOpEvent(event) {
+        const meta = event && event.meta;
+        const causationId = meta && typeof meta.causation_id === 'string' ? meta.causation_id : null;
+        const latestId = this._cardOp.op.selectors.lastRequestId(this.bus.getState());
+        return causationId !== null && latestId !== null && causationId !== latestId;
+    }
+
     _onCardLoaded(event) {
+        if (this._isStaleEntityCardOpEvent(event)) {
+            return;
+        }
         this._loadingCard = false;
         const card = event && event.payload && event.payload.result;
         if (!card || typeof card !== 'object' || !card.entity) {
@@ -1497,6 +1507,9 @@ export class CRMEntityCard extends PlatformElement {
     }
 
     _onCardFailed(event) {
+        if (this._isStaleEntityCardOpEvent(event)) {
+            return;
+        }
         this._loadingCard = false;
         const message = event && event.payload && typeof event.payload.message === 'string'
             ? event.payload.message

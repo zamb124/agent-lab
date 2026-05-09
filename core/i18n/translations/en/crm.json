@@ -963,6 +963,8 @@
     "mindmap": {
         "page_title": "Mind map",
         "overlay_title": "Mind map",
+        "back": "Previous root",
+        "back_aria": "Go back to the previous graph root",
         "loading": "Loading relationship map…",
         "err_person": "Could not load the user entity.",
         "err_invalid_root": "Root entity for the map is missing or unavailable.",

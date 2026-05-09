@@ -550,6 +550,9 @@ export class CRMEntityDetailPage extends PlatformPage {
         }
 
         this.useEvent(this._cardOp.op.events.SUCCEEDED, (event) => {
+            if (this._isStaleEntityCardOpEvent(event)) {
+                return;
+            }
             const result = event.payload && event.payload.result ? event.payload.result : null;
             if (!result || typeof result !== 'object') {
                 throw new Error('crm/entity_card SUCCEEDED: payload.result missing');
@@ -558,6 +561,9 @@ export class CRMEntityDetailPage extends PlatformPage {
             this._cardError = '';
         });
         this.useEvent(this._cardOp.op.events.FAILED, (event) => {
+            if (this._isStaleEntityCardOpEvent(event)) {
+                return;
+            }
             const err = event.payload && event.payload.error ? event.payload.error : null;
             this._card = null;
             this._cardError = err && typeof err.message === 'string' ? err.message : 'load_failed';
@@ -602,6 +608,13 @@ export class CRMEntityDetailPage extends PlatformPage {
             throw new Error('crm-entity-card-storage-type-draft: invalid detail');
         }
         this._draftStorageTypePair = { entity_type: d.entity_type, entity_subtype: d.entity_subtype };
+    }
+
+    _isStaleEntityCardOpEvent(event) {
+        const meta = event && event.meta;
+        const causationId = meta && typeof meta.causation_id === 'string' ? meta.causation_id : null;
+        const latestId = this._cardOp.op.selectors.lastRequestId(this.bus.getState());
+        return causationId !== null && latestId !== null && causationId !== latestId;
     }
 
     willUpdate(changed) {

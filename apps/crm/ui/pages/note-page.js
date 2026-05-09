@@ -178,6 +178,9 @@ export class CRMNotePage extends CRMNamespacePage {
             this._reloadCurrent();
         });
         this.useEvent(this._cardOp.op.events.SUCCEEDED, (event) => {
+            if (this._isStaleEntityCardOpEvent(event)) {
+                return;
+            }
             const result = event.payload && event.payload.result ? event.payload.result : null;
             if (!result || typeof result !== 'object') {
                 throw new Error('crm/entity_card SUCCEEDED: payload.result missing');
@@ -186,6 +189,9 @@ export class CRMNotePage extends CRMNamespacePage {
             this._cardError = '';
         });
         this.useEvent(this._cardOp.op.events.FAILED, (event) => {
+            if (this._isStaleEntityCardOpEvent(event)) {
+                return;
+            }
             const err = event.payload && event.payload.error ? event.payload.error : null;
             this._card = null;
             this._cardError = err && typeof err.message === 'string' ? err.message : 'load_failed';
@@ -255,6 +261,17 @@ export class CRMNotePage extends CRMNamespacePage {
 
     _isDraftId(value) {
         return value === 'new' || (typeof value === 'string' && value.startsWith('draft-'));
+    }
+
+    /**
+     * Два быстрых `crm/note/updated` при analyze→apply порождают параллельные GET card;
+     * ответ без связей может прийти позже свежего — не перезаписываем UI.
+     */
+    _isStaleEntityCardOpEvent(event) {
+        const meta = event && event.meta;
+        const causationId = meta && typeof meta.causation_id === 'string' ? meta.causation_id : null;
+        const latestId = this._cardOp.op.selectors.lastRequestId(this.bus.getState());
+        return causationId !== null && latestId !== null && causationId !== latestId;
     }
 
     _reloadCurrent() {
