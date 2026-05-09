@@ -213,6 +213,22 @@ class BaseContainer:
             CompanyVoiceProviderRepository,
         )
         return CompanyVoiceProviderRepository(db_url=self.shared_db_url)
+
+    @lazy
+    def platform_pronunciation_rule_repository(self):
+        """Глобальные правила произношения TTS (system/superadmin), shared БД."""
+        from core.db.repositories.pronunciation_rule_repository import (
+            PlatformPronunciationRuleRepository,
+        )
+        return PlatformPronunciationRuleRepository(db_url=self.shared_db_url)
+
+    @lazy
+    def company_pronunciation_rule_repository(self):
+        """Per-company правила произношения TTS, shared БД."""
+        from core.db.repositories.pronunciation_rule_repository import (
+            CompanyPronunciationRuleRepository,
+        )
+        return CompanyPronunciationRuleRepository(db_url=self.shared_db_url)
     
     @lazy
     def file_repository(self):

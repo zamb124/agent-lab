@@ -29,6 +29,9 @@ docs/scenarios/**/index.md
 
 /server.log
 
+# Тяжёлые тестовые файлы корпуса (>5MB), скачиваются через scripts/download_example_docs.py --large
+tests/.cache/
+
 # Video files
 docs/video/*.mov
 /logs/app.log

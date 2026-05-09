@@ -122,9 +122,12 @@ check-voice-resolver:
 check-speakable-parity:
 	@uv run python scripts/check_speakable_parity.py
 
-check-voice-canon: check-voice-resolver check-speakable-parity
+check-tts-pipeline:
+	@uv run python scripts/check_tts_pipeline_single_apply.py
 
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-i18n check-i18n-keys
+check-voice-canon: check-voice-resolver check-speakable-parity check-tts-pipeline
+
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-i18n check-i18n-keys
 	@echo "check-events-canon: OK"
 
 check-i18n:

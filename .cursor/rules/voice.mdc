@@ -281,6 +281,93 @@ Per-process default — `settings.voice` (`SpeechProvidersConfig`), ENV-преф
 - Heavy-модели (Silero, GigaAM) — session-scoped в `tests/provider_litserve/conftest.py`, `pytest.mark.timeout(15)`.
 - Прогон: `uv run pytest tests/voice/ -v`; `uv run pytest tests/provider_litserve/ -v --confcutdir=tests/provider_litserve`.
 
+## Pronunciation Pipeline (TTS Text-Shaping)
+
+Перед вызовом провайдера текст проходит **единственную** общую точку препроцесса — `PronunciationAwareTTSClient.synthesize` в `core/clients/tts_client.py`. Собирается в `voice_resolver.get_tts_client` для всех провайдеров.
+
+### Стадии `TtsTextPipeline.transform`
+
+1. **SSML extract** (фича-флаг `voice.tts.pronunciation.ssml_subset_enabled`, выкл по умолчанию).
+2. **Нормализация** — числа, даты, валюты, аббревиатуры (`core/utils/text_normalizers/`).
+3. **Regex-правила** — precompiled `re.Pattern`, порядок из БД.
+4. **Alias + stress-правила** — Aho-Corasick, longest-match, word-boundary.
+5. **Provider-final** — `apply_tts_input_steps` остаётся внутри `LocalTTSEngine` (litserve).
+
+### Capabilities matrix
+
+| provider | alias | regex | числа/даты | stress `+` | SSML phoneme |
+|---|---|---|---|---|---|
+| litserve (Silero) | да | да | да | **да** | нет |
+| yandex | да | да | да | **да** | да |
+| sber | да | да | да | **да** | да |
+| cloud_ru | да | да | да | нет | нет |
+| mock | да | да | да | **да** | да |
+
+### Модели правил (`core/clients/tts_pronunciation/models.py`)
+
+```python
+PronunciationRule(
+    id,              # UUID
+    kind,            # "alias" | "regex" | "stress"
+    pattern,         # слово / regex / слово
+    replacement,     # замена; для stress с '+' перед ударной гласной
+    language,        # BCP-47 ISO 639-1, None = любой
+    case_sensitive,  # по умолчанию False
+    word_boundary,   # только для alias/stress, по умолчанию True
+    providers,       # whitelist провайдеров; None = все совместимые
+    voices,          # whitelist голосов; None = любые
+    enabled,
+    note,
+)
+```
+
+### Cascade резолва
+
+```
+platform_pronunciation_rules (БД, system/superadmin)
+  → company_pronunciation_rules (БД, per-company)
+  → SpeechOverride.pronunciation_rules (per-call)
+```
+
+`voice_resolver.resolve_tts_pronunciation(company_id, override)` — TTL-кэш 300s. Инвалидация: `invalidate_company_overrides_cache(company_id)` и `invalidate_platform_pronunciation_cache()`.
+
+### SpeechOverride (расширение)
+
+| Поле | Тип |
+|---|---|
+| `pronunciation_rules` | `list[PronunciationRule] \| None` |
+| `pronunciation_replace` | `bool` (default False; True — заменяет platform+company) |
+
+### REST (per-company)
+
+| Метод | Путь |
+|---|---|
+| `GET` | `/frontend/api/companies/{company_id}/pronunciation-rules` |
+| `POST` | `/frontend/api/companies/{company_id}/pronunciation-rules` |
+| `PUT` | `/frontend/api/companies/{company_id}/pronunciation-rules/{rule_id}` |
+| `DELETE` | `/frontend/api/companies/{company_id}/pronunciation-rules/{rule_id}` |
+| `POST` | `/frontend/api/companies/{company_id}/pronunciation-rules/test` (dry-run) |
+
+### REST (platform, superadmin)
+
+| Метод | Путь |
+|---|---|
+| `GET/POST/PUT/DELETE` | `/frontend/api/platform/pronunciation-rules[/{rule_id}]` |
+
+### CI
+
+`make check-tts-pipeline` (`scripts/check_tts_pipeline_single_apply.py`) — запрещает прямой импорт `TtsTextPipeline` / `get_tts_text_pipeline` в `apps/**` кроме `apps/frontend/api/company_pronunciation_rules.py` (dry-run).
+
+### Bootstrap seed
+
+При старте `frontend` (если таблица `platform_pronunciation_rules` пустая): `Хуманитик → хуманитэк`, `Humanitec → хуманитэк` + stress-варианты. Управляется флагом `voice.tts.pronunciation_seed_enabled` (не в `TtsPronunciationConfig`, а в on_startup `frontend`).
+
+### Запреты
+
+- Прямой вызов `TtsTextPipeline.transform` вне `PronunciationAwareTTSClient` и dry-run REST — fail CI.
+- Хранение `CompiledPronunciation` как глобального синглтона — запрещено (TTL-кэш только в `voice_resolver`).
+- Stress-правила для провайдеров без stress capability (cloud_ru) — игнорируются, не ошибка.
+
 ## Запреты
 
 - Прямой импорт `Litserve*Client` / `CloudRu*Client` / `Yandex*Client` / `Sber*Client` / `LocalSileroVADClient` / `SileroVADProvider` вне `core/clients/**` — fail CI.

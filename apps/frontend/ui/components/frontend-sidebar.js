@@ -171,6 +171,7 @@ export class FrontendSidebar extends PlatformElement {
             </button>
         `;
     }
+
 }
 
 customElements.define('frontend-sidebar', FrontendSidebar);

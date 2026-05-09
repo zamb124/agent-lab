@@ -1280,16 +1280,18 @@ def get_llm_for_state(
 
 def get_vision_llm(
     model_name: str = "google/gemini-2.5-flash-preview",
-) -> LLMClient:
+) -> "LLMClient | MockLLM":
+    """Создает LLM клиент для vision запросов.
+
+    В тестовом окружении (TESTING=true) возвращает тот же MockLLM, что и get_llm:
+    модель подменяется на mock-gpt-4, реальный API не вызывается.
     """
-    Создает LLM клиент для vision запросов.
-    
-    Args:
-        model_name: Модель для vision (по умолчанию google/gemini-2.5-flash-preview)
-        
-    Returns:
-        LLMClient настроенный для vision
-    """
+    if _is_testing():
+        mock_key = "mock-gpt-4"
+        if mock_key not in _global_mock_registry:
+            _global_mock_registry[mock_key] = MockLLM(model_name=mock_key)
+        return _global_mock_registry[mock_key]
+
     settings = get_settings()
     provider = settings.llm.provider
     timeout = settings.llm.timeout

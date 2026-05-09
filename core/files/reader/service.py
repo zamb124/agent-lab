@@ -148,6 +148,62 @@ def _is_zip_local_header_magic(raw: bytes) -> bool:
     return len(raw) >= 4 and raw[:4] == b"PK\x03\x04"
 
 
+def _try_antiword(raw: bytes) -> Optional[str]:
+    """Запускает antiword; возвращает текст или None при сбое."""
+    antiword = shutil.which("antiword")
+    if antiword is None:
+        return None
+    with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = tmp.name
+    try:
+        proc = subprocess.run([antiword, tmp_path], capture_output=True, timeout=60)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+    if proc.returncode != 0:
+        return None
+    text = proc.stdout.decode("utf-8", errors="replace").strip()
+    return text or None
+
+
+def _extract_text_from_ole_word_stream(raw: bytes) -> Optional[str]:
+    """
+    Fallback извлечения текста из WordDocument stream OLE compound .doc.
+
+    Не парсит структуру FIB полноценно (это сотни страниц спецификации MS-DOC),
+    а вытаскивает читаемые ASCII/UTF-16 строки длиной >= 4 символов.
+    Используется когда antiword не справляется (формат Word 95 / минимальные .doc).
+    """
+    import olefile
+    import re
+
+    if not olefile.isOleFile(BytesIO(raw)):
+        return None
+    try:
+        ole = olefile.OleFileIO(BytesIO(raw))
+    except Exception:
+        return None
+    try:
+        if not ole.exists("WordDocument"):
+            return None
+        stream = ole.openstream("WordDocument").read()
+    finally:
+        ole.close()
+    chunks: List[str] = []
+    # ASCII-строки длиной >= 4 печатаемых символов
+    for match in re.finditer(rb"[\x20-\x7e\r\n\t]{4,}", stream):
+        chunks.append(match.group().decode("ascii", errors="replace"))
+    # UTF-16 LE строки
+    try:
+        decoded16 = stream.decode("utf-16-le", errors="ignore")
+        for match in re.finditer(r"[\u0020-\u00ff\u0400-\u04ff\u0100-\u017f]{4,}", decoded16):
+            chunks.append(match.group())
+    except Exception:
+        pass
+    text = "\n".join(chunks).strip()
+    return text or None
+
+
 def _kind_from_extension(ext: str) -> FileReadKind:
     if ext == ".pdf":
         return FileReadKind.PDF
@@ -257,6 +313,20 @@ class FileReader:
             result = await asyncio.to_thread(_read_xls_sync, raw, name, mime, opts)
         elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".doc":
             result = await asyncio.to_thread(_read_doc_choosing_backend_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".pptx":
+            result = await asyncio.to_thread(_read_pptx_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".ppt":
+            result = await asyncio.to_thread(_read_ppt_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".rtf":
+            result = await asyncio.to_thread(_read_rtf_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".odt":
+            result = await asyncio.to_thread(_read_odt_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".epub":
+            result = await asyncio.to_thread(_read_epub_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".msg":
+            result = await asyncio.to_thread(_read_msg_sync, raw, name, mime, opts)
+        elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".eml":
+            result = await asyncio.to_thread(_read_eml_sync, raw, name, mime, opts)
         elif info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
             result = await asyncio.to_thread(_read_unstructured_sync, raw, name, mime, info.detected_kind, opts)
         elif info.detected_kind == FileReadKind.UNKNOWN:
@@ -403,10 +473,11 @@ def _read_html_sync(
     mime: Optional[str],
     opts: ReadOptions,
 ) -> FileReadResult:
+    """HTML: trafilatura для контентных страниц + BeautifulSoup fallback для простой/частичной разметки."""
     del opts
     import trafilatura
 
-    html = raw.decode("utf-8", errors="replace")
+    html = _decode_text_bytes(raw, file_name)
     try:
         extracted = trafilatura.extract(
             html,
@@ -416,10 +487,18 @@ def _read_html_sync(
             include_images=False,
             favor_recall=True,
         )
-    except Exception as exc:
-        raise FileReadError(f"Ошибка trafilatura при разборе HTML: {file_name}") from exc
+    except Exception:
+        extracted = None
+    # Fallback на BeautifulSoup для простой/частичной HTML-разметки
     if extracted is None or extracted.strip() == "":
-        raise FileReadError(f"trafilatura не извлекла текст из HTML: {file_name}")
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        extracted = soup.get_text(separator="\n", strip=True)
+    if not extracted or not extracted.strip():
+        raise FileReadError(f"HTML не содержит текста: {file_name}")
     page = ReadPage(index=0, text=extracted, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
@@ -431,6 +510,30 @@ def _read_html_sync(
     )
 
 
+def _decode_text_bytes(raw: bytes, file_name: str) -> str:
+    """Декодирует текстовый файл с учётом BOM и авто-детекции кодировки."""
+    # Порядок проверки BOM важен: 4-байтовые UTF-32 перед 2-байтовыми UTF-16
+    boms = [
+        (b"\xff\xfe\x00\x00", "utf-32-le"),
+        (b"\x00\x00\xfe\xff", "utf-32-be"),
+        (b"\xff\xfe", "utf-16-le"),
+        (b"\xfe\xff", "utf-16-be"),
+        (b"\xef\xbb\xbf", "utf-8-sig"),
+    ]
+    for bom_bytes, codec in boms:
+        if raw.startswith(bom_bytes):
+            return raw.decode(codec)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        from charset_normalizer import from_bytes
+
+        best = from_bytes(raw).best()
+        if best is None:
+            raise FileReadError(f"Не удалось определить кодировку текстового файла: {file_name}")
+        return str(best)
+
+
 def _read_plain_text_sync(
     raw: bytes,
     file_name: str,
@@ -438,10 +541,7 @@ def _read_plain_text_sync(
     opts: ReadOptions,
 ) -> FileReadResult:
     del opts
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        text = raw.decode("utf-8", errors="replace")
+    text = _decode_text_bytes(raw, file_name)
     page = ReadPage(index=0, text=text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
@@ -499,46 +599,33 @@ def _read_doc_choosing_backend_sync(
     mime: Optional[str],
     opts: ReadOptions,
 ) -> FileReadResult:
-    if _is_msword_ole_compound(raw):
-        return _read_doc_with_antiword_sync(raw, file_name, mime, opts)
-    eff_name = file_name
-    eff_mime = mime
+    """
+    .doc:
+      ZIP-сигнатура  → OOXML под расширением .doc → диспатч на Unstructured как .docx.
+      OLE compound   → antiword; если он падает (часто на маленьких/legacy Word 95/97) → olefile-fallback.
+      Иначе          → ошибка.
+    """
     if _is_zip_local_header_magic(raw):
-        eff_mime = eff_mime or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        if file_name.lower().endswith(".doc"):
-            eff_name = f"{file_name[:-4]}.docx"
-    return _read_unstructured_sync(raw, eff_name, eff_mime, FileReadKind.OFFICE, opts)
+        eff_name = f"{file_name[:-4]}.docx" if file_name.lower().endswith(".doc") else file_name
+        eff_mime = mime or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        return _read_unstructured_sync(raw, eff_name, eff_mime, FileReadKind.OFFICE, opts)
+    if _is_msword_ole_compound(raw):
+        return _read_doc_ole_sync(raw, file_name, mime, opts)
+    raise FileReadError(f"Файл .doc не распознан (нет OLE/ZIP сигнатур): {file_name}")
 
 
-def _read_doc_with_antiword_sync(
+def _read_doc_ole_sync(
     raw: bytes,
     file_name: str,
     mime: Optional[str],
     opts: ReadOptions,
 ) -> FileReadResult:
-    antiword = shutil.which("antiword")
-    if antiword is None:
-        raise FileReadError(
-            "Для чтения .doc файлов требуется antiword. "
-            "Установите пакет: apt-get install antiword (Linux) или brew install antiword (Mac)."
-        )
-    with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
-        tmp.write(raw)
-        tmp_path = tmp.name
-    try:
-        result = subprocess.run(
-            [antiword, tmp_path],
-            capture_output=True,
-            timeout=60,
-        )
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
-    if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", errors="replace")
-        raise FileReadError(f"antiword не смог прочитать .doc файл: {stderr}")
-    text = result.stdout.decode("utf-8", errors="replace").strip()
+    """OLE compound .doc: antiword первым, затем olefile-fallback извлечения plain текста."""
+    text = _try_antiword(raw)
     if not text:
-        raise FileReadError(f"antiword не извлёк текст из файла: {file_name}")
+        text = _extract_text_from_ole_word_stream(raw)
+    if not text or not text.strip():
+        raise FileReadError(f".doc файл не содержит извлекаемого текста: {file_name}")
     page = ReadPage(index=0, text=text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
@@ -653,6 +740,293 @@ def _read_unstructured_sync(
         page_count=len(pages),
         pages=pages,
         warnings=warnings,
+    )
+
+
+def _read_pptx_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    """PowerPoint .pptx через python-pptx; одна страница на слайд."""
+    del opts
+    from pptx import Presentation
+
+    try:
+        prs = Presentation(BytesIO(raw))
+    except Exception as exc:
+        raise FileReadError(f"Не удалось открыть PPTX: {file_name}") from exc
+    pages: List[ReadPage] = []
+    for slide_idx, slide in enumerate(prs.slides):
+        chunks: List[str] = []
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        if run.text:
+                            chunks.append(run.text)
+            if shape.has_table:
+                for row in shape.table.rows:
+                    cells = [cell.text.strip() for cell in row.cells]
+                    chunks.append("\t".join(cells))
+        body = "\n".join(c for c in chunks if c)
+        pages.append(ReadPage(index=slide_idx, text=body, assets=[], label=f"slide_{slide_idx + 1}"))
+    if not pages:
+        raise FileReadError(f"PPTX не содержит слайдов: {file_name}")
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        detected_kind=FileReadKind.OFFICE,
+        page_count=len(pages),
+        pages=pages,
+        warnings=[],
+    )
+
+
+def _read_ppt_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    """PowerPoint legacy .ppt: ZIP-сигнатура → переименовать как .pptx, иначе сообщить."""
+    del opts
+    if _is_zip_local_header_magic(raw):
+        return _read_pptx_sync(raw, file_name[:-4] + ".pptx" if file_name.lower().endswith(".ppt") else file_name, mime, ReadOptions())
+    raise FileReadError(
+        f"Legacy .ppt (PowerPoint 97-2003) не поддерживается без libreoffice: {file_name}. "
+        "Конвертируйте в .pptx."
+    )
+
+
+def _read_rtf_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    """RTF через striprtf (чисто Python, без зависимостей)."""
+    del opts
+    from striprtf.striprtf import rtf_to_text
+
+    try:
+        rtf_text = raw.decode("utf-8", errors="replace")
+        text = rtf_to_text(rtf_text, errors="ignore")
+    except Exception as exc:
+        raise FileReadError(f"Не удалось разобрать RTF: {file_name}") from exc
+    if not text.strip():
+        raise FileReadError(f"RTF пустой: {file_name}")
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "application/rtf",
+        detected_kind=FileReadKind.OFFICE,
+        page_count=1,
+        pages=[ReadPage(index=0, text=text, assets=[], label=None)],
+        warnings=[],
+    )
+
+
+def _read_odt_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    """OpenDocument Text .odt через odfpy (ZIP+XML)."""
+    del opts
+    from odf.opendocument import load
+    from odf import teletype, text as odf_text
+
+    try:
+        doc = load(BytesIO(raw))
+    except Exception as exc:
+        raise FileReadError(f"Не удалось открыть ODT: {file_name}") from exc
+    parts: List[str] = []
+    for elem in doc.getElementsByType(odf_text.P):
+        s = teletype.extractText(elem)
+        if s.strip():
+            parts.append(s)
+    for elem in doc.getElementsByType(odf_text.H):
+        s = teletype.extractText(elem)
+        if s.strip():
+            parts.append(s)
+    body = "\n".join(parts)
+    if not body.strip():
+        raise FileReadError(f"ODT пустой: {file_name}")
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "application/vnd.oasis.opendocument.text",
+        detected_kind=FileReadKind.OFFICE,
+        page_count=1,
+        pages=[ReadPage(index=0, text=body, assets=[], label=None)],
+        warnings=[],
+    )
+
+
+def _read_epub_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    """EPUB через EbookLib + BeautifulSoup; одна страница на главу."""
+    del opts
+    import tempfile
+
+    from bs4 import BeautifulSoup
+    from ebooklib import epub, ITEM_DOCUMENT
+
+    # ebooklib читает только с диска, поэтому пишем во временный файл
+    with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = tmp.name
+    try:
+        try:
+            book = epub.read_epub(tmp_path)
+        except Exception as exc:
+            raise FileReadError(f"Не удалось открыть EPUB: {file_name}") from exc
+        pages: List[ReadPage] = []
+        for idx, item in enumerate(book.get_items_of_type(ITEM_DOCUMENT)):
+            soup = BeautifulSoup(item.get_content(), "html.parser")
+            text = soup.get_text(separator="\n", strip=True)
+            if text:
+                pages.append(ReadPage(
+                    index=len(pages),
+                    text=text,
+                    assets=[],
+                    label=f"chapter_{idx + 1}",
+                ))
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+    if not pages:
+        raise FileReadError(f"EPUB не содержит документов: {file_name}")
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "application/epub+zip",
+        detected_kind=FileReadKind.OFFICE,
+        page_count=len(pages),
+        pages=pages,
+        warnings=[],
+    )
+
+
+def _read_msg_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    """Outlook .msg через extract-msg (чисто Python)."""
+    del opts
+    import tempfile
+
+    import extract_msg
+
+    with tempfile.NamedTemporaryFile(suffix=".msg", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = tmp.name
+    try:
+        try:
+            msg = extract_msg.openMsg(tmp_path)
+        except Exception as exc:
+            raise FileReadError(f"Не удалось открыть MSG: {file_name}") from exc
+        try:
+            parts: List[str] = []
+            if msg.subject:
+                parts.append(f"Subject: {msg.subject}")
+            if msg.sender:
+                parts.append(f"From: {msg.sender}")
+            if msg.to:
+                parts.append(f"To: {msg.to}")
+            if msg.cc:
+                parts.append(f"Cc: {msg.cc}")
+            if msg.date:
+                parts.append(f"Date: {msg.date}")
+            if msg.body:
+                parts.append("")
+                parts.append(msg.body)
+            text = "\n".join(parts)
+        finally:
+            msg.close()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+    if not text.strip():
+        raise FileReadError(f"MSG пустой: {file_name}")
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "application/vnd.ms-outlook",
+        detected_kind=FileReadKind.OFFICE,
+        page_count=1,
+        pages=[ReadPage(index=0, text=text, assets=[], label=None)],
+        warnings=[],
+    )
+
+
+def _read_eml_sync(
+    raw: bytes,
+    file_name: str,
+    mime: Optional[str],
+    opts: ReadOptions,
+) -> FileReadResult:
+    """RFC 822 .eml через встроенный stdlib email модуль."""
+    del opts
+    from email import policy
+    from email.parser import BytesParser
+
+    try:
+        msg = BytesParser(policy=policy.default).parsebytes(raw)
+    except Exception as exc:
+        raise FileReadError(f"Не удалось разобрать EML: {file_name}") from exc
+    parts: List[str] = []
+    for header in ("Subject", "From", "To", "Cc", "Date"):
+        v = msg.get(header)
+        if v:
+            parts.append(f"{header}: {v}")
+    parts.append("")
+    body: Optional[str] = None
+    if msg.is_multipart():
+        for part in msg.walk():
+            ctype = part.get_content_type()
+            if ctype == "text/plain" and part.get("Content-Disposition") is None:
+                try:
+                    body = part.get_content()
+                except (LookupError, UnicodeDecodeError):
+                    payload = part.get_payload(decode=True) or b""
+                    body = payload.decode("utf-8", errors="replace")
+                break
+        if body is None:
+            for part in msg.walk():
+                ctype = part.get_content_type()
+                if ctype == "text/html":
+                    try:
+                        from bs4 import BeautifulSoup
+
+                        html = part.get_content() if hasattr(part, "get_content") else (
+                            part.get_payload(decode=True) or b""
+                        ).decode("utf-8", errors="replace")
+                        body = BeautifulSoup(html, "html.parser").get_text(separator="\n", strip=True)
+                    except Exception:
+                        continue
+                    break
+    else:
+        try:
+            body = msg.get_content()
+        except (LookupError, UnicodeDecodeError):
+            payload = msg.get_payload(decode=True) or b""
+            body = payload.decode("utf-8", errors="replace")
+    if body:
+        parts.append(body)
+    text = "\n".join(parts)
+    if not text.strip():
+        raise FileReadError(f"EML пустой: {file_name}")
+    return FileReadResult(
+        file_name=file_name,
+        mime_type=mime or "message/rfc822",
+        detected_kind=FileReadKind.OFFICE,
+        page_count=1,
+        pages=[ReadPage(index=0, text=text, assets=[], label=None)],
+        warnings=[],
     )
 
 

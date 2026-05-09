@@ -52,7 +52,14 @@ from core.clients.stt_client import (
 from core.clients.stt_streaming import BaseSTTStreamer, BufferedSTTStreamer
 from core.clients.tts_client import (
     BaseTTSClient,
+    PronunciationAwareTTSClient,
     TTSClientFactory,
+)
+from core.clients.tts_pronunciation.models import (
+    CompiledPronunciation,
+    NormalizationConfig,
+    PronunciationRule,
+    PronunciationRuleSet,
 )
 from core.clients.tts_streaming import BaseTTSStreamer, BatchBackedTTSStreamer
 from core.clients.vad_client import (
@@ -65,6 +72,10 @@ from core.db.repositories.company_voice_provider_repository import (
     CompanyVoiceProviderRepository,
     VoiceKind,
 )
+from core.db.repositories.pronunciation_rule_repository import (
+    CompanyPronunciationRuleRepository,
+    PlatformPronunciationRuleRepository,
+)
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -74,6 +85,10 @@ _COMPANY_CACHE_TTL_S: float = 60.0
 _company_cache: dict[
     tuple[str, VoiceKind], tuple[float, Optional["_CompanyOverrideRow"]]
 ] = {}
+
+_PRONUNCIATION_CACHE_TTL_S: float = 300.0
+_pronunciation_platform_cache: Optional[tuple[float, CompiledPronunciation]] = None
+_pronunciation_company_cache: dict[str, tuple[float, CompiledPronunciation]] = {}
 
 
 @dataclass(frozen=True)
@@ -183,11 +198,21 @@ def invalidate_company_overrides_cache(company_id: str) -> None:
         raise ValueError("company_id не может быть пустым.")
     for kind in ("stt", "tts"):
         _company_cache.pop((company_id, kind), None)  # type: ignore[arg-type]
+    _pronunciation_company_cache.pop(company_id, None)
+
+
+def invalidate_platform_pronunciation_cache() -> None:
+    """Сбросить кэш платформенных правил произношения (после их изменения суперадмином)."""
+    global _pronunciation_platform_cache
+    _pronunciation_platform_cache = None
 
 
 def reset_voice_resolver_for_tests() -> None:
     """Полная очистка in-memory кэша. Только для тестов."""
+    global _pronunciation_platform_cache
     _company_cache.clear()
+    _pronunciation_company_cache.clear()
+    _pronunciation_platform_cache = None
 
 
 def _validate_company_id(company_id: str) -> None:
@@ -405,6 +430,111 @@ async def get_stt_client(
     )
 
 
+def _get_pronunciation_repo() -> tuple[PlatformPronunciationRuleRepository, CompanyPronunciationRuleRepository]:
+    settings = get_settings()
+    db_url = settings.database.shared_url
+    if not db_url:
+        raise ValueError(
+            "voice_resolver: settings.database.shared_url не задан — "
+            "невозможно прочитать pronunciation_rules."
+        )
+    return (
+        PlatformPronunciationRuleRepository(db_url=db_url),
+        CompanyPronunciationRuleRepository(db_url=db_url),
+    )
+
+
+def _db_row_to_pronunciation_rule(row: object) -> PronunciationRule:
+    return PronunciationRule(
+        id=row.id,  # type: ignore[attr-defined]
+        kind=row.kind,  # type: ignore[attr-defined]
+        pattern=row.pattern,  # type: ignore[attr-defined]
+        replacement=row.replacement,  # type: ignore[attr-defined]
+        language=row.language,  # type: ignore[attr-defined]
+        case_sensitive=row.case_sensitive,  # type: ignore[attr-defined]
+        word_boundary=row.word_boundary,  # type: ignore[attr-defined]
+        providers=list(row.providers) if row.providers else None,  # type: ignore[attr-defined]
+        voices=list(row.voices) if row.voices else None,  # type: ignore[attr-defined]
+        enabled=row.enabled,  # type: ignore[attr-defined]
+        note=row.note,  # type: ignore[attr-defined]
+    )
+
+
+async def _load_platform_pronunciation() -> CompiledPronunciation:
+    """Загрузить платформенные правила произношения с TTL-кэшем."""
+    global _pronunciation_platform_cache
+    now = time.monotonic()
+    if _pronunciation_platform_cache is not None:
+        ts, cached = _pronunciation_platform_cache
+        if (now - ts) < _PRONUNCIATION_CACHE_TTL_S:
+            return cached
+
+    platform_repo, _ = _get_pronunciation_repo()
+    rows = await platform_repo.list_enabled()
+    rules = [_db_row_to_pronunciation_rule(r) for r in rows]
+    rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
+    compiled = CompiledPronunciation.from_rule_set(
+        rule_set,
+        ssml_subset_enabled=get_settings().voice.tts.pronunciation.ssml_subset_enabled
+        if hasattr(get_settings().voice.tts, "pronunciation")
+        else False,
+    )
+    _pronunciation_platform_cache = (now, compiled)
+    return compiled
+
+
+async def _load_company_pronunciation(company_id: str) -> CompiledPronunciation:
+    """Загрузить per-company правила произношения с TTL-кэшем."""
+    now = time.monotonic()
+    cached = _pronunciation_company_cache.get(company_id)
+    if cached is not None and (now - cached[0]) < _PRONUNCIATION_CACHE_TTL_S:
+        return cached[1]
+
+    _, company_repo = _get_pronunciation_repo()
+    rows = await company_repo.list_enabled(company_id=company_id)
+    rules = [_db_row_to_pronunciation_rule(r) for r in rows]
+    rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
+    compiled = CompiledPronunciation.from_rule_set(rule_set)
+    _pronunciation_company_cache[company_id] = (now, compiled)
+    return compiled
+
+
+async def resolve_tts_pronunciation(
+    *,
+    company_id: str,
+    override: Optional[SpeechOverride] = None,
+) -> CompiledPronunciation:
+    """Каскадный резолв правил произношения TTS для данной компании и call-override.
+
+    Порядок: platform → company → per-call (SpeechOverride.pronunciation_rules).
+    Если ``override.pronunciation_replace=True`` — per-call заменяет все предыдущие.
+    """
+    _validate_company_id(company_id)
+    override = _validate_override(override)
+
+    platform_compiled = await _load_platform_pronunciation()
+    company_compiled = await _load_company_pronunciation(company_id)
+
+    if override.pronunciation_rules is not None and override.pronunciation_replace:
+        per_call_rule_set = PronunciationRuleSet(
+            rules=override.pronunciation_rules,
+            normalization=NormalizationConfig(),
+        )
+        return CompiledPronunciation.from_rule_set(per_call_rule_set)
+
+    base = platform_compiled.merge(company_compiled)
+
+    if override.pronunciation_rules:
+        per_call_rule_set = PronunciationRuleSet(
+            rules=override.pronunciation_rules,
+            normalization=NormalizationConfig(),
+        )
+        per_call_compiled = CompiledPronunciation.from_rule_set(per_call_rule_set)
+        return base.merge(per_call_compiled)
+
+    return base
+
+
 async def get_tts_client(
     *,
     company_id: str,
@@ -476,7 +606,7 @@ async def get_tts_client(
         ),
     )
 
-    return TTSClientFactory.create_for_voice(
+    base_client = TTSClientFactory.create_for_voice(
         cfg=cfg,
         provider_name=provider_name,
         model=model,
@@ -485,6 +615,19 @@ async def get_tts_client(
         default_sample_rate=sample_rate,
         timeout_s=timeout_s,
         secrets=sec,
+    )
+
+    pronunciation = await resolve_tts_pronunciation(
+        company_id=company_id,
+        override=override,
+    )
+
+    return PronunciationAwareTTSClient(
+        base_client,
+        pronunciation,
+        provider_name=provider_name,
+        default_voice=voice,
+        default_language=locale_for_tts,
     )
 
 
@@ -637,11 +780,13 @@ async def get_tts_streamer(
 __all__ = [
     "ResolvedSttSettings",
     "resolve_stt_settings",
+    "resolve_tts_pronunciation",
     "get_stt_client",
     "get_tts_client",
     "get_vad_client",
     "get_stt_streamer",
     "get_tts_streamer",
     "invalidate_company_overrides_cache",
+    "invalidate_platform_pronunciation_cache",
     "reset_voice_resolver_for_tests",
 ]

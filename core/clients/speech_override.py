@@ -21,9 +21,12 @@ per-company-настройку и deployment-default. Используется �
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from core.clients.tts_pronunciation.models import PronunciationRule
 
 
 SpeechProviderName = Literal["litserve", "cloud_ru", "yandex", "sber", "mock"]
@@ -97,10 +100,34 @@ class SpeechOverride(BaseModel):
         gt=0.0,
         description="Таймаут одного HTTP-запроса в секундах.",
     )
+    pronunciation_rules: list["PronunciationRule"] | None = Field(
+        default=None,
+        description=(
+            "Per-call правила произношения TTS. Накладываются поверх platform + "
+            "company правил (append). Если ``pronunciation_replace=True`` — "
+            "полностью заменяют platform+company."
+        ),
+    )
+    pronunciation_replace: bool = Field(
+        default=False,
+        description=(
+            "Если True — per-call ``pronunciation_rules`` заменяют platform+company; "
+            "если False (по умолчанию) — append поверх."
+        ),
+    )
 
     def is_empty(self) -> bool:
         """True если ни одно поле не задано — override фактически отсутствует."""
         return self.model_dump(exclude_none=True) == {}
+
+
+def _rebuild_with_pronunciation_rule() -> None:
+    from core.clients.tts_pronunciation.models import PronunciationRule  # noqa: F401
+
+    SpeechOverride.model_rebuild()
+
+
+_rebuild_with_pronunciation_rule()
 
 
 __all__ = [

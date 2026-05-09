@@ -16,6 +16,12 @@ from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.company_voice_providers import (
     router as company_voice_providers_router,
 )
+from apps.frontend.api.company_pronunciation_rules import (
+    router as company_pronunciation_rules_router,
+)
+from apps.frontend.api.platform_pronunciation_rules import (
+    router as platform_pronunciation_rules_router,
+)
 from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
@@ -162,11 +168,44 @@ def _build_llms_txt(base_url: str) -> str:
         f"- Service health endpoint (technical): {base_url}/health\n"
     )
 
+async def _seed_platform_pronunciation_rules(container) -> None:
+    """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
+    from core.config import get_settings
+    if not getattr(get_settings().voice.tts, "pronunciation_seed_enabled", True):
+        return
+    repo = container.platform_pronunciation_rule_repository
+    existing = await repo.list_all()
+    existing_patterns = {(r.kind, r.pattern, r.language) for r in existing}
+
+    seed_rules = [
+        ("alias", "Хуманитик", "хуманитэк", "ru"),
+        ("alias", "Humanitec", "хуманитэк", "ru"),
+        ("alias", "humanitec", "хуманитэк", "ru"),
+        ("stress", "Хуманитик", "хум+анитэк", "ru"),
+        ("stress", "humanitec", "хум+анитэк", "ru"),
+    ]
+    for kind, pattern, replacement, lang in seed_rules:
+        if (kind, pattern, lang) not in existing_patterns:
+            await repo.create(
+                kind=kind,
+                pattern=pattern,
+                replacement=replacement,
+                language=lang,
+                word_boundary=True,
+                case_sensitive=False,
+                note="Платформенное правило (seed)",
+            )
+    from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
+    invalidate_platform_pronunciation_cache()
+    logger.info("frontend.pronunciation_seed_applied")
+
+
 async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> None:
     if is_testing():
         return
     await ensure_system_admin_membership(container)
     await ensure_demo_company_and_user(container)
+    await _seed_platform_pronunciation_rules(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
 
@@ -193,6 +232,8 @@ app = create_service_app(
         auth_router,
         companies_router,
         company_voice_providers_router,
+        company_pronunciation_rules_router,
+        platform_pronunciation_rules_router,
         voice_providers_catalog_router,
         embed_configs_router,
         public_landing_agents_router,

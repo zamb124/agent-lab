@@ -11,13 +11,18 @@ batch-клиенты под капотом.
   `core.clients.voice_resolver.get_tts_client(*, company_id, override)`.
   Прямой импорт классов из этого модуля в `apps/**` запрещён CI
   (`scripts/check_voice_resolver_usage.py`).
+
+``PronunciationAwareTTSClient`` — декоратор поверх ``BaseTTSClient``,
+применяющий ``TtsTextPipeline`` перед делегированием провайдеру. Собирается
+в ``voice_resolver.get_tts_client`` — это единственное место применения
+``TtsTextPipeline`` в HTTP-слое.
 """
 
 from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import httpx
 from pydantic import BaseModel, Field
@@ -29,6 +34,7 @@ from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 
 if TYPE_CHECKING:
+    from core.clients.tts_pronunciation.models import CompiledPronunciation
     from core.config.models import (
         CloudRuTTSBackendConfig,
         SberTTSBackendConfig,
@@ -390,6 +396,75 @@ class MockTTSClient(BaseTTSClient):
         )
 
 
+class PronunciationAwareTTSClient(BaseTTSClient):
+    """Декоратор-обёртка поверх ``BaseTTSClient``: применяет text-shaping pipeline.
+
+    Создаётся в ``voice_resolver.get_tts_client`` для всех провайдеров.
+    Является **единственным** местом вызова ``TtsTextPipeline.transform`` —
+    CI ``scripts/check_tts_pipeline_single_apply.py`` проверяет это.
+
+    ``provider_name`` используется для фильтрации правил по capabilities matrix
+    (например stress-маркеры не применяются для ``cloud_ru``).
+    """
+
+    def __init__(
+        self,
+        delegate: BaseTTSClient,
+        pronunciation: "CompiledPronunciation",
+        *,
+        provider_name: str,
+        default_voice: Optional[str] = None,
+        default_language: Optional[str] = None,
+    ) -> None:
+        self._delegate = delegate
+        self._pronunciation = pronunciation
+        self._provider_name = provider_name
+        self._default_voice = default_voice
+        self._default_language = default_language
+
+    async def synthesize(
+        self,
+        *,
+        text: str,
+        voice: Optional[str] = None,
+        response_format: Optional[str] = None,
+        sample_rate: Optional[int] = None,
+    ) -> TTSResult:
+        from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
+        from core.tracing.operation_span import traced_operation
+
+        pipeline = get_tts_text_pipeline()
+        original_len = len(text)
+        transformed = pipeline.transform(
+            text,
+            pronunciation=self._pronunciation,
+            provider=self._provider_name,
+            voice=voice or self._default_voice,
+            language=self._default_language,
+        )
+
+        if transformed != text:
+            async with traced_operation(
+                "voice.tts.pronunciation.transform",
+                operation_category="voice",
+                extra_attributes={
+                    "tts.provider": self._provider_name,
+                    "tts.voice": voice or self._default_voice or "",
+                    "tts.language": self._default_language or "",
+                    "tts.pronunciation.original_len": original_len,
+                    "tts.pronunciation.transformed_len": len(transformed),
+                },
+            ):
+                pass
+
+        return await self._delegate.synthesize(
+            text=transformed,
+            voice=voice,
+            response_format=response_format,
+            sample_rate=sample_rate,
+        )
+
+
 class TTSClientFactory:
     """Фабрика TTS клиентов для voice_resolver."""
 
@@ -499,5 +574,6 @@ __all__ = [
     "YandexTTSClient",
     "SberTTSClient",
     "MockTTSClient",
+    "PronunciationAwareTTSClient",
     "TTSClientFactory",
 ]

@@ -482,3 +482,85 @@ class PlatformShortLink(Base):
             postgresql_where=text("kind = 'sync_call_join'"),
         ),
     )
+
+
+class PlatformPronunciationRule(Base):
+    """Глобальные правила произношения TTS, управляемые суперадмином.
+
+    Применяются ко всем компаниям (platform tier), перекрываются
+    per-company правилами из ``CompanyPronunciationRule``.
+    """
+
+    __tablename__ = "platform_pronunciation_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    replacement: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    case_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    word_boundary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    providers: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    voices: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('alias','regex','stress')",
+            name="platform_pronunciation_rules_kind_check",
+        ),
+        Index("ix_platform_pronunciation_rules_enabled", "enabled"),
+        Index("ix_platform_pronunciation_rules_language", "language"),
+    )
+
+
+class CompanyPronunciationRule(Base):
+    """Per-company правила произношения TTS.
+
+    Накладываются поверх платформенных (``PlatformPronunciationRule``):
+    порядок применения — platform → company → per-call (SpeechOverride).
+    """
+
+    __tablename__ = "company_pronunciation_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    replacement: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    case_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    word_boundary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    providers: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    voices: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('alias','regex','stress')",
+            name="company_pronunciation_rules_kind_check",
+        ),
+        Index("ix_company_pronunciation_rules_company_id", "company_id"),
+        Index("ix_company_pronunciation_rules_company_enabled", "company_id", "enabled"),
+        UniqueConstraint("company_id", "id", name="uq_company_pronunciation_rules_company_id"),
+    )

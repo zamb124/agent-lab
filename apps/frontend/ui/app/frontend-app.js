@@ -23,6 +23,13 @@ import {
     companyVoiceProvidersUpsertOp,
     companyVoiceProvidersRemoveOp,
 } from '../events/resources/company-voice-providers.resource.js';
+import {
+    companyPronunciationRulesLoadOp,
+    companyPronunciationRuleCreateOp,
+    companyPronunciationRuleUpdateOp,
+    companyPronunciationRuleDeleteOp,
+    companyPronunciationRuleTestOp,
+} from '../events/resources/company-pronunciation-rules.resource.js';
 import { teamMembersResource, inviteGenerateOp } from '../events/resources/team.resource.js';
 import { embedConfigsResource, embedCodeLoadOp } from '../events/resources/embed.resource.js';
 import { landingAgentsLoadOp, landingDemoSessionOp } from '../events/resources/landing-demo.resource.js';
@@ -191,6 +198,11 @@ export class FrontendApp extends PlatformApp {
         companyVoiceProvidersLoadOp,
         companyVoiceProvidersUpsertOp,
         companyVoiceProvidersRemoveOp,
+        companyPronunciationRulesLoadOp,
+        companyPronunciationRuleCreateOp,
+        companyPronunciationRuleUpdateOp,
+        companyPronunciationRuleDeleteOp,
+        companyPronunciationRuleTestOp,
         teamMembersResource,
         inviteGenerateOp,
         embedConfigsResource,
@@ -359,8 +371,7 @@ export class FrontendApp extends PlatformApp {
             auth.status === 'unauthenticated' &&
             auth.sessionEndCause === null &&
             routeKey &&
-            !this._deferredAuthMeRequested &&
-            !LANDING_ROUTE_KEYS.has(routeKey)
+            !this._deferredAuthMeRequested
         ) {
             this._deferredAuthMeRequested = true;
             this.dispatch(CoreAuthEvents.USER_LOAD_REQUESTED, null);
