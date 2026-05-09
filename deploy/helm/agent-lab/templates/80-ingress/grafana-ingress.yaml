@@ -34,4 +34,31 @@ spec:
                 name: grafana
                 port:
                   number: 3000
+---
+# Без forwardAuth: иначе curl https://grafana.../api/health (cluster-health §13) получает 401 от grafana-check.
+# Приоритет выше основного Ingress Grafana (1000), иначе совпадение PathPrefix / перехватывает запрос.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-health
+  namespace: {{ .Values.namespace }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: "1001"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.grafanaHost }}
+      secretName: platform-tls
+  rules:
+    - host: {{ .Values.ingress.grafanaHost | quote }}
+      http:
+        paths:
+          - path: /api/health
+            pathType: Exact
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
 {{- end }}

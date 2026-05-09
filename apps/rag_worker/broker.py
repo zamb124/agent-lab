@@ -6,6 +6,7 @@ RAG Worker broker для RAG задач.
 
 from taskiq import TaskiqState
 
+from core.billing import set_billing_service
 from core.tasks.broker import (
     create_broker,
     create_scheduler,
@@ -39,6 +40,8 @@ async def rag_worker_startup(state: TaskiqState) -> None:
 
     initialize_default_processors(container.file_repository)
     set_settings(settings)
+    set_billing_service(container.billing_service)
+    logger.info("worker.billing_initialized", service="rag_worker")
 
     if settings.tracing.enabled:
         setup_tracing(settings.tracing)
