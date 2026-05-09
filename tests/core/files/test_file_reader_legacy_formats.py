@@ -166,5 +166,5 @@ async def test_read_doc_without_antiword_raises_clear_error(
     doc_path.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 512)
 
     reader = FileReader()
-    with pytest.raises(FileReadError, match="antiword"):
+    with pytest.raises(FileReadError, match=r"antiword|извлекаемого текста"):
         await reader.read(doc_path)

@@ -84,12 +84,21 @@ def _build_automaton(
     voice: Optional[str],
     language: Optional[str],
     capabilities_stress: bool,
+    case_sensitive_subset: Optional[bool] = None,
 ) -> Optional[ahocorasick.Automaton]:
-    """Строит Aho-Corasick automaton из применимых alias-правил."""
+    """Строит Aho-Corasick automaton из применимых alias-правил.
+
+    case_sensitive_subset:
+        None — все правила;
+        True — только ``case_sensitive``;
+        False — только регистронезависимые.
+    """
     automaton: ahocorasick.Automaton = ahocorasick.Automaton()
     added = 0
 
     for rule in rules:
+        if case_sensitive_subset is not None and rule.case_sensitive != case_sensitive_subset:
+            continue
         if not rule.enabled if hasattr(rule, "enabled") else False:
             continue
         if rule.is_stress and not capabilities_stress:
@@ -113,23 +122,26 @@ def _build_automaton(
     return automaton
 
 
-def _apply_alias_rules(
+def _apply_alias_rules_ac(
     text: str,
     automaton: ahocorasick.Automaton,
-    rules: list[_CompiledAliasRule],
+    *,
+    lower_fold: bool,
 ) -> str:
     """Применяет Aho-Corasick замены с longest-match и word-boundary.
 
-    Порядок: longest-match побеждает при перекрытии. Если несколько правил
-    заканчиваются в одном месте — длинный паттерн приоритетнее.
+    lower_fold=False: совпадения и автомат по исходной строке (case-sensitive правила).
+    lower_fold=True: сканируем ``text.lower()``, границы слова проверяем в исходном ``text``.
+
+    Порядок: longest-match побеждает при перекрытии.
     """
-    text_lower = text.lower()
+    haystack = text.lower() if lower_fold else text
     matches: list[tuple[int, int, str]] = []
 
-    for end_idx, rule in automaton.iter(text_lower):
-        pattern = rule.pattern if rule.case_sensitive else rule.pattern.lower()
+    for end_idx, rule in automaton.iter(haystack):
+        pattern = rule.pattern.lower() if lower_fold else rule.pattern
         start_idx = end_idx - len(pattern) + 1
-        if rule.word_boundary and not _is_word_boundary_at(text_lower, start_idx, end_idx + 1):
+        if rule.word_boundary and not _is_word_boundary_at(text, start_idx, end_idx + 1):
             continue
         matches.append((start_idx, end_idx + 1, rule.replacement))
 
@@ -209,20 +221,31 @@ class TtsTextPipeline:
                     rules_applied += 1
                     text = new_text
 
-        # Стадии 4+5: Alias + stress-правила (единый Aho-Corasick проход)
+        # Стадии 4+5: Alias + stress (сначала case-sensitive, затем регистронезависимые)
         if caps.alias and pronunciation.alias_rules:
-            automaton = _build_automaton(
+            alias_before = text
+            auto_cs = _build_automaton(
                 pronunciation.alias_rules,
                 provider=provider,
                 voice=voice,
                 language=language,
                 capabilities_stress=caps.stress_marker,
+                case_sensitive_subset=True,
             )
-            if automaton is not None:
-                new_text = _apply_alias_rules(text, automaton, pronunciation.alias_rules)
-                if new_text != text:
-                    rules_applied += 1
-                    text = new_text
+            if auto_cs is not None:
+                text = _apply_alias_rules_ac(text, auto_cs, lower_fold=False)
+            auto_ci = _build_automaton(
+                pronunciation.alias_rules,
+                provider=provider,
+                voice=voice,
+                language=language,
+                capabilities_stress=caps.stress_marker,
+                case_sensitive_subset=False,
+            )
+            if auto_ci is not None:
+                text = _apply_alias_rules_ac(text, auto_ci, lower_fold=True)
+            if text != alias_before:
+                rules_applied += 1
 
         if rules_applied > 0 or len(text) != original_len:
             logger.debug(

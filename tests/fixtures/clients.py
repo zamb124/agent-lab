@@ -65,8 +65,26 @@ def patch_service_clients_asgi(monkeypatch: pytest.MonkeyPatch) -> None:
                 from apps.office.main import app
                 _apps_cache[service] = app
             elif service == "voice":
-                from apps.voice.main import app
-                _apps_cache[service] = app
+                # Как voice_app: batch /transcribe идёт в STTClient, без mock-бэкенда
+                # упрётся в реальный HTTP (litserve/cloud) и падает ConnectError.
+                monkeypatch.setenv("VOICE__STT__PROVIDER", "mock")
+                monkeypatch.setenv("VOICE__TTS__PROVIDER", "mock")
+                monkeypatch.setenv("VOICE__VAD__PROVIDER", "mock")
+                import core.config.base as config_base
+                from apps.voice.config import reset_voice_settings
+                from apps.voice.container import reset_voice_container
+                from core.clients.voice_resolver import reset_voice_resolver_for_tests
+
+                monkeypatch.setattr(config_base, "_settings_instance", None)
+                reset_voice_resolver_for_tests()
+                reset_voice_settings()
+                reset_voice_container()
+                import importlib
+
+                import apps.voice.main as voice_main_mod
+
+                importlib.reload(voice_main_mod)
+                _apps_cache[service] = voice_main_mod.app
             else:
                 return None
         except ImportError:

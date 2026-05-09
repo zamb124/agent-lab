@@ -27,7 +27,7 @@ globs:
 1. **Префикс** `/rag/api/v1/` — всегда. Без префикса — запрещено.
 2. **При отправке файла НЕ передавать `Content-Type: application/json`** — `ServiceClient`/`RagClient` сами выставят `multipart`. `data={"metadata": json.dumps(...)}` — единственный канон. `json={...}` рядом с `files=` запрещено.
 3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
-4. **Async-индексация** — все mutating-операции через TaskIQ `process_document_task` (`apps/rag_worker/tasks/indexing_tasks.py`). Синхронный `parse_document` в API — запрещён.
+4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён.
 5. **Доступ к namespace** — для `ingest-text` и `search` обязательна проверка `namespace_repository.get(id)` + совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` проверка для каждого `namespace_ids[i]`.
 6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `upload_namespace_document`, `delete_namespace_document`, `get_document_processing_status`, `files_download_url_path`, `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
 

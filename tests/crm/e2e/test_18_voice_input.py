@@ -2,6 +2,9 @@
 Тесты голосового ввода.
 
 User Story: Голосовой ввод -> транскрипция -> AI анализ -> создание entities.
+
+Контекст ``company2``: у ``system`` в тестовой БД часто есть ``company_voice_providers``
+(STT litserve), что сильнее deployment-default и даёт ConnectError без поднятого litserve.
 """
 
 import pytest
@@ -15,7 +18,7 @@ class TestVoiceInput:
     """Голосовой ввод и транскрипция"""
     
     @pytest.mark.asyncio
-    async def test_transcribe_audio(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_transcribe_audio(self, crm_client, mock_llm_redis, unique_id, auth_headers_company2):
         """Аудио -> текст через STT (транскрипция)"""
         audio_bytes = minimal_wav_silence(duration_sec=1.0)
         
@@ -27,7 +30,7 @@ class TestVoiceInput:
         }])
         
         files = {"file": ("voice.wav", audio_bytes, "audio/wav")}
-        response = await crm_client.post("/crm/api/v1/entities/voice-input", files=files, headers=auth_headers_system)
+        response = await crm_client.post("/crm/api/v1/entities/voice-input", files=files, headers=auth_headers_company2)
         
         assert response.status_code == 200
         result = response.json()
@@ -39,7 +42,7 @@ class TestVoiceInput:
         assert "text" in result["stt"]
     
     @pytest.mark.asyncio
-    async def test_voice_to_note_full_pipeline(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_voice_to_note_full_pipeline(self, crm_client, mock_llm_redis, unique_id, auth_headers_company2):
         """Полный pipeline: Аудио -> транскрипция -> AI анализ -> entities"""
         audio_bytes = minimal_wav_silence(duration_sec=1.0)
         
@@ -73,7 +76,7 @@ class TestVoiceInput:
         response = await crm_client.post(
             "/crm/api/v1/entities/voice-input?analyze=true",
             files=files,
-            headers=auth_headers_system,
+            headers=auth_headers_company2,
         )
         
         assert response.status_code == 200
@@ -90,7 +93,7 @@ class TestVoiceInput:
             assert len(result["entities"]) >= 1
     
     @pytest.mark.asyncio
-    async def test_voice_input_with_language(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
+    async def test_voice_input_with_language(self, crm_client, mock_llm_redis, unique_id, auth_headers_company2):
         """Голосовой ввод с указанием языка"""
         audio_bytes = minimal_wav_silence(duration_sec=1.0)
         
@@ -105,7 +108,7 @@ class TestVoiceInput:
         response = await crm_client.post(
             "/crm/api/v1/entities/voice-input?language=ru",
             files=files,
-            headers=auth_headers_system,
+            headers=auth_headers_company2,
         )
         
         assert response.status_code == 200

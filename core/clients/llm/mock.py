@@ -476,6 +476,34 @@ class MockLLM:
                 final=False,
             )
 
+    async def invoke(
+        self,
+        messages: List[Message],
+        json_output: bool = False,
+        max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> str | Dict[str, Any]:
+        """Non-streaming вызов (vision/OCR и др.), совместим с ``LLMClient.invoke``."""
+        del max_tokens, extra_body, extra_headers
+        normalized = _normalize_messages(messages)
+        response_format: Optional[Dict[str, Any]] = None
+        if json_output:
+            response_format = {"type": "json_object"}
+        await self._capture_call_to_redis(
+            messages=normalized,
+            tools=None,
+            response_format=response_format,
+        )
+        response = await self._get_response_async(normalized)
+        content = response.get("content", "")
+        if json_output:
+            stripped = content.strip()
+            if not stripped:
+                return {}
+            return json.loads(stripped)
+        return content
+
     @overload
     async def chat(
         self,

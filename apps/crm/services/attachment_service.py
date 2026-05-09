@@ -198,6 +198,7 @@ class AttachmentService:
                     "download_url": "",
                 })
                 continue
+            display_name = (
                 response.get("filename")
                 or response.get("document_name")
             )

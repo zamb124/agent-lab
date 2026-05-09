@@ -2,7 +2,7 @@
 Репозиторий для CRM entities в PostgreSQL.
 
 Структурные данные -- в crm_entities (CRM DB).
-Семантический индекс и поиск -- ``RAGRepository`` (in-process pgvector, тот же слой, что у flows/rag).
+Семантический индекс и поиск -- ``RAGRepository`` (in-process провайдер ``RAG_IN_PROCESS_PROVIDER_ID``, см. ``core/rag/constants.py``).
 """
 
 import base64
@@ -48,7 +48,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     Репозиторий для CRM entities.
 
     CRUD -- через crm_entities (PostgreSQL).
-    Семантика -- ``RAGRepository`` (загрузка текста и поиск через провайдер pgvector).
+    Семантика -- ``RAGRepository`` (загрузка текста и поиск через in-process провайдер ``RAG_IN_PROCESS_PROVIDER_ID``).
     """
 
     def __init__(self, db: CRMDatabase, rag_repository: RAGRepository):

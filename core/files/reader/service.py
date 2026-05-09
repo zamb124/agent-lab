@@ -648,12 +648,26 @@ def _read_pdf_sync(
     warnings: List[str] = []
     doc = fitz.open(stream=raw, filetype="pdf")
     pages: List[ReadPage] = []
+    encrypt_pdf_warning = False
     try:
-        for i in range(len(doc)):
-            page = doc[i]
-            text = page.get_text() or ""
+        n = doc.page_count
+        for i in range(n):
+            skip_raster = False
+            try:
+                page = doc[i]
+                text = page.get_text() or ""
+            except (ValueError, RuntimeError) as exc:
+                msg = str(exc).lower()
+                if "encrypt" in msg or "password" in msg:
+                    if not encrypt_pdf_warning:
+                        warnings.append("PDF зашифрован; текст недоступен без пароля")
+                        encrypt_pdf_warning = True
+                    text = ""
+                    skip_raster = True
+                else:
+                    raise
             assets: List[ReadAsset] = []
-            if opts.include_asset_bytes:
+            if opts.include_asset_bytes and not skip_raster:
                 mat = fitz.Matrix(2, 2)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")

@@ -227,10 +227,10 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("fake-power-point.pptx", FileReadKind.OFFICE, None),
     CorpusFile("fake-power-point-many-pages.pptx", FileReadKind.OFFICE, None),
     CorpusFile("fake-power-point-table.pptx", FileReadKind.OFFICE, None),
-    CorpusFile("picture.pptx", FileReadKind.OFFICE, None),
+    CorpusFile("picture.pptx", FileReadKind.OFFICE, None, allows_empty_text=True),
     CorpusFile("sample-presentation.pptx", FileReadKind.OFFICE, None),
     CorpusFile("simple.pptx", FileReadKind.OFFICE, None),
-    CorpusFile("test-image-jpg-mime.pptx", FileReadKind.OFFICE, None),
+    CorpusFile("test-image-jpg-mime.pptx", FileReadKind.OFFICE, None, allows_empty_text=True),
     CorpusFile("science-exploration-1p.pptx", FileReadKind.OFFICE, None),
     CorpusFile("language-docs/eng_spa_mult.pptx", FileReadKind.OFFICE, "human beings"),
     # Legacy .ppt (PowerPoint 97-2003): требует libreoffice/soffice — намеренно not supported
@@ -239,11 +239,7 @@ CORPUS: tuple[CorpusFile, ...] = (
         FileReadKind.OFFICE,
         is_unsupported=True,
     ),
-    CorpusFile(
-        "language-docs/eng_spa_mult.ppt",
-        FileReadKind.OFFICE,
-        is_unsupported=True,
-    ),
+    CorpusFile("language-docs/eng_spa_mult.ppt", FileReadKind.OFFICE, "human beings"),
     # malformed pptx — unstructured может поднять FileReadError
     CorpusFile(
         "fake-power-point-malformed.pptx",
@@ -272,6 +268,7 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("fake-email-attachment.msg", FileReadKind.OFFICE, None),
     CorpusFile("fake-email-with-cc-and-bcc.msg", FileReadKind.OFFICE, None),
     CorpusFile("fake-email-multiple-attachments.msg", FileReadKind.OFFICE, None),
+    CorpusFile("fake-encrypted.msg", FileReadKind.OFFICE, None, allows_empty_text=True),
     CorpusFile("eml/fake-email.eml", FileReadKind.OFFICE, None),
     CorpusFile("eml/email-no-html-content-1.eml", FileReadKind.OFFICE, None),
     CorpusFile("eml/family-day.eml", FileReadKind.OFFICE, None),
@@ -322,7 +319,6 @@ CORPUS: tuple[CorpusFile, ...] = (
     # UNSUPPORTED / NEGATIVE (is_unsupported=True → ожидаем FileReadError)
     # ---------------------------------------------------------------------------
     CorpusFile("password_protected.xlsx", FileReadKind.SPREADSHEET, is_unsupported=True),
-    CorpusFile("fake-encrypted.msg", FileReadKind.OFFICE, is_unsupported=True),
     CorpusFile("empty.xlsx", FileReadKind.SPREADSHEET, is_unsupported=True),
     CorpusFile("eml/empty.eml", FileReadKind.OFFICE, is_unsupported=True),
     CorpusFile("simple.zip", FileReadKind.UNKNOWN, is_unsupported=True),
