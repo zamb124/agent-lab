@@ -297,6 +297,19 @@
       optional: true
 - name: PROVIDER_LITSERVE__API__BASE_URL
   value: http://{{ .Values.litserve.serviceName }}:{{ .Values.litserve.port }}/v1
+{{- /*
+  Voice STT/TTS/VAD используют тот же провайдер litserve внутрикластерно.
+  В conf.json по умолчанию стоит публичный URL https://humanitec.ru/litserve —
+  через Ingress это попадает на provider-litserve, но AuthMiddleware на
+  публичном Host требует JWT, который у воркеров отсутствует → 401.
+  Поэтому в кластере override на cluster-internal Service.
+*/}}
+- name: VOICE__STT__LITSERVE__BASE_URL
+  value: http://{{ .Values.litserve.serviceName }}:{{ .Values.litserve.port }}
+- name: VOICE__TTS__LITSERVE__BASE_URL
+  value: http://{{ .Values.litserve.serviceName }}:{{ .Values.litserve.port }}
+- name: VOICE__VAD__LITSERVE__BASE_URL
+  value: http://{{ .Values.litserve.serviceName }}:{{ .Values.litserve.port }}
 - name: OFFICE__DOCUMENT_SERVER_PUBLIC_URL
   value: {{ .Values.onlyoffice.publicUrl | quote }}
 - name: OFFICE__JWT_SECRET

@@ -1,15 +1,23 @@
 {{- if .Values.ingress.enabled }}
+{{- /*
+  Два Ingress объекта вместо одного:
+  - platform-services (router.priority=10) — все доменные сервисы (/flows, /crm, …)
+  - platform-frontend (router.priority=1)  — catch-all / на frontend
+  Аннотация traefik.ingress.kubernetes.io/router.priority применяется на ВЕСЬ
+  Ingress, поэтому без разделения все routers получают равный приоритет 1
+  и порядок выбора маршрута становится недетерминированным (выигрывает /).
+  
+  Subdomain-specific Ingress (livekit/grafana/onlyoffice) используют priority=100
+  и побеждают для своих host'ов поверх wildcard *.humanitec.ru.
+*/}}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: platform
+  name: platform-services
   namespace: {{ .Values.namespace }}
   annotations:
-    # Traefik: *.humanitec.ru пересекается с livekit/onlyoffice/grafana — без приоритета
-    # wildcard забирает трафик на frontend (uvicorn), LiveKit отдаёт 404 на /rtc/v1/validate.
-    traefik.ingress.kubernetes.io/router.priority: "1"
-  # secretName platform-tls выпускается deploy/scripts/setup-wildcard-tls.sh.
+    traefik.ingress.kubernetes.io/router.priority: "10"
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
@@ -22,13 +30,6 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
-          {{- /*
-            Каждый доменный сервис сам обслуживает весь свой URL-префикс:
-            SPA index.html, /static/, /api/v1/, /api/ws/, /health, /docs.
-            Frontend (catch-all /) обслуживает только console/landing:
-            /, /dashboard, /login, /products/*, /frontend/*.
-          */}}
-
           {{- if $.Values.applications.flows.enabled }}
           - path: /flows
             pathType: Prefix
@@ -109,8 +110,28 @@ spec:
                 port:
                   number: {{ $.Values.litserve.port }}
           {{- end }}
-
-          {{- if $.Values.applications.frontend.enabled }}
+    {{- end }}
+{{- if .Values.applications.frontend.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-frontend
+  namespace: {{ .Values.namespace }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: "1"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.apexHost | quote }}
+        - {{ .Values.ingress.wildcardHost | quote }}
+      secretName: platform-tls
+  rules:
+    {{- range $host := list .Values.ingress.apexHost .Values.ingress.wildcardHost }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
           - path: /
             pathType: Prefix
             backend:
@@ -118,6 +139,6 @@ spec:
                 name: {{ $.Values.applications.frontend.serviceName }}
                 port:
                   number: {{ $.Values.applications.frontend.port }}
-          {{- end }}
     {{- end }}
+{{- end }}
 {{- end }}
