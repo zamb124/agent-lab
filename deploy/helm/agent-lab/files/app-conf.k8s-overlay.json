@@ -10,7 +10,8 @@
     "provider_litserve": {
       "provider_litserve": {
         "infra": {
-          "embedding_accelerator": "cpu"
+          "embedding_accelerator": "cpu",
+          "rerank_accelerator": "cpu"
         }
       }
     }

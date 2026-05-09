@@ -88,7 +88,7 @@ class VectorDocument(Base):
         TSVECTOR,
         Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
     )
-    embedding = mapped_column(Vector(4096), nullable=True)
+    embedding = mapped_column(Vector(1024), nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, default=None, index=True,
         comment="Идентификатор модели эмбеддинга (напр. qwen/qwen3-embedding-8b). NULL у старых чанков до переиндексации."

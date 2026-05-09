@@ -37,7 +37,7 @@ def test_rag_embedding_config_defaults_litserve_qwen() -> None:
     emb = EmbeddingConfig()
     assert emb.provider == "provider_litserve"
     assert emb.api.model == "qwen/qwen3-embedding-8b"
-    assert emb.api.dimension == 4096
+    assert emb.api.dimension == 1024
 
 
 def test_rag_reranker_runtime_defaults_provider_litserve() -> None:

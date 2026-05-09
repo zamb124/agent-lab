@@ -56,10 +56,16 @@ globs:
 
 - PostgreSQL + pgvector. Чанкинг — `_chunks_from_file_read_result` (tiktoken внутри страниц `FileReadResult`).
 - Колонка `embedding_model` на чанке = активной модели; векторы разных моделей не смешиваются.
-- При размерности > 2000 (HNSW лимит на кортеж) индекс по `embedding` не используется — поиск без ANN (например `vector(4096)` Qwen3-Embedding-8B). `SET hnsw.iterative_scan` применяется только там, где есть HNSW.
+- Колонка `embedding` — **`vector(1024)`** с индексом **`ix_vd_embedding_hnsw`** (cosine, `m = 16`, `ef_construction = 64`) при размерности, допустимой для HNSW в сборке pgvector. Перед запросом семантического поиска: **`SET hnsw.iterative_scan = relaxed_order`** (`PgVectorProvider`) для корректного объединения ANN с жёсткими фильтрами SQL.
 - **Гибридный поиск:** semantic + FTS по `content_tsv` (если в параметрах включены `semantic` и `lexical`) — два списка через RRF; полные строки — по id.
-- `rag.embedding.api.mrl_output_dimension`: префикс длины N → L2-нормализация → дополнение нулями до `dimension` (совместимость с `vector(dimension)`).
-- Ключи `conf.json`: `rag.enabled`, `rag.default_provider`, `rag.embedding.{model,dimension,base_url}`, `rag.providers.pgvector.{enabled,embedding_api_key,chunk_size,chunk_overlap,timeout}`.
+- **`rag.embedding.api`**: полный вывод модели (напр. 4096 у Qwen3-Embedding-8B) и **`mrl_output_dimension`** (совпадает с **`dimension`** для хранения в колонке) — префикс нормализуется и сохраняется как плотный **1024**-мерный вектор без паддинга до 4096; см. `EmbeddingService`.
+- Ключи `conf.json`: `rag.enabled`, `rag.default_provider`, `rag.embedding.{model,dimension,base_url,mrl_output_dimension}`, `rag.providers.pgvector.{enabled,embedding_api_key,chunk_size,chunk_overlap,timeout}`.
+
+### Операционные расширения (не в MVP код-пути)
+
+- **DiskANN** (Timescale pgvectorscale / Microsoft pg_diskann): при росте корпуса до десятков миллионов чанков и упора индекса HNSW в RAM Postgres — отдельная задача: образ Postgres с расширением, DDL индекса и возможная правка `PgVectorProvider`.
+- **Тип halfvec**: может уменьшить память строк и индекса после верификации связки образ Postgres / версия pgvector / тип SQLAlchemy.
+- **GraphRAG** (Apache AGE, Graphiti и др.): обход графа узлов и рёбер в Postgres не является текущим `apps/rag` пайплайном (чанки + pgvector + FTS); выносится в отдельный продуктовый эпик при появлении требований к топологии знаний.
 
 ### `agentset`
 

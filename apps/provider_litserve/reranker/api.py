@@ -6,7 +6,7 @@ import litserve as ls
 
 from core.config.models import ProviderLitserveInfraConfig
 
-from apps.provider_litserve.shared import resolve_torch_device
+from apps.provider_litserve.shared import resolve_rerank_device, resolve_torch_device
 
 from .engines import LocalRerankerEngine, parse_rerank_body
 
@@ -18,7 +18,8 @@ class RerankerLitAPI(ls.LitAPI):
         self._engine = LocalRerankerEngine(cfg)
 
     def setup(self, device) -> None:
-        d = device if device is not None else resolve_torch_device(self._cfg)
+        litserve_device = device if device is not None else resolve_torch_device(self._cfg)
+        d = resolve_rerank_device(self._cfg, litserve_device)
         self._engine.setup(d)
 
     def decode_request(self, request, **kwargs):

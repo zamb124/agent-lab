@@ -37,3 +37,17 @@ def resolve_embedding_device(cfg: ProviderLitserveInfraConfig, litserve_worker_d
     if ea == "cuda":
         return "cuda:0"
     raise ValueError(f"unknown embedding_accelerator: {ea!r}")
+
+
+def resolve_rerank_device(cfg: ProviderLitserveInfraConfig, litserve_worker_device: str) -> str:
+    """Устройство для локального реранкера: ``rerank_accelerator``; ``auto`` = устройство воркера."""
+    ra = cfg.rerank_accelerator
+    if ra == "auto":
+        return litserve_worker_device
+    if ra == "cpu":
+        return "cpu"
+    if ra == "mps":
+        return "mps"
+    if ra == "cuda":
+        return "cuda:0"
+    raise ValueError(f"unknown rerank_accelerator: {ra!r}")

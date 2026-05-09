@@ -52,7 +52,7 @@
 
 Запросы **POST /v1/embeddings** и **POST /v1/rerank** принимают `model` без учёта регистра: значение сопоставляется с зарегистрированными идентификаторами (реестр + дефолты из конфига, пока каталог в памяти не загружен из БД).
 
-Переопределение деплоя: **`services.provider_litserve`**. ENV: **`PROVIDER_LITSERVE__API__*`**, **`PROVIDER_LITSERVE__INFRA__*`** (в т.ч. **`PROVIDER_LITSERVE__INFRA__MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__GATEWAY_PORT`**, **`PROVIDER_LITSERVE__INFRA__ACCELERATOR`** со значением `auto`, `cuda` или `cpu`).
+Переопределение деплоя: **`services.provider_litserve`**. ENV: **`PROVIDER_LITSERVE__API__*`**, **`PROVIDER_LITSERVE__INFRA__*`** (в т.ч. **`PROVIDER_LITSERVE__INFRA__MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__EMBEDDING_MODEL_ID`**, **`PROVIDER_LITSERVE__INFRA__GATEWAY_PORT`**, **`PROVIDER_LITSERVE__INFRA__ACCELERATOR`** со значением `auto`, `cuda`, `cpu` или `mps`, **`PROVIDER_LITSERVE__INFRA__EMBEDDING_ACCELERATOR`** и **`PROVIDER_LITSERVE__INFRA__RERANK_ACCELERATOR`** для раздельного выбора устройства эмбеддера и реранкера).
 
 ## GPU на отдельной ноде кластера
 

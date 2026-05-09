@@ -108,7 +108,35 @@ class EmbeddingService:
             self.api_url = self.OPENROUTER_URL
         
         logger.info(f"EmbeddingService: models={self.models}, url={self.api_url}")
-    
+
+    def _embedding_lengths_ok(self, model: str, actual_dim: int) -> bool:
+        """
+        Допускает ответ API полной размерности модели (напр. 4096) при хранении MRL 1024:
+        ``dimension`` и ``mrl_output_dimension`` задают размер в pgvector, не длину ответа.
+        """
+        if self.mrl_output_dimension is not None:
+            native_expected = MODEL_DIMENSIONS.get(model)
+            if native_expected is not None and actual_dim != native_expected:
+                logger.warning(
+                    f"Model {model} returned dimension {actual_dim}, "
+                    f"expected native {native_expected} for MRL path"
+                )
+                return False
+            if actual_dim < self.mrl_output_dimension:
+                logger.warning(
+                    f"Model {model} returned dimension {actual_dim}, "
+                    f"shorter than mrl_output_dimension ({self.mrl_output_dimension})"
+                )
+                return False
+            return True
+        if self.dimension is not None and actual_dim != self.dimension:
+            logger.warning(
+                f"Model {model} returned dimension {actual_dim}, "
+                f"expected {self.dimension}"
+            )
+            return False
+        return True
+
     @property
     def model(self) -> str:
         """Текущая активная модель"""
@@ -162,17 +190,10 @@ class EmbeddingService:
                     return None
                 
                 embeddings = [item["embedding"] for item in data["data"]]
-                
-                # Проверяем размерность
-                if embeddings and self.dimension:
-                    actual_dim = len(embeddings[0])
-                    if actual_dim != self.dimension:
-                        logger.warning(
-                            f"Model {model} returned dimension {actual_dim}, "
-                            f"expected {self.dimension}"
-                        )
-                        return None
-                
+
+                if embeddings and not self._embedding_lengths_ok(model, len(embeddings[0])):
+                    return None
+
                 return embeddings
                 
         except Exception as e:
@@ -305,19 +326,15 @@ class EmbeddingService:
         vectors: List[List[float]],
     ) -> List[List[float]]:
         """
-        MRL: первые ``mrl_output_dimension`` компонент — L2 по префиксу,
-        остаток до полной размерности колонки — нули (совместимость с ``vector(N)`` в БД).
+        MRL: первые ``mrl_output_dimension`` компонент — L2 по префиксу.
+
+        Если ``dimension == mrl_output_dimension``, в БД пишется плотный вектор длины N без паддинга.
+        Если ``dimension > mrl_output_dimension``, хвост добивается нулями до ``dimension`` (legacy).
         """
         if self.mrl_output_dimension is None:
             return vectors
         n = self.mrl_output_dimension
-        full = self.dimension or self._active_dimension
-        if full is None or full <= 0:
-            raise ValueError(
-                "Для MRL задайте dimension в конфиге или выполните запрос к API для определения размерности модели"
-            )
-        if n > full:
-            raise ValueError("mrl_output_dimension не может превышать полную размерность вектора")
+        dense_storage = self.dimension is not None and self.dimension == n
         padded: List[List[float]] = []
         for vec in vectors:
             if len(vec) < n:
@@ -328,11 +345,22 @@ class EmbeddingService:
             norm = sum(v * v for v in tail) ** 0.5
             if norm > 0.0:
                 tail = [v / norm for v in tail]
+            if dense_storage:
+                padded.append(tail)
+                continue
+            full = self.dimension or self._active_dimension
+            if full is None or full <= 0:
+                raise ValueError(
+                    "Для MRL с паддингом задайте dimension в конфиге "
+                    "или выполните запрос к API для определения размерности модели"
+                )
+            if n > full:
+                raise ValueError("mrl_output_dimension не может превышать полную размерность вектора")
             padded.append(tail + [0.0] * (full - n))
         return padded
 
     def get_embedding_dimension(self) -> int:
-        """Размерность вектора в pgvector (полная ``dimension`` конфига, с паддингом при MRL)."""
+        """Размерность вектора в pgvector (поле ``dimension`` конфига — размер столбца)."""
         if self.dimension is not None:
             return self.dimension
         if self._active_dimension is not None:

@@ -16,7 +16,7 @@
   "nodes": {
     "bootstrap_session": {
       "type": "code",
-      "code": "async def run(state):\n    session_id = getattr(state, \"session_id\", None)\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n    sid = session_id.strip()\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars.setdefault(\"rag_embedding_provider\", \"provider_litserve\")\n    merged_vars.setdefault(\"rag_embedding_model\", \"qwen/qwen3-embedding-8b\")\n    merged_vars.setdefault(\"rag_embedding_dimension\", 4096)\n    state.variables = merged_vars\n    state[\"rag_namespace_id\"] = f\"simple_crawler:{sid}\"\n    state[\"search_links\"] = []\n    state[\"search_queries\"] = []\n    return state"
+      "code": "async def run(state):\n    session_id = getattr(state, \"session_id\", None)\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n    sid = session_id.strip()\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars.setdefault(\"rag_embedding_provider\", \"provider_litserve\")\n    merged_vars.setdefault(\"rag_embedding_model\", \"qwen/qwen3-embedding-8b\")\n    merged_vars.setdefault(\"rag_embedding_dimension\", 1024)\n    state.variables = merged_vars\n    state[\"rag_namespace_id\"] = f\"simple_crawler:{sid}\"\n    state[\"search_links\"] = []\n    state[\"search_queries\"] = []\n    return state"
     },
     "plan_queries": {
       "type": "llm_node",
@@ -145,6 +145,6 @@
     "search_queries_count": 3,
     "rag_embedding_provider": "provider_litserve",
     "rag_embedding_model": "qwen/qwen3-embedding-8b",
-    "rag_embedding_dimension": 4096
+    "rag_embedding_dimension": 1024
   }
 }

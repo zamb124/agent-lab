@@ -339,7 +339,8 @@
       "provider": "provider_litserve",
       "api": {
         "model": "qwen/qwen3-embedding-8b",
-        "dimension": 4096
+        "dimension": 1024,
+        "mrl_output_dimension": 1024
       }
     },
     "reranker": {

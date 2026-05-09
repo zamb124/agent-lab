@@ -732,7 +732,7 @@ class EmbeddingApiConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str = "qwen/qwen3-embedding-8b"
-    dimension: int = 4096
+    dimension: int = 1024
     # Явный override корня ``…/v1``: при ``provider=openrouter`` пусто — из ``llm``;
     # при ``provider=provider_litserve`` пусто — из ``provider_litserve.api.base_url`` в настройках.
     base_url: Optional[str] = None
@@ -740,7 +740,7 @@ class EmbeddingApiConfig(BaseModel):
         default=None,
         gt=0,
         description="MRL-усечение: если задано, вектор обрезается до первых N измерений "
-                    "и L2-нормализуется перед сохранением. Экономит память в 4096/N раз.",
+                    "и L2-нормализуется перед сохранением. Совпадение с dimension — плотный вектор без паддинга.",
     )
 
 
@@ -1129,6 +1129,14 @@ class ProviderLitserveInfraConfig(BaseModel):
             "Устройство только для POST /v1/embeddings (SentenceTransformer). "
             "auto — то же, что выбрано глобальным accelerator для воркера; "
             "cpu — принудительно RAM/CPU (если Qwen3-Embedding-8B не помещается в VRAM)."
+        ),
+    )
+    rerank_accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
+        default="auto",
+        description=(
+            "Устройство только для POST /v1/rerank (FlagLLM реранкер). "
+            "auto — то же, что глобальный accelerator для воркера; "
+            "cpu — принудительно CPU (разгрузка VRAM под STT/chat на малой карте)."
         ),
     )
     workers_per_device: int = 1
