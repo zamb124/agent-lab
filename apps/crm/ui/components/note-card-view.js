@@ -6,7 +6,8 @@
  *     сайдбар (задачи, связанные объекты). Вложения — из шапки (popover).
  *     Текст вложений подставляется в тело заметки на сервере при загрузке.
  *     Шапка: attachments / edit / delete.
- *     Граф связей — блок ниже основного текста, высота области превью `100dvh`.
+ *     Граф связей — под областью текста; текст — в контейнере с ограничением по высоте
+ *     и собственной прокруткой.
  *   - `edit`: inline-форма — title, описание (с голосовым вводом), дата, теги,
  *     аплоад вложений. Текст из файлов добавляется в описание на сервере.
  *     `entitiesResource.create` (для note === null) или
@@ -512,6 +513,18 @@ export class CRMNoteCardView extends PlatformElement {
             }
 
             /* ================== note content (markdown) ================== */
+            .note-text-scroll {
+                flex: 0 1 auto;
+                max-height: min(45vh, 520px);
+                min-height: 140px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding-right: var(--space-1);
+                box-sizing: border-box;
+            }
+            .note-text-scroll .markdown {
+                min-height: 0;
+            }
             .markdown {
                 box-sizing: border-box;
                 min-height: 220px;
@@ -594,9 +607,10 @@ export class CRMNoteCardView extends PlatformElement {
 
             /* ================== inline graph (view) ================== */
             .note-graph-preview-host {
-                height: 100dvh;
-                min-height: 100dvh;
-                flex-shrink: 0;
+                flex: 1 1 auto;
+                min-height: min(360px, 50vh);
+                height: auto;
+                max-height: none;
                 display: flex;
                 flex-direction: column;
                 min-width: 0;
@@ -3230,18 +3244,20 @@ export class CRMNoteCardView extends PlatformElement {
                             ${this._renderMobileHeaderPanel(summaryText, summaryTime, summaryEntities)}
                         </div>
                     </header>
-                    ${description.length > 0
-                        ? html`
-                            <article
-                                class="markdown"
-                                @click=${this._onMarkdownClick}
-                                @mousemove=${this._onMarkdownMouseMove}
-                                @mouseleave=${this._onMarkdownMouseLeave}
-                            >
-                                ${unsafeHTML(renderMarkdownToHtml(description))}
-                            </article>
-                        `
-                        : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
+                    <div class="note-text-scroll">
+                        ${description.length > 0
+                            ? html`
+                                <article
+                                    class="markdown"
+                                    @click=${this._onMarkdownClick}
+                                    @mousemove=${this._onMarkdownMouseMove}
+                                    @mouseleave=${this._onMarkdownMouseLeave}
+                                >
+                                    ${unsafeHTML(renderMarkdownToHtml(description))}
+                                </article>
+                            `
+                            : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
+                    </div>
                     ${this._renderNoteGraphInlineSection()}
                 </section>
 
