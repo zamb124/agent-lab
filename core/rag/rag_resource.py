@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.models.identity_models import Namespace
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.index_profile_merge import merge_index_profile_dict_overlays
 from core.rag.rag_resource_bind import RagResourceBindParams
 
@@ -38,7 +39,7 @@ class RAGResource:
         namespace: str,
         container: Any,
         *,
-        provider: str = "pgvector",
+        provider: str = RAG_IN_PROCESS_PROVIDER_ID,
         default_top_k: int = 5,
         company_id: Optional[str] = None,
         search_options: Optional[Dict[str, Any]] = None,

@@ -112,6 +112,24 @@ class RagSearchArgs(BaseModel):
     )
     limit: int = Field(5, ge=1, le=100)
     filters: Optional[Dict[str, Any]] = Field(None, description="Фильтры по metadata; опционально.")
+    channels: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Каналы гибридного поиска (semantic/lexical); как у REST SearchRequest.",
+    )
+    rrf_k: Optional[int] = Field(None, ge=1, description="Параметр RRF; опционально.")
+    per_channel_top_k: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Верхняя граница кандидатов на канал; опционально.",
+    )
+    rerank: Optional[bool] = Field(
+        None,
+        description="Включить пост-retrieval реранк; None — дефолты сервера/профиля.",
+    )
+    retrieval: Optional[bool] = Field(
+        None,
+        description="Флаг retrieval в теле поиска; семантика на стороне провайдера.",
+    )
 
 
 @tool(
@@ -178,6 +196,11 @@ async def rag_search(
     query: str,
     limit: int = 5,
     filters: Optional[Dict[str, Any]] = None,
+    channels: Optional[Dict[str, Any]] = None,
+    rrf_k: Optional[int] = None,
+    per_channel_top_k: Optional[int] = None,
+    rerank: Optional[bool] = None,
+    retrieval: Optional[bool] = None,
 ) -> dict:
     merged_filters: Dict[str, Any] = dict(filters) if filters is not None else {}
     if "collection_id" in merged_filters and merged_filters["collection_id"] != collection_id:
@@ -192,6 +215,11 @@ async def rag_search(
             query,
             limit=limit,
             filters=merged_filters,
+            channels=channels,
+            rrf_k=rrf_k,
+            per_channel_top_k=per_channel_top_k,
+            rerank=rerank,
+            retrieval=retrieval,
         )
     except ServiceClientError as exc:
         return {"success": False, "error": str(exc)}

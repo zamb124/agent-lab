@@ -8,7 +8,7 @@
 
 - **Провайдер** (`pgvector`, `agentset`) определяет хранение чанков и способ поиска. У namespace фиксируется провайдер создания. В запросах к API опционально передаётся **`?provider=`**; иначе используется **`rag.default_provider`** из конфигурации.
 - **Индексация асинхронная**: загрузка файла возвращает **202** и идентификатор фоновой задачи; итог смотрите по **`GET /rag/api/v1/documents/{document_id}/status`**. Для выполнения задач должен быть запущен **rag_worker** (TaskIQ).
-- **Межсервисные вызовы** к RAG идут через **`ServiceClient`** (сервис `"rag"`), с контекстом **`get_context()`**, не прямым `httpx` между сервисами.
+- **Межсервисные вызовы** к RAG — через **`RagClient`** (`core/clients/rag_client.py`) поверх **`ServiceClient`** (сервис `"rag"`), с контекстом **`get_context()`**, не прямым `httpx` между сервисами.
 - **Префикс API** — только **`/rag/api/v1/...`**.
 
 ## HTTP-контракт
@@ -84,9 +84,11 @@
 
 Параметры конфига: **`namespace`**, **`provider`**, **`default_top_k`**, опционально **`company_id`**, **`search_options`** и **`index_profile_config`**.
 
-**`RAGRepository`** (ядро в **`core/rag/repository.py`**) с опциональными **`service_client`**, **`bind`**, **`worker_tasks`**: HTTP-поиск; постановка задач воркера — методы **`enqueue_s3_document_index`**, **`enqueue_worker_delete_document`**, **`list_documents_via_worker`**, **`enqueue_worker_cleanup_namespace`** при **`worker_tasks=RagWorkerTasksAdapter`** (`apps/rag/services/rag_worker_tasks_adapter.py`).
+**`RAGRepository`** (`core/rag/repository.py`): in-process **`provider`** (на контейнере — pgvector, см. **`RAG_IN_PROCESS_PROVIDER_ID`** в `core/rag/constants.py`) и опционально **`service_client`** + **`bind`** для HTTP **`search_namespace`** (тот же контракт, что **`POST /rag/api/v1/namespaces/{id}/search`**). Постановка индексации из API и воркера — напрямую через TaskIQ-задачи в `apps/rag_worker/tasks/` и вызовы из `apps/rag/api/`.
 
-Результат **`search`** — список словарей: **`content`**, **`score`**, **`document_id`**, **`metadata`**.
+Единая сборка path/body для HTTP-поиска по namespace — **`core/rag/rag_http_namespace_search.py`** (используют **`RagClient.search`** и **`RAGRepository.search_namespace`**).
+
+Результат **`RAGResource.search`** — список словарей: **`content`**, **`score`**, **`document_id`**, **`metadata`**.
 
 ## Структура каталога
 
@@ -102,7 +104,6 @@ apps/rag/
 │   ├── documents.py
 │   └── search.py
 ├── services/
-│   └── rag_worker_tasks_adapter.py
 └── ui/
     ├── index.html
     ├── index.js

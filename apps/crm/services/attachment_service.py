@@ -6,10 +6,8 @@
 
 from typing import Dict, Any, List, TYPE_CHECKING
 from datetime import datetime, timezone
-from io import BytesIO
-import json
-
-from core.clients.service_client import ServiceClient, ServiceClientError
+from core.clients.rag_client import RagClient
+from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.logging import get_logger
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
@@ -38,7 +36,7 @@ class AttachmentService:
         company_repository: "CompanyRepository",
         file_repository: "FileRepository",
     ):
-        self._service_client = ServiceClient()
+        self._rag = RagClient()
         self._entity_repo = entity_repository
         self._access_grant_repo = access_grant_repository
         self._company_repo = company_repository
@@ -78,13 +76,11 @@ class AttachmentService:
             "ttl_seconds": 0,
         }
         
-        files = {"file": (filename, BytesIO(file_data), "application/octet-stream")}
-        
-        response = await self._service_client.post(
-            service="rag",
-            path=f"/rag/api/v1/namespaces/{namespace}/documents",
-            files=files,
-            data={"metadata": json.dumps(metadata)}
+        response = await self._rag.upload_namespace_document(
+            namespace,
+            filename=filename,
+            file_bytes=file_data,
+            metadata=metadata,
         )
         
         document_id = response["document_id"]
@@ -134,10 +130,7 @@ class AttachmentService:
             logger.warning(f"Attachment not found: {document_id} for {entity_id}")
             return False
         
-        await self._service_client.delete(
-            service="rag",
-            path=f"/rag/api/v1/namespaces/{namespace_name}/documents/{document_id}"
-        )
+        await self._rag.delete_namespace_document(namespace_name, document_id)
         
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(timezone.utc)
@@ -187,11 +180,8 @@ class AttachmentService:
                 continue
 
             try:
-                response = await self._service_client.get(
-                    service="rag",
-                    path=f"/rag/api/v1/documents/{doc_id}/status"
-                )
-            except ServiceClientError as exc:
+                response = await self._rag.get_document_processing_status(doc_id)
+            except (ServiceClientError, ValueError) as exc:
                 logger.warning(
                     "Attachment status missing in file storage and rag status endpoint",
                     entity_id=entity_id,
@@ -208,9 +198,6 @@ class AttachmentService:
                     "download_url": "",
                 })
                 continue
-            if not isinstance(response, dict):
-                raise ValueError(f"RAG document status must be dict, got {type(response)}")
-            display_name = (
                 response.get("filename")
                 or response.get("document_name")
             )
@@ -241,7 +228,7 @@ class AttachmentService:
                 "metadata": extra if isinstance(extra, dict) else {},
                 "size_bytes": size_bytes if isinstance(size_bytes, int) else 0,
                 "content_type": content_type if isinstance(content_type, str) else "",
-                "download_url": f"/rag/api/v1/files/download/{doc_id}",
+                "download_url": RagClient.files_download_url_path(doc_id),
             })
         
         return attachments
@@ -263,8 +250,13 @@ class AttachmentService:
                 success = await self.remove_attachment(entity_id, doc_id)
                 if success:
                     deleted_count += 1
-            except Exception as e:
-                logger.error(f"Failed to delete attachment {doc_id} for {entity_id}: {e}")
+            except (ServiceClientError, ValueError) as e:
+                logger.error(
+                    "Failed to delete attachment",
+                    entity_id=entity_id,
+                    document_id=doc_id,
+                    error=str(e),
+                )
         
         logger.info(f"Deleted {deleted_count} attachments for {entity_id}")
         return deleted_count

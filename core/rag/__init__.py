@@ -30,9 +30,17 @@ from .models import (
 )
 from .parsed_document import BlockKind, ParsedBlock, ParsedDocument
 from .parsing import parse_document_bytes
+from .constants import RAG_IN_PROCESS_PROVIDER_ID
+from .rag_http_namespace_search import (
+    RAG_API_V1_PREFIX,
+    SEARCH_REQUEST_OPTION_KEYS,
+    build_namespace_search_json_body,
+    build_namespace_search_path,
+    filter_search_request_options,
+    merge_search_request_options,
+)
 from .rag_resource import RAGResource
 from .rag_resource_bind import RagResourceBindParams
-from .rag_worker_tasks_port import RagWorkerTasksPort
 from .post_retrieval_rerank import (
     RerankerClientError,
     apply_rerank_after_retrieve,
@@ -61,8 +69,14 @@ __all__ = [
     "ParsedDocument",
     "parse_document_bytes",
     "RAGResource",
+    "RAG_IN_PROCESS_PROVIDER_ID",
+    "RAG_API_V1_PREFIX",
+    "SEARCH_REQUEST_OPTION_KEYS",
+    "build_namespace_search_json_body",
+    "build_namespace_search_path",
+    "filter_search_request_options",
+    "merge_search_request_options",
     "RagResourceBindParams",
-    "RagWorkerTasksPort",
     "split_parsed_document",
     "split_plain_text_fixed_tokens",
     "get_default_rag_provider",

@@ -12,12 +12,13 @@ globs:
 
 Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — единый `core/files/reader/FileReader` (`FileReadResult`); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
 
-Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,services,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank}`.
+Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,constants}`.
 
 ## Контракт
 
 - `core/rag/base_provider.py::BaseRAGProvider` — namespaces (`create/delete/list/get`), documents (`add/delete/list/get`), `search(query, namespace?, top_k, filters, **kwargs)`. Реализации: `core/rag/providers/{pgvector,agentset}_provider.py`.
-- **Пост-retrieval реранк (только pgvector):** `core/rag/post_retrieval_rerank.py` — `apply_rerank_after_retrieve`, `apply_rerank_after_retrieve_grouped`, `RerankerHTTPClient`. Вызывается после `search` на HTTP-слое RAG, в CRM семантическом поиске сущностей, в `search_task` воркера. Дубли логики реранка в `apps/*` запрещены.
+- **Пост-retrieval реранк (только pgvector):** `core/rag/post_retrieval_rerank.py` — `apply_rerank_after_retrieve`, `apply_rerank_after_retrieve_grouped`, `RerankerHTTPClient`. Вызывается после `search` на HTTP-слое RAG, в CRM семантическом поиске сущностей. Дубли логики реранка в `apps/*` запрещены. CI: `scripts/check_rag_post_retrieval_rerank_single.py` (`make check-rag-post-retrieval-rerank`, входит в `check-events-canon`).
+- In-process идентификатор провайдера на контейнере (репозиторий, CRM rerank-guard): **`core/rag/constants.py::RAG_IN_PROCESS_PROVIDER_ID`** (должен совпадать с `BaseContainer.rag_repository` / pgvector).
 - Опциональные поля тела поиска: `channels`, `rrf_k`, `per_channel_top_k`, `rerank`, `retrieval` (см. `SearchRequest`, `GlobalSearchRequest`, `RagClient`, `RAGRepository.search_namespace`). Поле `retrieval` зарезервировано для будущей обработки в `PgVectorProvider`; реализация — только в `core/rag`.
 - Модели: `RAGDocument`, `RAGSearchResult`, `RAGNamespace` (Pydantic) + `VectorDocument`, `DocumentProcessingStatus` (SQLAlchemy в БД процесса RAG, `database.rag_url`).
 
@@ -28,7 +29,7 @@ globs:
 3. **NamespaceManager для scope** (`core/rag/namespace_manager.py::NamespaceManager.resolve_namespace(scope, context_id?, session_id?) -> str`); `scope ∈ {"flow","company","session"}`. Хардкод `f"flow:{...}"` запрещён.
 4. **Async-индексация** — все mutating-операции через TaskIQ `process_document_task` (`apps/rag_worker/tasks/indexing_tasks.py`). Синхронный `parse_document` в API — запрещён.
 5. **Доступ к namespace** — для `ingest-text` и `search` обязательна проверка `namespace_repository.get(id)` + совпадение `company_id` с контекстом; иначе 404/403. Для `POST /rag/api/v1/search` проверка для каждого `namespace_ids[i]`.
-6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `search`, `global_search`. Не плодить `ServiceClient(...)` напрямую в peer-сервисе.
+6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `upload_namespace_document`, `delete_namespace_document`, `get_document_processing_status`, `files_download_url_path`, `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
 
 ## TTL документов и retention
 

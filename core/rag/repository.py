@@ -1,6 +1,5 @@
 """
-RAG Repository: in-process ``BaseRAGProvider`` и опционально HTTP-поиск (контракт REST RAG API),
-постановка задач воркера через ``RagWorkerTasksPort``.
+RAG Repository: in-process ``BaseRAGProvider`` и опционально HTTP-поиск (контракт REST RAG API).
 
 Дефолты ``namespace`` / ``provider`` / ``company_id`` / ``search_options`` / ``index_profile_config`` —
 ``RagResourceBindParams`` (как у ресурса ``rag`` в flows).
@@ -10,40 +9,26 @@ from __future__ import annotations
 
 from core.logging import get_logger
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote, urlencode
 
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.rag.base_provider import BaseRAGProvider
-from core.rag.index_profile_merge import merge_index_profile_dict_overlays
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
+from core.rag.rag_http_namespace_search import (
+    build_namespace_search_json_body,
+    build_namespace_search_path,
+    merge_search_request_options,
+)
 from core.rag.rag_resource_bind import RagResourceBindParams
-from core.rag.rag_worker_tasks_port import RagWorkerTasksPort
 
 logger = get_logger(__name__)
 COMPANY_ID_HEADER = "X-Company-Id"
-_SEARCH_REQUEST_OPTION_KEYS = frozenset(
-    {"channels", "rrf_k", "per_channel_top_k", "rerank", "retrieval"}
-)
 
-def _filter_search_options(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    if not raw:
-        return {}
-    return {k: v for k, v in raw.items() if k in _SEARCH_REQUEST_OPTION_KEYS}
-
-def _merge_search_options(
-    bind_opts: Optional[Dict[str, Any]],
-    call_opts: Optional[Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
-    merged: Dict[str, Any] = {}
-    merged.update(_filter_search_options(bind_opts))
-    merged.update(_filter_search_options(call_opts))
-    return merged if merged else None
 
 class RAGRepository:
     """
-    Обертка над ``BaseRAGProvider``; опционально ``ServiceClient`` для ``search_namespace`` (тот же контракт,
-    что ``POST /rag/api/v1/namespaces/{id}/search``) и ``RagWorkerTasksPort`` для постановки задач воркера.
+    Обертка над ``BaseRAGProvider``; опционально ``ServiceClient`` для ``search_namespace``
+    (тот же контракт, что ``POST /rag/api/v1/namespaces/{id}/search``).
     """
 
     def __init__(
@@ -52,12 +37,10 @@ class RAGRepository:
         *,
         service_client: Optional[ServiceClient] = None,
         bind: Optional[RagResourceBindParams] = None,
-        worker_tasks: Optional[RagWorkerTasksPort] = None,
     ) -> None:
         self._provider = provider
         self._service_client = service_client
         self._bind = bind
-        self._worker_tasks = worker_tasks
 
     @property
     def provider(self) -> BaseRAGProvider:
@@ -65,14 +48,6 @@ class RAGRepository:
 
     def _effective_bind(self, bind: Optional[RagResourceBindParams]) -> Optional[RagResourceBindParams]:
         return bind if bind is not None else self._bind
-
-    def _require_active_company(self) -> str:
-        ctx = get_context()
-        if ctx is None or ctx.active_company is None:
-            raise ValueError(
-                "RAGRepository: для операций воркера нужен контекст запроса с active_company"
-            )
-        return ctx.active_company.company_id
 
     def _merge_company_headers(
         self,
@@ -112,13 +87,6 @@ class RAGRepository:
             )
         return self._service_client
 
-    def _require_worker_tasks(self) -> RagWorkerTasksPort:
-        if self._worker_tasks is None:
-            raise ValueError(
-                "RAGRepository: для постановки задач воркера задайте worker_tasks (RagWorkerTasksPort)"
-            )
-        return self._worker_tasks
-
     async def search_namespace(
         self,
         *,
@@ -149,101 +117,25 @@ class RAGRepository:
         if prov is None and b is not None:
             prov = b.provider
 
-        merged_opts = _merge_search_options(
+        merged_opts = merge_search_request_options(
             b.search_options if b is not None else None,
             search_options,
         )
 
         extra_headers = self._merge_company_headers(company_id, b)
-        body: Dict[str, Any] = {"query": query, "limit": lim}
-        if filters is not None:
-            body["filters"] = filters
-        if merged_opts:
-            body.update(merged_opts)
-
-        ns_segment = quote(ns, safe="")
-        path = f"/rag/api/v1/namespaces/{ns_segment}/search"
-        if prov:
-            path = f"{path}?{urlencode({'provider': prov})}"
+        body = build_namespace_search_json_body(
+            query=query,
+            limit=lim,
+            filters=filters,
+            merged_search_options=merged_opts,
+        )
+        path = build_namespace_search_path(ns, provider=prov)
 
         kwargs: Dict[str, Any] = {"json": body, "timeout": timeout}
         if extra_headers is not None:
             kwargs["headers"] = extra_headers
 
         return await client.post("rag", path, **kwargs)
-
-    async def enqueue_s3_document_index(
-        self,
-        s3_key: str,
-        document_name: str,
-        metadata: Dict[str, Any],
-        *,
-        namespace_id: Optional[str] = None,
-        bind: Optional[RagResourceBindParams] = None,
-        index_profile_config: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Постановка индексации из S3 в очередь воркера; слияние ``index_profile_config`` как у ресурса ``rag``.
-        """
-        port = self._require_worker_tasks()
-        b = self._effective_bind(bind)
-        ns = self._resolve_namespace_id(namespace_id, b)
-        company_id = self._require_active_company()
-
-        meta = dict(metadata)
-        ipc = merge_index_profile_dict_overlays(
-            b.index_profile_config if b is not None else None,
-            meta.get("index_profile_config") if isinstance(meta.get("index_profile_config"), dict) else None,
-            index_profile_config,
-        )
-        if ipc:
-            meta["index_profile_config"] = ipc
-
-        return await port.enqueue_index_rag_document_s3(
-            company_id=company_id,
-            namespace_id=ns,
-            s3_key=s3_key,
-            document_name=document_name,
-            metadata=meta,
-        )
-
-    async def enqueue_worker_delete_document(
-        self,
-        document_id: str,
-        *,
-        namespace_id: Optional[str] = None,
-        bind: Optional[RagResourceBindParams] = None,
-    ) -> Dict[str, Any]:
-        """Постановка удаления документа через воркер (TaskIQ)."""
-        port = self._require_worker_tasks()
-        b = self._effective_bind(bind)
-        ns = self._resolve_namespace_id(namespace_id, b)
-        return await port.enqueue_delete_document(namespace_id=ns, document_id=document_id)
-
-    async def list_documents_via_worker(
-        self,
-        *,
-        namespace_id: Optional[str] = None,
-        bind: Optional[RagResourceBindParams] = None,
-        timeout: float = 10.0,
-    ) -> List[Dict[str, Any]]:
-        """Список документов через задачу воркера с ожиданием результата."""
-        port = self._require_worker_tasks()
-        b = self._effective_bind(bind)
-        ns = self._resolve_namespace_id(namespace_id, b)
-        return await port.wait_list_documents(namespace_id=ns, timeout=timeout)
-
-    async def enqueue_worker_cleanup_namespace(
-        self,
-        *,
-        namespace_id: Optional[str] = None,
-        bind: Optional[RagResourceBindParams] = None,
-    ) -> Dict[str, Any]:
-        """Постановка очистки namespace через воркер."""
-        port = self._require_worker_tasks()
-        b = self._effective_bind(bind)
-        ns = self._resolve_namespace_id(namespace_id, b)
-        return await port.enqueue_cleanup_namespace(namespace_id=ns)
 
     async def list_documents(
         self,

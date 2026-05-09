@@ -33,11 +33,16 @@ from apps.crm.db.models import CRMEntity
 from core.context import get_context
 from core.config import get_settings
 from core.rag import RAGRepository
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
+
+_CRM_HYBRID_RRF_K = 60
+
+
 class EntityRepository(BaseCRMRepository[CRMEntity]):
     """
     Репозиторий для CRM entities.
@@ -698,7 +703,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             search_results = await apply_rerank_after_retrieve(
                 results=search_results,
                 query=query,
-                provider_name="pgvector",
+                provider_name=RAG_IN_PROCESS_PROVIDER_ID,
                 request_rerank=None,
                 profile_sd=None,
                 settings=settings,
@@ -768,7 +773,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         Возвращает (entity, rrf_score, match_type).
         match_type: "text" | "semantic" | "hybrid" (найдено обоими).
         """
-        k = 60
+        k = _CRM_HYBRID_RRF_K
         rrf_max = 2.0 / (k + 1)  # теоретический максимум при ранге 1 в обоих списках
 
         fts_entities = await self.fts_search_ranked(

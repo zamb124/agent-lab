@@ -324,11 +324,12 @@ class BaseContainer:
     @lazy
     def rag_repository(self):
         """RAGRepository: in-process всегда ``pgvector`` (хранение в нашей БД); поиск через ``service_client``."""
+        from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
         from core.rag.factory import get_rag_provider
         from core.rag.repository import RAGRepository
 
         return RAGRepository(
-            get_rag_provider("pgvector"),
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
             service_client=self.service_client,
         )
 
