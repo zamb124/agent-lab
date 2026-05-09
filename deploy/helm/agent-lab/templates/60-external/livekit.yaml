@@ -102,4 +102,19 @@ spec:
             - name: rtc-udp
               containerPort: 7881
               protocol: UDP
+          livenessProbe:
+            tcpSocket:
+              port: 7880
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 7880
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.livekit.resources | nindent 12 }}
 {{- end }}

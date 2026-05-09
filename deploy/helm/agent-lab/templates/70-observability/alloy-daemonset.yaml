@@ -114,9 +114,6 @@ spec:
             - name: pod-logs
               mountPath: /var/log/pods
               readOnly: true
-            - name: container-logs
-              mountPath: /var/lib/docker/containers
-              readOnly: true
           securityContext:
             privileged: false
             readOnlyRootFilesystem: false
@@ -127,7 +124,4 @@ spec:
         - name: pod-logs
           hostPath:
             path: /var/log/pods
-        - name: container-logs
-          hostPath:
-            path: /var/lib/docker/containers
 {{- end }}

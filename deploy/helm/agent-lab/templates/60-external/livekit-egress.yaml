@@ -46,4 +46,6 @@ spec:
                   json: true
                 session_limits:
                   file_output_max_duration: 1h
+          resources:
+            {{- toYaml .Values.livekitEgress.resources | nindent 12 }}
 {{- end }}

@@ -12,6 +12,9 @@ metadata:
     app.kubernetes.io/part-of: agent-lab
 spec:
   replicas: {{ $worker.replicas }}
+  # Recreate: два воркера одновременно конкурируют за TaskIQ-задачи и плодят дубли.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: {{ $name }}
@@ -23,6 +26,8 @@ spec:
     spec:
 {{- include "agentlab.podImagePullSecrets" $ | nindent 6 }}
 {{- include "agentlab.nodeSchedule" (list $ $worker.nodeName) | nindent 6 }}
+      # Воркеры обрабатывают тяжёлые задачи (STT, LLM); дефолтных 30s недостаточно.
+      terminationGracePeriodSeconds: {{ $worker.terminationGracePeriodSeconds | default 60 }}
       initContainers:
         {{- include "agentlab.dbReadyAndMigrateInitContainers" $ | nindent 8 }}
       containers:
@@ -36,6 +41,17 @@ spec:
             {{- include "agentlab.confVolumeMount" $ | nindent 12 }}
           resources:
             {{- toYaml $worker.resources | nindent 12 }}
+          # Воркеры не слушают HTTP; проверяем, жив ли главный процесс контейнера.
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "kill -0 1"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
       volumes:
         {{- include "agentlab.confVolume" $ | nindent 8 }}
 {{- end }}

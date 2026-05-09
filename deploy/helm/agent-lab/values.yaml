@@ -200,6 +200,7 @@ workers:
     nodeName: master
     enabled: true
     replicas: 2
+    terminationGracePeriodSeconds: 300
     command: ["taskiq", "worker", "apps.flows_worker.worker:worker_app", "--workers", "4"]
     resources:
       requests:
@@ -224,6 +225,7 @@ workers:
     nodeName: master
     enabled: true
     replicas: 1
+    terminationGracePeriodSeconds: 300
     command: ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "2"]
     resources:
       requests:
@@ -236,6 +238,7 @@ workers:
     nodeName: master
     enabled: true
     replicas: 1
+    terminationGracePeriodSeconds: 300
     command: ["taskiq", "worker", "apps.sync_worker.worker:worker_app", "--workers", "2"]
     resources:
       requests:
@@ -309,49 +312,77 @@ livekit:
   enabled: true
   nodeName: master
   image: livekit/livekit-server:v1.11.0
-  imagePullPolicy: Always
+  imagePullPolicy: IfNotPresent
   apiKey: devkey
   publicUrl: wss://livekit.humanitec.ru
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
 
 livekitEgress:
   enabled: true
   nodeName: master
-  image: livekit/egress:latest
-  imagePullPolicy: Always
+  image: livekit/egress:v1.12.0
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 4Gi
 
 coturn:
   enabled: true
   nodeName: master
-  image: coturn/coturn:latest
+  image: coturn/coturn:4.10.0
   realm: agentlab
   minPort: 49152
   maxPort: 65535
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
 
 onlyoffice:
   enabled: true
   nodeName: master
-  image: onlyoffice/documentserver:latest
+  image: onlyoffice/documentserver:9.3.1
   publicUrl: https://onlyoffice.humanitec.ru
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
 
 observability:
   loki:
     enabled: true
     nodeName: master
-    image: grafana/loki:latest
+    image: grafana/loki:3.7.1
     storage: 100Gi
   tempo:
     enabled: true
     nodeName: master
-    image: grafana/tempo:latest
+    image: grafana/tempo:v2.9.2
     storage: 50Gi
   grafana:
     enabled: true
     nodeName: master
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.0.1
     publicUrl: https://grafana.humanitec.ru
   alloy:
     enabled: true
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.16.0
 
 ingress:
   enabled: true
