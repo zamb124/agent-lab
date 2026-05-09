@@ -22,6 +22,7 @@ fi
 __SKIP_COUNT=0
 __DO_COUNT=0
 __FAIL_COUNT=0
+__FAILED_STEPS=()
 
 log_info() {
   printf '%s[INFO]%s  %s\n' "$C_BLUE" "$C_RESET" "$*"
@@ -103,6 +104,7 @@ check_step() {
     return 0
   else
     __FAIL_COUNT=$((__FAIL_COUNT + 1))
+    __FAILED_STEPS+=("$name")
     log_error "$name"
     return 1
   fi
@@ -119,6 +121,7 @@ check_step_with_output() {
     return 0
   else
     __FAIL_COUNT=$((__FAIL_COUNT + 1))
+    __FAILED_STEPS+=("$name")
     log_error "$name"
     printf '%s%s%s\n' "$C_DIM" "$out" "$C_RESET" | sed 's/^/        /'
     return 1
@@ -144,6 +147,8 @@ wait_for() {
     elapsed=$((elapsed + interval))
   done
   log_error "$desc — timeout ${max_sec}s"
+  __FAIL_COUNT=$((__FAIL_COUNT + 1))
+  __FAILED_STEPS+=("$desc — timeout ${max_sec}s")
   return 1
 }
 
@@ -154,6 +159,10 @@ print_summary() {
   printf '  %s[DO]%s    %d\n' "$C_YELLOW" "$C_RESET" "$__DO_COUNT"
   if [ "$__FAIL_COUNT" -gt 0 ]; then
     printf '  %s[FAIL]%s  %d\n' "$C_RED" "$C_RESET" "$__FAIL_COUNT"
+    printf '\n%sУпавшие проверки:%s\n' "$C_RED" "$C_RESET"
+    for step in "${__FAILED_STEPS[@]}"; do
+      printf '  %s- %s%s\n' "$C_RED" "$step" "$C_RESET"
+    done
     return 1
   fi
   printf '  %s[FAIL]%s  0\n' "$C_GREEN" "$C_RESET"

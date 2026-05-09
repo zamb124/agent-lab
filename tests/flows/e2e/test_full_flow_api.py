@@ -81,9 +81,8 @@ async def execute(args, state):
         assert data["tool_id"] == "e2e_calculator"
 
     @pytest.mark.asyncio
-    async def test_create_simple_flow_via_api(self, client, auth_headers_system):
-        """3. Создаём простой flow через API."""
-        # Создаём переменную в БД компании для теста
+    async def test_create_and_execute_simple_flow_via_api(self, client, auth_headers_system, unique_id):
+        """3+4. Создаём flow (с переменной) и сразу выполняем его через API (один тест, чтобы избежать ordering issues при -n)."""
         var_response = await client.post(
             "/flows/api/v1/variables/",
             json={
@@ -94,8 +93,8 @@ async def execute(args, state):
             headers=auth_headers_system,
         )
         assert var_response.status_code == 200, f"Failed to create variable: {var_response.text}"
-        
-        response = await client.post(
+
+        create_response = await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": "e2e_simple_flow",
@@ -122,14 +121,11 @@ async def execute(args, state):
             },
             headers=auth_headers_system,
         )
-        assert response.status_code == 200, f"Failed to create agent: {response.status_code}, {response.text}"
-        data = response.json()
-        assert data["flow_id"] == "e2e_simple_flow"
+        assert create_response.status_code == 200, f"Failed to create flow: {create_response.status_code}, {create_response.text}"
+        create_data = create_response.json()
+        assert create_data["flow_id"] == "e2e_simple_flow"
 
-    @pytest.mark.asyncio
-    async def test_execute_simple_flow_via_api(self, client, unique_id):
-        """4. Выполняем flow через API."""
-        response = await client.post(
+        exec_response = await client.post(
             "/flows/api/v1/tasks/submit",
             json={
                 "flow_id": "e2e_simple_flow",
@@ -137,10 +133,10 @@ async def execute(args, state):
                 "content": "Hello",
             },
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert get_task_state(data) == "completed"
-        assert "E2E Test Company" in get_task_response(data)
+        assert exec_response.status_code == 200
+        exec_data = exec_response.json()
+        assert get_task_state(exec_data) == "completed"
+        assert "E2E Test Company" in get_task_response(exec_data)
 
 
 class TestE2EFlowWithConditions:

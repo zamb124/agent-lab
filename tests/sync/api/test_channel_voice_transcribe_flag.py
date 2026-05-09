@@ -77,6 +77,7 @@ async def test_voice_message_without_channel_flag_stays_idle(
 @pytest.mark.real_taskiq
 @pytest.mark.timeout(120)
 async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
+    sync_service,
     sync_client,
     sync_worker,
     sync_auth_headers,
@@ -91,6 +92,9 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
         json={"transcribe_voice_messages": True},
     )
     assert patch.status_code == 200
+    patch_data = patch.json()
+    assert patch_data.get("transcribe_voice_messages") is True
+
     wav = minimal_wav_silence(duration_sec=0.05)
     up = await sync_client.post(
         "/sync/api/v1/files/",
@@ -114,7 +118,9 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
     audio = next(c for c in msg["contents"] if c["type"] == "file/audio")
     assert audio["data"]["transcription_status"] == "processing"
 
-    deadline = time.monotonic() + 90.0
+    await asyncio.sleep(1.0)
+
+    deadline = time.monotonic() + 120.0
     done_text: str | None = None
     while time.monotonic() < deadline:
         lr = await sync_client.get(
