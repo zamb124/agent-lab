@@ -40,7 +40,7 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "RAG__PROVIDERS__PGVECTOR__ENABLED": "true",
     # См. tests/conftest.py: OpenRouter + Qwen model id без локального LitServe в subprocess.
     "RAG__EMBEDDING__PROVIDER": "openrouter",
-    "RAG__EMBEDDING__MODEL": "qwen/qwen3-embedding-8b",
+    "RAG__EMBEDDING__MODEL": "qwen/qwen3-embedding-4b",
     "RAG__EMBEDDING__DIMENSION": "1024",
     "RAG__EMBEDDING__MRL_OUTPUT_DIMENSION": "1024",
     "RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED": "false",

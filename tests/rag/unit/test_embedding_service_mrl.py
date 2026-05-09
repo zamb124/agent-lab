@@ -9,7 +9,7 @@ def test_mrl_pads_to_full_dimension_and_normalizes_prefix() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-8b"],
+        models=["qwen/qwen3-embedding-4b"],
         dimension=8,
         mrl_output_dimension=2,
     )
@@ -27,7 +27,7 @@ def test_mrl_dense_vector_when_dimension_equals_prefix_length() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-8b"],
+        models=["qwen/qwen3-embedding-4b"],
         dimension=4,
         mrl_output_dimension=4,
     )
@@ -44,7 +44,7 @@ def test_get_embedding_dimension_returns_storage_column_size() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-8b"],
+        models=["qwen/qwen3-embedding-4b"],
         dimension=1024,
         mrl_output_dimension=1024,
     )
@@ -55,7 +55,7 @@ def test_mrl_legacy_padding_when_dimension_exceeds_prefix() -> None:
     svc = EmbeddingService(
         api_key="k",
         base_url="https://example.com/v1",
-        models=["qwen/qwen3-embedding-8b"],
+        models=["qwen/qwen3-embedding-4b"],
         dimension=4096,
         mrl_output_dimension=512,
     )

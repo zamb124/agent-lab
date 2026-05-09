@@ -79,7 +79,7 @@ os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
 os.environ.setdefault("RAG__PROVIDERS__PGVECTOR__ENABLED", "true")
 # RAG в pytest: эмбеддинги через OpenRouter + Qwen id — не требует поднятого LitServe для HTTP.
 os.environ.setdefault("RAG__EMBEDDING__PROVIDER", "openrouter")
-os.environ.setdefault("RAG__EMBEDDING__MODEL", "qwen/qwen3-embedding-8b")
+os.environ.setdefault("RAG__EMBEDDING__MODEL", "qwen/qwen3-embedding-4b")
 os.environ.setdefault("RAG__EMBEDDING__DIMENSION", "1024")
 os.environ.setdefault("RAG__EMBEDDING__MRL_OUTPUT_DIMENSION", "1024")
 os.environ.setdefault("RAG__DOCUMENT_INDEXING__SEARCH_DEFAULTS__RERANKER__ENABLED", "false")

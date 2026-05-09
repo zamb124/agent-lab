@@ -16,7 +16,7 @@ def test_v1_models_response_contains_audio_kinds(unique_id):
     response = build_provider_litserve_v1_models_response(
         embedding_openai_model_id="emb-openai",
         embedding_model_ids=[f"emb-{unique_id}"],
-        embedding_hf_model_id="Qwen/Qwen3-Embedding-8B",
+        embedding_hf_model_id="Qwen/Qwen3-Embedding-4B",
         embedding_dimension=1024,
         embedding_context_length=8192,
         rerank_openai_model_id="rerank-openai",
@@ -46,7 +46,7 @@ def test_v1_models_response_dedupes_audio_ids(unique_id):
     response = build_provider_litserve_v1_models_response(
         embedding_openai_model_id="emb",
         embedding_model_ids=[],
-        embedding_hf_model_id="Qwen/Qwen3-Embedding-8B",
+        embedding_hf_model_id="Qwen/Qwen3-Embedding-4B",
         embedding_dimension=1024,
         embedding_context_length=8192,
         rerank_openai_model_id="rerank",

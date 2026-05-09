@@ -111,7 +111,7 @@ class EmbeddingService:
 
     def _embedding_lengths_ok(self, model: str, actual_dim: int) -> bool:
         """
-        Допускает ответ API полной размерности модели (напр. 4096) при хранении MRL 1024:
+        Допускает ответ API полной размерности модели (напр. 2560 у Qwen3-Embedding-4B, 4096 у 8B) при хранении MRL 1024:
         ``dimension`` и ``mrl_output_dimension`` задают размер в pgvector, не длину ответа.
         """
         if self.mrl_output_dimension is not None:
