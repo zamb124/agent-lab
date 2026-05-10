@@ -101,7 +101,7 @@ def flows_service():
         pid_file=_FLOWS_SERVER_PID,
         app_path="apps.flows.main:app",
         port=9001,
-        startup_wait=60.0,
+        startup_wait=120.0,
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "flows"),
     )
     

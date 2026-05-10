@@ -19,6 +19,7 @@ export {
     resetPlatformBusForTests,
 } from './bus-singleton.js';
 export { bootstrapPlatformBus, completeBootstrap } from './bootstrap.js';
+export { syncPlatformThemeDom } from './effects/theme.effect.js';
 export { buildPlatformReducer, combineReducers, coreSlices } from './reducers/index.js';
 export { translate } from './effects/i18n.effect.js';
 export { httpRequest, httpStream, HttpError } from './http.js';

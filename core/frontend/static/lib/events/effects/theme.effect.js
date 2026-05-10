@@ -3,18 +3,46 @@
  *
  * Применяет тему к DOM (data-theme на <html>, meta theme-color), persists выбор
  * пользователя в localStorage, слушает изменения системной темы и эмитит события.
+ * Если на <html> задан data-platform-theme-lock="dark"|"light", в DOM всегда эта тема
+ * (публичные страницы frontend), при этом state/localStorage сохраняют выбор для консоли.
  */
 
 import { CoreEvents } from '../contract.js';
 
 const STORAGE_KEY = 'platform_theme';
 
+/** @returns {'dark' | 'light' | null} */
+function _lockedDomThemeMode() {
+    const lock = document.documentElement.getAttribute('data-platform-theme-lock');
+    if (lock === 'dark' || lock === 'light') {
+        return lock;
+    }
+    return null;
+}
+
 function _applyToDom(mode) {
-    document.documentElement.setAttribute('data-theme', mode);
+    const locked = _lockedDomThemeMode();
+    const applied = locked !== null ? locked : mode;
+    document.documentElement.setAttribute('data-theme', applied);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) {
-        meta.setAttribute('content', mode === 'dark' ? '#0a0a0c' : '#ffffff');
+        meta.setAttribute('content', applied === 'dark' ? '#0a0a0c' : '#ffffff');
     }
+}
+
+/**
+ * Повторно применить тему к document с учётом data-platform-theme-lock (маршрут публичного фронта).
+ *
+ * @param {'dark' | 'light'} mode — текущий mode из state.theme (без lock снимет выбранную тему).
+ */
+export function syncPlatformThemeDom(mode) {
+    if (mode !== 'dark' && mode !== 'light') {
+        throw new Error('syncPlatformThemeDom: mode must be dark or light');
+    }
+    if (typeof document === 'undefined') {
+        return;
+    }
+    _applyToDom(mode);
 }
 
 export function createThemeEffect() {

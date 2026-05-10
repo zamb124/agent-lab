@@ -763,7 +763,10 @@ class SessionServerManager:
         self.log_file = log_file or f"/tmp/{name.lower()}_server_test.log"
         self.err_file = err_file or f"/tmp/{name.lower()}_server_test_err.log"
         self.env = env or {}
-        self.lock = FileLock(self.lock_file, timeout=60)
+        # xdist: первый gw держит lock на весь _start_server() (до startup_wait + cleanup);
+        # timeout=60 даёт массовый filelock.Timeout при параллельном старте flows на 9001.
+        _lock_timeout_sec = max(300, int(startup_wait) + 180)
+        self.lock = FileLock(self.lock_file, timeout=_lock_timeout_sec)
     
     def _cleanup_old_processes(self):
         """Убивает старые процессы сервера перед запуском."""

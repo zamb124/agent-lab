@@ -159,11 +159,61 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
         return Object.keys(speech).length === 0 ? null : speech;
     }
 
+    /**
+     * Эффективный TTS=flow.speech + branch.speech; голос на ветке перекрывает flow.
+     * Устаревший `branches.*.speech.tts.voice` в состоянии редактора давит на flow
+     * после смены голоса на уровне flow — снимаем только поле voice на всех ветках.
+     * @param {unknown} flowConfig
+     * @returns {Record<string, unknown>|null}
+     */
+    _stripTtsVoiceFromAllBranches(flowConfig) {
+        const fc = asObject(flowConfig);
+        const branchesIn =
+            fc && fc.branches && typeof fc.branches === 'object' && !Array.isArray(fc.branches)
+                ? fc.branches
+                : {};
+        const keys = Object.keys(branchesIn);
+        if (keys.length === 0) {
+            return null;
+        }
+        const branches = { ...branchesIn };
+        let changed = false;
+        for (const bk of keys) {
+            const rawBranch = branches[bk];
+            if (!rawBranch || typeof rawBranch !== 'object' || Array.isArray(rawBranch)) {
+                continue;
+            }
+            const speech = rawBranch.speech && typeof rawBranch.speech === 'object' ? rawBranch.speech : null;
+            const tts = speech && speech.tts && typeof speech.tts === 'object' ? speech.tts : null;
+            if (!tts || typeof tts.voice !== 'string' || tts.voice === '') {
+                continue;
+            }
+            const nextSpeech = this._mergeSpeechBlock(speech, 'tts', 'voice', null);
+            const nextBranch = { ...rawBranch };
+            if (nextSpeech === null) {
+                delete nextBranch.speech;
+            } else {
+                nextBranch.speech = nextSpeech;
+            }
+            branches[bk] = nextBranch;
+            changed = true;
+        }
+        return changed ? branches : null;
+    }
+
     _commitFlowSpeech(block, field, value) {
         const fc = asObject(this._editor.state).flowConfig;
         const prev = fc && fc.speech && typeof fc.speech === 'object' ? fc.speech : null;
         const next = this._mergeSpeechBlock(prev, block, field, value);
-        this._editor.patchFlowConfig({ patch: { speech: next } });
+        /** @type {Record<string, unknown>} */
+        const patch = { speech: next };
+        if (block === 'tts' && field === 'voice') {
+            const branchesNext = this._stripTtsVoiceFromAllBranches(fc);
+            if (branchesNext !== null) {
+                patch.branches = branchesNext;
+            }
+        }
+        this._editor.patchFlowConfig({ patch });
     }
 
     _commitBranchSpeech(branchKey, block, field, value) {
@@ -288,14 +338,40 @@ export class FlowsFlowPropertyPanel extends PlatformElement {
     }
 
     /** @param {unknown} catalog */
+    _litserveTtsVoiceIdsUnion(catalog) {
+        if (!catalog || typeof catalog !== 'object') return [];
+        const hints = catalog.tts_litserve_voice_hints;
+        if (!Array.isArray(hints)) return [];
+        const seen = new Set();
+        for (const x of hints) {
+            if (!x || !Array.isArray(x.voice_ids)) continue;
+            for (const id of x.voice_ids) {
+                if (typeof id === 'string' && id !== '') seen.add(id);
+            }
+        }
+        return [...seen].sort();
+    }
+
+    /**
+     * Litserve: при заданной model — голоса из hint; иначе union по hint'ам каталога.
+     * Пустой prov при непустом union — те же id (наследование провайдера с компании).
+     */
+    /** @param {unknown} catalog */
     _ttsVoiceIds(ttsProv, ttsModel, catalog) {
         if (!catalog || typeof catalog !== 'object') return [];
+        const litserveUnion = this._litserveTtsVoiceIdsUnion(catalog);
         if (ttsProv === 'litserve') {
-            const hints = catalog.tts_litserve_voice_hints;
-            if (!Array.isArray(hints) || typeof ttsModel !== 'string' || ttsModel === '') return [];
-            const h = hints.find((x) => x && x.api_model_id === ttsModel);
-            if (!h || !Array.isArray(h.voice_ids)) return [];
-            return [...h.voice_ids];
+            if (typeof ttsModel === 'string' && ttsModel !== '') {
+                const hints = catalog.tts_litserve_voice_hints;
+                if (!Array.isArray(hints)) return [];
+                const h = hints.find((x) => x && x.api_model_id === ttsModel);
+                if (!h || !Array.isArray(h.voice_ids)) return [];
+                return [...h.voice_ids];
+            }
+            return litserveUnion;
+        }
+        if (ttsProv === '' && litserveUnion.length > 0) {
+            return litserveUnion;
         }
         if (ttsProv === 'cloud_ru' && Array.isArray(catalog.cloud_ru_tts_voice_ids)) {
             return [...catalog.cloud_ru_tts_voice_ids];

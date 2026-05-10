@@ -70,6 +70,8 @@ WS-команды (фрейм клиент → сервер) обязаны за
 
 Core scope (`@platform/lib/events/contract.js`): `auth`, `theme`, `i18n`, `router`, `network`, `ui`, `notify`, `pwa`, `storage`, `http`, `ws`. Дополнительно `@platform/lib/events/index.js`: `CoreAuthEvents`, `ICON_EVENTS`, `FILES_EVENTS`, `COMPANIES_EVENTS`, `TEAM_EVENTS`, `CALENDAR_EVENTS`, `NOTIFICATIONS_EVENTS`, `FILE_TYPES_EVENTS`, `PWA_EVENTS`, `I18N_NAMESPACE_SET_REQUESTED`.
 
+**Публичные страницы frontend (лендинг, продукты, legal, login/join и т.д.):** на `<html>` выставляется `data-platform-theme-lock="dark"`. `theme.effect.js` всегда красит DOM (`data-theme`, `meta theme-color`) в тёмную тему, не трогая вывод `THEME_CHANGED` и `localStorage` (`platform_theme`) — там остаётся выбор для консоли. Склейка lock + `syncPlatformThemeDom` в `apps/frontend/ui/app/frontend-app.js`; ранний lock без мигания — inline script в `apps/frontend/ui/index.html` (пути должны совпадать с `PUBLIC_ROUTE_KEYS`).
+
 Сервисные имена — порождаются фабриками в `apps/<svc>/ui/events/resources/*.resource.js` по контракту `'<svc>/<entity>'`. Литералы прямо в коде запрещены — `factory.events.X` или helper-методы контроллера.
 
 ## Структура `apps/<svc>/ui/`

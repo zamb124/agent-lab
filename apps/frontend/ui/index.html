@@ -1,6 +1,29 @@
 <!DOCTYPE html>
 <html lang="ru" data-theme="dark">
 <head>
+    <script>
+        (function () {
+            var p = location.pathname.replace(/\/+$/, '') || '/';
+            var pub =
+                p === '/' ||
+                p === '/login' ||
+                p === '/join' ||
+                p === '/select-company' ||
+                p === '/policy' ||
+                p === '/terms' ||
+                p === '/support' ||
+                p === '/blog' ||
+                p.indexOf('/blog/') === 0 ||
+                p === '/about' ||
+                p === '/roadmap' ||
+                p.indexOf('/demo/digital-workers') === 0 ||
+                p.indexOf('/products/') === 0;
+            if (pub) {
+                document.documentElement.setAttribute('data-platform-theme-lock', 'dark');
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Humanitec — платформа автоматизации бизнеса</title>
