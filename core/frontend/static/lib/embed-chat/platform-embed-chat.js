@@ -32,6 +32,7 @@ import {
 } from '@platform/lib/voice/voice-http-origin.js';
 import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
 import { normalizeVoiceLocaleForWs } from '@platform/lib/voice/normalize-voice-locale.js';
+import { fetchFlowVoiceSessionQueryDict } from '@platform/lib/voice/fetch-flow-voice-session-query.js';
 import {
     feedStreamTtsFromA2aResult,
     primeStreamTtsPlaybackFromUserGesture,
@@ -652,6 +653,29 @@ export class PlatformEmbedChat extends LitElement {
         }
     }
 
+    /**
+     * @returns {Promise<Record<string, string>>}
+     */
+    async _mergeEmbedTtsOnlyWsQuery() {
+        let serverQuery = {};
+        const fid = String(this.flowId || '').trim();
+        const root = String(this.flowsBaseUrl || '').replace(/\/$/, '');
+        if (fid !== '' && root !== '') {
+            serverQuery = await fetchFlowVoiceSessionQueryDict({
+                flowsApiRoot: root,
+                flowId: fid,
+                branchId: this.branchId,
+                skillIdLegacy: this.skillId,
+                credentials: this.useCredentials === true ? 'include' : 'omit',
+                getHeaders:
+                    typeof this.getAuthToken === 'function' ? () => this.getAuthToken() : async () => ({}),
+            });
+        }
+        const wsQuery = { ...serverQuery };
+        Object.assign(wsQuery, this._wsLanguageQueryForVoiceSession());
+        return wsQuery;
+    }
+
     _disposeEmbedTtsOnlyStream() {
         const m = this._embedTtsOnlyMedia;
         this._embedTtsOnlyMedia = null;
@@ -667,22 +691,22 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     /**
+     * @param {Record<string, string>} wsQuery
      * @returns {VoiceMediaSession}
      */
-    _makeEmbedTtsOnlyVoiceMediaSession() {
+    _createEmbedTtsOnlyVoiceMediaSession(wsQuery) {
         const voiceBaseUrl = this._resolvedVoiceHttpBaseForStream().replace(/\/$/, '');
         const companyId = String(this.companyId || '').trim();
         const sessionId = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
-        const q = this._wsLanguageQueryForVoiceSession();
         const opts = {
             baseUrl: wsBase,
             sessionId,
             companyId,
             autoRecord: false,
         };
-        if (Object.keys(q).length > 0) {
-            Object.assign(opts, { query: q });
+        if (Object.keys(wsQuery).length > 0) {
+            Object.assign(opts, { query: wsQuery });
         }
         const media = new VoiceMediaSession(opts);
         media.addEventListener('error', (e) => {
@@ -760,22 +784,27 @@ export class PlatformEmbedChat extends LitElement {
         }
         this._disposeEmbedTtsOnlyStream();
         this._embedTtsOnlyStreamStarting = true;
-        const media = this._makeEmbedTtsOnlyVoiceMediaSession();
-        this._embedTtsOnlyMedia = media;
-        media.primePlaybackFromUserGesture();
-        setStreamTtsTarget(media, readTtsOutputEnabled);
         void (async () => {
+            /** @type {InstanceType<typeof VoiceMediaSession>|null} */
+            let media = null;
             try {
+                const wsQuery = await this._mergeEmbedTtsOnlyWsQuery();
+                media = this._createEmbedTtsOnlyVoiceMediaSession(wsQuery);
+                this._embedTtsOnlyMedia = media;
+                media.primePlaybackFromUserGesture();
+                setStreamTtsTarget(media, readTtsOutputEnabled);
                 await this._finalizeEmbedTtsOnlyStreamAfterConnect(media);
             } catch (err) {
                 if (this._embedTtsOnlyMedia === media) {
                     this._embedTtsOnlyMedia = null;
                 }
                 clearStreamTtsTarget();
-                try {
-                    media.close();
-                } catch {
-                    /* noop */
+                if (media !== null) {
+                    try {
+                        media.close();
+                    } catch {
+                        /* noop */
+                    }
                 }
                 this.dispatchEvent(
                     new CustomEvent('humanitec-embed-voice-error', {
@@ -813,19 +842,24 @@ export class PlatformEmbedChat extends LitElement {
         }
         this._disposeEmbedTtsOnlyStream();
         this._embedTtsOnlyStreamStarting = true;
-        const media = this._makeEmbedTtsOnlyVoiceMediaSession();
-        this._embedTtsOnlyMedia = media;
+        /** @type {InstanceType<typeof VoiceMediaSession>|null} */
+        let media = null;
         try {
+            const wsQuery = await this._mergeEmbedTtsOnlyWsQuery();
+            media = this._createEmbedTtsOnlyVoiceMediaSession(wsQuery);
+            this._embedTtsOnlyMedia = media;
             await this._finalizeEmbedTtsOnlyStreamAfterConnect(media);
         } catch (err) {
             if (this._embedTtsOnlyMedia === media) {
                 this._embedTtsOnlyMedia = null;
             }
             clearStreamTtsTarget();
-            try {
-                media.close();
-            } catch {
-                /* noop */
+            if (media !== null) {
+                try {
+                    media.close();
+                } catch {
+                    /* noop */
+                }
             }
             this.dispatchEvent(
                 new CustomEvent('humanitec-embed-voice-error', {
@@ -1250,6 +1284,9 @@ export class PlatformEmbedChat extends LitElement {
     updated(changed) {
         super.updated(changed);
         if (changed.has('visible') && !this.visible) {
+            this._disposeEmbedTtsOnlyStream();
+        }
+        if (changed.has('flowId') || changed.has('branchId') || changed.has('skillId')) {
             this._disposeEmbedTtsOnlyStream();
         }
         if (changed.has('visible')) {

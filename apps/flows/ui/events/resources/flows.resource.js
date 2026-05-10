@@ -7,6 +7,7 @@
 
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+import { fetchFlowVoiceSessionQueryDict } from '@platform/lib/voice/fetch-flow-voice-session-query.js';
 
 export const flowsResource = createResourceCollection({
     name: 'flows/flows',
@@ -130,14 +131,18 @@ export const flowVoiceSessionQueryOp = createAsyncOp({
         if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
             throw new Error('flowVoiceSessionQueryOp: flow_id required');
         }
-        const bid =
+        const branchRaw =
             typeof payload.branch_id === 'string' && payload.branch_id.trim() !== ''
-                ? payload.branch_id.trim()
-                : 'default';
-        return httpRequest({
-            method: 'GET',
-            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}/voice-session-query?branch_id=${encodeURIComponent(bid)}`,
+                ? payload.branch_id
+                : undefined;
+        const query = await fetchFlowVoiceSessionQueryDict({
+            flowsApiRoot: '/flows',
+            flowId: payload.flow_id,
+            branchId: branchRaw,
+            credentials: 'include',
+            getHeaders: async () => ({}),
         });
+        return { query };
     },
 });
 

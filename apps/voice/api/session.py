@@ -67,6 +67,13 @@ async def voice_session(
         await websocket.close(code=1008)
         return
 
+    tts_voice_q: str | None
+    if isinstance(tts_voice, str):
+        stripped = tts_voice.strip()
+        tts_voice_q = stripped if stripped != "" else None
+    else:
+        tts_voice_q = None
+
     await websocket.accept()
     logger.info(
         "voice.session.connected",
@@ -86,7 +93,7 @@ async def voice_session(
     tts_override = SpeechOverride(
         provider=tts_provider_name,
         model=tts_model,
-        voice=tts_voice,
+        voice=tts_voice_q,
         language=language,
         sample_rate=tts_sample_rate,
     )

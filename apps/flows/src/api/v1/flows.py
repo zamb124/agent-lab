@@ -32,6 +32,7 @@ from apps.flows.src.services.flow_speech_resolve import (
     flow_speech_to_triple_override,
     triple_to_voice_ws_query_dict,
 )
+from core.clients.voice_resolver import resolve_effective_tts_voice_for_ws
 
 logger = get_logger(__name__)
 
@@ -914,12 +915,38 @@ async def get_flow_voice_session_query(
     container: ContainerDep,
     branch_id: str = Query("default", description="ID ветки графа для мержа speech"),
 ) -> FlowVoiceSessionQueryResponse:
+    """Собирает query для Voice WS: STT/TTS/VAD/language из effective_flow_speech_settings.
+
+    Ключи опциональны (только явно заданные в профиле). Дополнительно для ``tts_voice``
+    выполняется тот же tier-резолв, что в ``resolve_effective_tts_voice_for_ws``, чтобы URL
+    совпадал с ``get_tts_streamer`` при частичном профиле. Остальные поля без значения в
+    профиле не заполняются — их на стороне ``apps/voice`` дозаполняет ``create_*_provider`` /
+    ``get_tts_streamer`` из company и ``settings.voice``.
+    """
     cfg = await container.flow_repository.get(flow_id)
     if cfg is None:
         raise HTTPException(status_code=404, detail="Flow not found")
     eff = effective_flow_speech_settings(cfg, branch_id)
     stt, tts, vad = flow_speech_to_triple_override(eff)
-    return FlowVoiceSessionQueryResponse(query=triple_to_voice_ws_query_dict(stt, tts, vad))
+    query = triple_to_voice_ws_query_dict(stt, tts, vad)
+    ctx = get_context()
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    resolved_voice = await resolve_effective_tts_voice_for_ws(
+        company_id=company_id,
+        flow_tts=tts,
+    )
+    if resolved_voice:
+        query["tts_voice"] = str(resolved_voice)
+    else:
+        query.pop("tts_voice", None)
+    logger.info(
+        "flows.voice_session_query",
+        flow_id=flow_id,
+        branch_id=branch_id,
+        flow_tts_voice=tts.voice,
+        resolved_tts_voice=resolved_voice,
+    )
+    return FlowVoiceSessionQueryResponse(query=query)
 
 
 @router.get("/{flow_id}", response_model=FlowResponse)

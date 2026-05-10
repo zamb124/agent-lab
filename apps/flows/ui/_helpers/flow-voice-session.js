@@ -6,6 +6,10 @@ import { VoiceAgentBridge } from '@platform/lib/voice/voice-agent-bridge.js';
 import { disposeVoiceMediaThenBridge } from '@platform/lib/voice/dispose-voice-session.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import { normalizeVoiceLocaleForWs } from '@platform/lib/voice/normalize-voice-locale.js';
+import {
+    fetchFlowVoiceSessionQueryDict,
+    normalizeBranchIdForFlowVoiceSessionQuery,
+} from '@platform/lib/voice/fetch-flow-voice-session-query.js';
 
 /**
  * Дополнительные заголовки для fetch к voice / A2A (как `getAuthToken` в embed): по умолчанию {}.
@@ -17,6 +21,36 @@ export async function flowsVoiceAuxiliaryHttpHeadersStub() {
 }
 
 export { normalizeVoiceLocaleForWs as normalizeFlowVoiceSttLanguage };
+
+/**
+ * `base` и пустое значение — базовый граф (`branch_id=default` на API), не ключ `FlowConfig.branches`.
+ * @param {string|null|undefined} branchId
+ * @returns {string}
+ */
+export function branchIdForFlowVoiceSessionQuery(branchId) {
+    return normalizeBranchIdForFlowVoiceSessionQuery(branchId, undefined);
+}
+
+/**
+ * Query-параметры Voice WS: полный набор из `voice-session-query` (STT/TTS/VAD/language),
+ * как отдаёт flows API после мержа профиля речи; без обрезки до голоса.
+ * @param {object} p
+ * @param {string} p.flowId
+ * @param {string|null|undefined} p.branchId
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function fetchFlowVoiceWsQuery({ flowId, branchId }) {
+    if (typeof flowId !== 'string' || flowId.length === 0) {
+        throw new Error('fetchFlowVoiceWsQuery: flow_id required');
+    }
+    return fetchFlowVoiceSessionQueryDict({
+        flowsApiRoot: '/flows',
+        flowId,
+        branchId,
+        credentials: 'include',
+        getHeaders: async () => ({}),
+    });
+}
 
 /**
  * HTTP-оригин голосового шлюза: тот же host, что у страницы, путь `/voice` (dev: WS-прокси

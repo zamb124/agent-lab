@@ -14,6 +14,7 @@ import {
 } from '../voice/tts-output-pref.js';
 import { setStreamTtsTarget } from '../voice/stream-tts-registry.js';
 import { normalizeVoiceLocaleForWs } from '../voice/normalize-voice-locale.js';
+import { fetchFlowVoiceSessionQueryDict } from '../voice/fetch-flow-voice-session-query.js';
 import './platform-embed-chat.js';
 
 /**
@@ -1055,31 +1056,15 @@ export class PlatformEmbedChatDrawer extends LitElement {
         if (fid === '' || root === '') {
             return {};
         }
-        let bid = String(this.branchId || this.skillId || '').trim();
-        if (bid === '') {
-            bid = 'default';
-        }
-        const url = `${root}/api/v1/flows/${encodeURIComponent(fid)}/voice-session-query?branch_id=${encodeURIComponent(bid)}`;
-        const headersRaw =
-            typeof this.getAuthToken === 'function' ? await this.getAuthToken() : {};
-        const headers =
-            headersRaw && typeof headersRaw === 'object' && !Array.isArray(headersRaw)
-                ? headersRaw
-                : {};
-        const res = await fetch(url, {
-            method: 'GET',
+        return fetchFlowVoiceSessionQueryDict({
+            flowsApiRoot: root,
+            flowId: fid,
+            branchId: this.branchId,
+            skillIdLegacy: this.skillId,
             credentials: this.useCredentials === true ? 'include' : 'omit',
-            headers,
+            getHeaders:
+                typeof this.getAuthToken === 'function' ? () => this.getAuthToken() : async () => ({}),
         });
-        if (!res.ok) {
-            const t = await res.text();
-            throw new Error(`voice-session-query HTTP ${res.status}: ${t}`);
-        }
-        const body = await res.json();
-        if (!body || typeof body !== 'object' || !body.query || typeof body.query !== 'object') {
-            throw new Error('voice-session-query: invalid response body');
-        }
-        return { ...body.query };
     }
 
     /** ISO-код для query language=; null если явной локали нет (оставить значение из профиля flow). */

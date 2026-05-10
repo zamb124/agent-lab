@@ -340,6 +340,36 @@ def _resolve_optional_float(
     return company_value
 
 
+async def resolve_effective_tts_voice_for_ws(
+    *,
+    company_id: str | None,
+    flow_tts: SpeechOverride,
+) -> str | None:
+    """Итоговый ``voice`` для URL WebSocket (те же шаги 1–3, что в ``get_tts_client``).
+
+    Сначала нормализованное ``flow_tts.voice`` (профиль flow/ветки), затем запись
+    ``company_voice_providers`` (kind=tts), затем ``settings.voice.tts.default_voice``.
+    Пустая строка в профиле трактуется как отсутствие override (как на WS после
+    нормализации query).
+    """
+    tts = _validate_override(flow_tts)
+    cfg = get_settings().voice.tts
+    raw_v = tts.voice
+    if isinstance(raw_v, str):
+        stripped = raw_v.strip()
+        flow_voice: str | None = stripped if stripped != "" else None
+    else:
+        flow_voice = raw_v
+    company_row = None
+    if company_id is not None and company_id.strip() != "":
+        company_row = await _load_company_override(company_id=company_id, kind="tts")
+    return _resolve_optional_str(
+        override_value=flow_voice,
+        company_value=company_row.voice if company_row else None,
+        default_value=cfg.default_voice,
+    )
+
+
 async def resolve_stt_settings(
     *,
     company_id: str,
@@ -779,6 +809,7 @@ async def get_tts_streamer(
 
 __all__ = [
     "ResolvedSttSettings",
+    "resolve_effective_tts_voice_for_ws",
     "resolve_stt_settings",
     "resolve_tts_pronunciation",
     "get_stt_client",

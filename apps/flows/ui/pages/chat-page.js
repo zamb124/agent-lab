@@ -15,6 +15,7 @@ import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-ch
 import {
     createFlowVoiceSession,
     disposeFlowVoiceSession,
+    fetchFlowVoiceWsQuery,
     flowsVoiceAuxiliaryHttpHeadersStub,
     formatFlowVoiceConnectErrorDetail,
     normalizeFlowVoiceSttLanguage,
@@ -176,7 +177,6 @@ export class ChatPage extends PlatformPage {
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
         this._sessionState = this.useOp('flows/session_state');
-        this._flowVoiceSessionQuery = this.useOp('flows/flow_voice_session_query');
         this._flows = this.useResource('flows/flows');
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
         this._localeSel = this.select((s) => s.i18n.locale);
@@ -296,15 +296,6 @@ export class ChatPage extends PlatformPage {
             return;
         }
         const localeRaw = asString(this._localeSel.value);
-        /** @type {Record<string, string>} */
-        const wsQuery = {};
-        if (localeRaw.trim() !== '') {
-            try {
-                wsQuery.language = normalizeFlowVoiceSttLanguage(localeRaw);
-            } catch {
-                /* noop */
-            }
-        }
         if (this._ttsOnlyMedia !== null && this._ttsOnlyMedia.isConnected) {
             this._ttsOnlyMedia.primePlaybackFromUserGesture();
             setStreamTtsTarget(this._ttsOnlyMedia, readTtsOutputEnabled);
@@ -325,40 +316,56 @@ export class ChatPage extends PlatformPage {
         const voiceBaseUrl = resolveFlowVoiceHttpOrigin();
         const wsBase = voiceBaseUrl.replace(/^http/, 'ws');
         const sessionId = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        const mediaOpts = {
-            baseUrl: wsBase,
-            sessionId,
-            companyId,
-            autoRecord: false,
-        };
-        if (Object.keys(wsQuery).length > 0) {
-            Object.assign(mediaOpts, { query: wsQuery });
-        }
-        const media = new VoiceMediaSession(mediaOpts);
-        media.addEventListener('error', (ev) => {
-            const d = ev.detail && typeof ev.detail === 'object' ? ev.detail : {};
-            const msg =
-                typeof d.detail === 'string' && d.detail.trim() !== ''
-                    ? d.detail
-                    : typeof d.code === 'string'
-                      ? d.code
-                      : this.t('platform_chat.toast_voice_ws_hint');
-            this.toast('flows:platform_chat.toast_voice_error', {
-                type: 'error',
-                vars: { detail: msg },
-            });
-        });
-        media.addEventListener('closed', () => {
-            if (this._ttsOnlyMedia === media) {
-                this._ttsOnlyMedia = null;
-                clearStreamTtsTarget();
-            }
-        });
-        this._ttsOnlyMedia = media;
-        media.primePlaybackFromUserGesture();
-        setStreamTtsTarget(media, readTtsOutputEnabled);
+
         void (async () => {
+            /** @type {InstanceType<typeof VoiceMediaSession>|null} */
+            let media = null;
             try {
+                const serverQuery = await fetchFlowVoiceWsQuery({
+                    flowId: this.flowId,
+                    branchId: this.branchId,
+                });
+                /** @type {Record<string, string>} */
+                const wsQuery = { ...serverQuery };
+                if (localeRaw.trim() !== '') {
+                    try {
+                        wsQuery.language = normalizeFlowVoiceSttLanguage(localeRaw);
+                    } catch {
+                        /* noop */
+                    }
+                }
+                const mediaOpts = {
+                    baseUrl: wsBase,
+                    sessionId,
+                    companyId,
+                    autoRecord: false,
+                };
+                if (Object.keys(wsQuery).length > 0) {
+                    Object.assign(mediaOpts, { query: wsQuery });
+                }
+                media = new VoiceMediaSession(mediaOpts);
+                media.addEventListener('error', (ev) => {
+                    const d = ev.detail && typeof ev.detail === 'object' ? ev.detail : {};
+                    const msg =
+                        typeof d.detail === 'string' && d.detail.trim() !== ''
+                            ? d.detail
+                            : typeof d.code === 'string'
+                              ? d.code
+                              : this.t('platform_chat.toast_voice_ws_hint');
+                    this.toast('flows:platform_chat.toast_voice_error', {
+                        type: 'error',
+                        vars: { detail: msg },
+                    });
+                });
+                media.addEventListener('closed', () => {
+                    if (this._ttsOnlyMedia === media) {
+                        this._ttsOnlyMedia = null;
+                        clearStreamTtsTarget();
+                    }
+                });
+                this._ttsOnlyMedia = media;
+                media.primePlaybackFromUserGesture();
+                setStreamTtsTarget(media, readTtsOutputEnabled);
                 await media.connect();
                 if (this._ttsOnlyMedia !== media) {
                     try {
@@ -384,10 +391,12 @@ export class ChatPage extends PlatformPage {
                     this._ttsOnlyMedia = null;
                 }
                 clearStreamTtsTarget();
-                try {
-                    media.close();
-                } catch {
-                    /* noop */
+                if (media !== null) {
+                    try {
+                        media.close();
+                    } catch {
+                        /* noop */
+                    }
                 }
                 this.toast('flows:platform_chat.toast_voice_error', {
                     type: 'error',
@@ -431,18 +440,10 @@ export class ChatPage extends PlatformPage {
             sttLanguage,
             initialContextId,
             getVoiceWsQuery: async () => {
-                const branchForVoice =
-                    typeof this.branchId === 'string' && this.branchId !== '' && this.branchId !== 'base'
-                        ? this.branchId
-                        : 'default';
-                const raw = await this._flowVoiceSessionQuery.run({
-                    flow_id: this.flowId,
-                    branch_id: branchForVoice,
+                return fetchFlowVoiceWsQuery({
+                    flowId: this.flowId,
+                    branchId: this.branchId,
                 });
-                if (!raw || typeof raw !== 'object' || !raw.query || typeof raw.query !== 'object') {
-                    throw new Error('flows chat voice: voice-session-query invalid response');
-                }
-                return raw.query;
             },
             getContextId: () => {
                 const cid = this._chat.state?.currentContextId;
