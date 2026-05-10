@@ -308,6 +308,11 @@
     --field-pill-compact-input-weight: var(--font-medium);
     --field-pill-compact-select-chevron-padding-end: 22px;
 
+    /* Плашка dense: узкая строка в шапке sidebar (выбор namespace) — ниже compact */
+    --field-pill-dense-padding-y: 3px;
+    --field-pill-dense-padding-x: 10px;
+    --field-pill-dense-spin-height: 28px;
+
     --field-attr-row-gap: var(--space-2);
 
     /* Числовое поле (platform-field-number): колонка шагов вместо нативных стрелок */

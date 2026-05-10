@@ -51,7 +51,7 @@ alwaysApply: false
 | `disabled` | `boolean` | — |
 | `inputType` | `'text'\|'email'\|'password'\|'url'\|'tel'\|'search'` | Только при `type='string'` — нативный `<input type=...>`. Default `'text'`. Любое другое значение — `throw`. |
 | `hint` | `string` | Подсказка-tooltip рядом с `label` (рисуется через `<platform-help-hint>`). **НЕ** always-visible div — содержимое появляется при наведении/фокусе на «?». Локальный `<div class="hint">…</div>` под полем формы запрещён. |
-| `pillDensity` | `'default' \| 'compact'` | Плотность оболочки pill: `compact` — уменьшенные отступы, радиус и кегль (сайдбар namespace и узкие строки). Атрибут `pill-density`. Иное значение — `throw`. |
+| `pillDensity` | `'default' \| 'compact' \| 'dense'` | Плотность оболочки pill: `compact` — уменьшенные отступы, радиус и кегль; `dense` — ещё ниже строка редактирования (`field-pill--compact` + `field-pill--dense`, шапка `platform-sidebar-namespace-select`). Атрибут `pill-density`. Иное значение — `throw`. |
 
 `@change` — `detail.value` содержит **типизированное** значение (`number` для number/integer, `boolean` для boolean, `Array` для array, …).
 

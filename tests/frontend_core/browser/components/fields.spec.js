@@ -53,6 +53,15 @@ describe('platform-field dispatcher', () => {
         expect(pill.classList.contains('field-pill--compact')).to.equal(true);
     });
 
+    it('pill-density="dense" добавляет field-pill--compact и field-pill--dense', async () => {
+        const el = await fixture(html`
+            <platform-field type="string" mode="edit" value="" pill-density="dense"></platform-field>
+        `);
+        const pill = el.shadowRoot.querySelector('.field-pill');
+        expect(pill.classList.contains('field-pill--compact')).to.equal(true);
+        expect(pill.classList.contains('field-pill--dense')).to.equal(true);
+    });
+
     it('без label не рендерит field-pill-label, но рисует pill', async () => {
         const el = await fixture(html`<platform-field type="string" mode="edit" value=""></platform-field>`);
         expect(el.shadowRoot.querySelector('.field-pill')).to.exist;

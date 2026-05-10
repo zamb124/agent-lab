@@ -1,6 +1,6 @@
 /**
  * platform-sidebar-namespace-select — единый блок выбора платформенного namespace
- * в шапке service sidebar: подпись, platform-field enum (compact), кнопки edit/add.
+ * в шапке service sidebar: подпись, platform-field enum (`pill-density="dense"`), кнопки edit/add.
  *
  * Поведение выбора и модалки — у родителя; темизация через CSS-переменные на предке.
  */
@@ -80,11 +80,15 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 26px;
-                height: 26px;
-                padding: 0;
                 box-sizing: border-box;
-                border-radius: var(--radius-md);
+                width: calc(
+                    2px + 2 * var(--field-pill-dense-padding-y) + var(--field-pill-dense-spin-height)
+                );
+                height: calc(
+                    2px + 2 * var(--field-pill-dense-padding-y) + var(--field-pill-dense-spin-height)
+                );
+                padding: 0;
+                border-radius: var(--radius-full);
                 cursor: pointer;
                 flex-shrink: 0;
                 transition:
@@ -137,7 +141,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
         this.addTitle = '';
         this.editIcon = 'edit';
         this.fieldClass = '';
-        this.pillDensity = 'compact';
+        this.pillDensity = 'dense';
     }
 
     _onFieldChange(e) {
@@ -200,7 +204,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                                   ?disabled=${this.disabled}
                                   @click=${this._onEditClick}
                               >
-                                  <platform-icon name=${this.editIcon} size="14"></platform-icon>
+                                  <platform-icon name=${this.editIcon} size="16"></platform-icon>
                               </button>
                           `
                         : ''}
@@ -213,7 +217,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                                   ?disabled=${this.disabled}
                                   @click=${this._onAddClick}
                               >
-                                  <platform-icon name="plus" size="14"></platform-icon>
+                                  <platform-icon name="plus" size="16"></platform-icon>
                               </button>
                           `
                         : ''}

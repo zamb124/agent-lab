@@ -51,6 +51,14 @@ export const fieldPillStyles = css`
         background-position: right var(--space-1) center;
     }
 
+    .field-pill.field-pill--compact.field-pill--dense {
+        --field-pill-padding-y: var(--field-pill-dense-padding-y);
+        --field-pill-padding-x: var(--field-pill-dense-padding-x);
+        --field-pill-gap: 2px;
+        --field-pill-number-spin-width: 24px;
+        --field-pill-number-spin-height: var(--field-pill-dense-spin-height);
+    }
+
     .field-pill--tags .tags-row {
         min-height: var(--field-pill-number-spin-height);
         box-sizing: border-box;

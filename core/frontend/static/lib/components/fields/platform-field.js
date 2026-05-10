@@ -75,8 +75,10 @@ export class PlatformField extends PlatformElement {
         super.willUpdate(changedProps);
         if (changedProps.has('pillDensity')) {
             const v = this.pillDensity;
-            if (v !== 'default' && v !== 'compact') {
-                throw new Error(`platform-field: pillDensity must be "default" or "compact", got "${v}"`);
+            if (v !== 'default' && v !== 'compact' && v !== 'dense') {
+                throw new Error(
+                    `platform-field: pillDensity must be "default", "compact" or "dense", got "${v}"`,
+                );
             }
         }
     }
@@ -217,7 +219,12 @@ export class PlatformField extends PlatformElement {
     render() {
         const hasLabel = typeof this.label === 'string' && this.label !== '';
         const hasHint = typeof this.hint === 'string' && this.hint !== '';
-        const density = this.pillDensity === 'compact' ? 'field-pill--compact' : '';
+        const density =
+            this.pillDensity === 'dense'
+                ? 'field-pill--compact field-pill--dense'
+                : this.pillDensity === 'compact'
+                  ? 'field-pill--compact'
+                  : '';
         return html`
             <div class="field-pill ${density}" data-mode=${this.mode}>
                 ${hasLabel
