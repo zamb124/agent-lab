@@ -42,6 +42,7 @@ from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from apps.frontend.container import get_frontend_container
 from apps.frontend.dependencies import ContainerDep
+from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.app.factory import create_service_app
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.system_bootstrap import ensure_system_admin_membership
@@ -379,6 +380,9 @@ async def serve_spa(container: ContainerDep, full_path: str = ""):
         return FileResponse(index_path)
 
     return {"message": "Frontend UI not built yet"}
+
+
+app.add_middleware(StaticCoreModuleCorsMiddleware)
 
 
 if __name__ == "__main__":
