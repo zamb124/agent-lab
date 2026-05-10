@@ -179,6 +179,7 @@
         "mini_zoom_out": "Zoom out (Ctrl + wheel)",
         "mini_zoom_reset": "Reset zoom",
         "mini_open_full": "Open full workspace",
+        "mini_graph_overlay_aria": "Relationship graph around the entity",
         "canvas_view_group_label": "Canvas view",
         "view_mode_3d": "3D",
         "view_mode_mindmap": "Mind map",

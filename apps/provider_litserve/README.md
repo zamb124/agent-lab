@@ -36,10 +36,10 @@
   "infra": {
     "gateway_port": 8014,
     "backend": "flagllm",
-    "model_id": "Qwen/Qwen3-Reranker-8B",
+    "model_id": "Qwen/Qwen3-Reranker-4B",
     "embedding_model_id": "Qwen/Qwen3-Embedding-4B",
     "embedding_openai_model_id": "qwen/qwen3-embedding-4b",
-    "rerank_openai_model_id": "qwen/qwen3-reranker-8b",
+    "rerank_openai_model_id": "qwen/qwen3-reranker-4b",
     "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
     "embedding_model_ids": [],
     "rerank_model_ids": [],

@@ -24,10 +24,10 @@ pytestmark = pytest.mark.timeout(15)
 
 def test_default_litserve_infra_uses_qwen_embedding_and_rerank(unique_id):
     cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
-    assert cfg.model_id == "Qwen/Qwen3-Reranker-8B"
+    assert cfg.model_id == "Qwen/Qwen3-Reranker-4B"
     assert cfg.embedding_model_id == "Qwen/Qwen3-Embedding-4B"
     assert cfg.embedding_openai_model_id == "qwen/qwen3-embedding-4b"
-    assert cfg.rerank_openai_model_id == "qwen/qwen3-reranker-8b"
+    assert cfg.rerank_openai_model_id == "qwen/qwen3-reranker-4b"
     assert cfg.backend == "flagllm"
     assert cfg.max_length == 8192
     assert cfg.model_batch_size == 4

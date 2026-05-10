@@ -179,6 +179,7 @@
         "mini_zoom_out": "Уменьшить (Ctrl + колесо)",
         "mini_zoom_reset": "Сбросить масштаб",
         "mini_open_full": "Открыть полностью",
+        "mini_graph_overlay_aria": "Граф связей вокруг сущности",
         "canvas_view_group_label": "Вид канваса",
         "view_mode_3d": "3D",
         "view_mode_mindmap": "Mind map",

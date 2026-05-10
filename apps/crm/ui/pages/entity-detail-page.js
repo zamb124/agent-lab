@@ -336,44 +336,34 @@ export class CRMEntityDetailPage extends PlatformPage {
             }
             .body.graph {
                 overflow: hidden;
-                padding: 0;
+                padding: var(--space-4);
                 display: flex;
                 flex-direction: column;
                 align-items: stretch;
                 flex: 1 1 0%;
                 min-height: 0;
+                box-sizing: border-box;
             }
             :host([embedded]) .body.graph {
                 padding: 0;
             }
-            .body.graph crm-mini-graph {
+            .entity-graph-preview-host {
+                flex: 1 1 0%;
+                min-height: 0;
+                min-width: 0;
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                overflow: hidden;
+                box-sizing: border-box;
+            }
+            .entity-graph-preview-host crm-mini-graph {
                 flex: 1 1 0%;
                 min-height: 0;
                 width: 100%;
-            }
-            .graph-mode-switch {
-                display: flex;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-bottom: 1px solid var(--glass-border-subtle);
-                flex-shrink: 0;
-                background: var(--glass-tint-subtle);
-            }
-            .graph-mode-switch button {
-                flex: 1;
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-md);
-                border: 1px solid var(--glass-border-medium);
-                background: var(--glass-solid-medium);
-                color: var(--text-secondary);
-                font-size: var(--text-xs);
-                font-weight: 600;
-                cursor: pointer;
-            }
-            .graph-mode-switch button.active {
-                border-color: var(--accent);
-                background: var(--accent-subtle);
-                color: var(--text-primary);
             }
 
             .center {
@@ -742,6 +732,15 @@ export class CRMEntityDetailPage extends PlatformPage {
         const entityId = detail && typeof detail.entityId === 'string' ? detail.entityId : '';
         const entityType = detail && typeof detail.entity_type === 'string' ? detail.entity_type : '';
         this._navigateToLinkedEntity(entityId, entityType);
+    }
+
+    _onMiniGraphViewModeRequest(event) {
+        const d = event.detail && typeof event.detail === 'object' ? event.detail : null;
+        const raw = d && typeof d.viewMode === 'string' ? d.viewMode.trim() : '';
+        if (raw !== 'mindmap' && raw !== '3d') {
+            throw new Error('CRMEntityDetailPage: view-mode-request requires viewMode mindmap|3d');
+        }
+        this._graphView.setViewMode({ viewMode: raw });
     }
 
     _onRelatedClick(event) {
@@ -1203,33 +1202,18 @@ export class CRMEntityDetailPage extends PlatformPage {
             const vm = this._graphView.value.viewMode;
             return html`
                 <div class="body graph">
-                    <div class="graph-mode-switch" role="group">
-                        <button
-                            type="button"
-                            class=${vm === 'mindmap' ? 'active' : ''}
-                            @click=${() => {
-                                this._graphView.setViewMode({ viewMode: 'mindmap' });
-                            }}
-                        >
-                            ${this.t('graph.view_mode_mindmap')}
-                        </button>
-                        <button
-                            type="button"
-                            class=${vm === '3d' ? 'active' : ''}
-                            @click=${() => {
-                                this._graphView.setViewMode({ viewMode: '3d' });
-                            }}
-                        >
-                            ${this.t('graph.view_mode_3d')}
-                        </button>
+                    <div class="entity-graph-preview-host">
+                        <crm-mini-graph
+                            fill-container
+                            embed-chrome
+                            show-view-mode-toggle
+                            .entityId=${this.itemId}
+                            namespace=${entityNs}
+                            .viewMode=${vm}
+                            @view-mode-request=${this._onMiniGraphViewModeRequest}
+                            @entity-open=${this._onMiniGraphEntityOpen}
+                        ></crm-mini-graph>
                     </div>
-                    <crm-mini-graph
-                        fill-container
-                        .entityId=${this.itemId}
-                        namespace=${entityNs}
-                        .viewMode=${vm}
-                        @entity-open=${this._onMiniGraphEntityOpen}
-                    ></crm-mini-graph>
                 </div>
             `;
         }

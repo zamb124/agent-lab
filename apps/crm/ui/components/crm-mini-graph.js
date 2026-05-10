@@ -549,7 +549,7 @@ export class CRMMiniGraph extends PlatformElement {
 
     _syncHostAriaLabel() {
         if (this.embedChrome && this.showViewModeToggle) {
-            this.setAttribute('aria-label', this.t('note_view.graph_inline_title'));
+            this.setAttribute('aria-label', this.t('graph.mini_graph_overlay_aria'));
         } else {
             this.removeAttribute('aria-label');
         }

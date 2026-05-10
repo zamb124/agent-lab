@@ -1148,7 +1148,7 @@ class ProviderLitserveInfraConfig(BaseModel):
     max_passage_chars: int = 64000
     max_length: int = 8192
     model_batch_size: int = 4
-    model_id: str = "Qwen/Qwen3-Reranker-8B"
+    model_id: str = "Qwen/Qwen3-Reranker-4B"
 
     use_fp16: bool = True
     use_bf16: bool = False
@@ -1156,7 +1156,7 @@ class ProviderLitserveInfraConfig(BaseModel):
 
     embedding_model_id: str = "Qwen/Qwen3-Embedding-4B"
     embedding_openai_model_id: str = "qwen/qwen3-embedding-4b"
-    rerank_openai_model_id: str = "qwen/qwen3-reranker-8b"
+    rerank_openai_model_id: str = "qwen/qwen3-reranker-4b"
     llm_model_id: str = "Qwen/Qwen2.5-1.5B-Instruct"
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)
