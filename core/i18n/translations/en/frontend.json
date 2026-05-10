@@ -615,7 +615,10 @@
         "backend_proxy_example_title": "Backend request example to platform",
         "copy_backend_proxy_example": "Copy backend example",
         "client_backend_example_title": "Browser call example to your backend",
-        "copy_client_backend_example": "Copy /api/chat-token example"
+        "copy_client_backend_example": "Copy /api/chat-token example",
+        "allowed_origins_title": "Widget allowed origins (CORS)",
+        "allowed_origins_empty": "The list is empty — the platform does not enforce an origin allow-list for session-token.",
+        "allowed_origins_nonempty": "For session-token, the origin string must match one of the values below exactly."
     },
     "team_modal": {
         "loading": "Loading..."

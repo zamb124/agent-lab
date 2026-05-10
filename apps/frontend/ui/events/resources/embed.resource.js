@@ -14,7 +14,8 @@
  *   POST   /frontend/api/embed/configs                  → EmbedConfig
  *   PATCH  /frontend/api/embed/configs/{embed_id}       → EmbedConfig
  *   DELETE /frontend/api/embed/configs/{embed_id}       → 204
- *   GET    /frontend/api/embed/configs/{embed_id}/code  → { html_code, script_url, token_endpoint }
+ *   GET    /frontend/api/embed/configs/{embed_id}/code  → { html_code, script_url, token_endpoint,
+ *     backend_proxy_code, browser_to_host_backend_code, allowed_origins }
  */
 
 import {
@@ -73,11 +74,28 @@ export const embedCodeLoadOp = createAsyncOp({
             method: 'GET',
             url: `/frontend/api/embed/configs/${encodeURIComponent(id)}/code`,
         });
+        if (!Array.isArray(r.allowed_origins)) {
+            throw new Error('embedCodeLoadOp: allowed_origins must be array');
+        }
+        for (let i = 0; i < r.allowed_origins.length; i += 1) {
+            if (typeof r.allowed_origins[i] !== 'string') {
+                throw new Error('embedCodeLoadOp: allowed_origins entries must be strings');
+            }
+        }
+        const backend_proxy_code =
+            typeof r.backend_proxy_code === 'string' ? r.backend_proxy_code : '';
+        const browser_to_host_backend_code =
+            typeof r.browser_to_host_backend_code === 'string'
+                ? r.browser_to_host_backend_code
+                : '';
         return {
             embed_id: id,
             html_code: typeof r.html_code === 'string' ? r.html_code : '',
             script_url: typeof r.script_url === 'string' ? r.script_url : '',
             token_endpoint: typeof r.token_endpoint === 'string' ? r.token_endpoint : '',
+            backend_proxy_code,
+            browser_to_host_backend_code,
+            allowed_origins: r.allowed_origins,
         };
     },
     extraInitial: { codeByEmbedId: {}, codeLoadingById: {} },
@@ -94,11 +112,17 @@ export const embedCodeLoadOp = createAsyncOp({
             delete nextLoading[r.embed_id];
             return {
                 ...state,
-                codeByEmbedId: { ...state.codeByEmbedId, [r.embed_id]: {
-                    html_code: r.html_code,
-                    script_url: r.script_url,
-                    token_endpoint: r.token_endpoint,
-                } },
+                codeByEmbedId: {
+                    ...state.codeByEmbedId,
+                    [r.embed_id]: {
+                        html_code: r.html_code,
+                        script_url: r.script_url,
+                        token_endpoint: r.token_endpoint,
+                        backend_proxy_code: r.backend_proxy_code,
+                        browser_to_host_backend_code: r.browser_to_host_backend_code,
+                        allowed_origins: r.allowed_origins,
+                    },
+                },
                 codeLoadingById: nextLoading,
             };
         }

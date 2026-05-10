@@ -13,49 +13,6 @@ import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/glass-spinner.js';
 
-// Snippet-шаблоны embed-host'а: строки с примером кода, который
-// пользователь вставляет на своём backend/сайте. Это не исполняемый
-// код UI-модалки — поэтому `window.fetch` собирается через конкатенацию,
-// чтобы CI-проверка `check_ui_canon` не распознала их как реальный HTTP
-// вызов внутри модалки (реальные HTTP — только в фабриках
-// events/resources/*.resource.js).
-const _FETCH = 'window.' + 'fetch';
-
-function _backendProxyExample(tokenEndpoint) {
-    if (typeof tokenEndpoint !== 'string' || tokenEndpoint.length === 0) {
-        throw new Error('_backendProxyExample: tokenEndpoint required');
-    }
-    return `// Server-to-server: your backend exchanges issuer token for embed-session token.
-// Call this endpoint with issuer token (hum_...).
-const response = await ${_FETCH}('${tokenEndpoint}', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer hum_<ISSUER_TOKEN>',
-    },
-    body: JSON.stringify({
-        origin: req.headers.origin,
-        expires_in_seconds: 300,
-    }),
-});
-const data = await response.json();
-// data.token — short-lived embed-session token, return it to the browser.
-return res.json({ token: data.token, expires_at: data.expires_at });`;
-}
-
-function _clientBackendExample() {
-    return `// Browser only calls your backend, never the platform directly.
-async function getChatToken() {
-    const r = await ${_FETCH}('/api/chat-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin: window.location.origin, expires_in_seconds: 300 }),
-    });
-    if (!r.ok) throw new Error('Cannot get chat token');
-    return await r.json();
-}`;
-}
-
 export class FrontendEmbedCodeModal extends PlatformModal {
     static modalKind = 'frontend.embed_code';
 
@@ -181,8 +138,9 @@ export class FrontendEmbedCodeModal extends PlatformModal {
         const entry = this._entry();
         const html_code = entry.html_code;
         const token_endpoint = entry.token_endpoint;
-        const backendExample = _backendProxyExample(token_endpoint);
-        const clientExample = _clientBackendExample();
+        const backendExample = entry.backend_proxy_code || '';
+        const clientExample = entry.browser_to_host_backend_code || '';
+        const origins = Array.isArray(entry.allowed_origins) ? entry.allowed_origins : [];
         return html`
             <div class="section">
                 <div class="section-desc">${this.t('embed_code_modal.description')}</div>
@@ -204,6 +162,16 @@ export class FrontendEmbedCodeModal extends PlatformModal {
                 <button class="btn copy-btn"
                     @click=${() => this._copy(token_endpoint, 'embed_code_modal.toast_copied')}
                 >${this.t('embed_code_modal.copy_token_endpoint')}</button>
+            </div>
+
+            <div class="section">
+                <div class="section-title">${this.t('embed_code_modal.allowed_origins_title')}</div>
+                <div class="section-desc">
+                    ${origins.length === 0
+                        ? this.t('embed_code_modal.allowed_origins_empty')
+                        : this.t('embed_code_modal.allowed_origins_nonempty')}
+                </div>
+                <pre>${origins.length === 0 ? '[]' : JSON.stringify(origins, null, 2)}</pre>
             </div>
 
             <div class="section">

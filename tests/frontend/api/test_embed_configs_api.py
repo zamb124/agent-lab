@@ -477,6 +477,9 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "flow-id" not in html_code
     assert "skill-id" not in html_code
     assert "/static/core/lib/embed-chat/platform-lara-assistant.js" in html_code
+    assert 'type="importmap"' in html_code
+    assert "@platform/lib/" in html_code
+    assert "/static/core/assets/js/lit/lit.min.js" in html_code
     assert "fetch('/api/chat-token'" in html_code
     assert "embed_id: EMBED_ID" in html_code
     assert "session-token" not in html_code
@@ -489,6 +492,21 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "setMetadataHooks: setEmbedMetadataHooks" in html_code
     assert "setAuthProvider: setEmbedAuthProvider" in html_code
     assert data["token_endpoint"].endswith(f"/frontend/api/embed/configs/{embed_id}/session-token")
+    assert isinstance(data.get("allowed_origins"), list)
+    assert data["allowed_origins"] == []
+    prox = data["backend_proxy_code"]
+    client_snip = data["browser_to_host_backend_code"]
+    assert isinstance(prox, str) and prox
+    assert isinstance(client_snip, str) and client_snip
+    assert data["token_endpoint"] in prox
+    assert embed_id in prox
+    assert "session-token" in prox
+    assert "await fetch(" in prox
+    assert "hum_<ISSUER_TOKEN>" in prox
+    assert embed_id in client_snip
+    assert "expires_in_seconds:" in client_snip
+    assert "fetch('/api/chat-token'" in client_snip
+    assert "expires_in_seconds:" in html_code and "300" in html_code
     assert "assistant.voiceEnabled = false" in html_code
     assert "assistant.voiceDefaultOn = false" in html_code
     assert "assistant.voiceBaseUrl" in html_code
@@ -500,6 +518,37 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
         f"/frontend/api/embed/configs/{embed_id}",
         headers=auth_headers
     )
+
+
+@pytest.mark.asyncio
+async def test_get_embed_code_backend_snippet_reflects_allowed_origins(
+    frontend_client: AsyncClient,
+    test_auth_with_agent,
+):
+    auth_headers, _, _ = test_auth_with_agent
+    origin = "https://larashved.ru"
+    create_response = await frontend_client.post(
+        "/frontend/api/embed/configs",
+        headers=auth_headers,
+        json={
+            "name": "Snippet Origins Widget",
+            "flow_id": "test_agent",
+            "allowed_origins": [origin],
+        },
+    )
+    assert create_response.status_code == 200
+    embed_id = create_response.json()["embed_id"]
+    code_response = await frontend_client.get(
+        f"/frontend/api/embed/configs/{embed_id}/code",
+        headers=auth_headers,
+    )
+    assert code_response.status_code == 200
+    data = code_response.json()
+    assert data["allowed_origins"] == [origin]
+    assert origin in data["backend_proxy_code"]
+    assert "agents:read" in data["backend_proxy_code"]
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
 
 @pytest.mark.asyncio

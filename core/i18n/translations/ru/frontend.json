@@ -615,7 +615,10 @@
         "backend_proxy_example_title": "Пример backend-запроса в платформу",
         "copy_backend_proxy_example": "Скопировать backend пример",
         "client_backend_example_title": "Пример вызова вашего backend из браузера",
-        "copy_client_backend_example": "Скопировать пример /api/chat-token"
+        "copy_client_backend_example": "Скопировать пример /api/chat-token",
+        "allowed_origins_title": "Допустимые origins (CORS) виджета",
+        "allowed_origins_empty": "Список пуст — origin в теле session-token платформа не ограничивает по белому списку.",
+        "allowed_origins_nonempty": "При вызове session-token строка origin должна точно совпасть с одним из элементов ниже."
     },
     "team_modal": {
         "loading": "Загрузка..."

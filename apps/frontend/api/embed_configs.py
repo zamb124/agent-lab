@@ -25,6 +25,83 @@ from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
 
+_EMBED_CODE_SESSION_TOKEN_TTL_SECONDS = 300
+
+
+def _build_embed_integration_snippets(
+    *,
+    token_endpoint: str,
+    embed_id: str,
+    allowed_origins: list[str],
+    expires_in_seconds: int,
+) -> tuple[str, str]:
+    ttl = expires_in_seconds
+    token_ep_js = json.dumps(token_endpoint, ensure_ascii=False)
+    embed_id_js = json.dumps(embed_id, ensure_ascii=False)
+    origins_js = json.dumps(allowed_origins, ensure_ascii=False)
+
+    backend_proxy_code = (
+        "// Server-to-server: API-ключ платформы hum_... "
+        "(scopes agents:read и/или agents:write, см. выдачу ключей) -> embed-session JWT.\n"
+        f"// expires_in_seconds допустимо 60..900; в примере: {ttl}.\n"
+        "// Поле origin в теле POST — строка сайта посетителя "
+        "(как у window.location.origin на странице клиента).\n"
+        "// Если список allowed_origins виджета не пустой, это значение должно быть в списке.\n"
+        f"// allowed_origins виджета: {origins_js}\n"
+        "// Задайте browserOrigin, например из входящего HTTP-запроса к вашему POST /api/chat-token:\n"
+        "// const browserOrigin = req.headers.origin; // примерный Express\n"
+        f"const response = await fetch({token_ep_js}, {{\n"
+        "  method: 'POST',\n"
+        "  headers: {\n"
+        "    'Content-Type': 'application/json',\n"
+        "    'Authorization': 'Bearer hum_<ISSUER_TOKEN>',\n"
+        "  },\n"
+        "  body: JSON.stringify({\n"
+        "    origin: browserOrigin,\n"
+        f"    expires_in_seconds: {ttl},\n"
+        "  }),\n"
+        "});\n"
+        "if (!response.ok) throw new Error('Humanitec session-token request failed');\n"
+        "const data = await response.json();\n"
+        "// data.token — Bearer для виджета; data.expires_at — при необходимости клиенту.\n"
+    )
+
+    browser_to_host_backend_code = (
+        "// Браузер вызывает только ваш backend, не платформу напрямую.\n"
+        "async function getChatToken() {\n"
+        "  const r = await fetch('/api/chat-token', {\n"
+        "    method: 'POST',\n"
+        "    headers: { 'Content-Type': 'application/json' },\n"
+        "    body: JSON.stringify({\n"
+        f"      embed_id: {embed_id_js},\n"
+        "      origin: window.location.origin,\n"
+        f"      expires_in_seconds: {ttl},\n"
+        "    }),\n"
+        "  });\n"
+        "  if (!r.ok) throw new Error('Cannot get chat token');\n"
+        "  return await r.json();\n"
+        "}\n"
+    )
+
+    return backend_proxy_code, browser_to_host_backend_code
+
+
+def _build_embed_import_map_script(*, core_root: str) -> str:
+    """Import map для внешнего сайта: bare `lit` и `@platform/lib/` без SPA index.html."""
+    root = core_root.rstrip("/")
+    imports_map: dict[str, str] = {
+        "lit": f"{root}/assets/js/lit/lit.min.js",
+        "lit/decorators.js": f"{root}/assets/js/lit/decorators.min.js",
+        "lit/directives/class-map.js": f"{root}/assets/js/lit/directives/class-map.min.js",
+        "lit/directives/repeat.js": f"{root}/assets/js/lit/directives/repeat.min.js",
+        "lit/directives/unsafe-html.js": f"{root}/assets/js/lit/directives/unsafe-html.min.js",
+        "lit/directives/when.js": f"{root}/assets/js/lit/directives/when.min.js",
+        "lit/directives/guard.js": f"{root}/assets/js/lit/directives/guard.min.js",
+        "@platform/lib/": f"{root}/lib/",
+    }
+    payload = json.dumps({"imports": imports_map}, indent=2, ensure_ascii=False)
+    return f"<script type=\"importmap\">\n{payload}\n</script>"
+
 
 def _validate_landing_catalog_fields(
     *,
@@ -191,10 +268,14 @@ class EmbedConfigResponse(BaseModel):
 
 class EmbedCodeResponse(BaseModel):
     """Код для встраивания виджета"""
+
     html_code: str
     script_url: str
     embed_id: str
     token_endpoint: str
+    backend_proxy_code: str
+    browser_to_host_backend_code: str
+    allowed_origins: List[str]
 
 class EmbedSessionTokenRequest(BaseModel):
     origin: Optional[str] = Field(default=None, description="Origin внешнего сайта")
@@ -500,13 +581,27 @@ async def get_embed_code(
     if settings.server.env == "production":
         script_url = "https://cdn.humanitec.ru/lib/embed-chat/platform-lara-assistant.js"
         base_url = "https://api.humanitec.ru"
+        embed_import_map_core_root = "https://cdn.humanitec.ru"
     else:
         host = request.headers.get("host", "localhost:8000")
-        protocol = "https" if settings.server.env == "production" else "http"
+        protocol = request.url.scheme
+        if protocol not in ("http", "https"):
+            raise ValueError(
+                f"get_embed_code: ожидалась схема http или https, получено {protocol!r}"
+            )
         script_url = f"{protocol}://{host}/static/core/lib/embed-chat/platform-lara-assistant.js"
         base_url = f"{protocol}://{host}"
+        embed_import_map_core_root = f"{protocol}://{host}/static/core"
 
     token_endpoint = f"{base_url}/frontend/api/embed/configs/{embed_id}/session-token"
+    ttl = _EMBED_CODE_SESSION_TOKEN_TTL_SECONDS
+    allowed_origins = list(config.allowed_origins)
+    backend_proxy_code, browser_to_host_backend_code = _build_embed_integration_snippets(
+        token_endpoint=token_endpoint,
+        embed_id=config.embed_id,
+        allowed_origins=allowed_origins,
+        expires_in_seconds=ttl,
+    )
     assistant_title = config.assistant_title or config.name
     theme_js = json.dumps(config.theme, ensure_ascii=False)
     show_launcher_js = json.dumps(config.show_launcher, ensure_ascii=False)
@@ -519,7 +614,11 @@ async def get_embed_code(
     voice_default_on_js = json.dumps(config.voice_enabled and config.voice_default_on)
     company_id_js = json.dumps(company_id, ensure_ascii=False)
 
+    import_map_script = _build_embed_import_map_script(core_root=embed_import_map_core_root)
+
     html_code = f'''<!-- Humanitec Platform Embed Chat -->
+<!-- import map: bare specifiers lit и @platform на стороннем origin. Один type=importmap на документ. -->
+{import_map_script}
 <script type="module" src="{script_url}"></script>
 <script>
   const EMBED_ID = {embed_id_js};
@@ -533,7 +632,7 @@ async def get_embed_code(
       body: JSON.stringify({{
         embed_id: EMBED_ID,
         origin: window.location.origin,
-        expires_in_seconds: 300
+        expires_in_seconds: {ttl}
       }})
     }});
     if (!response.ok) throw new Error('Cannot get embed session token');
@@ -627,6 +726,9 @@ async def get_embed_code(
         script_url=script_url,
         embed_id=embed_id,
         token_endpoint=token_endpoint,
+        backend_proxy_code=backend_proxy_code,
+        browser_to_host_backend_code=browser_to_host_backend_code,
+        allowed_origins=allowed_origins,
     )
 
 @router.post("/{embed_id}/session-token", response_model=EmbedSessionTokenResponse)
