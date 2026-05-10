@@ -731,7 +731,7 @@ class EmbeddingApiConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    model: str = "qwen/qwen3-embedding-4b"
+    model: str = "qwen/qwen3-embedding-0.6b"
     dimension: int = 1024
     # Явный override корня ``…/v1``: при ``provider=openrouter`` пусто — из ``llm``;
     # при ``provider=provider_litserve`` пусто — из ``provider_litserve.api.base_url`` в настройках.
@@ -1128,7 +1128,7 @@ class ProviderLitserveInfraConfig(BaseModel):
         description=(
             "Устройство только для POST /v1/embeddings (SentenceTransformer). "
             "auto — то же, что выбрано глобальным accelerator для воркера; "
-            "cpu — принудительно RAM/CPU (если Qwen3-Embedding-4B не помещается в VRAM)."
+            "cpu — принудительно RAM/CPU (если эмбеддер не помещается в VRAM)."
         ),
     )
     rerank_accelerator: Literal["auto", "cpu", "cuda", "mps"] = Field(
@@ -1148,15 +1148,15 @@ class ProviderLitserveInfraConfig(BaseModel):
     max_passage_chars: int = 64000
     max_length: int = 8192
     model_batch_size: int = 4
-    model_id: str = "Qwen/Qwen3-Reranker-4B"
+    model_id: str = "Qwen/Qwen3-Reranker-0.6B"
 
     use_fp16: bool = True
     use_bf16: bool = False
     normalize_scores: bool = True
 
-    embedding_model_id: str = "Qwen/Qwen3-Embedding-4B"
-    embedding_openai_model_id: str = "qwen/qwen3-embedding-4b"
-    rerank_openai_model_id: str = "qwen/qwen3-reranker-4b"
+    embedding_model_id: str = "Qwen/Qwen3-Embedding-0.6B"
+    embedding_openai_model_id: str = "qwen/qwen3-embedding-0.6b"
+    rerank_openai_model_id: str = "qwen/qwen3-reranker-0.6b"
     llm_model_id: str = "Qwen/Qwen2.5-1.5B-Instruct"
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)

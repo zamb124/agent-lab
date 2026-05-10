@@ -10,7 +10,7 @@ globs:
 ---
 # RAG (Retrieval-Augmented Generation)
 
-Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — единый `core/files/reader/FileReader` (`FileReadResult`); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
+Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — единый `core/files/reader/FileReader` (`FileReadResult`); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding-0.6B** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
 
 Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui}` + `core/rag/{base_provider,factory,models,namespace_manager,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,constants}`.
 
@@ -61,7 +61,7 @@ globs:
 - Колонка `embedding_model` на чанке = активной модели; векторы разных моделей не смешиваются.
 - Колонка `embedding` — **`vector(1024)`** с индексом **`ix_vd_embedding_hnsw`** (cosine, `m = 16`, `ef_construction = 64`) при размерности, допустимой для HNSW в сборке pgvector. Перед запросом семантического поиска: **`SET hnsw.iterative_scan = relaxed_order`** (`PgVectorProvider`) для корректного объединения ANN с жёсткими фильтрами SQL.
 - **Гибридный поиск:** semantic + FTS по `content_tsv` (если в параметрах включены `semantic` и `lexical`) — два списка через RRF; полные строки — по id.
-- **`rag.embedding.api`**: полный вывод модели (напр. 2560 у Qwen3-Embedding-4B) и **`mrl_output_dimension`** (совпадает с **`dimension`** для хранения в колонке) — префикс нормализуется и сохраняется как плотный **1024**-мерный вектор без паддинга до полной размерности модели; см. `EmbeddingService`.
+- **`rag.embedding.api`**: полный выход модели (для Qwen3-Embedding-0.6B нативно 1024) и **`mrl_output_dimension`** (совпадает с **`dimension`** для хранения в колонке) — префикс нормализуется и сохраняется как плотный **1024**-мерный вектор; см. `EmbeddingService`.
 - Ключи `conf.json`: `rag.enabled`, `rag.default_provider`, `rag.embedding.{model,dimension,base_url,mrl_output_dimension}`, `rag.providers.pgvector.{enabled,embedding_api_key,chunk_size,chunk_overlap,timeout}`.
 
 ### Операционные расширения (не в MVP код-пути)

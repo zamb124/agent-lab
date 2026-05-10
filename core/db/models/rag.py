@@ -91,7 +91,7 @@ class VectorDocument(Base):
     embedding = mapped_column(Vector(1024), nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, default=None, index=True,
-        comment="Идентификатор модели эмбеддинга (напр. qwen/qwen3-embedding-4b). NULL у старых чанков до переиндексации."
+        comment="Идентификатор модели эмбеддинга (напр. qwen/qwen3-embedding-0.6b)."
     )
     chunk_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

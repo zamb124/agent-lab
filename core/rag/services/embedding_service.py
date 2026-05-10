@@ -44,8 +44,7 @@ MODEL_DIMENSIONS = {
     "sentence-transformers/all-minilm-l12-v2": 384,
     "sentence-transformers/all-minilm-l6-v2": 384,
     # Large
-    "qwen/qwen3-embedding-4b": 2560,
-    "qwen/qwen3-embedding-8b": 4096,
+    "qwen/qwen3-embedding-0.6b": 1024,
     "google/gemini-embedding-001": 768,
 }
 
@@ -111,7 +110,7 @@ class EmbeddingService:
 
     def _embedding_lengths_ok(self, model: str, actual_dim: int) -> bool:
         """
-        Допускает ответ API полной размерности модели (напр. 2560 у Qwen3-Embedding-4B, 4096 у 8B) при хранении MRL 1024:
+        Допускает ответ API полной размерности модели (напр. 1024 у Qwen3-Embedding-0.6B) при хранении MRL N:
         ``dimension`` и ``mrl_output_dimension`` задают размер в pgvector, не длину ответа.
         """
         if self.mrl_output_dimension is not None:

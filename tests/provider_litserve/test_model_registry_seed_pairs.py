@@ -68,10 +68,10 @@ def test_sync_defaults_adds_models_when_registry_not_empty(tmp_path) -> None:
         sqlite_path=str(tmp_path / "registry.db"),
         llm_model_id="Qwen/Qwen2.5-1.5B-Instruct",
         llm_model_ids=["qwen/qwen2.5-1.5b-instruct"],
-        embedding_model_id="Qwen/Qwen3-Embedding-4B",
-        embedding_openai_model_id="qwen/qwen3-embedding-4b",
-        model_id="Qwen/Qwen3-Reranker-4B",
-        rerank_openai_model_id="qwen/qwen3-reranker-4b",
+        embedding_model_id="Qwen/Qwen3-Embedding-0.6B",
+        embedding_openai_model_id="qwen/qwen3-embedding-0.6b",
+        model_id="Qwen/Qwen3-Reranker-0.6B",
+        rerank_openai_model_id="qwen/qwen3-reranker-0.6b",
     )
     init_registry(cfg)
     create_or_replace_model(
@@ -87,32 +87,32 @@ def test_sync_defaults_adds_models_when_registry_not_empty(tmp_path) -> None:
     api_ids = {m.api_model_id for m in models}
     assert "custom/embedding-model" in api_ids
     assert "qwen/qwen2.5-1.5b-instruct" in api_ids
-    assert "qwen/qwen3-embedding-4b" in api_ids
-    assert "qwen/qwen3-reranker-4b" in api_ids
+    assert "qwen/qwen3-embedding-0.6b" in api_ids
+    assert "qwen/qwen3-reranker-0.6b" in api_ids
 
 
 def test_sync_defaults_updates_existing_config_model_by_api_id(tmp_path) -> None:
     cfg = ProviderLitserveInfraConfig(
         sqlite_path=str(tmp_path / "registry.db"),
-        embedding_model_id="Qwen/Qwen3-Embedding-4B",
-        embedding_openai_model_id="qwen/qwen3-embedding-4b",
-        model_id="Qwen/Qwen3-Reranker-4B",
-        rerank_openai_model_id="qwen/qwen3-reranker-4b",
+        embedding_model_id="Qwen/Qwen3-Embedding-0.6B",
+        embedding_openai_model_id="qwen/qwen3-embedding-0.6b",
+        model_id="Qwen/Qwen3-Reranker-0.6B",
+        rerank_openai_model_id="qwen/qwen3-reranker-0.6b",
     )
     init_registry(cfg)
     create_or_replace_model(
         cfg,
         kind="llm",
         hf_model_id="Qwen/Old-Embedding",
-        api_model_id="qwen/qwen3-embedding-4b",
+        api_model_id="qwen/qwen3-embedding-0.6b",
     )
 
     sync_defaults_from_config(cfg)
 
     models = {m.api_model_id: m for m in list_models(cfg)}
-    model = models["qwen/qwen3-embedding-4b"]
+    model = models["qwen/qwen3-embedding-0.6b"]
     assert model.kind == "embedding"
-    assert model.hf_model_id == "Qwen/Qwen3-Embedding-4B"
+    assert model.hf_model_id == "Qwen/Qwen3-Embedding-0.6B"
     assert model.status == "ready"
 
 
@@ -121,10 +121,10 @@ def test_sync_defaults_is_idempotent(tmp_path) -> None:
         sqlite_path=str(tmp_path / "registry.db"),
         llm_model_id="Qwen/Qwen2.5-1.5B-Instruct",
         llm_model_ids=["qwen/qwen2.5-1.5b-instruct"],
-        embedding_model_id="Qwen/Qwen3-Embedding-4B",
-        embedding_openai_model_id="qwen/qwen3-embedding-4b",
-        model_id="Qwen/Qwen3-Reranker-4B",
-        rerank_openai_model_id="qwen/qwen3-reranker-4b",
+        embedding_model_id="Qwen/Qwen3-Embedding-0.6B",
+        embedding_openai_model_id="qwen/qwen3-embedding-0.6b",
+        model_id="Qwen/Qwen3-Reranker-0.6B",
+        rerank_openai_model_id="qwen/qwen3-reranker-0.6b",
     )
     init_registry(cfg)
 
