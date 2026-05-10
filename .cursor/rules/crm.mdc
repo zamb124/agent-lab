@@ -65,6 +65,10 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 - **AmoCRM:** `client_id` = UUID интеграции Amo (`uuid`); `client_secret` — только из кабинета Amo. Прочее в `auth.providers.amocrm` — `configuration.mdc`.
 - **Тяжёлый импорт** (если у коннектора `*_runs_in_worker() = true`): TaskIQ `run_namespace_integration_job`, `crm_tasks.task_type = namespace_integration_job`, `data: {provider_id, job: 'entities'|'custom_fields'}`. `POST .../namespaces/{ns}/integrations/{provider}/sync` отвечает 202 + `TaskResponse`. Параллельная активная задача (тот же `provider_id`+`job` в namespace) → 409, `detail.code=active_task_exists`. У inline-коннектора (`*_runs_in_worker=false`) — 200 + `SyncStatsResponse`.
 
+### Журнал `crm_tasks` — realtime для UI
+
+- Воркеры `note_analyze` и `knowledge_import` после изменения строки в БД вызывают `apps/crm/services/crm_task_ws_broadcast.py`: доменное событие `crm/task/updated` с `payload: { task: TaskResponse }` на `user_id` инициатора (параллельно `notify_user` с `CRM_TASK_UPDATED` для notification-center). Фронт: slice `crm/tasks` мержит событие в `extraReducer`, без периодического `GET /tasks` для прогресса.
+
 ### `RelationshipType` — системные
 
 Типы с `prompt != None` (используются AI): `mentions` (0.5), `related_to` (0.7), `parent_of` (1.0), `assigned_to` (0.8), `belongs_to` (0.8), `follows_up` (0.6), `blocks` (0.9), `reports_to` (0.9), `owner_of` (0.85). Типы без `prompt` (системные / inverse): `linked` (1.0), `child_of`, `blocked_by`, `manages`, `duplicates` (0.3), `attended` (0.7), **`note_voice`** (1.0), **`in_context`** (1.0).

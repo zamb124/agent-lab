@@ -11,9 +11,10 @@
  *   - useOp('crm/note_analyze_start')   — старт AI-анализа заметки
  *   - useOp('crm/entity_cards_bulk')    — batch-загрузка карточек связанных entity
  *
- * Realtime: подписка на WS-события `crm/note/updated` и `crm/daily_summary/updated`,
- * которые публикует backend через `core/ui_events/dispatcher.py`. Изменение
- * namespace приходит как `ui/namespace/changed` (CoreEvents.UI_NAMESPACE_CHANGED) —
+ * Realtime: подписка на WS-события `crm/note/updated`, `crm/daily_summary/updated`,
+ * `crm/period_summary/updated`, `crm/task/updated` (прогресс `note_analyze` в slice
+ * `crm/tasks` без поллинга). Backend публикует через `core/ui_events/dispatcher.py`.
+ * Изменение namespace приходит как `ui/namespace/changed` (CoreEvents.UI_NAMESPACE_CHANGED) —
  * page перезапрашивает ленту и сводку.
  *
  * Открытие заметки: страница навигирует на роут `note` (`/crm/notes/:itemId`),
@@ -77,7 +78,6 @@ const NOTE_SUBTYPE_ICONS = {
 };
 const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
-const ANALYZE_TASKS_POLL_MS = 2500;
 
 export class CRMDailyNotesPage extends CRMNamespacePage {
     static i18nNamespace = 'crm';
@@ -817,8 +817,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._debounceTimer = null;
         this._mediaRecorder = null;
         this._audioChunks = [];
-        this._lastSearchRequestId = null;
-        this._analyzeTasksPollTimer = null;
     }
 
     connectedCallback() {
@@ -851,25 +849,48 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this.useEvent('crm/period_summary/updated', (event) => this._onSummaryWsUpdate(event.payload, true));
 
         this.useEvent('crm/note_search/succeeded', (event) => {
-            if (event.meta && event.meta.causation_id !== this._lastSearchRequestId) return;
+            const causationId = event.meta && typeof event.meta.causation_id === 'string' ? event.meta.causation_id : null;
+            if (causationId === null || causationId.length === 0) {
+                throw new Error('crm/note_search/succeeded: causation_id required');
+            }
+            const expectedId = this._search.op.selectors.lastRequestId(this.bus.getState());
+            if (typeof expectedId !== 'string' || expectedId.length === 0) {
+                throw new Error('crm/note_search/succeeded: slice lastRequestId missing');
+            }
+            if (causationId !== expectedId) return;
             const result = event.payload && event.payload.result;
             const items = result && Array.isArray(result.items) ? result.items : [];
             this._searchResults = items;
             this._searchLoading = false;
             this._loadCardsForVisibleNotes(items);
         });
-        this.useEvent('crm/note_search/failed', () => { this._searchLoading = false; });
+        this.useEvent('crm/note_search/failed', (event) => {
+            const causationId = event.meta && typeof event.meta.causation_id === 'string' ? event.meta.causation_id : null;
+            if (causationId === null || causationId.length === 0) {
+                throw new Error('crm/note_search/failed: causation_id required');
+            }
+            const expectedId = this._search.op.selectors.lastRequestId(this.bus.getState());
+            if (typeof expectedId !== 'string' || expectedId.length === 0) {
+                throw new Error('crm/note_search/failed: slice lastRequestId missing');
+            }
+            if (causationId !== expectedId) return;
+            this._searchLoading = false;
+        });
 
         this.useEvent('crm/note_voice_input/succeeded', (event) => this._onVoiceTranscribed(event.payload.result));
-        this.useEvent(this._tasks.resource.events.LIST_LOADED, () => {
-            this._rebuildAnalyzeTaskMap();
-            this._syncAnalyzeTasksPolling();
+        this.useEvent(this._tasks.resource.events.LIST_LOADED, () => this._rebuildAnalyzeTaskMap());
+        this.useEvent('crm/task/updated', () => this._rebuildAnalyzeTaskMap());
+        this.useEvent(CoreEvents.WS_CONNECTED, () => {
+            const items = this._tasks.items;
+            const hasActiveAnalyze = items.some(
+                (t) => t
+                    && t.task_type === 'note_analyze'
+                    && ACTIVE_ANALYZE_TASK_STATUSES.has(t.status),
+            );
+            if (hasActiveAnalyze || this._analyze.busy) {
+                this._loadAnalyzeTasks();
+            }
         });
-        this.useEvent(this._analyze.op.events.SUCCEEDED, () => {
-            this._loadAnalyzeTasks();
-            this._syncAnalyzeTasksPolling();
-        });
-        this.useEvent(this._analyze.op.events.FAILED, () => this._syncAnalyzeTasksPolling());
 
         this.useEvent('crm/notes_list/loaded', (event) => {
             const items = event.payload && Array.isArray(event.payload.items) ? event.payload.items : [];
@@ -895,7 +916,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
             this._mediaRecorder.stop();
         }
-        this._stopAnalyzeTasksPolling();
         this._creatingNote = false;
         super.disconnectedCallback();
     }
@@ -966,35 +986,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             byNoteId[noteId] = task;
         }
         this._analyzeTasksByNoteId = byNoteId;
-    }
-
-    _hasActiveAnalyzeTasks() {
-        return Object.keys(this._analyzeTasksByNoteId).length > 0 || this._analyze.busy;
-    }
-
-    _syncAnalyzeTasksPolling() {
-        if (this._hasActiveAnalyzeTasks()) {
-            this._startAnalyzeTasksPolling();
-            return;
-        }
-        this._stopAnalyzeTasksPolling();
-    }
-
-    _startAnalyzeTasksPolling() {
-        if (this._analyzeTasksPollTimer !== null) {
-            return;
-        }
-        this._analyzeTasksPollTimer = window.setInterval(() => {
-            this._loadAnalyzeTasks();
-        }, ANALYZE_TASKS_POLL_MS);
-    }
-
-    _stopAnalyzeTasksPolling() {
-        if (this._analyzeTasksPollTimer === null) {
-            return;
-        }
-        window.clearInterval(this._analyzeTasksPollTimer);
-        this._analyzeTasksPollTimer = null;
     }
 
     _reloadSummary(options) {
@@ -1087,8 +1078,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         const ns = this._currentNamespace();
         const payload = { q, search_mode: this._searchMode, limit: 50 };
         if (typeof ns === 'string' && ns.length > 0) payload.namespace = ns;
-        const event = this._search.run(payload);
-        this._lastSearchRequestId = event && typeof event.id === 'string' ? event.id : null;
+        this._search.run(payload);
     }
 
     _onSearchModeChange(mode) {
@@ -1198,8 +1188,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             return;
         }
         this._analyze.run({ note_id: note.entity_id });
-        this._loadAnalyzeTasks();
-        this._syncAnalyzeTasksPolling();
         this.openModal('crm.ai_analysis', { noteId: note.entity_id });
     }
 

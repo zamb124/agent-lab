@@ -268,7 +268,6 @@
         "subtitle": "Namespace background jobs: knowledge imports, AI note analyses, daily and period summaries, integrations.",
         "namespace_label": "Namespace: {{namespace}}",
         "namespace_label_all": "All company namespaces",
-        "live_polling": "Polling for updates",
         "loading": "Loading...",
         "refresh": "Refresh",
         "empty": "No tasks in this namespace yet.",

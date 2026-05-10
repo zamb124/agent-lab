@@ -2,6 +2,9 @@
  * Tasks — фоновые задачи CRM (knowledge_import, note_analyze, daily_summary,
  * period_summary).
  *
+ * Realtime: WebSocket ``crm/task/updated`` (payload ``{ task: TaskResponse }``)
+ * мержится в slice без поллинга.
+ *
  * Backend (`/crm/api/v1/tasks`):
  *   GET  /                                → OffsetPage[TaskResponse]
  *   GET  /{task_id}                       → TaskResponse (`taskGetOp`)
@@ -21,6 +24,26 @@ import {
     createAsyncOp,
 } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
+
+const CRM_TASK_UPDATED = 'crm/task/updated';
+
+/**
+ * @param {object} state
+ * @param {object} task
+ * @param {string} idField
+ * @returns {object}
+ */
+function _mergeTaskIntoCollectionState(state, task, idField) {
+    const id = task[idField];
+    const idx = state.items.findIndex((x) => x && x[idField] === id);
+    const items = idx === -1 ? [...state.items, task] : state.items.map((x, i) => (i === idx ? task : x));
+    const byId = { ...state.byId, [id]: task };
+    return {
+        ...state,
+        items,
+        byId,
+    };
+}
 
 export const taskGetOp = createAsyncOp({
     name: 'crm/task_get',
@@ -59,6 +82,20 @@ export const tasksResource = createResourceCollection({
             query.note_id = payload.note_id;
         }
         return query;
+    },
+    extraReducer: (state, event) => {
+        if (event.type !== CRM_TASK_UPDATED) {
+            return state;
+        }
+        const payload = event.payload;
+        if (!payload || typeof payload !== 'object') {
+            return state;
+        }
+        const task = payload.task;
+        if (!task || typeof task !== 'object' || typeof task.task_id !== 'string') {
+            return state;
+        }
+        return _mergeTaskIntoCollectionState(state, task, 'task_id');
     },
 });
 

@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from apps.crm.container import get_crm_container
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.taskiq_analyze_errors import format_validation_for_taskiq
 from apps.crm_worker.broker import broker
 from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
@@ -27,6 +28,8 @@ logger = get_logger(__name__)
 
 async def _notify_analyze_stage(
     user_id: str,
+    repo,
+    company_id: str,
     *,
     task_id: str,
     namespace: str,
@@ -51,6 +54,12 @@ async def _notify_analyze_stage(
                 "progress_pct": progress_pct,
             },
         ),
+    )
+    await publish_crm_task_snapshot_for_user(
+        user_id=user_id,
+        repo=repo,
+        task_id=task_id,
+        company_id=company_id,
     )
 
 
@@ -85,6 +94,8 @@ async def process_note_task(
         )
         await _notify_analyze_stage(
             user_id,
+            repo,
+            company_id,
             task_id=task_id,
             namespace=namespace,
             status="running",
@@ -103,8 +114,13 @@ async def process_note_task(
             )
             await _notify_analyze_stage(
                 user_id,
-                task_id=task_id, namespace=namespace,
-                status="cancelled", stage="cancelled", progress_pct=100,
+                repo,
+                company_id,
+                task_id=task_id,
+                namespace=namespace,
+                status="cancelled",
+                stage="cancelled",
+                progress_pct=100,
                 message="Задача отменена",
             )
             return True
@@ -163,8 +179,13 @@ async def process_note_task(
         await container.entity_service.record_note_analysis_failure(note_id, err_msg)
         await _notify_analyze_stage(
             user_id,
-            task_id=task_id, namespace=namespace,
-            status="failed", stage="failed", progress_pct=100,
+            repo,
+            company_id,
+            task_id=task_id,
+            namespace=namespace,
+            status="failed",
+            stage="failed",
+            progress_pct=100,
             message=err_msg[:200],
         )
         raise ValueError(err_msg) from exc
@@ -180,8 +201,13 @@ async def process_note_task(
         await container.entity_service.record_note_analysis_failure(note_id, err_msg)
         await _notify_analyze_stage(
             user_id,
-            task_id=task_id, namespace=namespace,
-            status="failed", stage="failed", progress_pct=100,
+            repo,
+            company_id,
+            task_id=task_id,
+            namespace=namespace,
+            status="failed",
+            stage="failed",
+            progress_pct=100,
             message=err_msg[:200],
         )
         raise
@@ -197,8 +223,13 @@ async def process_note_task(
     )
     await _notify_analyze_stage(
         user_id,
-        task_id=task_id, namespace=namespace,
-        status="completed", stage="completed", progress_pct=100,
+        repo,
+        company_id,
+        task_id=task_id,
+        namespace=namespace,
+        status="completed",
+        stage="completed",
+        progress_pct=100,
         message=f"Найдено сущностей: {entities_count}, связей: {rel_count}",
     )
     return result_data

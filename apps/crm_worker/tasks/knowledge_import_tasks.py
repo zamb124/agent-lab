@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from apps.crm.container import get_crm_container
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.file_text_reader import load_text_from_stored_file_id
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
@@ -31,6 +32,8 @@ logger = get_logger(__name__)
 
 async def _notify_task_user(
     user_id: str,
+    repo,
+    company_id: str,
     *,
     task_id: str,
     task_type: str,
@@ -57,6 +60,12 @@ async def _notify_task_user(
                 "progress_pct": progress_pct,
             },
         ),
+    )
+    await publish_crm_task_snapshot_for_user(
+        user_id=user_id,
+        repo=repo,
+        task_id=task_id,
+        company_id=company_id,
     )
 
 
@@ -118,6 +127,12 @@ async def run_knowledge_import_task(
             stage="splitting",
             progress_pct=25,
         )
+        await publish_crm_task_snapshot_for_user(
+            user_id=row.user_id,
+            repo=repo,
+            task_id=task_id,
+            company_id=company_id,
+        )
 
         chunks = split_knowledge_text(
             text,
@@ -138,6 +153,8 @@ async def run_knowledge_import_task(
             )
             await _notify_task_user(
                 row.user_id,
+                repo,
+                company_id,
                 task_id=task_id,
                 task_type="knowledge_import",
                 namespace=row.namespace,
@@ -154,6 +171,12 @@ async def run_knowledge_import_task(
             company_id,
             stage="processing_chunks",
             progress_pct=40,
+        )
+        await publish_crm_task_snapshot_for_user(
+            user_id=row.user_id,
+            repo=repo,
+            task_id=task_id,
+            company_id=company_id,
         )
 
         async with traced_operation(
@@ -193,6 +216,8 @@ async def run_knowledge_import_task(
                     )
                     await _notify_task_user(
                         row.user_id,
+                        repo,
+                        company_id,
                         task_id=task_id,
                         task_type="knowledge_import",
                         namespace=row.namespace,
@@ -231,6 +256,12 @@ async def run_knowledge_import_task(
                         "created_relationship_ids": list(created_relationship_ids),
                     },
                 )
+                await publish_crm_task_snapshot_for_user(
+                    user_id=row.user_id,
+                    repo=repo,
+                    task_id=task_id,
+                    company_id=company_id,
+                )
 
             if mode == "graph":
                 pipeline = container.note_processing_service
@@ -261,6 +292,8 @@ async def run_knowledge_import_task(
                         )
                         await _notify_task_user(
                             row.user_id,
+                            repo,
+                            company_id,
                             task_id=task_id,
                             task_type="knowledge_import",
                             namespace=row.namespace,
@@ -299,6 +332,12 @@ async def run_knowledge_import_task(
                             "created_relationship_ids": list(created_relationship_ids),
                         },
                     )
+                    await publish_crm_task_snapshot_for_user(
+                        user_id=row.user_id,
+                        repo=repo,
+                        task_id=task_id,
+                        company_id=company_id,
+                    )
 
         await repo.patch_progress(
             task_id,
@@ -317,6 +356,8 @@ async def run_knowledge_import_task(
         )
         await _notify_task_user(
             row.user_id,
+            repo,
+            company_id,
             task_id=task_id,
             task_type="knowledge_import",
             namespace=row.namespace,
@@ -355,6 +396,8 @@ async def run_knowledge_import_task(
         )
         await _notify_task_user(
             row.user_id,
+            repo,
+            company_id,
             task_id=task_id,
             task_type="knowledge_import",
             namespace=row.namespace,

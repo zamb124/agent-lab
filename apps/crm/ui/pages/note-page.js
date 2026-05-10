@@ -32,7 +32,6 @@ import '@platform/lib/components/platform-icon.js';
 import '../components/note-card-view.js';
 
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
-const ANALYZE_TASK_POLL_MS = 2500;
 const TASK_RELATIONSHIP_TYPE = 'related_to';
 const NOTE_MARKDOWN_FORMAT_UI_TIMEOUT_MS = 180000;
 
@@ -169,7 +168,6 @@ export class CRMNotePage extends CRMNamespacePage {
         this._tasks = this.useResource('crm/tasks');
         this._analyzeOp = this.useOp('crm/note_analyze_start');
         this._markdownFormatOp = this.useOp('crm/note_markdown_format');
-        this._analyzeTaskPollTimer = null;
         this._draftVersionInitialized = false;
         this._lastDraftVersion = null;
         this._lastAutoOpenedDraftVersion = null;
@@ -221,12 +219,21 @@ export class CRMNotePage extends CRMNamespacePage {
             this._card = null;
             this._cardError = err && typeof err.message === 'string' ? err.message : 'load_failed';
         });
-        this.useEvent(this._tasks.resource.events.LIST_LOADED, () => this._syncAnalyzeTaskPolling());
-        this.useEvent(this._analyzeOp.op.events.SUCCEEDED, () => {
-            this._loadAnalyzeTasks();
-            this._syncAnalyzeTaskPolling();
+        this.useEvent(this._tasks.resource.events.LIST_LOADED, () => {
+            this.requestUpdate();
         });
-        this.useEvent(this._analyzeOp.op.events.FAILED, () => this._syncAnalyzeTaskPolling());
+        this.useEvent('crm/task/updated', () => {
+            this.requestUpdate();
+        });
+        this.useEvent(CoreEvents.WS_CONNECTED, () => {
+            if (typeof this.noteId !== 'string' || this.noteId.length === 0 || this._isDraftId(this.noteId)) {
+                return;
+            }
+            if (this._isAnalyzingNow()) {
+                this._loadAnalyzeTasks();
+            }
+        });
+
         this.useEvent(this._markdownFormatOp.op.events.FAILED, () => {
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
@@ -240,7 +247,6 @@ export class CRMNotePage extends CRMNamespacePage {
             return;
         }
         if (typeof this.noteId !== 'string' || this.noteId.length === 0) {
-            this._stopAnalyzeTaskPolling();
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
             this._markdownFormatProgress = null;
@@ -254,7 +260,6 @@ export class CRMNotePage extends CRMNamespacePage {
             return;
         }
         if (this._isDraftId(this.noteId)) {
-            this._stopAnalyzeTaskPolling();
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
             this._markdownFormatProgress = null;
@@ -330,7 +335,6 @@ export class CRMNotePage extends CRMNamespacePage {
     }
 
     disconnectedCallback() {
-        this._stopAnalyzeTaskPolling();
         this._clearMarkdownFormatUiTimeout();
         super.disconnectedCallback();
     }
@@ -433,31 +437,6 @@ export class CRMNotePage extends CRMNamespacePage {
         return typeof activeTask.status === 'string' ? activeTask.status : '';
     }
 
-    _syncAnalyzeTaskPolling() {
-        if (this._isAnalyzingNow()) {
-            this._startAnalyzeTaskPolling();
-            return;
-        }
-        this._stopAnalyzeTaskPolling();
-    }
-
-    _startAnalyzeTaskPolling() {
-        if (this._analyzeTaskPollTimer !== null) {
-            return;
-        }
-        this._analyzeTaskPollTimer = window.setInterval(() => {
-            this._loadAnalyzeTasks();
-        }, ANALYZE_TASK_POLL_MS);
-    }
-
-    _stopAnalyzeTaskPolling() {
-        if (this._analyzeTaskPollTimer === null) {
-            return;
-        }
-        window.clearInterval(this._analyzeTaskPollTimer);
-        this._analyzeTaskPollTimer = null;
-    }
-
     _analyzeStatusText() {
         return this._analyzeOp.busy
             ? this.t('note_view.summary_analyze_starting')
@@ -469,7 +448,6 @@ export class CRMNotePage extends CRMNamespacePage {
             throw new Error('CRMNotePage._onRefreshSummary: noteId required');
         }
         this._analyzeOp.run({ note_id: this.noteId, mode: 'analyze' });
-        this._syncAnalyzeTaskPolling();
         this._loadAnalyzeTasks();
     }
 

@@ -164,7 +164,14 @@ export const noteAnalyzeStartOp = createAsyncOp({
             body,
         });
     },
-    onSuccess: (ctx, _result, event) => {
+    onSuccess: (ctx, result, event) => {
+        if (result && typeof result === 'object' && typeof result.task_id === 'string') {
+            ctx.dispatch(
+                'crm/task/updated',
+                { task: result },
+                { causation_id: event.id, source: 'http' },
+            );
+        }
         ctx.dispatch(
             CoreEvents.UI_TOAST_SHOW,
             { type: 'success', i18n_key: 'crm:toast.note.analyze_started' },

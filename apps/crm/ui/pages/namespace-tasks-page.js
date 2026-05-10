@@ -12,9 +12,10 @@
  *  - crm/task_rollback         — POST /tasks/{id}/rollback      (только knowledge_import)
  *  - crm/task_review_complete  — POST /tasks/{id}/review-complete (status=review_required)
  *
- * Live-обновление: пока есть хотя бы одна задача в `pending|running`, опрашиваем
- * список каждые 3000ms (silent reload). Дополнительно подписываемся на доменное
- * событие `crm/task/updated` (если backend публикует) и на UI_NAMESPACE_CHANGED.
+ * Live-обновление: доменное событие ``crm/task/updated`` мержится в slice
+ * ``crm/tasks`` (воркеры ``note_analyze`` / ``knowledge_import``). После разрыва
+ * WS выполняется однократный resync при активных задачах. Дополнительно
+ * ``crm/daily_summary/updated`` и смена namespace инициируют перезагрузку списка.
  *
  * Wizard knowledge-import живёт отдельной модалкой `crm.knowledge_import`
  * (PlatformModal). Открывается кнопкой в toolbar страницы (только при
@@ -29,8 +30,6 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-
-const POLL_MS = 3000;
 
 const TASK_TYPE_FILTERS = Object.freeze([
     Object.freeze({ id: '', labelKey: 'namespace_tasks_page.filter_all' }),
@@ -96,7 +95,6 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
 
     static properties = {
         _typeFilter: { state: true },
-        _polling: { state: true },
     };
 
     static styles = [
@@ -332,21 +330,6 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
                 word-break: break-word;
             }
 
-            .live-dot {
-                display: inline-block;
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-                background: var(--success);
-                box-shadow: 0 0 6px var(--success-border);
-                animation: pulse 1.4s ease-in-out infinite;
-            }
-
-            @keyframes pulse {
-                0%, 100% { opacity: 0.6; }
-                50%      { opacity: 1; }
-            }
-
             .page-subtitle-mobile {
                 display: none;
             }
@@ -379,8 +362,6 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
     constructor() {
         super();
         this._typeFilter = '';
-        this._polling = false;
-        this._pollTimer = null;
         this._lastNamespace = null;
 
         this._tasks = this.useResource('crm/tasks');
@@ -393,18 +374,21 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
     connectedCallback() {
         super.connectedCallback();
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this._loadTasks());
-        this.useEvent('crm/task/updated', () => this._loadTasks());
         this.useEvent('crm/daily_summary/updated', () => this._loadTasks());
+        this.useEvent(CoreEvents.WS_CONNECTED, () => {
+            const items = this._tasks.items;
+            if (items.some((row) => row && ACTIVE_STATUSES.has(row.status))) {
+                this._loadTasks();
+            }
+        });
         this.useEvent(this._cancelOp.op.events.SUCCEEDED, () => this._loadTasks());
         this.useEvent(this._retryOp.op.events.SUCCEEDED, () => this._loadTasks());
         this.useEvent(this._rollbackOp.op.events.SUCCEEDED, () => this._loadTasks());
         this.useEvent(this._reviewCompleteOp.op.events.SUCCEEDED, () => this._loadTasks());
-        this.useEvent(this._tasks.resource.events.LIST_LOADED, () => this._maybeStartPolling());
         this._loadTasks();
     }
 
     disconnectedCallback() {
-        this._stopPolling();
         super.disconnectedCallback();
     }
 
@@ -423,34 +407,6 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
             payload.task_type = this._typeFilter;
         }
         this._tasks.load(payload);
-    }
-
-    _maybeStartPolling() {
-        const items = this._tasks.items;
-        const hasActive = items.some((row) => ACTIVE_STATUSES.has(row.status));
-        if (hasActive) {
-            this._startPolling();
-        } else {
-            this._stopPolling();
-        }
-    }
-
-    _startPolling() {
-        if (this._pollTimer !== null) {
-            return;
-        }
-        this._polling = true;
-        this._pollTimer = window.setInterval(() => {
-            this._loadTasks();
-        }, POLL_MS);
-    }
-
-    _stopPolling() {
-        if (this._pollTimer !== null) {
-            window.clearInterval(this._pollTimer);
-            this._pollTimer = null;
-        }
-        this._polling = false;
     }
 
     _setTypeFilter(typeId) {
@@ -598,9 +554,6 @@ export class CRMNamespaceTasksPage extends CRMNamespacePage {
                         `)}
                     </div>
                     <div style="display:inline-flex;align-items:center;gap:var(--space-3);">
-                        ${this._polling
-                            ? html`<span class="live-dot" title=${this.t('namespace_tasks_page.live_polling')}></span>`
-                            : ''}
                         ${namespace !== null ? html`
                             <button
                                 type="button"
