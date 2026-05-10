@@ -10,6 +10,7 @@ import json as _json
 
 from typing import List, Optional, Dict, Tuple
 from sqlalchemy import select, delete, or_, update, tuple_
+from sqlalchemy.exc import IntegrityError
 
 from apps.crm.db.base import CRMDatabase, BaseCRMRepository
 from apps.crm.db.models import Relationship
@@ -87,19 +88,51 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         self,
         source_id: str,
         target_id: str,
-        rel_type: str
+        rel_type: str,
+        *,
+        namespace: Optional[str] = None,
     ) -> Optional[Relationship]:
-        """Находит точную связь"""
+        """Находит связь по (company, source, target, type); при namespace задан — с тем же пространством."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(Relationship).where(
                 Relationship.company_id == company_id,
                 Relationship.source_entity_id == source_id,
                 Relationship.target_entity_id == target_id,
-                Relationship.relationship_type == rel_type
+                Relationship.relationship_type == rel_type,
             )
+            if namespace is not None:
+                stmt = stmt.where(Relationship.namespace == namespace)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
+
+    async def ensure_edge(self, row: Relationship) -> Relationship:
+        """
+        Вставляет связь или возвращает уже существующую с тем же ключом uq_relationships_unique_edge.
+        Защита от гонок параллельных вставок и дубликатов резолва черновика.
+        """
+        existing = await self.find_exact(
+            row.source_entity_id,
+            row.target_entity_id,
+            row.relationship_type,
+            namespace=row.namespace,
+        )
+        if existing is not None:
+            return existing
+        try:
+            return await self.create(row)
+        except IntegrityError as exc:
+            if "uq_relationships_unique_edge" not in str(exc):
+                raise
+            existing_after = await self.find_exact(
+                row.source_entity_id,
+                row.target_entity_id,
+                row.relationship_type,
+                namespace=row.namespace,
+            )
+            if existing_after is not None:
+                return existing_after
+            raise
     
     async def delete_outgoing_by_source_and_types(
         self,

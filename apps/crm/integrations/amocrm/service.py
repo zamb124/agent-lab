@@ -217,6 +217,7 @@ class AmoCRMIntegrationService:
             source_entity_id,
             target_entity_id,
             relationship_type,
+            namespace=namespace,
         )
         if existing is not None:
             return False

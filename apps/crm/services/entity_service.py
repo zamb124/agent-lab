@@ -2329,14 +2329,20 @@ class EntityService:
         )
         id_map.update(id_fragment)
 
+        seen_resolved_edges: set[tuple[str, str, str]] = set()
+        unique_draft_rels: list[AIAnalysisRelationshipDraft] = []
+        for rel in draft.relationships:
+            src = id_map[rel.source_draft_entity_id]
+            tgt = id_map[rel.target_draft_entity_id]
+            key = (src, tgt, rel.relationship_type)
+            if key in seen_resolved_edges:
+                continue
+            seen_resolved_edges.add(key)
+            unique_draft_rels.append(rel)
+
         async def create_one_relationship(rel: AIAnalysisRelationshipDraft) -> Optional[str]:
             src = id_map[rel.source_draft_entity_id]
             tgt = id_map[rel.target_draft_entity_id]
-            existing = await self._relationship_repo.find_exact(
-                src, tgt, rel.relationship_type
-            )
-            if existing:
-                return None
             row = Relationship(
                 relationship_id=str(uuid.uuid4()),
                 source_entity_id=src,
@@ -2350,11 +2356,13 @@ class EntityService:
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),
             )
-            saved = await self._relationship_repo.create(row)
-            return saved.relationship_id
+            saved = await self._relationship_repo.ensure_edge(row)
+            if saved.relationship_id == row.relationship_id:
+                return saved.relationship_id
+            return None
 
         rel_results = await asyncio.gather(
-            *[create_one_relationship(rel) for rel in draft.relationships]
+            *[create_one_relationship(rel) for rel in unique_draft_rels]
         )
         created_relationship_ids = [rid for rid in rel_results if rid is not None]
 
@@ -3343,9 +3351,6 @@ class EntityService:
         company_id = self._get_company_id()
         now = datetime.now(timezone.utc)
         for entity_id in entity_ids:
-            existing = await self._relationship_repo.find_exact(note_id, entity_id, "linked")
-            if existing:
-                continue
             row = Relationship(
                 relationship_id=str(uuid.uuid4()),
                 source_entity_id=note_id,
@@ -3359,7 +3364,7 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            await self._relationship_repo.create(row)
+            await self._relationship_repo.ensure_edge(row)
 
     async def sync_note_mentions_from_applied_entities(
         self, note_id: str, entity_ids: list[str]
@@ -3383,9 +3388,6 @@ class EntityService:
                 continue
             if entity_id in tenant_company_ids:
                 continue
-            existing = await self._relationship_repo.find_exact(note_id, entity_id, "mentions")
-            if existing:
-                continue
             row = Relationship(
                 relationship_id=str(uuid.uuid4()),
                 source_entity_id=note_id,
@@ -3399,7 +3401,7 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            await self._relationship_repo.create(row)
+            await self._relationship_repo.ensure_edge(row)
 
     async def enrich_note_description_with_mention_tokens(self, note_id: str) -> None:
         """

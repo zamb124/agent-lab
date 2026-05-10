@@ -147,11 +147,13 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             ent.entity_id,
             lead_id,
             "related_to",
+            namespace=ns,
         )
         rel_assigned = await crm_container.relationship_repository.find_exact(
             ent.entity_id,
             member_id,
             "assigned_to",
+            namespace=ns,
         )
         assert rel_related is not None
         assert rel_assigned is not None

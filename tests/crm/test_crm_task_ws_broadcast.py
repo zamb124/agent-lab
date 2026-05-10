@@ -14,8 +14,13 @@ from apps.crm.services import crm_task_ws_broadcast as broadcast_mod
 async def test_broadcast_crm_task_updated_for_user_payload(monkeypatch):
     recorded: list[tuple[str, str, dict]] = []
 
-    async def _capture(*, user_id: str, type: str, payload: dict) -> None:  # noqa: A002
-        recorded.append((user_id, type, payload))
+    async def _capture(**kwargs: object) -> None:
+        user_id = kwargs.get('user_id')
+        event_type = kwargs.get('type')
+        payload = kwargs.get('payload')
+        if not isinstance(user_id, str) or not isinstance(event_type, str) or not isinstance(payload, dict):
+            raise AssertionError('publish_ui_event_to_user mock: expected user_id, type, payload')
+        recorded.append((user_id, event_type, payload))
 
     monkeypatch.setattr(broadcast_mod, "publish_ui_event_to_user", _capture)
 

@@ -200,6 +200,7 @@ class UserPersonService:
             source_id=member_entity_id,
             target_id=company_entities[0].entity_id,
             rel_type=BELONGS_TO_RELATIONSHIP_TYPE,
+            namespace=USER_PERSON_NAMESPACE,
         )
         if existing:
             return
