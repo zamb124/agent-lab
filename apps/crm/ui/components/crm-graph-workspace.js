@@ -1363,7 +1363,9 @@ export class CRMGraphWorkspace extends PlatformElement {
         this._contextMenu = null;
     }
 
-    _applyGraphFromNode(nodeId) {
+    _applyGraphFromNode(nodeId, options) {
+        const preserveGraphDataMode =
+            options && typeof options === 'object' && options.preserveGraphDataMode === true;
         const id = typeof nodeId === 'string' ? nodeId.trim() : '';
         if (id.length === 0) {
             throw new Error('CRMGraphWorkspace._applyGraphFromNode: nodeId required');
@@ -1377,7 +1379,11 @@ export class CRMGraphWorkspace extends PlatformElement {
         }
         this._defaultOverviewActive = false;
         this._selectedRootId = id;
-        this._graphDataMode = 'influence';
+        if (!preserveGraphDataMode) {
+            this._graphDataMode = 'influence';
+        } else if (this._graphDataMode === 'path') {
+            this._graphDataMode = 'influence';
+        }
         this._entitySearchQuery = '';
         if (this._searchDebounceTimer) {
             clearTimeout(this._searchDebounceTimer);
@@ -1468,7 +1474,7 @@ export class CRMGraphWorkspace extends PlatformElement {
         if (nativeEvent && typeof nativeEvent.detail === 'number' && nativeEvent.detail > 1) {
             return;
         }
-        this._applyGraphFromNode(id);
+        this._applyGraphFromNode(id, { preserveGraphDataMode: true });
     }
 
     _onMindmapNodeDblClick(event) {
