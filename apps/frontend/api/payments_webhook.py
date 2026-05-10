@@ -1,8 +1,10 @@
 """
 Webhook для приёма уведомлений от платежных провайдеров (YooMoney).
 
-Путь совпадает с настроенным в YooMoney Notification URI:
-https://humanitec.ru/api/v1/payments/webhook/yoomoney_main
+Два эквивалентных пути (см. `apps/frontend/main.py`):
+
+- `https://<host>/api/v1/payments/webhook/<provider_name>` — то, что обычно задают у провайдера
+- `https://<host>/frontend/api/v1/payments/webhook/<provider_name>` — вместе с префиксом сервиса
 
 YooMoney отправляет POST application/x-www-form-urlencoded,
 ожидает HTTP 200 OK в ответ.

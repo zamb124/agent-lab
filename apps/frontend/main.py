@@ -264,6 +264,10 @@ app = create_service_app(
     cors_allow_origin_regex=_frontend_cors_regex,
 )
 
+# YooMoney и другие провайдеры часто настроены на URL без префикса сервиса (`/api/v1/payments/...`).
+# Иначе POST попадает на SPA `GET /{full_path:path}` и даёт 405.
+app.include_router(payments_webhook_router, tags=["payments-webhook-root"])
+
 # Монтирование core/frontend (общая библиотека) - СНАЧАЛА монтируем статику!
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
 if core_frontend_path.exists():
