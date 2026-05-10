@@ -1163,12 +1163,14 @@ class ProviderLitserveInfraConfig(BaseModel):
     llm_model_ids: list[str] = Field(
         default_factory=lambda: [
             "Qwen/Qwen2.5-1.5B-Instruct",
-            "Qwen/Qwen2.5-Coder-0.5B",
         ],
     )
     markdown_default_api_model_id: str = Field(
-        default="Qwen/Qwen2.5-Coder-0.5B",
-        description="api/HF id LLM по умолчанию для POST /v1/text/format_markdown (должен быть в llm_model_ids или реестре).",
+        default="Qwen/Qwen2.5-1.5B-Instruct",
+        description=(
+            "api/HF id LLM по умолчанию для POST /v1/text/format_markdown (должен быть в llm_model_ids или реестре). "
+            "Дефолт совпадает с llm_model_id — та же локальная модель, что для чата и суммаризации через LitServe."
+        ),
     )
     markdown_max_chunk_chars: int = Field(
         default=6000,
@@ -1177,16 +1179,19 @@ class ProviderLitserveInfraConfig(BaseModel):
         description="Максимум символов на чанк перед батчевым generate.",
     )
     markdown_max_microbatch: int = Field(
-        default=4,
+        default=2,
         ge=1,
         le=16,
-        description="Сколько чанков за один вызов model.generate.",
+        description="Сколько чанков за один вызов model.generate (меньше — ниже пик RAM на KV-cache).",
     )
     markdown_max_new_tokens: int = Field(
-        default=2048,
+        default=1024,
         ge=64,
         le=8192,
-        description="Лимит новых токенов на один чанк (после промпта).",
+        description=(
+            "Лимит новых токенов на один чанк (после промпта). Фактический вызов generate использует "
+            "min(это значение, длина промпта + slack) — меньше простоя без EOS на коротких чанках."
+        ),
     )
     markdown_chunk_join: str = Field(
         default="\n\n",
@@ -1197,6 +1202,21 @@ class ProviderLitserveInfraConfig(BaseModel):
         ge=512,
         le=131072,
         description="truncation max_length при токенизации батча промптов.",
+    )
+    markdown_format_repetition_penalty: float = Field(
+        default=1.15,
+        ge=1.0,
+        le=2.0,
+        description="repetition_penalty для POST /v1/text/format_markdown (1.0 — без штрафа).",
+    )
+    markdown_microbatch_peak_cap: int = Field(
+        default=2,
+        ge=1,
+        le=16,
+        description=(
+            "Верхняя граница эффективного microbatch для format_markdown: "
+            "min(запрошенный microbatch, этот cap). Снижает пик памяти; на GPU cap можно поднять."
+        ),
     )
 
     stt_models: list["ProviderLitserveSTTModelEntry"] = Field(

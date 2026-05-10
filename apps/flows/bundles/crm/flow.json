@@ -55,6 +55,7 @@
             "temperature": 0.3,
             "provider": "openrouter"
           },
+          "llm_capability": "llm_summarize",
           "tools": [],
           "structured_output": true,
           "output_schema_file": "schemas/summarize.output_schema.json",
@@ -75,6 +76,7 @@
             "temperature": 0.3,
             "provider": "openrouter"
           },
+          "llm_capability": "llm_summarize",
           "tools": [],
           "structured_output": true,
           "output_schema_file": "schemas/summarize.output_schema.json",
@@ -95,6 +97,7 @@
             "temperature": 0.2,
             "provider": "openrouter"
           },
+          "llm_capability": "llm_summarize",
           "tools": [],
           "structured_output": true,
           "output_schema_file": "schemas/summarize.output_schema.json",
@@ -115,6 +118,7 @@
             "temperature": 0.2,
             "provider": "openrouter"
           },
+          "llm_capability": "llm_summarize",
           "tools": [],
           "structured_output": true,
           "output_schema_file": "schemas/summarize.output_schema.json",
@@ -135,6 +139,7 @@
             "temperature": 0.1,
             "provider": "provider_litserve"
           },
+          "llm_capability": "llm_summarize",
           "tools": [],
           "structured_output": true,
           "output_schema_file": "schemas/summarize_attachment.output_schema.json",

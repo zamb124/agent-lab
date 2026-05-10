@@ -15,6 +15,9 @@
 - **POST** `/v1/embeddings` — OpenAI-совместимое тело; инференс во воркерах **`EmbeddingLitAPI`** ([`embedding/api.py`](embedding/api.py), движок [`embedding/engines.py`](embedding/engines.py)).
 - **POST** `/v1/rerank` — тело `{query, passages}`; ответ `{scores}`; инференс во воркерах **`RerankerLitAPI`** ([`reranker/api.py`](reranker/api.py), движок [`reranker/engines.py`](reranker/engines.py)).
 - **POST** `/v1/text/format_markdown` — тело `{text, model?, max_chunk_chars?, max_microbatch?, max_new_tokens?, chunk_join?}`; ответ `{markdown, chunks_total, chunks_processed, model}`; инференс во воркерах **`MarkdownFormatLitAPI`** ([`markdown_format/api.py`](markdown_format/api.py), движок [`markdown_format/engines.py`](markdown_format/engines.py)). Батчевый `generate` по чанкам текста; модель — запись **`llm`** в конфиге/реестре (`markdown_default_api_model_id`).
+
+**Память и дублирование весов LLM.** Кеш `ensure_local_causal_lm` (см. [`llm/local_causal_lm.py`](llm/local_causal_lm.py)) — **на процесс**. LitServe поднимает **отдельный** inference-воркер на каждый `LitAPI`; маршруты **`/v1/chat/completions`** и **`/v1/text/format_markdown`** обрабатываются **разными процессами**. Если оба уже вызывали один и тот же `hf_model_id`, в RAM будет **две полные копии** модели (ожидаемо). Внутри одного воркера повторные запросы переиспользуют один экземпляр. Загрузка на CUDA/MPS идёт в `float16`/`bfloat16`; лимит пика при `format_markdown` задаёт **`markdown_microbatch_peak_cap`** (см. `ProviderLitserveInfraConfig`).
+
 - **GET** `/health` — встроенный LitServe: текст **`ok`** / **`not ready`** (пока воркеры не готовы).
 
 Контракты HTTP для OpenAPI и интеграционных тестов (in-process ASGI, те же `EmbeddingLitAPI` / `RerankerLitAPI`, без воркеров): [`provider_litserve_asgi.py`](provider_litserve_asgi.py), схемы ответов — [`provider_litserve_http_schemas.py`](provider_litserve_http_schemas.py); тела запросов POST — [`openai_server_contracts.py`](openai_server_contracts.py). Для чата в runtime используется встроенный `OpenAISpec` LitServe.
@@ -44,11 +47,12 @@
     "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
     "embedding_model_ids": [],
     "rerank_model_ids": [],
-    "llm_model_ids": ["Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-Coder-0.5B"],
-    "markdown_default_api_model_id": "Qwen/Qwen2.5-Coder-0.5B",
+    "llm_model_ids": ["Qwen/Qwen2.5-1.5B-Instruct"],
+    "markdown_default_api_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
     "markdown_max_chunk_chars": 6000,
-    "markdown_max_microbatch": 4,
-    "markdown_max_new_tokens": 2048
+    "markdown_max_microbatch": 2,
+    "markdown_microbatch_peak_cap": 2,
+    "markdown_max_new_tokens": 1024
   }
 }
 ```

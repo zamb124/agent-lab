@@ -11,6 +11,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from core.text_transforms.format_markdown_response import (
+    FormatMarkdownResponseBody,
+    FormatMarkdownUsage,
+    validate_format_markdown_response,
+)
+
 
 class EmbeddingDataItem(BaseModel):
     """Элемент ``data[]`` ответа эмбеддингов."""
@@ -30,15 +36,6 @@ class OpenAIEmbeddingsResponseBody(BaseModel):
         default_factory=lambda: {"prompt_tokens": 0, "total_tokens": 0},
         description="Заглушка usage; локальный шлюз токены не считает.",
     )
-
-
-class FormatMarkdownResponseBody(BaseModel):
-    """Ответ POST ``/v1/text/format_markdown``."""
-
-    markdown: str
-    chunks_total: int = Field(ge=0)
-    chunks_processed: int = Field(ge=0)
-    model: str
 
 
 class RerankResponseBody(BaseModel):
@@ -90,10 +87,6 @@ class V1ModelsResponseBody(BaseModel):
 
 def validate_embeddings_response(payload: dict[str, Any]) -> OpenAIEmbeddingsResponseBody:
     return OpenAIEmbeddingsResponseBody.model_validate(payload)
-
-
-def validate_format_markdown_response(payload: dict[str, Any]) -> FormatMarkdownResponseBody:
-    return FormatMarkdownResponseBody.model_validate(payload)
 
 
 def validate_rerank_response(payload: dict[str, Any]) -> RerankResponseBody:

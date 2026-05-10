@@ -21,6 +21,7 @@
  *   - `mode: 'view' | 'edit'` — текущий режим (для note === null
  *     автоматически 'edit').
  *   - `defaultNamespace: string` — обязателен для режима создания.
+ *   - `markdownFormatting`, `markdownFormatProgress` — индикатор format Markdown (view): баннер под шапкой.
  *
  * Эмитит:
  *   - `edit-note`                — клик по карандашу в шапке view.
@@ -61,6 +62,7 @@ import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@plat
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { escapeHtml as _escapeHtmlCanon } from '@platform/lib/utils/escape-html.js';
 import { formatPlatformDate, formatPlatformTime } from '@platform/lib/utils/format-platform-date.js';
+import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_UPDATE_OP = 'crm/entity_update';
@@ -110,7 +112,8 @@ function _restoreMentionsHtml(html) {
 }
 
 function renderMarkdownToHtml(text) {
-    const withPlaceholders = _replaceMentionsWithPlaceholder(typeof text === 'string' ? text : '');
+    const normalizedMd = stripOuterMarkdownCodeFence(typeof text === 'string' ? text : '');
+    const withPlaceholders = _replaceMentionsWithPlaceholder(normalizedMd);
     const escaped = escapeHtml(withPlaceholders);
     if (escaped.length === 0) {
         return '';
@@ -202,6 +205,7 @@ export class CRMNoteCardView extends PlatformElement {
         aiProgressStage: { type: String, attribute: 'ai-progress-stage' },
         aiProgressStatus: { type: String, attribute: 'ai-progress-status' },
         markdownFormatting: { type: Boolean, attribute: 'markdown-formatting' },
+        markdownFormatProgress: { attribute: false },
         _editName: { state: true },
         _editDescription: { state: true },
         _editDate: { state: true },
@@ -558,22 +562,72 @@ export class CRMNoteCardView extends PlatformElement {
                 display: block;
                 flex-shrink: 0;
             }
-            .note-markdown-format-overlay {
-                position: absolute;
-                inset: 0;
-                z-index: 4;
+            .note-markdown-format-banner {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-3);
+                flex-shrink: 0;
+                margin-bottom: var(--space-3);
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--glass-border-medium);
+                background: var(--glass-tint-medium);
+                color: var(--text-primary);
+            }
+            .note-markdown-format-banner-main {
+                flex: 1;
+                min-width: 0;
                 display: flex;
                 flex-direction: column;
+                gap: var(--space-2);
+            }
+            .note-markdown-format-banner-head {
+                display: flex;
                 align-items: center;
-                justify-content: center;
-                gap: var(--space-3);
-                padding: var(--space-4);
-                text-align: center;
-                background: color-mix(in srgb, var(--glass-solid-strong) 88%, transparent);
-                border-radius: var(--radius-md);
+                justify-content: space-between;
+                gap: var(--space-2);
                 font-size: var(--text-sm);
+                font-weight: 500;
+            }
+            .note-markdown-format-banner-pct {
+                flex-shrink: 0;
+                font-size: var(--text-xs);
                 color: var(--text-secondary);
-                pointer-events: none;
+                font-weight: 600;
+            }
+            .note-markdown-format-banner-line {
+                width: 100%;
+                height: 6px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                overflow: hidden;
+            }
+            .note-markdown-format-banner-line > span {
+                display: block;
+                height: 100%;
+                background: var(--accent);
+                transition: width var(--duration-fast);
+            }
+            .note-markdown-format-banner-line.indeterminate {
+                position: relative;
+            }
+            .note-markdown-format-banner-line.indeterminate > span {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 32%;
+                min-width: 48px;
+                transition: none;
+                animation: noteMarkdownProgressIndeterminate 1.15s ease-in-out infinite;
+            }
+            @keyframes noteMarkdownProgressIndeterminate {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(420%); }
+            }
+            .note-text-scroll.markdown-format-status-active .markdown {
+                opacity: 0.55;
+                transition: opacity var(--duration-fast);
             }
             .note-text-scroll .markdown {
                 min-height: 0;
@@ -1370,6 +1424,7 @@ export class CRMNoteCardView extends PlatformElement {
         this.aiProgressStage = '';
         this.aiProgressStatus = '';
         this.markdownFormatting = false;
+        this.markdownFormatProgress = null;
 
         this._editName = '';
         this._editDescription = '';
@@ -1496,6 +1551,20 @@ export class CRMNoteCardView extends PlatformElement {
                     download_url: uploadedUrl,
                 },
             };
+        });
+
+        this.useEvent(this._attachmentUpload.op.events.SUCCEEDED, (event) => {
+            if (this.mode !== 'view') {
+                return;
+            }
+            const result = event && event.payload && event.payload.result;
+            if (!result || typeof result !== 'object') {
+                return;
+            }
+            if (result.markdown_format_queued !== true) {
+                return;
+            }
+            this.emit('markdown-format-attachment-queued');
         });
 
         this.useEvent(this._voice.op.events.SUCCEEDED, (event) => {
@@ -3240,6 +3309,36 @@ export class CRMNoteCardView extends PlatformElement {
         this.emit('task-add', { text: value });
     }
 
+    _renderMarkdownFormatStatusBanner() {
+        if (!this.markdownFormatting) {
+            return nothing;
+        }
+        const mfProg = this.markdownFormatProgress;
+        const mfHasNums = mfProg !== null && typeof mfProg === 'object'
+            && typeof mfProg.done === 'number'
+            && typeof mfProg.total === 'number'
+            && mfProg.total > 0;
+        const mfPct = mfHasNums ? Math.min(100, Math.round((mfProg.done / mfProg.total) * 100)) : 0;
+        return html`
+            <div class="note-markdown-format-banner" role="status" aria-live="polite">
+                <glass-spinner size="sm"></glass-spinner>
+                <div class="note-markdown-format-banner-main">
+                    <div class="note-markdown-format-banner-head">
+                        <span>${
+                            mfHasNums
+                                ? this.t('note_view.markdown_format_progress', { done: mfProg.done, total: mfProg.total })
+                                : this.t('note_view.markdown_formatting')
+                        }</span>
+                        ${mfHasNums ? html`<span class="note-markdown-format-banner-pct">${mfPct}%</span>` : ''}
+                    </div>
+                    ${mfHasNums
+                        ? html`<div class="note-markdown-format-banner-line"><span style="width:${mfPct}%;"></span></div>`
+                        : html`<div class="note-markdown-format-banner-line indeterminate"><span></span></div>`}
+                </div>
+            </div>
+        `;
+    }
+
     render() {
         if (this.mode === 'edit') {
             return this._renderEdit();
@@ -3298,7 +3397,8 @@ export class CRMNoteCardView extends PlatformElement {
                             ${this._renderMobileHeaderPanel(summaryText, summaryTime, summaryEntities)}
                         </div>
                     </header>
-                    <div class="note-text-scroll">
+                    ${this._renderMarkdownFormatStatusBanner()}
+                    <div class=${`note-text-scroll${this.markdownFormatting ? ' markdown-format-status-active' : ''}`}>
                         <div class="note-text-body-wrap">
                             ${description.length > 0
                                 ? html`
@@ -3335,13 +3435,6 @@ export class CRMNoteCardView extends PlatformElement {
                                             <path d="M4 18h3" />
                                         </svg>
                                     </button>
-                                    ${this.markdownFormatting
-                                        ? html`
-                                            <div class="note-markdown-format-overlay">
-                                                <glass-spinner size="md"></glass-spinner>
-                                                <span>${this.t('note_view.markdown_formatting')}</span>
-                                            </div>`
-                                        : nothing}
                                 `
                                 : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
                         </div>

@@ -46,6 +46,7 @@ export class CRMNotePage extends CRMNamespacePage {
         _mode: { state: true },
         _mobileHeaderPanel: { state: true },
         _markdownFormatting: { state: true },
+        _markdownFormatProgress: { state: true },
     };
 
     static styles = [
@@ -157,6 +158,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this._mode = 'view';
         this._mobileHeaderPanel = '';
         this._markdownFormatting = false;
+        this._markdownFormatProgress = null;
         this._markdownFormatUiTimer = null;
         this._lastRequestedId = '';
         this._entities = this.useResource('crm/entities');
@@ -180,8 +182,24 @@ export class CRMNotePage extends CRMNamespacePage {
             if (typeof noteId !== 'string' || noteId !== this.noteId) {
                 return;
             }
+            const mf = event.payload && event.payload.markdown_format;
+            const phase = mf && typeof mf.phase === 'string' ? mf.phase : '';
+            if (phase === 'started') {
+                this._markdownFormatting = true;
+                this._markdownFormatProgress = null;
+                this._armMarkdownFormatUiTimeout();
+                return;
+            }
+            if (phase === 'partial') {
+                const done = mf && typeof mf.chunks_done === 'number' ? mf.chunks_done : 0;
+                const total = mf && typeof mf.chunks_total === 'number' ? mf.chunks_total : 0;
+                this._markdownFormatProgress = { done, total };
+                this._reloadCurrent();
+                return;
+            }
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
+            this._markdownFormatProgress = null;
             this._reloadCurrent();
         });
         this.useEvent(this._cardOp.op.events.SUCCEEDED, (event) => {
@@ -212,6 +230,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this.useEvent(this._markdownFormatOp.op.events.FAILED, () => {
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
+            this._markdownFormatProgress = null;
         });
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => this.requestUpdate());
     }
@@ -224,6 +243,7 @@ export class CRMNotePage extends CRMNamespacePage {
             this._stopAnalyzeTaskPolling();
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
+            this._markdownFormatProgress = null;
             this._draftVersionInitialized = false;
             this._lastDraftVersion = null;
             this._lastAutoOpenedDraftVersion = null;
@@ -237,6 +257,7 @@ export class CRMNotePage extends CRMNamespacePage {
             this._stopAnalyzeTaskPolling();
             this._clearMarkdownFormatUiTimeout();
             this._markdownFormatting = false;
+            this._markdownFormatProgress = null;
             this._draftVersionInitialized = false;
             this._lastDraftVersion = null;
             this._lastAutoOpenedDraftVersion = null;
@@ -252,6 +273,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this._mode = 'view';
         this._clearMarkdownFormatUiTimeout();
         this._markdownFormatting = false;
+        this._markdownFormatProgress = null;
         this._reloadCurrent();
     }
 
@@ -329,11 +351,24 @@ export class CRMNotePage extends CRMNamespacePage {
                 return;
             }
             this._markdownFormatting = false;
+            this._markdownFormatProgress = null;
             this.dispatch(CoreEvents.UI_TOAST_SHOW, {
                 type: 'warning',
                 i18n_key: 'crm:toast.note.markdown_format_timeout',
             });
         }, NOTE_MARKDOWN_FORMAT_UI_TIMEOUT_MS);
+    }
+
+    _onMarkdownFormatAttachmentQueued() {
+        if (typeof this.noteId !== 'string' || this.noteId.length === 0 || this._isDraftId(this.noteId)) {
+            return;
+        }
+        if (this._markdownFormatting) {
+            return;
+        }
+        this._markdownFormatting = true;
+        this._markdownFormatProgress = null;
+        this._armMarkdownFormatUiTimeout();
     }
 
     _onFormatMarkdownRequest() {
@@ -344,6 +379,7 @@ export class CRMNotePage extends CRMNamespacePage {
             return;
         }
         this._markdownFormatting = true;
+        this._markdownFormatProgress = null;
         this._markdownFormatOp.run({ note_id: this.noteId });
         this._armMarkdownFormatUiTimeout();
     }
@@ -798,6 +834,7 @@ export class CRMNotePage extends CRMNamespacePage {
                     .aiProgressStage=${this._analyzeProgressStage()}
                     .aiProgressStatus=${this._analyzeProgressStatus()}
                     .markdownFormatting=${this._markdownFormatting}
+                    .markdownFormatProgress=${this._markdownFormatProgress}
                     .mobileHeaderPanel=${this._mobileHeaderPanel}
                     mode="view"
                     @entity-open=${this._onEntityOpen}
@@ -805,6 +842,7 @@ export class CRMNotePage extends CRMNamespacePage {
                     @edit-note=${this._onEditNote}
                     @refresh-summary=${this._onRefreshSummary}
                     @format-markdown-request=${this._onFormatMarkdownRequest}
+                    @markdown-format-attachment-queued=${this._onMarkdownFormatAttachmentQueued}
                     @task-add=${this._onTaskAdd}
                     @task-toggle=${this._onTaskToggle}
                     @task-remove=${this._onTaskRemove}

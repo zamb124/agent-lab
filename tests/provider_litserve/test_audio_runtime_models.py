@@ -98,7 +98,7 @@ def test_llm_allowed_and_resolve_merge_config_with_runtime_registry(unique_id):
     """После загрузки SQLite чат/markdown должны видеть и реестр, и llm_model_ids из infra (как embedding/rerank)."""
     cfg = ProviderLitserveInfraConfig(
         sqlite_path=f"./data/test/{unique_id}.db",
-        llm_model_ids=["Qwen/Qwen2.5-Coder-0.5B"],
+        llm_model_ids=["Qwen/Qwen2.5-1.5B-Instruct"],
     )
     replace_runtime_catalog(
         [
@@ -110,15 +110,15 @@ def test_llm_allowed_and_resolve_merge_config_with_runtime_registry(unique_id):
         ]
     )
     allowed = allowed_api_model_ids("llm", cfg)
-    assert "Qwen/Qwen2.5-Coder-0.5B" in allowed
+    assert "Qwen/Qwen2.5-1.5B-Instruct" in allowed
     assert f"registry-llm-{unique_id}" in allowed
-    assert resolve_hf_model_id("llm", "Qwen/Qwen2.5-Coder-0.5B", cfg) == "Qwen/Qwen2.5-Coder-0.5B"
+    assert resolve_hf_model_id("llm", "Qwen/Qwen2.5-1.5B-Instruct", cfg) == "Qwen/Qwen2.5-1.5B-Instruct"
     assert resolve_hf_model_id("llm", f"registry-llm-{unique_id}", cfg) == "hf/registry-llm"
 
 
 def test_llm_default_map_includes_markdown_default_api_model_id(unique_id):
     """markdown_default_api_model_id должен быть разрешён, даже если не перечислен в llm_model_ids."""
-    md_model = f"Qwen/Qwen2.5-Coder-md-{unique_id}"
+    md_model = f"extra-markdown-only-llm-{unique_id}"
     cfg = ProviderLitserveInfraConfig(
         sqlite_path=f"./data/test/{unique_id}.db",
         llm_model_ids=["Qwen/Qwen2.5-1.5B-Instruct"],

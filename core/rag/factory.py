@@ -5,15 +5,15 @@
 from core.config.rag_provider_factory import (
     RAG_PROVIDERS,
     ResolvedRagProvider,
-    get_default_rag_provider,
     get_rag_provider,
+    reset_rag_provider_instances_cache,
     resolve_rag_provider_bundle,
 )
 
 __all__ = [
     "RAG_PROVIDERS",
     "ResolvedRagProvider",
-    "get_default_rag_provider",
     "get_rag_provider",
+    "reset_rag_provider_instances_cache",
     "resolve_rag_provider_bundle",
 ]

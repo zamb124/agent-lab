@@ -76,7 +76,7 @@ async def run_namespace_integration_job(
     if row.status == "cancelled":
         return {"status": "cancelled", "task_id": task_id}
 
-    _set_crm_context(
+    await _set_crm_context(
         company_id,
         row.namespace,
         auth_token,

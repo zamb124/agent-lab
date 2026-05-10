@@ -54,25 +54,67 @@ class TeamMemberUpdate(BaseModel):
 
 
 class CompanySettingsUpdate(BaseModel):
-    """Обновление настроек компании"""
+    """Обновление базовых настроек компании.
+
+    AI-провайдеры конфигурируются отдельным CRUD-роутером ``/ai-providers``
+    (см. core.company_ai). Поля legacy (``rag_embedding`` / ``rag_rerank`` /
+    ``crm_summarize_provider``) удалены вместе с парсерами в ``core.company_ai``.
+    """
+
     name: Optional[str] = Field(default=None, description="Название компании")
     monthly_budget: Optional[float] = Field(default=None, description="Месячный лимит")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Дополнительные данные")
-    rag_embedding: Optional["RagEmbeddingOverrideUpdate"] = Field(
-        default=None,
-        description="Переопределение embedding модели RAG для компании",
-    )
 
 
-class RagEmbeddingOverrideUpdate(BaseModel):
-    """Переопределение embedding runtime для RAG на уровне компании."""
+# === AI providers (capabilities + custom OpenAI-compatible) ===
 
-    enabled: bool = Field(default=False, description="Включить company override")
-    provider: Optional[Literal["openrouter", "provider_litserve"]] = Field(
-        default=None,
-        description="Провайдер эмбеддингов",
-    )
-    model: Optional[str] = Field(default=None, description="ID embedding модели")
+
+class AIProvidersCapabilityUpdate(BaseModel):
+    """PUT /api/settings/ai-providers/{capability}: задать override capability компании.
+
+    - ``provider`` платформенный (``openrouter|openai|bothub|yandex|provider_litserve``)
+      или ``custom:<id>``; для rerank допустимы ``inherit|none|provider_litserve|custom:<id>``;
+      для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).
+    - ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется
+      (ключ в custom-провайдере).
+    """
+
+    provider: str = Field(min_length=1)
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    folder_id: Optional[str] = None
+    extra_request_headers: Optional[Dict[str, str]] = None
+    model: Optional[str] = None
+    voice: Optional[str] = None
+    language: Optional[str] = None
+    sample_rate: Optional[int] = None
+
+
+class CustomProviderCreate(BaseModel):
+    """POST /api/settings/ai-providers/custom: создание custom OpenAI-compatible провайдера."""
+
+    id: str = Field(min_length=1, max_length=32)
+    label: str = Field(min_length=1, max_length=128)
+    base_url: str
+    api_key: str
+    extra_request_headers: Optional[Dict[str, str]] = None
+    extra_request_body: Optional[Dict[str, Any]] = None
+    rerank_path: Optional[str] = None
+    capabilities: List[str] = Field(default_factory=list)
+    model_by_capability: Dict[str, str] = Field(default_factory=dict)
+
+
+class CustomProviderUpdate(BaseModel):
+    """PATCH /api/settings/ai-providers/custom/{id}."""
+
+    label: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    extra_request_headers: Optional[Dict[str, str]] = None
+    extra_request_body: Optional[Dict[str, Any]] = None
+    rerank_path: Optional[str] = None
+    capabilities: Optional[List[str]] = None
+    model_by_capability: Optional[Dict[str, str]] = None
 
 
 class ServiceStatus(BaseModel):

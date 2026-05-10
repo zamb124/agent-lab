@@ -1078,7 +1078,14 @@ def get_llm(
         actual_base_url = resolved_base_url or _get_default_base_url(actual_provider, settings)
 
         default_headers: Dict[str, str] = {}
-        if actual_provider == "openrouter" and settings.llm.openrouter:
+        # custom_openai_compatible: никаких vendor-default headers (только Authorization Bearer
+        # в LLMClient.stream и опциональные extra_headers вызывающего кода).
+        if actual_provider == "custom_openai_compatible":
+            if not resolved_base_url:
+                raise ValueError(
+                    "custom_openai_compatible: base_url обязателен (URL OpenAI-совместимого endpoint компании)"
+                )
+        elif actual_provider == "openrouter" and settings.llm.openrouter:
             default_headers = {
                 "HTTP-Referer": settings.llm.openrouter.site_url,
                 "X-Title": settings.llm.openrouter.site_name,
@@ -1206,6 +1213,15 @@ def get_llm(
             max_tokens=resolved_max_tokens,
             timeout=timeout,
             llm_provider=actual_provider,
+        )
+
+    if actual_provider == "custom_openai_compatible":
+        # Этот провайдер всегда требует кастомный api_key + base_url; обычно
+        # выбирается через ResolvedLLM из core.company_ai (custom:<id> в metadata).
+        # Без явного api_key/base_url использование запрещено.
+        raise ValueError(
+            "custom_openai_compatible LLM требует явный api_key и base_url; "
+            "вызывайте через core.company_ai.resolve_llm_for_capability(...)"
         )
 
     raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")

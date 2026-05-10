@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from apps.flows.src.services.schedule_service import ScheduleService
     from core.integrations.oauth_service import OAuthService
     from core.state import ExecutionState
+    from core.text_transforms import TextTransformService
 
 
 def get_operator_handoff_service() -> "OperatorHandoffService":
@@ -48,6 +49,19 @@ def get_code_runner(language: str = "python", resources: dict | None = None) -> 
     from apps.flows.src.container import get_container
 
     return get_container().get_code_runner(language=language, resources=resources)
+
+
+_text_transform_service: "TextTransformService | None" = None
+
+
+def get_text_transform_service() -> "TextTransformService":
+    """Суммаризация и Markdown без доступа к FlowContainer из namespace."""
+    global _text_transform_service
+    if _text_transform_service is None:
+        from core.text_transforms import TextTransformService
+
+        _text_transform_service = TextTransformService()
+    return _text_transform_service
 
 
 async def get_mcp_client(

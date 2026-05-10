@@ -16,6 +16,7 @@ from .agent_session_tools import (
 from .docx_template import fill_docx_template
 from .sandbox_codegen import sandbox_codegen
 from .files import create_file, read_file
+from .format_text_markdown import format_text_markdown
 from .google_docs import (
     gdocs_append_text,
     gdocs_create_document,
@@ -38,6 +39,7 @@ from .lara_crm import (
 from .math_tools import calculator
 from .pravo import pravo_catalog_search, pravo_document_rag_search
 from .rag import rag_add_text, rag_create_namespace, rag_search
+from .summarize_text import summarize_text
 from .scheduling import (
     cancel_scheduled_task,
     list_scheduled_tasks,
@@ -72,6 +74,7 @@ __all__ = [
     "sandbox_codegen",
     "fill_docx_template",
     "final_answer",
+    "format_text_markdown",
     "gdocs_append_text",
     "gdocs_create_document",
     "gdocs_delete_range",
@@ -90,6 +93,7 @@ __all__ = [
     "read_file",
     "reason",
     "self_check",
+    "summarize_text",
     "schedule_cron_task",
     "schedule_interval_task",
     "schedule_one_time_task",

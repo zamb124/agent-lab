@@ -12,15 +12,15 @@ from core.config.models import ProviderLitserveInfraConfig
 
 def _cfg() -> ProviderLitserveInfraConfig:
     return ProviderLitserveInfraConfig(
-        llm_model_ids=["Qwen/Qwen2.5-Coder-0.5B"],
-        markdown_default_api_model_id="Qwen/Qwen2.5-Coder-0.5B",
+        llm_model_ids=["Qwen/Qwen2.5-1.5B-Instruct"],
+        markdown_default_api_model_id="Qwen/Qwen2.5-1.5B-Instruct",
     )
 
 
 def test_parse_minimal_body() -> None:
     parsed = parse_format_markdown_body({"text": "  hello  "}, cfg=_cfg())
     assert parsed["text"] == "hello"
-    assert parsed["model_id"] == "Qwen/Qwen2.5-Coder-0.5B"
+    assert parsed["model_id"] == "Qwen/Qwen2.5-1.5B-Instruct"
 
 
 def test_parse_rejects_empty_text() -> None:
@@ -33,7 +33,7 @@ def test_parse_overrides() -> None:
     parsed = parse_format_markdown_body(
         {
             "text": "x",
-            "model": "Qwen/Qwen2.5-Coder-0.5B",
+            "model": "Qwen/Qwen2.5-1.5B-Instruct",
             "max_chunk_chars": 2000,
             "max_microbatch": 2,
             "max_new_tokens": 128,

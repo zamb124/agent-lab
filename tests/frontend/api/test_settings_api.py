@@ -30,13 +30,13 @@ class TestSettingsAPI:
         data = response.json()
         
         # Проверяем обязательные поля
-        assert "company_id" in data
-        assert "name" in data
-        assert "subdomain" in data
-        assert "status" in data
-        assert "monthly_budget" in data
-        assert "tariff_plan" in data
-        assert "created_at" in data
+        assert "rag_embedding" in data
+        emb = data["rag_embedding"]
+        assert "platform_model_id" in emb
+        assert "effective_model_from_platform" in emb
+        assert "rag_rerank" in data
+        assert "crm_summarize" in data
+        assert "provider_choices" in data["crm_summarize"]
 
     async def test_get_company_settings_unauthorized(self, frontend_client: AsyncClient):
         """Попытка получить настройки без авторизации"""

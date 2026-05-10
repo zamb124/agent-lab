@@ -571,6 +571,24 @@ GLOBALS: List[Dict[str, Any]] = [
         "tags": ["files", "platform"],
     },
     {
+        "name": "get_text_transform_service",
+        "type": "callable",
+        "doc": (
+            "Фасад `platform_services.get_text_transform_service`: единый `TextTransformService` "
+            "без `FlowContainer`.\n"
+            "svc = get_text_transform_service()\n"
+            "summary = await svc.summarize(text, max_output_tokens=..., provider=..., model=...)\n"
+            "# model может быть `openrouter:vendor/model` или задайте provider+model отдельно.\n"
+            "md = await svc.format_markdown(text, provider=None, model=None)\n"
+            "# По умолчанию Markdown — HTTP `POST /v1/text/format_markdown` (LitServe); "
+            "для openrouter/openai/… — чанкованный вызов `get_llm`.\n"
+            "Биллинг: `require_balance` для LLM; для LitServe — span `llm.provider_litserve.format_markdown` "
+            "и токены из ответа (`usage`)."
+        ),
+        "perspectives": ["editor", "flow", "tool", "node"],
+        "tags": ["text", "llm", "platform"],
+    },
+    {
         "name": "transcribe_audio",
         "type": "function",
         "doc": (

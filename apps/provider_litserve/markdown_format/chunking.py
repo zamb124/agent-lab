@@ -1,33 +1,7 @@
-"""Разбиение длинного текста на чанки по границам абзацев/строк."""
+"""Разбиение текста на чанки; реализация в ``core.text_transforms.chunking``."""
 
 from __future__ import annotations
 
+from core.text_transforms.chunking import split_text_into_markdown_chunks
 
-def split_text_into_markdown_chunks(text: str, max_chunk_chars: int) -> list[str]:
-    if max_chunk_chars <= 0:
-        raise ValueError("max_chunk_chars должен быть положительным")
-    t = text.strip()
-    if not t:
-        return []
-    if len(t) <= max_chunk_chars:
-        return [t]
-
-    parts: list[str] = []
-    start = 0
-    n = len(t)
-    while start < n:
-        end = min(start + max_chunk_chars, n)
-        if end < n:
-            window = t[start:end]
-            cut_pp = window.rfind("\n\n")
-            if cut_pp != -1 and cut_pp >= max_chunk_chars // 4:
-                end = start + cut_pp
-            else:
-                cut_nl = window.rfind("\n")
-                if cut_nl != -1 and cut_nl >= max_chunk_chars // 4:
-                    end = start + cut_nl + 1
-        chunk = t[start:end].strip()
-        if chunk:
-            parts.append(chunk)
-        start = end
-    return parts
+__all__ = ["split_text_into_markdown_chunks"]

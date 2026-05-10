@@ -629,7 +629,8 @@
         "summary_entity_open": "Открыть сущность",
         "graph_inline_title": "Окружение заметки",
         "markdown_format_action": "Форматировать текст в Markdown",
-        "markdown_formatting": "Форматирование в Markdown…"
+        "markdown_formatting": "Форматирование в Markdown…",
+        "markdown_format_progress": "Часть {{done}} из {{total}}"
     },
     "note_edit": {
         "field_description": "Текст заметки",

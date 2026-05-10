@@ -14,6 +14,8 @@ from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.logging import get_logger
 from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
+from core.text_transforms.format_markdown_response import validate_format_markdown_response
+from core.text_transforms.strip_outer_markdown_fence import strip_outer_markdown_code_fence
 
 logger = get_logger(__name__)
 
@@ -41,7 +43,12 @@ async def format_note_description_markdown_task(
     interface_language: str,
     expected_updated_at_iso: str,
 ) -> dict[str, Any]:
-    _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
+    """
+    Один HTTP POST на весь текст: разбиение на чанки и батчевый ``generate`` выполняет LitServe
+    ([``MarkdownFormatEngine``](apps/provider_litserve/markdown_format/engines.py)); повторять это
+    циклом CRM-воркером нельзя — время растёт как число чанков подряд без общего батча на GPU.
+    """
+    await _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     container = get_crm_container()
     entity = await container.entity_repository.get(note_id)
     if entity is None:
@@ -72,13 +79,19 @@ async def format_note_description_markdown_task(
         return {"status": "skipped_empty_description", "note_id": note_id}
 
     settings = get_settings()
+    infra = settings.provider_litserve.infra
     timeout = float(settings.note_markdown_format_service_timeout_seconds)
+    model_id = str(infra.markdown_default_api_model_id).strip()
+    if not model_id:
+        raise ValueError("note_markdown_format: markdown_default_api_model_id пуст")
+    chunk_lim = int(infra.markdown_max_chunk_chars)
+
     client = ServiceClient()
     try:
-        payload = await client.post(
+        raw = await client.post(
             "provider_litserve",
             "/v1/text/format_markdown",
-            json={"text": str(desc).strip()},
+            json={"text": str(desc).strip(), "model": model_id, "max_chunk_chars": chunk_lim},
             timeout=timeout,
             headers={"Authorization": f"Bearer {PROVIDER_LITSERVE_PLACEHOLDER_BEARER}"},
         )
@@ -90,14 +103,15 @@ async def format_note_description_markdown_task(
         )
         raise
 
-    if not isinstance(payload, dict):
+    if not isinstance(raw, dict):
         raise ValueError("provider_litserve format_markdown: ответ не JSON-object")
-    markdown_raw = payload.get("markdown")
-    if not isinstance(markdown_raw, str):
-        raise ValueError("provider_litserve format_markdown: поле markdown отсутствует или не строка")
-    markdown = markdown_raw.strip()
+    validated = validate_format_markdown_response(raw)
+    markdown = strip_outer_markdown_code_fence(validated.markdown.strip())
     if not markdown:
         raise ValueError("provider_litserve format_markdown: пустой markdown")
+
+    chunks_total = int(validated.chunks_total)
+    chunks_processed = int(validated.chunks_processed)
 
     entity.description = markdown
     entity.updated_at = datetime.now(timezone.utc)
@@ -112,11 +126,17 @@ async def format_note_description_markdown_task(
         action="updated",
         company_repository=container.company_repository,
         access_grant_repository=container.access_grant_repository,
+        skip_notification_center=False,
+        markdown_format={
+            "phase": "complete",
+            "chunks_done": chunks_processed,
+            "chunks_total": chunks_total,
+        },
     )
 
     return {
         "status": "completed",
         "note_id": note_id,
-        "chunks_total": payload.get("chunks_total"),
-        "chunks_processed": payload.get("chunks_processed"),
+        "chunks_total": chunks_total,
+        "chunks_processed": chunks_processed,
     }

@@ -1,5 +1,7 @@
 """
 Перевекторизация устаревших чанков CRM vector_documents с ``embedding_model IS NULL``.
+
+Использует стандартную фабрику RAG-провайдеров (которая учитывает per-company embedding override).
 """
 
 from __future__ import annotations
@@ -12,32 +14,11 @@ from core.config import get_settings
 from core.context import clear_context, set_context
 from core.context.system_task_context import build_system_auth_context
 from core.logging import get_logger
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.rag.providers.pgvector_provider import PgVectorProvider
 
 logger = get_logger(__name__)
-
-
-def _build_crm_pgvector_provider() -> PgVectorProvider:
-    settings = get_settings()
-    api = settings.rag.embedding.api
-    embedding_config: dict[str, Any] = {
-        "model": api.model,
-        "dimension": api.dimension,
-        "base_url": api.base_url,
-    }
-    if api.mrl_output_dimension is not None:
-        embedding_config["mrl_output_dimension"] = api.mrl_output_dimension
-
-    crm_db_url = settings.database.crm_url
-    if not crm_db_url:
-        raise ValueError("DATABASE__CRM_URL не настроен")
-
-    provider_config: dict[str, Any] = {
-        "enabled": True,
-        "db_url": crm_db_url,
-    }
-
-    return PgVectorProvider(provider_config, embedding_config)
 
 
 @broker.task(
@@ -66,9 +47,6 @@ async def crm_reembed_stale_documents_tick(
             "reembedded": 0,
         }
 
-    provider = _build_crm_pgvector_provider()
-    target_model = provider._embedding_model_name()
-    batch_size = reembed_cfg.reembed_batch_size
     system_context = await build_system_auth_context(
         container=get_crm_container(),
         trace_id=f"scheduler:crm_reembed_stale_documents:{scheduler_task_id or 'manual'}",
@@ -77,6 +55,13 @@ async def crm_reembed_stale_documents_tick(
     )
     set_context(system_context)
     try:
+        provider = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+        if not isinstance(provider, PgVectorProvider):
+            raise RuntimeError(
+                f"crm_reembed_stale_documents: ожидается PgVectorProvider, получено {type(provider).__name__}"
+            )
+        target_model = provider._embedding_model_name()
+        batch_size = reembed_cfg.reembed_batch_size
         reembedded = await provider.reembed_stale_documents(
             batch_size=batch_size,
             target_embedding_model=target_model,

@@ -31,6 +31,7 @@ from apps.frontend.api.team import router as team_router
 from apps.frontend.api.api_keys import router as api_keys_router
 from apps.frontend.api.billing import router as billing_router
 from apps.frontend.api.settings import router as settings_router
+from apps.frontend.api.ai_providers import router as ai_providers_router
 from apps.frontend.api.services import router as services_router
 from apps.frontend.api.scheduler import router as scheduler_router
 from apps.frontend.api.leads import leads_router, lead_requests_router
@@ -243,6 +244,7 @@ app = create_service_app(
         api_keys_router,
         billing_router,
         settings_router,
+        ai_providers_router,
         services_router,
         scheduler_router,
         leads_router,

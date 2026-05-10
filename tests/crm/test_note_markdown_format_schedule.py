@@ -17,12 +17,13 @@ async def test_schedule_note_markdown_format_skips_when_feature_disabled(monkeyp
     )
     from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
 
-    await schedule_note_markdown_format(
+    out = await schedule_note_markdown_format(
         note_id="note-1",
         company_id="company-1",
         namespace="default",
         expected_updated_at_iso="2026-05-10T12:00:00+00:00",
     )
+    assert out is False
 
 
 @pytest.mark.asyncio
@@ -36,12 +37,13 @@ async def test_schedule_note_markdown_format_skips_without_context(monkeypatch: 
     monkeypatch.setattr("apps.crm.services.note_markdown_format_schedule.get_context", lambda: None)
     from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
 
-    await schedule_note_markdown_format(
+    out = await schedule_note_markdown_format(
         note_id="note-1",
         company_id="company-1",
         namespace="default",
         expected_updated_at_iso="2026-05-10T12:00:00+00:00",
     )
+    assert out is False
 
 
 @pytest.mark.asyncio

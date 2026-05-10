@@ -550,6 +550,8 @@ class PlatformTracer:
         provider_upstream_inference_cost: Optional[float] = None,
         settlement_quantity_rub: Optional[int] = None,
         billing_resource_name: Optional[str] = None,
+        cost_origin: Optional[str] = None,
+        custom_provider_id: Optional[str] = None,
     ) -> None:
         """Записывает результат LLM вызова в span и помечает для billing settlement."""
         total_tokens = input_tokens + output_tokens
@@ -587,7 +589,11 @@ class PlatformTracer:
                 attr.ATTR_BILLING_PENDING_SETTLEMENT: True,
             }
         )
-        
+        if cost_origin is not None:
+            span.set_attribute(attr.ATTR_BILLING_COST_ORIGIN, cost_origin)
+        if custom_provider_id is not None:
+            span.set_attribute(attr.ATTR_BILLING_CUSTOM_PROVIDER_ID, custom_provider_id)
+
         if response_content is not None or tool_calls:
             response_data = {
                 "content": response_content,

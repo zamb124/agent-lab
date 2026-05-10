@@ -104,6 +104,14 @@ tools:
     public: true
     description: "Калькулятор для математических вычислений"
 
+  - id: summarize_text
+    public: true
+    description: "Суммаризация текста через платформенный LLM"
+
+  - id: format_text_markdown
+    public: true
+    description: "Преобразование текста в структурированный Markdown (LitServe или LLM)"
+
   - id: sandbox_codegen
     public: true
     description: "Мета-тул: LLM генерирует inline Python, платформа валидирует и выполняет в sandbox; JSON-ответ с result/trace"

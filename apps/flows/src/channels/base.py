@@ -57,7 +57,6 @@ from core.tracing.provider import is_tracing_enabled
 from apps.flows.src.utils import extract_json_from_response
 from apps.flows.src.variables import VariableResolver
 from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
-
 logger = get_logger(__name__)
 
 
@@ -548,7 +547,7 @@ class BaseChannel(ABC):
             if runtime_flow is None:
                 await emitter.emit_error(f"Flow не найден: {self.flow_id}")
                 raise ValueError(f"Flow не найден: {self.flow_id}")
-            
+
             # Переопределяем variables из metadata если переданы
             request_variables = params.metadata.get("variables") if params.metadata else None
             if request_variables:

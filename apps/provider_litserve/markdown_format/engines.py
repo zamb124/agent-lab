@@ -4,14 +4,42 @@ from __future__ import annotations
 
 from typing import Any
 
+import gc
+import time
 import torch
 from fastapi import HTTPException
+from transformers import GenerationConfig
 
 from apps.provider_litserve.llm.local_causal_lm import ensure_local_causal_lm
 from apps.provider_litserve.markdown_format.chunking import split_text_into_markdown_chunks
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
+from core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def normalize_litserve_eos_token_id(raw: Any) -> int | list[int] | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, torch.Tensor):
+        flat = raw.detach().cpu().flatten().tolist()
+        if len(flat) == 0:
+            return None
+        if len(flat) == 1:
+            return int(flat[0])
+        return [int(x) for x in flat]
+    if isinstance(raw, (list, tuple)):
+        if len(raw) == 0:
+            return None
+        ints = [int(x) for x in raw]
+        return ints[0] if len(ints) == 1 else ints
+    return None
 
 _MARKDOWN_SYSTEM = (
     "You convert plain text into clean, structured Markdown. "
@@ -36,7 +64,9 @@ def parse_format_markdown_body(
 
     model_raw = body.get("model")
     if model_raw is None:
-        model_id = cfg.markdown_default_api_model_id.strip()
+        configured = cfg.markdown_default_api_model_id.strip()
+        primary_llm = cfg.llm_model_id.strip()
+        model_id = configured if configured else primary_llm
     else:
         if not isinstance(model_raw, str):
             raise HTTPException(status_code=422, detail={"reason": "model_invalid"})
@@ -86,6 +116,26 @@ def parse_format_markdown_body(
     }
     validate_markdown_format_params(out)
     return out
+
+
+def markdown_trim_generated_token_ids(
+    new_tokens_1d: torch.Tensor,
+    *,
+    eos_token_id: int | list[int] | None,
+    pad_token_id: int | None,
+) -> torch.Tensor:
+    row = new_tokens_1d.flatten().long().clone()
+    if eos_token_id is not None:
+        for i in range(row.numel()):
+            tid = int(row[i].item())
+            at_eos = tid == eos_token_id if isinstance(eos_token_id, int) else tid in eos_token_id
+            if at_eos:
+                row = row[:i]
+                break
+    if pad_token_id is not None and row.numel() > 0:
+        while row.numel() > 0 and int(row[-1].item()) == pad_token_id:
+            row = row[:-1]
+    return row
 
 
 def validate_markdown_format_params(parsed: dict[str, Any]) -> None:
@@ -140,13 +190,31 @@ class MarkdownFormatEngine:
             hf_token=self._hf_token,
         )
 
-        max_microbatch = max(1, int(parsed["max_microbatch"]))
+        requested_mb = max(1, int(parsed["max_microbatch"]))
+        peak_cap = max(1, int(self._cfg.markdown_microbatch_peak_cap))
+        max_microbatch = min(requested_mb, peak_cap)
+        if max_microbatch < requested_mb:
+            logger.info(
+                "markdown_format_microbatch_capped",
+                requested=requested_mb,
+                effective=max_microbatch,
+                peak_cap=peak_cap,
+            )
         max_new_tokens = max(1, int(parsed["max_new_tokens"]))
         joiner: str = parsed["chunk_join"]
         tokenizer_max_length = max(256, int(self._cfg.markdown_tokenizer_max_length))
 
         formatted_parts: list[str] = []
         total = len(chunks)
+        prompt_tokens_acc = 0
+        completion_tokens_acc = 0
+        logger.info(
+            "markdown_format_started",
+            chunks_total=total,
+            max_microbatch=max_microbatch,
+            max_new_tokens=max_new_tokens,
+            hf_model_id=hf_model_id,
+        )
         old_padding_side = tokenizer.padding_side
         tokenizer.padding_side = "left"
         try:
@@ -173,6 +241,32 @@ class MarkdownFormatEngine:
                     )
                     prompts.append(prompt)
 
+                unpadded = tokenizer(prompts, add_special_tokens=True, truncation=False)
+                batch_ids = unpadded["input_ids"]
+                if not isinstance(batch_ids, list):
+                    raise ValueError("markdown_format: ожидался batch input_ids")
+                for local_i, ids in enumerate(batch_ids):
+                    ln = len(ids)
+                    if ln > tokenizer_max_length:
+                        global_part = batch_start + local_i + 1
+                        logger.warning(
+                            "markdown_format_prompt_token_length_exceeded",
+                            chunk_part_index=global_part,
+                            chunks_total=total,
+                            actual_length=ln,
+                            max_length=tokenizer_max_length,
+                        )
+                        raise HTTPException(
+                            status_code=422,
+                            detail={
+                                "reason": "markdown_prompt_token_length_exceeded",
+                                "max_length": tokenizer_max_length,
+                                "actual_length": ln,
+                                "chunk_part_index": global_part,
+                                "chunks_total": total,
+                            },
+                        )
+
                 encoded = tokenizer(
                     prompts,
                     return_tensors="pt",
@@ -181,28 +275,104 @@ class MarkdownFormatEngine:
                     max_length=tokenizer_max_length,
                 )
                 encoded = {k: v.to(self._device) for k, v in encoded.items()}
+                attn = encoded.get("attention_mask")
+                if attn is not None:
+                    prompt_tokens_acc += int(attn.sum().item())
+                    max_prompt_tokens = int(attn.sum(dim=1).max().item())
+                else:
+                    prompt_tokens_acc += int(encoded["input_ids"].numel())
+                    max_prompt_tokens = int(encoded["input_ids"].shape[1])
                 prompt_width = int(encoded["input_ids"].shape[1])
+                slack = max(384, max_prompt_tokens // 4)
+                adaptive_budget = max_prompt_tokens + slack
+                batch_max_new_tokens = min(max_new_tokens, adaptive_budget)
+                if batch_max_new_tokens < 64:
+                    batch_max_new_tokens = 64
+                if batch_max_new_tokens < max_new_tokens:
+                    logger.info(
+                        "markdown_format_new_tokens_adaptive_cap",
+                        configured_max_new_tokens=max_new_tokens,
+                        effective_max_new_tokens=batch_max_new_tokens,
+                        max_prompt_tokens=max_prompt_tokens,
+                        slack=slack,
+                    )
                 pad_id = tokenizer.pad_token_id
                 if pad_id is None:
                     pad_id = tokenizer.eos_token_id
+                eos_raw = getattr(model.generation_config, "eos_token_id", None)
+                if eos_raw is None:
+                    eos_raw = tokenizer.eos_token_id
+                eos_gen = normalize_litserve_eos_token_id(eos_raw)
+                rep_penalty = float(self._cfg.markdown_format_repetition_penalty)
+                gen_cfg = GenerationConfig(
+                    max_new_tokens=batch_max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=pad_id,
+                    repetition_penalty=rep_penalty,
+                    temperature=None,
+                    top_p=None,
+                    top_k=None,
+                )
+                if eos_gen is not None:
+                    gen_cfg.eos_token_id = eos_gen
+                gen_in: dict[str, Any] = {
+                    k: encoded[k] for k in ("input_ids", "attention_mask", "token_type_ids") if k in encoded
+                }
+                logger.info(
+                    "markdown_format_generate_begin",
+                    batch_chunks=len(batch_chunks),
+                    prompt_seq_width=prompt_width,
+                    max_prompt_tokens=max_prompt_tokens,
+                    max_new_tokens=batch_max_new_tokens,
+                    hf_model_id=hf_model_id,
+                )
+                gen_t0 = time.monotonic()
                 with torch.no_grad():
-                    generated = model.generate(
-                        **encoded,
-                        max_new_tokens=max_new_tokens,
-                        do_sample=False,
-                        pad_token_id=pad_id,
-                    )
+                    generated = model.generate(**gen_in, generation_config=gen_cfg)
+                gen_ms = (time.monotonic() - gen_t0) * 1000.0
+                logger.info(
+                    "markdown_format_generate_done",
+                    duration_ms=round(gen_ms, 2),
+                    batch_chunks=len(batch_chunks),
+                    max_new_tokens=batch_max_new_tokens,
+                    hf_model_id=hf_model_id,
+                )
                 for row_idx in range(generated.shape[0]):
                     new_tokens = generated[row_idx, prompt_width:]
-                    piece = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+                    trimmed = markdown_trim_generated_token_ids(
+                        new_tokens,
+                        eos_token_id=eos_gen,
+                        pad_token_id=pad_id,
+                    )
+                    completion_tokens_acc += int(trimmed.numel())
+                    piece = tokenizer.decode(trimmed, skip_special_tokens=True).strip()
                     formatted_parts.append(piece)
+                logger.info(
+                    "markdown_format_batch_done",
+                    chunks_done=len(formatted_parts),
+                    chunks_total=total,
+                    batch_chunks=len(batch_chunks),
+                    hf_model_id=hf_model_id,
+                )
+                del generated, encoded, gen_in, gen_cfg
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                elif torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
         finally:
             tokenizer.padding_side = old_padding_side
 
         markdown = joiner.join(formatted_parts).strip()
+        total_tok = prompt_tokens_acc + completion_tokens_acc
         return {
             "markdown": markdown,
             "chunks_total": total,
             "chunks_processed": len(formatted_parts),
             "model": req_model,
+            "usage": {
+                "prompt_tokens": prompt_tokens_acc,
+                "completion_tokens": completion_tokens_acc,
+                "total_tokens": total_tok,
+            },
         }

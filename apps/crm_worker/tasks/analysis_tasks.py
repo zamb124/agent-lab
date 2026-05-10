@@ -68,7 +68,7 @@ async def process_note_task(
     mode: str,
 ) -> dict[str, Any]:
     """mode: 'analyze' | 'apply' | 'process'."""
-    _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
+    await _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     container = get_crm_container()
     repo = container.task_repository
     pipeline = container.note_processing_service

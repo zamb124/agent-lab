@@ -1,20 +1,25 @@
 """
-RAG-провайдер из Pydantic ``BaseSettings``: выбор ключа, ``model_dump`` записи, эмбеддинги для pgvector, инстанцирование класса провайдера.
+RAG-провайдер из Pydantic ``BaseSettings``: выбор ключа, ``model_dump`` записи,
+эмбеддинги для pgvector (с учётом per-company override), инстанцирование класса провайдера.
 
 Импорты из ``core.rag.providers`` / ``core.rag.embedding_runtime`` только внутри функций,
 чтобы не зациклиться с ``core.rag.__init__``.
+
+CleanFirst: легаси singleton ``_default_rag_provider`` / ``get_default_rag_provider`` /
+``reset_default_rag_provider_cache`` удалены — везде используется ``get_rag_provider(...)``
+напрямую с per-request кэшем по содержимому bundle.
 """
 
 from __future__ import annotations
 
 import json
-
-from core.logging import get_logger
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
+from core.company_ai.resolver import resolve_embedding_for_company
 from core.config.base import BaseSettings, get_settings
 from core.context import get_context
+from core.logging import get_logger
 
 if TYPE_CHECKING:
     from core.rag.base_provider import BaseRAGProvider
@@ -22,8 +27,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 _providers_cache: dict[str, type[Any]] | None = None
 _provider_instances_cache: dict[str, Any] = {}
-_RAG_EMBEDDING_OVERRIDE_KEY = "rag_embedding_override"
-_RAG_EMBEDDING_ALLOWED_PROVIDERS = {"openrouter", "provider_litserve"}
+
 
 def _providers() -> dict[str, type[Any]]:
     global _providers_cache
@@ -37,10 +41,12 @@ def _providers() -> dict[str, type[Any]]:
         }
     return _providers_cache
 
+
 def __getattr__(name: str) -> Any:
     if name == "RAG_PROVIDERS":
         return _providers()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 @dataclass(frozen=True)
 class ResolvedRagProvider:
@@ -49,6 +55,7 @@ class ResolvedRagProvider:
     provider_key: str
     provider_config: dict[str, Any]
     embedding_runtime: Any | None
+
 
 def resolve_rag_provider_bundle(
     settings: BaseSettings,
@@ -65,12 +72,24 @@ def resolve_rag_provider_bundle(
         pls = getattr(settings, "provider_litserve", None) or ProviderLitserveConfig()
         emb = rag.embedding
         if provider_name is None:
-            override = _resolve_company_rag_embedding_override()
-            if override is not None:
-                embedding_override = rag.embedding.model_copy(deep=True)
-                embedding_override.provider = override["provider"]
-                embedding_override.api.model = override["model"]
-                emb = embedding_override
+            ctx = get_context()
+            if ctx is not None and ctx.active_company is not None:
+                resolved = resolve_embedding_for_company()
+                if resolved is not None:
+                    emb_copy = rag.embedding.model_copy(deep=True)
+                    emb_copy.provider = (
+                        "provider_litserve"
+                        if resolved.provider == "provider_litserve"
+                        else (
+                            "openrouter"
+                            if resolved.provider == "openrouter"
+                            else resolved.provider
+                        )
+                    )
+                    if resolved.base_url:
+                        emb_copy.api.base_url = resolved.base_url
+                    emb = emb_copy
+
         from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
 
         embedding_runtime = build_rag_embedding_runtime_dict(emb, llm, pls)
@@ -80,23 +99,6 @@ def resolve_rag_provider_bundle(
         embedding_runtime=embedding_runtime,
     )
 
-def _resolve_company_rag_embedding_override() -> dict[str, str] | None:
-    context = get_context()
-    if context is None or context.active_company is None:
-        return None
-    metadata = context.active_company.metadata
-    raw = metadata.get(_RAG_EMBEDDING_OVERRIDE_KEY)
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        raise ValueError("company.metadata.rag_embedding_override должен быть объектом")
-    provider_raw = raw.get("provider")
-    model_raw = raw.get("model")
-    if not isinstance(provider_raw, str) or provider_raw not in _RAG_EMBEDDING_ALLOWED_PROVIDERS:
-        raise ValueError("company.metadata.rag_embedding_override.provider имеет недопустимое значение")
-    if not isinstance(model_raw, str) or not model_raw.strip():
-        raise ValueError("company.metadata.rag_embedding_override.model должен быть непустой строкой")
-    return {"provider": provider_raw, "model": model_raw.strip()}
 
 def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
     embedding_runtime: Any = bundle.embedding_runtime
@@ -109,14 +111,18 @@ def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
     }
     return json.dumps(payload, sort_keys=True, ensure_ascii=True)
 
+
 def get_rag_provider(
     provider_name: Optional[str] = None,
     *,
     settings: BaseSettings | None = None,
-) -> BaseRAGProvider:
+) -> "BaseRAGProvider":
     """
     Создаёт RAG провайдер из ``get_settings()``: активный ключ, ``RAGProviderConfig.model_dump()``,
-    для ``pgvector`` — ``resolve_rag_embedding_runtime(rag.embedding, llm, provider_litserve)``.
+    для ``pgvector`` — embedding runtime с учётом per-company override.
+
+    Кэш — по полному содержимому bundle (включая компанейский embedding override),
+    чтобы разные компании получали разные инстансы автоматически.
     """
     active_settings = settings or get_settings()
     bundle = resolve_rag_provider_bundle(active_settings, provider_name)
@@ -145,28 +151,16 @@ def get_rag_provider(
     logger.info("Создан RAG провайдер: %s", bundle.provider_key)
     return instance
 
-_default_rag_provider: Optional[BaseRAGProvider] = None
 
-def reset_default_rag_provider_cache() -> None:
-    """Сброс синглтона провайдера после смены глобальных настроек (например ``set_settings``)."""
-    global _default_rag_provider
-    _default_rag_provider = None
+def reset_rag_provider_instances_cache() -> None:
+    """Сброс кэша инстансов провайдеров (используется в тестах при смене settings)."""
     _provider_instances_cache.clear()
 
-def get_default_rag_provider() -> BaseRAGProvider:
-    """Дефолтный RAG провайдер (синглтон на процесс)."""
-    global _default_rag_provider
-
-    if _default_rag_provider is None:
-        _default_rag_provider = get_rag_provider()
-
-    return _default_rag_provider
 
 __all__ = [
     "RAG_PROVIDERS",
     "ResolvedRagProvider",
-    "reset_default_rag_provider_cache",
-    "get_default_rag_provider",
     "get_rag_provider",
+    "reset_rag_provider_instances_cache",
     "resolve_rag_provider_bundle",
 ]

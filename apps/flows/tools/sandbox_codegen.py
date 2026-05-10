@@ -25,8 +25,16 @@ from apps.flows.src.eval.codegen_utils import (
 from apps.flows.src.eval.platform_services import get_code_runner
 from apps.flows.src.tools import tool
 from core.clients.llm import get_llm
+from core.config import get_settings
 
-SANDBOX_CODEGEN_DEFAULT_MODEL = "qwen/qwen3.5-397b-a17b"
+
+def _sandbox_codegen_default_model() -> str:
+    """Платформенный дефолт модели codegen — берётся из ``settings.llm.default_model``."""
+    s = get_settings()
+    m = (s.llm.default_model or "").strip()
+    if not m:
+        raise ValueError("sandbox_codegen: settings.llm.default_model не задан")
+    return m
 
 
 class LLMGeneratedCode(BaseModel):
@@ -79,18 +87,18 @@ class SandboxCodegenArgs(BaseModel):
     max_iterations: int = Field(default=5, ge=1, le=20)
     max_doc_chars: int = Field(default=120_000, ge=5000, le=500_000)
     model: str = Field(
-        default=SANDBOX_CODEGEN_DEFAULT_MODEL,
+        default_factory=_sandbox_codegen_default_model,
         min_length=1,
-        description="Имя модели LLM для codegen (OpenRouter id).",
+        description="Имя модели LLM для codegen; дефолт берётся из settings.llm.default_model.",
     )
 
     @field_validator("model", mode="before")
     @classmethod
     def _model_non_empty(cls, value: Any) -> Any:
         if value is None:
-            return SANDBOX_CODEGEN_DEFAULT_MODEL
+            return _sandbox_codegen_default_model()
         if isinstance(value, str) and value.strip() == "":
-            return SANDBOX_CODEGEN_DEFAULT_MODEL
+            return _sandbox_codegen_default_model()
         return value
 
     @field_validator("run_variables", mode="before")

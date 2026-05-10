@@ -9,7 +9,7 @@ from apps.rag_worker.broker import broker
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
-from core.models.identity_models import Company, User
+from core.models.identity_models import User
 from core.rag.upload_profile_binding import UploadProfileBinding
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.tracing import attributes as trace_attributes
@@ -18,12 +18,17 @@ from core.tracing.operation_span import traced_operation
 logger = get_logger(__name__)
 
 
-def _embedding_context_for_rag_worker(
+async def _embedding_context_for_rag_worker(
     *,
     company_id: str,
     user_id: str,
     namespace_id: str,
 ) -> Context:
+    """Загружает полную ``Company`` (вкл. ``metadata.ai_providers``) для воркера.
+
+    Без этого per-company embedding override игнорировался бы в фоне (контекст ходит
+    с пустым ``Company.metadata`` → резолвер не видит override).
+    """
     cid = str(company_id).strip()
     uid = str(user_id).strip()
     ns = str(namespace_id).strip() or "default"
@@ -31,9 +36,14 @@ def _embedding_context_for_rag_worker(
         raise ValueError("company_id обязателен для контекста эмбеддингов в RAG worker")
     if not uid:
         raise ValueError("user_id обязателен для контекста эмбеддингов в RAG worker")
+
+    container = get_rag_container()
+    company = await container.company_repository.get(cid)
+    if company is None:
+        raise ValueError(f"RAG worker: компания {cid!r} не найдена")
     return Context(
         user=User(user_id=uid, name="RAG worker"),
-        active_company=Company(company_id=cid, name=cid),
+        active_company=company,
         channel="rag_worker",
         active_namespace=ns,
     )
@@ -69,7 +79,7 @@ async def index_rag_document_s3_task(
         raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.index.upload_s3.")
 
     set_context(
-        _embedding_context_for_rag_worker(
+        await _embedding_context_for_rag_worker(
             company_id=str(trace_company_id).strip(),
             user_id=str(trace_user_id).strip(),
             namespace_id=namespace_id,
@@ -223,7 +233,7 @@ async def process_document_upload(
         raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.ingest.full.")
 
     set_context(
-        _embedding_context_for_rag_worker(
+        await _embedding_context_for_rag_worker(
             company_id=str(trace_company_id).strip(),
             user_id=str(trace_user_id).strip(),
             namespace_id=namespace_id,

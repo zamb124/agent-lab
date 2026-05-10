@@ -49,7 +49,16 @@ import {
     billingPlanChangeOp,
     billingTopupOp,
 } from '../events/resources/billing.resource.js';
-import { settingsLoadOp, settingsUpdateOp } from '../events/resources/settings.resource.js';
+import {
+    settingsLoadOp,
+    settingsUpdateOp,
+    aiProvidersLoadOp,
+    aiProviderCapabilityPutOp,
+    aiProviderCapabilityDeleteOp,
+    aiCustomProviderCreateOp,
+    aiCustomProviderUpdateOp,
+    aiCustomProviderDeleteOp,
+} from '../events/resources/settings.resource.js';
 import { leadSubmitOp, leadRequestsList } from '../events/resources/leads.resource.js';
 import { tracingSpansList, tracingFacets, tracingTraceLoadOp } from '../events/resources/tracing.resource.js';
 import {
@@ -223,6 +232,12 @@ export class FrontendApp extends PlatformApp {
         billingTopupOp,
         settingsLoadOp,
         settingsUpdateOp,
+        aiProvidersLoadOp,
+        aiProviderCapabilityPutOp,
+        aiProviderCapabilityDeleteOp,
+        aiCustomProviderCreateOp,
+        aiCustomProviderUpdateOp,
+        aiCustomProviderDeleteOp,
         leadSubmitOp,
         leadRequestsList,
         tracingSpansList,

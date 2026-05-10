@@ -661,13 +661,21 @@ class LlmNode(BaseNode):
         self._loaded_tools = tools
 
     def _get_llm(self, state: Optional[ExecutionState] = None):
-        """Возвращает LLM клиент."""
+        """Возвращает LLM клиент.
+
+        Runtime overlay для capability LLM_CHAT: если у активной компании задан
+        ``llm_chat`` override (BYOK поверх платформенного провайдера или custom),
+        и у ноды нет своего ``api_key``/``base_url``, накладываем company-провайдера
+        поверх дефолтов из bundle. Это позволяет компании переключить ВСЕ flows
+        на свой ключ/endpoint без правки JSON-бандлов.
+        """
         model = None
         temp = None
         provider = None
         api_key = None
         base_url = None
         folder_id = None
+        extra_request_headers: Optional[Dict[str, str]] = None
 
         if self._node_config and self._node_config.llm_override:
             override = self._node_config.llm_override
@@ -677,6 +685,7 @@ class LlmNode(BaseNode):
             api_key = override.api_key
             base_url = override.base_url
             folder_id = override.folder_id
+            extra_request_headers = override.extra_request_headers
         elif self.llm_config_dict:
             model = self.llm_config_dict.get("model")
             temp = self.llm_config_dict.get("temperature")
@@ -684,6 +693,42 @@ class LlmNode(BaseNode):
             api_key = self.llm_config_dict.get("api_key")
             base_url = self.llm_config_dict.get("base_url")
             folder_id = self.llm_config_dict.get("folder_id")
+
+        node_has_byok = bool(
+            (api_key and str(api_key).strip()) or (base_url and str(base_url).strip())
+        )
+        if not node_has_byok:
+            from core.company_ai import AICapability, resolve_llm_for_capability
+
+            cap_value = (
+                self._node_config.llm_capability
+                if self._node_config and self._node_config.llm_capability
+                else AICapability.LLM_CHAT.value
+            )
+            try:
+                capability = AICapability(cap_value)
+            except ValueError as e:
+                raise ValueError(
+                    f"LlmNode {self.node_id}: неизвестный llm_capability {cap_value!r}"
+                ) from e
+            try:
+                resolved = resolve_llm_for_capability(
+                    capability,
+                    fallback_provider=provider,
+                    fallback_model=model,
+                )
+            except Exception:
+                resolved = None
+            if resolved is not None and resolved.cost_origin == "company":
+                provider = resolved.provider
+                model = resolved.model
+                api_key = resolved.api_key
+                base_url = resolved.base_url
+                folder_id = resolved.folder_id or folder_id
+                if resolved.extra_request_headers:
+                    merged = dict(extra_request_headers or {})
+                    merged.update(resolved.extra_request_headers)
+                    extra_request_headers = merged
 
         logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
         max_tok = None

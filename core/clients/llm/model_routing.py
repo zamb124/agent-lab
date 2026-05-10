@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Optional
 
 LLM_ROUTING_PROVIDER_SLUGS = frozenset(
-    {"openrouter", "openai", "bothub", "provider_litserve", "yandex"}
+    {"openrouter", "openai", "bothub", "provider_litserve", "yandex", "custom_openai_compatible"}
 )
 
 

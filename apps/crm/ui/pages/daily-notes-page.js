@@ -34,6 +34,7 @@ import {
     hasGetUserMediaApi,
     pickVoiceMimeType,
 } from '@platform/lib/utils/voice-recording.js';
+import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-date-picker.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -1048,6 +1049,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             : (typeof payload.namespace === 'string' && payload.namespace.length > 0 ? payload.namespace : null);
         if (ns !== payloadNs) return;
         if (typeof payload.note_date !== 'string') return;
+        const mf = payload.markdown_format;
+        if (mf && (mf.phase === 'partial' || mf.phase === 'started')) {
+            return;
+        }
         if (payload.note_date < this._dailyNotesUi.value.range.from || payload.note_date > this._dailyNotesUi.value.range.to) return;
         const next = { ...this._noteEntitiesByNoteId };
         delete next[payload.note_id.trim()];
@@ -1401,12 +1406,19 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             && attrs.ai_analysis_draft.note && typeof attrs.ai_analysis_draft.note === 'object'
             && typeof attrs.ai_analysis_draft.note.description === 'string'
             && attrs.ai_analysis_draft.note.description.trim().length > 0) {
-            return this._truncate(attrs.ai_analysis_draft.note.description, 260);
+            return this._truncate(
+                stripOuterMarkdownCodeFence(attrs.ai_analysis_draft.note.description),
+                260,
+            );
         }
-        const desc = typeof note.description === 'string' && note.description.trim().length > 0
+        const emptyLabel = this.t('note_content.no_description');
+        const descRaw = typeof note.description === 'string' && note.description.trim().length > 0
             ? note.description
-            : this.t('note_content.no_description');
-        return this._truncate(desc, 220);
+            : null;
+        if (descRaw === null) {
+            return emptyLabel;
+        }
+        return this._truncate(stripOuterMarkdownCodeFence(descRaw), 220);
     }
 
     _truncate(text, maxLength) {

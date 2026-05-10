@@ -376,9 +376,25 @@ class EmbeddingService:
         return self._active_model
 
     def runtime_snapshot(self, *, embedding_tokens: int) -> dict[str, Any]:
-        """Текущее состояние runtime для записи в indexing_runtime."""
+        """Текущее состояние runtime для записи в indexing_runtime.
+
+        Provider определяется по api_url, чтобы не лгать в логах при LitServe.
+        """
+        url = (self.api_url or "").lower()
+        if "openrouter.ai" in url:
+            provider = "openrouter"
+        elif "8014" in url or "provider_litserve" in url or "provider-litserve" in url:
+            provider = "provider_litserve"
+        elif "api.openai.com" in url:
+            provider = "openai"
+        elif "bothub.chat" in url:
+            provider = "bothub"
+        elif "yandex" in url:
+            provider = "yandex"
+        else:
+            provider = "custom_openai_compatible"
         snap: dict[str, Any] = {
-            "provider": "openrouter",
+            "provider": provider,
             "api_url": self.api_url,
             "model_used": self.model,
             "dimension": self.get_embedding_dimension(),

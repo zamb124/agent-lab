@@ -19,7 +19,8 @@ notification-center, второй — про обновление доменно
 
 from __future__ import annotations
 
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import Any, Literal, Optional, TypedDict, TYPE_CHECKING
+
 
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
@@ -38,6 +39,14 @@ logger = get_logger(__name__)
 CrmNoteWsAction = Literal["created", "updated", "deleted"]
 
 
+class MarkdownFormatProgressPayload(TypedDict):
+    """Дополнение payload события ``crm/note/updated`` при format_markdown (очередь + прогресс + финал)."""
+
+    phase: Literal["started", "partial", "complete"]
+    chunks_done: int
+    chunks_total: int
+
+
 async def broadcast_crm_note_event(
     company_id: str,
     namespace: str,
@@ -47,6 +56,8 @@ async def broadcast_crm_note_event(
     *,
     company_repository: "CompanyRepository",
     access_grant_repository: "AccessGrantRepository",
+    skip_notification_center: bool = False,
+    markdown_format: MarkdownFormatProgressPayload | None = None,
 ) -> None:
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
     recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
@@ -72,24 +83,27 @@ async def broadcast_crm_note_event(
     else:
         title = "Заметка удалена"
         message = "Заметка удалена"
-    ui_event_payload = {
+    ui_event_payload: dict[str, Any] = {
         "company_id": company_id,
         "namespace": normalized_namespace,
         "note_id": note_id,
         "note_date": note_date_iso,
         "action": action,
     }
+    if markdown_format is not None:
+        ui_event_payload["markdown_format"] = markdown_format
     for user_id in recipient_user_ids:
-        await notify_user(
-            user_id=user_id,
-            notification=Notification(
-                type=NotificationType.CRM_NOTE_UPDATED,
-                title=title,
-                message=message,
-                service="crm",
-                data=notification_data,
-            ),
-        )
+        if not skip_notification_center:
+            await notify_user(
+                user_id=user_id,
+                notification=Notification(
+                    type=NotificationType.CRM_NOTE_UPDATED,
+                    title=title,
+                    message=message,
+                    service="crm",
+                    data=notification_data,
+                ),
+            )
         await publish_ui_event_to_user(
             user_id=user_id,
             type="crm/note/updated",

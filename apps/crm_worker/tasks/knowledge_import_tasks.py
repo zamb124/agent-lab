@@ -76,7 +76,7 @@ async def run_knowledge_import_task(
 
     data = row.data
     used_redis = data.get("source_text_sha256") is not None
-    _set_crm_context(
+    await _set_crm_context(
         company_id,
         row.namespace,
         auth_token,

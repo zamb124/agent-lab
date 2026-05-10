@@ -11,7 +11,7 @@ RAG система с поддержкой различных провайдер
 
 from .base_provider import BaseRAGProvider
 from .chunking import split_parsed_document, split_plain_text_fixed_tokens
-from .factory import get_default_rag_provider, get_rag_provider
+from .factory import get_rag_provider
 from core.rag_indexing_schema import (
     IndexProfileConfig,
     IndexProfileLexicalConfig,
@@ -79,7 +79,6 @@ __all__ = [
     "RagResourceBindParams",
     "split_parsed_document",
     "split_plain_text_fixed_tokens",
-    "get_default_rag_provider",
     "get_rag_provider",
     "RAGRepository",
     "RerankerClientError",

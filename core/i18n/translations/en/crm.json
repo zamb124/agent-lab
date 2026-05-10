@@ -629,7 +629,8 @@
         "summary_entity_open": "Open entity",
         "graph_inline_title": "Around this note",
         "markdown_format_action": "Format text as Markdown",
-        "markdown_formatting": "Formatting as Markdown…"
+        "markdown_formatting": "Formatting as Markdown…",
+        "markdown_format_progress": "Part {{done}} of {{total}}"
     },
     "note_edit": {
         "field_description": "Note text",

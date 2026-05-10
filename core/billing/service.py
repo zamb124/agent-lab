@@ -48,6 +48,9 @@ BALANCE_BLOCK_OPERATION_VISION = "vision"
 BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM = "livekit_room"
 BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS = "livekit_egress"
 
+COST_ORIGIN_PLATFORM = "platform"
+COST_ORIGIN_COMPANY = "company"
+
 _BALANCE_BLOCK_OPERATION_I18N_KEYS: dict[str, str] = {
     BALANCE_BLOCK_OPERATION_LLM: "billing.notifications.blocked_operation.llm",
     BALANCE_BLOCK_OPERATION_EMBEDDING: "billing.notifications.blocked_operation.embedding",
@@ -114,11 +117,17 @@ class BillingService:
         *,
         operation_code: str,
         notification_service: str = "frontend",
+        cost_origin: str = COST_ORIGIN_PLATFORM,
     ) -> None:
         """
         Pre-flight перед операцией, которая создаёт span с pending_settlement.
         При блокировке по балансу отправляет notify_user с пояснением (язык из контекста или RU).
+
+        ``cost_origin == "company"`` — вызов идёт через ключ компании, биллинга нет, проверка
+        баланса пропускается.
         """
+        if cost_origin == COST_ORIGIN_COMPANY:
+            return
         if not self._balance_enforcement_enabled:
             return
         cid = (company_id or "").strip()
@@ -334,19 +343,32 @@ class BillingService:
         cost: float,
         usage_type: UsageType = UsageType.TOOL_CALL,
         quantity: int = 1,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        cost_origin: str = COST_ORIGIN_PLATFORM,
     ) -> str:
-        """Записывает использование ресурса. Возвращает usage_id."""
-        
+        """Записывает использование ресурса. Возвращает usage_id.
+
+        ``cost_origin``:
+
+        - ``platform`` — стандартное списание с баланса компании.
+        - ``company`` — компания платит сама (BYOK / custom провайдер); запись создаётся
+          с ``cost=0``, баланс и ``current_month_spent`` не трогаются. Метка фиксируется
+          в metadata записи, чтобы аналитика видела факт использования и провайдера.
+        """
+
         context = get_context()
         session_id = context.session_id if context else None
-        
-        # ВАЖНО: загружаем актуальную компанию из БД чтобы не перезаписать данные
+
         actual_company = await self._company_repository.get(company.company_id)
         if not actual_company:
             raise ValueError(f"Компания {company.company_id} не найдена в БД")
-        
-        # Создаем запись об использовании
+
+        is_company = cost_origin == COST_ORIGIN_COMPANY
+        effective_cost = 0.0 if is_company else cost
+
+        record_metadata = dict(metadata or {})
+        record_metadata["cost_origin"] = cost_origin
+
         usage_record = UsageRecord(
             usage_id=str(uuid.uuid4()),
             user_id=user.user_id,
@@ -354,39 +376,49 @@ class BillingService:
             session_id=session_id,
             usage_type=usage_type,
             resource_name=resource_name,
-            cost=cost,
+            cost=effective_cost,
             quantity=quantity,
-            metadata=metadata or {}
+            metadata=record_metadata,
         )
-        
-        logger.info(f"Сохраняем запись использования: usage_id={usage_record.usage_id}, стоимость={cost}₽")
-        
+
+        logger.info(
+            "Сохраняем запись использования: usage_id=%s, стоимость=%s₽, cost_origin=%s",
+            usage_record.usage_id,
+            effective_cost,
+            cost_origin,
+        )
+
         if not self._usage_repository:
             raise RuntimeError(
                 "UsageRepository не настроен. Биллинг не может работать без репозитория. "
                 "Проверьте инициализацию BillingService."
             )
-        
-        await self._usage_repository.set(usage_record)
-        
-        # Обновляем баланс и потраченную сумму компании
-        old_balance = actual_company.balance
-        old_spent = actual_company.current_month_spent
-        
-        actual_company.balance -= cost
-        actual_company.current_month_spent += cost
 
-        logger.info(f"Обновляем компанию {actual_company.company_id}:")
-        logger.info(f"Баланс: {old_balance:.2f}₽ → {actual_company.balance:.2f}₽")
-        logger.info(f"Потрачено в месяце: {old_spent:.2f}₽ → {actual_company.current_month_spent:.2f}₽")
-        
-        await self._company_repository.set(actual_company)
-        
-        # Обновляем баланс в переданном объекте для консистентности в текущем контексте
-        company.balance = actual_company.balance
-        company.current_month_spent = actual_company.current_month_spent
-        
-        logger.info(f"Записано использование {resource_name} для компании {actual_company.company_id}: {cost}₽")
+        await self._usage_repository.set(usage_record)
+
+        if not is_company:
+            old_balance = actual_company.balance
+            old_spent = actual_company.current_month_spent
+            actual_company.balance -= effective_cost
+            actual_company.current_month_spent += effective_cost
+            logger.info(
+                "Обновляем компанию %s: баланс %.2f → %.2f, потрачено %.2f → %.2f",
+                actual_company.company_id,
+                old_balance,
+                actual_company.balance,
+                old_spent,
+                actual_company.current_month_spent,
+            )
+            await self._company_repository.set(actual_company)
+            company.balance = actual_company.balance
+            company.current_month_spent = actual_company.current_month_spent
+        else:
+            logger.info(
+                "cost_origin=company: ресурс %s, баланс не списан (запись %s — для аналитики)",
+                resource_name,
+                usage_record.usage_id,
+            )
+
         return usage_record.usage_id
 
     async def settle_span_charge(
@@ -447,11 +479,16 @@ class BillingService:
         unit_cost = await self.get_resource_cost_for_company(company, resource_name)
         cost = unit_cost * quantity
 
+        cost_origin = attrs.get(trace_attr.ATTR_BILLING_COST_ORIGIN, COST_ORIGIN_PLATFORM)
         meta: Dict[str, Any] = {
             "span_id": span_id,
             "trace_id": span_dict.get("trace_id"),
             "settlement_source": "span_billing_job",
         }
+        custom_pid = attrs.get(trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID)
+        if custom_pid:
+            meta["custom_provider_id"] = custom_pid
+
         usage_id = await self.record_usage(
             user,
             company,
@@ -460,6 +497,7 @@ class BillingService:
             usage_type=usage_type,
             quantity=quantity,
             metadata=meta,
+            cost_origin=cost_origin,
         )
         await settlement.mark(span_id, LEGACY_SPAN_ONLY_RULE_ID, usage_id)
         return usage_id
@@ -510,12 +548,18 @@ class BillingService:
         unit_cost = await self._unit_cost_for_company(company, resource_name)
         cost = unit_cost * quantity
 
+        attrs = span_dict.get("attributes") or {}
+        cost_origin = attrs.get(trace_attr.ATTR_BILLING_COST_ORIGIN, COST_ORIGIN_PLATFORM)
+        custom_pid = attrs.get(trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID)
         meta: Dict[str, Any] = {
             "span_id": span_id,
             "trace_id": span_dict.get("trace_id"),
             "rule_id": rule.rule_id,
             "settlement_source": "span_billing_job",
         }
+        if custom_pid:
+            meta["custom_provider_id"] = custom_pid
+
         usage_id = await self.record_usage(
             user,
             company,
@@ -524,6 +568,7 @@ class BillingService:
             usage_type=usage_type,
             quantity=quantity,
             metadata=meta,
+            cost_origin=cost_origin,
         )
         await settlement.mark(span_id, rule.rule_id, usage_id)
         return usage_id

@@ -64,6 +64,7 @@ from apps.crm.services.daily_summary_cache_service import DailySummaryCacheServi
 from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
 from core.clients.a2a_client import A2AClient
+from core.company_ai import AICapability, resolve_llm_for_capability
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger

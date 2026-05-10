@@ -123,13 +123,14 @@ class AttachmentService:
                 access_grant_repository=self._access_grant_repo,
             )
 
+        markdown_format_queued = False
         if (
             entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
             and attachment_had_extractable_text
         ):
             from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
 
-            await schedule_note_markdown_format(
+            markdown_format_queued = await schedule_note_markdown_format(
                 note_id=entity_id,
                 company_id=company_id,
                 namespace=namespace,
@@ -145,7 +146,8 @@ class AttachmentService:
             "document_id": document_id,
             "filename": filename,
             "status": response["status"],
-            "task_id": response.get("task_id")
+            "task_id": response.get("task_id"),
+            "markdown_format_queued": markdown_format_queued,
         }
     
     async def remove_attachment(

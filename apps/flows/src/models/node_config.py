@@ -193,6 +193,24 @@ class NodeConfig(StrictBaseModel):
         description="Переопределение LLM настроек (если None - из global config)", 
         alias="llm"
     )
+    llm_capability: Optional[
+        Literal[
+            "llm_chat",
+            "llm_summarize",
+            "llm_format_markdown",
+            "llm_codegen",
+            "llm_vision",
+            "image_gen",
+        ]
+    ] = Field(
+        default=None,
+        description=(
+            "Декларативная capability ноды для company AI overlay. "
+            "Если None — считается llm_chat. Если у компании в metadata.ai_providers "
+            "задан override этой capability, runtime подменяет provider/model/api_key "
+            "перед вызовом LLM. См. core/company_ai/resolver.py."
+        ),
+    )
     react: Optional[ReactConfig] = Field(
         default=None, description="Конфигурация ReAct цикла (loop_mode, exit_tool)"
     )

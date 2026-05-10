@@ -97,6 +97,10 @@ ATTR_BILLING_QUANTITY = "platform.billing.quantity"
 # Целые рубли для settlement, если провайдер отдал USD (OpenRouter): round(usd * billing.usd_to_rub_rate)
 ATTR_BILLING_SETTLEMENT_QUANTITY_RUB = "platform.billing.settlement_quantity_rub"
 ATTR_BILLING_PENDING_SETTLEMENT = "platform.billing.pending_settlement"
+# "platform" (стандартное списание) или "company" (BYOK / custom провайдер — биллинга нет)
+ATTR_BILLING_COST_ORIGIN = "platform.billing.cost_origin"
+# id custom OpenAI-compatible провайдера компании, если использовался (для аналитики)
+ATTR_BILLING_CUSTOM_PROVIDER_ID = "platform.billing.custom_provider_id"
 ATTR_OPERATION_CATEGORY = "platform.operation.category"
 
 # RAG / embeddings

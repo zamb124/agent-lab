@@ -18,7 +18,7 @@ from apps.crm.services.namespace_notification_recipients import (
 from apps.crm_worker.broker import broker
 from core.context import Context, set_context
 from core.logging import get_logger
-from core.models.identity_models import Company, User
+from core.models.identity_models import User
 from core.models.i18n_models import Language
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 _WORKER_PLACEHOLDER_USER_IDS = frozenset({"crm-worker"})
 
 
-def _set_crm_context(
+async def _set_crm_context(
     company_id: str,
     namespace: Optional[str] = None,
     auth_token: Optional[str] = None,
@@ -50,9 +50,13 @@ def _set_crm_context(
         normalized_namespace = s
     resolved_user_id = user_id or "crm-worker"
     lang = Language(interface_language) if interface_language is not None else Language.RU
+    container = get_crm_container()
+    company_row = await container.company_repository.get(company_id)
+    if company_row is None:
+        raise ValueError(f"Company not found for CRM worker context: {company_id}")
     context = Context(
         user=User(user_id=resolved_user_id, name="CRM Worker"),
-        active_company=Company(company_id=company_id, name=company_id),
+        active_company=company_row,
         session_id=f"crm-worker:{company_id}",
         channel="taskiq",
         active_namespace=normalized_namespace,
@@ -147,7 +151,7 @@ async def rebuild_daily_summary_task(
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
         resolved_auth_token = await _build_auth_token_for_company(company_id=company_id, user_id=user_id)
-    _set_crm_context(
+    await _set_crm_context(
         company_id=company_id,
         namespace=namespace,
         auth_token=resolved_auth_token,
@@ -224,7 +228,7 @@ async def rebuild_period_summary_task(
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
         resolved_auth_token = await _build_auth_token_for_company(company_id=company_id, user_id=user_id)
-    _set_crm_context(
+    await _set_crm_context(
         company_id=company_id,
         namespace=namespace,
         auth_token=resolved_auth_token,
@@ -329,7 +333,7 @@ async def reconcile_daily_summary_task(days_back: int = 1) -> dict[str, Any]:
         company_id = row.company_id
         namespace = row.namespace
         note_date = row.note_date
-        _set_crm_context(company_id=company_id, namespace=namespace)
+        await _set_crm_context(company_id=company_id, namespace=namespace)
         queued = await container.entity_service.enqueue_daily_summary_rebuild(
             date_str=note_date.isoformat(),
             namespace=namespace,

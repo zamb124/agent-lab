@@ -5,6 +5,8 @@
 Источники spans с platform.billing.pending_settlement (operation_name при сохранении в БД):
 
 - llm.{model} — core/tracing/tracer.py (record_llm_response на CLIENT span)
+- llm.provider_litserve.format_markdown — core/text_transforms/service.py (HTTP ``/v1/text/format_markdown``;
+  токены из ответа LitServe в ``platform.llm.*_tokens``, settlement — правило ``llm_tracer_tokens``)
 - flows.llm_resource.complete | .chat | .chat_with_tools — apps/flows/src/resources/wrappers/llm_resource.py
 - flows.llm.invoke_task — apps/flows/src/tasks/llm_tasks.py
 - rag.embed.batch — core/rag/services/embedding_service.py

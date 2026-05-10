@@ -31,6 +31,7 @@ import './modals/create-scheduler-task-modal.js';
 import './modals/topup-modal.js';
 import './modals/system-access-modal.js';
 import './modals/balance-grant-modal.js';
+import './modals/ai-custom-provider-modal.js';
 
 import './components/landing/landing-header.js';
 import './components/landing/landing-hero.js';

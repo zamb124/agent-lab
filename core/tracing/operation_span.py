@@ -24,6 +24,8 @@ async def traced_operation(
     billing_resource_name: Optional[str] = None,
     billing_quantity: Optional[int] = None,
     billing_pending_settlement: bool = False,
+    billing_cost_origin: Optional[str] = None,
+    billing_custom_provider_id: Optional[str] = None,
     resource_type: Optional[str] = None,
     resource_id: Optional[str] = None,
     trace_ctx: Optional[TraceContext] = None,
@@ -33,6 +35,9 @@ async def traced_operation(
     operation_name: стабильная строка вида service.area.action.
     billing_usage_type: значение UsageType (строка), например embedding_request.
     billing_pending_settlement: если True — span попадёт в фоновое списание (idle job), иначе только observability.
+    billing_cost_origin: ``"platform"`` или ``"company"``; при ``"company"`` settlement создаст
+        UsageRecord с ``cost=0`` (баланс не трогается, см. core/billing/service.py).
+    billing_custom_provider_id: id custom OpenAI-compatible провайдера компании (опц., для аналитики).
     """
     merged: Dict[str, Any] = dict(extra_attributes or {})
     if operation_category:
@@ -45,6 +50,10 @@ async def traced_operation(
         merged[attr.ATTR_BILLING_QUANTITY] = billing_quantity
     if billing_pending_settlement:
         merged[attr.ATTR_BILLING_PENDING_SETTLEMENT] = True
+    if billing_cost_origin is not None:
+        merged[attr.ATTR_BILLING_COST_ORIGIN] = billing_cost_origin
+    if billing_custom_provider_id is not None:
+        merged[attr.ATTR_BILLING_CUSTOM_PROVIDER_ID] = billing_custom_provider_id
 
     tracer = get_tracer()
     async with tracer.platform_operation_span(

@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional
 
 from core.billing import get_billing_service
+from core.billing.service import COST_ORIGIN_COMPANY, COST_ORIGIN_PLATFORM
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company, User
@@ -49,11 +50,12 @@ async def record_stt_usage(
     provider: str,
     audio_seconds: float,
     metadata: Optional[Mapping[str, Any]] = None,
+    cost_origin: str = COST_ORIGIN_PLATFORM,
 ) -> str:
     """Записать списание за STT-вызов.
 
-    quantity = округлённое вверх число секунд аудио (минимум 1). Стоимость
-    единицы — `stt:<provider>` из прайса.
+    quantity = округлённое вверх число секунд аудио (минимум 1). При ``cost_origin=company``
+    запись пишется с ``cost=0`` (компания платит провайдеру напрямую).
     """
     if not provider or not isinstance(provider, str):
         raise ValueError("voice_usage.record_stt_usage: provider обязателен.")
@@ -62,11 +64,15 @@ async def record_stt_usage(
 
     user_obj, company_obj = _resolve_actor(user=user, company=company)
     quantity = max(1, int(audio_seconds + 0.999))
-    resource_name = f"stt:{provider}"
+    is_company = cost_origin == COST_ORIGIN_COMPANY
+    resource_name = "stt:byok" if is_company else f"stt:{provider}"
 
     billing = get_billing_service()
-    unit_cost = await billing.get_resource_cost_for_company(company_obj, resource_name)
-    total_cost = unit_cost * quantity
+    if is_company:
+        total_cost = 0.0
+    else:
+        unit_cost = await billing.get_resource_cost_for_company(company_obj, resource_name)
+        total_cost = unit_cost * quantity
 
     return await billing.record_usage(
         user=user_obj,
@@ -81,6 +87,7 @@ async def record_stt_usage(
             "kind": "stt",
             **(dict(metadata) if metadata else {}),
         },
+        cost_origin=cost_origin,
     )
 
 
@@ -91,11 +98,9 @@ async def record_tts_usage(
     provider: str,
     char_count: int,
     metadata: Optional[Mapping[str, Any]] = None,
+    cost_origin: str = COST_ORIGIN_PLATFORM,
 ) -> str:
-    """Записать списание за TTS-вызов.
-
-    quantity = число символов исходного текста. Стоимость единицы — `tts:<provider>`.
-    """
+    """Записать списание за TTS-вызов; при ``cost_origin=company`` cost=0."""
     if not provider or not isinstance(provider, str):
         raise ValueError("voice_usage.record_tts_usage: provider обязателен.")
     if char_count < 0:
@@ -103,11 +108,15 @@ async def record_tts_usage(
 
     user_obj, company_obj = _resolve_actor(user=user, company=company)
     quantity = max(1, int(char_count))
-    resource_name = f"tts:{provider}"
+    is_company = cost_origin == COST_ORIGIN_COMPANY
+    resource_name = "tts:byok" if is_company else f"tts:{provider}"
 
     billing = get_billing_service()
-    unit_cost = await billing.get_resource_cost_for_company(company_obj, resource_name)
-    total_cost = unit_cost * quantity
+    if is_company:
+        total_cost = 0.0
+    else:
+        unit_cost = await billing.get_resource_cost_for_company(company_obj, resource_name)
+        total_cost = unit_cost * quantity
 
     return await billing.record_usage(
         user=user_obj,
@@ -122,6 +131,7 @@ async def record_tts_usage(
             "kind": "tts",
             **(dict(metadata) if metadata else {}),
         },
+        cost_origin=cost_origin,
     )
 
 

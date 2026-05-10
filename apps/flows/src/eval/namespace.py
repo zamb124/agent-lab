@@ -39,6 +39,7 @@ from apps.flows.src.eval.platform_services import (
     get_oauth_service,
     get_operator_handoff_service,
     get_schedule_service,
+    get_text_transform_service,
     synthesize_speech,
     transcribe_audio,
 )
@@ -245,6 +246,7 @@ class PythonNamespaceBuilder:
         namespace["BrowserSnapshotDescribe"] = BrowserSnapshotDescribe
         namespace["get_google_oauth_token"] = get_google_oauth_token
         namespace["get_lara_facade"] = get_lara_facade
+        namespace["get_text_transform_service"] = get_text_transform_service
         namespace["GoogleDocsClient"] = GoogleDocsClient
         namespace["quote"] = quote
         namespace["_require_context_namespace"] = _inline_require_context_namespace

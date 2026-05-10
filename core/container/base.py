@@ -314,16 +314,21 @@ class BaseContainer:
         from core.clients.service_client import ServiceClient
         return ServiceClient()
 
-    @lazy
+    @property
     def rag_provider(self):
-        """Дефолтный RAG-провайдер процесса: ``rag.default_provider`` (API сервиса rag, переключение провайдера)."""
-        from core.rag.factory import get_default_rag_provider
+        """Дефолтный RAG-провайдер: на каждый доступ — фабрика с учётом per-company override.
 
-        return get_default_rag_provider()
+        НЕ ``@lazy``: per-company embedding override живёт в Context.active_company.metadata,
+        и закешированный провайдер на жизнь процесса игнорировал бы переключение
+        компании на её собственный embedding endpoint.
+        """
+        from core.rag.factory import get_rag_provider
 
-    @lazy
+        return get_rag_provider()
+
+    @property
     def rag_repository(self):
-        """RAGRepository: in-process всегда ``pgvector`` (хранение в нашей БД); поиск через ``service_client``."""
+        """RAGRepository: in-process всегда ``pgvector``; per-request с учётом company override."""
         from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
         from core.rag.factory import get_rag_provider
         from core.rag.repository import RAGRepository

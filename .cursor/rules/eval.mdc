@@ -10,7 +10,7 @@ alwaysApply: false
 - Sandbox видит **только whitelist** имён.
 - Платформенные сервисы (`core/`, `apps/`) — защищённый внутренний код, недоступный напрямую.
 
-Доступ из тула к платформе — **только через узкие фасады** (`platform_services.py`), зарегистрированные в namespace.
+Доступ из тула к платформе — **только через узкие фасады** (`platform_services.py`), зарегистрированные в namespace. Суммаризация и Markdown — `get_text_transform_service()` (`TextTransformService`): биллинг `require_balance` + списание как у LLM; HTTP Markdown LitServe — span `llm.provider_litserve.format_markdown` с токенами из поля `usage` ответа.
 
 **In-process sandbox:** где возможно — подмена безопасными объектами (реестр `apps/flows/src/eval/shim_registry.py`: `httpx`, `llm`, …) вместо запрета по имени, если семантика совместима. Полный CPython / произвольный `os`/`subprocess` в одном процессе с платформой недоступны (для этого нужен out-of-process sandbox — отдельная задача). Нормализация исходника (удаление `import apps|core*`) встроена в `PythonCompiler` при `strip_platform_imports=True` (default в `PythonCodeRunner`).
 

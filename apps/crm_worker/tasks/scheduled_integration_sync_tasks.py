@@ -70,7 +70,7 @@ async def scheduled_namespace_integration_unified_sync(
             }
 
     auth_token = await _build_auth_token_for_company(company_id, uid)
-    _set_crm_context(
+    await _set_crm_context(
         company_id,
         ns,
         auth_token=auth_token,

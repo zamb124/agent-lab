@@ -7,11 +7,18 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, List, Optional
 
 import httpx
 import tiktoken
 
+from core.company_ai.resolver import (
+    COST_ORIGIN_COMPANY,
+    COST_ORIGIN_PLATFORM,
+    CostOrigin,
+    resolve_rerank_for_company,
+)
 from core.config.base import BaseSettings
 from core.context import get_context
 from core.http import get_httpx_client
@@ -57,12 +64,18 @@ class RerankerHTTPClient:
         platform_markup: float = 1.1,
         billing_resource_id: str = "rerank",
         billing_service: Optional["BillingService"] = None,
+        cost_origin: CostOrigin = COST_ORIGIN_PLATFORM,
+        api_key: Optional[str] = None,
+        extra_request_headers: Optional[dict[str, str]] = None,
     ) -> None:
         self._timeout_seconds = timeout_seconds
         self.cost_per_1m_tokens = cost_per_1m_tokens
         self.platform_markup = platform_markup
         self.billing_resource_id = billing_resource_id
         self.billing_service = billing_service
+        self.cost_origin = cost_origin
+        self.api_key = api_key
+        self.extra_request_headers = dict(extra_request_headers or {}) or None
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def count_tokens(self, query: str, passages: List[str]) -> int:
@@ -90,17 +103,21 @@ class RerankerHTTPClient:
 
         billing = self.billing_service or self._get_billing_service()
         resource = self.billing_resource_id.strip() or "rerank"
+        is_company = self.cost_origin == COST_ORIGIN_COMPANY
+        effective_cost = 0.0 if is_company else cost
+        resource_name = "rerank:byok" if is_company else f"rerank:{resource}"
         logger.info(
-            "Rerank billing: tokens=%s cost=%.4f RUB resource=rerank:%s",
+            "Rerank billing: tokens=%s cost=%.4f RUB resource=%s cost_origin=%s",
             token_count,
-            cost,
-            resource,
+            effective_cost,
+            resource_name,
+            self.cost_origin,
         )
         await billing.record_usage(
             user=context.user,
             company=context.active_company,
-            resource_name=f"rerank:{resource}",
-            cost=cost,
+            resource_name=resource_name,
+            cost=effective_cost,
             usage_type=UsageType.RERANK_REQUEST,
             quantity=token_count,
             metadata={
@@ -108,7 +125,9 @@ class RerankerHTTPClient:
                 "tokens": token_count,
                 "cost_per_1m_tokens": self.cost_per_1m_tokens,
                 "platform_markup": self.platform_markup,
+                "cost_origin": self.cost_origin,
             },
+            cost_origin=self.cost_origin,
         )
 
     async def rerank(
@@ -136,6 +155,15 @@ class RerankerHTTPClient:
 
         payload = {"query": query, "passages": passages}
 
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.extra_request_headers:
+            headers.update(self.extra_request_headers)
+
         try:
             async with get_httpx_client(
                 timeout=self._timeout_seconds,
@@ -144,10 +172,7 @@ class RerankerHTTPClient:
                 response = await client.post(
                     endpoint_url.strip(),
                     json=payload,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                    },
+                    headers=headers,
                 )
         except httpx.TimeoutException as e:
             raise RerankerClientError(
@@ -231,11 +256,23 @@ class RerankerHTTPClient:
         return out
 
 
+@dataclass(frozen=True)
+class RerankResolution:
+    """Итог резолва rerank: enabled/url/cost_origin/api_key/headers."""
+
+    enabled: bool
+    url: Optional[str]
+    max_candidates: Optional[int]
+    cost_origin: CostOrigin
+    api_key: Optional[str] = None
+    extra_request_headers: Optional[dict[str, str]] = None
+
+
 def rerank_options(
     request_rerank: bool | None,
     profile_sd: IndexProfileSearchDefaults | None,
     settings: BaseSettings,
-) -> tuple[bool, str | None, int | None]:
+) -> RerankResolution:
     effective_sd = profile_sd
     if effective_sd is None:
         effective_sd = settings.rag.document_indexing.search_defaults
@@ -261,7 +298,42 @@ def rerank_options(
             )
 
     max_candidates = prof.max_candidates if prof is not None else None
-    return enabled, url, max_candidates
+
+    company_resolved = resolve_rerank_for_company()
+    if company_resolved is not None:
+        if not company_resolved.enabled:
+            return RerankResolution(
+                enabled=False,
+                url=None,
+                max_candidates=max_candidates,
+                cost_origin=company_resolved.cost_origin,
+            )
+        if company_resolved.url:
+            return RerankResolution(
+                enabled=True,
+                url=company_resolved.url,
+                max_candidates=max_candidates,
+                cost_origin=company_resolved.cost_origin,
+                api_key=company_resolved.api_key,
+                extra_request_headers=company_resolved.extra_request_headers,
+            )
+        # provider_litserve без явного URL — конструируем из настроек платформы
+        lit_url = provider_litserve_rerank_http_url(
+            settings.provider_litserve.resolve_openai_v1_base_url()
+        )
+        return RerankResolution(
+            enabled=True,
+            url=lit_url,
+            max_candidates=max_candidates,
+            cost_origin=company_resolved.cost_origin,
+        )
+
+    return RerankResolution(
+        enabled=enabled,
+        url=url,
+        max_candidates=max_candidates,
+        cost_origin=COST_ORIGIN_PLATFORM,
+    )
 
 
 async def apply_rerank_after_retrieve(
@@ -273,7 +345,10 @@ async def apply_rerank_after_retrieve(
     profile_sd: IndexProfileSearchDefaults | None,
     settings: BaseSettings,
 ) -> list[RAGSearchResult]:
-    enabled, url, max_candidates = rerank_options(request_rerank, profile_sd, settings)
+    resolution = rerank_options(request_rerank, profile_sd, settings)
+    enabled = resolution.enabled
+    url = resolution.url
+    max_candidates = resolution.max_candidates
     if not enabled:
         return results
     if provider_name != "pgvector":
@@ -292,6 +367,9 @@ async def apply_rerank_after_retrieve(
         cost_per_1m_tokens=rr.cost_per_1m_tokens,
         platform_markup=rr.platform_markup,
         billing_resource_id=rr.billing_model_id,
+        cost_origin=resolution.cost_origin,
+        api_key=resolution.api_key,
+        extra_request_headers=resolution.extra_request_headers,
     )
     return await client.rerank(url, query, results, max_candidates=max_candidates)
 

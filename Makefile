@@ -1,6 +1,6 @@
 .PHONY: help dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
-.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank build-i18n
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai build-i18n
 .PHONY: clean-i18n-unused base
 .PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
 
@@ -125,12 +125,15 @@ check-speakable-parity:
 check-tts-pipeline:
 	@uv run python scripts/check_tts_pipeline_single_apply.py
 
+check-company-ai:
+	uv run python scripts/check_company_ai_canon.py
+
 check-rag-post-retrieval-rerank:
 	@uv run python scripts/check_rag_post_retrieval_rerank_single.py
 
 check-voice-canon: check-voice-resolver check-speakable-parity check-tts-pipeline
 
-check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-i18n check-i18n-keys
+check-events-canon: check-core-frontend-canon check-ui-canon check-ui-factories check-command-rest-mirror check-voice-resolver check-speakable-parity check-tts-pipeline check-rag-post-retrieval-rerank check-company-ai check-i18n check-i18n-keys
 	@echo "check-events-canon: OK"
 
 check-i18n:
