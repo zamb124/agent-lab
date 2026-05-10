@@ -42,8 +42,50 @@ import {
 } from '../voice/stream-tts-registry.js';
 import './embed-block-renderer.js';
 import './embed-chat-input.js';
+import { hasPlatformBus } from '../events/bus-singleton.js';
+import { bootstrapPlatformBus, completeBootstrap } from '../events/bootstrap.js';
 
 let mid = 0;
+
+/** Путь вида `/flows` для baseUrl платформы; пустая строка — как у shell без сервисного префикса. */
+function _serviceBasePathFromFlowsBaseUrl(flowsBaseUrl) {
+    if (typeof flowsBaseUrl !== 'string') {
+        return '';
+    }
+    const t = flowsBaseUrl.trim();
+    if (t === '') return '';
+    try {
+        const baseHref = typeof globalThis.location !== 'undefined' && globalThis.location.href
+            ? globalThis.location.href
+            : 'https://localhost/';
+        const href = /^https?:\/\//i.test(t) ? t : new URL(t, baseHref).href;
+        const pathname = new URL(href).pathname.replace(/\/+$/, '');
+        return pathname;
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Core-компоненты (platform-assistant-message-actions и др.) расширяют PlatformElement,
+ * который в connectedCallback требует getPlatformBus. Полноценного PlatformApp в embed нет —
+ * поднимаем один EventBus синхронно до super.connectedCallback.
+ */
+function ensurePlatformBusForEmbedChat(flowsBaseUrl) {
+    if (typeof window === 'undefined' || hasPlatformBus()) return;
+    const devMode =
+        typeof location !== 'undefined' && /[?&]platform_devtools=1\b/.test(location.search);
+    const baseUrl = _serviceBasePathFromFlowsBaseUrl(flowsBaseUrl);
+    bootstrapPlatformBus({
+        baseUrl,
+        routes: [],
+        slices: {},
+        effects: [],
+        devMode,
+    });
+    completeBootstrap();
+}
+
 const ASSISTANT_EVENT_SCHEMA_VERSION = '1.0.0';
 
 /**
@@ -937,6 +979,7 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     connectedCallback() {
+        ensurePlatformBusForEmbedChat(this.flowsBaseUrl);
         super.connectedCallback();
         this.addEventListener('embed-block-action', this._onBlockAction);
         document.addEventListener('click', this._onCredClickOutside);
