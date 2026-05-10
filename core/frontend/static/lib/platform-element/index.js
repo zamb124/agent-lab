@@ -40,7 +40,10 @@ import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles, iconButtonStyles } from '../styles/shared/button.styles.js';
 import { getPlatformBus } from '../events/bus-singleton.js';
 import { SelectController } from '../events/select-controller.js';
-import { CoreEvents, CoreAuthEvents, assertEventType, translate } from '../events/index.js';
+// Не использовать ../events/index.js: barrel подтягивает модули с bare import `lit` (ложится на автономный embed).
+import { CoreEvents, assertEventType } from '../events/contract.js';
+import { CoreAuthEvents } from '../events/effects/auth.effect.js';
+import { translate } from '../events/effects/i18n.effect.js';
 import { getFactory } from '../events/factory-registry.js';
 import { getDefaultI18nNamespace } from '../utils/i18n-namespace.js';
 import {
