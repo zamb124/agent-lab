@@ -627,7 +627,9 @@
         "task_remove": "Удалить задачу",
         "task_add_placeholder": "Введите задачу + Enter",
         "summary_entity_open": "Открыть сущность",
-        "graph_inline_title": "Окружение заметки"
+        "graph_inline_title": "Окружение заметки",
+        "markdown_format_action": "Форматировать текст в Markdown",
+        "markdown_formatting": "Форматирование в Markdown…"
     },
     "note_edit": {
         "field_description": "Текст заметки",
@@ -1096,7 +1098,10 @@
             "voice_started": "Запись с микрофона началась",
             "voice_stopped": "Голосовая запись завершена",
             "voice_unavailable_https": "Запись с микрофона доступна только по HTTPS или на localhost",
-            "voice_unavailable_recorder": "Браузер не поддерживает запись с микрофона"
+            "voice_unavailable_recorder": "Браузер не поддерживает запись с микрофона",
+            "markdown_format_started": "Форматирование в Markdown запущено",
+            "markdown_format_failed": "Не удалось запустить форматирование",
+            "markdown_format_timeout": "Форматирование заняло слишком много времени. Обновите страницу при необходимости."
         },
         "notes_list": {
             "failed": "Failed"

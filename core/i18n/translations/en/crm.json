@@ -627,7 +627,9 @@
         "task_remove": "Remove task",
         "task_add_placeholder": "Type a task + Enter",
         "summary_entity_open": "Open entity",
-        "graph_inline_title": "Around this note"
+        "graph_inline_title": "Around this note",
+        "markdown_format_action": "Format text as Markdown",
+        "markdown_formatting": "Formatting as Markdown…"
     },
     "note_edit": {
         "field_description": "Note text",
@@ -1096,7 +1098,10 @@
             "voice_started": "Recording started",
             "voice_stopped": "Voice recording finished",
             "voice_unavailable_https": "Microphone recording requires HTTPS or localhost",
-            "voice_unavailable_recorder": "This browser does not support microphone recording"
+            "voice_unavailable_recorder": "This browser does not support microphone recording",
+            "markdown_format_started": "Markdown formatting started",
+            "markdown_format_failed": "Could not start formatting",
+            "markdown_format_timeout": "Formatting is taking too long. Refresh the page if needed."
         },
         "notes_list": {
             "failed": "Failed"

@@ -92,7 +92,11 @@ def _default_api_to_hf(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> dic
         llm_ids = [model_id.strip() for model_id in cfg.llm_model_ids if model_id.strip()]
         if not llm_ids:
             llm_ids = [cfg.llm_model_id.strip()]
-        return {model_id: model_id for model_id in llm_ids if model_id}
+        out = {model_id: model_id for model_id in llm_ids if model_id}
+        md = cfg.markdown_default_api_model_id.strip()
+        if md:
+            out.setdefault(md, md)
+        return out
     if kind == "embedding":
         return build_embedding_api_pairs(cfg)
     if kind == "rerank":
@@ -111,7 +115,7 @@ def allowed_api_model_ids(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> 
     default_map = _default_api_to_hf(kind, cfg)
     with _catalog_lock:
         initialized = _catalog_initialized
-    if initialized and kind not in ("embedding", "rerank"):
+    if initialized and kind not in ("embedding", "rerank", "llm"):
         return frozenset(runtime_map.keys())
     return frozenset({*default_map.keys(), *runtime_map.keys()})
 
@@ -126,7 +130,7 @@ def resolve_hf_model_id(kind: ModelKind, api_model_id: str, cfg: ProviderLitserv
         return hf
     with _catalog_lock:
         initialized = _catalog_initialized
-    if initialized and kind not in ("embedding", "rerank"):
+    if initialized and kind not in ("embedding", "rerank", "llm"):
         return None
     default_map = _default_api_to_hf(kind, cfg)
     return _hf_from_api_map(default_map, normalized)
@@ -137,7 +141,7 @@ def runtime_api_model_ids(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> 
     default_map = _default_api_to_hf(kind, cfg)
     with _catalog_lock:
         initialized = _catalog_initialized
-    if initialized and kind not in ("embedding", "rerank"):
+    if initialized and kind not in ("embedding", "rerank", "llm"):
         return sorted(runtime_map.keys())
     merged = dict(default_map)
     merged.update(runtime_map)

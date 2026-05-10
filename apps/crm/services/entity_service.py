@@ -940,6 +940,7 @@ class EntityService:
             **kwargs
         )
 
+        attachment_text_merged = False
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID and entity.attachment_ids:
             merged_desc: Optional[str] = entity.description
             for fid in entity.attachment_ids:
@@ -953,6 +954,8 @@ class EntityService:
                         error=str(exc),
                     )
                     continue
+                if text.strip():
+                    attachment_text_merged = True
                 merged_desc = merge_attachment_extracted_into_description(
                     merged_desc,
                     att_name,
@@ -962,6 +965,16 @@ class EntityService:
 
         await self._entity_repo.create(entity)
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
+
+        if attachment_text_merged:
+            from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
+
+            await schedule_note_markdown_format(
+                note_id=entity.entity_id,
+                company_id=entity.company_id,
+                namespace=entity.namespace,
+                expected_updated_at_iso=entity.updated_at.isoformat(),
+            )
 
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             company_id = self._get_company_id()
@@ -1965,6 +1978,37 @@ class EntityService:
         attrs.pop("ai_analysis_last_error", None)
         attrs.pop("ai_analysis_last_error_at", None)
         await self.update_entity(note_id, {"attributes": attrs})
+
+    async def request_note_markdown_format(self, note_id: str) -> str:
+        """Поставить в очередь форматирование текста заметки в Markdown (LitServe, TaskIQ)."""
+        from apps.crm.services.note_markdown_format_schedule import enqueue_note_markdown_format_task
+
+        note = await self.get_entity(note_id)
+        if not note:
+            raise ValueError("Заметка не найдена")
+        if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
+            raise ValueError("Ожидалась заметка (entity_type=note)")
+
+        ctx = get_context()
+        user_id = ctx.user.user_id if ctx and ctx.user else None
+        company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+        if not user_id or not company_id:
+            raise ValueError("Контекст пользователя или компании отсутствует")
+        if not await self._access_control.can_write_entity(note, user_id, company_id):
+            raise PermissionError("Недостаточно прав для изменения заметки")
+
+        desc = note.description
+        if desc is None or not str(desc).strip():
+            raise ValueError("Текст заметки пуст")
+
+        ns = note.namespace or "default"
+        await enqueue_note_markdown_format_task(
+            note_id=note_id,
+            company_id=company_id,
+            namespace=ns,
+            expected_updated_at_iso=note.updated_at.isoformat(),
+        )
+        return note_id
 
     async def _load_analysis_draft_from_note(
         self,

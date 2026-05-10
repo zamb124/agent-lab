@@ -78,6 +78,19 @@ class CRMSettings(BaseSettings):
         le=366,
         description="Максимум календарных дней в одном запросе period summary (CRM)",
     )
+    note_attachment_markdown_format_enabled: bool = Field(
+        default=True,
+        description=(
+            "Фоновое форматирование текста заметки (description) через provider_litserve "
+            "POST /v1/text/format_markdown после вставки текста из файла во вложение."
+        ),
+    )
+    note_markdown_format_service_timeout_seconds: float = Field(
+        default=120.0,
+        ge=10.0,
+        le=600.0,
+        description="Таймаут HTTP к provider_litserve для задачи форматирования Markdown заметки.",
+    )
 
 
 _crm_settings: Optional[CRMSettings] = None

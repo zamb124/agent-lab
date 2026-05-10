@@ -32,6 +32,15 @@ class OpenAIEmbeddingsResponseBody(BaseModel):
     )
 
 
+class FormatMarkdownResponseBody(BaseModel):
+    """Ответ POST ``/v1/text/format_markdown``."""
+
+    markdown: str
+    chunks_total: int = Field(ge=0)
+    chunks_processed: int = Field(ge=0)
+    model: str
+
+
 class RerankResponseBody(BaseModel):
     """Ответ POST ``/v1/rerank`` (как ожидает ``RerankerHTTPClient``)."""
 
@@ -81,6 +90,10 @@ class V1ModelsResponseBody(BaseModel):
 
 def validate_embeddings_response(payload: dict[str, Any]) -> OpenAIEmbeddingsResponseBody:
     return OpenAIEmbeddingsResponseBody.model_validate(payload)
+
+
+def validate_format_markdown_response(payload: dict[str, Any]) -> FormatMarkdownResponseBody:
+    return FormatMarkdownResponseBody.model_validate(payload)
 
 
 def validate_rerank_response(payload: dict[str, Any]) -> RerankResponseBody:

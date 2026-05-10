@@ -19,6 +19,7 @@ from apps.crm.models.api import (
     AIAnalysisDraftApplyResult,
     AIAnalysisDraftPatchRequest,
     AIAnalysisDraftStored,
+    NoteMarkdownFormatQueuedResponse,
     NoteProcessingConfig,
     NoteProcessingResult,
     SearchMentionsRequest,
@@ -477,6 +478,27 @@ async def patch_note_analysis_draft(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+
+@router.post(
+    "/notes/{note_id}/format-markdown",
+    status_code=202,
+    response_model=NoteMarkdownFormatQueuedResponse,
+)
+async def request_note_markdown_format(
+    note_id: str,
+    container: ContainerDep,
+) -> NoteMarkdownFormatQueuedResponse:
+    """Поставить в очередь преобразование текста заметки в Markdown (TaskIQ + LitServe)."""
+    try:
+        queued_id = await container.entity_service.request_note_markdown_format(note_id)
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "Заметка не найдена":
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return NoteMarkdownFormatQueuedResponse(note_id=queued_id)
 
 
 

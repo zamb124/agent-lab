@@ -841,6 +841,13 @@ class StructuredKnowledgeImportRequest(BaseModel):
 
 # ── Unified task models ────────────────────────────────────────────────────────
 
+class NoteMarkdownFormatQueuedResponse(BaseModel):
+    """Ответ POST …/notes/{note_id}/format-markdown — задача поставлена в TaskIQ."""
+
+    status: Literal["queued"] = "queued"
+    note_id: str
+
+
 class TaskResponse(BaseModel):
     """Ответ с данными задачи из crm_tasks."""
 

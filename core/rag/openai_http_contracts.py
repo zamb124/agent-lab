@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 
+PROVIDER_LITSERVE_PLACEHOLDER_BEARER = "local-litserve"
+
 
 def provider_litserve_rerank_http_url(openai_v1_base: str) -> str:
     return f"{normalize_openai_v1_base_url(openai_v1_base)}/rerank"

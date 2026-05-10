@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -25,6 +24,8 @@ from apps.provider_litserve.config import (
 )
 from apps.provider_litserve.container import get_provider_litserve_container
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
+from apps.provider_litserve.llm.local_causal_lm import ensure_local_causal_lm
+from apps.provider_litserve.markdown_format.api import MarkdownFormatLitAPI
 from apps.provider_litserve.model_registry import (
     create_or_replace_model,
     get_model,
@@ -151,8 +152,6 @@ class ChatCompletionsLitAPI(ls.LitAPI):
 
     def __init__(self) -> None:
         super().__init__(spec=ls.OpenAISpec())
-        self._tokenizers: dict[str, Any] = {}
-        self._models: dict[str, Any] = {}
         self._device: str = "cpu"
         self._max_new_tokens: int = 4096
         self._hf_token: str | None = None
@@ -171,23 +170,6 @@ class ChatCompletionsLitAPI(ls.LitAPI):
             ) from exc
         _ = AutoModelForCausalLM
         _ = AutoTokenizer
-
-    def _ensure_model(self, hf_model_id: str) -> tuple[Any, Any]:
-        if hf_model_id in self._models and hf_model_id in self._tokenizers:
-            return self._tokenizers[hf_model_id], self._models[hf_model_id]
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        if self._device.startswith("cuda") and not torch.cuda.is_available():
-            raise RuntimeError(
-                "provider_litserve: CUDA device для локального chat недоступен (torch.cuda.is_available() == False); "
-                "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и resources.limits.nvidia.com/gpu в Helm-чарте (deploy/helm/agent-lab/templates/50-gpu/litserve.yaml)."
-            )
-        tokenizer = AutoTokenizer.from_pretrained(hf_model_id, token=self._hf_token)
-        model = AutoModelForCausalLM.from_pretrained(hf_model_id, token=self._hf_token)
-        model.to(self._device)
-        self._tokenizers[hf_model_id] = tokenizer
-        self._models[hf_model_id] = model
-        return tokenizer, model
 
     def decode_request(self, request):
         return request.model_dump(exclude_none=True)
@@ -209,7 +191,11 @@ class ChatCompletionsLitAPI(ls.LitAPI):
         hf_model_id = resolve_hf_model_id("llm", requested_model, self._infra)
         if hf_model_id is None:
             raise HTTPException(status_code=422, detail={"reason": "unknown_chat_model", "model": requested_model})
-        tokenizer, model = self._ensure_model(hf_model_id)
+        tokenizer, model = ensure_local_causal_lm(
+            hf_model_id=hf_model_id,
+            device=self._device,
+            hf_token=self._hf_token,
+        )
 
         messages = body.get("messages")
         if not isinstance(messages, list) or not messages:
@@ -362,6 +348,7 @@ def _register_litserver_v1(app: FastAPI) -> None:
             EmbeddingLitAPI(cfg),
             RerankerLitAPI(cfg),
             ChatCompletionsLitAPI(),
+            MarkdownFormatLitAPI(cfg),
             STTLitAPI(cfg),
             TTSLitAPI(cfg),
             VADLitAPI(cfg),

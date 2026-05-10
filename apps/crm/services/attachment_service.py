@@ -90,6 +90,7 @@ class AttachmentService:
         if document_id not in entity.attachment_ids:
             entity.attachment_ids.append(document_id)
 
+        attachment_had_extractable_text = False
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             try:
                 raw_text = await load_text_from_bytes(file_data, filename)
@@ -101,6 +102,7 @@ class AttachmentService:
                     error=str(exc),
                 )
                 raw_text = ""
+            attachment_had_extractable_text = bool(isinstance(raw_text, str) and raw_text.strip())
             entity.description = merge_attachment_extracted_into_description(
                 entity.description,
                 filename,
@@ -108,17 +110,30 @@ class AttachmentService:
             )
 
         entity.updated_at = datetime.now(timezone.utc)
-        await self._entity_repo.update(entity)
+        merged = await self._entity_repo.update(entity)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
-            note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
+            note_date_iso = merged.note_date.isoformat() if merged.note_date is not None else None
             await broadcast_crm_note_event(
-                company_id=entity.company_id,
-                namespace=entity.namespace,
-                note_id=entity.entity_id,
+                company_id=merged.company_id,
+                namespace=merged.namespace,
+                note_id=merged.entity_id,
                 note_date_iso=note_date_iso,
                 action="updated",
                 company_repository=self._company_repo,
                 access_grant_repository=self._access_grant_repo,
+            )
+
+        if (
+            entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
+            and attachment_had_extractable_text
+        ):
+            from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
+
+            await schedule_note_markdown_format(
+                note_id=entity_id,
+                company_id=company_id,
+                namespace=namespace,
+                expected_updated_at_iso=merged.updated_at.isoformat(),
             )
         
         logger.info(

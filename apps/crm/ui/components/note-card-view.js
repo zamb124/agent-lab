@@ -201,6 +201,7 @@ export class CRMNoteCardView extends PlatformElement {
         aiProgressPct: { type: Number, attribute: 'ai-progress-pct' },
         aiProgressStage: { type: String, attribute: 'ai-progress-stage' },
         aiProgressStatus: { type: String, attribute: 'ai-progress-status' },
+        markdownFormatting: { type: Boolean, attribute: 'markdown-formatting' },
         _editName: { state: true },
         _editDescription: { state: true },
         _editDate: { state: true },
@@ -521,6 +522,58 @@ export class CRMNoteCardView extends PlatformElement {
                 overflow-x: hidden;
                 padding-right: var(--space-1);
                 box-sizing: border-box;
+            }
+            .note-text-body-wrap {
+                position: relative;
+                min-height: 0;
+            }
+            .note-markdown-format-btn {
+                position: absolute;
+                top: var(--space-2);
+                right: var(--space-2);
+                z-index: 2;
+                width: 36px;
+                height: 36px;
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-full);
+                background: var(--crm-note-action-bg);
+                color: var(--text-primary);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+                transition: background var(--duration-fast), filter var(--duration-fast);
+            }
+            .note-markdown-format-btn:hover:not(:disabled) {
+                background: var(--glass-tint-medium);
+                filter: brightness(1.02);
+            }
+            .note-markdown-format-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+            .note-markdown-format-btn svg {
+                display: block;
+                flex-shrink: 0;
+            }
+            .note-markdown-format-overlay {
+                position: absolute;
+                inset: 0;
+                z-index: 4;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                text-align: center;
+                background: color-mix(in srgb, var(--glass-solid-strong) 88%, transparent);
+                border-radius: var(--radius-md);
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+                pointer-events: none;
             }
             .note-text-scroll .markdown {
                 min-height: 0;
@@ -1316,6 +1369,7 @@ export class CRMNoteCardView extends PlatformElement {
         this.aiProgressPct = 0;
         this.aiProgressStage = '';
         this.aiProgressStatus = '';
+        this.markdownFormatting = false;
 
         this._editName = '';
         this._editDescription = '';
@@ -3245,18 +3299,52 @@ export class CRMNoteCardView extends PlatformElement {
                         </div>
                     </header>
                     <div class="note-text-scroll">
-                        ${description.length > 0
-                            ? html`
-                                <article
-                                    class="markdown"
-                                    @click=${this._onMarkdownClick}
-                                    @mousemove=${this._onMarkdownMouseMove}
-                                    @mouseleave=${this._onMarkdownMouseLeave}
-                                >
-                                    ${unsafeHTML(renderMarkdownToHtml(description))}
-                                </article>
-                            `
-                            : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
+                        <div class="note-text-body-wrap">
+                            ${description.length > 0
+                                ? html`
+                                    <article
+                                        class="markdown"
+                                        @click=${this._onMarkdownClick}
+                                        @mousemove=${this._onMarkdownMouseMove}
+                                        @mouseleave=${this._onMarkdownMouseLeave}
+                                    >
+                                        ${unsafeHTML(renderMarkdownToHtml(description))}
+                                    </article>
+                                    <button
+                                        type="button"
+                                        class="note-markdown-format-btn"
+                                        title=${this.t('note_view.markdown_format_action')}
+                                        ?disabled=${this.markdownFormatting}
+                                        @click=${() => this.emit('format-markdown-request')}
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="20"
+                                            height="20"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            aria-hidden="true"
+                                        >
+                                            <path d="M4 6h16" />
+                                            <path d="M7 12h10" />
+                                            <path d="M10 18h4" />
+                                            <path d="M4 18h3" />
+                                        </svg>
+                                    </button>
+                                    ${this.markdownFormatting
+                                        ? html`
+                                            <div class="note-markdown-format-overlay">
+                                                <glass-spinner size="md"></glass-spinner>
+                                                <span>${this.t('note_view.markdown_formatting')}</span>
+                                            </div>`
+                                        : nothing}
+                                `
+                                : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
+                        </div>
                     </div>
                     ${this._renderNoteGraphInlineSection()}
                 </section>

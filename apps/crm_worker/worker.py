@@ -22,5 +22,6 @@ import apps.crm_worker.tasks.reembed_tasks  # noqa: F401, E402
 import apps.crm_worker.tasks.namespace_integration_tasks  # noqa: F401, E402
 import apps.crm_worker.tasks.daily_summary_tasks  # noqa: F401, E402
 import apps.crm_worker.tasks.knowledge_import_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.note_markdown_tasks  # noqa: F401, E402
 
 __all__ = ["worker_app"]

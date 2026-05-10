@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.db.models import VectorDocument
 from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.embedding_runtime import RagEmbeddingRuntime
+from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
 from core.rag.rrf import reciprocal_rank_fusion
 from core.files.reader import FileReader
@@ -33,10 +34,6 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
     }
 )
 
-# Локальный LitServe не проверяет Bearer; заголовок обязателен для HTTP-клиента эмбеддингов.
-_PROVIDER_LITSERVE_LOCAL_EMBEDDING_BEARER = "local-litserve"
-
-
 def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if raw is None:
         return ""
@@ -53,7 +50,7 @@ def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
 
     settings = get_settings()
     if settings.rag.embedding.provider == "provider_litserve":
-        return _PROVIDER_LITSERVE_LOCAL_EMBEDDING_BEARER
+        return PROVIDER_LITSERVE_PLACEHOLDER_BEARER
     if getattr(settings.llm, "provider", None) == "openrouter":
         or_conf = getattr(settings.llm, "openrouter", None)
         if or_conf is not None:

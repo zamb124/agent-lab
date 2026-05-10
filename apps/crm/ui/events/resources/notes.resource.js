@@ -188,3 +188,32 @@ export const noteAnalyzeStartOp = createAsyncOp({
         );
     },
 });
+
+export const noteMarkdownFormatOp = createAsyncOp({
+    name: 'crm/note_markdown_format',
+    silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/notes/:note_id/format-markdown' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.note_id !== 'string' || payload.note_id.length === 0) {
+            throw new Error('noteMarkdownFormatOp: payload.note_id required');
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/format-markdown`,
+        });
+    },
+    onSuccess: (ctx, _result, event) => {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'info', i18n_key: 'crm:toast.note.markdown_format_started' },
+            { causation_id: event.id },
+        );
+    },
+    onFailure: (ctx, _err, event) => {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'error', i18n_key: 'crm:toast.note.markdown_format_failed' },
+            { causation_id: event.id },
+        );
+    },
+});

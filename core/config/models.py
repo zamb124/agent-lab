@@ -1161,7 +1161,42 @@ class ProviderLitserveInfraConfig(BaseModel):
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)
     llm_model_ids: list[str] = Field(
-        default_factory=lambda: ["Qwen/Qwen2.5-1.5B-Instruct"],
+        default_factory=lambda: [
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "Qwen/Qwen2.5-Coder-0.5B",
+        ],
+    )
+    markdown_default_api_model_id: str = Field(
+        default="Qwen/Qwen2.5-Coder-0.5B",
+        description="api/HF id LLM по умолчанию для POST /v1/text/format_markdown (должен быть в llm_model_ids или реестре).",
+    )
+    markdown_max_chunk_chars: int = Field(
+        default=6000,
+        ge=512,
+        le=100_000,
+        description="Максимум символов на чанк перед батчевым generate.",
+    )
+    markdown_max_microbatch: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description="Сколько чанков за один вызов model.generate.",
+    )
+    markdown_max_new_tokens: int = Field(
+        default=2048,
+        ge=64,
+        le=8192,
+        description="Лимит новых токенов на один чанк (после промпта).",
+    )
+    markdown_chunk_join: str = Field(
+        default="\n\n",
+        description="Склейка между отформатированными чанками в одном ответе.",
+    )
+    markdown_tokenizer_max_length: int = Field(
+        default=8192,
+        ge=512,
+        le=131072,
+        description="truncation max_length при токенизации батча промптов.",
     )
 
     stt_models: list["ProviderLitserveSTTModelEntry"] = Field(
