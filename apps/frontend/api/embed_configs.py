@@ -237,7 +237,7 @@ async def create_embed_config(
     
     try:
         agent = await container.service_client.get(
-            "flows", f"/api/v1/flows/{request_data.flow_id}"
+            "flows", f"/flows/api/v1/flows/{request_data.flow_id}"
         )
     except ServiceClientError as e:
         if "404" in str(e):

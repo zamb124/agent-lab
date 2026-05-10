@@ -1,0 +1,77 @@
+{
+  "id": "support_demo",
+  "name": "Демо: сотрудник поддержки (мок заказов)",
+  "description": "Первая линия поддержки для лендинга: запрос номера заказа, мок-поиск через инструмент, уточнение проблемы, фиксация кейса. Данные вымышленные.",
+  "version": "1.0.0",
+  "tags": [
+    "demo",
+    "landing",
+    "support"
+  ],
+  "permission": [],
+  "branches": {},
+  "store_card_image": "support_demo.jpg",
+  "entry": "main",
+  "nodes": {
+    "main": {
+      "type": "llm_node",
+      "name": "Поддержка: демо первой линии",
+      "prompt": "prompts/main.md",
+      "llm": {
+        "model": "qwen/qwen3.5-397b-a17b",
+        "temperature": 0.3,
+        "provider": "openrouter"
+      },
+      "tools": [
+        "reason",
+        "ask_user",
+        {
+          "tool_id": "lookup_order",
+          "type": "code",
+          "title": "Поиск заказа (демо)",
+          "description": "Возвращает вымышленную карточку заказа по номеру для учебного сценария. Обязателен перед любыми утверждениями о статусе заказа.",
+          "args_schema": {
+            "order_number": {
+              "type": "string",
+              "description": "Номер заказа как ввёл клиент (без обязательного формата)",
+              "required": true
+            }
+          },
+          "code": "async def execute(args, state):\n    import random\n    import uuid\n    order_number = str(args.get(\"order_number\", \"\")).strip()\n    if not order_number:\n        return {\"ok\": False, \"error\": \"order_number_required\", \"message\": \"Укажите непустой номер заказа.\"}\n    statuses = [\"packed\", \"in_transit\", \"delivered\", \"delayed\", \"awaiting_pickup\"]\n    carriers = [\"СДЭК\", \"Почта РФ\", \"Курьер магазина\", \"Самовывоз\"]\n    items_pool = [\n        \"Футболка (M), черная x1\",\n        \"Книга, твердый переплет x1\",\n        \"Наушники TWS x1\",\n        \"Кофе 250 г x2\",\n    ]\n    status = random.choice(statuses)\n    carrier = random.choice(carriers)\n    eta = random.randint(0, 7)\n    picks = random.sample(items_pool, k=min(2, len(items_pool)))\n    items_short = \", \".join(picks)\n    events = [\n        \"Заказ принят в обработку\",\n        \"Передан на склад\",\n        \"Отправлен со склада\",\n        \"В сортировочном центре\",\n        \"Демо: отметка о вручении\",\n    ]\n    hints = [\"Иван И. (маскировано)\", \"Мария П. (маскировано)\", \"Алексей В. (маскировано)\"]\n    return {\n        \"ok\": True,\n        \"demo\": True,\n        \"order_number\": order_number,\n        \"status\": status,\n        \"customer_hint\": random.choice(hints),\n        \"items_short\": items_short,\n        \"delivery_eta_days\": eta,\n        \"carrier\": carrier,\n        \"last_event\": random.choice(events),\n        \"internal_ref\": str(uuid.uuid4())[:8],\n    }"
+        },
+        {
+          "tool_id": "close_demo_support_case",
+          "type": "code",
+          "title": "Закрыть демо-обращение",
+          "description": "Фиксирует итог диалога в демо: категория и краткое резюме. Вызывай перед финальным прощанием.",
+          "args_schema": {
+            "order_number": {
+              "type": "string",
+              "description": "Номер заказа",
+              "required": true
+            },
+            "issue_category": {
+              "type": "string",
+              "description": "Одна из: delivery_delay, wrong_item, damaged, refund_question, order_status, other, escalation",
+              "required": true
+            },
+            "resolution_summary": {
+              "type": "string",
+              "description": "Кратко: что предложено клиенту и какой следующий шаг",
+              "required": true
+            }
+          },
+          "code": "async def execute(args, state):\n    import uuid\n    order_number = str(args.get(\"order_number\", \"\")).strip()\n    issue_category = str(args.get(\"issue_category\", \"\")).strip()\n    resolution_summary = str(args.get(\"resolution_summary\", \"\")).strip()\n    if not order_number:\n        return {\"ok\": False, \"error\": \"order_number_required\", \"message\": \"Номер заказа обязателен.\"}\n    if not issue_category:\n        return {\"ok\": False, \"error\": \"issue_category_required\", \"message\": \"Категория обращения обязательна.\"}\n    if not resolution_summary:\n        return {\"ok\": False, \"error\": \"resolution_summary_required\", \"message\": \"Краткое резюме решения обязательно.\"}\n    ref = f\"DEMO-SUP-{uuid.uuid4().hex[:10].upper()}\"\n    return {\n        \"ok\": True,\n        \"demo\": True,\n        \"case_ref\": ref,\n        \"order_number\": order_number,\n        \"issue_category\": issue_category,\n    }"
+        }
+      ],
+      "output_key": "response"
+    }
+  },
+  "edges": [
+    {
+      "from": "main",
+      "to": null
+    }
+  ],
+  "variables": {}
+}

@@ -36,7 +36,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
     await loader._load_nodes_cache()
 
     prefix = "/flows/api/v1/files/download/"
-    demo_ids = ("lawyer", "doctor", "psy", "coach", "tutor")
+    demo_ids = ("lawyer", "support_demo", "psy", "coach", "tutor")
 
     for bundle_id in demo_ids:
         jpg = bundles_dir / bundle_id / f"{bundle_id}.jpg"

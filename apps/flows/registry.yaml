@@ -69,8 +69,12 @@ flows:
 
   - id: doctor
     public: true
-    landing_public_demo: true
     description: "Демо лендинга: просветительский ориентир по здоровью (не диагноз)"
+
+  - id: support_demo
+    public: true
+    landing_public_demo: true
+    description: "Лендинг: демо первой линии поддержки с мок-поиском заказа"
 
   - id: psy
     public: true

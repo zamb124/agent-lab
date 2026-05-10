@@ -1,5 +1,5 @@
 /**
- * Секция главной: три публичных демо-агента (lawyer, doctor, psy) + тот же drawer, что на digital-workers.
+ * Секция главной: три публичных демо-агента (lawyer, support_demo, psy) + тот же drawer, что на digital-workers.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
@@ -8,7 +8,7 @@ import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
 
-const HOME_DEMO_FLOW_ORDER = Object.freeze(['lawyer', 'doctor', 'psy']);
+const HOME_DEMO_FLOW_ORDER = Object.freeze(['lawyer', 'support_demo', 'psy']);
 
 export class LandingHomeDemoAgents extends PlatformElement {
     static i18nNamespace = 'landing';

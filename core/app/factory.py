@@ -204,8 +204,13 @@ def create_service_app(
         from core.utils.background import run_with_log_context
 
         _cbr_fallback = settings.billing.usd_to_rub_rate
-        await _cbr_refresh_once(fallback=_cbr_fallback)
-        if not is_testing():
+        if is_testing():
+            logger.info(
+                "billing.cbr_rate.skipped_testing",
+                fallback=_cbr_fallback,
+            )
+        else:
+            await _cbr_refresh_once(fallback=_cbr_fallback)
             run_with_log_context(
                 _cbr_loop_coro(fallback=_cbr_fallback),
                 name="billing.cbr_rate_refresh",
