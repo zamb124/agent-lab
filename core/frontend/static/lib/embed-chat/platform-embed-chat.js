@@ -17,29 +17,29 @@ import {
     embedToolRowDisplayName,
     formatEmbedToolPairHintText,
 } from './embed-tool-helpers.js';
-import { toolCallIconName } from '@platform/lib/utils/tool-call-icon.js';
-import '@platform/lib/components/platform-icon.js';
-import '@platform/lib/components/platform-help-hint.js';
-import '@platform/lib/components/platform-assistant-message-actions.js';
+import { toolCallIconName } from '../utils/tool-call-icon.js';
+import '../components/platform-icon.js';
+import '../components/platform-help-hint.js';
+import '../components/platform-assistant-message-actions.js';
 import {
     readTtsOutputEnabled,
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
-} from '@platform/lib/voice/tts-output-pref.js';
+} from '../voice/tts-output-pref.js';
 import {
     resolveVoiceHttpOrigin,
     resolveVoiceHttpOriginFromFlowsBaseUrl,
-} from '@platform/lib/voice/voice-http-origin.js';
-import { VoiceMediaSession } from '@platform/lib/voice/voice-media-session.js';
-import { normalizeVoiceLocaleForWs } from '@platform/lib/voice/normalize-voice-locale.js';
-import { fetchFlowVoiceSessionQueryDict } from '@platform/lib/voice/fetch-flow-voice-session-query.js';
+} from '../voice/voice-http-origin.js';
+import { VoiceMediaSession } from '../voice/voice-media-session.js';
+import { normalizeVoiceLocaleForWs } from '../voice/normalize-voice-locale.js';
+import { fetchFlowVoiceSessionQueryDict } from '../voice/fetch-flow-voice-session-query.js';
 import {
     feedStreamTtsFromA2aResult,
     primeStreamTtsPlaybackFromUserGesture,
     stopStreamTtsPlayback,
     setStreamTtsTarget,
     clearStreamTtsTarget,
-} from '@platform/lib/voice/stream-tts-registry.js';
+} from '../voice/stream-tts-registry.js';
 import './embed-block-renderer.js';
 import './embed-chat-input.js';
 
