@@ -5,6 +5,8 @@ import { html, css } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
+import { isAllowedLandingScrollSectionId, storePendingLandingSectionTarget } from './landing-section-scroll.js';
+
 const INTERNAL_HREF_TO_ROUTE = Object.freeze({
     '/': 'landing',
     '/products/agents':    'product-agents',
@@ -321,16 +323,17 @@ export class LandingHeader extends PlatformElement {
                 inset: 0;
                 top: 71px;
                 box-sizing: border-box;
-                padding: 40px 20px;
+                padding: clamp(16px, 4vw, 28px) clamp(16px, 5vw, 24px) max(24px, env(safe-area-inset-bottom));
                 flex-direction: column;
                 align-items: stretch;
-                gap: 24px;
+                gap: clamp(12px, 3vw, 20px);
                 z-index: 10000;
                 background: #0f0f0f;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
                 min-height: calc(100vh - 71px);
                 min-height: calc(100dvh - 71px);
+                max-width: 100vw;
             }
             
             .mobile-menu.active {
@@ -338,17 +341,38 @@ export class LandingHeader extends PlatformElement {
             }
             
             .mobile-menu .nav-link {
-                font-size: 24px;
-                text-align: center;
+                box-sizing: border-box;
+                display: block;
+                width: 100%;
+                padding: 12px 0;
+                font-size: clamp(17px, 4.6vw, 20px);
+                font-weight: 500;
+                line-height: 1.3;
+                text-align: start;
+                text-decoration: none;
+            }
+            
+            .mobile-menu-footer {
+                margin-top: auto;
+                padding-top: clamp(12px, 3vw, 20px);
             }
             
             .mobile-menu .login-btn,
             .mobile-menu .dashboard-btn {
                 display: block;
+                box-sizing: border-box;
                 width: 100%;
-                padding: 16px;
-                font-size: 18px;
+                padding: 14px 20px;
+                font-size: 17px;
                 text-align: center;
+            }
+
+            /* Шапка: CTA только в нижней части выезжающего меню, без дубля рядом с бургером */
+            @media (max-width: 1099px) {
+                .header-actions > .login-btn,
+                .header-actions > .dashboard-btn {
+                    display: none;
+                }
             }
             
             @media (max-width: 480px) {
@@ -361,9 +385,9 @@ export class LandingHeader extends PlatformElement {
                 .header-actions {
                     gap: 6px;
                 }
-            
-                .login-btn,
-                .dashboard-btn {
+
+                .header-actions > .login-btn,
+                .header-actions > .dashboard-btn {
                     padding: 6px 12px;
                     font-size: 12px;
                 }
@@ -456,29 +480,39 @@ export class LandingHeader extends PlatformElement {
             .mobile-products-group {
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
+                gap: 4px;
+                width: 100%;
+                box-sizing: border-box;
+                padding-top: 4px;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
             }
             
             .mobile-products-title {
                 font-family: 'Fira Sans', sans-serif;
-                font-size: 14px;
+                font-size: 12px;
                 color: rgba(232, 232, 232, 0.5);
                 text-transform: uppercase;
-                letter-spacing: 1px;
-                padding: 0 8px;
+                letter-spacing: 0.08em;
+                padding: 12px 0 8px;
+                text-align: start;
+                margin: 0;
             }
             
             .mobile-product-link {
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                padding: 12px 16px;
+                padding: 12px 12px;
                 color: var(--landing-secondary, #E8E8E8);
                 text-decoration: none;
                 font-family: 'Fira Sans', sans-serif;
-                font-size: 18px;
+                font-size: clamp(16px, 4.2vw, 18px);
                 border-radius: 8px;
                 transition: background 0.2s;
+                justify-content: flex-start;
+                box-sizing: border-box;
+                width: 100%;
+                min-height: 48px;
             }
             
             .mobile-product-link:hover {
@@ -495,6 +529,15 @@ export class LandingHeader extends PlatformElement {
                 width: 100%;
                 height: 100%;
                 object-fit: contain;
+            }
+
+            .mobile-menu-secondary {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                box-sizing: border-box;
+                padding-top: 4px;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
             }
         `
     ];
@@ -590,7 +633,13 @@ export class LandingHeader extends PlatformElement {
         const href = e.currentTarget.getAttribute('href');
         if (href?.startsWith('#')) {
             e.preventDefault();
-            this._scrollToLandingSection(href.slice(1));
+            const sectionId = href.slice(1);
+            if (this._resolveLandingPage()) {
+                this._scrollToLandingSection(sectionId);
+            } else if (isAllowedLandingScrollSectionId(sectionId)) {
+                storePendingLandingSectionTarget(sectionId);
+                this.navigate('landing');
+            }
         } else {
             const routeKey = INTERNAL_HREF_TO_ROUTE[href];
             if (routeKey) {
@@ -781,15 +830,21 @@ export class LandingHeader extends PlatformElement {
                     </a>
                 </div>
                 
-                <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>${h('docs')}</a>
-                <a href="/support" class="nav-link" @click=${this._handleNavClick}>${h('support')}</a>
-                <a href="/blog" class="nav-link" @click=${this._handleNavClick}>${h('blog')}</a>
-                <a href="/about" class="nav-link" @click=${this._handleNavClick}>${h('company_page')}</a>
-                <a href="/roadmap" class="nav-link" @click=${this._handleNavClick}>${h('roadmap')}</a>
-                ${this.isAuthenticated
-                    ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._handleNavClick}>${h('dashboard')}</a>`
-                    : html`<button class="login-btn" @click=${() => { this._closeMobileMenu(); this._handleLoginClick(); }}>${h('login')}</button>`
-                }
+                <div class="mobile-menu-secondary">
+                    <a href="/documentation" class="nav-link" @click=${this._handleNavClick}>${h('docs')}</a>
+                    <a href="/support" class="nav-link" @click=${this._handleNavClick}>${h('support')}</a>
+                    <a href="/blog" class="nav-link" @click=${this._handleNavClick}>${h('blog')}</a>
+                    <a href="/about" class="nav-link" @click=${this._handleNavClick}>${h('company_page')}</a>
+                    <a href="/roadmap" class="nav-link" @click=${this._handleNavClick}>${h('roadmap')}</a>
+                </div>
+                <div class="mobile-menu-footer">
+                    ${this.isAuthenticated
+                        ? html`<a href="/dashboard" class="dashboard-btn" @click=${this._handleNavClick}>${h('dashboard')}</a>`
+                        : html`<button class="login-btn" @click=${() => {
+                            this._closeMobileMenu();
+                            this._handleLoginClick();
+                        }}>${h('login')}</button>`}
+                </div>
             </div>
         `;
     }

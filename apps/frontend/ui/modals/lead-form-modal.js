@@ -9,6 +9,7 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { isValidEmail, digitsOnly } from '@platform/lib/utils/validators.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 export class FrontendLeadFormModal extends PlatformFormModal {
@@ -243,46 +244,56 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                     </div>
                     <div class="form-group">
                         <div class="products-grid" role="group" aria-label=${this.t('cta.products_label')}>
-                            <label class="product-row">
-                                <input
-                                    type="checkbox"
+                            <div class="product-row">
+                                <platform-switch
+                                    size="sm"
                                     .checked=${this._interestAgents}
-                                    @change=${(e) => { this._interestAgents = e.target.checked; }}
-                                />
+                                    @change=${(e) => {
+                                        this._interestAgents = e.detail.value;
+                                    }}
+                                ></platform-switch>
                                 <span>${this.t('cta.product_agents')}</span>
-                            </label>
-                            <label class="product-row">
-                                <input
-                                    type="checkbox"
+                            </div>
+                            <div class="product-row">
+                                <platform-switch
+                                    size="sm"
                                     .checked=${this._interestRag}
-                                    @change=${(e) => { this._interestRag = e.target.checked; }}
-                                />
+                                    @change=${(e) => {
+                                        this._interestRag = e.detail.value;
+                                    }}
+                                ></platform-switch>
                                 <span>${this.t('cta.product_rag')}</span>
-                            </label>
-                            <label class="product-row">
-                                <input
-                                    type="checkbox"
+                            </div>
+                            <div class="product-row">
+                                <platform-switch
+                                    size="sm"
                                     .checked=${this._interestCrm}
-                                    @change=${(e) => { this._interestCrm = e.target.checked; }}
-                                />
+                                    @change=${(e) => {
+                                        this._interestCrm = e.detail.value;
+                                    }}
+                                ></platform-switch>
                                 <span>${this.t('cta.product_crm')}</span>
-                            </label>
-                            <label class="product-row">
-                                <input
-                                    type="checkbox"
+                            </div>
+                            <div class="product-row">
+                                <platform-switch
+                                    size="sm"
                                     .checked=${this._interestSync}
-                                    @change=${(e) => { this._interestSync = e.target.checked; }}
-                                />
+                                    @change=${(e) => {
+                                        this._interestSync = e.detail.value;
+                                    }}
+                                ></platform-switch>
                                 <span>${this.t('cta.product_sync')}</span>
-                            </label>
-                            <label class="product-row">
-                                <input
-                                    type="checkbox"
+                            </div>
+                            <div class="product-row">
+                                <platform-switch
+                                    size="sm"
                                     .checked=${this._interestDocuments}
-                                    @change=${(e) => { this._interestDocuments = e.target.checked; }}
-                                />
+                                    @change=${(e) => {
+                                        this._interestDocuments = e.detail.value;
+                                    }}
+                                ></platform-switch>
                                 <span>${this.t('cta.product_documents')}</span>
-                            </label>
+                            </div>
                         </div>
                         ${this.renderFieldError('products')}
                         ${this.renderFieldError('contact')}

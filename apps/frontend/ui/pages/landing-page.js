@@ -8,6 +8,8 @@ import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/auth-modal.js';
 
+import { takePendingLandingSectionTarget } from '../components/landing/landing-section-scroll.js';
+
 export class LandingPage extends PlatformPage {
     static styles = [
         PlatformPage.styles,
@@ -28,6 +30,29 @@ export class LandingPage extends PlatformPage {
             section { position: relative; scroll-margin-top: 88px; }
         `,
     ];
+
+    firstUpdated(changedProps) {
+        super.firstUpdated(changedProps);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => this._consumePendingLandingScroll());
+        });
+    }
+
+    _consumePendingLandingScroll() {
+        const sectionId = takePendingLandingSectionTarget();
+        if (sectionId === null) {
+            return;
+        }
+        const root = this.shadowRoot;
+        if (!root) {
+            return;
+        }
+        const target = root.getElementById(sectionId);
+        if (!target) {
+            return;
+        }
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     render() {
         return html`

@@ -136,6 +136,11 @@ export class SupportPage extends PlatformPage {
                 margin-top: var(--space-4);
                 line-height: 1.5;
             }
+            .support-form {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-5);
+            }
             .doc-footer {
                 margin-top: var(--space-10);
                 padding-top: var(--space-6);
@@ -254,7 +259,7 @@ export class SupportPage extends PlatformPage {
 
                 <glass-card>
                     <p class="section-title">${this.t('support_page.form_section_title')}</p>
-                    <form @submit=${this._submit}>
+                    <form class="support-form" @submit=${this._submit}>
                         <platform-field
                             type="string"
                             input-type="email"
