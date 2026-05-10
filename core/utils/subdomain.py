@@ -138,12 +138,13 @@ def validate_slug(slug: str) -> tuple[bool, Optional[str]]:
         return False, "Только латинские буквы, цифры и дефис. Должен начинаться и заканчиваться буквой или цифрой"
     
     # Зарезервированные slug'и (субдомен тенанта; onlyoffice — хост Document Server в проде;
-    # grafana/loki/tempo/alloy — observability-стек; livekit — WebRTC-сервер)
+    # grafana/loki/tempo/alloy — observability-стек; livekit — WebRTC-сервер; cdn — статика/embed)
     reserved = [
         "www",
         "api",
         "admin",
         "static",
+        "cdn",
         "system",
         "test",
         "staging",
