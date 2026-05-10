@@ -13,12 +13,15 @@
 ненулевого чанка — ``502`` и лог ``voice.synthesize.empty_audio_body``.
 HTTP ``4xx`` от ``provider_litserve`` (``TTSLitserveHttpError``) пробрасываются
 клиенту с тем же кодом и ``detail``; ответы ``5xx`` апстрима — ``502``.
+Сетевые сбои до HTTP-ответа апстрима (``httpx.RequestError``, в т.ч. нет TCP) —
+``503`` с пояснением, не ``500``.
 """
 
 from __future__ import annotations
 
 from typing import AsyncIterator, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -129,6 +132,22 @@ async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
             response_status=code,
         )
         raise HTTPException(status_code=code, detail=exc.detail) from exc
+    except httpx.RequestError as exc:
+        logger.warning(
+            "voice.synthesize.tts_upstream_unreachable",
+            company_id=company_id,
+            provider=tts_streamer.provider,
+            error_type=type(exc).__name__,
+            message=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "TTS-провайдер недоступен: нет соединения с сервисом синтеза. "
+                "Проверьте, что провайдер запущен и в конфигурации voice.tts "
+                "(например litserve base_url) указан верный адрес."
+            ),
+        ) from exc
     except StopAsyncIteration:
         logger.warning(
             "voice.synthesize.empty_audio_body",

@@ -21,6 +21,7 @@ import io
 import wave
 from collections.abc import AsyncIterator
 
+import httpx
 import pytest
 from httpx import AsyncClient
 
@@ -183,6 +184,57 @@ async def test_synthesize_litserve_upstream_422_returns_same_detail(
 
     assert response.status_code == 422, response.text
     assert f"litserve-reject-{unique_id}" in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(15)
+async def test_synthesize_upstream_connect_error_returns_503(
+    voice_client: AsyncClient,
+    auth_headers_system: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Нет TCP к TTS апстриму (ConnectError) — 503 с пояснением, не голый 500 ASGI."""
+
+    class _UnreachableStreamer(BaseTTSStreamer):
+        @property
+        def provider(self) -> str:
+            return "litserve"
+
+        @property
+        def mime_type(self) -> str:
+            return "audio/wav"
+
+        @property
+        def sample_rate(self) -> int:
+            return 24000
+
+        async def synthesize_chunk(self, text: str) -> bytes:
+            raise NotImplementedError
+
+        async def astream(
+            self, text_stream: AsyncIterator[str]
+        ) -> AsyncIterator[bytes]:
+            async for _ in text_stream:
+                raise httpx.ConnectError("All connection attempts failed")
+            if False:
+                yield b""
+
+    async def _fake_get_tts_streamer(*_a: object, **_k: object) -> _UnreachableStreamer:
+        return _UnreachableStreamer()
+
+    monkeypatch.setattr(
+        "apps.voice.api.synthesize.get_tts_streamer",
+        _fake_get_tts_streamer,
+    )
+
+    response = await voice_client.post(
+        "/voice/api/v1/synthesize",
+        json={"text": "Привет без reachable TTS."},
+        headers=auth_headers_system,
+    )
+
+    assert response.status_code == 503, response.text
+    assert "TTS-провайдер недоступен" in response.text
 
 
 @pytest.mark.asyncio
