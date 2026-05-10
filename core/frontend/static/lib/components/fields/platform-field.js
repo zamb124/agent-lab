@@ -45,6 +45,7 @@ export class PlatformField extends PlatformElement {
         inputType: { type: String, attribute: 'input-type' },
         hint: { type: String },
         pillDensity: { type: String, attribute: 'pill-density' },
+        pillEmbed: { type: Boolean, attribute: 'pill-embed' },
     };
 
     static styles = [
@@ -69,6 +70,7 @@ export class PlatformField extends PlatformElement {
         this.inputType = 'text';
         this.hint = '';
         this.pillDensity = 'default';
+        this.pillEmbed = false;
     }
 
     willUpdate(changedProps) {
@@ -225,8 +227,9 @@ export class PlatformField extends PlatformElement {
                 : this.pillDensity === 'compact'
                   ? 'field-pill--compact'
                   : '';
+        const embedCls = this.pillEmbed ? 'field-pill--embed' : '';
         return html`
-            <div class="field-pill ${density}" data-mode=${this.mode}>
+            <div class="field-pill ${density} ${embedCls}" data-mode=${this.mode}>
                 ${hasLabel
                     ? html`
                         <div class="field-pill-head">

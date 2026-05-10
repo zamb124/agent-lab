@@ -26,6 +26,14 @@ export const fieldPillStyles = css`
         margin-bottom: 0;
     }
 
+    /* Уже внутри .form-group или иной карточки — одна видимая плашка, не две. */
+    .field-pill.field-pill--embed {
+        background: transparent;
+        border: none;
+        padding: 0;
+        box-shadow: none;
+    }
+
     .field-pill--textarea {
         gap: var(--field-pill-gap-textarea);
     }

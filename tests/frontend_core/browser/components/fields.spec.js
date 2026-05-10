@@ -62,6 +62,14 @@ describe('platform-field dispatcher', () => {
         expect(pill.classList.contains('field-pill--dense')).to.equal(true);
     });
 
+    it('pill-embed добавляет field-pill--embed', async () => {
+        const el = await fixture(html`
+            <platform-field type="string" mode="edit" value="" pill-embed label="InCard"></platform-field>
+        `);
+        const pill = el.shadowRoot.querySelector('.field-pill');
+        expect(pill.classList.contains('field-pill--embed')).to.equal(true);
+    });
+
     it('без label не рендерит field-pill-label, но рисует pill', async () => {
         const el = await fixture(html`<platform-field type="string" mode="edit" value=""></platform-field>`);
         expect(el.shadowRoot.querySelector('.field-pill')).to.exist;

@@ -419,6 +419,7 @@ export class SyncChannelEditModal extends PlatformFormModal {
                               <platform-field
                                   type="string"
                                   mode="edit"
+                                  pill-embed
                                   label=${this.t('channel_settings.field_name')}
                                   placeholder=${this.t('channel_settings.placeholder_name')}
                                   .value=${this._name}

@@ -38,6 +38,12 @@ export class SyncChannelCreateModal extends PlatformFormModal {
     static styles = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
+            .channel-create-block {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                margin-bottom: var(--space-6);
+            }
             .members-list {
                 max-height: 240px;
                 overflow-y: auto;
@@ -159,7 +165,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
         const candidates = this._selectableMembers();
         const teamLoading = this._teamLoadingSel.value;
         return html`
-            <div class="form-group">
+            <div class="channel-create-block">
                 <platform-field
                     type="string"
                     mode="edit"
@@ -176,7 +182,7 @@ export class SyncChannelCreateModal extends PlatformFormModal {
                 ></platform-field>
             </div>
 
-            <div class="form-group">
+            <div class="channel-create-block">
                 <platform-field
                     type="string"
                     mode="edit"
