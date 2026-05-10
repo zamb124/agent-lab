@@ -37,17 +37,23 @@ export class FrontendEmbedCodeModal extends PlatformModal {
                 margin-bottom: var(--space-2);
             }
             pre {
-                font-family: var(--font-mono);
+                font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
                 font-size: var(--text-xs);
                 background: var(--glass-solid-subtle);
                 padding: var(--space-3) var(--space-4);
                 border-radius: var(--radius-md);
-                white-space: pre-wrap;
-                word-break: break-all;
-                max-height: 320px;
-                overflow: auto;
+                border: 1px solid var(--border-subtle, var(--glass-border-subtle));
+                white-space: pre;
+                overflow-x: auto;
+                overflow-y: auto;
+                word-break: normal;
+                overflow-wrap: normal;
+                tab-size: 2;
+                line-height: 1.5;
+                max-height: 360px;
                 color: var(--text-primary);
                 margin: 0 0 var(--space-2) 0;
+                -webkit-overflow-scrolling: touch;
             }
             .endpoint {
                 font-family: var(--font-mono);

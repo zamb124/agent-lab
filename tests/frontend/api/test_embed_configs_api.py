@@ -468,29 +468,23 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert "html_code" in data
     assert "script_url" in data
     assert data["embed_id"] == embed_id
-    
+    assert data["script_url"].endswith("/humanitec-embed-autoload.js")
+
     # Проверяем что в коде есть нужные элементы
     html_code = data["html_code"]
-    assert "platform-lara-assistant" in html_code
+    assert "humanitec-embed-autoload.js" in html_code
+    assert 'type="module"' in html_code
+    assert "data-embed-id=" in html_code
     assert embed_id in html_code
-    assert "embed-id" in html_code
     assert "flow-id" not in html_code
     assert "skill-id" not in html_code
-    assert "/static/core/lib/embed-chat/platform-lara-assistant.js" in html_code
-    assert 'type="importmap"' in html_code
-    assert "@platform/lib/" in html_code
-    assert "/static/core/assets/js/lit/lit.min.js" in html_code
-    assert "fetch('/api/chat-token'" in html_code
-    assert "embed_id: EMBED_ID" in html_code
+    assert '<script type="importmap">' not in html_code
+    assert "@platform/lib/" not in html_code
+    assert "/static/core/assets/js/lit/lit.min.js" not in html_code
+    assert 'data-chat-token-url="/api/chat-token"' in html_code
+    assert 'data-token-expires-seconds="300"' in html_code
     assert "session-token" not in html_code
     assert "credentials: 'include'" not in html_code
-    assert "window.humanitecEmbed" in html_code
-    assert "setTheme: setEmbedTheme" in html_code
-    assert "setLocale: setEmbedLocale" in html_code
-    assert "setLauncherVisible: setEmbedLauncherVisible" in html_code
-    assert "setAssistantTitle: setEmbedAssistantTitle" in html_code
-    assert "setMetadataHooks: setEmbedMetadataHooks" in html_code
-    assert "setAuthProvider: setEmbedAuthProvider" in html_code
     assert data["token_endpoint"].endswith(f"/frontend/api/embed/configs/{embed_id}/session-token")
     assert isinstance(data.get("allowed_origins"), list)
     assert data["allowed_origins"] == []
@@ -506,12 +500,11 @@ async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent
     assert embed_id in client_snip
     assert "expires_in_seconds:" in client_snip
     assert "fetch('/api/chat-token'" in client_snip
-    assert "expires_in_seconds:" in html_code and "300" in html_code
-    assert "assistant.voiceEnabled = false" in html_code
-    assert "assistant.voiceDefaultOn = false" in html_code
-    assert "assistant.voiceBaseUrl" in html_code
-    assert "assistant.companyId" in html_code
-    assert company_id in html_code
+    assert 'data-token-expires-seconds="300"' in html_code and "300" in html_code
+    assert 'data-voice-enabled="false"' in html_code
+    assert 'data-voice-default-on="false"' in html_code
+    assert "data-voice-base-url=" in html_code
+    assert "data-company-id=" in html_code and company_id in html_code
     
     # Cleanup
     await frontend_client.delete(
@@ -573,9 +566,9 @@ async def test_get_embed_code_voice_enabled_wires_assistant(frontend_client: Asy
     )
     assert response.status_code == 200
     html_code = response.json()["html_code"]
-    assert "assistant.voiceEnabled = true" in html_code
-    assert "assistant.voiceDefaultOn = true" in html_code
-    assert "assistant.voiceBaseUrl" in html_code
+    assert 'data-voice-enabled="true"' in html_code
+    assert 'data-voice-default-on="true"' in html_code
+    assert "data-voice-base-url=" in html_code
     assert company_id in html_code
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
@@ -605,9 +598,10 @@ async def test_get_embed_code_has_no_browser_direct_fallback_patterns(
     assert response.status_code == 200
     html_code = response.json()["html_code"]
 
-    assert "fetch('/api/chat-token'" in html_code
-    assert "const EMBED_ID =" in html_code
-    assert "getEmbedToken()" in html_code
+    assert 'data-chat-token-url="/api/chat-token"' in html_code
+    assert "data-token-expires-seconds=" in html_code
+    assert "const EMBED_ID =" not in html_code
+    assert "getEmbedToken()" not in html_code
 
     assert "fetch(\"http" not in html_code
     assert "fetch(\"https" not in html_code
@@ -920,10 +914,10 @@ async def test_embed_code_includes_assistant_title_and_locale(frontend_client: A
     )
     assert code_response.status_code == 200
     html_code = code_response.json()["html_code"]
-    assert "assistant.setAttribute('assistant-title', \"Lara QA\")" in html_code
-    assert "assistant.setAttribute('locale', \"ru\")" in html_code
-    assert "assistant.setAttribute('theme', \"light\")" in html_code
-    assert "assistant.showLauncher = false;" in html_code
+    assert 'data-assistant-title="Lara QA"' in html_code
+    assert 'data-locale="ru"' in html_code
+    assert 'data-theme="light"' in html_code
+    assert 'data-show-launcher="false"' in html_code
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 

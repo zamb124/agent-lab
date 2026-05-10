@@ -29,6 +29,7 @@ ENTRYPOINTS = tuple(
         Path("embed-chat/platform-embed-chat-drawer.js"),
         Path("embed-chat/platform-embed-chat.js"),
         Path("embed-chat/platform-lara-assistant.js"),
+        Path("embed-chat/humanitec-embed-autoload.js"),
     )
 )
 
