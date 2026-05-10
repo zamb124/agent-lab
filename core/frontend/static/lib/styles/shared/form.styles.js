@@ -2,7 +2,7 @@
  * Shared Form Styles — остательные паттерны форм (sections, toggle, layout).
  * Контентные поля: fieldPillStyles (классы .field-pill / .form-group / .form-input).
  */
-import { css } from 'lit';
+import { css } from '../../../assets/js/lit/lit.min.js';
 import { fieldPillStyles } from './field-pill.styles.js';
 
 const formAuxStyles = css`

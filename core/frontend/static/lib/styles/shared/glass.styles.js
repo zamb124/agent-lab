@@ -2,7 +2,7 @@
  * Glass Morphism - общие стили для glassmorphism эффектов
  * Используются во всех компонентах платформы
  */
-import { css } from 'lit';
+import { css } from '../../../assets/js/lit/lit.min.js';
 
 export const glassStyles = css`
     .glass-subtle {

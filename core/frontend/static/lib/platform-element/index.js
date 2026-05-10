@@ -32,7 +32,7 @@
  *   this.startOAuth(provider, { returnPath?, plan? })   — auth/oauth/start_requested
  */
 
-import { LitElement } from 'lit';
+import { LitElement } from '../../assets/js/lit/lit.min.js';
 import { StyleCache } from '../utils/style-cache.js';
 import { baseStyles } from './styles.js';
 import { glassStyles } from '../styles/shared/glass.styles.js';

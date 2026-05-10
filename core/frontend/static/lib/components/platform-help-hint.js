@@ -5,7 +5,7 @@
  * `placement`: `auto` — не вылезать за верх вьюпорта (снизу от якоря), `top` / `bottom` — жёстко.
  * `size`: `md` — кнопка 32×32 (как `flows-node-run-control`).
  */
-import { html, css } from 'lit';
+import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 

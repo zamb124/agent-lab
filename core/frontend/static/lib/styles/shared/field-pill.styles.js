@@ -2,7 +2,7 @@
  * Field pill — единый канон плашки поля и «голых» контролов внутри неё.
  * Токены: --field-pill-* в core/frontend/static/assets/css/tokens.css
  */
-import { css } from 'lit';
+import { css } from '../../../assets/js/lit/lit.min.js';
 
 export const fieldPillStyles = css`
     .field-pill,

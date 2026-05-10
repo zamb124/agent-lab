@@ -7,8 +7,8 @@
  *
  * Сам компонент не делает HTTP — это работа icon.effect.
  */
-import { html, css } from 'lit';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { html, css } from '../../assets/js/lit/lit.min.js';
+import { unsafeHTML } from '../../assets/js/lit/directives/unsafe-html.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { ICON_EVENTS } from '../events/reducers/icon.js';
 import { resolveFileIconBasename } from '../utils/file-icons.js';

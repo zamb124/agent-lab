@@ -23,7 +23,7 @@
  * Глобальный `platform-tts-barge-in` (window) при `stopStreamTtsPlayback()` — прерывает воспроизведение с кнопки на бабле при новом сообщении в чате.
  */
 
-import { html, css } from 'lit';
+import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
