@@ -82,6 +82,18 @@ def test_resolve_returns_none_for_unknown_api_id(unique_id):
     assert resolve_hf_model_id("vad", f"unknown-{unique_id}", cfg) is None
 
 
+def test_resolve_embedding_and_rerank_fall_back_to_config_when_runtime_initialized_empty(unique_id):
+    """Конфиг — источник истины для дефолтных пар RAG; SQLite может отставать после смены model id."""
+    cfg = ProviderLitserveInfraConfig(sqlite_path=f"./data/test/{unique_id}.db")
+    replace_runtime_catalog([])
+    assert resolve_hf_model_id("embedding", cfg.embedding_openai_model_id, cfg) == cfg.embedding_model_id
+    assert resolve_hf_model_id("rerank", cfg.rerank_openai_model_id, cfg) == cfg.model_id
+    emb_ids = runtime_api_model_ids("embedding", cfg)
+    assert cfg.embedding_openai_model_id in emb_ids
+    rerank_ids = runtime_api_model_ids("rerank", cfg)
+    assert cfg.rerank_openai_model_id in rerank_ids
+
+
 def test_replace_runtime_catalog_overrides_defaults(unique_id):
     cfg = _cfg(unique_id)
     counts = replace_runtime_catalog(

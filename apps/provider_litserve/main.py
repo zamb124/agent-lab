@@ -154,7 +154,7 @@ class ChatCompletionsLitAPI(ls.LitAPI):
         self._tokenizers: dict[str, Any] = {}
         self._models: dict[str, Any] = {}
         self._device: str = "cpu"
-        self._max_new_tokens: int = 256
+        self._max_new_tokens: int = 4096
         self._hf_token: str | None = None
         self._infra = get_provider_litserve_settings().provider_litserve.infra
 
@@ -196,7 +196,8 @@ class ChatCompletionsLitAPI(ls.LitAPI):
         body = dict(request)
         requested_model = str(body.get("model", "")).strip()
         allowed_ids = allowed_api_model_ids("llm", self._infra)
-        if requested_model not in allowed_ids:
+        req_lower = requested_model.lower()
+        if not any(a.lower() == req_lower for a in allowed_ids):
             raise HTTPException(
                 status_code=422,
                 detail={

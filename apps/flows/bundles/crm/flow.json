@@ -131,9 +131,9 @@
           "type": "llm_node",
           "prompt": "prompts/summarize_attachment.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "Qwen/Qwen2.5-1.5B-Instruct",
             "temperature": 0.1,
-            "provider": "openrouter"
+            "provider": "provider_litserve"
           },
           "tools": [],
           "structured_output": true,

@@ -47,7 +47,13 @@ from apps.crm.constants_graph import (
 )
 from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.file_text_reader import load_text_and_name_from_stored_file_id
-from apps.crm.services.note_attachment_description import merge_attachment_extracted_into_description
+from apps.crm.services.note_attachment_description import (
+    ATTACHMENT_SUMMARIZE_CHUNK_MAX_CHARS,
+    ATTACHMENT_SUMMARIZE_MERGE_PASS_THRESHOLD_CHARS,
+    merge_attachment_extracted_into_description,
+    split_text_into_summarize_chunks,
+    truncate_attachment_text_for_note,
+)
 from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_summary_ws_broadcast import (
@@ -3543,7 +3549,34 @@ class EntityService:
         return self._extract_data_from_a2a_response(response)
 
     async def call_summarize_attachment(self, text: str, filename: str) -> str:
-        """Суммаризировать текст вложения до компактного резюме через CRM flows skill."""
+        """Суммаризировать текст вложения до компактного резюме через CRM flows skill.
+
+        Длинный текст режется на чанки в пределах контекстного окна локального LLM (~32k токенов),
+        каждый чанк суммарируется отдельно; при необходимости выполняется финальное слияние резюме.
+        """
+        safe_text = truncate_attachment_text_for_note(text)
+        chunks = split_text_into_summarize_chunks(safe_text, ATTACHMENT_SUMMARIZE_CHUNK_MAX_CHARS)
+        if not chunks:
+            return ""
+
+        partials: list[str] = []
+        total = len(chunks)
+        for i, chunk in enumerate(chunks):
+            chunk_label = filename if total == 1 else f"{filename} (фрагмент {i + 1}/{total})"
+            partials.append(await self._summarize_attachment_fragment(chunk, chunk_label))
+
+        merged = "\n\n---\n\n".join(s.strip() for s in partials if s.strip())
+        merged = merged.strip()
+        if not merged:
+            raise ValueError("Суммаризация вложения не вернула текст ни по одному фрагменту")
+        if len(merged) <= ATTACHMENT_SUMMARIZE_MERGE_PASS_THRESHOLD_CHARS:
+            return merged
+        return await self._summarize_attachment_fragment(
+            merged,
+            f"{filename} (объединённое резюме фрагментов)",
+        )
+
+    async def _summarize_attachment_fragment(self, text: str, filename: str) -> str:
         company_id = self._get_company_id()
         settings = get_settings()
         flows_base = settings.server.get_flows_service_url().rstrip("/")

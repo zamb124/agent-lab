@@ -167,6 +167,32 @@ async def test_post_v1_embeddings_contract_single_string(
 
 
 @pytest.mark.asyncio
+async def test_post_v1_embeddings_openai_extra_fields_ignored(
+    provider_asgi_app: FastAPI,
+    provider_litserve_infra: ProviderLitserveInfraConfig,
+) -> None:
+    """SDK/прокси OpenAI часто шлют encoding_format, user и др. — не должны давать 422."""
+    async with AsyncClient(
+        transport=ASGITransport(app=provider_asgi_app),
+        base_url="http://test",
+    ) as client:
+        r = await client.post(
+            "/v1/embeddings",
+            json={
+                "model": provider_litserve_infra.embedding_openai_model_id,
+                "input": "x",
+                "encoding_format": "float",
+                "user": "ignored",
+                "dimensions": 1024,
+            },
+        )
+    assert r.status_code == 200
+    parsed = OpenAIEmbeddingsResponseBody.model_validate(r.json())
+    assert parsed.model == provider_litserve_infra.embedding_openai_model_id
+    assert len(parsed.data) == 1
+
+
+@pytest.mark.asyncio
 async def test_post_v1_embeddings_contract_batch(
     provider_asgi_app: FastAPI,
     provider_litserve_infra: ProviderLitserveInfraConfig,

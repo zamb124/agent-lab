@@ -191,7 +191,7 @@ def build_provider_litserve_v1_models_response(
 class OpenAIEmbeddingsRequest(BaseModel):
     """Тело POST ``/v1/embeddings`` (совместимо с OpenAI)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     model: str
     input: str | list[str]

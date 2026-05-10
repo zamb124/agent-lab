@@ -108,11 +108,11 @@ def _default_api_to_hf(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> dic
 
 def allowed_api_model_ids(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> frozenset[str]:
     runtime_map = runtime_catalog_snapshot(kind)
+    default_map = _default_api_to_hf(kind, cfg)
     with _catalog_lock:
         initialized = _catalog_initialized
-    if initialized:
+    if initialized and kind not in ("embedding", "rerank"):
         return frozenset(runtime_map.keys())
-    default_map = _default_api_to_hf(kind, cfg)
     return frozenset({*default_map.keys(), *runtime_map.keys()})
 
 
@@ -126,7 +126,7 @@ def resolve_hf_model_id(kind: ModelKind, api_model_id: str, cfg: ProviderLitserv
         return hf
     with _catalog_lock:
         initialized = _catalog_initialized
-    if initialized:
+    if initialized and kind not in ("embedding", "rerank"):
         return None
     default_map = _default_api_to_hf(kind, cfg)
     return _hf_from_api_map(default_map, normalized)
@@ -134,11 +134,12 @@ def resolve_hf_model_id(kind: ModelKind, api_model_id: str, cfg: ProviderLitserv
 
 def runtime_api_model_ids(kind: ModelKind, cfg: ProviderLitserveInfraConfig) -> list[str]:
     runtime_map = runtime_catalog_snapshot(kind)
+    default_map = _default_api_to_hf(kind, cfg)
     with _catalog_lock:
         initialized = _catalog_initialized
-    if initialized:
+    if initialized and kind not in ("embedding", "rerank"):
         return sorted(runtime_map.keys())
-    merged = dict(_default_api_to_hf(kind, cfg))
+    merged = dict(default_map)
     merged.update(runtime_map)
     return sorted(merged.keys())
 

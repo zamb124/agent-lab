@@ -78,12 +78,18 @@ class LocalEmbeddingEngine:
         rid = requested_model.strip()
         hf_model_id = resolve_hf_model_id("embedding", rid, self._cfg)
         if hf_model_id is None:
+            allowed = sorted(self.allowed_model_ids())
+            logger.warning(
+                "POST /v1/embeddings: unknown_embedding_model request=%r allowed=%s",
+                requested_model,
+                allowed,
+            )
             raise HTTPException(
                 status_code=422,
                 detail={
                     "reason": "unknown_embedding_model",
                     "model": requested_model,
-                    "allowed": sorted(self.allowed_model_ids()),
+                    "allowed": allowed,
                 },
             )
         texts = normalize_embedding_inputs(inp)
