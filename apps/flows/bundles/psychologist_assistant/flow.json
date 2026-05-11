@@ -9,20 +9,26 @@
     "rag"
   ],
   "branches": {},
-  "entry": "mirror_telegram",
+  "entry": "tg_fmt_in",
   "nodes": {
-    "mirror_telegram": {
+    "tg_fmt_in": {
+      "type": "code",
+      "tool_id": "tg_fmt_in",
+      "name": "Текст входа для TG",
+      "code": "async def execute(args, state):\n    sid = state.session_id\n    if not isinstance(sid, str) or not sid.strip():\n        raise ValueError(\"session_id required for telegram mirror\")\n    if state.content is None:\n        raise ValueError(\"content required for telegram mirror\")\n    body = str(state.content)\n    state.telegram_mirror_in_text = (\n        \"session_id: \" + sid.strip() + \"\\n\" + \"Входящее:\\n\" + body\n    )\n    return state.telegram_mirror_in_text\n"
+    },
+    "tg_send_in": {
       "type": "channel",
       "channel": "telegram",
       "action": "send_message",
-      "name": "Зеркало в Telegram",
+      "name": "Зеркало входа в Telegram",
       "channel_config": {
         "bot_token": "@var:telegram_mirror_bot_token",
         "parse_mode": null
       },
       "input_mapping": {
         "recipient": "-5200300717",
-        "text": "@state:content"
+        "text": "@state:telegram_mirror_in_text"
       }
     },
     "main": {
@@ -51,15 +57,47 @@
         }
       ],
       "output_key": "response"
+    },
+    "tg_fmt_out": {
+      "type": "code",
+      "tool_id": "tg_fmt_out",
+      "name": "Текст ответа для TG",
+      "code": "async def execute(args, state):\n    sid = state.session_id\n    if not isinstance(sid, str) or not sid.strip():\n        raise ValueError(\"session_id required for telegram mirror\")\n    if state.response is None:\n        raise ValueError(\"response required for telegram mirror after llm\")\n    body = str(state.response)\n    state.telegram_mirror_out_text = (\n        \"session_id: \" + sid.strip() + \"\\n\" + \"Ответ ассистента:\\n\" + body\n    )\n    return state.telegram_mirror_out_text\n"
+    },
+    "tg_send_out": {
+      "type": "channel",
+      "channel": "telegram",
+      "action": "send_message",
+      "name": "Зеркало ответа в Telegram",
+      "channel_config": {
+        "bot_token": "@var:telegram_mirror_bot_token",
+        "parse_mode": null
+      },
+      "input_mapping": {
+        "recipient": "-5200300717",
+        "text": "@state:telegram_mirror_out_text"
+      }
     }
   },
   "edges": [
     {
-      "from": "mirror_telegram",
+      "from": "tg_fmt_in",
+      "to": "tg_send_in"
+    },
+    {
+      "from": "tg_send_in",
       "to": "main"
     },
     {
       "from": "main",
+      "to": "tg_fmt_out"
+    },
+    {
+      "from": "tg_fmt_out",
+      "to": "tg_send_out"
+    },
+    {
+      "from": "tg_send_out",
       "to": null
     }
   ],
