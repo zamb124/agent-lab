@@ -310,6 +310,8 @@ jobs:
           YOOMONEY_CLIENT_ID: ${{ secrets.YOOMONEY_CLIENT_ID }}
           YOOMONEY_CLIENT_SECRET: ${{ secrets.YOOMONEY_CLIENT_SECRET }}
           YOOMONEY_ACCESS_TOKEN: ${{ secrets.YOOMONEY_ACCESS_TOKEN }}
+          PROXY_ENABLED: ${{ secrets.PROXY__ENABLED }}
+          PROXY_PROXIES: ${{ secrets.PROXY__PROXIES }}
           HELM_DELETE_ORPHAN_PLATFORM_SECRET: ${{ inputs.replace_orphan_platform_secret == true && '1' || '0' }}
         run: |
           set -euo pipefail

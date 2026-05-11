@@ -349,6 +349,16 @@
       name: {{ .Values.platformSecretName }}
       key: yoomoney-access-token
       optional: true
+- name: PROXY__ENABLED
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: proxy-enabled
+- name: PROXY__PROXIES
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: proxy-proxies
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: http://alloy:4317
 - name: LOGGING__LOKI_QUERY_URL

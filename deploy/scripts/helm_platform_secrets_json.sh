@@ -8,6 +8,13 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+if [ -z "${PROXY_ENABLED:-}" ]; then
+  PROXY_ENABLED="false"
+fi
+if [ -z "${PROXY_PROXIES:-}" ]; then
+  PROXY_PROXIES="[]"
+fi
+
 jq -n \
   --arg postgresPassword "${POSTGRES_PASSWORD:-}" \
   --arg authJwtSecret "${AUTH_JWT_SECRET:-}" \
@@ -54,6 +61,8 @@ jq -n \
   --arg yoomoneyClientId "${YOOMONEY_CLIENT_ID:-}" \
   --arg yoomoneyClientSecret "${YOOMONEY_CLIENT_SECRET:-}" \
   --arg yoomoneyAccessToken "${YOOMONEY_ACCESS_TOKEN:-}" \
+  --arg proxyEnabled "$PROXY_ENABLED" \
+  --arg proxyProxies "$PROXY_PROXIES" \
   '{
     create: true,
     postgresPassword: $postgresPassword,
@@ -100,5 +109,7 @@ jq -n \
     yoomoneyNotificationSecret: $yoomoneyNotificationSecret,
     yoomoneyClientId: $yoomoneyClientId,
     yoomoneyClientSecret: $yoomoneyClientSecret,
-    yoomoneyAccessToken: $yoomoneyAccessToken
+    yoomoneyAccessToken: $yoomoneyAccessToken,
+    proxyEnabled: $proxyEnabled,
+    proxyProxies: $proxyProxies
   }'

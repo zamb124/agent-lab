@@ -158,6 +158,7 @@ kubectl delete secret platform-secrets -n platform
 | `PUSH_APNS_PRIVATE_KEY` | (опционально) APNs .p8 |
 | `PUSH_FCM_CREDENTIALS_JSON` / `PUSH_FCM_PROJECT_ID` | (опционально) FCM service account |
 | `YOOMONEY_*` | (опционально) платежи YooMoney |
+| `PROXY__ENABLED` / `PROXY__PROXIES` | (опционально) исходящий HTTP(S) прокси (`settings.proxy`): `PROXY__PROXIES` — JSON-массив строк URL, одной строкой в секрете, например `["http://user:pass@host:3128"]` |
 
 Эти переменные задаются в GitHub Actions как env и передаются в Helm одним `--set-json platformSecrets=...` через `deploy/scripts/helm_platform_secrets_json.sh` (jq экранирует многострочные секреты).
 
@@ -182,6 +183,9 @@ export LIVEKIT_API_SECRET=...
 export TURN_SECRET=...
 export ONLYOFFICE_JWT_SECRET=...
 export GRAFANA_ADMIN_PASSWORD=...
+# Опционально: исходящий прокси (в GitHub те же значения под именами PROXY__ENABLED / PROXY__PROXIES):
+# export PROXY_ENABLED=true
+# export PROXY_PROXIES='["http://user:pass@proxy.example:3128"]'
 make k8s-deploy IMAGE_TAG=latest
 
 # При необходимости обновить только секреты (релиз уже есть):

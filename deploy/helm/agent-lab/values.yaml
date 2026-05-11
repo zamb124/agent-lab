@@ -444,5 +444,7 @@ platformSecrets:
   yoomoneyClientId: ""
   yoomoneyClientSecret: ""
   yoomoneyAccessToken: ""
+  proxyEnabled: ""
+  proxyProxies: ""
 
 platformSecretName: platform-secrets
