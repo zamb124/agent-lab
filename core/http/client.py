@@ -7,7 +7,7 @@ HTTP клиент с поддержкой прокси и автоматичес
 """
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -63,12 +63,14 @@ async def _request_direct_burst(
     *,
     timeout: float,
     attempts: int,
+    httpx_client_kwargs: Optional[dict[str, Any]] = None,
     **kwargs,
 ) -> httpx.Response:
     http_method = method.upper()
     last: BaseException | None = None
+    hck = httpx_client_kwargs or {}
     for attempt in range(attempts):
-        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.DIRECT_ONLY, **hck) as client:
             try:
                 return await client.request(http_method, url, **kwargs)
             except _CONNECT_RETRY_EXCEPTIONS as e:
@@ -92,6 +94,7 @@ async def request_public_oauth(
     timeout: float = 30.0,
     direct_attempts_before_proxy: int = PUBLIC_OAUTH_DIRECT_ATTEMPTS_BEFORE_PROXY,
     direct_attempts_after_proxy: int = PUBLIC_OAUTH_DIRECT_ATTEMPTS_AFTER_PROXY,
+    httpx_client_kwargs: Optional[dict[str, Any]] = None,
     **kwargs,
 ) -> httpx.Response:
     """
@@ -99,12 +102,14 @@ async def request_public_oauth(
     затем через platform proxy (если proxy.enabled и список proxies непустой),
     затем снова несколько попыток без прокси.
     """
+    hck = httpx_client_kwargs or {}
     try:
         return await _request_direct_burst(
             method,
             url,
             timeout=timeout,
             attempts=direct_attempts_before_proxy,
+            httpx_client_kwargs=hck,
             **kwargs,
         )
     except _CONNECT_RETRY_EXCEPTIONS:
@@ -112,7 +117,7 @@ async def request_public_oauth(
 
     if _platform_proxy_active():
         try:
-            async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.PROXY_ONLY) as client:
+            async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.PROXY_ONLY, **hck) as client:
                 return await client.request(method.upper(), url, **kwargs)
         except _CONNECT_RETRY_EXCEPTIONS as e:
             logger.warning(
@@ -126,6 +131,7 @@ async def request_public_oauth(
         url,
         timeout=timeout,
         attempts=direct_attempts_after_proxy,
+        httpx_client_kwargs=hck,
         **kwargs,
     )
 
