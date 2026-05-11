@@ -6,8 +6,10 @@ import asyncio
 import time
 from typing import Any, Dict, List, Optional, Union
 
+import httpx
+
 from apps.flows.src.models.enums import ChannelType
-from core.http import get_httpx_client
+from core.http.client import ProxyStrategy, request_with_strategy
 from core.logging import get_logger
 
 from .base import BaseChannelHandler
@@ -15,6 +17,20 @@ from .base import BaseChannelHandler
 logger = get_logger(__name__)
 
 MESSAGE_DRAFT_MIN_INTERVAL_SEC = 0.08
+
+
+async def _telegram_post(url: str, *, timeout: float, **kwargs: Any) -> httpx.Response:
+    """
+    Исходящий POST к Telegram Bot API: DIRECT_FIRST (прямое соединение, затем egress proxy
+    при ConnectTimeout/ConnectError, см. request_with_strategy).
+    """
+    return await request_with_strategy(
+        "POST",
+        url,
+        strategy=ProxyStrategy.DIRECT_FIRST,
+        timeout=timeout,
+        **kwargs,
+    )
 
 
 def _parse_mode_for_plain_send(config: Dict[str, Any]) -> Optional[str]:
@@ -97,21 +113,23 @@ class TelegramChannelHandler(BaseChannelHandler):
             
         if config.get("protect_content"):
             payload["protect_content"] = True
-        
-        async with get_httpx_client(timeout=30.0, proxy=True) as client:
-            response = await client.post(url, json=payload)
+
+        response = await _telegram_post(url, timeout=30.0, json=payload)
+        try:
             result = response.json()
-            
-            if not result.get("ok"):
-                logger.error(
-                    f"Telegram sendMessage failed: {result.get('description')}"
-                )
-                raise RuntimeError(
-                    f"Telegram API error: {result.get('description', 'Unknown error')}"
-                )
-            
-            logger.info(f"Telegram message sent to {recipient}")
-            return result
+        finally:
+            await response.aclose()
+
+        if not result.get("ok"):
+            logger.error(
+                f"Telegram sendMessage failed: {result.get('description')}"
+            )
+            raise RuntimeError(
+                f"Telegram API error: {result.get('description', 'Unknown error')}"
+            )
+
+        logger.info(f"Telegram message sent to {recipient}")
+        return result
 
     async def send_message_draft(
         self,
@@ -146,20 +164,22 @@ class TelegramChannelHandler(BaseChannelHandler):
         if message_thread_id is not None:
             payload["message_thread_id"] = message_thread_id
 
-        async with get_httpx_client(timeout=30.0, proxy=True) as client:
-            response = await client.post(url, json=payload)
+        response = await _telegram_post(url, timeout=30.0, json=payload)
+        try:
             result = response.json()
+        finally:
+            await response.aclose()
 
-            if not result.get("ok"):
-                logger.error(
-                    "Telegram sendMessageDraft failed: %s",
-                    result.get("description"),
-                )
-                raise RuntimeError(
-                    f"Telegram API error: {result.get('description', 'Unknown error')}"
-                )
+        if not result.get("ok"):
+            logger.error(
+                "Telegram sendMessageDraft failed: %s",
+                result.get("description"),
+            )
+            raise RuntimeError(
+                f"Telegram API error: {result.get('description', 'Unknown error')}"
+            )
 
-            return result
+        return result
 
     async def stream_message_draft_text(
         self,
@@ -208,45 +228,47 @@ class TelegramChannelHandler(BaseChannelHandler):
         """Отправляет фото в Telegram."""
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendPhoto"
-        
-        async with get_httpx_client(timeout=60.0, proxy=True) as client:
-            if isinstance(photo, bytes):
-                files = {"photo": ("photo.jpg", photo, "image/jpeg")}
-                data = {"chat_id": recipient}
-                
-                if caption:
-                    data["caption"] = caption
-                    data["parse_mode"] = config.get("parse_mode", "HTML")
-                    
-                if reply_to_message_id:
-                    data["reply_to_message_id"] = reply_to_message_id
-                
-                response = await client.post(url, data=data, files=files)
-            else:
-                payload = {
-                    "chat_id": recipient,
-                    "photo": photo,
-                }
-                
-                if caption:
-                    payload["caption"] = caption
-                    payload["parse_mode"] = config.get("parse_mode", "HTML")
-                    
-                if reply_to_message_id:
-                    payload["reply_to_message_id"] = reply_to_message_id
-                
-                response = await client.post(url, json=payload)
-            
+
+        if isinstance(photo, bytes):
+            files = {"photo": ("photo.jpg", photo, "image/jpeg")}
+            data: Dict[str, Any] = {"chat_id": recipient}
+
+            if caption:
+                data["caption"] = caption
+                data["parse_mode"] = config.get("parse_mode", "HTML")
+
+            if reply_to_message_id:
+                data["reply_to_message_id"] = reply_to_message_id
+
+            response = await _telegram_post(url, timeout=60.0, data=data, files=files)
+        else:
+            payload = {
+                "chat_id": recipient,
+                "photo": photo,
+            }
+
+            if caption:
+                payload["caption"] = caption
+                payload["parse_mode"] = config.get("parse_mode", "HTML")
+
+            if reply_to_message_id:
+                payload["reply_to_message_id"] = reply_to_message_id
+
+            response = await _telegram_post(url, timeout=60.0, json=payload)
+
+        try:
             result = response.json()
-            
-            if not result.get("ok"):
-                logger.error(f"Telegram sendPhoto failed: {result.get('description')}")
-                raise RuntimeError(
-                    f"Telegram API error: {result.get('description', 'Unknown error')}"
-                )
-            
-            logger.info(f"Telegram photo sent to {recipient}")
-            return result
+        finally:
+            await response.aclose()
+
+        if not result.get("ok"):
+            logger.error(f"Telegram sendPhoto failed: {result.get('description')}")
+            raise RuntimeError(
+                f"Telegram API error: {result.get('description', 'Unknown error')}"
+            )
+
+        logger.info(f"Telegram photo sent to {recipient}")
+        return result
     
     async def send_document(
         self,
@@ -262,48 +284,50 @@ class TelegramChannelHandler(BaseChannelHandler):
         """Отправляет документ в Telegram."""
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendDocument"
-        
-        async with get_httpx_client(timeout=120.0, proxy=True) as client:
-            if isinstance(document, bytes):
-                fname = filename or "document"
-                files = {"document": (fname, document, "application/octet-stream")}
-                data = {"chat_id": recipient}
-                
-                if caption:
-                    data["caption"] = caption
-                    data["parse_mode"] = config.get("parse_mode", "HTML")
-                    
-                if reply_to_message_id:
-                    data["reply_to_message_id"] = reply_to_message_id
-                
-                response = await client.post(url, data=data, files=files)
-            else:
-                payload = {
-                    "chat_id": recipient,
-                    "document": document,
-                }
-                
-                if caption:
-                    payload["caption"] = caption
-                    payload["parse_mode"] = config.get("parse_mode", "HTML")
-                    
-                if reply_to_message_id:
-                    payload["reply_to_message_id"] = reply_to_message_id
-                
-                response = await client.post(url, json=payload)
-            
+
+        if isinstance(document, bytes):
+            fname = filename or "document"
+            files = {"document": (fname, document, "application/octet-stream")}
+            data = {"chat_id": recipient}
+
+            if caption:
+                data["caption"] = caption
+                data["parse_mode"] = config.get("parse_mode", "HTML")
+
+            if reply_to_message_id:
+                data["reply_to_message_id"] = reply_to_message_id
+
+            response = await _telegram_post(url, timeout=120.0, data=data, files=files)
+        else:
+            payload = {
+                "chat_id": recipient,
+                "document": document,
+            }
+
+            if caption:
+                payload["caption"] = caption
+                payload["parse_mode"] = config.get("parse_mode", "HTML")
+
+            if reply_to_message_id:
+                payload["reply_to_message_id"] = reply_to_message_id
+
+            response = await _telegram_post(url, timeout=120.0, json=payload)
+
+        try:
             result = response.json()
-            
-            if not result.get("ok"):
-                logger.error(
-                    f"Telegram sendDocument failed: {result.get('description')}"
-                )
-                raise RuntimeError(
-                    f"Telegram API error: {result.get('description', 'Unknown error')}"
-                )
-            
-            logger.info(f"Telegram document sent to {recipient}")
-            return result
+        finally:
+            await response.aclose()
+
+        if not result.get("ok"):
+            logger.error(
+                f"Telegram sendDocument failed: {result.get('description')}"
+            )
+            raise RuntimeError(
+                f"Telegram API error: {result.get('description', 'Unknown error')}"
+            )
+
+        logger.info(f"Telegram document sent to {recipient}")
+        return result
     
     async def reply(
         self,
