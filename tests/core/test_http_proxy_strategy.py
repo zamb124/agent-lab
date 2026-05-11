@@ -140,6 +140,41 @@ class TestProxyStrategy:
                     mock_get_client.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_direct_first_fallback_json_not_passed_to_httpx_client_ctor(self):
+        """POST json к Telegram: fallback на прокси не должен пробрасывать json в AsyncClient."""
+        import httpx
+
+        with patch("core.http.client._request_direct_burst") as mock_direct:
+            with patch("core.http.client._platform_proxy_active", return_value=True):
+                with patch("core.http.client.get_httpx_client") as mock_get_client:
+                    mock_direct.side_effect = httpx.ConnectError("Direct failed")
+
+                    mock_client = AsyncMock()
+                    mock_response = MagicMock()
+                    mock_response.status_code = 200
+                    mock_client.request.return_value = mock_response
+                    mock_get_client.return_value.__aenter__.return_value = mock_client
+
+                    payload = {"chat_id": "-1", "text": "x"}
+                    response = await request_with_strategy(
+                        "POST",
+                        "https://api.telegram.org/botfake/sendMessage",
+                        strategy=ProxyStrategy.DIRECT_FIRST,
+                        direct_attempts=1,
+                        proxy_attempts=3,
+                        timeout=10.0,
+                        json=payload,
+                    )
+
+                    assert response.status_code == 200
+                    mock_get_client.assert_called_once()
+                    client_call_kwargs = mock_get_client.call_args[1]
+                    assert "json" not in client_call_kwargs
+                    req_call = mock_client.request.await_args
+                    assert req_call is not None
+                    assert req_call.kwargs["json"] == payload
+
+    @pytest.mark.asyncio
     async def test_direct_first_fallback_to_direct_after_proxy(self):
         """Тест DIRECT_FIRST - прямой и прокси не удались, повторное прямое."""
         import httpx

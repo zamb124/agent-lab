@@ -24,8 +24,16 @@ logger = get_logger(__name__)
 
 _CONNECT_RETRY_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout)
 
+# Ключи, допустимые в httpx.request(...), но не в httpx.AsyncClient(...).
+_HTTPX_REQUEST_ONLY_KEYS = frozenset({"content", "data", "files", "json", "extensions"})
+
 # Базовый набор статусов для SMART (401 добавляется через settings.proxy.retry_http_401_via_proxy).
 HTTP_STATUS_RETRY_VIA_PROXY = frozenset({403, 429, 451})
+
+
+def _httpx_async_client_kwargs(merged_kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Отделяет kwargs конструктора AsyncClient от параметров одного HTTP-запроса."""
+    return {k: v for k, v in merged_kwargs.items() if k not in _HTTPX_REQUEST_ONLY_KEYS}
 
 PUBLIC_OAUTH_DIRECT_ATTEMPTS_BEFORE_PROXY = 3
 PUBLIC_OAUTH_DIRECT_ATTEMPTS_AFTER_PROXY = 2
@@ -156,7 +164,9 @@ async def request_with_strategy(
         proxy_attempts: Количество попыток через прокси (для proxy_first)
         direct_attempts: Количество попыток прямого подключения (для direct_first)
         timeout: Таймаут запросов
-        **kwargs: Дополнительные параметры для httpx
+        **kwargs: Параметры для `client.request` (json, data, files, headers, ...). Ключи только
+            для запроса (`json`, `data`, `files`, `content`, `extensions`) не передаются в
+            конструктор `httpx.AsyncClient`.
 
     Returns:
         httpx.Response
@@ -176,11 +186,12 @@ async def request_with_strategy(
     if strategy == ProxyStrategy.PROXY_ONLY:
         if not _platform_proxy_active():
             raise httpx.ConnectError("Proxy requested but not configured")
+        client_kw = _httpx_async_client_kwargs(kwargs)
         async with get_httpx_client(
             timeout=timeout,
             strategy=ProxyStrategy.PROXY_ONLY,
             proxy_attempts=proxy_attempts,
-            **kwargs,
+            **client_kw,
         ) as client:
             return await client.request(method.upper(), url, **kwargs)
 
@@ -198,11 +209,12 @@ async def request_with_strategy(
 
         if _platform_proxy_active():
             try:
+                client_kw = _httpx_async_client_kwargs(kwargs)
                 async with get_httpx_client(
                     timeout=timeout,
                     strategy=ProxyStrategy.PROXY_ONLY,
                     proxy_attempts=proxy_attempts,
-                    **kwargs,
+                    **client_kw,
                 ) as client:
                     return await client.request(method.upper(), url, **kwargs)
             except _CONNECT_RETRY_EXCEPTIONS:
@@ -222,11 +234,12 @@ async def request_with_strategy(
     if strategy == ProxyStrategy.PROXY_FIRST:
         if _platform_proxy_active():
             try:
+                client_kw = _httpx_async_client_kwargs(kwargs)
                 async with get_httpx_client(
                     timeout=timeout,
                     strategy=ProxyStrategy.PROXY_ONLY,
                     proxy_attempts=proxy_attempts,
-                    **kwargs,
+                    **client_kw,
                 ) as client:
                     return await client.request(method.upper(), url, **kwargs)
             except _CONNECT_RETRY_EXCEPTIONS:
@@ -244,7 +257,8 @@ async def request_with_strategy(
         )
 
     if strategy == ProxyStrategy.SMART:
-        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART, **kwargs) as client:
+        client_kw = _httpx_async_client_kwargs(kwargs)
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART, **client_kw) as client:
             return await client.request(method.upper(), url, **kwargs)
 
     raise ValueError(f"Unknown strategy: {strategy}")
