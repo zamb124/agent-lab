@@ -15,7 +15,7 @@ from core.config import get_settings
 from ..base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 # S3ClientFactory используется через базовый класс BaseRAGProvider
 from core.utils.slug import generate_slug
 
@@ -39,7 +39,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         
         self._client = get_httpx_client(
             timeout=self.timeout,
-            proxy=True,
+            strategy=ProxyStrategy.SMART,
             base_url=self.base_url,
             headers={
                 "Authorization": f"Bearer {self.api_key}",

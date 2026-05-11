@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from apps.flows.config import get_settings as flows_get_settings
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.verify_draft import normalize_telegram_bot_token_for_api
 from apps.flows.src.triggers.handlers.base import (
@@ -125,7 +125,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             "drop_pending_updates": config.get("drop_pending_updates", False),
         }
         
-        async with get_httpx_client(timeout=30.0, proxy=True) as client:
+        async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
             response = await client.post(api_url, json=payload)
             
             if response.status_code != 200:
@@ -196,7 +196,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
         
         try:
-            async with get_httpx_client(timeout=30.0, proxy=True) as client:
+            async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
                 response = await client.post(api_url, json={"drop_pending_updates": True})
                 
                 if response.status_code == 200:

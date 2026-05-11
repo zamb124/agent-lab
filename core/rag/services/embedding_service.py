@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING
 from core.context import get_context
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
@@ -166,7 +166,7 @@ class EmbeddingService:
         try:
             async with get_httpx_client(
                 timeout=self.timeout,
-                proxy=True
+                strategy=ProxyStrategy.SMART,
             ) as client:
                 response = await client.post(
                     self.api_url,

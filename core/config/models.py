@@ -674,6 +674,15 @@ class ProxyConfig(BaseModel):
         default=4.0,
         description="Таймаут подключения к прокси (секунды)",
     )
+    prefer_proxy_ttl_seconds: int = Field(
+        default=86400,
+        ge=60,
+        description="TTL Redis-ключа prefer-proxy для origin (секунды); каждая SET learn обязана использовать EX",
+    )
+    retry_http_401_via_proxy: bool = Field(
+        default=False,
+        description="В SMART при 401 повторять запрос через egress proxy (может маскировать неверный токен)",
+    )
 
     _current_index: int = PrivateAttr(default=0)
     _last_used_proxy: Optional[str] = PrivateAttr(default=None)

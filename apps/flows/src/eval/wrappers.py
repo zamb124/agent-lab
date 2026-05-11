@@ -13,8 +13,7 @@ from pydantic import BaseModel
 from core.clients.llm.factory import get_llm, MessageInput
 from core.errors import SafeEvalError
 from core.context import get_current_channel
-from core.http import get_httpx_client
-from core.http.client import ProxyStrategy
+from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -336,9 +335,9 @@ class HttpxModule:
         timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """GET запрос через прокси."""
+        """GET с strategy=SMART (прямой канал, при блокировках — egress + learn в Redis)."""
         timeout = timeout or HttpxModule._default_timeout
-        async with get_httpx_client(timeout=timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.get(
                 url,
                 params=params,
@@ -365,9 +364,9 @@ class HttpxModule:
         timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """POST запрос через прокси."""
+        """POST с strategy=SMART."""
         timeout = timeout or HttpxModule._default_timeout
-        async with get_httpx_client(timeout=timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.post(
                 url,
                 content=content,
@@ -398,9 +397,9 @@ class HttpxModule:
         timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """PUT запрос через прокси."""
+        """PUT с strategy=SMART."""
         timeout = timeout or HttpxModule._default_timeout
-        async with get_httpx_client(timeout=timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.put(
                 url,
                 content=content,
@@ -431,9 +430,9 @@ class HttpxModule:
         timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """PATCH запрос через прокси."""
+        """PATCH с strategy=SMART."""
         timeout = timeout or HttpxModule._default_timeout
-        async with get_httpx_client(timeout=timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.patch(
                 url,
                 content=content,
@@ -460,9 +459,9 @@ class HttpxModule:
         timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """DELETE запрос через прокси."""
+        """DELETE с strategy=SMART."""
         timeout = timeout or HttpxModule._default_timeout
-        async with get_httpx_client(timeout=timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.delete(
                 url,
                 params=params,
@@ -490,9 +489,9 @@ class HttpxModule:
         timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """Универсальный request через прокси."""
+        """request() с strategy=SMART."""
         timeout = timeout or HttpxModule._default_timeout
-        async with get_httpx_client(timeout=timeout, proxy=True) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.request(
                 method,
                 url,

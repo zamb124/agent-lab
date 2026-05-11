@@ -107,9 +107,11 @@ settings.server.get_service_url("flows")
 
 `httpx` в `core/http/client.py` создаётся с `trust_env=False`: `HTTP_PROXY`/`HTTPS_PROXY` из окружения **не** подхватываются.
 
-Вызовы к Yandex/Google/GitHub/Apple (обмен `code`, userinfo, refresh) идут через `request_public_oauth`: несколько попыток **без** прокси, затем с `proxy` из `settings.proxy` (если `proxy.enabled` и непустой `proxy.proxies`), затем снова без. Ротация URL — как у `get_httpx_client(proxy=True)`.
+Исходящие вызовы: только явный `strategy=` у `get_httpx_client` / `SmartProxyClient` (`ProxyStrategy` в `core/http/client.py`). Аргумент `proxy=` **запрещён** (ValueError). Типично для внешних API — **`ProxyStrategy.SMART`**: сначала прямой канал, при `ConnectError`/`ConnectTimeout` на прямом или HTTP-триггерах (403/429/451; опционально 401 — `proxy.retry_http_401_via_proxy`) при активном `settings.proxy` — повтор через egress с ротацией URL; успешный проход через прокси запоминается в Redis (`platform:http_egress:prefer_proxy:{origin}`, TTL `proxy.prefer_proxy_ttl_seconds`) с инвалидацией при откате на успешный прямой. **`ProxyStrategy.PROXY_ONLY`** — точечно, где нужен гарантированно только egress (например средний шаг в `request_public_oauth` или второй запрос во `ExternalAPIClient` после 401/403 с прямого канала).
 
-В проде за корпоративным прокси — секция `proxy` (`enabled` + `proxies`, см. `ProxyConfig`).
+Вызовы к Yandex/Google/GitHub/Apple (обмен `code`, userinfo, refresh) идут через `request_public_oauth`: несколько попыток **без** прокси, затем один блок через `get_httpx_client(strategy=PROXY_ONLY)`, затем снова без.
+
+В проде за корпоративным прокси — секция `proxy` (`enabled` + `proxies`, `prefer_proxy_ttl_seconds`, см. `ProxyConfig`).
 
 ## Переменные flow и `@var:`
 

@@ -20,7 +20,7 @@ from apps.flows.src.models.external_api import (
     ResponseType,
 )
 from core.errors import ExternalAPIError
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
 
@@ -117,13 +117,13 @@ class ExternalAPIClient:
         Выполняет запрос: сначала без прокси, при 401/403 - с прокси.
         Для локальных хостов прокси не используется.
         """
-        async with get_httpx_client(timeout=timeout, proxy=False) as client:
+        async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
             response = await client.request(**request_kwargs)
 
         url = request_kwargs.get("url", "")
         if response.status_code in PROXY_RETRY_STATUS_CODES and not self._is_local_url(url):
             logger.debug(f"Got {response.status_code}, retrying with proxy")
-            async with get_httpx_client(timeout=timeout, proxy=True) as client:
+            async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.PROXY_ONLY) as client:
                 response = await client.request(**request_kwargs)
 
         return response

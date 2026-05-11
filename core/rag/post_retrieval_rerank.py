@@ -21,7 +21,7 @@ from core.company_ai.resolver import (
 )
 from core.config.base import BaseSettings
 from core.context import get_context
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.rag.models import RAGSearchResult
@@ -167,7 +167,7 @@ class RerankerHTTPClient:
         try:
             async with get_httpx_client(
                 timeout=self._timeout_seconds,
-                proxy=False,
+                strategy=ProxyStrategy.DIRECT_ONLY,
             ) as client:
                 response = await client.post(
                     endpoint_url.strip(),

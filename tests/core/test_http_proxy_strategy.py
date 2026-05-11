@@ -1,7 +1,7 @@
 """Тесты для программируемой стратегии прокси в HTTP клиенте."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 from core.http.client import ProxyStrategy, get_httpx_client, request_with_strategy
 
@@ -245,6 +245,11 @@ class TestProxyStrategy:
                 mock_direct.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_get_httpx_client_rejects_proxy_kwarg(self):
+        with pytest.raises(ValueError, match="unsupported keyword 'proxy'"):
+            get_httpx_client(proxy=True)
+
+    @pytest.mark.asyncio
     async def test_smart_direct_200_no_proxy_rotation(self):
         """SMART: при 200 сразу возвращаем ответ, без второй фазы."""
         with patch("core.http.client.SmartProxyClient._request_via_proxy_rotation") as mock_proxy_path:
@@ -265,11 +270,55 @@ class TestProxyStrategy:
                     return mock_resp
 
             with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
-                async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
-                    r = await client.request("GET", "https://api.example.com/x")
+                with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=False):
+                    with patch("core.http.client.egress_prefer_proxy_set", new_callable=AsyncMock):
+                        async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                            r = await client.request("GET", "https://api.example.com/x")
 
             assert r.status_code == 200
             mock_proxy_path.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_smart_sticky_redis_prefers_proxy_first(self):
+        """SMART: Redis говорит prefer proxy — сначала ротация прокси, без прямого запроса."""
+        via_proxy = MagicMock()
+        via_proxy.status_code = 200
+        type(via_proxy).is_success = PropertyMock(return_value=True)
+
+        with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=True):
+            with patch("core.http.client.egress_prefer_proxy_set", new_callable=AsyncMock) as mock_set:
+                with patch(
+                    "core.http.client.SmartProxyClient._request_via_proxy_rotation",
+                    new_callable=AsyncMock,
+                    return_value=via_proxy,
+                ) as mock_rotate:
+                    with patch("core.http.client._platform_proxy_active", return_value=True):
+                        async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                            r = await client.request("GET", "https://api.example.com/x")
+
+        assert r.status_code == 200
+        mock_rotate.assert_awaited_once()
+        mock_set.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_egress_prefer_proxy_set_requires_ttl(self):
+        """egress_prefer_proxy_set передаёт TTL в RedisClient.set."""
+        from core.http.egress_route_preference import egress_prefer_proxy_set
+
+        mock_rc = MagicMock()
+        mock_rc.set = AsyncMock(return_value=True)
+
+        with patch("core.http.egress_route_preference._redis_client", return_value=mock_rc):
+            with patch(
+                "core.http.egress_route_preference._platform_proxy_configured",
+                return_value=True,
+            ):
+                with patch("core.http.egress_route_preference.get_settings") as mock_gs:
+                    mock_gs.return_value.proxy.prefer_proxy_ttl_seconds = 3600
+                    await egress_prefer_proxy_set("https://example.com:443")
+
+        mock_rc.set.assert_awaited_once()
+        assert mock_rc.set.call_args[1]["ttl"] == 3600
 
     @pytest.mark.asyncio
     async def test_smart_403_retries_via_proxy_when_configured(self):
@@ -280,6 +329,7 @@ class TestProxyStrategy:
 
         second = MagicMock()
         second.status_code = 200
+        type(second).is_success = PropertyMock(return_value=True)
 
         class FakeAsyncClient:
             def __init__(self, *args, **kwargs):
@@ -301,14 +351,16 @@ class TestProxyStrategy:
         mock_settings.proxy.connect_timeout = 15.0
         mock_settings.proxy.mark_last_proxy_failed = MagicMock()
 
-        with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
-            with patch("core.http.client._platform_proxy_active", return_value=True):
-                with patch(
-                    "core.http.client.SmartProxyClient._get_settings",
-                    return_value=mock_settings,
-                ):
-                    async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
-                        r = await client.request("GET", "https://api.example.com/x")
+        with patch("core.http.client.egress_prefer_proxy_get", new_callable=AsyncMock, return_value=False):
+            with patch("core.http.client.egress_prefer_proxy_set", new_callable=AsyncMock):
+                with patch("core.http.client.httpx.AsyncClient", FakeAsyncClient):
+                    with patch("core.http.client._platform_proxy_active", return_value=True):
+                        with patch(
+                            "core.http.client.SmartProxyClient._get_settings",
+                            return_value=mock_settings,
+                        ):
+                            async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
+                                r = await client.request("GET", "https://api.example.com/x")
 
         assert r.status_code == 200
         first.aclose.assert_awaited_once()

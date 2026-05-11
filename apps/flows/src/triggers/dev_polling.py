@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Set
 import httpx
 
 from apps.flows.config import get_settings
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -47,7 +47,7 @@ class TelegramPollingBot:
         """Удаляет webhook перед polling."""
         url = f"{get_settings().telegram.api_base}/bot{self.bot_token}/deleteWebhook"
         try:
-            async with get_httpx_client(timeout=10.0, proxy=True) as client:
+            async with get_httpx_client(timeout=10.0, strategy=ProxyStrategy.SMART) as client:
                 await client.post(url)
                 logger.info(f"[{self.bot_key}] Webhook deleted")
         except httpx.HTTPError as e:
@@ -92,7 +92,7 @@ class TelegramPollingBot:
         
         logger.info(f"[{self.bot_key}] Polling started (token: ...{self.bot_token[-8:]})")
         
-        async with get_httpx_client(proxy=True) as client:
+        async with get_httpx_client(strategy=ProxyStrategy.SMART) as client:
             while self.running:
                 updates = await self.get_updates(client)
                 
@@ -293,7 +293,7 @@ class TelegramDevPolling:
         if secret:
             headers["X-Telegram-Bot-Api-Secret-Token"] = secret
 
-        async with get_httpx_client(timeout=120.0, proxy=True) as client:
+        async with get_httpx_client(timeout=120.0, strategy=ProxyStrategy.SMART) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         if response.status_code >= 500:

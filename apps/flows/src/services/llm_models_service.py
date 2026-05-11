@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 import httpx
 
 from apps.flows.config import get_settings
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 from apps.flows.src.db import LLMModelRepository
 from core.clients import SchedulerClient
 from core.logging import get_logger
@@ -187,7 +187,7 @@ class LLMModelsService:
         base_url = provider_cfg.resolve_openai_v1_base_url()
         url = f"{base_url}/models"
 
-        async with get_httpx_client(timeout=30.0, proxy=False) as client:
+        async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.DIRECT_ONLY) as client:
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()

@@ -20,7 +20,7 @@ from apps.flows.src.models.mcp import (
     MCPToolInfo,
     MCPTransportType,
 )
-from core.http import get_httpx_client
+from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
 from core.variables import VarResolver
@@ -214,7 +214,7 @@ class MCPClient:
                     keys.sort()
                     span.set_attribute("platform.mcp.tool_args_keys", ",".join(keys[:50]))
 
-            async with get_httpx_client(timeout=self.timeout, proxy=False) as client:
+            async with get_httpx_client(timeout=self.timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
                 response = await client.post(
                     self.config.url,
                     json=payload,
