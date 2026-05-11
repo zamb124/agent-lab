@@ -8,6 +8,7 @@ import './platform-embed-chat-drawer.js';
 export class PlatformLaraAssistant extends LitElement {
     static properties = {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
+        platformUiOrigin: { type: String, attribute: 'platform-ui-origin' },
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
         branchId: { type: String, attribute: 'branch-id' },
@@ -36,6 +37,7 @@ export class PlatformLaraAssistant extends LitElement {
     constructor() {
         super();
         this.flowsBaseUrl = '';
+        this.platformUiOrigin = '';
         this.flowId = 'lara';
         this.embedId = '';
         this.branchId = '';
@@ -63,6 +65,7 @@ export class PlatformLaraAssistant extends LitElement {
                 .theme=${this.theme || 'auto'}
                 .showLauncher=${this.showLauncher}
                 .flowsBaseUrl=${this.flowsBaseUrl}
+                .platformUiOrigin=${this.platformUiOrigin || ''}
                 flow-id=${this.flowId || 'lara'}
                 embed-id=${this.embedId || ''}
                 branch-id=${(this.branchId || this.skillId || '').trim()}

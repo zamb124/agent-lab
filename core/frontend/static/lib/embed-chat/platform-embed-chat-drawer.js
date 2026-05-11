@@ -30,6 +30,7 @@ import './platform-embed-chat.js';
 export class PlatformEmbedChatDrawer extends LitElement {
     static properties = {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
+        platformUiOrigin: { type: String, attribute: 'platform-ui-origin' },
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
         branchId: { type: String, attribute: 'branch-id' },
@@ -341,6 +342,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
     constructor() {
         super();
         this.flowsBaseUrl = '';
+        this.platformUiOrigin = '';
         this.flowId = '';
         this.embedId = '';
         this.branchId = '';
@@ -1448,6 +1450,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     interface-locale=${this._interfaceLocaleForChat()}
                     ?show-locale-control=${this.showLocaleControl}
                     .flowsBaseUrl=${this.flowsBaseUrl}
+                    .platformUiOrigin=${this.platformUiOrigin || ''}
                     company-id=${this.companyId || ''}
                     voice-base-url=${this.voiceBaseUrl || ''}
                     flow-id=${this.flowId || ''}

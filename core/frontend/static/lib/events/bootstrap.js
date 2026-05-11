@@ -31,6 +31,19 @@ import { createTeamEffect } from './effects/team.effect.js';
 import { createCalendarEffect } from './effects/calendar.effect.js';
 import { createUiEffect } from './effects/ui.effect.js';
 
+function _normalizePlatformApex(originStr) {
+    const s = (originStr || '').trim();
+    if (s === '') {
+        return '';
+    }
+    try {
+        const href = s.endsWith('/') ? s : `${s}/`;
+        return new URL(href).origin;
+    } catch {
+        return '';
+    }
+}
+
 /**
  * @param {{
  *   baseUrl: string,
@@ -38,7 +51,11 @@ import { createUiEffect } from './effects/ui.effect.js';
  *   slices?: Object<string, {reducer: Function, initial: any}>,
  *   effects?: Array<Function>,
  *   devMode?: boolean,
+ *   platformApexOrigin?: string,
  * }} options
+ *
+ * ``platformApexOrigin`` — origin платформы (``https://host`` без path): атрибут ``platform-ui-origin``
+ * в embed или вывод из ``flowsBaseUrl``, чтобы i18n, file-types и SVG не шли на ``location.host`` чужого сайта.
  * @returns {EventBus}
  */
 export function bootstrapPlatformBus(options) {
@@ -51,6 +68,16 @@ export function bootstrapPlatformBus(options) {
     const slices = opts.slices || {};
     const extraEffects = Array.isArray(opts.effects) ? opts.effects : [];
     const devMode = Boolean(opts.devMode);
+    const platformApex = _normalizePlatformApex(opts.platformApexOrigin || '');
+    let suppressHostIntegrationsForPwa = false;
+    if (
+        platformApex !== ''
+        && typeof globalThis.location !== 'undefined'
+        && typeof globalThis.location.origin === 'string'
+        && globalThis.location.origin.length > 0
+    ) {
+        suppressHostIntegrationsForPwa = globalThis.location.origin !== platformApex;
+    }
 
     const { reducer, initialState } = buildPlatformReducer(slices);
     const log = new EventLog({ devMode });
@@ -62,12 +89,17 @@ export function bootstrapPlatformBus(options) {
 
     bus.registerEffect(createNetworkEffect());
     bus.registerEffect(createThemeEffect());
-    bus.registerEffect(createI18nEffect({ baseUrl }));
+    bus.registerEffect(createI18nEffect({ baseUrl, platformApexOrigin: platformApex }));
     bus.registerEffect(createNotifyEffect());
     bus.registerEffect(createStorageEffect());
-    bus.registerEffect(createPwaEffect({ baseUrl }));
-    bus.registerEffect(createIconEffect());
-    bus.registerEffect(createFileTypesEffect());
+    bus.registerEffect(
+        createPwaEffect({
+            baseUrl,
+            suppressHostIntegrations: suppressHostIntegrationsForPwa,
+        }),
+    );
+    bus.registerEffect(createIconEffect({ platformApexOrigin: platformApex }));
+    bus.registerEffect(createFileTypesEffect({ platformApexOrigin: platformApex }));
     bus.registerEffect(createFilesEffect({ baseUrl }));
     bus.registerEffect(createCompaniesEffect({ baseUrl }));
     bus.registerEffect(createTeamEffect({ baseUrl }));

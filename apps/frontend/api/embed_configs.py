@@ -595,6 +595,7 @@ async def get_embed_code(
         f'data-locale="{html.escape(config.interface_locale, quote=True)}"',
         ('data-show-launcher="true"' if config.show_launcher else 'data-show-launcher="false"'),
         f'data-flows-base-url="{html.escape(f"{base_url}/flows", quote=True)}"',
+        f'data-platform-ui-origin="{html.escape(base_url, quote=True)}"',
         'data-chat-token-url="/api/chat-token"',
         f'data-token-expires-seconds="{ttl}"',
         'data-use-credentials="false"',

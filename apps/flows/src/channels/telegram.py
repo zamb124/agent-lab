@@ -17,6 +17,21 @@ logger = get_logger(__name__)
 MESSAGE_DRAFT_MIN_INTERVAL_SEC = 0.08
 
 
+def _parse_mode_for_plain_send(config: Dict[str, Any]) -> Optional[str]:
+    """
+    Если ключ parse_mode отсутствует — HTML (обратная совместимость).
+    Если задан null или пустая строка — без parse_mode (plain text).
+    """
+    if "parse_mode" not in config:
+        return "HTML"
+    raw = config.get("parse_mode")
+    if raw is None:
+        return None
+    if isinstance(raw, str) and raw.strip() == "":
+        return None
+    return str(raw)
+
+
 def get_telegram_api_base(config: Dict[str, Any] = None) -> str:
     """
     Возвращает базовый URL для Telegram API.
@@ -45,7 +60,7 @@ class TelegramChannelHandler(BaseChannelHandler):
     Конфигурация:
     {
         "bot_token": "@var:my_bot_token" или прямое значение,
-        "parse_mode": "HTML" | "Markdown" | "MarkdownV2",
+        "parse_mode": "HTML" | "Markdown" | "MarkdownV2" | null | "" (null/пусто — plain, без поля в API),
         "disable_notification": false,
         "protect_content": false
     }
@@ -65,12 +80,14 @@ class TelegramChannelHandler(BaseChannelHandler):
         """Отправляет текстовое сообщение в Telegram."""
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendMessage"
-        
-        payload = {
+
+        payload: Dict[str, Any] = {
             "chat_id": recipient,
             "text": text,
-            "parse_mode": config.get("parse_mode", "HTML"),
         }
+        pm = _parse_mode_for_plain_send(config)
+        if pm is not None:
+            payload["parse_mode"] = pm
         
         if reply_to_message_id:
             payload["reply_to_message_id"] = reply_to_message_id

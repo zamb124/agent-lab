@@ -3,6 +3,8 @@
  * Import map не нужен — замыкание embed на относительных импортах до lit-shim (см. scripts/check_embed_esm_closure.py).
  *
  * Обязательно: data-embed-id, data-flows-base-url.
+ * Опционально: data-platform-ui-origin — абсолютный origin платформы (i18n, file-types, SVG). Если CDN
+ *   отделён от API, указывать обязательно (в коде из консоли он уже задаётся); иначе берётся origin скрипта.
  * Токен: POST на data-chat-token-url (default /api/chat-token) телом как в справке виджета.
  */
 
@@ -37,6 +39,31 @@ function readDatasetBool(scriptEl, camelKey, defaultValue) {
     if (typeof raw !== 'string' || raw.trim() === '') return defaultValue;
     const v = raw.trim().toLowerCase();
     return v === '1' || v === 'true' || v === 'yes';
+}
+
+/**
+ * @param {HTMLScriptElement} scriptEl
+ * @param {DOMStringMap} ds
+ */
+function resolveEmbedPlatformUiOrigin(scriptEl, ds) {
+    const explicit =
+        typeof ds.platformUiOrigin === 'string' && ds.platformUiOrigin.trim() !== ''
+            ? ds.platformUiOrigin.trim().replace(/\/+$/, '')
+            : '';
+    if (explicit !== '') {
+        return explicit;
+    }
+    const srcRaw = typeof scriptEl.src === 'string' ? scriptEl.src.trim() : '';
+    if (srcRaw !== '') {
+        try {
+            return new URL(srcRaw).origin;
+        } catch (e) {
+            const err = new Error(`humanitec-embed-autoload: invalid script src (${srcRaw})`);
+            err.cause = e;
+            throw err;
+        }
+    }
+    return '';
 }
 
 /**
@@ -128,6 +155,11 @@ function mountFromScript(scriptEl) {
     assistant.showLauncher = readDatasetBool(scriptEl, 'showLauncher', false);
 
     assistant.flowsBaseUrl = flowsBaseUrl;
+
+    const platformUiOrigin = resolveEmbedPlatformUiOrigin(scriptEl, ds);
+    if (platformUiOrigin !== '') {
+        assistant.setAttribute('platform-ui-origin', platformUiOrigin);
+    }
 
     const voiceBaseUrl = typeof ds.voiceBaseUrl === 'string' ? ds.voiceBaseUrl.trim() : '';
     if (voiceBaseUrl !== '') {

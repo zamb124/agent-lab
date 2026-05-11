@@ -9,6 +9,7 @@ import { CoreEvents } from '../contract.js';
 import { httpRequest } from '../http.js';
 import { PLATFORM_LOCALE_STORAGE_KEY, resolveInitialUiLocale } from '../../utils/i18n-initial-locale.js';
 import { i18nDefaultNamespaceForBaseUrl } from '../../utils/i18n-namespace.js';
+import { embedSafeFetchCredentials, platformAbsoluteUrl } from './embed-request-helpers.js';
 
 const LOCALE_COOKIE = 'language';
 
@@ -18,8 +19,9 @@ function _writeLocaleCookie(locale) {
     document.documentElement.lang = locale;
 }
 
-export function createI18nEffect({ baseUrl } = {}) {
+export function createI18nEffect({ baseUrl, platformApexOrigin } = {}) {
     const defaultNamespace = i18nDefaultNamespaceForBaseUrl(baseUrl || '');
+    const apex = typeof platformApexOrigin === 'string' ? platformApexOrigin.trim() : '';
     return async function i18nEffect(event, ctx) {
         switch (event.type) {
             case CoreEvents.APP_BOOTSTRAP_STARTED: {
@@ -33,7 +35,15 @@ export function createI18nEffect({ baseUrl } = {}) {
                     throw new Error('i18n.effect: locale required');
                 }
                 try {
-                    const bundle = await httpRequest({ method: 'GET', url: `/api/i18n/${encodeURIComponent(locale)}` });
+                    const bundleUrl = platformAbsoluteUrl(
+                        `/api/i18n/${encodeURIComponent(locale)}`,
+                        apex,
+                    );
+                    const bundle = await httpRequest({
+                        method: 'GET',
+                        url: bundleUrl,
+                        credentials: embedSafeFetchCredentials(bundleUrl),
+                    });
                     ctx.dispatch(CoreEvents.I18N_LOCALE_LOADED, { locale, bundle }, { causation_id: event.id, source: 'http' });
                     localStorage.setItem(PLATFORM_LOCALE_STORAGE_KEY, locale);
                     _writeLocaleCookie(locale);

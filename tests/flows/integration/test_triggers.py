@@ -2145,6 +2145,32 @@ class TestTelegramChannelE2E:
         assert "test_bot_token_123" in requests[0]["token"]
         assert requests[0]["data"]["chat_id"] == "12345678"
         assert requests[0]["data"]["text"] == "Hello from agent!"
+        assert requests[0]["data"]["parse_mode"] == "HTML"
+
+    @pytest.mark.asyncio
+    async def test_telegram_send_message_plain_omits_parse_mode(self, notification_server):
+        """parse_mode null — без поля parse_mode (plain text)."""
+        from apps.flows.src.channels.telegram import TelegramChannelHandler
+
+        server, base_url = notification_server
+
+        handler = TelegramChannelHandler()
+
+        await handler.send_message(
+            recipient="12345678",
+            text="plain <not html>",
+            config={
+                "bot_token": "test_bot_token_123",
+                "api_base": f"{base_url}/telegram",
+                "parse_mode": None,
+            },
+            variables={},
+        )
+
+        requests = server.get_requests("telegram_send_message")
+        assert len(requests) == 1
+        assert "parse_mode" not in requests[0]["data"]
+        assert requests[0]["data"]["text"] == "plain <not html>"
 
     @pytest.mark.asyncio
     async def test_telegram_send_message_draft_real_http(self, notification_server):

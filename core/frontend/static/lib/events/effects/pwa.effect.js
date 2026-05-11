@@ -184,8 +184,9 @@ export const PWA_EVENTS = Object.freeze({
     DEPLOYMENT_VERSION_LOAD_FAILED:  'pwa/deployment_version/load_failed',
 });
 
-export function createPwaEffect({ baseUrl } = {}) {
+export function createPwaEffect({ baseUrl, suppressHostIntegrations } = {}) {
     const base = baseUrl || '';
+    const suppressHost = Boolean(suppressHostIntegrations);
     let attached = false;
     let versionTimer = null;
 
@@ -200,6 +201,9 @@ export function createPwaEffect({ baseUrl } = {}) {
     return async function pwaEffect(event, ctx) {
         switch (event.type) {
             case CoreEvents.APP_BOOTSTRAP_STARTED: {
+                if (suppressHost) {
+                    return;
+                }
                 if (!attached) {
                     attached = true;
                     if (typeof Notification !== 'undefined' && Notification.permission) {

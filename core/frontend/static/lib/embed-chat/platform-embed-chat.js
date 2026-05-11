@@ -66,18 +66,65 @@ function _serviceBasePathFromFlowsBaseUrl(flowsBaseUrl) {
     }
 }
 
+function _platformApexOriginFromFlowsBaseUrl(flowsBaseUrl) {
+    if (typeof flowsBaseUrl !== 'string') {
+        return '';
+    }
+    const t = flowsBaseUrl.trim();
+    if (t === '') {
+        return '';
+    }
+    try {
+        const baseHref =
+            typeof globalThis.location !== 'undefined' && globalThis.location.href
+                ? globalThis.location.href
+                : 'https://localhost/';
+        const href = /^https?:\/\//i.test(t) ? t : new URL(t, baseHref).href;
+        const u = new URL(href);
+        return `${u.protocol}//${u.host}`;
+    } catch {
+        return '';
+    }
+}
+
+/** @param {unknown} raw */
+function _normalizedPlatformUiOrigin(raw) {
+    if (typeof raw !== 'string') {
+        return '';
+    }
+    const t = raw.trim();
+    if (t === '') {
+        return '';
+    }
+    try {
+        const baseHref =
+            typeof globalThis.location !== 'undefined' && globalThis.location.href
+                ? globalThis.location.href
+                : 'https://localhost/';
+        const href = /^https?:\/\//i.test(t) ? t : new URL(t, baseHref).href;
+        const u = new URL(href);
+        return `${u.protocol}//${u.host}`;
+    } catch {
+        return '';
+    }
+}
+
 /**
  * Core-компоненты (platform-assistant-message-actions и др.) расширяют PlatformElement,
  * который в connectedCallback требует getPlatformBus. Полноценного PlatformApp в embed нет —
  * поднимаем один EventBus синхронно до super.connectedCallback.
  */
-function ensurePlatformBusForEmbedChat(flowsBaseUrl) {
+function ensurePlatformBusForEmbedChat(flowsBaseUrl, platformUiOrigin) {
     if (typeof window === 'undefined' || hasPlatformBus()) return;
     const devMode =
         typeof location !== 'undefined' && /[?&]platform_devtools=1\b/.test(location.search);
+    const apex =
+        _normalizedPlatformUiOrigin(platformUiOrigin) ||
+        _platformApexOriginFromFlowsBaseUrl(flowsBaseUrl);
     const baseUrl = _serviceBasePathFromFlowsBaseUrl(flowsBaseUrl);
     bootstrapPlatformBus({
         baseUrl,
+        platformApexOrigin: apex || undefined,
         routes: [],
         slices: {},
         effects: [],
@@ -92,7 +139,9 @@ const ASSISTANT_EVENT_SCHEMA_VERSION = '1.0.0';
  * Автономный чат: A2A stream + блоки. Без apps/crm, apps/flows.
  *
  * Свойства:
- * - flowsBaseUrl, flowId, embedId, branchId или skillId (легаси атрибут skill-id; embedId приоритетен для внешнего embed-route)
+ * - flowsBaseUrl, platformUiOrigin (platform-ui-origin): origin UI-платформы для bus (i18n, иконки, file-types);
+ *   если пусто — берётся origin из flowsBaseUrl
+ * - flowId, embedId, branchId или skillId (легаси атрибут skill-id; embedId приоритетен для внешнего embed-route)
  * - title
  * - labels: { send, placeholder, newChat, greeting, ... }
  * - useCredentials: boolean (fetch credentials: include — cookie при том же site / см. хост)
@@ -114,6 +163,7 @@ const ASSISTANT_EVENT_SCHEMA_VERSION = '1.0.0';
 export class PlatformEmbedChat extends LitElement {
     static properties = {
         flowsBaseUrl: { type: String, attribute: 'flows-base-url' },
+        platformUiOrigin: { type: String, attribute: 'platform-ui-origin' },
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
         branchId: { type: String, attribute: 'branch-id' },
@@ -514,6 +564,7 @@ export class PlatformEmbedChat extends LitElement {
     constructor() {
         super();
         this.flowsBaseUrl = '';
+        this.platformUiOrigin = '';
         this.flowId = '';
         this.embedId = '';
         this.branchId = '';
@@ -979,7 +1030,7 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     connectedCallback() {
-        ensurePlatformBusForEmbedChat(this.flowsBaseUrl);
+        ensurePlatformBusForEmbedChat(this.flowsBaseUrl, this.platformUiOrigin);
         super.connectedCallback();
         this.addEventListener('embed-block-action', this._onBlockAction);
         document.addEventListener('click', this._onCredClickOutside);

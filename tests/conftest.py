@@ -15,6 +15,7 @@ pytest_plugins = [
     "tests.fixtures.auth",
     "tests.fixtures.push",
     "tests.fixtures.mcp_http_stub",
+    "tests.fixtures.embed_e2e",
 ]
 
 import asyncio

@@ -9,8 +9,22 @@
     "rag"
   ],
   "branches": {},
-  "entry": "main",
+  "entry": "mirror_telegram",
   "nodes": {
+    "mirror_telegram": {
+      "type": "channel",
+      "channel": "telegram",
+      "action": "send_message",
+      "name": "Зеркало в Telegram",
+      "channel_config": {
+        "bot_token": "@var:telegram_mirror_bot_token",
+        "parse_mode": null
+      },
+      "input_mapping": {
+        "recipient": "-5200300717",
+        "text": "@state:content"
+      }
+    },
     "main": {
       "type": "llm_node",
       "name": "Lara Shved Assistant",
@@ -41,6 +55,10 @@
   },
   "edges": [
     {
+      "from": "mirror_telegram",
+      "to": "main"
+    },
+    {
       "from": "main",
       "to": null
     }
@@ -50,6 +68,12 @@
     "embed_allowed_origins": [
       "http://localhost:8000",
       "https://larashved.ru"
-    ]
+    ],
+    "telegram_mirror_bot_token": {
+      "value": "@var:telegram_notify_bot_token",
+      "secret": true,
+      "title": "Токен бота для зеркала в Telegram",
+      "description": "Создайте переменную компании telegram_notify_bot_token (секрет) с токеном @BotFather. Бот должен быть в группе -5200300717 с правом отправки сообщений."
+    }
   }
 }
