@@ -26,7 +26,11 @@ from apps.flows.src.runtime.a2a_messages import (
 )
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
+from apps.flows.src.state.cancellation import (
+    FlowCancelled,
+    check_cancellation,
+    get_cancellation_token,
+)
 from apps.flows.src.runtime.llm_byok import is_llm_byok_override
 from apps.flows.src.runtime.llm_override_params import (
     resolve_override_stream_kwargs,
@@ -36,7 +40,14 @@ from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.config import get_settings
 from core.context import get_context
-from core.clients.llm import LLMClient, MockLLM, StreamEvent, get_llm_for_state
+from core.clients.llm import (
+    LLMClient,
+    LLMStreamIdleTimeoutError,
+    LLMStreamUserCancelledError,
+    MockLLM,
+    StreamEvent,
+    get_llm_for_state,
+)
 from apps.flows.src.container import get_container
 from core.logging import get_logger
 from apps.flows.src.models import ReactLoopMode
@@ -82,6 +93,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     """
 
     MAX_ITERATIONS = 10
+    MAX_STREAM_IDLE_RETRIES = 4  # При idle timeout 10с — макс 50с ожидания (5 попыток × 10с)
 
     def _resolve_tool_by_call_name(self, call_name: str):
         """Резолвит tool по имени вызова, включая API-совместимую санитизацию."""
@@ -776,18 +788,57 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         response_format: Optional[Dict[str, Any]],
         state: ExecutionState,
     ) -> AsyncGenerator[StreamEvent, None]:
-        """Вызывает LLM - ТОЛЬКО STREAM."""
-        async for event in llm.stream(
-            messages,
-            tools,
-            response_format,
-            task_id,
-            context_id,
-            max_tokens=max_tok,
-            **stream_kw,
-        ):
-            await check_cancellation(state)
-            yield event
+        """Вызывает LLM — ТОЛЬКО STREAM.
+
+        При LLMStreamIdleTimeoutError автоматически делает retry
+        (до MAX_STREAM_IDLE_RETRIES раз). Это прозрачно для вызывающего
+        кода — он получает чанки, как если бы retry не было.
+        """
+        async def _stream_cancel_poll() -> bool:
+            token = get_cancellation_token()
+            if token is None:
+                return False
+            return await token.is_cancelled()
+
+        last_error: Optional[LLMStreamIdleTimeoutError] = None
+
+        for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 original + N retries
+            try:
+                async for event in llm.stream(
+                    messages,
+                    tools,
+                    response_format,
+                    task_id,
+                    context_id,
+                    max_tokens=max_tok,
+                    stream_cancel_poll=_stream_cancel_poll,
+                    **stream_kw,
+                ):
+                    await check_cancellation(state)
+                    yield event
+                return  # Стрим завершился нормально
+            except LLMStreamUserCancelledError:
+                tok = get_cancellation_token()
+                raise FlowCancelled(tok.task_id if tok is not None else task_id)
+            except LLMStreamIdleTimeoutError as e:
+                last_error = e
+                if attempt <= self.MAX_STREAM_IDLE_RETRIES:
+                    logger.warning(
+                        "LLM stream idle timeout (attempt %d/%d), retrying: "
+                        "idle=%.1fs, chunks=%d",
+                        attempt,
+                        self.MAX_STREAM_IDLE_RETRIES + 1,
+                        e.idle_seconds,
+                        e.chunks_received,
+                    )
+                    continue
+                # Все retry исчерпаны
+                logger.error(
+                    "LLM stream idle timeout after %d attempts, giving up: "
+                    "idle=%.1fs, chunks=%d",
+                    attempt, e.idle_seconds, e.chunks_received,
+                )
+                raise
 
     async def _execute_tools_parallel(
         self,

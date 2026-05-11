@@ -7,16 +7,35 @@ Stream-first архитектура: LLM ВСЕГДА вызывается ка�
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import time
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Union, TYPE_CHECKING, overload
+from contextlib import suppress
+from typing import (
+    Any,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    TYPE_CHECKING,
+    overload,
+)
 import httpx
 from pydantic import BaseModel
 
 from core.http.client import ProxyStrategy, get_httpx_client
+from core.http.egress_route_preference import (
+    egress_prefer_proxy_set,
+    normalized_http_origin,
+)
 from core.variables import VarResolver, VariableResolutionError
 from a2a.types import (
     Artifact,
@@ -51,6 +70,39 @@ from core.clients.llm.mock import (
 from core.clients.llm.model_routing import split_provider_prefixed_model
 
 logger = get_logger(__name__)
+
+
+class LLMStreamUserCancelledError(Exception):
+    """Отмена flow во время чтения SSE; consumer закрыл HTTP stream (stream_cancel_poll)."""
+
+
+class LLMStreamIdleTimeoutError(Exception):
+    """SSE-стрим завис: ни одного чанка не получено за STREAM_IDLE_TIMEOUT_SECONDS.
+
+    Причина — httpx aiter_lines() блокируется на неполной строке, когда
+    OpenRouter отправляет SSE-данные без завершающего \\n в рамках одного
+    TCP-пакета. Это интермиттентно (~каждый 2-й запрос) и зависит от
+    балансировки серверов и нагрузки.
+    """
+
+    def __init__(self, idle_seconds: float, chunks_received: int):
+        self.idle_seconds = idle_seconds
+        self.chunks_received = chunks_received
+        super().__init__(
+            f"LLM stream idle timeout: no data for {idle_seconds:.1f}s "
+            f"after {chunks_received} chunks received"
+        )
+
+
+# Максимальное время ожидания между чанками SSE-стрима (секунды).
+# Данные показывают: нормальные чанки приходят за 3-5 секунд,
+# зависание OpenRouter — стабильно после 16-18 чанков.
+# 10 секунд — щедро для любой паузы модели, но не мучает пользователя.
+STREAM_IDLE_TIMEOUT_SECONDS: float = 10.0
+
+# Warning-порог: если между чанками > N секунд — логируем предупреждение.
+_INTER_CHUNK_WARN_SECONDS: float = 5.0
+
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -418,6 +470,7 @@ class LLMClient:
         reasoning_effort: Optional[str] = None,
         extra_body: Optional[Dict[str, Any]] = None,
         extra_headers: Optional[Dict[str, str]] = None,
+        stream_cancel_poll: Optional[Callable[[], Awaitable[bool]]] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream-first метод вызова LLM.
@@ -549,115 +602,193 @@ class LLMClient:
                                 logger.error(f"Last message role: {openai_messages[-1].get('role')}, content length: {len(openai_messages[-1].get('content', ''))}")
                         response.raise_for_status()
 
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data: "):
-                            continue
+                    cancelled_evt = asyncio.Event()
+                    idle_timeout_evt = asyncio.Event()
+                    # Shared mutable: watchdog обновляет/читает last_chunk_time
+                    _last_chunk_time = time.monotonic()
+                    _chunk_count = 0
+                    watch: Optional[asyncio.Task[None]] = None
 
-                        data = line[6:]
-                        if data == "[DONE]":
-                            break
+                    async def _watch_idle_and_cancel() -> None:
+                        """Watchdog: отмена по poll + idle timeout."""
+                        nonlocal _last_chunk_time
+                        try:
+                            while True:
+                                await asyncio.sleep(1.0)
+                                # 1. Проверяем отмену пользователем
+                                if stream_cancel_poll is not None and await stream_cancel_poll():
+                                    cancelled_evt.set()
+                                    with suppress(Exception):
+                                        await response.aclose()
+                                    return
+                                # 2. Проверяем idle timeout
+                                idle = time.monotonic() - _last_chunk_time
+                                if idle >= STREAM_IDLE_TIMEOUT_SECONDS:
+                                    logger.error(
+                                        "LLM stream idle timeout: %.1fs without data, "
+                                        "chunks_received=%d, model=%s",
+                                        idle, _chunk_count, self.model,
+                                    )
+                                    idle_timeout_evt.set()
+                                    with suppress(Exception):
+                                        await response.aclose()
+                                    return
+                        except asyncio.CancelledError:
+                            raise
 
-                        chunk = json.loads(data)
-                        
-                        # Парсим usage из последнего chunk (stream_options: include_usage)
-                        if chunk.get("usage"):
-                            _merge_openai_compatible_usage_into_usage_data(chunk["usage"], usage_data)
-                        
-                        if not chunk.get("choices"):
-                            continue
+                    # Watchdog запускается ВСЕГДА (не только при stream_cancel_poll)
+                    watch = asyncio.create_task(_watch_idle_and_cancel())
+                    try:
+                        try:
+                            async for line in response.aiter_lines():
+                                # Обновляем время последнего чанка для watchdog
+                                now = time.monotonic()
+                                inter_chunk = now - _last_chunk_time
+                                _last_chunk_time = now
+                                _chunk_count += 1
+                                if inter_chunk > _INTER_CHUNK_WARN_SECONDS:
+                                    logger.warning(
+                                        "LLM stream slow chunk: %.1fs gap before chunk #%d, "
+                                        "model=%s",
+                                        inter_chunk, _chunk_count, self.model,
+                                    )
+                                if not line.startswith("data: "):
+                                    continue
 
-                        choice = chunk["choices"][0]
-                        delta = choice.get("delta", {}) or {}
+                                data = line[6:]
+                                if data == "[DONE]":
+                                    break
 
-                        # Некоторые шлюзы отдают весь текст только в message.content финального чанка (delta пустой).
-                        msg = choice.get("message")
-                        if isinstance(msg, dict):
-                            mc = msg.get("content")
-                            if (
-                                isinstance(mc, str)
-                                and mc
-                                and not delta.get("content")
-                                and not full_content
-                            ):
-                                full_content = mc
-                                yield TaskArtifactUpdateEvent(
-                                    contextId=context_id,
-                                    taskId=task_id,
-                                    artifact=Artifact(
-                                        artifactId=str(uuid.uuid4()),
-                                        parts=[Part(root=TextPart(text=mc))],
-                                    ),
-                                    append=True,
-                                    last_chunk=False,
-                                )
-                        
-                        # Логируем delta для отладки reasoning (только если есть подозрительные поля)
-                        if delta.get("reasoning") or delta.get("reasoning_content") or delta.get("type") == "reasoning":
-                            logger.debug(f"LLM delta with reasoning fields: {delta}")
+                                chunk = json.loads(data)
 
-                        if delta.get("content"):
-                            text = delta["content"]
-                            full_content += text
-                            yield TaskArtifactUpdateEvent(
-                                contextId=context_id,
-                                taskId=task_id,
-                                artifact=Artifact(
-                                    artifactId=str(uuid.uuid4()), parts=[Part(root=TextPart(text=text))]
-                                ),
-                                append=True,
-                                last_chunk=False,
-                            )
+                                # Парсим usage из последнего chunk (stream_options: include_usage)
+                                if chunk.get("usage"):
+                                    _merge_openai_compatible_usage_into_usage_data(chunk["usage"], usage_data)
 
-                        # Обработка reasoning для моделей o1/o3
-                        # Reasoning может приходить в разных форматах:
-                        # - delta.reasoning (OpenAI o1/o3)
-                        # - delta.reasoning_content (альтернативный формат)
-                        # - delta.content с type="reasoning" (некоторые провайдеры)
-                        # - choice.delta.reasoning (OpenRouter может использовать другой формат)
-                        reasoning_text = None
-                        if delta.get("reasoning"):
-                            reasoning_text = delta["reasoning"]
-                        elif delta.get("reasoning_content"):
-                            reasoning_text = delta["reasoning_content"]
-                        elif delta.get("type") == "reasoning" and delta.get("content"):
-                            reasoning_text = delta["content"]
-                        # Проверяем также в самом choice (для некоторых провайдеров)
-                        if not reasoning_text and choice.get("delta", {}).get("reasoning"):
-                            reasoning_text = choice["delta"]["reasoning"]
-                        
-                        if reasoning_text:
-                            full_reasoning += reasoning_text
-                            logger.debug(f"LLM reasoning chunk: {len(reasoning_text)} chars")
-                            yield TaskArtifactUpdateEvent(
-                                contextId=context_id,
-                                taskId=task_id,
-                                artifact=Artifact(
-                                    artifactId=str(uuid.uuid4()),
-                                    name="reasoning",
-                                    parts=[Part(root=TextPart(text=reasoning_text))]
-                                ),
-                                append=True,
-                                last_chunk=False,
-                            )
+                                if not chunk.get("choices"):
+                                    continue
 
-                        if delta.get("tool_calls"):
-                            for tc in delta["tool_calls"]:
-                                idx = tc["index"]
-                                if idx not in tool_calls_buffer:
-                                    tool_calls_buffer[idx] = {
-                                        "id": tc.get("id", ""),
-                                        "name": "",
-                                        "arguments": "",
-                                    }
-                                if tc.get("id"):
-                                    tool_calls_buffer[idx]["id"] = tc["id"]
-                                if tc.get("function"):
-                                    if tc["function"].get("name"):
-                                        tool_calls_buffer[idx]["name"] = tc["function"]["name"]
-                                    if tc["function"].get("arguments"):
-                                        tool_calls_buffer[idx]["arguments"] += tc["function"][
-                                            "arguments"
-                                        ]
+                                choice = chunk["choices"][0]
+                                delta = choice.get("delta", {}) or {}
+
+                                # Некоторые шлюзы отдают весь текст только в message.content финального чанка (delta пустой).
+                                msg = choice.get("message")
+                                if isinstance(msg, dict):
+                                    mc = msg.get("content")
+                                    if (
+                                        isinstance(mc, str)
+                                        and mc
+                                        and not delta.get("content")
+                                        and not full_content
+                                    ):
+                                        full_content = mc
+                                        yield TaskArtifactUpdateEvent(
+                                            contextId=context_id,
+                                            taskId=task_id,
+                                            artifact=Artifact(
+                                                artifactId=str(uuid.uuid4()),
+                                                parts=[Part(root=TextPart(text=mc))],
+                                            ),
+                                            append=True,
+                                            last_chunk=False,
+                                        )
+
+                                # Логируем delta для отладки reasoning (только если есть подозрительные поля)
+                                if delta.get("reasoning") or delta.get("reasoning_content") or delta.get("type") == "reasoning":
+                                    logger.debug(f"LLM delta with reasoning fields: {delta}")
+
+                                if delta.get("content"):
+                                    text = delta["content"]
+                                    full_content += text
+                                    yield TaskArtifactUpdateEvent(
+                                        contextId=context_id,
+                                        taskId=task_id,
+                                        artifact=Artifact(
+                                            artifactId=str(uuid.uuid4()), parts=[Part(root=TextPart(text=text))]
+                                        ),
+                                        append=True,
+                                        last_chunk=False,
+                                    )
+
+                                # Обработка reasoning для моделей o1/o3
+                                # Reasoning может приходить в разных форматах:
+                                # - delta.reasoning (OpenAI o1/o3)
+                                # - delta.reasoning_content (альтернативный формат)
+                                # - delta.content с type="reasoning" (некоторые провайдеры)
+                                # - choice.delta.reasoning (OpenRouter может использовать другой формат)
+                                reasoning_text = None
+                                if delta.get("reasoning"):
+                                    reasoning_text = delta["reasoning"]
+                                elif delta.get("reasoning_content"):
+                                    reasoning_text = delta["reasoning_content"]
+                                elif delta.get("type") == "reasoning" and delta.get("content"):
+                                    reasoning_text = delta["content"]
+                                # Проверяем также в самом choice (для некоторых провайдеров)
+                                if not reasoning_text and choice.get("delta", {}).get("reasoning"):
+                                    reasoning_text = choice["delta"]["reasoning"]
+
+                                if reasoning_text:
+                                    full_reasoning += reasoning_text
+                                    logger.debug(f"LLM reasoning chunk: {len(reasoning_text)} chars")
+                                    yield TaskArtifactUpdateEvent(
+                                        contextId=context_id,
+                                        taskId=task_id,
+                                        artifact=Artifact(
+                                            artifactId=str(uuid.uuid4()),
+                                            name="reasoning",
+                                            parts=[Part(root=TextPart(text=reasoning_text))]
+                                        ),
+                                        append=True,
+                                        last_chunk=False,
+                                    )
+
+                                if delta.get("tool_calls"):
+                                    for tc in delta["tool_calls"]:
+                                        idx = tc["index"]
+                                        if idx not in tool_calls_buffer:
+                                            tool_calls_buffer[idx] = {
+                                                "id": tc.get("id", ""),
+                                                "name": "",
+                                                "arguments": "",
+                                            }
+                                        if tc.get("id"):
+                                            tool_calls_buffer[idx]["id"] = tc["id"]
+                                        if tc.get("function"):
+                                            if tc["function"].get("name"):
+                                                tool_calls_buffer[idx]["name"] = tc["function"]["name"]
+                                            if tc["function"].get("arguments"):
+                                                tool_calls_buffer[idx]["arguments"] += tc["function"][
+                                                    "arguments"
+                                                ]
+                        except Exception as e:
+                            if cancelled_evt.is_set():
+                                raise LLMStreamUserCancelledError() from e
+                            if idle_timeout_evt.is_set():
+                                # Учим SMART что этот origin надо через прокси:
+                                # прямое соединение зависает mid-stream.
+                                try:
+                                    _origin = normalized_http_origin(
+                                        f"{self.base_url}/chat/completions"
+                                    )
+                                    await egress_prefer_proxy_set(_origin)
+                                    logger.info(
+                                        "Marked origin %s for proxy preference "
+                                        "(idle timeout after %d chunks)",
+                                        _origin,
+                                        _chunk_count,
+                                    )
+                                except Exception:
+                                    pass
+                                raise LLMStreamIdleTimeoutError(
+                                    idle_seconds=STREAM_IDLE_TIMEOUT_SECONDS,
+                                    chunks_received=_chunk_count,
+                                ) from e
+                            raise
+                    finally:
+                        if watch is not None:
+                            watch.cancel()
+                            with suppress(asyncio.CancelledError, RuntimeError):
+                                await watch
             except httpx.HTTPStatusError as e:
                 logger.error(f"LLM API HTTP error: {e}")
                 logger.error(f"Request URL: {self.base_url}/chat/completions")
@@ -710,6 +841,14 @@ class LLMClient:
             final=False,
         )
 
+        stream_duration = time.monotonic() - stream_start_time
+        logger.info(
+            "LLM stream complete: model=%s, chunks=%d, content_len=%d, "
+            "reasoning_len=%d, tool_calls=%d, duration=%.1fs",
+            self.model, _chunk_count, len(full_content),
+            len(full_reasoning), len(tool_calls_buffer), stream_duration,
+        )
+
         log_llm_stream_response(
             url=f"{self.base_url}/chat/completions",
             content=full_content,
@@ -718,7 +857,7 @@ class LLMClient:
             usage=usage_data,
             provider=self.llm_provider,
             model=self.model,
-            duration_ms=(time.monotonic() - stream_start_time) * 1000,
+            duration_ms=stream_duration * 1000,
         )
 
     async def invoke(
