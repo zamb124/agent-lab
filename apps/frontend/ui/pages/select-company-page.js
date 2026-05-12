@@ -4,9 +4,7 @@
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
-import { CoreEvents } from '@platform/lib/events/contract.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
-import { buildCompanySubdomainUrl } from '@platform/lib/utils/tenant-url.js';
 import '@platform/lib/components/platform-icon.js';
 
 function _userIsOwnerOfCompany(companyRecord) {
@@ -157,30 +155,6 @@ export class SelectCompanyPage extends PlatformPage {
         this._companiesSel = this.select((s) => s.companies.list);
         this._authSel = this.select((s) => s.auth.user);
         this._loaded = false;
-    }
-
-    connectedCallback() {
-        super.connectedCallback();
-        this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, (event) => {
-            const p = event.payload;
-            if (!p || typeof p.company_id !== 'string' || p.company_id.length === 0) {
-                throw new Error('AUTH_COMPANY_SWITCHED: company_id required in payload');
-            }
-            const list = this._companiesSel.value;
-            const company = list.find((c) => c.company_id === p.company_id);
-            if (!company) {
-                throw new Error('select-company: company not found in list');
-            }
-            if (typeof company.subdomain !== 'string' || company.subdomain.length === 0) {
-                this.toast('company.subdomain_missing', { type: 'error' });
-                return;
-            }
-            const target = buildCompanySubdomainUrl(company.subdomain, '/dashboard');
-            if (target === window.location.href) {
-                return;
-            }
-            window.location.replace(target);
-        });
     }
 
     updated() {

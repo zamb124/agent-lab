@@ -8,6 +8,7 @@
 
 import { CoreEvents } from '../contract.js';
 import { buildCompanySubdomainUrl } from '../../utils/tenant-url.js';
+import { POST_LOGIN_DASHBOARD_QUERY } from '../../utils/last-visited-service.js';
 
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
 
@@ -53,7 +54,19 @@ export function createAuthCompanyNavigationEffect() {
         const payload = `${Date.now()}|${company.company_id}|${subdomain}`;
         window.localStorage.setItem(COMPANY_SWITCH_STORAGE_KEY, payload);
 
-        const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        const pathname =
+            typeof window.location.pathname === 'string' ? window.location.pathname : '';
+        const search = typeof window.location.search === 'string' ? window.location.search : '';
+        const hash = typeof window.location.hash === 'string' ? window.location.hash : '';
+        let targetPath;
+        if (
+            pathname === '/select-company'
+            || pathname.startsWith('/select-company/')
+        ) {
+            targetPath = `/dashboard?${POST_LOGIN_DASHBOARD_QUERY}=1`;
+        } else {
+            targetPath = `${pathname}${search}${hash}`;
+        }
         const targetUrl = buildCompanySubdomainUrl(subdomain, targetPath);
         if (targetUrl !== window.location.href) {
             window.location.href = targetUrl;
