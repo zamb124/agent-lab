@@ -9,6 +9,7 @@ dependencies = [
     "greenlet",
     "num2words>=0.5.14",
     "pyahocorasick>=2.3.1",
+    "playwright-stealth>=2.0.3",
     "pywebpush>=2.1.2",
     "reportlab>=4.4.7",
     "xlrd>=2.0.1",
@@ -159,7 +160,6 @@ sync = [
 
 browser = [
     "playwright>=1.58.0",
-    "playwright-stealth>=2.0.3",
 ]
 
 docs = [
