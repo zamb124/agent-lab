@@ -94,7 +94,9 @@ export class FlowsSidebar extends PlatformElement {
                 height: 100%;
             }
             .create-btn {
-                width: 22px; height: 22px;
+                box-sizing: border-box;
+                width: var(--flows-toolbar-control-size);
+                height: var(--flows-toolbar-control-size);
                 display: flex; align-items: center; justify-content: center;
                 border-radius: var(--radius-lg);
                 color: white;
@@ -147,6 +149,9 @@ export class FlowsSidebar extends PlatformElement {
                 display: none;
             }
             .flows-toolbar {
+                --flows-toolbar-control-size: calc(
+                    2px + (var(--space-2) * 2) + (var(--text-sm) * 1.25)
+                );
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
@@ -176,14 +181,15 @@ export class FlowsSidebar extends PlatformElement {
             .flows-search-input {
                 width: 100%;
                 box-sizing: border-box;
-                padding: var(--space-2) var(--space-2) var(--space-2) calc(var(--space-2) + 22px);
+                height: var(--flows-toolbar-control-size);
+                padding: 0 var(--space-2) 0 calc(var(--space-2) + 22px);
                 border-radius: var(--radius-lg);
                 border: 1px solid var(--glass-border-subtle);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary);
                 font: inherit;
                 font-size: var(--text-sm);
-                line-height: 1.25;
+                line-height: calc(var(--flows-toolbar-control-size) - 2px);
             }
             .flows-search-input:focus {
                 outline: none;
@@ -389,7 +395,7 @@ export class FlowsSidebar extends PlatformElement {
                             title=${this.t('flows_sidebar.create_flow_tooltip')}
                             @click=${this._createFlow}
                         >
-                            <platform-icon name="plus" size="12"></platform-icon>
+                            <platform-icon name="plus" size="16"></platform-icon>
                         </button>
                     </div>
                     <div class="flows-list">

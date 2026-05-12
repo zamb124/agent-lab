@@ -414,7 +414,11 @@ function _resolveTaskId(result, fallback) {
 }
 
 function _isTerminalState(state, final) {
-    if (state === 'completed' || state === 'finished' || state === 'failed' || state === 'error') {
+    // completed/finished с final:false — промежуточный кадр A2A (напр. завершилась генерация LLM), поток ещё несёт artifact-update по графу.
+    if (state === 'completed' || state === 'finished') {
+        return final === true;
+    }
+    if (state === 'failed' || state === 'error') {
         return true;
     }
     if ((state === 'input-required' || state === 'input_required') && final) {
@@ -662,7 +666,8 @@ function _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId) {
             return taskId;
         }
 
-        if (final || state === 'completed' || state === 'finished' || state === 'failed' || state === 'error') {
+        // См. _isTerminalState: completed/finished с final:false — не конец задачи, после LLM ещё идут ноды графа.
+        if (final || state === 'failed' || state === 'error') {
             _dispatchTerminal(ctx, cid, taskId, state, message, metadata, causationId);
         }
         return taskId;
