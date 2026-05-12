@@ -13,10 +13,18 @@ from typing import Any, Callable, Coroutine, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
-from starlette.responses import HTMLResponse, RedirectResponse
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from core.api.integration_oauth_error_html import (
+    build_integration_oauth_error_html,
+    build_integration_oauth_simple_error_html,
+    oauth_callback_prefers_html_response,
+    oauth_error_correlation_ids,
+    resolve_oauth_integration_locale,
+)
 from core.config import get_settings
 from core.context import get_context
+from core.integrations.guided_integration_error import GuidedIntegrationError
 from core.integrations.models import CredentialInfo, IntegrationProvider
 from core.logging import get_logger
 from core.pagination import ListResponse
@@ -93,7 +101,7 @@ async def oauth_callback(
     code: Optional[str] = Query(default=None),
     error: Optional[str] = Query(default=None),
     referer: Optional[str] = Query(default=None),
-) -> HTMLResponse | RedirectResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     """
     Универсальный OAuth callback.
 
@@ -109,15 +117,45 @@ async def oauth_callback(
         raise HTTPException(status_code=400, detail="Missing required parameters: code and state")
 
     oauth_service = request.app.state.container.oauth_service
+    accept_language = request.headers.get("accept-language")
+    oauth_locale = resolve_oauth_integration_locale(accept_language)
+    corr = oauth_error_correlation_ids(request)
     try:
         credential, return_path, flow_context, post_auth_redirect_origin = await oauth_service.complete_oauth(
             state_token=state,
             code=code,
             referer=referer,
         )
+    except GuidedIntegrationError as exc:
+        logger.warning("OAuth complete_oauth GuidedIntegrationError: code=%s", exc.code)
+        prefers_html = oauth_callback_prefers_html_response(request)
+        if prefers_html:
+            body = build_integration_oauth_error_html(
+                exc,
+                locale=oauth_locale,
+                correlation=corr,
+            )
+            return HTMLResponse(content=body, status_code=400)
+        guided = exc.guided_payload(oauth_locale)
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": guided["message"],
+                "code": exc.code,
+                "guided": guided,
+            },
+        )
     except ValueError as exc:
         logger.warning("OAuth complete_oauth ValueError: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc))
+        msg = str(exc)
+        if oauth_callback_prefers_html_response(request):
+            body = build_integration_oauth_simple_error_html(
+                msg,
+                locale=oauth_locale,
+                correlation=corr,
+            )
+            return HTMLResponse(content=body, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
     except httpx.HTTPStatusError as exc:
         logger.error("OAuth provider token exchange error: status=%d", exc.response.status_code)
         raise HTTPException(status_code=502, detail="OAuth provider error")

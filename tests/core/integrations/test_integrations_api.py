@@ -7,9 +7,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from core.integrations.guided_integration_error import (
+    GuidedIntegrationError,
+    GuidedIntegrationLink,
+)
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.repository import IntegrationCredentialRepository
 
@@ -186,3 +191,91 @@ class TestOAuthCallback:
         )
         assert resp.status_code == 400
         assert "expired" in resp.json()["detail"].lower() or "invalid" in resp.json()["detail"].lower()
+
+
+class TestOAuthCallbackGuidedIntegrationError:
+    @pytest.mark.asyncio
+    async def test_returns_json_without_sec_fetch_dest(self, flows_client, flows_app) -> None:
+        exc = GuidedIntegrationError(
+            code="test_oauth_guided",
+            title_ru="RU title",
+            title_en="EN title",
+            message_ru="RU body",
+            message_en="EN body",
+            links=(
+                GuidedIntegrationLink(
+                    href="/crm/settings/spaces",
+                    label_ru="Lru",
+                    label_en="Len",
+                ),
+            ),
+        )
+        oauth = flows_app.state.container.oauth_service
+        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+            resp = await flows_client.get(
+                "/flows/api/v1/integrations/oauth/callback",
+                params={"code": "x", "state": "y"},
+                headers={"Accept-Language": "en"},
+            )
+        assert resp.status_code == 400
+        assert resp.headers.get("content-type", "").startswith("application/json")
+        payload = resp.json()
+        assert payload["code"] == "test_oauth_guided"
+        assert payload["detail"] == "EN body"
+        assert payload["guided"]["title"] == "EN title"
+        assert payload["guided"]["links"][0]["href"] == "/crm/settings/spaces"
+        assert "request_id" in payload
+
+    @pytest.mark.asyncio
+    async def test_returns_html_for_sec_fetch_dest_document(self, flows_client, flows_app) -> None:
+        exc = GuidedIntegrationError(
+            code="test_oauth_guided_html",
+            title_ru="RU title",
+            title_en="EN title",
+            message_ru="RU body",
+            message_en="EN body",
+            links=(
+                GuidedIntegrationLink(
+                    href="/crm/settings/spaces",
+                    label_ru="Lru",
+                    label_en="Len",
+                ),
+            ),
+        )
+        oauth = flows_app.state.container.oauth_service
+        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+            resp = await flows_client.get(
+                "/flows/api/v1/integrations/oauth/callback",
+                params={"code": "x", "state": "y"},
+                headers={
+                    "Sec-Fetch-Dest": "document",
+                    "Accept-Language": "en",
+                },
+            )
+        assert resp.status_code == 400
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert b"EN title" in resp.content
+        assert b"/crm/settings/spaces" in resp.content
+
+    @pytest.mark.asyncio
+    async def test_value_error_returns_html_when_document_navigation(
+        self, flows_client, flows_app,
+    ) -> None:
+        oauth = flows_app.state.container.oauth_service
+        with patch.object(
+            oauth,
+            "complete_oauth",
+            new=AsyncMock(side_effect=ValueError("plain error")),
+        ):
+            resp = await flows_client.get(
+                "/flows/api/v1/integrations/oauth/callback",
+                params={"code": "x", "state": "y"},
+                headers={
+                    "Sec-Fetch-Dest": "document",
+                    "Accept-Language": "en",
+                },
+            )
+        assert resp.status_code == 400
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert b"plain error" in resp.content
+        assert b"Connection failed" in resp.content

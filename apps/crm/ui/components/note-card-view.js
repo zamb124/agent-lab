@@ -5,9 +5,11 @@
  *   - `view` (default): read-only представление с markdown, AI-summary,
  *     сайдбар (задачи, связанные объекты). Вложения — из шапки (popover).
  *     Текст вложений подставляется в тело заметки на сервере при загрузке.
- *     Шапка: attachments / edit / delete.
- *     Граф связей — под областью текста; текст — в контейнере с ограничением по высоте
- *     и собственной прокруткой.
+ *     Шапка: attachments / (десктоп) переключатель графа / edit / delete.
+ *     Родитель задаёт `mobileHeaderPanel`: `'' | 'summary' | 'neighbors' | 'graph'`.
+ *     При `'graph'` в основной колонке только мини-граф (в других режимах canvas не монтируется);
+ *     иначе markdown на высоту колонки со скроллом у `.main`.
+ *     На узком экране блок `.mobile-header-panels` рендерится только для summary/neighbors.
  *   - `edit`: inline-форма — title, описание (с голосовым вводом), дата, теги,
  *     аплоад вложений. Текст из файлов добавляется в описание на сервере.
  *     `entitiesResource.create` (для note === null) или
@@ -21,11 +23,13 @@
  *   - `mode: 'view' | 'edit'` — текущий режим (для note === null
  *     автоматически 'edit').
  *   - `defaultNamespace: string` — обязателен для режима создания.
+ *   - `mobileHeaderPanel` — оверлеи на мобилке и режим графа в колонке (страница заметки).
  *   - `markdownFormatting`, `markdownFormatProgress` — индикатор format Markdown (view): баннер под шапкой.
  *
  * Эмитит:
  *   - `edit-note`                — клик по карандашу в шапке view.
  *   - `delete-note`              — клик по корзине в шапке view.
+ *   - `overlay-panel-toggle` { panel: 'graph' } — десктоп: переключить inline-граф (обрабатывает страница).
  *   - `entity-open` { entityId, entity_type? } — клик по связанной сущности или превью графа.
  *   - `cancel`                   — отмена в edit-режиме.
  *   - `saved` { entity }         — успешное сохранение существующей заметки.
@@ -350,6 +354,18 @@ export class CRMNoteCardView extends PlatformElement {
                 flex-shrink: 0;
                 align-items: center;
             }
+            .desktop-graph-toggle {
+                display: none;
+            }
+            @media (min-width: 768px) {
+                .desktop-graph-toggle {
+                    display: inline-flex;
+                }
+            }
+            .desktop-graph-toggle.active {
+                background: var(--accent);
+                color: #ffffff;
+            }
             .mobile-header-panels {
                 display: none;
             }
@@ -518,12 +534,18 @@ export class CRMNoteCardView extends PlatformElement {
             }
 
             /* ================== note content (markdown) ================== */
+            .note-primary-pane {
+                flex: 1 1 auto;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+            }
             .note-text-scroll {
-                flex: 0 1 auto;
-                max-height: min(45vh, 520px);
-                min-height: 140px;
-                overflow-y: auto;
+                flex: 1 1 auto;
+                min-height: 0;
+                max-height: none;
                 overflow-x: hidden;
+                overflow-y: visible;
                 padding-right: var(--space-1);
                 box-sizing: border-box;
             }
@@ -715,7 +737,7 @@ export class CRMNoteCardView extends PlatformElement {
             /* ================== inline graph (view) ================== */
             .note-graph-preview-host {
                 flex: 1 1 auto;
-                min-height: min(360px, 50vh);
+                min-height: min(280px, 40vh);
                 height: auto;
                 max-height: none;
                 display: flex;
@@ -1017,9 +1039,6 @@ export class CRMNoteCardView extends PlatformElement {
                     background: var(--crm-surface-elevated, var(--glass-solid-strong));
                     box-shadow: var(--glass-shadow-medium);
                     padding: var(--space-2);
-                }
-                .mobile-header-panels:empty {
-                    display: none;
                 }
                 .mobile-header-panels::before {
                     content: '';
@@ -3361,6 +3380,9 @@ export class CRMNoteCardView extends PlatformElement {
         const summaryTime = this._summaryGeneratedAt();
         const summaryEntities = this._summaryEntities();
         const tasks = this._noteTasks();
+        const panelGraph = this.mobileHeaderPanel === 'graph';
+        const mobileFloatingPanel =
+            this.mobileHeaderPanel === 'summary' || this.mobileHeaderPanel === 'neighbors';
 
         return html`
             <div class="layout">
@@ -3375,6 +3397,15 @@ export class CRMNoteCardView extends PlatformElement {
                         </div>
                         <div class="header-actions">
                             ${this._renderAttachmentsHeaderButton('view')}
+                            <button
+                                type="button"
+                                class=${`round-btn desktop-graph-toggle ${panelGraph ? 'active' : ''}`}
+                                title=${this.t('note_view.graph_inline_title')}
+                                aria-expanded=${String(panelGraph)}
+                                @click=${() => this.emit('overlay-panel-toggle', { panel: 'graph' })}
+                            >
+                                <platform-icon name="git-branch" size="20"></platform-icon>
+                            </button>
                             <button
                                 type="button"
                                 class="round-btn danger"
@@ -3393,53 +3424,62 @@ export class CRMNoteCardView extends PlatformElement {
                                 ${this.t('note_view.action_edit')}
                             </button>
                         </div>
-                        <div class="mobile-header-panels">
-                            ${this._renderMobileHeaderPanel(summaryText, summaryTime, summaryEntities)}
-                        </div>
+                        ${mobileFloatingPanel
+                            ? html`
+                                <div class="mobile-header-panels">
+                                    ${this._renderMobileHeaderPanel(summaryText, summaryTime, summaryEntities)}
+                                </div>
+                            `
+                            : nothing}
                     </header>
-                    ${this._renderMarkdownFormatStatusBanner()}
-                    <div class=${`note-text-scroll${this.markdownFormatting ? ' markdown-format-status-active' : ''}`}>
-                        <div class="note-text-body-wrap">
-                            ${description.length > 0
-                                ? html`
-                                    <article
-                                        class="markdown"
-                                        @click=${this._onMarkdownClick}
-                                        @mousemove=${this._onMarkdownMouseMove}
-                                        @mouseleave=${this._onMarkdownMouseLeave}
-                                    >
-                                        ${unsafeHTML(renderMarkdownToHtml(description))}
-                                    </article>
-                                    <button
-                                        type="button"
-                                        class="note-markdown-format-btn"
-                                        title=${this.t('note_view.markdown_format_action')}
-                                        ?disabled=${this.markdownFormatting}
-                                        @click=${() => this.emit('format-markdown-request')}
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            width="20"
-                                            height="20"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            aria-hidden="true"
-                                        >
-                                            <path d="M4 6h16" />
-                                            <path d="M7 12h10" />
-                                            <path d="M10 18h4" />
-                                            <path d="M4 18h3" />
-                                        </svg>
-                                    </button>
-                                `
-                                : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
-                        </div>
+                    ${panelGraph ? nothing : this._renderMarkdownFormatStatusBanner()}
+                    <div class="note-primary-pane">
+                        ${panelGraph
+                            ? this._renderNoteGraphInlineSection()
+                            : html`
+                                <div class=${`note-text-scroll${this.markdownFormatting ? ' markdown-format-status-active' : ''}`}>
+                                    <div class="note-text-body-wrap">
+                                        ${description.length > 0
+                                            ? html`
+                                                <article
+                                                    class="markdown"
+                                                    @click=${this._onMarkdownClick}
+                                                    @mousemove=${this._onMarkdownMouseMove}
+                                                    @mouseleave=${this._onMarkdownMouseLeave}
+                                                >
+                                                    ${unsafeHTML(renderMarkdownToHtml(description))}
+                                                </article>
+                                                <button
+                                                    type="button"
+                                                    class="note-markdown-format-btn"
+                                                    title=${this.t('note_view.markdown_format_action')}
+                                                    ?disabled=${this.markdownFormatting}
+                                                    @click=${() => this.emit('format-markdown-request')}
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="20"
+                                                        height="20"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <path d="M4 6h16" />
+                                                        <path d="M7 12h10" />
+                                                        <path d="M10 18h4" />
+                                                        <path d="M4 18h3" />
+                                                    </svg>
+                                                </button>
+                                            `
+                                            : html`<p class="empty-text">${this.t('note_view.no_description')}</p>`}
+                                    </div>
+                                </div>
+                            `}
                     </div>
-                    ${this._renderNoteGraphInlineSection()}
                 </section>
 
                 <aside class="sidebar">

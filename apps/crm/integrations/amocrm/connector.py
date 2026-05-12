@@ -5,11 +5,16 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService
 from apps.crm.integrations.amocrm.type_extensions import (
     AMO_OPTIONAL_FIELDS_BY_TYPE_ID,
     amo_canonical_type_ids,
+)
+from core.integrations.guided_integration_error import (
+    GuidedIntegrationError,
+    GuidedIntegrationLink,
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
@@ -91,9 +96,47 @@ class AmoCRMConnector:
                     type_id, namespace="default", company_id=company_id,
                 )
                 if src_default is None:
-                    raise ValueError(
-                        f"Для интеграции AmoCRM в пространстве «{ns}» нужен тип сущности «{type_id}» "
-                        "в компании. Создайте пространство из шаблона sales либо добавьте тип вручную."
+                    raise GuidedIntegrationError(
+                        code="crm_amocrm_missing_canonical_entity_type",
+                        title_ru="Не хватает типа сущности для AmoCRM",
+                        title_en="Missing entity type for AmoCRM",
+                        message_ru=(
+                            f"Для интеграции AmoCRM в пространстве «{ns}» нужен тип сущности "
+                            f"«{type_id}» в компании. Создайте пространство из шаблона sales "
+                            "либо добавьте тип вручную."
+                        ),
+                        message_en=(
+                            f"AmoCRM integration in space «{ns}» requires entity type "
+                            f"«{type_id}» for this company. Create a space from the sales template "
+                            "or add the type manually."
+                        ),
+                        steps_ru=(
+                            "В разделе «Пространства» создайте пространство из шаблона sales.",
+                            f"Или откройте карточку «{ns}» и добавьте тип «{type_id}» вручную.",
+                            "Затем снова подключите AmoCRM в настройках интеграций.",
+                        ),
+                        steps_en=(
+                            "In Spaces, create a space from the sales template.",
+                            f"Or open space «{ns}» and add type «{type_id}» manually.",
+                            "Then connect AmoCRM again in integration settings.",
+                        ),
+                        links=(
+                            GuidedIntegrationLink(
+                                href="/crm/settings/spaces",
+                                label_ru="Пространства",
+                                label_en="Spaces",
+                            ),
+                            GuidedIntegrationLink(
+                                href=f"/crm/settings/spaces/{quote(ns, safe='')}",
+                                label_ru=f"Пространство «{ns}»",
+                                label_en=f"Space «{ns}»",
+                            ),
+                            GuidedIntegrationLink(
+                                href="/crm/settings/templates",
+                                label_ru="Шаблоны пространств",
+                                label_en="Space templates",
+                            ),
+                        ),
                     )
                 await repo.clone_entity_type_between_namespaces(
                     type_id,

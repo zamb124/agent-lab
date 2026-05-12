@@ -491,14 +491,23 @@ export class CRMNotePage extends CRMNamespacePage {
     }
 
     _onEditNote() {
+        this._mobileHeaderPanel = '';
         this._mode = 'edit';
     }
 
     _toggleMobileHeaderPanel(panel) {
-        if (panel !== 'summary' && panel !== 'neighbors') {
+        if (panel !== 'summary' && panel !== 'neighbors' && panel !== 'graph') {
             throw new Error('CRMNotePage._toggleMobileHeaderPanel: unknown panel');
         }
         this._mobileHeaderPanel = this._mobileHeaderPanel === panel ? '' : panel;
+    }
+
+    _onOverlayPanelToggle(event) {
+        const panel = event.detail && typeof event.detail.panel === 'string' ? event.detail.panel.trim() : '';
+        if (panel !== 'graph') {
+            throw new Error('CRMNotePage._onOverlayPanelToggle: expected panel graph');
+        }
+        this._toggleMobileHeaderPanel(panel);
     }
 
     _onEditCancel() {
@@ -690,6 +699,15 @@ export class CRMNotePage extends CRMNamespacePage {
                             >
                                 <platform-icon name="folder" size="18"></platform-icon>
                             </button>
+                            <button
+                                type="button"
+                                class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'graph' ? 'active' : ''}`}
+                                title=${this.t('note_view.graph_inline_title')}
+                                aria-expanded=${String(this._mobileHeaderPanel === 'graph')}
+                                @click=${() => this._toggleMobileHeaderPanel('graph')}
+                            >
+                                <platform-icon name="git-branch" size="18"></platform-icon>
+                            </button>
                         </div>
                     ` : nothing}
                 </page-header>
@@ -824,6 +842,7 @@ export class CRMNotePage extends CRMNamespacePage {
                     @task-add=${this._onTaskAdd}
                     @task-toggle=${this._onTaskToggle}
                     @task-remove=${this._onTaskRemove}
+                    @overlay-panel-toggle=${this._onOverlayPanelToggle}
                 ></crm-note-card-view>
             </div>
             ${nothing}

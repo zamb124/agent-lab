@@ -5,6 +5,10 @@ OAuthService — единый OAuth2 flow (start, complete, refresh, get_valid_t
 IntegrationCredentialRepository — хранение per-user OAuth токенов.
 """
 
+from core.integrations.guided_integration_error import (
+    GuidedIntegrationError,
+    GuidedIntegrationLink,
+)
 from core.integrations.models import (
     IntegrationCredential,
     IntegrationProvider,
@@ -15,6 +19,8 @@ from core.integrations.providers.amocrm import parse_amocrm_subdomain_from_refer
 from core.integrations.repository import IntegrationCredentialRepository
 
 __all__ = [
+    "GuidedIntegrationError",
+    "GuidedIntegrationLink",
     "IntegrationCredential",
     "IntegrationCredentialRepository",
     "IntegrationProvider",

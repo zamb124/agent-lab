@@ -122,6 +122,10 @@ external_flow = await container.flow_discovery.register_agent(
 | `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
 | `core/integrations/oauth_service.py` | `OAuthService.build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
 | `core/api/integrations.py` | OAuth callback `GET /{server.name}/api/v1/integrations/oauth/callback` (flows: `/flows/api/v1/...`). Дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с этим путём; после успеха — редирект на `post_auth_redirect_origin` + `return_path` (если в state был допустимый `return_origin` при старте, см. `core.utils.domain.is_allowed_integration_return_origin`), иначе — `platform_public_base_url` + `return_path` |
+| `core/integrations/guided_integration_error.py` | `GuidedIntegrationError` / `GuidedIntegrationLink` — структурированная ошибка OAuth post-save (CRM и др.), текст RU/EN |
+| `core/api/integration_oauth_error_html.py` | HTML страницы ошибки callback (SSR), выбор локали из `Accept-Language` |
+
+Ошибки после `complete_oauth`, в т.ч. из хука `set_oauth_credential_saved_hook` (нет `FlowInterrupt`): если проброшен `GuidedIntegrationError`, колбэк отдаёт **application/json** с полями `detail`, `code`, `guided` (структурированный блок для клиентов/UI), либо **text/html** (переход браузера): условие ветки — **`Sec-Fetch-Dest: document`** (`oauth_callback_prefers_html_response`). Локали текста для HTML и для полей внутри `guided` задаёт **`Accept-Language`**. Для ошибок **`ValueError`** из `complete_oauth` действует то же правило HTML против JSON без структуры `guided`. `PlatformHttpErrorEnvelopeMiddleware` обогащает JSON с кодом ответа >= 400 как обычно.
 
 `BaseContainer` предоставляет `oauth_service` и `integration_credential_repository` для всех сервисов.
 
