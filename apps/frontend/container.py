@@ -76,6 +76,13 @@ class FrontendContainer(BaseContainer):
         storage = Storage(db_url=url, get_context_func=get_context)
         return FlowRepository(storage=storage)
 
+    @lazy
+    def redis_client(self):
+        from core.clients.redis_client import RedisClient
+        from core.config import get_settings
+
+        return RedisClient(get_settings().database.redis_url)
+
 # === Глобальный контейнер ===
 
 _frontend_container: Optional[FrontendContainer] = None

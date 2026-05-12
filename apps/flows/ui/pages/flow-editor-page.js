@@ -30,6 +30,7 @@ import '../components/editor/flows-execution-panel.js';
 import '../components/editor/flows-floating-panel.js';
 import '../components/flow-canvas/flows-flow-canvas.js';
 import '../modals/flows-canvas-help-modal.js';
+import '../modals/flows-preview-share-modal.js';
 import { getNodeTypeMeta, getCategoryToken } from '../constants/node-icons.js';
 import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 

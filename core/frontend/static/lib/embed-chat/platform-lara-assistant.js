@@ -14,6 +14,7 @@ export class PlatformLaraAssistant extends LitElement {
         branchId: { type: String, attribute: 'branch-id' },
         skillId: { type: String, attribute: 'skill-id' },
         theme: { type: String, attribute: 'theme' },
+        initialOpen: { type: Boolean, attribute: 'initial-open' },
         showLauncher: { type: Boolean, attribute: 'show-launcher' },
         assistantTitle: { type: String, attribute: 'assistant-title' },
         locale: { type: String },
@@ -43,6 +44,7 @@ export class PlatformLaraAssistant extends LitElement {
         this.branchId = '';
         this.skillId = '';
         this.theme = 'auto';
+        this.initialOpen = false;
         this.showLauncher = false;
         this.assistantTitle = 'Lara';
         this.locale = 'ru';
@@ -59,10 +61,24 @@ export class PlatformLaraAssistant extends LitElement {
         this.companyId = '';
     }
 
+    firstUpdated(changed) {
+        super.firstUpdated(changed);
+        if (!this.initialOpen) {
+            return;
+        }
+        void this.updateComplete.then(() => {
+            const drawer = this.querySelector('platform-embed-chat-drawer');
+            if (drawer != null && drawer.open !== true) {
+                drawer.open = true;
+            }
+        });
+    }
+
     render() {
         return html`
             <platform-embed-chat-drawer
                 .theme=${this.theme || 'auto'}
+                ?initial-open=${this.initialOpen}
                 .showLauncher=${this.showLauncher}
                 .flowsBaseUrl=${this.flowsBaseUrl}
                 .platformUiOrigin=${this.platformUiOrigin || ''}

@@ -19,7 +19,8 @@
         "logout": "Выйти",
         "language": "Язык",
         "user_fallback": "Пользователь",
-        "services": "Сервисы"
+        "services": "Сервисы",
+        "create_company": "Создать компанию"
     },
     "services_page": {
         "title": "Сервисы платформы",

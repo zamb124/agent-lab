@@ -244,6 +244,16 @@ export class FlowsEditorHeader extends PlatformElement {
         this.openModal('flows.triggers', { flowId: this.flowId });
     }
 
+    _openPreviewShare() {
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        const raw =
+            typeof this.branchId === 'string' && this.branchId.trim() !== '' ? this.branchId.trim() : 'base';
+        const bid = raw === 'base' ? 'default' : raw;
+        this.openModal('flows.preview_share', { flowId: this.flowId, branchId: bid });
+    }
+
     render() {
         const state = asObject(this._editor.state);
         let flowName;
@@ -291,6 +301,15 @@ export class FlowsEditorHeader extends PlatformElement {
             </div>
 
             <div class="header-right">
+                <button
+                    class="header-btn icon-only"
+                    type="button"
+                    title=${this.t('editor_header.share_preview')}
+                    aria-label=${this.t('editor_header.share_preview')}
+                    @click=${this._openPreviewShare}
+                >
+                    <platform-icon name="share" size="16"></platform-icon>
+                </button>
                 <button
                     class="header-btn icon-only"
                     type="button"

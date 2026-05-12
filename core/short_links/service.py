@@ -6,7 +6,11 @@ from typing import Optional
 from urllib.parse import quote
 
 from core.config import get_settings
-from core.short_links.kinds import SHORT_LINK_KIND_COMPANY_INVITE, SHORT_LINK_KIND_SYNC_CALL_JOIN
+from core.short_links.kinds import (
+    SHORT_LINK_KIND_COMPANY_INVITE,
+    SHORT_LINK_KIND_FLOW_PREVIEW_EMBED,
+    SHORT_LINK_KIND_SYNC_CALL_JOIN,
+)
 from core.short_links.payloads import CompanyInvitePayload, SyncCallJoinPayload
 from core.short_links.repository import ShortLinkRepository
 
@@ -71,6 +75,24 @@ class ShortLinkService:
             ok = await self._repo.insert_try(
                 code,
                 SHORT_LINK_KIND_COMPANY_INVITE,
+                payload,
+                expires_at,
+            )
+            if ok:
+                return self.public_short_url(code)
+
+        raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
+
+    async def mint_flow_preview_embed(self, handoff_id: str, expires_at: datetime) -> str:
+        if not isinstance(handoff_id, str) or not handoff_id.strip():
+            raise ValueError("handoff_id must be non-empty string")
+        payload = {"handoff_id": handoff_id.strip()}
+
+        for _ in range(12):
+            code = _random_code()
+            ok = await self._repo.insert_try(
+                code,
+                SHORT_LINK_KIND_FLOW_PREVIEW_EMBED,
                 payload,
                 expires_at,
             )

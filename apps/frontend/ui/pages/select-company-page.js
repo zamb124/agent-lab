@@ -9,6 +9,13 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import { buildCompanySubdomainUrl } from '@platform/lib/utils/tenant-url.js';
 import '@platform/lib/components/platform-icon.js';
 
+function _userIsOwnerOfCompany(companyRecord) {
+    if (!companyRecord || !Array.isArray(companyRecord.role)) {
+        return false;
+    }
+    return companyRecord.role.includes('owner');
+}
+
 export class SelectCompanyPage extends PlatformPage {
     static styles = [
         PlatformPage.styles,
@@ -56,8 +63,10 @@ export class SelectCompanyPage extends PlatformPage {
             .grid-main {
                 flex: 1 1 auto;
                 display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
+                gap: var(--space-6);
                 width: 100%;
                 min-height: 0;
             }
@@ -133,6 +142,13 @@ export class SelectCompanyPage extends PlatformPage {
                 word-break: break-word;
                 max-width: 100%;
             }
+            .create-company-secondary {
+                flex: 0 0 auto;
+                display: flex;
+                justify-content: center;
+                width: 100%;
+                max-width: 40rem;
+            }
         `,
     ];
 
@@ -182,35 +198,29 @@ export class SelectCompanyPage extends PlatformPage {
         this.openModal('platform.company_create', null);
     }
 
+    _resolveCurrentCompanyId(user) {
+        if (!user) return '';
+        if (typeof user.company_id === 'string' && user.company_id.length > 0) {
+            return user.company_id;
+        }
+        if (
+            user.raw &&
+            typeof user.raw.company_id === 'string' &&
+            user.raw.company_id.length > 0
+        ) {
+            return user.raw.company_id;
+        }
+        return '';
+    }
+
     render() {
         const companies = this._companiesSel.value;
         const user = this._authSel.value;
-        let currentId = '';
-        if (user) {
-            if (typeof user.company_id === 'string' && user.company_id.length > 0) {
-                currentId = user.company_id;
-            } else if (
-                user.raw &&
-                typeof user.raw.company_id === 'string' &&
-                user.raw.company_id.length > 0
-            ) {
-                currentId = user.raw.company_id;
-            }
-        }
-        return html`
-            <h1 class="page-title">${this.t('select_company.title')}</h1>
-            ${companies.length === 0
-                ? html`
-                    <div class="empty">
-                        <p class="empty-text">${this.t('select_company.empty_text')}</p>
-                        <div class="empty-actions">
-                            <button type="button" class="btn btn-primary" @click=${this._createCompany}>
-                                ${this.t('select_company.create_action')}
-                            </button>
-                        </div>
-                    </div>
-                `
-                : html`
+        const currentId = this._resolveCurrentCompanyId(user);
+        const activeRecord = currentId ? companies.find((c) => c.company_id === currentId) : undefined;
+        const canCreateAnother = companies.length > 0 && _userIsOwnerOfCompany(activeRecord);
+
+        const cardsBlock = html`
                     <div class="grid-main">
                         <div class="grid" role="list">
                             ${companies.map(
@@ -229,8 +239,32 @@ export class SelectCompanyPage extends PlatformPage {
                                 `,
                             )}
                         </div>
+                        ${canCreateAnother
+                            ? html`
+                                <div class="create-company-secondary">
+                                    <button type="button" class="btn btn-secondary" @click=${this._createCompany}>
+                                        ${this.t('select_company.create_action')}
+                                    </button>
+                                </div>
+                            `
+                            : ''}
                     </div>
-                `}
+                `;
+
+        return html`
+            <h1 class="page-title">${this.t('select_company.title')}</h1>
+            ${companies.length === 0
+                ? html`
+                    <div class="empty">
+                        <p class="empty-text">${this.t('select_company.empty_text')}</p>
+                        <div class="empty-actions">
+                            <button type="button" class="btn btn-primary" @click=${this._createCompany}>
+                                ${this.t('select_company.create_action')}
+                            </button>
+                        </div>
+                    </div>
+                `
+                : cardsBlock}
         `;
     }
 }

@@ -70,6 +70,22 @@ class ShortLinkRepository:
             await session.commit()
             return (res.rowcount or 0) > 0
 
+    async def delete_by_code_and_kind_returning(
+        self, code: str, kind: str
+    ) -> Optional[PlatformShortLink]:
+        """Атомарно удаляет строку только при совпадении kind; иначе ничего не удаляет."""
+        factory = await get_session_factory(self._db_url)
+        async with factory() as session:
+            stmt = (
+                delete(PlatformShortLink)
+                .where(PlatformShortLink.code == code, PlatformShortLink.kind == kind)
+                .returning(PlatformShortLink)
+            )
+            cursor = await session.execute(stmt)
+            row = cursor.scalars().first()
+            await session.commit()
+            return row
+
     async def delete_sync_by_link_token(self, link_token: str) -> int:
         factory = await get_session_factory(self._db_url)
         async with factory() as session:

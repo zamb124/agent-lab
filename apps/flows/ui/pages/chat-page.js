@@ -21,6 +21,7 @@ import {
     normalizeFlowVoiceSttLanguage,
     resolveFlowVoiceHttpOrigin,
 } from '../_helpers/flow-voice-session.js';
+import '../modals/flows-preview-share-modal.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
 import { asArray, asString, isPlainObject, authActiveCompanyId } from '../_helpers/flows-resolvers.js';
@@ -823,6 +824,17 @@ export class ChatPage extends PlatformPage {
         dispatchEmbedChatWindowToggle('flows-lara-open', { open: true });
     }
 
+    _openPreviewShare() {
+        this._overflowOpen = false;
+        if (typeof this.flowId !== 'string' || this.flowId.length === 0) {
+            return;
+        }
+        const raw =
+            typeof this.branchId === 'string' && this.branchId.trim() !== '' ? this.branchId.trim() : 'base';
+        const bid = raw === 'base' ? 'default' : raw;
+        this.openModal('flows.preview_share', { flowId: this.flowId, branchId: bid });
+    }
+
     _toggleOverflow(e) {
         e.stopPropagation();
         this._overflowOpen = !this._overflowOpen;
@@ -839,6 +851,19 @@ export class ChatPage extends PlatformPage {
             >
                 <platform-icon name="ai" size="16"></platform-icon>
             </button>
+            ${hasFlow
+                ? html`
+                    <button
+                        type="button"
+                        class="action-btn"
+                        title=${this.t('editor_header.share_preview')}
+                        aria-label=${this.t('editor_header.share_preview')}
+                        @click=${this._openPreviewShare}
+                    >
+                        <platform-icon name="share" size="16"></platform-icon>
+                    </button>
+                `
+                : nothing}
             ${hasFlow
                 ? html`
                     <button
@@ -917,6 +942,14 @@ export class ChatPage extends PlatformPage {
                     ${this._overflowOpen
                         ? html`
                             <div class="menu-flyout" @click=${(e) => e.stopPropagation()}>
+                                ${hasFlow
+                                    ? html`
+                                        <button type="button" class="action-btn-menu" @click=${this._openPreviewShare}>
+                                            <platform-icon name="share" size="16"></platform-icon>
+                                            ${this.t('editor_header.share_preview')}
+                                        </button>
+                                    `
+                                    : nothing}
                                 ${hasFlow
                                     ? html`
                                         <button type="button" class="action-btn-menu" @click=${this._openTriggers}>

@@ -16,7 +16,8 @@
  *         с LLM-calling именем `sanitize(tool_id)` как в backend) + strict; reminder_message);
  *       - Инструменты (`cfg.tools: ToolReference[]`): chips (иконка + имя) + выбор из библиотеки.
  *   5b. Structured-режим (`structured_output=true`):
- *       - Output JSON Schema (`cfg.output_schema`).
+ *       - Output JSON Schema (`cfg.output_schema`): при первом включении подставляется
+ *         учебный strict-шаблон; пустой конфиг показывает тот же шаблон до сохранения.
  *
  * Tools и Structured Output взаимоисключающи: если включён Structured Output,
  * tools и react-секция не отображаются.
@@ -43,6 +44,38 @@ import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
+
+const DEFAULT_STRUCTURED_OUTPUT_SCHEMA = Object.freeze({
+    type: 'object',
+    properties: {
+        answer: {
+            type: 'string',
+            description: 'Final reply text for the user.',
+        },
+        tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Short labels classifying the reply.',
+        },
+        score: {
+            type: 'number',
+            description: 'Numeric score (e.g. confidence 0–1).',
+        },
+    },
+    required: ['answer', 'tags', 'score'],
+    additionalProperties: false,
+});
+
+function _isUnsetOutputSchema(schema) {
+    if (schema == null || typeof schema !== 'object') {
+        return true;
+    }
+    return Object.keys(schema).length === 0;
+}
+
+function _cloneDefaultStructuredOutputSchema() {
+    return JSON.parse(JSON.stringify(DEFAULT_STRUCTURED_OUTPUT_SCHEMA));
+}
 
 function _toolListEntryKey(t) {
     if (typeof t === 'string') {
@@ -173,7 +206,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) auto;
                 gap: var(--space-3);
-                align-items: end;
+                align-items: center;
             }
             .react-exit-strict-row platform-field {
                 min-width: 0;
@@ -464,6 +497,13 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const next = mode === 'structured';
         const current = Boolean(this.nodeConfig?.structured_output);
         if (next === current) return;
+        if (next && _isUnsetOutputSchema(this.nodeConfig?.output_schema)) {
+            this._emitPatch({
+                structured_output: true,
+                output_schema: _cloneDefaultStructuredOutputSchema(),
+            });
+            return;
+        }
         this._emitPatch({ structured_output: next });
     }
 
@@ -748,13 +788,15 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _renderOutputSchemaSection() {
         if (!this.nodeConfig?.structured_output) return '';
-        const schema = this.nodeConfig?.output_schema && typeof this.nodeConfig.output_schema === 'object'
-            ? JSON.stringify(this.nodeConfig.output_schema, null, 2)
-            : '{}';
+        const raw = this.nodeConfig?.output_schema;
+        const schemaObj =
+            !_isUnsetOutputSchema(raw) && typeof raw === 'object' ? raw : DEFAULT_STRUCTURED_OUTPUT_SCHEMA;
+        const schema = JSON.stringify(schemaObj, null, 2);
         return html`
             <section class="block">
                 <h4 class="block-title">${this.t('llm_node_editor.section_output_schema')}</h4>
                 <div class="block-card">
+                    <div class="block-hint">${this.t('llm_node_editor.output_schema_strict_hint')}</div>
                     <flows-json-field-editor
                         .value=${schema}
                         @change=${this._onOutputSchemaChange}

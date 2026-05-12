@@ -522,6 +522,7 @@
     "output_mode_structured": "Структурированный",
     "output_mode_hint": "Инструменты: ассистент вызывает tools и отвечает обычным текстом. Структурированный: ответ — JSON по схеме ниже.",
     "section_output_schema": "JSON-схема вывода",
+    "output_schema_strict_hint": "Для strict JSON Schema корень — объект: все ключи из properties должны быть в required; на каждом объекте с properties задайте additionalProperties: false.",
     "section_react": "ReAct цикл",
     "section_tools": "Инструменты",
     "messages_filter_all": "Весь лог",
@@ -906,7 +907,23 @@
     "mode_run": "Run",
     "lara": "Открыть Lara для текущего flow",
     "code": "Код",
-    "publish": "Опубликовать"
+    "publish": "Опубликовать",
+    "share_preview": "Ссылка для гостевого просмотра (одноразовая)"
+  },
+  "preview_share": {
+    "title": "Гостевой просмотр",
+    "url_label": "Ссылка",
+    "copy": "Копировать",
+    "close": "Закрыть",
+    "create": "Создать ссылку",
+    "form_hint": "Нажмите «Создать ссылку» после при необходимости указания лимита.",
+    "guest_max_label": "Лимит сообщений гостя",
+    "guest_max_placeholder": "Без лимита",
+    "guest_max_hint": "Максимум пользовательских сообщений на один диалог для гостевой сессии. Пусто — без ограничения (1–500).",
+    "empty_url": "Не удалось получить ссылку",
+    "hint_author": "Страница по ссылке открывается один раз. Не пересылайте открытый URL — он перестанет открываться.",
+    "copy_toast": "Скопировано",
+    "err_guest_max": "Укажите целое число от 1 до 500 или оставьте поле пустым"
   },
   "node_types_sidebar": {
     "title": "Типы нод",

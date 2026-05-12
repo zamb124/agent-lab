@@ -146,6 +146,32 @@ export const flowVoiceSessionQueryOp = createAsyncOp({
     },
 });
 
+export const flowPreviewShareOp = createAsyncOp({
+    name: 'flows/flow_preview_share',
+    silent: true,
+    restMirror: { method: 'POST', path: '/flows/api/v1/flows/{flow_id}/preview-share' },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.flow_id !== 'string' || payload.flow_id.length === 0) {
+            throw new Error('flowPreviewShareOp: { flow_id, branch_id? } required');
+        }
+        const branchRaw = typeof payload.branch_id === 'string' && payload.branch_id.trim() !== ''
+            ? payload.branch_id.trim()
+            : 'default';
+        const body = { branch_id: branchRaw };
+        if (payload.guest_max_user_messages != null) {
+            if (typeof payload.guest_max_user_messages !== 'number' || !Number.isFinite(payload.guest_max_user_messages)) {
+                throw new Error('flowPreviewShareOp: guest_max_user_messages must be a finite number when set');
+            }
+            body.guest_max_user_messages = Math.trunc(payload.guest_max_user_messages);
+        }
+        return httpRequest({
+            method: 'POST',
+            url: `/flows/api/v1/flows/${encodeURIComponent(payload.flow_id)}/preview-share`,
+            body,
+        });
+    },
+});
+
 // Ветки графа (HTTP в `apps/flows/src/api/a2a.py`, тот же prefix `/flows/api/v1`).
 export const branchCreateOp = createAsyncOp({
     name: 'flows/branch_create',

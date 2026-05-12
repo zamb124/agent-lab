@@ -5,10 +5,11 @@ Frontend Service - FastAPI приложение для управления пл
 from core.logging import get_logger
 import os
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from core.config.testing import is_testing
-from fastapi import FastAPI, HTTPException
+from datetime import UTC, datetime
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, PlainTextResponse, Response
 from apps.frontend.api.auth import router as auth_router
@@ -42,10 +43,16 @@ from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from apps.frontend.container import get_frontend_container
 from apps.frontend.dependencies import ContainerDep
+from apps.frontend.services.flow_preview_guest_html import (
+    build_flow_preview_guest_html,
+    build_flow_preview_unavailable_html,
+)
 from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.app.factory import create_service_app
+from core.identity.flow_preview_handoff import consume_flow_preview_handoff, peek_flow_preview_handoff
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.system_bootstrap import ensure_system_admin_membership
+from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 
 logger = get_logger(__name__)
 _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
@@ -68,6 +75,28 @@ INDEXABLE_PUBLIC_PATHS: tuple[str, ...] = (
     "/about",
     "/roadmap",
 )
+
+def _flow_preview_preferred_lang(request: Request) -> str:
+    """ru | en по Accept-Language (первый упомянутый язык)."""
+    header = (request.headers.get("accept-language") or "").lower()
+    for part in header.split(","):
+        token = part.split(";")[0].strip()
+        if not token:
+            continue
+        if token.startswith("en"):
+            return "en"
+        if token.startswith("ru"):
+            return "ru"
+    return "ru"
+
+
+def _flow_preview_unavailable_response(request: Request) -> Response:
+    lang = _flow_preview_preferred_lang(request)
+    rid_raw = getattr(request.state, "request_id", None)
+    request_id = rid_raw if isinstance(rid_raw, str) and rid_raw.strip() else None
+    body = build_flow_preview_unavailable_html(lang=lang, request_id=request_id)
+    return Response(status_code=404, content=body, media_type="text/html; charset=utf-8")
+
 
 def _short_link_redirect_location(target: str) -> str:
     """Относительный path+query: браузер остаётся на том же host:port, что и GET /l/{code}.
@@ -211,6 +240,9 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
 
+    await container.redis_client.connect()
+    logger.info("frontend.redis.connected")
+
     from core.clients.payment import PaymentProviderFactory
     PaymentProviderFactory.initialize()
     await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
@@ -303,11 +335,126 @@ async def health(container: ContainerDep):
     return {"status": "ok", "service": "frontend"}
 
 @app.api_route("/l/{code}", methods=["GET", "HEAD"])
-async def resolve_short_link(container: ContainerDep, code: str):
-    target = await container.short_link_service.resolve_absolute_redirect_url(code.strip())
+async def resolve_short_link(request: Request, container: ContainerDep, code: str):
+    trimmed = code.strip()
+
+    if request.method.upper() == "HEAD":
+        row_head = await container.short_link_repository.get_by_code(trimmed)
+        if row_head is not None and row_head.kind == SHORT_LINK_KIND_FLOW_PREVIEW_EMBED:
+            now = datetime.now(UTC)
+            if row_head.expires_at <= now:
+                raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+            return Response(status_code=200, content=b"")
+        target_head = await container.short_link_service.resolve_absolute_redirect_url(trimmed)
+        if target_head is None:
+            raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+        return Response(status_code=200, content=b"")
+
+    row = await container.short_link_repository.delete_by_code_and_kind_returning(
+        trimmed, SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
+    )
+    if row is not None:
+        now = datetime.now(UTC)
+        if row.expires_at <= now:
+            raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+        handoff_raw = row.payload.get("handoff_id")
+        if not isinstance(handoff_raw, str) or not handoff_raw.strip():
+            raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
+        handoff_id = handoff_raw.strip()
+        loc_path = f"/flow-preview?h={quote(handoff_id, safe='')}"
+        return RedirectResponse(url=_short_link_redirect_location(loc_path), status_code=303)
+
+    target = await container.short_link_service.resolve_absolute_redirect_url(trimmed)
     if target is None:
         raise HTTPException(status_code=404, detail="Ссылка не найдена или истекла")
     return RedirectResponse(url=_short_link_redirect_location(target), status_code=303)
+
+
+@app.api_route("/flow-preview", methods=["GET", "HEAD"])
+async def flow_preview_guest_page(request: Request, container: ContainerDep, h: str = ""):
+    handoff_id = (h or "").strip()
+    if not handoff_id:
+        if request.method.upper() == "HEAD":
+            return Response(status_code=404, content=b"")
+        return _flow_preview_unavailable_response(request)
+
+    if request.method.upper() == "HEAD":
+        exists = await peek_flow_preview_handoff(
+            redis=container.redis_client,
+            handoff_id=handoff_id,
+        )
+        if not exists:
+            return Response(status_code=404, content=b"")
+        return Response(status_code=200, content=b"")
+
+    payload = await consume_flow_preview_handoff(
+        redis=container.redis_client,
+        handoff_id=handoff_id,
+    )
+    if payload is None:
+        return _flow_preview_unavailable_response(request)
+
+    jwt = payload.get("jwt")
+    embed_id = payload.get("embed_id")
+    flow_id = payload.get("flow_id")
+    branch_id = payload.get("branch_id")
+    assistant_title = payload.get("assistant_title")
+    interface_locale = payload.get("interface_locale")
+    flows_base_url = payload.get("flows_base_url")
+    platform_ui_origin = payload.get("platform_ui_origin")
+    company_id = payload.get("company_id")
+
+    if not isinstance(jwt, str) or not jwt.strip():
+        return _flow_preview_unavailable_response(request)
+    if not isinstance(embed_id, str) or not embed_id.strip():
+        return _flow_preview_unavailable_response(request)
+    if not isinstance(flow_id, str) or not flow_id.strip():
+        return _flow_preview_unavailable_response(request)
+    if not isinstance(branch_id, str) or not branch_id.strip():
+        return _flow_preview_unavailable_response(request)
+    if not isinstance(flows_base_url, str) or not flows_base_url.strip():
+        return _flow_preview_unavailable_response(request)
+    if not isinstance(platform_ui_origin, str) or not platform_ui_origin.strip():
+        return _flow_preview_unavailable_response(request)
+    if not isinstance(company_id, str) or not company_id.strip():
+        return _flow_preview_unavailable_response(request)
+
+    if not isinstance(assistant_title, str) or not assistant_title.strip():
+        assistant_title = flow_id.strip()
+    else:
+        assistant_title = assistant_title.strip()
+
+    if not isinstance(interface_locale, str) or not interface_locale.strip():
+        interface_locale = "auto"
+    else:
+        interface_locale = interface_locale.strip()
+
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    scheme = (forwarded_proto or request.url.scheme or "").strip().lower()
+    if scheme not in ("http", "https"):
+        raise ValueError("flow_preview_guest_page: ожидалась схема http или https")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    host = (forwarded_host or request.headers.get("host") or request.url.netloc or "").strip()
+    if not host:
+        raise ValueError("flow_preview_guest_page: host is required")
+    # Только same-origin `/static/core/...`: страница на нашем домене; CDN-скрипт может быть иной сборки
+    # и ломать нативный ESM (bare `@platform/*` без import map).
+    script_url = f"{scheme}://{host}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+
+    html_out = build_flow_preview_guest_html(
+        script_url=script_url,
+        embed_id=embed_id.strip(),
+        flow_id=flow_id.strip(),
+        branch_id=branch_id.strip(),
+        assistant_title=assistant_title,
+        interface_locale=interface_locale,
+        flows_base_url=flows_base_url.strip(),
+        platform_ui_origin=platform_ui_origin.strip(),
+        static_bearer=jwt.strip(),
+        company_id=company_id.strip(),
+    )
+    return Response(content=html_out, media_type="text/html; charset=utf-8")
+
 
 @app.get("/api/public/legal")
 @app.get("/frontend/api/public/legal")

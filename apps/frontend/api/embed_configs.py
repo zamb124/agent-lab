@@ -151,6 +151,7 @@ def _embed_config_to_response(config: EmbedConfig) -> "EmbedConfigResponse":
         guest_max_user_messages=config.guest_max_user_messages,
         voice_enabled=config.voice_enabled,
         voice_default_on=config.voice_default_on,
+        preview_share_link=config.preview_share_link,
         usage_count=config.usage_count,
         last_used_at=config.last_used_at,
         created_at=config.created_at,
@@ -244,6 +245,7 @@ class EmbedConfigResponse(BaseModel):
     guest_max_user_messages: Optional[int]
     voice_enabled: bool
     voice_default_on: bool
+    preview_share_link: bool
     usage_count: int
     last_used_at: Optional[datetime]
     created_at: datetime
@@ -382,6 +384,7 @@ async def create_embed_config(
         guest_max_user_messages=request_data.guest_max_user_messages,
         voice_enabled=request_data.voice_enabled,
         voice_default_on=request_data.voice_default_on,
+        preview_share_link=False,
         created_by=user.user_id,
     )
     
@@ -420,10 +423,12 @@ async def list_embed_configs(
     
     embed_config_repo = container.embed_config_repository
     configs = await embed_config_repo.list(limit=limit, offset=offset)
-    
-    logger.info(f"Получен список из {len(configs)} конфигураций для компании {company_id}")
 
-    items = [_embed_config_to_response(c) for c in configs]
+    visible = [c for c in configs if not c.preview_share_link]
+
+    logger.info(f"Получен список из {len(visible)} конфигураций для компании {company_id}")
+
+    items = [_embed_config_to_response(c) for c in visible]
     return OffsetPage[EmbedConfigResponse](items=items, total=len(items), limit=limit, offset=offset)
 
 @router.get("/{embed_id}", response_model=EmbedConfigResponse)
@@ -441,7 +446,10 @@ async def get_embed_config(
     
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
-    
+
+    if config.preview_share_link:
+        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+
     return _embed_config_to_response(config)
 
 @router.patch("/{embed_id}", response_model=EmbedConfigResponse)
@@ -459,6 +467,9 @@ async def update_embed_config(
     config = await embed_config_repo.get(embed_id)
     
     if not config:
+        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+
+    if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
     
     # Обновляем только переданные поля
@@ -517,6 +528,9 @@ async def delete_embed_config(
     
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+
+    if config.preview_share_link:
+        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
     
     # Удаляем конфигурацию
     await embed_config_repo.delete(embed_id)
@@ -547,6 +561,9 @@ async def get_embed_code(
     config = await embed_config_repo.get(embed_id)
     
     if not config:
+        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+
+    if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
     user = request.state.user
@@ -638,6 +655,8 @@ async def issue_embed_session_token(
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
     if not config:
+        raise HTTPException(status_code=404, detail="Конфигурация не найдена")
+    if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
     if config.status != EmbedStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Конфигурация виджета отключена")

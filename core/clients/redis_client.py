@@ -110,6 +110,26 @@ class RedisClient:
                     pass
             return None
 
+    async def getdel(self, key: str) -> Optional[str]:
+        """Атомарно возвращает значение и удаляет ключ (Redis GETDEL / fallback Lua)."""
+        if not await self._ensure_connected():
+            return None
+        client = self._client
+        try:
+            getter = getattr(client, "getdel", None)
+            if callable(getter):
+                return await client.getdel(key)
+        except Exception as e:
+            logger.warning(f"getdel failed for key {key}: {e}")
+
+        lua = "local v = redis.call('GET', KEYS[1]); if v then redis.call('DEL', KEYS[1]) end; return v"
+        try:
+            if await self._ensure_connected():
+                return await self._client.eval(lua, 1, key)
+        except Exception as e:
+            logger.warning(f"getdel lua failed for key {key}: {e}")
+        return None
+
     async def set(self, key: str, value: str, ttl: int | None = None) -> bool:
         """Устанавливает значение по ключу с auto-reconnect"""
         if not await self._ensure_connected():

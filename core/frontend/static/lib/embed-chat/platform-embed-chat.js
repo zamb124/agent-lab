@@ -16,8 +16,8 @@ import {
     pairEmbedToolCallsAndResults,
     embedToolRowDisplayName,
     formatEmbedToolPairHintText,
+    toolCallIconName,
 } from './embed-tool-helpers.js';
-import { toolCallIconName } from '../utils/tool-call-icon.js';
 import '../components/platform-icon.js';
 import '../components/platform-help-hint.js';
 import '../components/platform-assistant-message-actions.js';

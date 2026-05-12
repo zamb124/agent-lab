@@ -215,6 +215,13 @@ Inline на слое — полный `config` целевого типа. **Ти
 - `GET /flows/api/v1/tasks/state?session_id=...` (или `context_id`+`flow_id`) — сохранённый state сессии. Записи нет — `{"messages": [], "task_id": null}`, HTTP 200. В TestPanel редактора ноды state вводится только вручную JSON.
 - `GET /flows/api/v1/flows/{flow_id}/voice-session-query?branch_id=...` — строковые query-параметры для WebSocket voice-сессии (effective профиль `FlowConfig.speech` + опционально `BranchConfig.speech`), см. `triple_to_voice_ws_query_dict` в `apps/flows/src/services/flow_speech_resolve.py`. Используется SPA flows и embed перед `VoiceMediaSession.connect`.
 
+## Гостевой preview embed (одноразовая ссылка)
+
+- **Минт:** `POST /flows/api/v1/flows/{flow_id}/preview-share` body `{ "branch_id": "<ветка>", "guest_max_user_messages"?: <1..500> }` — права как у остальных операций с flow; создаётся ephemeral `EmbedConfig` с `preview_share_link=True`, опционально `guest_max_user_messages`, + mapping, `embed_session` JWT (24h), payload handoff в **Redis** (`core/identity/flow_preview_handoff.py`, ключ с префиксом, TTL как у JWT), короткая ссылка kind `flow_preview_embed` (`core/short_links/kinds.py`) с payload только `handoff_id` (без JWT в PostgreSQL). Ответ: `{ "share_url": "<platform_public>/l/{code}" }`.
+- **Редирект:** `GET /l/{code}` на **frontend** — для kind `flow_preview_embed` строка в `platform_short_links` удаляется атомарно (`delete_by_code_and_kind_returning`), при успехе **303** на относительный `/flow-preview?h=<handoff_id>`. Повторный `GET` того же code → **404**. `HEAD /l/{code}` для этого kind не сжигает строку (проверка существования/срока).
+- **Страница:** `GET /flow-preview?h=...` — первое успешное обращение забирает payload из Redis **GETDEL** (`consume_flow_preview_handoff`); HTML: **import map** для bare `lit`/`lit/*` на vendored `/static/core/assets/js/lit/` (как SPA через бандлер, здесь — без бандлера), затем `<script type="module" src="...humanitec-embed-autoload.js">` с `data-static-bearer`. Повтор того же `h` (в т.ч. F5) → **404** без пояснения причины на странице. `HEAD` — только проверка наличия ключа в Redis (без consume).
+- **Консоль embed:** `EmbedConfig` с `preview_share_link=True` не попадает в список виджетов (`apps/frontend/api/embed_configs.py`); прямой доступ по id для правки кода/сессии — **404**.
+
 ## Профиль речи flow (`FlowConfig.speech`)
 
 - Конфиг: `apps/flows/src/models/flow_speech_settings.py` (`FlowSpeechSttBlock`, `FlowSpeechTtsBlock`, `FlowSpeechVadBlock`, вложенный `FlowSpeechSettings`). Поля совместимы с заполнением `SpeechOverride` и query voice WS; **секреты провайдеров в JSON flow не хранятся** (остаются в deployment и `company_voice_providers`).

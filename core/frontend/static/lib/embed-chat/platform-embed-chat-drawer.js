@@ -26,6 +26,7 @@ import './platform-embed-chat.js';
  * Имя в шапке: атрибут assistant-title или ?embed_assistant_name= / embed_chat_title= (UTF-8).
  * Закрытие панели скрывает её (panel--collapsed), экземпляр platform-embed-chat сохраняется.
  * При изменении `open` диспатчится composed `humanitec-embed-drawer-open-changed` с `detail.open` для синхронизации с хостом.
+ * `initial-open`: один раз открыть панель при первом цикле, когда свойство доходит от родителя (не в connectedCallback).
  */
 export class PlatformEmbedChatDrawer extends LitElement {
     static properties = {
@@ -50,6 +51,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
         theme: { type: String },
         /** Показывать встроенную FAB-кнопку запуска чата */
         showLauncher: { type: Boolean, attribute: 'show-launcher' },
+        /** При подключении сразу открыть панель (без коллапса до первого клика) */
+        initialOpen: { type: Boolean, attribute: 'initial-open' },
         /** Поверх дефолтных строк (embed-chat-default-labels) */
         labels: { type: Object },
         getAuthToken: { type: Object },
@@ -359,6 +362,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._voiceMedia = null;
         this.locale = '';
         this.open = false;
+        this.initialOpen = false;
         this.theme = 'auto';
         this.showLauncher = false;
         this.labels = {};
@@ -392,6 +396,8 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._panelDragActive = false;
         this._panelDragPosition = null;
         this._panelDragContext = null;
+        /** Чтобы открыть панель один раз, когда `initialOpen` приходит с родителя после первого цикла Lit. */
+        this._initialOpenConsumed = false;
         this._onPanelDragPointerMove = this._onPanelDragPointerMove.bind(this);
         this._onPanelDragPointerUp = this._onPanelDragPointerUp.bind(this);
         this._onViewportResize = this._onViewportResize.bind(this);
@@ -502,6 +508,15 @@ export class PlatformEmbedChatDrawer extends LitElement {
     firstUpdated(changed) {
         super.firstUpdated(changed);
         this._bindToggleListener();
+    }
+
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        if (this._initialOpenConsumed || !this.initialOpen) {
+            return;
+        }
+        this._initialOpenConsumed = true;
+        this.open = true;
     }
 
     updated(changed) {

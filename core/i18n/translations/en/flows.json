@@ -522,6 +522,7 @@
     "output_mode_structured": "Structured",
     "output_mode_hint": "Tools: the assistant may call tools and respond in natural language. Structured: the reply is a JSON object validated against the output schema below.",
     "section_output_schema": "Output JSON schema",
+    "output_schema_strict_hint": "For strict JSON Schema use a root object: every key in properties must appear in required; on each object that defines properties set additionalProperties: false.",
     "section_react": "ReAct loop",
     "section_tools": "Tools",
     "messages_filter_all": "All messages",
@@ -906,7 +907,23 @@
     "mode_run": "Run",
     "lara": "Open Lara for current flow",
     "code": "Code",
-    "publish": "Publish"
+    "publish": "Publish",
+    "share_preview": "Guest preview link (one-time)"
+  },
+  "preview_share": {
+    "title": "Guest preview",
+    "url_label": "Link",
+    "copy": "Copy",
+    "close": "Close",
+    "create": "Create link",
+    "form_hint": "Click Create link after optionally setting a message limit.",
+    "guest_max_label": "Guest message limit",
+    "guest_max_placeholder": "No limit",
+    "guest_max_hint": "Maximum user messages per conversation for the guest session. Empty means unlimited (1–500).",
+    "empty_url": "Could not get the link",
+    "hint_author": "The page opens once. Do not share the opened URL from the address bar — it will stop working.",
+    "copy_toast": "Copied",
+    "err_guest_max": "Enter an integer from 1 to 500, or leave the field empty"
   },
   "node_types_sidebar": {
     "title": "Node types",

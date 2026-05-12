@@ -8,9 +8,10 @@
  *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → подписка на
  *     AUTH_COMPANY_SWITCHED → редирект на subdomain выбранной компании.
  *     Cross-tab синхронизация через localStorage 'platform:company-switch'.
- *   - меню: пункт Apps (модалка `platform.services`), затем Профиль,
- *     Профиль (открывает `platform.user_info` модалку с формой профиля),
- *     Компания (если их > 1), Календарь, Документация, язык (en|ru),
+ *   - меню: пункт Apps (модалка `platform.services`), затем Профиль
+ *     (открывает `platform.user_info` модалку с формой профиля),
+ *     Компания (если есть хотя бы одна в списке; «Создать компанию» — только
+ *     при роли owner текущей компании), Календарь, Документация, язык (en|ru),
  *     переключатель темы, Выйти.
  *   - в свернутом sidebar (`platform-sidebar[collapsed]`) меню переходит
  *     в `position: fixed` через CSS-переменные `--user-menu-fixed-*`.
@@ -238,6 +239,20 @@ export class PlatformUser extends PlatformElement {
         this.openModal('platform.services', {});
     }
 
+    _openCreateCompany(e) {
+        e.stopPropagation();
+        this._menuOpen = false;
+        this._companySelectorOpen = false;
+        this.openModal('platform.company_create', null);
+    }
+
+    _isOwnerOfCompany(companyRecord) {
+        if (!companyRecord || !Array.isArray(companyRecord.role)) {
+            return false;
+        }
+        return companyRecord.role.includes('owner');
+    }
+
     _logout() {
         this._menuOpen = false;
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
@@ -347,7 +362,11 @@ export class PlatformUser extends PlatformElement {
         const companies = this._companiesSelect.value;
         const currentCompanyId = this._currentCompanyId(auth);
         const currentCompanyName = this._companyName(currentCompanyId);
-        const hasMultipleCompanies = companies.length > 1;
+        const hasCompaniesMenu = companies.length >= 1;
+        const activeCompanyRecord = currentCompanyId
+            ? companies.find((c) => c.company_id === currentCompanyId)
+            : undefined;
+        const canCreateCompany = this._isOwnerOfCompany(activeCompanyRecord);
         const themeMode = this._themeSelect.value;
         const locale = this._localeSelect.value;
         const avatarUrl = this._avatarUrl(user);
@@ -406,7 +425,7 @@ export class PlatformUser extends PlatformElement {
                         <span class="menu-item-label">${this.t('menu.profile')}</span>
                     </button>
 
-                    ${hasMultipleCompanies ? html`
+                    ${hasCompaniesMenu ? html`
                         <button class="menu-item company-selector" @click=${this._toggleCompanySelector}>
                             <platform-icon class="menu-icon" name="building-one" size="18"></platform-icon>
                             <span class="menu-item-label">${currentCompanyName}</span>
@@ -421,6 +440,7 @@ export class PlatformUser extends PlatformElement {
                                 ${companies.map((company) => html`
                                     <button
                                         class=${classMap({ 'company-item': true, active: company.company_id === currentCompanyId })}
+                                        type="button"
                                         @click=${(e) => this._switchCompany(company.company_id, e)}
                                     >
                                         <span class="company-item-name">
@@ -432,6 +452,18 @@ export class PlatformUser extends PlatformElement {
                                         ` : ''}
                                     </button>
                                 `)}
+                                ${canCreateCompany ? html`
+                                    <button
+                                        type="button"
+                                        class="company-create-item"
+                                        @click=${this._openCreateCompany}
+                                    >
+                                        <span class="company-item-name">
+                                            <platform-icon name="plus" size="14"></platform-icon>
+                                            <span>${this.t('menu.create_company')}</span>
+                                        </span>
+                                    </button>
+                                ` : ''}
                             </div>
                         ` : ''}
                     ` : ''}
@@ -702,6 +734,26 @@ export class PlatformUser extends PlatformElement {
                 min-width: 0;
             }
             .check-icon { color: var(--accent); }
+
+            .company-create-item {
+                display: flex;
+                align-items: center;
+                width: 100%;
+                padding: var(--space-2) var(--space-3);
+                margin-top: var(--space-1);
+                background: transparent;
+                border: 1px dashed var(--glass-border-medium);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                font-size: var(--text-sm);
+                color: var(--accent);
+                font-weight: var(--font-medium);
+                text-align: left;
+            }
+            .company-create-item:hover {
+                background: var(--glass-solid-medium);
+                border-color: var(--accent);
+            }
 
             .lang-row {
                 display: flex;

@@ -154,6 +154,11 @@ class EmbedConfig(BaseModel):
             "Имеет силу только если voice_enabled=True."
         ),
     )
+    preview_share_link: bool = Field(
+        default=False,
+        title="Служебный виджет для одноразовой гостевой ссылки из редактора flow",
+        description="Не показывается в списке embed configs консоли; создаётся только через preview-share API.",
+    )
 
     # Статистика
     usage_count: int = Field(

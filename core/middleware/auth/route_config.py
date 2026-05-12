@@ -12,6 +12,7 @@ from starlette.requests import Request
 SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/api/",
     "/l/",
+    "/flow-preview",
     "/flows/",
     "/crm/",
     "/rag/",
@@ -115,6 +116,10 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/login", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/login", auth_required=False, context_type="anonymous"),
     RouteRule("/l/*", auth_required=False, context_type="anonymous"),
+    RouteRule("/flow-preview", auth_required=False, context_type="anonymous"),
+    RouteRule("/flow-preview/", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/flow-preview", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/flow-preview/", auth_required=False, context_type="anonymous"),
     
     # Страницы продуктов (публичный доступ)
     RouteRule("/products/*", auth_required=False, context_type="anonymous"),

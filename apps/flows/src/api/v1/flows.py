@@ -4,11 +4,13 @@ API endpoints для flows.
 
 import asyncio
 import json
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field, field_validator
 import yaml
 
 from apps.flows.src.container import FlowContainer
@@ -33,8 +35,51 @@ from apps.flows.src.services.flow_speech_resolve import (
     triple_to_voice_ws_query_dict,
 )
 from core.clients.voice_resolver import resolve_effective_tts_voice_for_ws
+from core.identity.flow_preview_handoff import store_flow_preview_handoff
+from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
+from core.short_links.service import require_platform_public_base_url
+from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
+
+_FLOW_PREVIEW_SHARE_TTL_SECONDS = 86400
+
+
+def _preview_share_base_urls(request: Request) -> tuple[str, str]:
+    """Возвращает (flows_base_url, platform_ui_origin) для сценария встраивания."""
+    from core.config import get_settings
+
+    settings = get_settings()
+    if settings.server.env == "production":
+        base = require_platform_public_base_url().rstrip("/")
+        return f"{base}/flows", base
+
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    scheme = (forwarded_proto or request.url.scheme or "").strip().lower()
+    if scheme not in ("http", "https"):
+        raise ValueError("_preview_share_base_urls: ожидалась схема http или https")
+
+    forwarded_host = request.headers.get("x-forwarded-host")
+    host = (forwarded_host or request.headers.get("host") or request.url.netloc or "").strip()
+    if not host:
+        raise ValueError("_preview_share_base_urls: host is required")
+
+    base = f"{scheme}://{host}".rstrip("/")
+    return f"{base}/flows", base
+
+
+class FlowPreviewShareRequest(BaseModel):
+    branch_id: str = Field(default="default", description="Ветка графа (skill)")
+    guest_max_user_messages: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=500,
+        description="Лимит пользовательских сообщений гостя на один диалог (embed-session); не задано — без лимита",
+    )
+
+
+class FlowPreviewShareResponse(BaseModel):
+    share_url: str
 
 
 def _speech_to_json(settings: FlowSpeechSettings | None) -> Optional[Dict[str, Any]]:
@@ -1079,6 +1124,119 @@ async def reload_flow_from_bundle(
         flow_id=loaded_id,
         message=f"Flow '{loaded_id}' перезагружен из bundle",
     )
+
+
+@router.post("/{flow_id}/preview-share", response_model=FlowPreviewShareResponse)
+async def create_flow_preview_share(
+    flow_id: str,
+    body: FlowPreviewShareRequest,
+    request: Request,
+    container: ContainerDep,
+) -> FlowPreviewShareResponse:
+    """Одноразовая короткая ссылка на гостевую страницу с embed-чатом по flow/ветке."""
+    ctx = get_context()
+    if ctx is None or ctx.user is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if ctx.active_company is None:
+        raise HTTPException(status_code=400, detail="Company required")
+
+    company_id = ctx.active_company.company_id
+
+    flow_cfg = await container.flow_repository.get(flow_id)
+    if flow_cfg is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    branch_id_raw = (body.branch_id or "").strip()
+    if not branch_id_raw:
+        branch_id_raw = "default"
+
+    flow_type = getattr(flow_cfg, "type", None) or FlowType.LOCAL
+    if flow_type == FlowType.EXTERNAL:
+        branch_id = "default"
+    else:
+        branch_id = branch_id_raw
+        branches = flow_cfg.branches or {}
+        if branches and branch_id not in branches:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Branch '{branch_id}' not found",
+            )
+
+    flows_base, platform_origin = _preview_share_base_urls(request)
+
+    assistant_title = flow_cfg.name or flow_id
+    embed_id = f"pshare_{uuid.uuid4().hex}"
+
+    config = EmbedConfig(
+        embed_id=embed_id,
+        name=f"[preview] {assistant_title}",
+        flow_id=flow_id,
+        branch_id=branch_id,
+        allowed_origins=[],
+        status=EmbedStatus.ACTIVE,
+        theme="dark",
+        position="bottom-right",
+        show_launcher=True,
+        show_reasoning=False,
+        show_tool_calls=False,
+        assistant_title=assistant_title,
+        interface_locale="auto",
+        voice_enabled=False,
+        voice_default_on=False,
+        preview_share_link=True,
+        guest_max_user_messages=body.guest_max_user_messages,
+        created_by=ctx.user.user_id,
+    )
+    await container.embed_config_repository.set(config)
+    mapping = EmbedMapping(embed_id=embed_id, company_id=company_id)
+    await container.embed_mapping_repository.set(mapping)
+
+    guest_id = f"flow_preview_{uuid.uuid4().hex}"
+    token = get_token_service().create_embed_session_token(
+        user_id=guest_id,
+        company_id=company_id,
+        roles=["guest"],
+        expires_in=_FLOW_PREVIEW_SHARE_TTL_SECONDS,
+        metadata={
+            "embed_id": embed_id,
+            "embed_flow_id": flow_id,
+            "embed_branch_id": branch_id,
+            "allowed_origin": "",
+            "issued_by": "flows.preview_share",
+        },
+    )
+
+    handoff_id = str(uuid.uuid4())
+    handoff_payload: dict[str, Any] = {
+        "jwt": token,
+        "embed_id": embed_id,
+        "flow_id": flow_id,
+        "branch_id": branch_id,
+        "assistant_title": assistant_title,
+        "theme": "dark",
+        "interface_locale": "auto",
+        "flows_base_url": flows_base,
+        "platform_ui_origin": platform_origin,
+        "company_id": company_id,
+    }
+    await store_flow_preview_handoff(
+        redis=container.redis_client,
+        handoff_id=handoff_id,
+        payload=handoff_payload,
+        ttl_seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS,
+    )
+
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS)
+    share_url = await container.short_link_service.mint_flow_preview_embed(handoff_id, expires_at)
+
+    logger.info(
+        "flows.preview_share_minted",
+        flow_id=flow_id,
+        branch_id=branch_id,
+        embed_id=embed_id,
+        issuer_user_id=ctx.user.user_id,
+    )
+    return FlowPreviewShareResponse(share_url=share_url)
 
 
 @router.put("/{flow_id}", response_model=FlowResponse)

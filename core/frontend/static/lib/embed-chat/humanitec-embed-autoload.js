@@ -5,6 +5,7 @@
  * Обязательно: data-embed-id, data-flows-base-url.
  * Опционально: data-platform-ui-origin — абсолютный origin платформы (i18n, file-types, SVG). Если CDN
  *   отделён от API, указывать обязательно (в коде из консоли он уже задаётся); иначе берётся origin скрипта.
+ * data-initial-open="true" — открыть панель drawer сразу при загрузке (guest preview и т.п.).
  * Токен: POST на data-chat-token-url (default /api/chat-token) телом как в справке виджета.
  */
 
@@ -80,6 +81,9 @@ function mountFromScript(scriptEl) {
         throw new Error('humanitec-embed-autoload: data-flows-base-url required');
     }
 
+    const staticBearerRaw = typeof ds.staticBearer === 'string' ? ds.staticBearer.trim() : '';
+    const staticBearer = staticBearerRaw;
+
     const chatTokenUrlRaw = ds.chatTokenUrl;
     const chatTokenUrl =
         typeof chatTokenUrlRaw === 'string' && chatTokenUrlRaw.trim() !== ''
@@ -95,28 +99,35 @@ function mountFromScript(scriptEl) {
         expiresInSeconds = n;
     }
 
-    async function getEmbedToken() {
-        const response = await fetch(chatTokenUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                embed_id: embedId,
-                origin: typeof window !== 'undefined' ? window.location.origin : '',
-                expires_in_seconds: expiresInSeconds,
-            }),
-        });
-        if (!response.ok) {
-            throw new Error('Cannot get embed session token');
+    /** @type {() => Promise<{ Authorization?: string }>} */
+    let getEmbedToken;
+    if (staticBearer !== '') {
+        getEmbedToken = async () => ({ Authorization: `Bearer ${staticBearer}` });
+    } else {
+        async function getEmbedTokenFetch() {
+            const response = await fetch(chatTokenUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    embed_id: embedId,
+                    origin: typeof window !== 'undefined' ? window.location.origin : '',
+                    expires_in_seconds: expiresInSeconds,
+                }),
+            });
+            if (!response.ok) {
+                throw new Error('Cannot get embed session token');
+            }
+            const data = await response.json();
+            const token =
+                typeof data.token === 'string' && data.token !== ''
+                    ? data.token
+                    : (typeof data.access_token === 'string' ? data.access_token : '');
+            if (!token) {
+                throw new Error('humanitec-embed-autoload: token response missing token field');
+            }
+            return { Authorization: `Bearer ${token}` };
         }
-        const data = await response.json();
-        const token =
-            typeof data.token === 'string' && data.token !== ''
-                ? data.token
-                : (typeof data.access_token === 'string' ? data.access_token : '');
-        if (!token) {
-            throw new Error('humanitec-embed-autoload: token response missing token field');
-        }
-        return { Authorization: `Bearer ${token}` };
+        getEmbedToken = getEmbedTokenFetch;
     }
 
     /** @type {HTMLElement} */
@@ -124,6 +135,11 @@ function mountFromScript(scriptEl) {
     assistant.setAttribute('embed-id', embedId);
     if ((ds.flowId || '').trim() !== '') {
         assistant.setAttribute('flow-id', ds.flowId.trim());
+    }
+
+    const branchId = typeof ds.branchId === 'string' ? ds.branchId.trim() : '';
+    if (branchId !== '') {
+        assistant.setAttribute('branch-id', branchId);
     }
 
     const assistantTitle = typeof ds.assistantTitle === 'string' ? ds.assistantTitle.trim() : '';
@@ -153,6 +169,10 @@ function mountFromScript(scriptEl) {
 
     assistant.useCredentials = readDatasetBool(scriptEl, 'useCredentials', false);
     assistant.showLauncher = readDatasetBool(scriptEl, 'showLauncher', false);
+    assistant.initialOpen = readDatasetBool(scriptEl, 'initialOpen', false);
+    if (assistant.initialOpen) {
+        assistant.setAttribute('initial-open', '');
+    }
 
     assistant.flowsBaseUrl = flowsBaseUrl;
 
