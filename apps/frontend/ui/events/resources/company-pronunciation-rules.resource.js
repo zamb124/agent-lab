@@ -99,13 +99,13 @@ export const companyPronunciationRuleCreateOp = createAsyncOp({
                 kind: payload.kind,
                 pattern: payload.pattern,
                 replacement: payload.replacement,
-                language: payload.language || null,
+                language: typeof payload.language === 'string' && payload.language.length > 0 ? payload.language : null,
                 case_sensitive: payload.case_sensitive === true,
                 word_boundary: payload.word_boundary !== false,
                 providers: Array.isArray(payload.providers) && payload.providers.length > 0 ? payload.providers : null,
                 voices: Array.isArray(payload.voices) && payload.voices.length > 0 ? payload.voices : null,
                 enabled: payload.enabled !== false,
-                note: payload.note || null,
+                note: typeof payload.note === 'string' && payload.note.length > 0 ? payload.note : null,
             },
         });
         return _normalizeRule(response);
@@ -131,13 +131,13 @@ export const companyPronunciationRuleUpdateOp = createAsyncOp({
         if (payload.kind !== undefined) body.kind = payload.kind;
         if (payload.pattern !== undefined) body.pattern = payload.pattern;
         if (payload.replacement !== undefined) body.replacement = payload.replacement;
-        if (payload.language !== undefined) body.language = payload.language || null;
+        if (payload.language !== undefined) body.language = typeof payload.language === 'string' && payload.language.length > 0 ? payload.language : null;
         if (payload.case_sensitive !== undefined) body.case_sensitive = payload.case_sensitive === true;
         if (payload.word_boundary !== undefined) body.word_boundary = payload.word_boundary !== false;
         if (payload.providers !== undefined) body.providers = Array.isArray(payload.providers) && payload.providers.length > 0 ? payload.providers : null;
         if (payload.voices !== undefined) body.voices = Array.isArray(payload.voices) && payload.voices.length > 0 ? payload.voices : null;
         if (payload.enabled !== undefined) body.enabled = payload.enabled !== false;
-        if (payload.note !== undefined) body.note = payload.note || null;
+        if (payload.note !== undefined) body.note = typeof payload.note === 'string' && payload.note.length > 0 ? payload.note : null;
         const response = await httpRequest({
             method: 'PUT',
             url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/${encodeURIComponent(payload.rule_id)}`,
@@ -186,9 +186,9 @@ export const companyPronunciationRuleTestOp = createAsyncOp({
             url: `/frontend/api/companies/${encodeURIComponent(payload.company_id)}/pronunciation-rules/test`,
             body: {
                 text: payload.text,
-                provider: payload.provider || 'litserve',
-                voice: payload.voice || null,
-                language: payload.language || null,
+                provider: typeof payload.provider === 'string' && payload.provider.length > 0 ? payload.provider : 'litserve',
+                voice: typeof payload.voice === 'string' && payload.voice.length > 0 ? payload.voice : null,
+                language: typeof payload.language === 'string' && payload.language.length > 0 ? payload.language : null,
             },
         });
         return {

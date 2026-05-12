@@ -61,7 +61,8 @@ export class SyncChatHeader extends PlatformElement {
             background: var(--accent-gradient, linear-gradient(135deg, #6366f1, #8b5cf6));
             color: var(--text-inverse, #fff);
         }
-        .menu-btn {
+        /* Mobile shell 2026: гамбургер удалён, back-кнопка только на мобиле для channel-маршрута */
+        .back-btn {
             display: none;
             background: transparent;
             border: none;
@@ -71,9 +72,9 @@ export class SyncChatHeader extends PlatformElement {
             border-radius: var(--radius-full, 999px);
             cursor: pointer;
         }
-        .menu-btn:hover { background: var(--glass-hover); }
+        .back-btn:hover { background: var(--glass-hover); }
         @media (max-width: 767px) {
-            .menu-btn { display: inline-flex; }
+            .back-btn { display: inline-flex; }
         }
         .avatar {
             width: 44px;
@@ -361,8 +362,12 @@ export class SyncChatHeader extends PlatformElement {
         return this._channels.items.find((c) => c.id === this.channelId);
     }
 
-    _onMenuClick() {
-        this.openSidebar();
+    _onBackClick() {
+        if (typeof history !== 'undefined' && history.length > 1) {
+            history.back();
+            return;
+        }
+        this.navigate('shell', {});
     }
 
     _renderListChrome(title, subtitle) {
@@ -371,9 +376,6 @@ export class SyncChatHeader extends PlatformElement {
         }
         const sub = typeof subtitle === 'string' && subtitle !== '' ? subtitle : '';
         return html`
-            <button class="menu-btn" @click=${this._onMenuClick} title=${this.t('chat_header.menu')}>
-                <platform-icon name="menu" size="20"></platform-icon>
-            </button>
             <span class="avatar list-mark" aria-hidden="true">
                 <platform-icon name="chat" size="22"></platform-icon>
             </span>
@@ -536,8 +538,8 @@ export class SyncChatHeader extends PlatformElement {
         const wsConnected = !!(ws && ws.connected === true);
         const wsConnecting = !!(ws && ws.connecting === true);
         return html`
-            <button class="menu-btn" @click=${this._onMenuClick} title=${this.t('chat_header.menu')}>
-                <platform-icon name="menu" size="20"></platform-icon>
+            <button class="back-btn" @click=${this._onBackClick} title=${this.t('chat_header.back')}>
+                <platform-icon name="arrow-left" size="20"></platform-icon>
             </button>
             ${callActiveHere && callUi.overlayMinimized ? html`
                 <span class="pulse"></span>

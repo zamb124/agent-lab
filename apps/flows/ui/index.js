@@ -15,6 +15,7 @@ import '@platform/lib/components/glass-toast.js';
 import '@platform/lib/components/platform-modal-stack.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
+import '@platform/lib/components/company-modal.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/layout/platform-island.js';
@@ -31,6 +32,7 @@ import './pages/operator-page.js';
 
 // Компоненты
 import './components/flows-sidebar.js';
+import './components/flows-catalog-list.js';
 import './components/flow-card.js';
 import './components/branch-item.js';
 import './components/chat/chat-input.js';

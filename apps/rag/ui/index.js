@@ -8,5 +8,6 @@
 
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/company-modal.js';
 
 import './app/rag-app.js';

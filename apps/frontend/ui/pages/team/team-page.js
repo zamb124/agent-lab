@@ -289,6 +289,8 @@ export class FrontendTeamPage extends PlatformPage {
                         class="invite-role"
                         type="enum"
                         mode="edit"
+                        pill-density="dense"
+                        pill-embed
                         label=""
                         .value=${this._selectedRole}
                         .config=${this._inviteRoleEnumConfig()}

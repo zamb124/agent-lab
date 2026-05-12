@@ -183,6 +183,8 @@ def check_base_zone() -> None:
         "toast",
         "openModal",
         "closeModal",
+        "openBottomSheet",
+        "closeBottomSheet",
         "navigate",
         "copyToClipboard",
         "setLocale",
@@ -207,6 +209,7 @@ def check_components_zone() -> None:
         "PlatformElement",
         "PlatformModal",
         "PlatformFormModal",
+        "PlatformBottomSheet",
     }
     extends_pattern = re.compile(r"class\s+(\w+)\s+extends\s+(\w+)\b")
     for path in files:
@@ -244,6 +247,27 @@ def check_components_zone() -> None:
             fail(f"{path.relative_to(ROOT)}: модалка обязана иметь `static modalKind = '<scope>.<entity>'`")
         if "registerModalKind(" not in text:
             fail(f"{path.relative_to(ROOT)}: модалка обязана вызвать registerModalKind(<kind>, <tag>)")
+
+    # Bottom sheets (mobile shell 2026): concrete-классы (`customElements.define`)
+    # ОБЯЗАНЫ иметь `static bottomSheetKind = '<scope>.<entity>'` + парный
+    # `registerBottomSheetKind`. Базовые компоненты исключены.
+    base_sheets = {
+        "platform-bottom-sheet.js",          # base class
+        "platform-bottom-sheet-stack.js",    # рендерер стека
+    }
+    sheet_files = [
+        p for p in files
+        if ("bottom-sheet" in p.name or p.name.endswith("-sheet.js"))
+        and p.name not in base_sheets
+    ]
+    for path in sheet_files:
+        text = path.read_text(encoding="utf-8")
+        if "customElements.define" not in text:
+            continue
+        if "static bottomSheetKind" not in text:
+            fail(f"{path.relative_to(ROOT)}: bottom-sheet обязан иметь `static bottomSheetKind = '<scope>.<entity>'`")
+        if "registerBottomSheetKind(" not in text:
+            fail(f"{path.relative_to(ROOT)}: bottom-sheet обязан вызвать registerBottomSheetKind(<kind>, <tag>)")
 
 
 def check_utils_zone() -> None:

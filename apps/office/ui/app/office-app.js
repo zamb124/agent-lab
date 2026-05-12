@@ -49,6 +49,7 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/office-sidebar.js';
+import '../components/sheets/office-workspace-picker-sheet.js';
 import '../components/onlyoffice-host.js';
 import '../components/office-document-row.js';
 import '../components/office-catalog-card.js';
@@ -65,15 +66,29 @@ import '../modals/document-create-empty-modal.js';
 import '../modals/document-upload-modal.js';
 
 const OFFICE_ROUTES = [
-    { key: 'documents_list',     path: '' },
-    { key: 'platform_services', path: 'services', parent: 'documents_list' },
-    { key: 'documents_catalogs', path: 'catalogs',                parent: 'documents_list' },
-    { key: 'documents_catalogs', path: 'catalog/:catalogId',      parent: 'documents_list' },
-    { key: 'document_editor',    path: 'edit/:bindingId',         parent: 'documents_list' },
+    { key: 'documents_list',     path: '',                                           titleKey: 'routes.documents_list' },
+    { key: 'platform_services',  path: 'services',           parent: 'documents_list', titleKey: 'routes.platform_services' },
+    { key: 'documents_catalogs', path: 'catalogs',           parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
+    { key: 'documents_catalogs', path: 'catalog/:catalogId', parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
+    { key: 'document_editor',    path: 'edit/:bindingId',    parent: 'documents_list', titleKey: 'routes.document_editor' },
 ];
+
+/**
+ * Mobile bottom-nav (mobile shell 2026): Documents, Catalogs, Profile.
+ * Editor — fullscreen-маршрут с iframe OnlyOffice, капсула там скрывается.
+ */
+const OFFICE_BOTTOM_NAV_ITEMS = [
+    { key: 'documents', routeKey: 'documents_list',     icon: 'doc-detail', labelKey: 'bottom_nav.documents' },
+    { key: 'catalogs',  routeKey: 'documents_catalogs', icon: 'folder',     labelKey: 'bottom_nav.catalogs' },
+    { key: 'profile',   sheet: 'platform.service_switcher', icon: 'user',   labelKey: 'bottom_nav.profile' },
+];
+
+const OFFICE_BOTTOM_NAV_HIDE_ON_ROUTES = ['document_editor'];
 
 export class OfficeApp extends PlatformApp {
     static defaultI18nNamespace = 'documents';
+    static bottomNavItems = OFFICE_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = OFFICE_BOTTOM_NAV_HIDE_ON_ROUTES;
 
     constructor() {
         super();

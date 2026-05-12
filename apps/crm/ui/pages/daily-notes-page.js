@@ -47,6 +47,7 @@ import {
     resolveSummaryChipEntity,
     summaryChipUnresolvedIconName,
 } from '../utils/related-entity-presenter.js';
+import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
 
 const ENTITY_TYPES_RESOURCE = 'crm/entity_types';
 
@@ -1688,6 +1689,15 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                         </label>
                     </div>
                     <div slot="actions">
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${openCrmLaraAssistant}
+                            title=${this.t('lara.assistant')}
+                            aria-label=${this.t('lara.assistant')}
+                        >
+                            <platform-icon name="sparkle" size="18"></platform-icon>
+                        </button>
                         <button
                             type="button"
                             class="mobile-header-icon-btn mobile-header-summary-btn"

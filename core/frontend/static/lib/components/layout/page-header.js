@@ -1,19 +1,23 @@
 /**
- * PageHeader - унифицированный хедер страницы с бургер-меню на мобильных
+ * PageHeader — in-flow заголовок страницы.
  *
  * Использование:
  * <page-header title="Заголовок" subtitle="Подзаголовок">
+ *     <button type="button" slot="leading" class="page-header-leading-btn"></button>
  *     <button slot="actions">Кнопка</button>
  * </page-header>
  *
  * На узких экранах: одна строка в липкой полосе — только заголовок (ellipsis),
  * без subtitle (длинный текст выносится в тело страницы). Режим
  * mobileToolbarMode="search" заменяет блок заголовка на слот toolbar-search.
- * Атрибут hide-mobile-menu скрывает кнопку бургера (второй хедер внутри вложенного экрана).
+ *
+ * Mobile shell 2026: гамбургер удалён, первичная навигация — `platform-bottom-nav`,
+ * глобальная шапка — `platform-top-bar`. `page-header` остаётся как in-flow
+ * заголовок страницы для контекстных actions и подписей. Атрибут `hide-mobile-menu`
+ * сохранён как no-op для обратной совместимости и будет удалён позже.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
-import { CoreEvents } from '../../events/contract.js';
 import { mobileStickyHeaderPageHeaderShellStyles } from '../../styles/shared/mobile-sticky-header.styles.js';
 import '../platform-icon.js';
 
@@ -30,7 +34,10 @@ export class PageHeader extends PlatformElement {
          * `visible` — не обрезать по вертикали/вне контейнера (выпадающие меню в slot actions).
          */
         actionsOverflow: { type: String, attribute: 'actions-overflow' },
-        /** Скрыть кнопку открытия сайдбара на mobile (вложенный экран уже под общим хедером). */
+        /**
+         * @deprecated Mobile shell 2026: гамбургер удалён, атрибут оставлен как no-op
+         * для постепенной миграции pages/modals. Используйте `platform-top-bar`.
+         */
         hideMobileMenu: { type: Boolean, attribute: 'hide-mobile-menu' },
         _isMobile: { state: true },
     };
@@ -72,8 +79,25 @@ export class PageHeader extends PlatformElement {
                 min-width: 0;
             }
 
-            .menu-btn {
-                display: none;
+            ::slotted(.page-header-leading-btn) {
+                flex-shrink: 0;
+                width: 40px;
+                height: 40px;
+                margin-top: 2px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-lg);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--border-subtle);
+                color: var(--text-secondary);
+                cursor: pointer;
+                box-sizing: border-box;
+                padding: 0;
+            }
+            ::slotted(.page-header-leading-btn):hover {
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
             }
 
             .title-section {
@@ -119,34 +143,8 @@ export class PageHeader extends PlatformElement {
                     align-items: center;
                 }
 
-                .menu-btn {
-                    display: flex;
-                    width: 36px;
-                    height: 36px;
-                    margin-left: 0;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: var(--radius-lg);
-                    background: var(--glass-solid-strong);
-                    backdrop-filter: blur(var(--glass-blur-medium));
-                    border: 1px solid var(--glass-border-medium);
-                    color: var(--text-primary);
-                    cursor: pointer;
-                    flex-shrink: 0;
-                    transition: all var(--duration-fast) var(--easing-default);
-                    box-shadow: var(--glass-shadow-subtle);
-                }
-
-                .menu-btn.hidden {
-                    display: none;
-                }
-
-                .menu-btn:hover {
-                    background: var(--glass-solid-medium);
-                }
-
-                .menu-btn:active {
-                    transform: scale(0.95);
+                ::slotted(.page-header-leading-btn) {
+                    margin-top: 0;
                 }
 
                 .title {
@@ -195,12 +193,6 @@ export class PageHeader extends PlatformElement {
                 background: rgba(255, 255, 255, 0.92);
                 border-bottom-color: rgba(15, 23, 42, 0.08);
             }
-
-            :host-context([data-theme="light"]) .menu-btn {
-                background: rgba(255, 255, 255, 0.95);
-                border-color: rgba(0, 0, 0, 0.1);
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            }
         `,
     ];
 
@@ -214,7 +206,6 @@ export class PageHeader extends PlatformElement {
         this.hideMobileMenu = false;
         this._isMobile = false;
         this._resizeObserver = null;
-        this._sidebarOpenSel = this.select((s) => s.ui.sidebar.mobileOpen);
     }
 
     connectedCallback() {
@@ -236,10 +227,6 @@ export class PageHeader extends PlatformElement {
         this._isMobile = window.innerWidth <= 767;
     }
 
-    _openSidebar() {
-        this.dispatch(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, null);
-    }
-
     _renderTitleBlock() {
         if (this._isMobile && this.mobileToolbarMode === 'search') {
             return html`
@@ -258,20 +245,11 @@ export class PageHeader extends PlatformElement {
     }
 
     render() {
-        const sidebarOpen = !!(this._sidebarOpenSel && this._sidebarOpenSel.value);
-        const showMenu = this._isMobile && !sidebarOpen && !this.hideMobileMenu;
-
         return html`
             <div class="header-wrap">
             <div class="header">
                 <div class="header-left">
-                    <button
-                        class="menu-btn ${showMenu ? '' : 'hidden'}"
-                        @click=${this._openSidebar}
-                        title="Открыть меню"
-                    >
-                        <platform-icon name="menu" size="20"></platform-icon>
-                    </button>
+                    <slot name="leading"></slot>
                     ${this._renderTitleBlock()}
                 </div>
                 <div

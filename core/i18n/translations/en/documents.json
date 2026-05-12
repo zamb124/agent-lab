@@ -5,6 +5,14 @@
         "documents_catalogs": "Catalogs",
         "document_editor": "Editor"
     },
+    "bottom_nav": {
+        "documents": "Files",
+        "catalogs": "Catalogs",
+        "profile": "Profile"
+    },
+    "workspace_picker": {
+        "title": "Workspace"
+    },
     "sidebar": {
         "title": "Documents",
         "namespace_label": "Workspace",

@@ -117,7 +117,7 @@ export const aiCustomProviderUpdateOp = createAsyncOp({
     name: 'frontend/ai_custom_provider_update',
     successToastKey: 'frontend:settings_page.ai_providers.toast_custom_updated',
     errorToastKey: 'frontend:settings_page.ai_providers.toast_custom_failed',
-    restMirror: { method: 'PATCH', path: '/frontend/api/settings/ai-providers/custom/:id' },
+    restMirror: { method: 'PATCH', path: '/frontend/api/settings/ai-providers/custom/:provider_id' },
     request: async ({ payload }) => {
         if (!payload || !payload.id) {
             throw new Error('ai_custom_provider_update: id required');
@@ -138,7 +138,7 @@ export const aiCustomProviderDeleteOp = createAsyncOp({
     name: 'frontend/ai_custom_provider_delete',
     successToastKey: 'frontend:settings_page.ai_providers.toast_custom_deleted',
     errorToastKey: 'frontend:settings_page.ai_providers.toast_custom_failed',
-    restMirror: { method: 'DELETE', path: '/frontend/api/settings/ai-providers/custom/:id' },
+    restMirror: { method: 'DELETE', path: '/frontend/api/settings/ai-providers/custom/:provider_id' },
     request: async ({ payload }) => {
         if (!payload || !payload.id) {
             throw new Error('ai_custom_provider_delete: id required');

@@ -18,7 +18,7 @@
         "theme_dark": "Dark theme",
         "logout": "Log out",
         "language": "Language",
-        "user_fallback": "User",
+        "user_fallback": "Account",
         "services": "Services",
         "create_company": "Create company"
     },
@@ -31,6 +31,39 @@
     },
     "services_switch": {
         "aria": "Open services launcher"
+    },
+    "mobile_nav": {
+        "aria": "Primary navigation",
+        "profile": "Profile"
+    },
+    "service_switcher": {
+        "heading": "Menu",
+        "services_title": "Services",
+        "quick_title": "Quick access",
+        "quick_profile": "Profile",
+        "quick_calendar": "Calendar",
+        "quick_documentation": "Documentation",
+        "settings_title": "Management",
+        "preferences_title": "Preferences",
+        "theme_light": "Light theme",
+        "theme_dark": "Dark theme",
+        "logout": "Sign out",
+        "settings_console": "Console",
+        "settings_team": "Team",
+        "settings_billing": "Billing",
+        "settings_api_keys": "API keys",
+        "notifications_title": "Notifications",
+        "company_list_aria": "Choose company",
+        "no_company": "No workspace selected",
+        "close": "Close"
+    },
+    "top_bar": {
+        "back_aria": "Back",
+        "menu_aria": "Menu"
+    },
+    "bottom_sheet": {
+        "close_aria": "Close",
+        "drag_handle_aria": "Drag to close"
     },
     "apps": {
         "flows": {
@@ -98,7 +131,9 @@
         "error_slug_taken": "This company URL is already taken",
         "error_create": "Could not create company",
         "creating": "Creating...",
-        "submit": "Create"
+        "submit": "Create",
+        "subdomain_missing": "This workspace has no subdomain address; open company settings or contact support.",
+        "switched": "Workspace switched"
     },
     "platform_field": {
         "number_increment": "Increase",

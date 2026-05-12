@@ -76,72 +76,15 @@ export const sidebarHostStyles = css`
         display: none;
     }
 
+    /*
+     * Mobile shell 2026: сайдбар-drawer удалён на мобиле. Первичная навигация —
+     * <platform-bottom-nav> + <platform-top-bar> + <platform-bottom-sheet>.
+     * Сайдбар-сервиса полностью скрыт на ширине <= 767px; обёртка
+     * platform-service-sidebar не рендерит мобильное переключение.
+     */
     @media (max-width: 767px) {
         :host {
-            position: fixed;
-            left: -100%;
-            top: 0;
-            bottom: 0;
-            height: auto;
-            min-height: var(--app-vh, 100vh);
-            min-height: -webkit-fill-available;
-            z-index: var(--z-modal, 1000);
-            width: 75%;
-            min-width: 0;
-            max-width: 320px;
-            background: var(--glass-solid-strong);
-            backdrop-filter: blur(var(--glass-blur-strong));
-            -webkit-backdrop-filter: blur(var(--glass-blur-strong));
-            border-right: 1px solid var(--glass-border-subtle);
-            transition: left var(--duration-normal) ease;
-            padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-        }
-
-        :host([mobile-open]) {
-            left: 0;
-        }
-
-        :host([mobile-open]) .mobile-backdrop {
-            display: block;
-            position: fixed;
-            top: 0;
-            bottom: 0;
-            left: 100%;
-            width: 100vw;
-            width: var(--app-vw, 100vw);
-            height: auto;
-            min-height: var(--app-vh, 100vh);
-            min-height: -webkit-fill-available;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: -1;
-        }
-
-        :host([collapsed]) {
-            width: 75%;
-            min-width: 0;
-            max-width: 320px;
-        }
-
-        :host([collapsed]) .sidebar-logo-text,
-        :host([collapsed]) .sidebar-section-title,
-        :host([collapsed]) .sidebar-text,
-        :host([collapsed]) ::slotted([data-hide-collapsed]) {
-            display: block;
-        }
-
-        :host([collapsed]) .sidebar-logo {
-            flex-direction: row;
-            justify-content: flex-start;
-            align-items: center;
-            gap: var(--space-3);
-        }
-
-        :host([collapsed]) .sidebar-collapse-row {
-            justify-content: flex-start;
-        }
-
-        :host([collapsed]) .sidebar-header {
-            flex-direction: row;
+            display: none !important;
         }
     }
 
@@ -149,17 +92,6 @@ export const sidebarHostStyles = css`
 
     :host-context([data-theme="light"]) .sidebar-footer {
         border-top-color: rgba(15, 23, 42, 0.08);
-    }
-
-    @media (max-width: 767px) {
-        :host-context([data-theme="light"]) {
-            background: rgba(255, 255, 255, 0.95);
-            border-right-color: rgba(15, 23, 42, 0.08);
-        }
-
-        :host-context([data-theme="light"]) .mobile-backdrop {
-            background: rgba(15, 23, 42, 0.3);
-        }
     }
 `;
 

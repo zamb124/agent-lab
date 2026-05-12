@@ -1,6 +1,7 @@
 /**
  * platform-sidebar-namespace-select — единый блок выбора платформенного namespace
- * в шапке service sidebar: подпись, platform-field enum (`pill-density="dense"`), кнопки edit/add.
+ * в шапке service sidebar: подпись, platform-field enum (`pill-density="dense"`),
+ * необязательный слот `trailing` между полем и кнопками edit/add, затем опционально edit/add.
  *
  * Поведение выбора и модалки — у родителя; темизация через CSS-переменные на предке.
  */
@@ -126,6 +127,53 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                 cursor: not-allowed;
                 transform: none;
             }
+
+            ::slotted([slot='trailing']) {
+                flex-shrink: 0;
+                min-width: 0;
+            }
+
+            ::slotted(.platform-namespace-trailing-action-btn) {
+                box-sizing: border-box;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: calc(
+                    2px + 2 * var(--field-pill-dense-padding-y) + var(--field-pill-dense-spin-height)
+                );
+                height: calc(
+                    2px + 2 * var(--field-pill-dense-padding-y) + var(--field-pill-dense-spin-height)
+                );
+                padding: 0;
+                border: none;
+                border-radius: var(--radius-full);
+                cursor: pointer;
+                background: var(--accent);
+                color: var(--text-inverse);
+                transition:
+                    background var(--duration-fast),
+                    opacity var(--duration-fast),
+                    transform var(--duration-fast),
+                    box-shadow var(--duration-fast);
+                box-shadow: 0 2px 6px var(--accent-subtle, rgba(153, 166, 249, 0.16));
+            }
+
+            ::slotted(.platform-namespace-trailing-action-btn:hover:not(:disabled)) {
+                filter: brightness(1.06);
+                transform: translateY(-1px);
+            }
+
+            ::slotted(.platform-namespace-trailing-action-btn:active:not(:disabled)) {
+                transform: translateY(0);
+            }
+
+            ::slotted(.platform-namespace-trailing-action-btn:disabled) {
+                opacity: 0.55;
+                cursor: not-allowed;
+                transform: none;
+                filter: none;
+                box-shadow: none;
+            }
         `,
     ];
 
@@ -195,6 +243,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                         ?disabled=${this.disabled}
                         @change=${this._onFieldChange}
                     ></platform-field>
+                    <slot name="trailing"></slot>
                     ${this.showEdit
                         ? html`
                               <button

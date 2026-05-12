@@ -5,6 +5,14 @@
         "documents_catalogs": "Каталоги",
         "document_editor": "Редактор"
     },
+    "bottom_nav": {
+        "documents": "Файлы",
+        "catalogs": "Каталоги",
+        "profile": "Профиль"
+    },
+    "workspace_picker": {
+        "title": "Пространство"
+    },
     "sidebar": {
         "title": "Документы",
         "namespace_label": "Пространство",

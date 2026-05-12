@@ -49,7 +49,9 @@ State `frozen`. Изменения — только reducer фабрики. Ис
 | `this.useResource(name, opts?)` / `useOp(name)` / `useForm(name)` / `useCursorList(name, opts?)` / `useFacets(name)` / `useSlice(name)` | контроллеры поверх фабрик |
 | `this.toast(i18n_key, {type?, vars?, duration?})` | `UI_TOAST_SHOW` |
 | `this.openModal(kindOrClass, props?)` / `closeModal(kind?)` | `UI_MODAL_OPEN`/`_CLOSE` |
-| `this.openSidebar()` / `closeSidebar()` | `UI_SIDEBAR_OPEN_REQUESTED`/`_CLOSE_` |
+| `this.openBottomSheet(kind, props?)` / `closeBottomSheet(target?)` | `UI_BOTTOM_SHEET_OPEN_REQUESTED`/`_CLOSE_REQUESTED` |
+| `this.openSidebar()` / `closeSidebar()` | `UI_SIDEBAR_OPEN_REQUESTED`/`_CLOSE_` (desktop only, no-op на мобиле) |
+| `this.getCurrentRouteKey()` | `state.router.routeKey` |
 | `this.navigate(routeKey, params?)` | `ROUTER_NAVIGATE_REQUESTED` |
 | `this.copyToClipboard(text, {success_i18n_key, error_i18n_key})` | `UI_CLIPBOARD_COPY_REQUESTED` |
 | `this.setLocale(locale)` | `I18N_LOCALE_REQUESTED` |
@@ -128,6 +130,80 @@ apps/<svc>/ui/
 - Имя фабрики не `<svc>/<entity>` (ровно 2 сегмента) — fail.
 
 CI: `make check-ui-canon` (`scripts/check_ui_canon.sh`), `make check-events-canon` (`+ scripts/check_ui_factories.py`).
+
+## Mobile shell 2026 canon
+
+Единый мобильный шелл для всех сервисов: радикальная досягаемость (radical reachability), без гамбургера, без скрытой левой панели.
+
+### Архитектура
+
+| Компонент | Назначение | Видимость |
+|---|---|---|
+| `<platform-bottom-nav>` | Плавающая капсула первичной навигации (Liquid Glass), 4–5 табов | `≤767px` only |
+| `<platform-bottom-sheet>` | База для нижних экранов (snap `half`/`full`, swipe-down-to-close, scrim) | `≤767px`, отдельные могут и десктоп |
+| `<platform-bottom-sheet-stack>` | Единственное место в DOM, куда монтируются sheets | везде |
+| `<platform-top-bar>` | Опциональный sticky top-bar с back/title/actions | `≤767px`, opt-in через `static topBarEnabled = true` |
+| `<platform-service-switcher-sheet>` (`kind: 'platform.service_switcher'`) | Универсальный sheet профиля: сервисы, console-links, theme, notifications, logout | `≤767px` |
+| `<platform-sidebar>` / сервисный sidebar | Десктопная навигация | `≥768px`. На `≤767px` принудительно `display: none` |
+
+### Декларативная конфигурация в `PlatformApp`-наследнике
+
+```js
+const BOTTOM_NAV_ITEMS = [
+    { key: 'list',    routeKey: '<route>', icon: 'icon-name', labelKey: 'bottom_nav.<key>' },
+    { key: 'sheet',   sheet: '<scope>.<kind>', icon: 'user',  labelKey: 'bottom_nav.<key>' },
+];
+
+export class FooApp extends PlatformApp {
+    static bottomNavItems = BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = ['fullscreen_editor'];
+    // По умолчанию `<platform-top-bar>` выключен; включается явно:
+    // static topBarEnabled = true;
+    // static topBarHideOnRoutes = ['public_landing'];
+}
+```
+
+Каждый route в `createRouterEffect({ routes })` обязан иметь `titleKey: 'routes.<key>'` (это подпись в `<platform-top-bar>` и breadcrumbs).
+
+### Bottom sheets
+
+Каждый sheet:
+1. Наследует `PlatformBottomSheet` (`@platform/lib/components/layout/platform-bottom-sheet.js`).
+2. Имеет `static bottomSheetKind = '<scope>.<entity>'` (формат `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`).
+3. Регистрируется через `registerBottomSheetKind(kind, tagName)` (по аналогии с modal-registry).
+4. Открывается из любого `PlatformElement` через `this.openBottomSheet('<kind>', props?)`; закрытие — `this.closeBottomSheet()` или `this._requestClose()` изнутри.
+5. Контент рендерится в `renderBody()`; заголовок — через `this.heading = this.t('<...>')` в `connectedCallback`.
+
+Прямое `document.createElement('*-sheet')` / `appendChild` / `this.open = true` — запрещено. Рендерит только `<platform-bottom-sheet-stack>`, единственный экземпляр которого встроен в `PlatformApp.render()`.
+
+### Запреты mobile shell
+
+- Гамбургер-меню в любой шапке (`page-header.menu-btn`, `<svc>-mobile-app-header`, кастомный `.menu-btn` в чате) — **запрещён**. Удалять при касании к компоненту.
+- Открытие сайдбара на мобиле (`this.openSidebar()` под `≤767px`) — no-op. Не использовать как мобильный шелл.
+- Создание новых `*-mobile-app-header` компонентов — запрещено. Если нужен top-bar — `static topBarEnabled = true` + `<platform-top-bar>`.
+- Локальные `position: fixed; bottom: 0` навигации в сервисных компонентах — запрещены. Только `<platform-bottom-nav>`.
+- Дублирование `<platform-bottom-nav>` / `<platform-bottom-sheet-stack>` / `<platform-top-bar>` в сервисных приложениях — запрещено. Их рендерит только `PlatformApp.render()`.
+
+### Безопасные зоны и токены
+
+Все размеры/радиусы/z-index — через токены `tokens.css`:
+`--platform-bottom-nav-height/-inset/-radius/-z-index/-tap-target`, `--platform-top-bar-height/-z-index`,
+`--platform-bottom-sheet-radius/-z-index/-scrim`, `--app-content-bottom-padding-mobile`.
+
+Нижний контент-padding автоматически: `<platform-island safe-bottom>` либо страница ставит `padding-bottom: var(--app-content-bottom-padding-mobile)`.
+
+### i18n
+
+Каждый сервис обязан содержать в своём bundle (`core/i18n/translations/{ru,en}/<ns>.json`) парные ключи:
+
+```json
+{
+  "routes": { "<routeKey>": "<подпись для top-bar и breadcrumbs>" },
+  "bottom_nav": { "<itemKey>": "<подпись таба>" }
+}
+```
+
+Платформенные ключи bottom-sheet — `core/i18n/translations/{ru,en}/platform.json` (`mobile_nav.*`, `service_switcher.*`, `top_bar.*`, `bottom_sheet.*`).
 
 ## Modal canon
 

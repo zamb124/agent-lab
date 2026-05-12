@@ -98,7 +98,6 @@ import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
 
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/frontend-sidebar.js';
-import '../components/frontend-mobile-app-header.js';
 import '../pages/landing-page.js';
 import '../pages/products/product-agents-page.js';
 import '../pages/products/product-rag-page.js';
@@ -128,35 +127,35 @@ import '../pages/admin/tracing-page.js';
 import '../pages/admin/billing-admin-page.js';
 
 const FRONTEND_ROUTES = [
-    { key: 'landing',           path: '' },
-    { key: 'product-agents',    path: 'products/agents' },
-    { key: 'product-rag',       path: 'products/rag' },
-    { key: 'product-crm',       path: 'products/crm' },
-    { key: 'product-sync',      path: 'products/sync' },
-    { key: 'product-documents', path: 'products/documents' },
-    { key: 'policy',            path: 'policy' },
-    { key: 'terms',             path: 'terms' },
-    { key: 'support',           path: 'support' },
-    { key: 'digital-workers',   path: 'demo/digital-workers', parent: 'landing' },
-    { key: 'blog',              path: 'blog', parent: 'landing' },
-    { key: 'blog-post',         path: 'blog/:slug', parent: 'blog' },
-    { key: 'about',             path: 'about', parent: 'landing' },
-    { key: 'roadmap',           path: 'roadmap', parent: 'landing' },
-    { key: 'login',             path: 'login' },
-    { key: 'join',              path: 'join' },
-    { key: 'select-company',    path: 'select-company' },
-    { key: 'dashboard',         path: 'dashboard' },
-    { key: 'platform_services', path: 'services', parent: 'dashboard' },
-    { key: 'team',              path: 'team' },
-    { key: 'api-keys',          path: 'api-keys' },
-    { key: 'company-voice-providers', path: 'company-voice-providers' },
-    { key: 'embed-configs',     path: 'embed-configs' },
-    { key: 'billing',           path: 'billing' },
-    { key: 'scheduler-tasks',   path: 'scheduler-tasks' },
-    { key: 'settings',          path: 'settings' },
-    { key: 'lead-requests',     path: 'lead-requests' },
-    { key: 'platform-tracing',  path: 'platform-tracing' },
-    { key: 'platform-billing',  path: 'platform-billing' },
+    { key: 'landing',                 path: '',                                                titleKey: 'routes.landing' },
+    { key: 'product-agents',          path: 'products/agents',          parent: 'landing',     titleKey: 'routes.product-agents' },
+    { key: 'product-rag',             path: 'products/rag',             parent: 'landing',     titleKey: 'routes.product-rag' },
+    { key: 'product-crm',             path: 'products/crm',             parent: 'landing',     titleKey: 'routes.product-crm' },
+    { key: 'product-sync',            path: 'products/sync',            parent: 'landing',     titleKey: 'routes.product-sync' },
+    { key: 'product-documents',       path: 'products/documents',       parent: 'landing',     titleKey: 'routes.product-documents' },
+    { key: 'policy',                  path: 'policy',                   parent: 'landing',     titleKey: 'routes.policy' },
+    { key: 'terms',                   path: 'terms',                    parent: 'landing',     titleKey: 'routes.terms' },
+    { key: 'support',                 path: 'support',                  parent: 'landing',     titleKey: 'routes.support' },
+    { key: 'digital-workers',         path: 'demo/digital-workers',     parent: 'landing',     titleKey: 'routes.digital-workers' },
+    { key: 'blog',                    path: 'blog',                     parent: 'landing',     titleKey: 'routes.blog' },
+    { key: 'blog-post',               path: 'blog/:slug',               parent: 'blog',        titleKey: 'routes.blog-post' },
+    { key: 'about',                   path: 'about',                    parent: 'landing',     titleKey: 'routes.about' },
+    { key: 'roadmap',                 path: 'roadmap',                  parent: 'landing',     titleKey: 'routes.roadmap' },
+    { key: 'login',                   path: 'login',                                           titleKey: 'routes.login' },
+    { key: 'join',                    path: 'join',                                            titleKey: 'routes.join' },
+    { key: 'select-company',          path: 'select-company',                                  titleKey: 'routes.select-company' },
+    { key: 'dashboard',               path: 'dashboard',                                       titleKey: 'routes.dashboard' },
+    { key: 'platform_services',       path: 'services',                 parent: 'dashboard',   titleKey: 'routes.platform_services' },
+    { key: 'team',                    path: 'team',                     parent: 'dashboard',   titleKey: 'routes.team' },
+    { key: 'api-keys',                path: 'api-keys',                 parent: 'dashboard',   titleKey: 'routes.api-keys' },
+    { key: 'company-voice-providers', path: 'company-voice-providers',  parent: 'dashboard',   titleKey: 'routes.company-voice-providers' },
+    { key: 'embed-configs',           path: 'embed-configs',            parent: 'dashboard',   titleKey: 'routes.embed-configs' },
+    { key: 'billing',                 path: 'billing',                  parent: 'dashboard',   titleKey: 'routes.billing' },
+    { key: 'scheduler-tasks',         path: 'scheduler-tasks',          parent: 'dashboard',   titleKey: 'routes.scheduler-tasks' },
+    { key: 'settings',                path: 'settings',                 parent: 'dashboard',   titleKey: 'routes.settings' },
+    { key: 'lead-requests',           path: 'lead-requests',            parent: 'dashboard',   titleKey: 'routes.lead-requests' },
+    { key: 'platform-tracing',        path: 'platform-tracing',         parent: 'dashboard',   titleKey: 'routes.platform-tracing' },
+    { key: 'platform-billing',        path: 'platform-billing',         parent: 'dashboard',   titleKey: 'routes.platform-billing' },
 ];
 
 const PUBLIC_ROUTE_KEYS = new Set([
@@ -186,22 +185,31 @@ const DOCUMENT_META_SKIP = new Set([
     'blog-post',
 ]);
 
-/** Страницы, где уже есть `<page-header>` — общий мобильный хедер не вставляем. */
-const FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER = new Set([
-    'team',
-    'api-keys',
-    'company-voice-providers',
-    'embed-configs',
-    'billing',
-    'scheduler-tasks',
-    'settings',
-    'lead-requests',
-    'platform-tracing',
-    'platform-billing',
-]);
+/**
+ * Mobile bottom-nav (mobile shell 2026): консоль панели управления.
+ * Скрыта на всех public-маршрутах (landing, login, blog и т.п.) — туда mobile shell
+ * платформы не подключается, лендинг рендерит свой собственный layout.
+ */
+const FRONTEND_BOTTOM_NAV_ITEMS = [
+    { key: 'dashboard',  routeKey: 'dashboard',  icon: 'apps',     labelKey: 'bottom_nav.dashboard' },
+    { key: 'team',       routeKey: 'team',       icon: 'users',    labelKey: 'bottom_nav.team' },
+    { key: 'billing',    routeKey: 'billing',    icon: 'chart',    labelKey: 'bottom_nav.billing' },
+    { key: 'profile',    sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
+];
+
+const FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES = [
+    'landing',
+    'product-agents', 'product-rag', 'product-crm', 'product-sync', 'product-documents',
+    'policy', 'terms', 'support',
+    'digital-workers',
+    'blog', 'blog-post', 'about', 'roadmap',
+    'login', 'join', 'select-company',
+];
 
 export class FrontendApp extends PlatformApp {
     static defaultI18nNamespace = 'frontend';
+    static bottomNavItems = FRONTEND_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = FRONTEND_BOTTOM_NAV_HIDE_ON_ROUTES;
 
     static factories = [
         apiKeysResource,
@@ -616,19 +624,13 @@ export class FrontendApp extends PlatformApp {
             case 'platform-billing':  content = html`<frontend-billing-admin-page></frontend-billing-admin-page>`; break;
             default:                  content = html`<dashboard-page></dashboard-page>`; break;
         }
-        const shellHeader = FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
-            ? ''
-            : html`<frontend-mobile-app-header></frontend-mobile-app-header>`;
-        const islandOwnHeaderMobile =
-            FRONTEND_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey) && this._frontendMobile;
         return html`
             <div class="console">
                 <div class="sidebar"><frontend-sidebar></frontend-sidebar></div>
                 <div class="main">
-                    ${shellHeader}
                     <platform-island
-                        padding=${islandOwnHeaderMobile ? 'none' : 'md'}
-                        ?safe-bottom=${islandOwnHeaderMobile}
+                        padding=${this._frontendMobile ? 'none' : 'md'}
+                        ?safe-bottom=${this._frontendMobile}
                     >${content}</platform-island>
                 </div>
             </div>

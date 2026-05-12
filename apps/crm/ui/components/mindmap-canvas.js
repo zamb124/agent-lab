@@ -403,10 +403,10 @@ export class CRMMindmapCanvas extends PlatformElement {
                 font-family: var(--font-sans, system-ui);
                 font-size: 11px;
                 font-weight: 600;
-                fill: var(--text-secondary);
+                fill: var(--text-primary);
                 paint-order: stroke fill;
                 stroke: var(--bg-secondary);
-                stroke-width: 3px;
+                stroke-width: 3.5px;
                 stroke-linejoin: round;
                 pointer-events: none;
             }
@@ -1000,7 +1000,7 @@ export class CRMMindmapCanvas extends PlatformElement {
             const innerH = p.h - sw;
             const rxStroke =
                 innerW > 0 && innerH > 0 ? Math.max(0, MM_NODE_CORNER_RX - inset) : 0;
-            const fillBg = isRoot ? accent : '#ffffff';
+            const fillBg = isRoot ? accent : 'var(--crm-surface)';
             const fo = html`
                 <div xmlns="http://www.w3.org/1999/xhtml" class=${innerCls}>
                     <platform-icon name=${iconName} size=${this.compact ? '14' : '18'}></platform-icon>

@@ -155,6 +155,14 @@ clearFactoryRegistry()          // только тесты
 export class FrontendApp extends PlatformApp {
     static defaultI18nNamespace = 'frontend';
     static factories = [apiKeysResource, embedConfigsResource, /* ... */];
+    // Mobile shell 2026 (см. frontend.mdc / ui_components.mdc):
+    static bottomNavItems = [
+        { key: 'dashboard', routeKey: 'dashboard', icon: 'apps', labelKey: 'bottom_nav.dashboard' },
+        { key: 'team',      routeKey: 'team',      icon: 'users', labelKey: 'bottom_nav.team' },
+        { key: 'profile',   sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
+    ];
+    static bottomNavHideOnRoutes = ['landing', 'login'];
+    // Опционально: static topBarEnabled = true;
     getBaseUrl() { return '/frontend/api'; }
     getRoutes()  { return CONSOLE_ROUTES; }
 }
@@ -165,6 +173,8 @@ customElements.define('frontend-app', FrontendApp);
 
 **Bridge-effect** допустим только как тонкая связка domain-events с core-events (`STORAGE_*`/`ROUTER_*`/`WS_*`/`AUTH_*`). Запрещено: HTTP/WS-запросы (это `request` фабрики), мутация slice (это reducer), бизнес-логика (это backend).
 
+Каждый route в `createRouterEffect({ routes })` обязан содержать `titleKey: 'routes.<key>'` — подпись для `<platform-top-bar>` и breadcrumbs. Парные ключи `routes.*` + `bottom_nav.*` обязаны быть в `core/i18n/translations/{ru,en}/<ns>.json`.
+
 ## CoreEvents — helpers базы
 
 Прямой `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*)` в `apps/<svc>/ui/{pages,modals,components}/**` запрещён (`scripts/check_ui_canon.sh`). Используй helper:
@@ -173,7 +183,8 @@ customElements.define('frontend-app', FrontendApp);
 |---|---|
 | `this.toast(key, opts)` | `UI_TOAST_SHOW` |
 | `this.openModal(kind, props)` / `this.closeModal(kind?)` | `UI_MODAL_OPEN` / `_CLOSE` |
-| `this.openSidebar()` / `this.closeSidebar()` | `UI_SIDEBAR_OPEN_REQUESTED` / `_CLOSE_` |
+| `this.openBottomSheet(kind, props?)` / `this.closeBottomSheet(target?)` | `UI_BOTTOM_SHEET_OPEN_REQUESTED` / `_CLOSE_REQUESTED` |
+| `this.openSidebar()` / `this.closeSidebar()` | `UI_SIDEBAR_OPEN_REQUESTED` / `_CLOSE_` (desktop only) |
 | `this.navigate(routeKey, params?)` | `ROUTER_NAVIGATE_REQUESTED` |
 | `this.copyToClipboard(text, opts)` | `UI_CLIPBOARD_COPY_REQUESTED` |
 | `this.setLocale(locale)` | `I18N_LOCALE_REQUESTED` |

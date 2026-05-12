@@ -37,6 +37,7 @@ import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/layout/page-header.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
+import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
 import '../pages/entity-detail-page.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
@@ -122,6 +123,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 width: 100%;
                 height: 100%;
                 min-height: 0;
+                min-width: 0;
                 overflow: hidden;
             }
 
@@ -536,6 +538,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
+                min-width: 0;
                 height: 100%;
                 align-self: stretch;
                 overflow: hidden;
@@ -563,8 +566,10 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 overflow-y: auto;
                 overflow-x: hidden;
                 min-height: 0;
+                min-width: 0;
                 padding: var(--space-1);
                 transition: filter 0.2s ease, opacity 0.2s ease;
+                box-sizing: border-box;
             }
 
             .cards-grid {
@@ -572,6 +577,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
                 gap: var(--space-3);
                 align-content: start;
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
             }
 
             .loading-more {
@@ -581,14 +589,6 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 font-size: var(--text-sm);
             }
             .scroll-sentinel { height: 1px; }
-
-            .merge-dnd-hint {
-                margin: 0;
-                padding: 0 0 var(--space-1) 0;
-                font-size: 11px;
-                color: var(--text-tertiary);
-                line-height: 1.3;
-            }
 
             .card-score {
                 display: flex;
@@ -600,6 +600,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 border-radius: 8px;
                 overflow: hidden;
                 flex-shrink: 0;
+                min-width: 0;
+                width: 100%;
+                max-width: 100%;
             }
             .card-score .score-bar {
                 position: absolute;
@@ -635,6 +638,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 flex-direction: column;
                 gap: 10px;
                 min-height: 130px;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
                 cursor: pointer;
                 transition: border-color var(--duration-fast), background var(--duration-fast);
             }
@@ -661,6 +667,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 display: flex;
                 align-items: flex-start;
                 gap: 10px;
+                min-width: 0;
             }
             .card-header-main {
                 flex: 1;
@@ -728,6 +735,9 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 display: -webkit-box;
                 -webkit-line-clamp: 2;
                 -webkit-box-orient: vertical;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                min-width: 0;
             }
 
             .card-tags {
@@ -735,6 +745,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 flex-wrap: nowrap;
                 gap: 6px;
                 overflow: hidden;
+                min-width: 0;
             }
             .card-tag {
                 display: inline-flex;
@@ -754,6 +765,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 justify-content: space-between;
                 gap: 8px;
                 margin-top: auto;
+                min-width: 0;
             }
             .card-footer-end {
                 display: flex;
@@ -768,13 +780,17 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 gap: 4px;
                 padding: 0 10px;
                 min-height: 22px;
+                min-width: 0;
                 font-size: 11px;
                 border-radius: 12px;
                 font-weight: 500;
                 border: none;
                 white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
                 background: var(--crm-surface-tint);
                 color: var(--text-secondary);
+                flex: 1 1 auto;
             }
             .card-meta { color: var(--text-tertiary); font-size: 11px; }
             .card-delete-btn {
@@ -943,16 +959,12 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
                     box-sizing: border-box;
                 }
-                .merge-dnd-hint {
-                    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
-                    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
-                    box-sizing: border-box;
-                }
                 .layout {
                     padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
                     padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
                     padding-bottom: max(var(--space-2), var(--platform-safe-bottom));
                     box-sizing: border-box;
+                    min-width: 0;
                 }
                 .mobile-tabs {
                     display: flex;
@@ -998,7 +1010,16 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 .layout { grid-template-columns: 1fr; }
                 .list-panel, .detail-panel { display: none; }
                 .list-panel.mobile-active { display: flex; flex: 1; min-height: 0; }
-                .detail-panel.mobile-active { display: flex; flex: 1; min-height: 0; overflow-y: auto; }
+                .detail-panel.mobile-active {
+                    display: flex;
+                    flex: 1;
+                    min-height: 0;
+                    overflow: hidden;
+                }
+                .layout.layout--mobile-entity-detail {
+                    padding-left: env(safe-area-inset-left, 0px);
+                    padding-right: env(safe-area-inset-right, 0px);
+                }
                 .cards-scroll { padding: var(--space-2) 0; }
                 .cards-grid { grid-template-columns: 1fr; gap: var(--space-2); }
                 .entity-card-item { padding: 14px; min-height: 0; gap: 8px; border-radius: 12px; }
@@ -1616,6 +1637,15 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     <div slot="actions">
                         <button
                             type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${openCrmLaraAssistant}
+                            title=${this.t('lara.assistant')}
+                            aria-label=${this.t('lara.assistant')}
+                        >
+                            <platform-icon name="sparkle" size="18"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
                             class="mobile-header-icon-btn ${this._showFiltersPanel || this._hasExpandedFilters() ? 'active' : ''}"
                             title=${this.t('entity_filters.panel_title')}
                             @click=${() => { this._showFiltersPanel = !this._showFiltersPanel; }}
@@ -2034,12 +2064,8 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
             ${listActive ? this._renderToolbar() : nothing}
 
-            ${items.length >= 2 && !loading
-                ? html`<p class="merge-dnd-hint">${this.t('entities_page.merge_dnd_hint')}</p>`
-                : nothing}
-
             <div
-                class="layout ${this._isWideDesktopSplit ? 'layout--wide-split' : ''} ${this._isWideDesktopSplit && this._currentEntityId ? 'layout--detail-open' : ''}"
+                class="layout ${this._isWideDesktopSplit ? 'layout--wide-split' : ''} ${this._isWideDesktopSplit && this._currentEntityId ? 'layout--detail-open' : ''} ${this._isMobile && cardActive ? 'layout--mobile-entity-detail' : ''}"
             >
                 <section class="list-panel ${listActive ? 'mobile-active' : ''} ${loading ? 'busy' : ''}">
                     ${loading

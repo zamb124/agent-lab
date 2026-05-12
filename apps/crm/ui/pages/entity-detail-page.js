@@ -490,6 +490,58 @@ export class CRMEntityDetailPage extends PlatformPage {
             :host([embedded]) .body {
                 padding: var(--space-3);
             }
+            @media (max-width: 767px) {
+                :host {
+                    --platform-mobile-sticky-header-padding-left: max(0px, env(safe-area-inset-left, 0px));
+                    --platform-mobile-sticky-header-padding-right: max(0px, env(safe-area-inset-right, 0px));
+                }
+                .header-wrap {
+                    padding-left: 0;
+                    padding-right: 0;
+                    padding-top: var(--space-3);
+                    padding-bottom: var(--space-2);
+                }
+                :host([embedded]) .header-wrap {
+                    padding-left: 0;
+                    padding-right: 0;
+                    padding-top: var(--space-3);
+                    padding-bottom: var(--space-2);
+                }
+                .tabs {
+                    padding-left: 0;
+                    padding-right: 0;
+                }
+                :host([embedded]) .tabs {
+                    padding-left: 0;
+                    padding-right: 0;
+                }
+                .body {
+                    padding: var(--space-2) 0 var(--space-4);
+                }
+                :host([embedded]) .body {
+                    padding-left: 0;
+                    padding-right: 0;
+                    padding-top: var(--space-2);
+                    padding-bottom: var(--space-4);
+                }
+                .body.graph {
+                    padding-left: 0;
+                    padding-right: 0;
+                    padding-top: var(--space-2);
+                    padding-bottom: var(--space-4);
+                }
+                .body.detail-body-muted {
+                    border-radius: 0;
+                }
+                .body.detail-body-muted crm-entity-card {
+                    flex: 0 1 auto;
+                    min-height: 0;
+                }
+                .page-subtitle-mobile {
+                    margin-left: 0;
+                    margin-right: 0;
+                }
+            }
             .embedded-host-filler {
                 flex: 1;
                 min-height: 0;

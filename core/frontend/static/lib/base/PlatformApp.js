@@ -16,6 +16,16 @@
  *     и getServiceEffects().
  *   - static defaultI18nNamespace     — namespace по умолчанию для this.t(...)
  *     во всех компонентах сервиса. Приземляется через setDefaultI18nNamespace.
+ *   - static bottomNavItems = []      — конфигурация мобильной первичной навигации
+ *     (mobile shell 2026). Видна только на <= 767px. Каждый item:
+ *       { key, routeKey, params?, sheet?, sheetProps?, icon, labelKey, badge? }
+ *     Пустой массив = bottom-nav скрыт (публичные/landing страницы).
+ *   - static bottomNavHideOnRoutes = []  — список routeKeys, на которых bottom-nav
+ *     дополнительно скрывается (полноэкранные редакторы: flow_editor, document_editor).
+ *   - static topBarEnabled = false    — рендерит <platform-top-bar> сверху на мобиле.
+ *     Default false — сервисы, у которых страницы уже рендерят `<page-header>` со sticky-mobile,
+ *     могут адоптировать постепенно. Включи `true` при отказе от per-page sticky-header.
+ *   - static topBarHideOnRoutes = []  — список routeKeys, на которых top-bar скрыт.
  */
 
 import { html, css } from 'lit';
@@ -35,6 +45,10 @@ import '../components/pwa-install-banner.js';
 import '../components/glass-toast.js';
 import '../components/platform-shell-page.js';
 import '../components/platform-modal-stack.js';
+import '../components/platform-bottom-sheet-stack.js';
+import '../components/layout/platform-bottom-nav.js';
+import '../components/layout/platform-top-bar.js';
+import '../components/sheets/platform-service-switcher-sheet.js';
 import '../components/platform-user-chip.js';
 import '../components/platform-user-info-modal.js';
 import '../components/platform-services-modal.js';
@@ -259,10 +273,32 @@ export class PlatformApp extends PlatformElement {
 
         const routeKey = route ? route.routeKey : null;
         const params = route ? route.params || {} : {};
+        const ctor = this.constructor;
+        const bottomNavItems = Array.isArray(ctor.bottomNavItems) ? ctor.bottomNavItems : [];
+        const bottomNavHideOnRoutes = Array.isArray(ctor.bottomNavHideOnRoutes)
+            ? ctor.bottomNavHideOnRoutes
+            : [];
+        const topBarEnabled = ctor.topBarEnabled === true;
+        const topBarHideOnRoutes = Array.isArray(ctor.topBarHideOnRoutes)
+            ? ctor.topBarHideOnRoutes
+            : [];
+        const hideTopBar = topBarHideOnRoutes.includes(routeKey);
         return html`
+            ${topBarEnabled && !hideTopBar
+                ? html`<platform-top-bar></platform-top-bar>`
+                : ''}
             ${this.renderRoute(routeKey, params)}
+            ${bottomNavItems.length > 0
+                ? html`
+                    <platform-bottom-nav
+                        .items=${bottomNavItems}
+                        .hideOnRoutes=${bottomNavHideOnRoutes}
+                    ></platform-bottom-nav>
+                `
+                : ''}
             <pwa-install-banner></pwa-install-banner>
             <platform-modal-stack></platform-modal-stack>
+            <platform-bottom-sheet-stack></platform-bottom-sheet-stack>
         `;
     }
 }

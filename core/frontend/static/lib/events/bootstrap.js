@@ -15,6 +15,7 @@ import { setPlatformBus, hasPlatformBus, getPlatformBus } from './bus-singleton.
 import { maybeAttachDevtools } from './devtools.js';
 
 import { createAuthEffect } from './effects/auth.effect.js';
+import { createAuthCompanyNavigationEffect } from './effects/auth-company-navigation.effect.js';
 import { createThemeEffect } from './effects/theme.effect.js';
 import { createI18nEffect } from './effects/i18n.effect.js';
 import { createNotifyEffect } from './effects/notify.effect.js';
@@ -106,6 +107,7 @@ export function bootstrapPlatformBus(options) {
     bus.registerEffect(createCalendarEffect({ baseUrl }));
     bus.registerEffect(createUiEffect());
     bus.registerEffect(createAuthEffect({ baseUrl }));
+    bus.registerEffect(createAuthCompanyNavigationEffect());
     if (routes.length > 0) {
         bus.registerEffect(createRouterEffect({ baseUrl, routes }));
     }

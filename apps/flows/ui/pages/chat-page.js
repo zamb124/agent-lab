@@ -758,6 +758,10 @@ export class ChatPage extends PlatformPage {
         this._chat.resetSession();
     }
 
+    _onFlowsChatBack() {
+        this.navigate('list', {});
+    }
+
     _openEditor() {
         this._overflowOpen = false;
         if (!this.flowId) return;
@@ -1005,6 +1009,20 @@ export class ChatPage extends PlatformPage {
                 subtitle=${branchLabel}
                 actions-overflow="visible"
             >
+                ${this._isMobile
+                    ? html`
+                          <button
+                              type="button"
+                              slot="leading"
+                              class="page-header-leading-btn"
+                              title=${this.t('platform_chat.title_back_to_flows_list')}
+                              aria-label=${this.t('platform_chat.title_back_to_flows_list')}
+                              @click=${this._onFlowsChatBack}
+                          >
+                              <platform-icon name="arrow-left" size="20"></platform-icon>
+                          </button>
+                      `
+                    : nothing}
                 <div slot="actions">
                     ${this._isMobile
                         ? this._renderMobileActions(hasFlow)

@@ -6,6 +6,12 @@
         "search": "Search",
         "settings": "Settings"
     },
+    "bottom_nav": {
+        "namespaces": "Bases",
+        "search": "Search",
+        "settings": "Settings",
+        "profile": "Profile"
+    },
     "sidebar": {
         "title": "RAG Service",
         "provider_label": "Provider",

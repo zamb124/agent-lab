@@ -111,7 +111,7 @@ import {
 import { fileUploadOp } from '../events/resources/files.resource.js';
 
 import '../components/crm-sidebar.js';
-import '../components/crm-mobile-app-header.js';
+import '../components/sheets/crm-workspace-picker-sheet.js';
 import '@platform/lib/embed-chat/platform-lara-assistant.js';
 import '../pages/settings-hub-page.js';
 import '../pages/daily-notes-page.js';
@@ -155,49 +155,41 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
 
 const CRM_ROUTES = [
-    { key: 'notes',               path: '' },
-    { key: 'platform_services',   path: 'services', parent: 'notes' },
-    { key: 'settings',            path: 'settings' },
-    { key: 'notes',               path: 'notes' },
-    { key: 'note',                path: 'notes/:itemId',     parent: 'notes' },
-    { key: 'entities',            path: 'entities' },
-    { key: 'entity_new',           path: 'entities/new',     parent: 'entities' },
-    { key: 'entity',              path: 'entities/:itemId',   parent: 'entities' },
-    { key: 'graph',               path: 'graph' },
-    { key: 'tasks',               path: 'tasks' },
-    { key: 'access_requests',     path: 'access-requests' },
-    { key: 'spaces',              path: 'spaces',             parent: 'settings' },
-    { key: 'space',               path: 'spaces/:itemId',     parent: 'spaces' },
-    { key: 'space_integrations',  path: 'spaces/:itemId/integrations', parent: 'space' },
-    { key: 'templates',           path: 'templates',          parent: 'settings' },
-    { key: 'namespace_imports',   path: 'namespace_imports',  parent: 'settings' },
-    { key: 'relationship_types',  path: 'relationship_types', parent: 'settings' },
+    { key: 'notes',               path: '',                 titleKey: 'routes.notes' },
+    { key: 'platform_services',   path: 'services',         parent: 'notes', titleKey: 'routes.platform_services' },
+    { key: 'settings',            path: 'settings',         titleKey: 'routes.settings' },
+    { key: 'notes',               path: 'notes',            titleKey: 'routes.notes' },
+    { key: 'note',                path: 'notes/:itemId',    parent: 'notes', titleKey: 'routes.note' },
+    { key: 'entities',            path: 'entities',         titleKey: 'routes.entities' },
+    { key: 'entity_new',          path: 'entities/new',     parent: 'entities', titleKey: 'routes.entity_new' },
+    { key: 'entity',              path: 'entities/:itemId', parent: 'entities', titleKey: 'routes.entity' },
+    { key: 'graph',               path: 'graph',            titleKey: 'routes.graph' },
+    { key: 'tasks',               path: 'tasks',            titleKey: 'routes.tasks' },
+    { key: 'access_requests',     path: 'access-requests',  titleKey: 'routes.access_requests' },
+    { key: 'spaces',              path: 'spaces',           parent: 'settings', titleKey: 'routes.spaces' },
+    { key: 'space',               path: 'spaces/:itemId',   parent: 'spaces', titleKey: 'routes.space' },
+    { key: 'space_integrations',  path: 'spaces/:itemId/integrations', parent: 'space', titleKey: 'routes.space_integrations' },
+    { key: 'templates',           path: 'templates',        parent: 'settings', titleKey: 'routes.templates' },
+    { key: 'namespace_imports',   path: 'namespace_imports', parent: 'settings', titleKey: 'routes.namespace_imports' },
+    { key: 'relationship_types',  path: 'relationship_types', parent: 'settings', titleKey: 'routes.relationship_types' },
 ];
 
 /**
- * Маршруты, где страница уже рендерит свой `<page-header>` (бургер + заголовок).
- * Общий `crm-mobile-app-header` для них отключаем — иначе шапка дублируется.
- * На мобилке `platform-island` без горизонтального padding, как у notes/entities.
+ * Mobile bottom-nav (mobile shell 2026): 4 первичных вкладки сервиса + профиль (service-switcher).
+ * Видна только на ≤767px. На fullscreen-маршрутах (нет таких в CRM сегодня) скрывается через bottomNavHideOnRoutes.
  */
-const CRM_ROUTES_WITH_OWN_PAGE_HEADER = new Set([
-    'notes',
-    'note',
-    'entities',
-    'tasks',
-    'settings',
-    'access_requests',
-    'spaces',
-    'space',
-    'space_integrations',
-    'templates',
-    'namespace_imports',
-    'relationship_types',
-    'entity',
-    'entity_new',
-]);
+const CRM_BOTTOM_NAV_ITEMS = [
+    { key: 'notes',    routeKey: 'notes',    icon: 'note',         labelKey: 'bottom_nav.notes' },
+    { key: 'tasks',    routeKey: 'tasks',    icon: 'check-square', labelKey: 'bottom_nav.tasks' },
+    { key: 'graph',    routeKey: 'graph',    icon: 'share',        labelKey: 'bottom_nav.graph' },
+    { key: 'entities', routeKey: 'entities', icon: 'box',          labelKey: 'bottom_nav.entities' },
+    { key: 'profile',  sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
+];
 
 export class CRMApp extends PlatformApp {
     static defaultI18nNamespace = 'crm';
+    static bottomNavItems = CRM_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = [];
 
     constructor() {
         super();
@@ -438,21 +430,16 @@ export class CRMApp extends PlatformApp {
             case 'relationship_types':  content = html`<crm-relationship-types-page></crm-relationship-types-page>`; break;
             default:                    content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
         }
-        const mobileIslandFullBleed =
-            typeof routeKey === 'string'
-            && CRM_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
-            && this._crmMobile;
+        const mobileIslandFullBleed = this._crmMobile;
         const companyRaw = this._laraActiveCompanySel.value;
         const companyId = typeof companyRaw === 'string' && companyRaw.trim() !== '' ? companyRaw.trim() : '';
         const voiceBase =
             typeof this._laraVoiceBaseUrl === 'string' ? this._laraVoiceBaseUrl.trim() : '';
         const laraDuplex = companyId !== '' && voiceBase !== '';
+        const laraShowLauncher = !this._crmMobile;
         return html`
             <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">
-                ${CRM_ROUTES_WITH_OWN_PAGE_HEADER.has(routeKey)
-                    ? ''
-                    : html`<crm-mobile-app-header></crm-mobile-app-header>`}
                 <platform-island
                     padding=${mobileIslandFullBleed ? 'none' : 'md'}
                     ?safe-bottom=${mobileIslandFullBleed}
@@ -466,7 +453,7 @@ export class CRMApp extends PlatformApp {
                 skill-id="crm"
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
-                .showLauncher=${true}
+                .showLauncher=${laraShowLauncher}
                 .assistantTitle=${'Lara'}
                 ?voice-enabled=${laraDuplex}
                 voice-base-url=${voiceBase}

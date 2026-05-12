@@ -18,7 +18,7 @@
         "theme_dark": "Тёмная тема",
         "logout": "Выйти",
         "language": "Язык",
-        "user_fallback": "Пользователь",
+        "user_fallback": "Аккаунт",
         "services": "Сервисы",
         "create_company": "Создать компанию"
     },
@@ -31,6 +31,39 @@
     },
     "services_switch": {
         "aria": "Открыть витрину сервисов"
+    },
+    "mobile_nav": {
+        "aria": "Основная навигация",
+        "profile": "Профиль"
+    },
+    "service_switcher": {
+        "heading": "Меню",
+        "services_title": "Сервисы",
+        "quick_title": "Быстрый доступ",
+        "quick_profile": "Профиль",
+        "quick_calendar": "Календарь",
+        "quick_documentation": "Документация",
+        "settings_title": "Управление",
+        "preferences_title": "Настройки",
+        "theme_light": "Светлая тема",
+        "theme_dark": "Тёмная тема",
+        "logout": "Выйти из аккаунта",
+        "settings_console": "Консоль",
+        "settings_team": "Команда",
+        "settings_billing": "Биллинг",
+        "settings_api_keys": "API ключи",
+        "notifications_title": "Уведомления",
+        "company_list_aria": "Выбор компании",
+        "no_company": "Компания не выбрана",
+        "close": "Закрыть"
+    },
+    "top_bar": {
+        "back_aria": "Назад",
+        "menu_aria": "Меню"
+    },
+    "bottom_sheet": {
+        "close_aria": "Закрыть",
+        "drag_handle_aria": "Потяните для закрытия"
     },
     "apps": {
         "flows": {
@@ -98,7 +131,9 @@
         "error_slug_taken": "Адрес компании уже занят",
         "error_create": "Не удалось создать компанию",
         "creating": "Создание...",
-        "submit": "Создать"
+        "submit": "Создать",
+        "subdomain_missing": "У этой компании нет адреса поддомена; откройте настройки или обратитесь в поддержку.",
+        "switched": "Компания переключена"
     },
     "platform_field": {
         "number_increment": "Увеличить",

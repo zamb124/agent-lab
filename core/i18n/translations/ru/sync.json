@@ -7,6 +7,11 @@
         "settings": "Настройки",
         "call_join": "Вход по ссылке"
     },
+    "bottom_nav": {
+        "channels": "Каналы",
+        "calls": "Встречи",
+        "profile": "Профиль"
+    },
     "close": "Закрыть",
     "call_aggregate_empty_body": "Нет материала для сводки: в ленте этого звонка нет текстовых сообщений и готовых расшифровок аудио или видео. Речь в комнате сама в чат не попадает — пишите сообщения в канал, включите запись звонка или расшифровку голосовых в настройках канала.",
     "recording_error_default": "Ошибка записи",
@@ -51,6 +56,7 @@
         "namespace_label": "Пространство",
         "all_namespaces": "Все",
         "edit_namespace_tooltip": "Sync-настройки пространства",
+        "namespace_meeting_btn": "Создать митинг",
         "time_yesterday": "Вчера",
         "section_team": "Команда",
         "section_spaces": "Пространства",
@@ -547,6 +553,7 @@
     },
     "chat_header": {
         "menu": "Меню",
+        "back": "Назад",
         "subtitle_typing": "{names} печатает(ют)…",
         "subtitle_online": "онлайн",
         "subtitle_last_seen": "был(а) недавно",

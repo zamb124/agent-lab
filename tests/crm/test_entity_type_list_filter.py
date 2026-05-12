@@ -38,7 +38,26 @@ def test_leaf_missing_from_map_raises() -> None:
         resolve_list_entity_query_pair("call", m)
 
 
-def test_parent_missing_from_map_raises() -> None:
+def test_call_under_note_when_root_row_present() -> None:
     m = {"call": "note", "note": None}
-    # 'note' is in map; valid
     assert resolve_list_entity_query_pair("call", m) == ("note", "call")
+
+
+def test_implicit_note_root_when_row_missing_from_map() -> None:
+    m = {"call": "note", "meeting": "note"}
+    assert resolve_list_entity_query_pair("call", m) == ("note", "call")
+
+
+def test_implicit_task_root_when_row_missing_from_map() -> None:
+    m = {"subtask_under_task": "task"}
+    assert resolve_list_entity_query_pair("subtask_under_task", m) == ("task", "subtask_under_task")
+
+
+def test_task_root_leaf() -> None:
+    m = {"task": None}
+    assert resolve_list_entity_query_pair("task", m) == ("task", None)
+
+
+def test_task_child_when_task_row_present() -> None:
+    m = {"ticket": "task", "task": None}
+    assert resolve_list_entity_query_pair("ticket", m) == ("task", "ticket")

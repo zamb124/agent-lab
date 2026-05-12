@@ -296,6 +296,46 @@ if rg -nP "${LOCAL_HASH_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
     rg -nP "${LOCAL_HASH_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
 fi
 
+# 20. Mobile shell 2026 canon: гамбургер в apps/<svc>/ui/** запрещён.
+#     - Старые компоненты *-mobile-app-header — удалены, новые такие имена запрещены.
+#     - this.openSidebar() в apps/<svc>/ui/{pages,modals,components}/** — антипаттерн.
+#     - <platform-bottom-nav> / <platform-bottom-sheet-stack> / <platform-top-bar> рендерит только PlatformApp (core).
+MOBILE_HEADER_PATTERN="customElements\.define\(\s*['\"][a-z0-9_-]*-mobile-app-header['\"]"
+if rg -nP "${MOBILE_HEADER_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
+    fail "компонент *-mobile-app-header запрещён — mobile shell делает <platform-bottom-nav> + <platform-top-bar> (см. frontend.mdc)"
+    rg -nP "${MOBILE_HEADER_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+MOBILE_HEADER_IMPORT_PATTERN="from\s+['\"][^'\"]*mobile-app-header[^'\"]*['\"]"
+if rg -nP "${MOBILE_HEADER_IMPORT_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
+    fail "импорт *-mobile-app-header запрещён — используйте mobile shell платформы (bottom-nav / top-bar)"
+    rg -nP "${MOBILE_HEADER_IMPORT_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+
+# Локальная вёрстка <platform-bottom-nav> / <platform-bottom-sheet-stack> / <platform-top-bar>
+# в сервисных приложениях запрещена — её делает PlatformApp.render().
+BOTTOM_NAV_LOCAL_PATTERN="<platform-bottom-(nav|sheet-stack)\b|<platform-top-bar\b"
+if rg -nP "${BOTTOM_NAV_LOCAL_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
+    fail "рендер <platform-bottom-nav>/<platform-bottom-sheet-stack>/<platform-top-bar> в apps/**/ui запрещён — их монтирует PlatformApp.render() (см. frontend.mdc)"
+    rg -nP "${BOTTOM_NAV_LOCAL_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
+fi
+
+# this.openSidebar() в pages/modals/components — антипаттерн mobile shell 2026.
+# Допускается только в sidebar-компонентах core (там — desktop-канон).
+OPEN_SIDEBAR_PATTERN="this\.openSidebar\s*\("
+if rg -nP "${OPEN_SIDEBAR_PATTERN}" apps -g '*.js' --glob '!apps/*/ui/components/*sidebar*.js' >/dev/null 2>&1; then
+    fail "this.openSidebar() в apps/<svc>/ui/{pages,modals,components}/** запрещён — на мобиле используйте <platform-bottom-nav> + bottom-sheet, на десктопе sidebar и так виден"
+    rg -nP "${OPEN_SIDEBAR_PATTERN}" apps -g '*.js' --glob '!apps/*/ui/components/*sidebar*.js' >&2 || true
+fi
+
+# 21. Bottom-sheet canon: kind строго '<scope>.<entity>', регистрация через registerBottomSheetKind.
+BOTTOM_SHEET_KIND_PATTERN="static\s+bottomSheetKind\s*=\s*['\"]([^'\"]+)['\"]"
+BOTTOM_SHEET_KIND_BAD="$(rg -noP "${BOTTOM_SHEET_KIND_PATTERN}" apps core -g '*.js' \
+    | grep -vE "static\s+bottomSheetKind\s*=\s*['\"][a-z][a-z0-9_]*\.[a-z][a-z0-9_]*['\"]" || true)"
+if [ -n "$BOTTOM_SHEET_KIND_BAD" ]; then
+    fail "bottomSheetKind должен быть '<scope>.<entity>' (snake_case)"
+    echo "$BOTTOM_SHEET_KIND_BAD" >&2
+fi
+
 if [ "$ERR" -ne 0 ]; then
     exit 1
 fi

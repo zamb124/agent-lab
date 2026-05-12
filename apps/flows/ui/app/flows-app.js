@@ -55,20 +55,42 @@ import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js
 import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
+import '../components/flows-catalog-list.js';
 
 const FLOWS_ROUTES = [
-    { key: 'list',                path: '' },
-    { key: 'operator',            path: 'operator' },
-    { key: 'platform_services',   path: 'services', parent: 'list' },
-    { key: 'flow_chat',           path: ':flowId' },
-    { key: 'flow_chat_branch',     path: ':flowId/branch/:branchId' },
-    { key: 'flow_chat_session',   path: ':flowId/session/:sessionId' },
-    { key: 'flow_editor',         path: ':flowId/editor' },
-    { key: 'flow_editor_branch',   path: ':flowId/editor/:branchId' },
+    { key: 'list',                 path: '',                              titleKey: 'routes.list' },
+    { key: 'operator',             path: 'operator',                      titleKey: 'routes.operator' },
+    { key: 'platform_services',    path: 'services', parent: 'list',      titleKey: 'routes.platform_services' },
+    { key: 'flow_chat',            path: ':flowId',                       parent: 'list', titleKey: 'routes.flow_chat' },
+    { key: 'flow_chat_branch',     path: ':flowId/branch/:branchId',      parent: 'flow_chat', titleKey: 'routes.flow_chat_branch' },
+    { key: 'flow_chat_session',    path: ':flowId/session/:sessionId',    parent: 'flow_chat', titleKey: 'routes.flow_chat_session' },
+    { key: 'flow_editor',          path: ':flowId/editor',                parent: 'flow_chat', titleKey: 'routes.flow_editor' },
+    { key: 'flow_editor_branch',   path: ':flowId/editor/:branchId',      parent: 'flow_editor', titleKey: 'routes.flow_editor_branch' },
+];
+
+/**
+ * Mobile bottom-nav (mobile shell 2026): список, Оператор, Профиль.
+ * На маршруте чата или редактора капсула скрыта; из чата возврат — кнопка в шапке.
+ */
+const FLOWS_BOTTOM_NAV_ITEMS = [
+    { key: 'flows',    routeKey: 'list',     icon: 'workflow',  labelKey: 'bottom_nav.flows' },
+    { key: 'operator', routeKey: 'operator', icon: 'tasks',     labelKey: 'bottom_nav.operator' },
+    { key: 'profile',  sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
+];
+
+/** Чат/editing канвас без нижней капсулы: назад через шапку чата или выход из редактора. */
+const FLOWS_BOTTOM_NAV_HIDE_ON_ROUTES = [
+    'flow_chat',
+    'flow_chat_branch',
+    'flow_chat_session',
+    'flow_editor',
+    'flow_editor_branch',
 ];
 
 export class FlowsApp extends PlatformApp {
     static defaultI18nNamespace = 'flows';
+    static bottomNavItems = FLOWS_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = FLOWS_BOTTOM_NAV_HIDE_ON_ROUTES;
 
     static factories = [
         flowsResource,
@@ -297,13 +319,16 @@ export class FlowsApp extends PlatformApp {
         return [createRouterEffect({ baseUrl: '/flows', routes: FLOWS_ROUTES })];
     }
 
+    _flowsDesktopSidebarColumn() {
+        if (this._flowsMobile) return html``;
+        return html`<div class="sidebar"><flows-list-page></flows-list-page></div>`;
+    }
+
     renderRoute(routeKey, params) {
         switch (routeKey) {
             case 'platform_services':
                 return html`
-                    <div class="sidebar">
-                        <flows-list-page></flows-list-page>
-                    </div>
+                    ${this._flowsDesktopSidebarColumn()}
                     <div class="main">
                         <platform-island padding=${this._flowsMobile ? 'none' : 'md'} ?safe-bottom=${this._flowsMobile}>
                             <platform-services-page></platform-services-page>
@@ -317,9 +342,7 @@ export class FlowsApp extends PlatformApp {
             case 'flow_chat_branch':
             case 'flow_chat_session':
                 return html`
-                    <div class="sidebar">
-                        <flows-list-page></flows-list-page>
-                    </div>
+                    ${this._flowsDesktopSidebarColumn()}
                     <div class="main">
                         <platform-island
                             padding=${this._flowsMobile ? 'none' : 'md'}
@@ -347,15 +370,16 @@ export class FlowsApp extends PlatformApp {
             case 'list':
             default:
                 return html`
-                    <div class="sidebar">
-                        <flows-list-page></flows-list-page>
-                    </div>
+                    ${this._flowsDesktopSidebarColumn()}
                     <div class="main">
                         <platform-island
                             padding=${this._flowsMobile ? 'none' : 'md'}
                             ?safe-bottom=${this._flowsMobile}
+                            ?content-no-scroll=${this._flowsMobile}
                         >
-                            <flows-empty-state></flows-empty-state>
+                            ${this._flowsMobile
+                                ? html`<flows-catalog-list mode="page"></flows-catalog-list>`
+                                : html`<flows-empty-state></flows-empty-state>`}
                         </platform-island>
                     </div>
                     ${this._renderLara()}
@@ -364,6 +388,8 @@ export class FlowsApp extends PlatformApp {
     }
 
     _renderLara() {
+        // FAB (`show-launcher`) не включаем: запуск только из шапки редактора/чата
+        // через `dispatchEmbedChatWindowToggle('flows-lara-open')`; без узла drawer слушатель не работает.
         const companyRaw = this._laraActiveCompanySel.value;
         const companyId = typeof companyRaw === 'string' && companyRaw.trim() !== '' ? companyRaw.trim() : '';
         const voiceBase = typeof this._laraVoiceBaseUrl === 'string' ? this._laraVoiceBaseUrl.trim() : '';

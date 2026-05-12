@@ -1,7 +1,12 @@
 /**
- * PlatformSidebar - унифицированный компонент sidebar
- * Поддержка collapsed mode (только иконки) и mobile mode (slide-in overlay)
- * Transparent design - использует slots для кастомизации
+ * PlatformSidebar — унифицированный desktop-сайдбар сервиса.
+ *
+ * Поддержка collapsed mode (только иконки). Transparent design — использует slots для кастомизации.
+ *
+ * Mobile shell 2026: на ширине <= 767px хост скрыт (`display: none` в sidebar.styles.js).
+ * Первичная навигация на мобиле — <platform-bottom-nav> + <platform-top-bar>,
+ * вторичная — <platform-bottom-sheet>. `mobile-open`/`UI_SIDEBAR_*` живут только
+ * для совместимости (no-op на мобиле); код будет упразднён при следующем рефакторинге.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
@@ -56,14 +61,16 @@ export class PlatformSidebar extends PlatformElement {
         this._checkMobile();
         this._setupResizeObserver();
         document.addEventListener('keydown', this._boundKeyHandler);
-        // Подписка на глобальные команды открытия/закрытия сайдбара через bus.
+        /*
+         * Mobile shell 2026: на мобиле сайдбар скрыт CSS'ом (display:none). Подписки на
+         * UI_SIDEBAR_* оставлены для desktop-режимов (collapsed/expanded), но команды
+         * mobileOpen игнорируются при `_isMobile` — drawer'а нет.
+         */
         this.useEvent(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, () => {
-            if (this._isMobile && !this.mobileOpen) {
-                this.mobileOpen = true;
-                this._notifyMobileChange(true);
-            }
+            if (this._isMobile) return;
         });
         this.useEvent(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, () => {
+            if (this._isMobile) return;
             if (this.mobileOpen) {
                 this.mobileOpen = false;
                 this._notifyMobileChange(false);

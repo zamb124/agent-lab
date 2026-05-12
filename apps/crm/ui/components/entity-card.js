@@ -438,6 +438,20 @@ export class CRMEntityCard extends PlatformElement {
                 gap: var(--space-4);
                 min-height: 0;
             }
+            @media (max-width: 767px) {
+                :host([compact-stack]) {
+                    height: auto;
+                    min-height: 0;
+                    overflow: visible;
+                }
+                :host([compact-stack]) .scroll {
+                    flex: 0 0 auto;
+                    overflow: visible;
+                    min-height: 0;
+                    padding: var(--space-3) var(--space-2);
+                    gap: var(--space-3);
+                }
+            }
 
             .empty {
                 display: flex;

@@ -1,4 +1,8 @@
 {
+    "bottom_nav": {
+        "models": "Models",
+        "profile": "Profile"
+    },
     "sidebar": {
         "title": "Humanitec Models",
         "models": "Models"

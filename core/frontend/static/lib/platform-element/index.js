@@ -24,6 +24,9 @@
  *   this.closeModal(kind?)                             — UI_MODAL_CLOSE
  *   this.openSidebar()                                 — UI_SIDEBAR_OPEN_REQUESTED
  *   this.closeSidebar()                                — UI_SIDEBAR_CLOSE_REQUESTED
+ *   this.openBottomSheet(kind, props?)                 — UI_BOTTOM_SHEET_OPEN_REQUESTED
+ *   this.closeBottomSheet(targetOrUndefined)           — UI_BOTTOM_SHEET_CLOSE_REQUESTED
+ *   this.getCurrentRouteKey()                          — state.router.routeKey | null
  *   this.navigate(routeKey, params?, navigationOptions?) — ROUTER_NAVIGATE_REQUESTED (options.search: ?query)
  *   this.copyToClipboard(text, {success_i18n_key, error_i18n_key}) — UI_CLIPBOARD_COPY_REQUESTED
  *   this.setLocale(locale)                              — I18N_LOCALE_REQUESTED
@@ -232,6 +235,64 @@ export class PlatformElement extends LitElement {
 
     closeSidebar() {
         this.dispatch(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, null);
+    }
+
+    /**
+     * Открыть нижний экран (bottom-sheet) по зарегистрированному kind'у.
+     * Универсальный механизм вторичной мобильной навигации (mobile shell 2026).
+     *
+     * @param {string} kind — '<scope>.<name>' (snake_case), сheet должен быть зарегистрирован.
+     * @param {object|null|undefined} [props] — props компонента листа.
+     */
+    openBottomSheet(kind, props) {
+        if (typeof kind !== 'string' || kind.length === 0) {
+            throw new Error('PlatformElement.openBottomSheet: kind required (non-empty string)');
+        }
+        const sheetProps = props === undefined ? null : props;
+        this.dispatch(CoreEvents.UI_BOTTOM_SHEET_OPEN_REQUESTED, { kind, props: sheetProps });
+    }
+
+    /**
+     * Закрыть нижний экран.
+     *   - без аргумента: снять верхний из стека
+     *   - строка: закрыть верхний sheet указанного kind
+     *   - { id }: закрыть sheet по id
+     */
+    closeBottomSheet(target) {
+        let kind = null;
+        let id = null;
+        if (target === undefined || target === null) {
+            // pop topmost
+        } else if (typeof target === 'string') {
+            if (target.length === 0) {
+                throw new Error('PlatformElement.closeBottomSheet: kind must be non-empty string');
+            }
+            kind = target;
+        } else if (typeof target === 'object') {
+            if (typeof target.id !== 'string' || target.id.length === 0) {
+                throw new Error('PlatformElement.closeBottomSheet: { id } must contain non-empty string');
+            }
+            id = target.id;
+        } else {
+            throw new Error('PlatformElement.closeBottomSheet: target must be string kind, { id }, or omitted');
+        }
+        const payload = { kind };
+        if (id !== null) payload.id = id;
+        this.dispatch(CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED, payload);
+    }
+
+    /**
+     * Текущий routeKey из state.router. Возвращает null, если bus ещё не поднят
+     * или router не успел матчинг (paranoid-чтение без падений).
+     * Используется в навигационных компонентах (platform-bottom-nav, platform-top-bar).
+     *
+     * @returns {string|null}
+     */
+    getCurrentRouteKey() {
+        const state = this.bus.getState();
+        const router = state && state.router;
+        const key = router && router.routeKey;
+        return typeof key === 'string' && key.length > 0 ? key : null;
     }
 
     navigate(routeKey, params, navigationOptions) {

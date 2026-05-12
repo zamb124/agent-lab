@@ -125,7 +125,7 @@ export class CRMRelatedNeighborRows extends PlatformElement {
                         <div class="neighbor-line">
                             <button
                                 type="button"
-                                class="related-card tone-${tone}"
+                                class="related-card tone-${tone} ${this.showRemove ? 'related-card--with-remove' : ''}"
                                 @click=${() => this._onOpen(row)}
                             >
                                 <span class="related-icon">

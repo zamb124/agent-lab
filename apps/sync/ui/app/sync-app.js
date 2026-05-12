@@ -56,16 +56,32 @@ import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 const SYNC_ROUTES = [
-    { key: 'shell',           path: '' },
-    { key: 'platform_services', path: 'services', parent: 'shell' },
-    { key: 'channel',         path: 'c/:channelId' },
-    { key: 'calls_scheduled', path: 'calls/scheduled' },
-    { key: 'settings',        path: 'settings' },
-    { key: 'call_join',       path: 'join/:linkToken' },
+    { key: 'shell',             path: '',                titleKey: 'routes.shell' },
+    { key: 'platform_services', path: 'services',        parent: 'shell', titleKey: 'routes.platform_services' },
+    { key: 'channel',           path: 'c/:channelId',    parent: 'shell', titleKey: 'routes.channel' },
+    { key: 'calls_scheduled',   path: 'calls/scheduled', titleKey: 'routes.calls_scheduled' },
+    { key: 'settings',          path: 'settings',        titleKey: 'routes.settings' },
+    { key: 'call_join',         path: 'join/:linkToken', titleKey: 'routes.call_join' },
 ];
+
+/**
+ * Mobile bottom-nav (mobile shell 2026): Channels (home), Calls scheduled, Profile.
+ * Видна только на ≤767px. Скрыта на полноэкранных экранах: `call_join` (гость),
+ * `channel` (открытый чат — назад через шапку).
+ */
+const SYNC_BOTTOM_NAV_ITEMS = [
+    { key: 'channels', routeKey: 'shell',           icon: 'chat',       labelKey: 'bottom_nav.channels' },
+    { key: 'calls',    routeKey: 'calls_scheduled', icon: 'phone-call', labelKey: 'bottom_nav.calls' },
+    { key: 'profile',  sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
+];
+
+/** Канал (чат встречи / переписка): фокус на контенте, как на десктопе без второй строки вкладок. */
+const SYNC_BOTTOM_NAV_HIDE_ON_ROUTES = ['call_join', 'channel'];
 
 export class SyncApp extends PlatformApp {
     static defaultI18nNamespace = 'sync';
+    static bottomNavItems = SYNC_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = SYNC_BOTTOM_NAV_HIDE_ON_ROUTES;
 
     constructor() {
         super();

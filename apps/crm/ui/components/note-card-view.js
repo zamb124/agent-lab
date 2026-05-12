@@ -39,7 +39,7 @@
  * `apps/crm/ui/index.html` (`/static/core/assets/js/marked.min.js`).
  */
 
-import { html, css, nothing } from 'lit';
+import { html, css, nothing, render } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { selectCrmSidebarOrDefaultNamespace } from '../utils/crm-namespace-select.js';
@@ -210,6 +210,9 @@ export class CRMNoteCardView extends PlatformElement {
         aiProgressStatus: { type: String, attribute: 'ai-progress-status' },
         markdownFormatting: { type: Boolean, attribute: 'markdown-formatting' },
         markdownFormatProgress: { attribute: false },
+        /** Узел в slot actions у page-header на мобилке; тулбар портится через lit render(). */
+        mobileHeaderActionsHost: { attribute: false },
+        mobileToolbarPorted: { type: Boolean, reflect: true, attribute: 'mobile-toolbar-ported' },
         _editName: { state: true },
         _editDescription: { state: true },
         _editDate: { state: true },
@@ -1001,6 +1004,9 @@ export class CRMNoteCardView extends PlatformElement {
             .task-add-input input::placeholder { color: var(--crm-note-text-muted); }
 
             @media (max-width: 767px) {
+                :host([mobile-toolbar-ported]) .header .header-actions {
+                    display: none;
+                }
                 .sidebar > .summary-card,
                 .sidebar > .neighbors-section {
                     display: none;
@@ -1444,6 +1450,10 @@ export class CRMNoteCardView extends PlatformElement {
         this.aiProgressStatus = '';
         this.markdownFormatting = false;
         this.markdownFormatProgress = null;
+        this.mobileHeaderActionsHost = null;
+        this.mobileToolbarPorted = false;
+        this._lastMobileToolbarPortHost = null;
+        this._onMobileToolbarPortResize = () => this._syncMobileToolbarPort();
 
         this._editName = '';
         this._editDescription = '';
@@ -1667,6 +1677,8 @@ export class CRMNoteCardView extends PlatformElement {
                 this._contextSearchLoading = false;
             }
         });
+
+        window.addEventListener('resize', this._onMobileToolbarPortResize);
     }
 
     disconnectedCallback() {
@@ -1690,6 +1702,8 @@ export class CRMNoteCardView extends PlatformElement {
             clearTimeout(this._attachmentsPopoverCloseTimer);
             this._attachmentsPopoverCloseTimer = null;
         }
+        window.removeEventListener('resize', this._onMobileToolbarPortResize);
+        this._teardownMobileToolbarPortRendering();
         super.disconnectedCallback();
     }
 
@@ -3328,6 +3342,149 @@ export class CRMNoteCardView extends PlatformElement {
         this.emit('task-add', { text: value });
     }
 
+    _renderEditHeaderActionsContent() {
+        const isCreate = this.note === null;
+        const busy = isCreate ? this._entities.createInFlight : this._updateOp.busy;
+        const uploading = this._fileUpload.busy;
+        return html`
+            ${this._renderAttachmentsHeaderButton('edit')}
+            <button
+                type="button"
+                class="round-btn"
+                title=${this.t('note_edit.action_cancel')}
+                @click=${() => this._onCancelEdit()}
+                ?disabled=${busy}
+            >
+                <platform-icon name="close" size="20"></platform-icon>
+            </button>
+            <button
+                type="button"
+                class="pill-btn"
+                ?disabled=${busy || uploading || this._voiceState === 'processing'}
+                @click=${() => this._onSaveEdit()}
+            >
+                <platform-icon name=${busy ? 'loader' : 'save'} size="16"></platform-icon>
+                ${busy
+                    ? this.t('note_edit.action_saving')
+                    : isCreate
+                        ? this.t('note_edit.action_create')
+                        : this.t('note_edit.action_save')}
+            </button>
+        `;
+    }
+
+    /**
+     * @param {boolean} includeDesktopGraphToggle — на мобилке в шапке страницы граф отдельно; в карточке на узком экране не дублировать.
+     */
+    _renderViewHeaderActionsContent(includeDesktopGraphToggle) {
+        const panelGraph = this.mobileHeaderPanel === 'graph';
+        return html`
+            ${this._renderAttachmentsHeaderButton('view')}
+            ${includeDesktopGraphToggle
+                ? html`
+                    <button
+                        type="button"
+                        class=${`round-btn desktop-graph-toggle ${panelGraph ? 'active' : ''}`}
+                        title=${this.t('note_view.graph_inline_title')}
+                        aria-expanded=${String(panelGraph)}
+                        @click=${() => this.emit('overlay-panel-toggle', { panel: 'graph' })}
+                    >
+                        <platform-icon name="git-branch" size="20"></platform-icon>
+                    </button>
+                `
+                : nothing}
+            <button
+                type="button"
+                class="round-btn danger"
+                title=${this.t('note_view.action_delete')}
+                @click=${() => this.emit('delete-note')}
+            >
+                <platform-icon name="trash" size="20"></platform-icon>
+            </button>
+            ${includeDesktopGraphToggle
+                ? html`
+                    <button
+                        type="button"
+                        class="pill-btn"
+                        title=${this.t('note_view.action_edit')}
+                        @click=${() => this.emit('edit-note')}
+                    >
+                        <platform-icon name="edit" size="16"></platform-icon>
+                        ${this.t('note_view.action_edit')}
+                    </button>
+                `
+                : html`
+                    <button
+                        type="button"
+                        class="round-btn"
+                        title=${this.t('note_view.action_edit')}
+                        aria-label=${this.t('note_view.action_edit')}
+                        @click=${() => this.emit('edit-note')}
+                    >
+                        <platform-icon name="edit" size="20"></platform-icon>
+                    </button>
+                `}
+        `;
+    }
+
+    _teardownMobileToolbarPortRendering() {
+        if (this._lastMobileToolbarPortHost !== null) {
+            render(nothing, this._lastMobileToolbarPortHost);
+            this._lastMobileToolbarPortHost = null;
+        }
+    }
+
+    _syncMobileToolbarPort() {
+        const host = this.mobileHeaderActionsHost;
+        const mobile = typeof window !== 'undefined'
+            && window.matchMedia('(max-width: 767px)').matches;
+        const shouldPort = Boolean(host && mobile);
+        if (this.mobileToolbarPorted !== shouldPort) {
+            this.mobileToolbarPorted = shouldPort;
+        }
+
+        if (this._lastMobileToolbarPortHost !== null && this._lastMobileToolbarPortHost !== host) {
+            render(nothing, this._lastMobileToolbarPortHost);
+            this._lastMobileToolbarPortHost = null;
+        }
+
+        if (!host) {
+            return;
+        }
+
+        if (!mobile) {
+            render(nothing, host);
+            if (this._lastMobileToolbarPortHost === host) {
+                this._lastMobileToolbarPortHost = null;
+            }
+            return;
+        }
+
+        let tpl;
+        if (this.mode === 'edit') {
+            tpl = html`
+                <div class="header-actions">
+                    ${this._renderEditHeaderActionsContent()}
+                </div>
+            `;
+        } else {
+            if (!this.note || typeof this.note !== 'object') {
+                render(nothing, host);
+                if (this._lastMobileToolbarPortHost === host) {
+                    this._lastMobileToolbarPortHost = null;
+                }
+                return;
+            }
+            tpl = html`
+                <div class="header-actions">
+                    ${this._renderViewHeaderActionsContent(false)}
+                </div>
+            `;
+        }
+        render(tpl, host);
+        this._lastMobileToolbarPortHost = host;
+    }
+
     _renderMarkdownFormatStatusBanner() {
         if (!this.markdownFormatting) {
             return nothing;
@@ -3356,6 +3513,11 @@ export class CRMNoteCardView extends PlatformElement {
                 </div>
             </div>
         `;
+    }
+
+    updated(changed) {
+        super.updated(changed);
+        this._syncMobileToolbarPort();
     }
 
     render() {
@@ -3396,33 +3558,7 @@ export class CRMNoteCardView extends PlatformElement {
                             ${this._renderViewNoteMetaRibbon()}
                         </div>
                         <div class="header-actions">
-                            ${this._renderAttachmentsHeaderButton('view')}
-                            <button
-                                type="button"
-                                class=${`round-btn desktop-graph-toggle ${panelGraph ? 'active' : ''}`}
-                                title=${this.t('note_view.graph_inline_title')}
-                                aria-expanded=${String(panelGraph)}
-                                @click=${() => this.emit('overlay-panel-toggle', { panel: 'graph' })}
-                            >
-                                <platform-icon name="git-branch" size="20"></platform-icon>
-                            </button>
-                            <button
-                                type="button"
-                                class="round-btn danger"
-                                title=${this.t('note_view.action_delete')}
-                                @click=${() => this.emit('delete-note')}
-                            >
-                                <platform-icon name="trash" size="20"></platform-icon>
-                            </button>
-                            <button
-                                type="button"
-                                class="pill-btn"
-                                title=${this.t('note_view.action_edit')}
-                                @click=${() => this.emit('edit-note')}
-                            >
-                                <platform-icon name="edit" size="16"></platform-icon>
-                                ${this.t('note_view.action_edit')}
-                            </button>
+                            ${this._renderViewHeaderActionsContent(true)}
                         </div>
                         ${mobileFloatingPanel
                             ? html`
@@ -3672,10 +3808,6 @@ export class CRMNoteCardView extends PlatformElement {
     }
 
     _renderEdit() {
-        const isCreate = this.note === null;
-        const busy = isCreate ? this._entities.createInFlight : this._updateOp.busy;
-        const uploading = this._fileUpload.busy;
-
         return html`
             <div class="layout edit-mode">
                 <section class="main">
@@ -3691,29 +3823,7 @@ export class CRMNoteCardView extends PlatformElement {
                             />
                         </div>
                         <div class="header-actions">
-                            ${this._renderAttachmentsHeaderButton('edit')}
-                            <button
-                                type="button"
-                                class="round-btn"
-                                title=${this.t('note_edit.action_cancel')}
-                                @click=${() => this._onCancelEdit()}
-                                ?disabled=${busy}
-                            >
-                                <platform-icon name="close" size="20"></platform-icon>
-                            </button>
-                            <button
-                                type="button"
-                                class="pill-btn"
-                                ?disabled=${busy || uploading || this._voiceState === 'processing'}
-                                @click=${() => this._onSaveEdit()}
-                            >
-                                <platform-icon name=${busy ? 'loader' : 'save'} size="16"></platform-icon>
-                                ${busy
-                                    ? this.t('note_edit.action_saving')
-                                    : isCreate
-                                        ? this.t('note_edit.action_create')
-                                        : this.t('note_edit.action_save')}
-                            </button>
+                            ${this._renderEditHeaderActionsContent()}
                         </div>
                     </header>
 

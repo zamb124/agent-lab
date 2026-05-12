@@ -5,6 +5,13 @@ import '@platform/lib/components/glass-card.js';
 import '@platform/lib/components/platform-button.js';
 import '../components/sync-chat-header.js';
 
+/**
+ * sync-calls-scheduled-page — список запланированных встреч.
+ *
+ * `sync/call_links_scheduled` — WS createAsyncOp (см. calls.resource.js), поэтому используем
+ * `useOp().run()` и читаем `lastResult` напрямую. На `connectedCallback` и на каждый
+ * `WS_CONNECTED` дёргаем повторно (как `autoload` ресурса).
+ */
 export class SyncCallsScheduledPage extends PlatformPage {
     static styles = css`
         :host {
@@ -40,7 +47,36 @@ export class SyncCallsScheduledPage extends PlatformPage {
 
     constructor() {
         super();
-        this._links = this.useResource('sync/call_links_scheduled', { autoload: true });
+        this._linksOp = this.useOp('sync/call_links_scheduled');
+        this.useEvent('sync/call_links_scheduled/succeeded', () => this.requestUpdate());
+        this.useEvent('sync/call_link_create/succeeded', () => { this._linksOp.run(this._defaultRangePayload()); });
+        this.useEvent('sync/call_link_update/succeeded', () => { this._linksOp.run(this._defaultRangePayload()); });
+        this.useEvent('sync/call_link_remove/succeeded', () => { this._linksOp.run(this._defaultRangePayload()); });
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._linksOp.run(this._defaultRangePayload());
+    }
+
+    /**
+     * CallsLinksListPayload требует обязательные start_at/end_at.
+     * Окно: −30 дней .. +365 дней от now (UTC ISO). Этого хватает для отображения
+     * прошедших и грядущих встреч на одном экране. При появлении фильтров (например,
+     * «месяц») этот метод станет параметризованным.
+     */
+    _defaultRangePayload() {
+        const now = Date.now();
+        const start_at = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const end_at = new Date(now + 365 * 24 * 60 * 60 * 1000).toISOString();
+        return { start_at, end_at, limit: 200, offset: 0 };
+    }
+
+    _resolveItems() {
+        const result = this._linksOp.lastResult;
+        if (Array.isArray(result)) return result;
+        if (result && Array.isArray(result.items)) return result.items;
+        return [];
     }
 
     _onCreate() {
@@ -51,7 +87,18 @@ export class SyncCallsScheduledPage extends PlatformPage {
         this.openModal('sync.call_link_edit', { linkToken });
     }
 
+    _formatScheduledAt(link) {
+        const raw = typeof link.scheduled_start_at === 'string'
+            ? link.scheduled_start_at
+            : (typeof link.scheduled_at === 'string' ? link.scheduled_at : '');
+        if (raw === '') return '';
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString();
+    }
+
     render() {
+        const items = this._resolveItems();
         return html`
             <sync-chat-header
                 header-mode="list"
@@ -62,14 +109,14 @@ export class SyncCallsScheduledPage extends PlatformPage {
                 <div class="actions-row">
                     <platform-button variant="primary" @click=${this._onCreate}>${this.t('calls_scheduled.action_create')}</platform-button>
                 </div>
-                ${this._links.items.length === 0 ? html`
+                ${items.length === 0 ? html`
                     <p style="color: var(--text-secondary);">${this.t('calls_scheduled.empty')}</p>
                 ` : html`
                     <ul>
-                        ${this._links.items.map((link) => html`
+                        ${items.map((link) => html`
                             <li class="item" @click=${() => this._onEdit(link.link_token)}>
                                 <span>${resolveNonEmptyString(link.title, link.link_token)}</span>
-                                <span class="meta">${link.scheduled_at ? new Date(link.scheduled_at).toLocaleString() : ''}</span>
+                                <span class="meta">${this._formatScheduledAt(link)}</span>
                             </li>
                         `)}
                     </ul>

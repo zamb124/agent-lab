@@ -22,6 +22,7 @@ import { teamSlice } from './team.js';
 import { calendarSlice } from './calendar.js';
 import { notificationsSlice } from './notifications.js';
 import { uiSlice } from './ui.js';
+import { bottomSheetsSlice } from './bottom_sheets.js';
 
 export const coreSlices = Object.freeze({
     auth:          { reducer: authReducer, initial: initialAuthState },
@@ -29,6 +30,7 @@ export const coreSlices = Object.freeze({
     i18n:          { reducer: i18nReducer, initial: initialI18nState },
     notify:        { reducer: notifyReducer, initial: initialNotifyState },
     modals:        { reducer: modalsReducer, initial: initialModalsState },
+    bottomSheets:  bottomSheetsSlice,
     network:       { reducer: networkReducer, initial: initialNetworkState },
     router:        { reducer: routerReducer, initial: initialRouterState },
     pwa:           { reducer: pwaReducer, initial: initialPwaState },

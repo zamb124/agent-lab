@@ -30,6 +30,7 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/note-card-view.js';
+import { crmNotePageMobileToolbarHostStyles } from '../styles/crm-note-page-mobile-toolbar-host.styles.js';
 
 const ACTIVE_ANALYZE_TASK_STATUSES = new Set(['pending', 'running']);
 const TASK_RELATIONSHIP_TYPE = 'related_to';
@@ -50,6 +51,7 @@ export class CRMNotePage extends CRMNamespacePage {
 
     static styles = [
         CRMNamespacePage.styles,
+        crmNotePageMobileToolbarHostStyles,
         css`
             :host {
                 display: flex;
@@ -171,6 +173,7 @@ export class CRMNotePage extends CRMNamespacePage {
         this._draftVersionInitialized = false;
         this._lastDraftVersion = null;
         this._lastAutoOpenedDraftVersion = null;
+        this._noteToolbarHost = null;
     }
 
     connectedCallback() {
@@ -284,6 +287,13 @@ export class CRMNotePage extends CRMNamespacePage {
 
     updated(changed) {
         super.updated(changed);
+        const hostCandidate = this.renderRoot?.querySelector('.crm-note-page-card-toolbar-host');
+        const nextToolbarHost = hostCandidate instanceof HTMLElement ? hostCandidate : null;
+        if (nextToolbarHost !== this._noteToolbarHost) {
+            this._noteToolbarHost = nextToolbarHost;
+            this.requestUpdate();
+        }
+
         const note = this._resolveNote();
         if (note === null) {
             return;
@@ -356,10 +366,7 @@ export class CRMNotePage extends CRMNamespacePage {
             }
             this._markdownFormatting = false;
             this._markdownFormatProgress = null;
-            this.dispatch(CoreEvents.UI_TOAST_SHOW, {
-                type: 'warning',
-                i18n_key: 'crm:toast.note.markdown_format_timeout',
-            });
+            this.toast('toast.note.markdown_format_timeout', { type: 'warning' });
         }, NOTE_MARKDOWN_FORMAT_UI_TIMEOUT_MS);
     }
 
@@ -678,38 +685,45 @@ export class CRMNotePage extends CRMNamespacePage {
     _renderMobilePageHeader(showPanelActions) {
         return html`
             <div class="note-mobile-header-wrap">
-                <page-header title=${this.t('daily_notes_page.section_title')} subtitle="">
-                    ${showPanelActions ? html`
-                        <div slot="actions" class="note-mobile-header-actions">
-                            <button
-                                type="button"
-                                class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'summary' ? 'active' : ''}`}
-                                title=${this.t('note_view.summary_title')}
-                                aria-expanded=${String(this._mobileHeaderPanel === 'summary')}
-                                @click=${() => this._toggleMobileHeaderPanel('summary')}
-                            >
-                                <platform-icon name="ai" size="18" colored></platform-icon>
-                            </button>
-                            <button
-                                type="button"
-                                class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'neighbors' ? 'active' : ''}`}
-                                title=${this.t('entity_card.related_objects_section')}
-                                aria-expanded=${String(this._mobileHeaderPanel === 'neighbors')}
-                                @click=${() => this._toggleMobileHeaderPanel('neighbors')}
-                            >
-                                <platform-icon name="folder" size="18"></platform-icon>
-                            </button>
-                            <button
-                                type="button"
-                                class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'graph' ? 'active' : ''}`}
-                                title=${this.t('note_view.graph_inline_title')}
-                                aria-expanded=${String(this._mobileHeaderPanel === 'graph')}
-                                @click=${() => this._toggleMobileHeaderPanel('graph')}
-                            >
-                                <platform-icon name="git-branch" size="18"></platform-icon>
-                            </button>
-                        </div>
-                    ` : nothing}
+                <page-header
+                    title=${this.t('daily_notes_page.section_title')}
+                    subtitle=""
+                    actions-overflow="visible"
+                >
+                    <div slot="actions" class="crm-note-page-header-actions-row">
+                        ${showPanelActions ? html`
+                            <div class="note-mobile-header-actions">
+                                <button
+                                    type="button"
+                                    class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'summary' ? 'active' : ''}`}
+                                    title=${this.t('note_view.summary_title')}
+                                    aria-expanded=${String(this._mobileHeaderPanel === 'summary')}
+                                    @click=${() => this._toggleMobileHeaderPanel('summary')}
+                                >
+                                    <platform-icon name="ai" size="18" colored></platform-icon>
+                                </button>
+                                <button
+                                    type="button"
+                                    class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'neighbors' ? 'active' : ''}`}
+                                    title=${this.t('entity_card.related_objects_section')}
+                                    aria-expanded=${String(this._mobileHeaderPanel === 'neighbors')}
+                                    @click=${() => this._toggleMobileHeaderPanel('neighbors')}
+                                >
+                                    <platform-icon name="folder" size="18"></platform-icon>
+                                </button>
+                                <button
+                                    type="button"
+                                    class=${`note-mobile-header-btn ${this._mobileHeaderPanel === 'graph' ? 'active' : ''}`}
+                                    title=${this.t('note_view.graph_inline_title')}
+                                    aria-expanded=${String(this._mobileHeaderPanel === 'graph')}
+                                    @click=${() => this._toggleMobileHeaderPanel('graph')}
+                                >
+                                    <platform-icon name="git-branch" size="18"></platform-icon>
+                                </button>
+                            </div>
+                        ` : nothing}
+                        <div class="crm-note-page-card-toolbar-host"></div>
+                    </div>
                 </page-header>
             </div>
         `;
@@ -744,6 +758,7 @@ export class CRMNotePage extends CRMNamespacePage {
                         .note=${null}
                         mode="edit"
                         defaultNamespace=${this._currentNamespace()}
+                        .mobileHeaderActionsHost=${this._noteToolbarHost}
                         @cancel=${this._onEditCancel}
                         @created=${this._onEditCreated}
                     ></crm-note-card-view>
@@ -794,6 +809,7 @@ export class CRMNotePage extends CRMNamespacePage {
                         .note=${note}
                         .card=${this._card}
                         mode="edit"
+                        .mobileHeaderActionsHost=${this._noteToolbarHost}
                         @cancel=${this._onEditCancel}
                         @saved=${this._onEditSaved}
                     ></crm-note-card-view>
@@ -832,6 +848,7 @@ export class CRMNotePage extends CRMNamespacePage {
                     .markdownFormatting=${this._markdownFormatting}
                     .markdownFormatProgress=${this._markdownFormatProgress}
                     .mobileHeaderPanel=${this._mobileHeaderPanel}
+                    .mobileHeaderActionsHost=${this._noteToolbarHost}
                     mode="view"
                     @entity-open=${this._onEntityOpen}
                     @delete-note=${this._onDeleteNote}

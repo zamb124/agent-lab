@@ -96,6 +96,7 @@ export const relatedEntityCardSharedStyles = css`
         box-sizing: border-box;
     }
     .neighbor-line {
+        position: relative;
         display: flex;
         flex-direction: row;
         align-items: flex-start;
@@ -109,9 +110,16 @@ export const relatedEntityCardSharedStyles = css`
         flex: 1 1 0;
         min-width: 0;
     }
+    .neighbor-line .related-card.related-card--with-remove {
+        padding-right: 44px;
+    }
     .neighbor-remove {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 1;
         flex-shrink: 0;
-        margin-top: 10px;
+        margin-top: 0;
         width: 36px;
         height: 36px;
         display: inline-flex;

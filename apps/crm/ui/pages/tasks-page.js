@@ -18,6 +18,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/layout/page-header.js';
+import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
 
 const TASK_DND_MIME = 'application/x-crm-task-id';
 
@@ -557,7 +558,11 @@ export class CRMTasksPage extends CRMNamespacePage {
                 .board .column.mobile-active { display: flex; }
                 .board .column.mobile-active .column-header { display: none; }
 
-                .task-card { padding: 14px; border-radius: 12px; }
+                .board .column.mobile-active .column-body {
+                    padding: var(--space-2) 0;
+                }
+
+                .task-card { padding: 12px; border-radius: 12px; }
                 .task-icon { width: 32px; height: 32px; }
                 .task-name { font-size: 14px; }
             }
@@ -1134,6 +1139,15 @@ export class CRMTasksPage extends CRMNamespacePage {
                         </label>
                     </div>
                     <div slot="actions">
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn"
+                            @click=${openCrmLaraAssistant}
+                            title=${this.t('lara.assistant')}
+                            aria-label=${this.t('lara.assistant')}
+                        >
+                            <platform-icon name="sparkle" size="18"></platform-icon>
+                        </button>
                         <button
                             type="button"
                             class="mobile-header-icon-btn"

@@ -30,19 +30,44 @@ export class SyncCallLinkEditModal extends PlatformFormModal {
         this._title = '';
         this._scheduledAt = '';
         this._hydrated = false;
-        this._links = this.useResource('sync/call_links_scheduled');
+        this._linksOp = this.useOp('sync/call_links_scheduled');
         this._linkUpdate = this.useOp('sync/call_link_update');
         this._linkRemove = this.useOp('sync/call_link_remove');
+        this.useEvent('sync/call_links_scheduled/succeeded', () => this.requestUpdate());
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        const now = Date.now();
+        this._linksOp.run({
+            start_at: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString(),
+            end_at: new Date(now + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            limit: 200,
+            offset: 0,
+        });
+    }
+
+    _resolveItems() {
+        const result = this._linksOp.lastResult;
+        if (Array.isArray(result)) return result;
+        if (result && Array.isArray(result.items)) return result.items;
+        return [];
     }
 
     updated(changed) {
         super.updated?.(changed);
         if (!this._hydrated && this.linkToken) {
-            const item = this._links.byId[this.linkToken];
+            const item = this._resolveItems().find((x) => x && x.link_token === this.linkToken);
             if (item) {
                 this._title = typeof item.title === 'string' ? item.title : '';
-                if (item.scheduled_at) {
-                    this._scheduledAt = new Date(item.scheduled_at).toISOString().slice(0, 16);
+                const raw = typeof item.scheduled_start_at === 'string'
+                    ? item.scheduled_start_at
+                    : (typeof item.scheduled_at === 'string' ? item.scheduled_at : '');
+                if (raw) {
+                    const d = new Date(raw);
+                    if (!Number.isNaN(d.getTime())) {
+                        this._scheduledAt = d.toISOString().slice(0, 16);
+                    }
                 }
                 this._hydrated = true;
             }

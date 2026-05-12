@@ -19,6 +19,7 @@ import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/platform-user-info-modal.js';
 import '@platform/lib/components/platform-audio-message-player.js';
 import '@platform/lib/components/auth-modal.js';
+import '@platform/lib/components/company-modal.js';
 
 import './app/sync-app.js';
 

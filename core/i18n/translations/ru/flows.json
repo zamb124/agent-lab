@@ -9,6 +9,11 @@
     "flow_editor": "Редактор",
     "flow_editor_branch": "Редактор"
   },
+  "bottom_nav": {
+    "flows": "Flows",
+    "operator": "Оператор",
+    "profile": "Профиль"
+  },
   "flow_create_modal": {
     "title": "Создать flow",
     "mode_empty_title": "Пустой flow",
@@ -316,6 +321,7 @@
   },
   "platform_chat": {
     "title_menu": "Открыть меню",
+    "title_back_to_flows_list": "К списку flows",
     "title_lara": "Открыть Lara",
     "title_sessions": "Сессии",
     "title_edit_agent": "Редактировать агента",

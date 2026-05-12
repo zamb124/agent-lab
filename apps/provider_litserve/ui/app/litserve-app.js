@@ -20,12 +20,20 @@ import '../components/litserve-sidebar.js';
 import '../pages/litserve-models-page.js';
 
 const LITSERVE_ROUTES = [
-    { key: 'models', path: '' },
-    { key: 'platform_services', path: 'services', parent: 'models' },
+    { key: 'models', path: '', titleKey: 'routes.models' },
+    { key: 'platform_services', path: 'services', parent: 'models', titleKey: 'routes.platform_services' },
+];
+
+/** Mobile shell: реестр моделей + профиль/переключатель сервисов (как в RAG/Sync). */
+const LITSERVE_BOTTOM_NAV_ITEMS = [
+    { key: 'models', routeKey: 'models', icon: 'database', labelKey: 'bottom_nav.models' },
+    { key: 'profile', sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
 export class LitserveApp extends PlatformApp {
     static defaultI18nNamespace = 'litserve';
+    static bottomNavItems = LITSERVE_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = [];
 
     static factories = [
         litserveModelsResource,

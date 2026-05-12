@@ -25,6 +25,33 @@
     --platform-mobile-sticky-header-padding-right: max(var(--space-3), env(safe-area-inset-right, 0px));
     --platform-mobile-sticky-header-padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));
     --platform-mobile-sticky-header-row-min-height: 44px;
+
+    /* Mobile shell 2026 — platform-bottom-nav (Liquid Glass капсула, <= 767px) */
+    --platform-bottom-nav-height: 64px;
+    --platform-bottom-nav-inset: var(--space-4);
+    --platform-bottom-nav-radius: var(--radius-2xl);
+    --platform-bottom-nav-z-index: 25;
+    --platform-bottom-nav-tap-target: 48px;
+
+    /* Mobile shell 2026 — platform-top-bar (Liquid Glass липкая полоса сверху) */
+    --platform-top-bar-height: 52px;
+    --platform-top-bar-z-index: 24;
+
+    /* Mobile shell 2026 — platform-bottom-sheet (выше bottom-nav, ниже modal-portal) */
+    --platform-bottom-sheet-radius: var(--radius-3xl);
+    --platform-bottom-sheet-z-index: 1010;
+    --platform-bottom-sheet-scrim: rgba(0, 0, 0, 0.45);
+
+    /*
+     * Нижний padding контента на мобиле, чтобы плавающая капсула bottom-nav
+     * не перекрывала последние элементы (списки, FAB).
+     * Сервисные страницы навешивают это значение на корневой контейнер.
+     */
+    --app-content-bottom-padding-mobile: calc(
+        var(--platform-bottom-nav-height)
+        + var(--platform-bottom-nav-inset) * 2
+        + var(--platform-safe-bottom)
+    );
     
     /* ========== ЦВЕТОВАЯ ПАЛИТРА ========== */
     
@@ -749,7 +776,10 @@
     --platform-date-picker-day-hover-border: var(--border-default);
     --platform-date-picker-range-bg: var(--accent-subtle);
     --platform-date-picker-range-text: var(--accent-secondary);
-    
+
+    /* Mobile shell 2026 — scrim для bottom-sheet (светлая тема) */
+    --platform-bottom-sheet-scrim: rgba(15, 23, 42, 0.32);
+
     /* Акценты для светлой темы */
     --accent: #8794F0;
     --accent-hover: #99A6F9;

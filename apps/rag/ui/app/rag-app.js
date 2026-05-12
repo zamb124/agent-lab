@@ -39,15 +39,27 @@ import '../pages/settings-page.js';
 import '../modals/namespace-create-modal.js';
 
 const RAG_ROUTES = [
-    { key: 'namespaces',       path: '' },
-    { key: 'platform_services', path: 'services', parent: 'namespaces' },
-    { key: 'namespace_detail', path: 'namespaces/:namespaceId', parent: 'namespaces' },
-    { key: 'search',           path: 'search' },
-    { key: 'settings',         path: 'settings' },
+    { key: 'namespaces',        path: '',                              titleKey: 'routes.namespaces' },
+    { key: 'platform_services', path: 'services',                      parent: 'namespaces',  titleKey: 'routes.platform_services' },
+    { key: 'namespace_detail',  path: 'namespaces/:namespaceId',       parent: 'namespaces',  titleKey: 'routes.namespace_detail' },
+    { key: 'search',            path: 'search',                                                titleKey: 'routes.search' },
+    { key: 'settings',          path: 'settings',                                              titleKey: 'routes.settings' },
+];
+
+/**
+ * Mobile bottom-nav (mobile shell 2026): Knowledge bases, Search, Settings, Profile.
+ */
+const RAG_BOTTOM_NAV_ITEMS = [
+    { key: 'namespaces', routeKey: 'namespaces', icon: 'box',      labelKey: 'bottom_nav.namespaces' },
+    { key: 'search',     routeKey: 'search',     icon: 'search',   labelKey: 'bottom_nav.search' },
+    { key: 'settings',   routeKey: 'settings',   icon: 'settings', labelKey: 'bottom_nav.settings' },
+    { key: 'profile',    sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
 ];
 
 export class RagApp extends PlatformApp {
     static defaultI18nNamespace = 'rag';
+    static bottomNavItems = RAG_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = [];
 
     constructor() {
         super();

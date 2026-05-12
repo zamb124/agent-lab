@@ -5,9 +5,9 @@
  *   - чтение: this.select(...) по auth/companies/theme/i18n
  *   - действия: this.dispatch(...), this.switchCompany(...), this.setTheme(...),
  *     this.setLocale(...), this.openModal(...)
- *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → подписка на
- *     AUTH_COMPANY_SWITCHED → редирект на subdomain выбранной компании.
- *     Cross-tab синхронизация через localStorage 'platform:company-switch'.
+ *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → AUTH_COMPANY_SWITCHED
+ *     (auth-company-navigation.effect: редирект на subdomain).
+ *     Cross-tab: localStorage 'platform:company-switch' + storage listener.
  *   - меню: пункт Apps (модалка `platform.services`), затем Профиль
  *     (открывает `platform.user_info` модалку с формой профиля),
  *     Компания (если есть хотя бы одна в списке; «Создать компанию» — только
@@ -65,7 +65,6 @@ export class PlatformUser extends PlatformElement {
         this._localeSelect = this.select((s) => s.i18n.locale);
 
         this._companiesLoaded = false;
-        this._pendingSwitchCompanyId = null;
 
         this._onDocumentClick = this._onDocumentClick.bind(this);
         this._onStorage = this._onStorage.bind(this);
@@ -76,7 +75,6 @@ export class PlatformUser extends PlatformElement {
         super.connectedCallback();
         document.addEventListener('click', this._onDocumentClick);
         window.addEventListener('storage', this._onStorage);
-        this.useEvent(CoreEvents.AUTH_COMPANY_SWITCHED, (event) => this._onCompanySwitched(event));
     }
 
     disconnectedCallback() {
@@ -153,30 +151,7 @@ export class PlatformUser extends PlatformElement {
             this._companySelectorOpen = false;
             return;
         }
-        this._pendingSwitchCompanyId = companyId;
         this.switchCompany(companyId);
-    }
-
-    _onCompanySwitched(event) {
-        const companyId = event.payload && event.payload.company_id;
-        if (!companyId) return;
-        if (this._pendingSwitchCompanyId !== companyId) {
-            return;
-        }
-        this._pendingSwitchCompanyId = null;
-        const company = this._companiesSelect.value.find((c) => c.company_id === companyId);
-        if (!company || !company.subdomain) {
-            this.toast('company.subdomain_missing', { type: 'error' });
-            return;
-        }
-        this.toast('company.switched', { type: 'success' });
-        this._broadcastCompanySwitch(company);
-        this._redirectToCompany(company);
-    }
-
-    _broadcastCompanySwitch(company) {
-        const payload = `${Date.now()}|${company.company_id}|${company.subdomain}`;
-        window.localStorage.setItem(COMPANY_SWITCH_STORAGE_KEY, payload);
     }
 
     _onStorage(event) {
@@ -186,10 +161,6 @@ export class PlatformUser extends PlatformElement {
         const targetSubdomain = parts[2];
         if (!targetSubdomain) return;
         this._redirectToSubdomain(targetSubdomain);
-    }
-
-    _redirectToCompany(company) {
-        this._redirectToSubdomain(company.subdomain);
     }
 
     _redirectToSubdomain(subdomain) {

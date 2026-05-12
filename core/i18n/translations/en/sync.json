@@ -7,6 +7,11 @@
         "settings": "Settings",
         "call_join": "Join link"
     },
+    "bottom_nav": {
+        "channels": "Channels",
+        "calls": "Meetings",
+        "profile": "Profile"
+    },
     "close": "Close",
     "call_aggregate_empty_body": "Nothing to summarize: this call lane has no text messages or finished audio/video transcripts. Room audio is not posted to the chat — send messages in the channel, start a call recording, or enable voice transcription in channel settings.",
     "recording_error_default": "Recording error",
@@ -51,6 +56,7 @@
         "namespace_label": "Namespace",
         "all_namespaces": "All",
         "edit_namespace_tooltip": "Sync settings for the namespace",
+        "namespace_meeting_btn": "Create meeting",
         "time_yesterday": "Yesterday",
         "section_team": "Team",
         "section_spaces": "Spaces",
@@ -547,6 +553,7 @@
     },
     "chat_header": {
         "menu": "Menu",
+        "back": "Back",
         "subtitle_typing": "{names} typing…",
         "subtitle_online": "online",
         "subtitle_last_seen": "last seen recently",

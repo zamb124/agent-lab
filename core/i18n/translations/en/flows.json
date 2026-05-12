@@ -9,6 +9,11 @@
     "flow_editor": "Editor",
     "flow_editor_branch": "Editor"
   },
+  "bottom_nav": {
+    "flows": "Flows",
+    "operator": "Operator",
+    "profile": "Profile"
+  },
   "flow_create_modal": {
     "title": "Create flow",
     "mode_empty_title": "Empty flow",
@@ -316,6 +321,7 @@
   },
   "platform_chat": {
     "title_menu": "Open menu",
+    "title_back_to_flows_list": "Back to flows list",
     "title_lara": "Open Lara",
     "title_sessions": "Sessions",
     "title_edit_agent": "Edit agent",

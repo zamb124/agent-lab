@@ -124,6 +124,82 @@ registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-
 - `modal.open = true` / `this.open = false`.
 - Слушатели `CustomEvent('open-modal' / 'close')` — только `dispatch`/helper.
 
+## Bottom-sheet canon (mobile shell 2026)
+
+Параллельный modal-canon канал для вторичной мобильной сложности (фильтры, namespace picker, профиль/настройки, расширенные действия).
+
+- База: `PlatformBottomSheet` (`@platform/lib/components/layout/platform-bottom-sheet.js`).
+- Реестр: `registerBottomSheetKind(kind, tagName)` (`@platform/lib/utils/bottom-sheet-registry.js`).
+- Стек: `state.bottomSheets.stack` (`core/frontend/static/lib/events/reducers/bottom_sheets.js`).
+- Рендер: `<platform-bottom-sheet-stack>`, единственный экземпляр монтируется `PlatformApp.render()`.
+- Открытие/закрытие: `this.openBottomSheet('<kind>', props?)` / `this.closeBottomSheet(target?)`. События — `UI_BOTTOM_SHEET_OPEN_REQUESTED` / `UI_BOTTOM_SHEET_CLOSE_REQUESTED` / `UI_BOTTOM_SHEET_OPENED` / `UI_BOTTOM_SHEET_CLOSED` (`core/frontend/static/lib/events/contract.js`).
+
+### Регистрация
+
+```javascript
+import { PlatformBottomSheet } from '@platform/lib/components/layout/platform-bottom-sheet.js';
+import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
+
+export class CrmWorkspacePickerSheet extends PlatformBottomSheet {
+    static bottomSheetKind = 'crm.workspace_picker';
+    static i18nNamespace = 'crm';
+    renderBody() { /* ... */ }
+}
+customElements.define('crm-workspace-picker-sheet', CrmWorkspacePickerSheet);
+registerBottomSheetKind(CrmWorkspacePickerSheet.bottomSheetKind, 'crm-workspace-picker-sheet');
+```
+
+### Опции `PlatformBottomSheet` (наследуются как `static properties`)
+
+| Свойство | Значение |
+|---|---|
+| `snap` | `'half'` (default) или `'full'` (без верхнего отступа). Управляет высотой панели. |
+| `dismissible` | `true` (default) — закрытие по scrim/Escape/swipe-down. `false` для критичных подтверждений. |
+| `heading` | Заголовок в шапке шита. Ставится через `this.heading = this.t('...')` в `connectedCallback`. |
+| `open` | Флаг видимости. Управляется stack'ом, **не ставить напрямую**. |
+
+### Универсальный sheet платформы
+
+`platform-service-switcher-sheet` (`kind: 'platform.service_switcher'`, `@platform/lib/components/sheets/platform-service-switcher-sheet.js`) — единый sheet профиля/меню:
+
+- карточка пользователя (имя как в `platform-user`: `user.name` / `raw.name`, затем email / ФИО из `raw`; строка компании + раскрывающийся список смены компании и «Создать компанию» для owner — те же контракты, что `AUTH_COMPANY_SWITCHED` + subdomain redirect; при первом открытии диспатчится `companies/list/load_requested`);
+- launcher сервисов (`platform-services-launcher`);
+- консольные ссылки (Console, Team, Billing, API keys);
+- `platform-notification-manager`;
+- переключение темы;
+- кнопка logout.
+
+Открытие — через `bottom-nav` итем `{ sheet: 'platform.service_switcher' }`.
+
+### Запреты bottom sheets
+
+- `bottomSheetKind` без формата `<scope>.<entity>` → `registerBottomSheetKind` бросит ошибку.
+- Прямое `document.createElement('*-sheet')` / `document.body.appendChild(...)` — запрещено.
+- `this.open = true` снаружи stack'а — запрещено.
+- Параллельные локальные «нижние модалки» в `apps/<svc>/ui/**` через `PlatformElement` + `position: fixed; bottom: 0` — запрещено.
+- Дублирование `<platform-bottom-sheet-stack>` в сервисных приложениях — запрещено.
+
+## Bottom navigation (mobile shell 2026)
+
+`<platform-bottom-nav>` (`@platform/lib/components/layout/platform-bottom-nav.js`) — плавающая Liquid Glass капсула первичной навигации:
+
+- Видна только на `≤767px` (CSS-медиа), на десктопе автоматически скрыта.
+- Декларативно настраивается через `static bottomNavItems` / `static bottomNavHideOnRoutes` на наследнике `PlatformApp`.
+- Итемы — либо `routeKey` (тап → `ROUTER_NAVIGATE_REQUESTED`), либо `sheet` (тап → `UI_BOTTOM_SHEET_OPEN_REQUESTED`). Опционально `badge` (число / строка).
+- Активный таб подсвечивается по `state.router.routeKey` с учётом иерархии `parent` маршрутов.
+- Tap target ≥ `--platform-bottom-nav-tap-target` (по умолчанию 48px) — WCAG 2.2 2.5.5.
+
+Все размеры/радиус/z-index — токены `tokens.css` (`--platform-bottom-nav-*`).
+
+## Top bar (mobile shell 2026)
+
+`<platform-top-bar>` (`@platform/lib/components/layout/platform-top-bar.js`) — опциональный мобильный sticky-header:
+
+- Slots `left` / `center` / `right`; по умолчанию слева — back-кнопка (если у текущего route есть `parent`), по центру — `this.t(routes[routeKey].titleKey)`.
+- Поддерживает edge-swipe right для back (gesture-based navigation).
+- Включается на уровне приложения через `static topBarEnabled = true`. По умолчанию **отключён**, чтобы не конфликтовать с сервисными mobile-headers до полной миграции.
+- `static topBarHideOnRoutes = [...]` — список routeKey, где top-bar скрыт (например fullscreen-маршруты).
+
 ## `<platform-user-chip>` и `platform.user_info`
 
 Любое отображение пользователя по `user_id` в UI — **только** через core-компоненты `<platform-user-chip>` и core-модалку `platform.user_info` (`<platform-user-info-modal>`). Сырая строка `user_id` (или его обрезанный префикс) в pages/modals/components/таблицах/title запрещена.
@@ -219,7 +295,7 @@ registerModalKind(FrontendCreateApiKeyModal.modalKind, 'frontend-create-api-key-
 
 - `setPlatformNamespaceSelection(companyId, name)` диспатчит `CoreEvents.UI_NAMESPACE_SELECT_REQUESTED`. `ui.effect.js` персистит выбор в `localStorage` и эмитит `UI_NAMESPACE_CHANGED` + `UI_DOCUMENTS_RELOAD_REQUESTED`.
 - Подписка — `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)`, не `window.addEventListener('office-documents-list-reload')`.
-- Селектор в шапке `platform-service-sidebar` (CRM / Office / Sync) — только `<platform-sidebar-namespace-select>`: `core/frontend/static/lib/components/layout/platform-sidebar-namespace-select.js`. Внутри уже `platform-field` `type="enum"`, `mode="edit"`, `pill-density="compact"`, плюс опциональные кнопки (`show-edit`, `show-add`, `edit-icon`). События: `change` (как у `platform-field`), `edit-request`, `add-request`. Подписи и `config`/`value`/`disabled` передаёт родитель; модалки и `setPlatformNamespaceSelection` остаются в сервисе.
+- Селектор в шапке `platform-service-sidebar` (CRM / Office / Sync) — только `<platform-sidebar-namespace-select>`: `core/frontend/static/lib/components/layout/platform-sidebar-namespace-select.js`. Внутри уже `platform-field` `type="enum"`, `mode="edit"`, `pill-density="compact"`, опциональный слот `name="trailing"` (между полем и кнопками), плюс опциональные кнопки (`show-edit`, `show-add`, `edit-icon`). Класс кнопки в слоте — `platform-namespace-trailing-action-btn` (стили `::slotted` в компоненте). События: `change` (как у `platform-field`), `edit-request`, `add-request`. Подписи и `config`/`value`/`disabled` передаёт родитель; модалки и `setPlatformNamespaceSelection` остаются в сервисе.
 - Темизация кнопок — CSS-переменные на предке (часто `platform-service-sidebar` в сервисе): `--platform-namespace-add-background`, `--platform-namespace-add-color`, `--platform-namespace-edit-stroke`, `--platform-namespace-edit-fg`, `--platform-namespace-edit-hover-bg`, `--platform-namespace-edit-hover-fg`, `--platform-namespace-edit-hover-stroke` (дефолты в `:host` компонента).
 - Не оборачивать enum в отдельный блок с фоном и бордером вокруг поля: один визуальный контур — `field-pill` у `platform-field`. Скрытие при `collapsed`: правило на хосте, например `platform-service-sidebar[collapsed] platform-sidebar-namespace-select { display: none }`.
 

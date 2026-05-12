@@ -1,60 +1,21 @@
 /**
- * FlowsSidebar — список flow'ов в боковой панели.
- *
- * Источник правды — `useResource('flows/flows', { autoload: true })`.
- * Открытие модалок — `this.openModal('flows.<kind>', props)`. Навигация
- * между flow'ами — `this.navigate('flow_chat', { flowId })`.
- *
- * Поиск по каталогу — клиентский фильтр по уже загруженному списку (имя,
- * flow_id, описание, теги, имена веток). Полнота ограничена первой страницей
- * ответа API (limit по умолчанию 500).
- *
- * Локальное состояние UI: строка поиска, `expandedFlows`, `collapsed`/`mobileOpen`.
+ * FlowsSidebar — оболочка `platform-service-sidebar` + футер; каталог flow’ов —
+ * единый компонент `<flows-catalog-list>` (тот же, что на мобильной главной /flows).
  */
 
 import { html, css } from 'lit';
-import { repeat } from 'lit/directives/repeat.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
-import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
-import '@platform/lib/components/layout/sidebar-section.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-deployment-version.js';
-import './flow-card.js';
-import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import './flows-catalog-list.js';
+import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const OPERATOR_ROLES = new Set(['admin', 'owner']);
-
-function _fieldIncludesSubstring(normalizedQuery, value) {
-    if (typeof value !== 'string' || value.length === 0) return false;
-    return value.toLowerCase().includes(normalizedQuery);
-}
-
-function flowMatchesSidebarSearch(flow, normalizedQuery) {
-    if (normalizedQuery.length === 0) return true;
-    if (!isPlainObject(flow)) return false;
-    if (_fieldIncludesSubstring(normalizedQuery, flow.name)) return true;
-    if (_fieldIncludesSubstring(normalizedQuery, flow.flow_id)) return true;
-    if (_fieldIncludesSubstring(normalizedQuery, flow.description)) return true;
-    if (Array.isArray(flow.tags)) {
-        for (const tag of flow.tags) {
-            if (typeof tag !== 'string') continue;
-            if (tag.toLowerCase().includes(normalizedQuery)) return true;
-        }
-    }
-    const branches = flow.branches;
-    if (!isPlainObject(branches)) return false;
-    for (const key of Object.keys(branches)) {
-        const branch = branches[key];
-        if (!isPlainObject(branch)) continue;
-        if (_fieldIncludesSubstring(normalizedQuery, branch.name)) return true;
-    }
-    return false;
-}
 
 function userCanManageOperator(user, activeCompanyId) {
     if (!user || typeof user !== 'object' || typeof activeCompanyId !== 'string') return false;
@@ -76,8 +37,6 @@ export class FlowsSidebar extends PlatformElement {
     static properties = {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
-        _expanded: { state: true },
-        _flowSearchQuery: { state: true },
     };
 
     static styles = [
@@ -93,31 +52,9 @@ export class FlowsSidebar extends PlatformElement {
             platform-service-sidebar {
                 height: 100%;
             }
-            .create-btn {
-                box-sizing: border-box;
-                width: var(--flows-toolbar-control-size);
-                height: var(--flows-toolbar-control-size);
-                display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-lg);
-                color: white;
-                background: var(--accent);
-                border: none;
-                cursor: pointer;
-                box-shadow: 0 2px 6px rgba(153, 166, 249, 0.2);
-                transition: all var(--duration-normal) var(--easing-default);
-            }
-            .create-btn:hover {
-                background: var(--accent-hover);
-                transform: scale(1.1);
-                box-shadow: 0 3px 8px rgba(153, 166, 249, 0.3);
-            }
-            sidebar-section {
-                flex: 1; min-height: 0;
-                display: flex; flex-direction: column;
-            }
-            .flows-list {
-                display: flex; flex-direction: column; gap: var(--space-2);
-                flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0;
+            flows-catalog-list {
+                flex: 1;
+                min-height: 0;
             }
             .footer-links {
                 display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2);
@@ -148,67 +85,6 @@ export class FlowsSidebar extends PlatformElement {
             platform-service-sidebar[collapsed] .footer-link span {
                 display: none;
             }
-            .flows-toolbar {
-                --flows-toolbar-control-size: calc(
-                    2px + (var(--space-2) * 2) + (var(--text-sm) * 1.25)
-                );
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-            }
-            .flows-toolbar .flows-search {
-                flex: 1;
-                min-width: 0;
-            }
-            .flows-toolbar .create-btn {
-                flex-shrink: 0;
-            }
-            .flows-search {
-                position: relative;
-                flex-shrink: 0;
-            }
-            .flows-search .search-icon {
-                position: absolute;
-                left: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                color: var(--text-tertiary);
-                pointer-events: none;
-            }
-            .flows-search-input {
-                width: 100%;
-                box-sizing: border-box;
-                height: var(--flows-toolbar-control-size);
-                padding: 0 var(--space-2) 0 calc(var(--space-2) + 22px);
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--glass-border-subtle);
-                background: var(--glass-solid-subtle);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-                line-height: calc(var(--flows-toolbar-control-size) - 2px);
-            }
-            .flows-search-input:focus {
-                outline: none;
-                border-color: var(--accent);
-                box-shadow: 0 0 0 2px var(--accent-subtle);
-            }
-            .flows-search-input:disabled {
-                opacity: 0.65;
-                cursor: not-allowed;
-            }
-            platform-service-sidebar[collapsed] .flows-toolbar {
-                display: none;
-            }
-            .flows-search-empty {
-                font-size: var(--text-sm);
-                color: var(--text-tertiary);
-                text-align: center;
-                padding: var(--space-4) var(--space-2);
-            }
         `,
     ];
 
@@ -216,10 +92,6 @@ export class FlowsSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._expanded = {};
-        this._flowSearchQuery = '';
-        this._flows = this.useResource('flows/flows', { autoload: true });
-        this._branchRemove = this.useOp('flows/branch_remove');
         this._currentFlowSel = this.select((s) => {
             const params = isPlainObject(s.router) && isPlainObject(s.router.params) ? s.router.params : {};
             return typeof params.flowId === 'string' ? params.flowId : null;
@@ -244,74 +116,6 @@ export class FlowsSidebar extends PlatformElement {
 
     closeMobile() {
         this._shell()?.closeMobile();
-    }
-
-    _onFlowAction(e) {
-        const { action, flowId, branchId } = isPlainObject(e.detail) ? e.detail : {};
-        switch (action) {
-            case 'chat':
-                if (branchId) {
-                    this.navigate('flow_chat_branch', { flowId, branchId });
-                } else {
-                    this.navigate('flow_chat', { flowId });
-                }
-                this.closeMobile();
-                break;
-            case 'edit':
-                if (branchId) {
-                    this.navigate('flow_editor_branch', { flowId, branchId });
-                } else {
-                    this.navigate('flow_editor', { flowId });
-                }
-                break;
-            case 'delete':
-                this._confirmDeleteFlow(flowId);
-                break;
-            case 'delete-branch':
-                this._confirmDeleteBranch(flowId, branchId);
-                break;
-            case 'create-branch':
-                this.openModal('flows.branch_create', { flowId });
-                break;
-            case 'toggle':
-                this._expanded = { ...this._expanded, [flowId]: !this._expanded[flowId] };
-                break;
-        }
-    }
-
-    async _confirmDeleteFlow(flowId) {
-        const ok = await platformConfirm(
-            this.t('flows_sidebar.delete_flow_message', { id: flowId }),
-            {
-                title: this.t('flows_sidebar.delete_flow_title'),
-                variant: 'danger',
-                confirmVariant: 'danger',
-                confirmText: this.t('context_menu.delete'),
-                cancelText: this.t('flows_sidebar.action_cancel'),
-            },
-        );
-        if (!ok) return;
-        await this._flows.remove(flowId);
-    }
-
-    async _confirmDeleteBranch(flowId, branchId) {
-        const ok = await platformConfirm(
-            this.t('flows_sidebar.delete_branch_message', { id: branchId }),
-            {
-                title: this.t('flows_sidebar.delete_branch_title'),
-                variant: 'danger',
-                confirmVariant: 'danger',
-                confirmText: this.t('context_menu.delete'),
-                cancelText: this.t('flows_sidebar.action_cancel'),
-            },
-        );
-        if (!ok) return;
-        await this._branchRemove.run({ flow_id: flowId, branch_id: branchId });
-        await this._flows.get(flowId);
-    }
-
-    _createFlow() {
-        this.openModal('flows.flow_create', {});
     }
 
     _openSessions() {
@@ -342,20 +146,11 @@ export class FlowsSidebar extends PlatformElement {
         this.navigate('operator', {});
     }
 
-    _onFlowSearchInput(e) {
-        const t = e.target;
-        if (!(t instanceof HTMLInputElement)) {
-            throw new Error('FlowsSidebar._onFlowSearchInput: expected input');
-        }
-        this._flowSearchQuery = typeof t.value === 'string' ? t.value : '';
+    _onCatalogDismissMobile() {
+        this.closeMobile();
     }
 
     render() {
-        const items = asArray(this._flows.items);
-        const qTrimmed = typeof this._flowSearchQuery === 'string' ? this._flowSearchQuery.trim() : '';
-        const qNorm = qTrimmed.toLowerCase();
-        const filteredItems = items.filter((f) => flowMatchesSidebarSearch(f, qNorm));
-        const currentFlowId = this._currentFlowSel.value;
         const auth = this._authSel.value;
         const operatorAllowed = userCanManageOperator(auth.user, auth.companyId);
 
@@ -369,56 +164,11 @@ export class FlowsSidebar extends PlatformElement {
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
-                <sidebar-section custom-header ?collapsed=${this.collapsed}>
-                    <div
-                        slot="header"
-                        class="flows-toolbar"
-                        role="group"
-                        aria-label=${this.t('flows_sidebar.section_all_flows')}
-                    >
-                        <div class="flows-search">
-                            <span class="search-icon" aria-hidden="true">
-                                <platform-icon name="search" size="14"></platform-icon>
-                            </span>
-                            <input
-                                type="search"
-                                class="flows-search-input"
-                                .value=${this._flowSearchQuery}
-                                placeholder=${this.t('flows_sidebar.search_placeholder')}
-                                aria-label=${this.t('flows_sidebar.search_aria')}
-                                ?disabled=${this._flows.loading && items.length === 0}
-                                @input=${this._onFlowSearchInput}
-                            />
-                        </div>
-                        <button
-                            class="create-btn"
-                            title=${this.t('flows_sidebar.create_flow_tooltip')}
-                            @click=${this._createFlow}
-                        >
-                            <platform-icon name="plus" size="16"></platform-icon>
-                        </button>
-                    </div>
-                    <div class="flows-list">
-                        ${this._flows.loading && items.length === 0
-                            ? html`<glass-spinner></glass-spinner>`
-                            : qTrimmed !== '' && items.length > 0 && filteredItems.length === 0
-                                ? html`<div class="flows-search-empty">${this.t('flows_sidebar.search_empty')}</div>`
-                                : repeat(
-                                    filteredItems,
-                                    (a) => a.flow_id,
-                                    (flowItem) => html`
-                                        <flow-card
-                                            .flow=${flowItem}
-                                            ?active=${flowItem.flow_id === currentFlowId}
-                                            ?expanded=${Boolean(this._expanded[flowItem.flow_id])}
-                                            ?collapsed=${this.collapsed}
-                                            @flow-action=${this._onFlowAction}
-                                        ></flow-card>
-                                    `,
-                                )}
-                    </div>
-                </sidebar-section>
-
+                <flows-catalog-list
+                    mode="sidebar"
+                    ?collapsedSidebar=${this.collapsed}
+                    @flows-catalog-dismiss-mobile=${this._onCatalogDismissMobile}
+                ></flows-catalog-list>
                 <div slot="footer">
                     <div class="footer-links">
                         ${operatorAllowed
