@@ -2,8 +2,7 @@
  * Glass Button Component
  * Кнопка с glass morphism эффектом
  */
-import { html, css } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
+import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassButton extends PlatformElement {
@@ -148,17 +147,14 @@ export class GlassButton extends PlatformElement {
     }
 
     render() {
-        const classes = {
-            [this.variant]: true,
-            [this.size]: true,
-            'icon-only': this.iconOnly,
-            'loading': this.loading,
-        };
+        const parts = [this.variant, this.size];
+        if (this.iconOnly) parts.push('icon-only');
+        if (this.loading) parts.push('loading');
 
         return html`
             <button
                 type=${this.type}
-                class=${classMap(classes)}
+                class=${parts.join(' ')}
                 ?disabled=${this.disabled || this.loading}
             >
                 <slot></slot>

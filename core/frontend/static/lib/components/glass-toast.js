@@ -2,8 +2,7 @@
  * Glass Toast Component
  * Всплывающее уведомление
  */
-import { html, css } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
+import { html, css } from '../../assets/js/lit/lit.min.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassToast extends PlatformElement {
@@ -155,13 +154,8 @@ export class GlassToast extends PlatformElement {
     }
 
     render() {
-        const classes = {
-            toast: true,
-            [this.type]: true,
-        };
-
         return html`
-            <div class=${classMap(classes)}>
+            <div class="toast ${this.type}">
                 <span class="icon">${this._getIcon()}</span>
                 <div class="message">${this.message}</div>
                 <button class="close" @click=${this.close}>×</button>
