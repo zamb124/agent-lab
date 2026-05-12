@@ -31,7 +31,7 @@ async def test_crm_reembed_task_sets_and_clears_system_context(monkeypatch) -> N
             return 7
 
     provider = ProviderStub()
-    monkeypatch.setattr(reembed_tasks, "_build_crm_pgvector_provider", lambda: provider)
+    monkeypatch.setattr(reembed_tasks, "get_rag_provider", lambda _provider_id: provider)
     monkeypatch.setattr(
         reembed_tasks,
         "get_settings",

@@ -404,6 +404,7 @@ def test_chat_completions_litapi_predict_local_model_response(monkeypatch: pytes
             infra=types.SimpleNamespace(
                 llm_model_id="Qwen/Qwen2.5-1.5B-Instruct",
                 llm_model_ids=["Qwen/Qwen2.5-1.5B-Instruct"],
+                markdown_default_api_model_id="Qwen/Qwen2.5-1.5B-Instruct",
                 hf_token="hf_test",
             )
         )

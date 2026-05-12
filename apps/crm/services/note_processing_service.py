@@ -18,6 +18,9 @@ from apps.crm.models.api import (
 )
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.file_text_reader import load_text_and_name_from_stored_file_id
+from apps.crm.services.note_attachment_description import (
+    strip_auto_merged_attachment_blocks_from_note_description,
+)
 
 ProgressCb = Callable[[str, int, str], Awaitable[None]]
 
@@ -45,8 +48,11 @@ class NoteProcessingService:
             raise ValueError(f"Заметка не найдена: {note_id}")
 
         parts: list[str] = []
-        if note.description:
-            stripped = note.description.strip()
+        desc_raw = note.description or ""
+        if not include_attachments:
+            desc_raw = strip_auto_merged_attachment_blocks_from_note_description(desc_raw)
+        if desc_raw:
+            stripped = desc_raw.strip()
             if stripped:
                 parts.append(stripped)
 

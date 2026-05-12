@@ -196,16 +196,26 @@ async def request_with_strategy(
             return await client.request(method.upper(), url, **kwargs)
 
     if strategy == ProxyStrategy.DIRECT_FIRST:
-        try:
-            return await _request_direct_burst(
-                method,
-                url,
-                timeout=timeout,
-                attempts=direct_attempts,
-                **kwargs,
-            )
-        except _CONNECT_RETRY_EXCEPTIONS:
-            pass
+        # Проверяем, помечен ли origin для прокси (обучение SMART/DIRECT_FIRST)
+        origin = normalized_http_origin(url)
+        prefer = False
+        if _platform_proxy_active():
+            try:
+                prefer = await egress_prefer_proxy_get(origin)
+            except Exception:
+                pass
+
+        if not prefer:
+            try:
+                return await _request_direct_burst(
+                    method,
+                    url,
+                    timeout=timeout,
+                    attempts=direct_attempts,
+                    **kwargs,
+                )
+            except _CONNECT_RETRY_EXCEPTIONS:
+                pass
 
         if _platform_proxy_active():
             try:
@@ -216,12 +226,23 @@ async def request_with_strategy(
                     proxy_attempts=proxy_attempts,
                     **client_kw,
                 ) as client:
-                    return await client.request(method.upper(), url, **kwargs)
+                    resp = await client.request(method.upper(), url, **kwargs)
+                    # Запоминаем: этот origin работает через прокси
+                    try:
+                        await egress_prefer_proxy_set(origin)
+                    except Exception:
+                        pass
+                    return resp
             except _CONNECT_RETRY_EXCEPTIONS:
                 logger.warning(
                     "Запрос через прокси к %s не удался, повторное прямое подключение",
                     url,
                 )
+                # Прокси тоже не работает — сбрасываем предпочтение
+                try:
+                    await egress_prefer_proxy_delete(origin)
+                except Exception:
+                    pass
 
         return await _request_direct_burst(
             method,

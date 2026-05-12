@@ -586,6 +586,7 @@ async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
         updated_at=None,
         description="old",
         attributes={},
+        attachment_ids=[],
     )
     service._entity_repo.get = AsyncMock(return_value=existing)
     service._entity_repo.update = AsyncMock()

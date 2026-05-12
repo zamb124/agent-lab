@@ -23,6 +23,32 @@ def truncate_attachment_text_for_note(text: str) -> str:
     return t[:NOTE_ATTACHMENT_TEXT_MAX_CHARS] + "\n\n[truncated]"
 
 
+def strip_auto_merged_attachment_blocks_from_note_description(description: str) -> str:
+    """Убирает блоки ``=== filename ===`` и следующее за ними тело, добавленные merge_attachment_extracted_into_description.
+
+    Разделитель между сегментами — двойной перевод строки, ``---``, снова двойной перевод строки.
+    Сегменты после первого, у которых первая строка вида ``=== ... ===``, отбрасываются.
+    Остальные сегменты (продолжение текста пользователя после разделителя) сохраняются.
+    """
+    if not description or not str(description).strip():
+        return ""
+    parts = str(description).split("\n\n---\n\n")
+    if len(parts) <= 1:
+        return str(description).strip()
+    kept: list[str] = []
+    for idx, part in enumerate(parts):
+        chunk = part.strip()
+        if not chunk:
+            continue
+        first_line = chunk.split("\n", 1)[0].strip()
+        if idx > 0 and first_line.startswith("=== ") and first_line.endswith(" ==="):
+            continue
+        kept.append(chunk)
+    if not kept:
+        return ""
+    return "\n\n---\n\n".join(kept)
+
+
 def merge_attachment_extracted_into_description(
     current: Optional[str],
     display_name: str,

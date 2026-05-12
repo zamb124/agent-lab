@@ -16,6 +16,6 @@ def test_runtime_snapshot_after_active_model() -> None:
     assert {k: snap[k] for k in ("model_used", "embedding_tokens", "provider")} == {
         "model_used": "openai/text-embedding-3-small",
         "embedding_tokens": 42,
-        "provider": "openrouter",
+        "provider": "custom_openai_compatible",
     }
     assert "api_url" in snap

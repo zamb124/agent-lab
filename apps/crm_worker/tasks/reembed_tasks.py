@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Protocol, runtime_checkable
 
 from apps.crm.container import get_crm_container
 from apps.crm_worker.broker import broker
@@ -16,9 +16,15 @@ from core.context.system_task_context import build_system_auth_context
 from core.logging import get_logger
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
-from core.rag.providers.pgvector_provider import PgVectorProvider
 
 logger = get_logger(__name__)
+
+
+@runtime_checkable
+class _CrmStaleReembedProvider(Protocol):
+    def _embedding_model_name(self) -> str: ...
+
+    async def reembed_stale_documents(self, *, batch_size: int, target_embedding_model: str) -> int: ...
 
 
 @broker.task(
@@ -56,9 +62,10 @@ async def crm_reembed_stale_documents_tick(
     set_context(system_context)
     try:
         provider = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
-        if not isinstance(provider, PgVectorProvider):
+        if not isinstance(provider, _CrmStaleReembedProvider):
             raise RuntimeError(
-                f"crm_reembed_stale_documents: ожидается PgVectorProvider, получено {type(provider).__name__}"
+                "crm_reembed_stale_documents: провайдер должен поддерживать "
+                f"_embedding_model_name и reembed_stale_documents; получено {type(provider).__name__}"
             )
         target_model = provider._embedding_model_name()
         batch_size = reembed_cfg.reembed_batch_size

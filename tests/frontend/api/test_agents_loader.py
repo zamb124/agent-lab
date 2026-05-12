@@ -10,6 +10,19 @@ import pytest
 from pathlib import Path
 
 
+@pytest.fixture(autouse=True)
+def _init_company_skip_mcp_network_sync(monkeypatch):
+    """sync_auto_mcp_servers_for_company ходит в Browser MCP; в CI/хосте без сервиса — зависание TCP."""
+
+    async def _noop_sync(**_kwargs: object) -> dict[str, int]:
+        return {"servers": 0, "tools": 0}
+
+    monkeypatch.setattr(
+        "apps.flows.src.tasks.company_init_tasks.sync_auto_mcp_servers_for_company",
+        _noop_sync,
+    )
+
+
 @pytest.mark.asyncio
 async def test_init_company_resources_for_system(container, unique_id: str):
     """

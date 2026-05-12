@@ -20,7 +20,7 @@ class TestSettingsAPI:
         auth_headers,
         frontend_container
     ):
-        """Получение настроек компании"""
+        """Получение профиля компании и снимка AI-провайдеров (раздельные роутеры)."""
         response = await frontend_client.get(
             "/frontend/api/settings/company",
             headers=auth_headers
@@ -28,15 +28,24 @@ class TestSettingsAPI:
         
         assert response.status_code == 200
         data = response.json()
-        
-        # Проверяем обязательные поля
-        assert "rag_embedding" in data
-        emb = data["rag_embedding"]
-        assert "platform_model_id" in emb
-        assert "effective_model_from_platform" in emb
-        assert "rag_rerank" in data
-        assert "crm_summarize" in data
-        assert "provider_choices" in data["crm_summarize"]
+        assert "company_id" in data
+        assert "name" in data
+        assert "monthly_budget" in data
+
+        ai = await frontend_client.get(
+            "/frontend/api/settings/ai-providers",
+            headers=auth_headers,
+        )
+        assert ai.status_code == 200
+        body = ai.json()
+        caps = {item["capability"]: item for item in body["capabilities"]}
+        assert caps["embedding"]["kind"] == "embedding"
+        assert caps["rerank"]["kind"] == "rerank"
+        summarize = caps["llm_summarize"]
+        assert summarize["kind"] == "llm"
+        assert "llm_summarize" in body["catalog"]
+        prov_items = body["catalog"]["llm_summarize"]
+        assert any(p.get("kind") == "platform" for p in prov_items)
 
     async def test_get_company_settings_unauthorized(self, frontend_client: AsyncClient):
         """Попытка получить настройки без авторизации"""
