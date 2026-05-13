@@ -70,6 +70,12 @@ export class EmbedBlockRenderer extends LitElement {
             }
         }
         el.addEventListener('embed-block-action', (e) => {
+            if (typeof e.stopPropagation === 'function') {
+                e.stopPropagation();
+            }
+            if (typeof e.stopImmediatePropagation === 'function') {
+                e.stopImmediatePropagation();
+            }
             this.dispatchEvent(
                 new CustomEvent('embed-block-action', {
                     detail: e.detail,

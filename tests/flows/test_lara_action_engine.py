@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
@@ -16,6 +18,21 @@ class InMemoryRedis:
         _ = ttl
         self._store[key] = value
         return True
+
+    async def set_nx(self, key: str, value: str, ttl_seconds: int) -> bool:
+        _ = ttl_seconds
+        if key in self._store:
+            return False
+        self._store[key] = value
+        return True
+
+    async def delete(self, *keys: str) -> int:
+        n = 0
+        for k in keys:
+            if k in self._store:
+                del self._store[k]
+                n += 1
+        return n
 
 
 @pytest.mark.asyncio
@@ -182,3 +199,52 @@ async def test_owner_guard_rejects_different_user() -> None:
             context_id="ctx1",
             pending_action_id=action["pending_action_id"],
         )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_apply_invokes_effect_once() -> None:
+    redis = InMemoryRedis()
+    engine = LaraActionEngine(redis_client=redis)
+    gate = asyncio.Event()
+    blocker = asyncio.Event()
+    counts = {"n": 0}
+
+    action = await engine.preview_action(
+        company_id="c1",
+        user_id="u1",
+        context_id="ctx1",
+        capability="crm.note",
+        operation="create",
+        target={"service": "crm"},
+        payload={"name": "n"},
+        preview={"summary": "create"},
+        risk="low",
+        idempotency_key="golden",
+    )
+    pid = action["pending_action_id"]
+
+    async def slow_apply(_: dict) -> dict[str, bool]:
+        counts["n"] += 1
+        gate.set()
+        await blocker.wait()
+        return {"ok": True}
+
+    async def run_apply() -> dict:
+        return await engine.apply_action(
+            company_id="c1",
+            user_id="u1",
+            context_id="ctx1",
+            pending_action_id=pid,
+            idempotency_key="golden",
+            apply_fn=slow_apply,
+        )
+
+    t_a = asyncio.create_task(run_apply())
+    t_b = asyncio.create_task(run_apply())
+    await asyncio.wait_for(gate.wait(), timeout=2)
+    blocker.set()
+    out_a, out_b = await asyncio.gather(t_a, t_b)
+    assert counts["n"] == 1
+    assert out_a["status"] == "applied"
+    assert out_b["status"] == "applied"
+    assert out_b["result"]["ok"] is True

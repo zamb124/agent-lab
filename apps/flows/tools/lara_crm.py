@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import quote
@@ -664,24 +665,156 @@ async def crm_analyze_note_text(
     mentioned_entity_ids: Optional[List[str]] = None,
     state: Optional[dict] = None,
 ) -> str:
-    body: Dict[str, Any] = {}
+    nid = str(note_id).strip()
+    body: Dict[str, Any] = {
+        "note_id": nid,
+        "mode": "analyze",
+        "include_attachments": True,
+        "check_duplicates": True,
+    }
     if extract_entity_types:
         body["extract_entity_types"] = extract_entity_types
     if mentioned_entity_ids:
         body["mentioned_entity_ids"] = mentioned_entity_ids
 
     client = ServiceClient()
-    path = f"/crm/api/v1/entities/notes/{quote(str(note_id), safe='')}/analyze"
     try:
-        result = await client.post("crm", path, json=body)
+        start = await client.post(
+            "crm",
+            "/crm/api/v1/tasks/note-analyze",
+            json=body,
+            timeout=60.0,
+        )
     except ServiceClientError as exc:
         return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
 
+    if not isinstance(start, dict):
+        return json.dumps(
+            {"success": False, "error": "Invalid note-analyze response"},
+            ensure_ascii=False,
+        )
+    tid_raw = start.get("task_id")
+    if not isinstance(tid_raw, str) or not tid_raw.strip():
+        return json.dumps(
+            {"success": False, "error": "Missing task_id in note-analyze response"},
+            ensure_ascii=False,
+        )
+    task_id = tid_raw.strip()
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 120.0
+    terminal: Dict[str, Any] = {}
+    while loop.time() < deadline:
+        try:
+            row = await client.get(
+                "crm",
+                f"/crm/api/v1/tasks/{quote(task_id, safe='')}",
+                timeout=30.0,
+            )
+        except ServiceClientError as exc:
+            return json.dumps(
+                {"success": False, "error": str(exc), "task_id": task_id},
+                ensure_ascii=False,
+            )
+        if isinstance(row, dict):
+            terminal = row
+            status = row.get("status")
+            if status in ("completed", "failed", "cancelled"):
+                break
+        await asyncio.sleep(0.35)
+    else:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "analyze task timeout",
+                "task_id": task_id,
+                "last_task": terminal,
+            },
+            ensure_ascii=False,
+        )
+
+    terminal_status = terminal.get("status")
+    if terminal_status == "failed":
+        msg = terminal.get("error_message")
+        if not isinstance(msg, str) or not msg.strip():
+            msg = "analyze failed"
+        return json.dumps(
+            {
+                "success": False,
+                "error": msg,
+                "task_id": task_id,
+                "task": terminal,
+            },
+            ensure_ascii=False,
+        )
+    if terminal_status == "cancelled":
+        return json.dumps(
+            {
+                "success": False,
+                "error": "analyze cancelled",
+                "task_id": task_id,
+                "task": terminal,
+            },
+            ensure_ascii=False,
+        )
+    if terminal_status != "completed":
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"unexpected analyze task status: {terminal_status}",
+                "task_id": task_id,
+                "task": terminal,
+            },
+            ensure_ascii=False,
+        )
+
+    draft: Dict[str, Any] = {}
+    try:
+        entity = await client.get(
+            "crm",
+            f"/crm/api/v1/entities/{quote(nid, safe='')}",
+            timeout=60.0,
+        )
+    except ServiceClientError as exc:
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(exc),
+                "task_id": task_id,
+                "task": terminal,
+            },
+            ensure_ascii=False,
+        )
+    if isinstance(entity, dict):
+        attrs = entity.get("attributes")
+        if isinstance(attrs, dict):
+            raw_draft = attrs.get("ai_analysis_draft")
+            if isinstance(raw_draft, dict):
+                draft = raw_draft
+
     summary = "Анализ выполнен."
-    if isinstance(result, dict):
-        ents = result.get("entities") or []
-        if isinstance(ents, list) and len(ents) > 0:
-            summary = f"Найдено сущностей: {len(ents)}."
+    entities_list = draft.get("entities")
+    if isinstance(entities_list, list) and len(entities_list) > 0:
+        summary = f"Найдено сущностей: {len(entities_list)}."
+    else:
+        td = terminal.get("data")
+        if isinstance(td, dict):
+            cnt = td.get("result_entities_count")
+            if isinstance(cnt, int) and cnt > 0:
+                summary = f"Найдено сущностей: {cnt}."
+
+    analyze_payload: Dict[str, Any] = {"task_id": task_id}
+    analyze_payload.update(draft)
+    terminal_data = terminal.get("data")
+    if isinstance(terminal_data, dict):
+        if "result_entities_count" not in analyze_payload:
+            if "result_entities_count" in terminal_data:
+                analyze_payload["result_entities_count"] = terminal_data["result_entities_count"]
+        if "result_relationships_count" not in analyze_payload:
+            if "result_relationships_count" in terminal_data:
+                analyze_payload["result_relationships_count"] = terminal_data[
+                    "result_relationships_count"
+                ]
 
     blocks = [
         {"type": "text", "text": summary},
@@ -692,14 +825,14 @@ async def crm_analyze_note_text(
                     "action_id": "crm.entity.open",
                     "action_kind": "open_entity",
                     "label": "Открыть заметку",
-                    "arguments": {"entity_id": note_id},
-                    "context": {"entity_id": note_id, "entity_type": "note"},
+                    "arguments": {"entity_id": nid},
+                    "context": {"entity_id": nid, "entity_type": "note"},
                 }
             ],
         },
     ]
     return json.dumps(
-        {"success": True, "analyze": result, "blocks": blocks},
+        {"success": True, "analyze": analyze_payload, "blocks": blocks},
         ensure_ascii=False,
     )
 

@@ -42,8 +42,10 @@ import {
 } from '../voice/stream-tts-registry.js';
 import './embed-block-renderer.js';
 import './embed-chat-input.js';
-import { hasPlatformBus } from '../events/bus-singleton.js';
+import { getActivePlatformNamespaceName } from '../utils/platform-namespace.js';
+import { getPlatformBus, hasPlatformBus } from '../events/bus-singleton.js';
 import { bootstrapPlatformBus, completeBootstrap } from '../events/bootstrap.js';
+import { CoreEvents } from '../events/contract.js';
 
 let mid = 0;
 
@@ -114,6 +116,101 @@ function _normalizedPlatformUiOrigin(raw) {
  * который в connectedCallback требует getPlatformBus. Полноценного PlatformApp в embed нет —
  * поднимаем один EventBus синхронно до super.connectedCallback.
  */
+
+/** @param {unknown} payload */
+function _normalizePendingActionIdFromPayload(payload) {
+    const o =
+        payload && typeof payload === 'object' && !Array.isArray(payload)
+            ? /** @type {Record<string, unknown>} */ (payload)
+            : {};
+    const top = o.pending_action_id;
+    if (typeof top === 'string' && top.trim()) {
+        return top.trim();
+    }
+    const argsRaw = o.arguments;
+    const args =
+        argsRaw && typeof argsRaw === 'object' && !Array.isArray(argsRaw)
+            ? /** @type {Record<string, unknown>} */ (argsRaw)
+            : {};
+    const fromArgs = args.pending_action_id;
+    if (typeof fromArgs === 'string' && fromArgs.trim()) {
+        return fromArgs.trim();
+    }
+    const ctxRaw = o.context;
+    const ctx =
+        ctxRaw && typeof ctxRaw === 'object' && !Array.isArray(ctxRaw)
+            ? /** @type {Record<string, unknown>} */ (ctxRaw)
+            : {};
+    const fromCtx = ctx.pending_action_id;
+    if (typeof fromCtx === 'string' && fromCtx.trim()) {
+        return fromCtx.trim();
+    }
+    return '';
+}
+
+/** @param {unknown} raw */
+function _embedRouteKeyForOpenEntityContext(raw) {
+    const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (t === 'note' || t === 'meeting' || t === 'call') {
+        return 'note';
+    }
+    return 'entity';
+}
+
+/**
+ * CRM (и другой SPA с теми же ключами роутера): переход по `entity_id` из кнопки блока actions.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {Record<string, unknown>} ctx
+ * @returns {boolean}
+ */
+function _tryDispatchEmbeddedRouterOpenEntity(args, ctx) {
+    const rid =
+        typeof args.entity_id === 'string' && args.entity_id.trim()
+            ? args.entity_id.trim()
+            : '';
+    if (!rid || !hasPlatformBus()) {
+        return false;
+    }
+    /** @type {{ getState?: () => unknown; dispatch?: (...args: unknown[]) => void }} */
+    let bus;
+    try {
+        bus = getPlatformBus();
+    } catch {
+        return false;
+    }
+    if (!bus || typeof bus.getState !== 'function' || typeof bus.dispatch !== 'function') {
+        return false;
+    }
+    const st = bus.getState();
+    if (!st || typeof st !== 'object') {
+        return false;
+    }
+    const routerRaw = /** @type {Record<string, unknown>} */ (st).router;
+    if (!routerRaw || typeof routerRaw !== 'object') {
+        return false;
+    }
+    const routesRaw = routerRaw.routes;
+    if (!Array.isArray(routesRaw) || routesRaw.length === 0) {
+        return false;
+    }
+    const c = ctx && typeof ctx === 'object' && !Array.isArray(ctx) ? ctx : {};
+    const etCand = /** @type {Record<string, unknown>} */ (c).entity_type ?? /** @type {Record<string, unknown>} */ (c).entityType;
+    const etStr = typeof etCand === 'string' ? etCand : '';
+    const routeKey = _embedRouteKeyForOpenEntityContext(etStr);
+    if (
+        !routesRaw.some((r) => r && typeof r === 'object' && /** @type {{ key?: string }} */ (r).key === routeKey)
+    ) {
+        return false;
+    }
+    bus.dispatch(
+        CoreEvents.ROUTER_NAVIGATE_REQUESTED,
+        { routeKey, params: { itemId: rid } },
+        { source: 'platform_embed_chat_open_entity' },
+    );
+    return true;
+}
+
 function ensurePlatformBusForEmbedChat(flowsBaseUrl, platformUiOrigin) {
     if (typeof window === 'undefined' || hasPlatformBus()) return;
     const devMode =
@@ -762,8 +859,7 @@ export class PlatformEmbedChat extends LitElement {
                 branchId: this.branchId,
                 skillIdLegacy: this.skillId,
                 credentials: this.useCredentials === true ? 'include' : 'omit',
-                getHeaders:
-                    typeof this.getAuthToken === 'function' ? () => this.getAuthToken() : async () => ({}),
+                getHeaders: () => this._outboundFlowsRequestHeaders(),
             });
         }
         const wsQuery = { ...serverQuery };
@@ -1035,6 +1131,7 @@ export class PlatformEmbedChat extends LitElement {
         ensurePlatformBusForEmbedChat(this.flowsBaseUrl, this.platformUiOrigin);
         super.connectedCallback();
         this.addEventListener('embed-block-action', this._onBlockAction);
+        this.addEventListener('embed-action-config-error', this._onEmbedActionConfigError);
         document.addEventListener('click', this._onCredClickOutside);
         this._bindAckListeners();
         if (typeof window !== 'undefined') {
@@ -1046,6 +1143,7 @@ export class PlatformEmbedChat extends LitElement {
     disconnectedCallback() {
         super.disconnectedCallback();
         this.removeEventListener('embed-block-action', this._onBlockAction);
+        this.removeEventListener('embed-action-config-error', this._onEmbedActionConfigError);
         document.removeEventListener('click', this._onCredClickOutside);
         if (typeof window !== 'undefined') {
             window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefForEmbed);
@@ -1100,36 +1198,94 @@ export class PlatformEmbedChat extends LitElement {
         }
     }
 
+    _onEmbedActionConfigError = (e) => {
+        if (typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+        }
+        const d = e?.detail && typeof e.detail === 'object' ? e.detail : {};
+        const m =
+            typeof d.message === 'string' && d.message.trim()
+                ? d.message.trim()
+                : 'Действие не настроено. Повторите запрос.';
+        this._appendLocalAssistantEcho(m);
+    };
+
     _onBlockAction = (e) => {
+        if (typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+        }
         const detail = e.detail && typeof e.detail === 'object' ? e.detail : {};
         const actionId = typeof detail.action_id === 'string' ? detail.action_id.trim() : '';
         const actionKind = typeof detail.action_kind === 'string' ? detail.action_kind.trim() : '';
         if (!actionId || !actionKind) {
+            this._appendLocalAssistantEcho(
+                'Не удалось обработать кнопку: нет идентификатора действия. Отправьте сообщение заново или обновите чат.',
+            );
             return;
         }
+        const args =
+            detail.arguments && typeof detail.arguments === 'object' && !Array.isArray(detail.arguments)
+                ? detail.arguments
+                : {};
+        const ctx =
+            detail.context && typeof detail.context === 'object' && !Array.isArray(detail.context)
+                ? detail.context
+                : {};
+        const pendingResolved =
+            _normalizePendingActionIdFromPayload({
+                pending_action_id: detail.pending_action_id,
+                arguments: args,
+                context: ctx,
+            }) || null;
         const payload = {
             action_id: actionId,
             action_kind: actionKind,
-            pending_action_id:
-                typeof detail.pending_action_id === 'string' && detail.pending_action_id.trim()
-                    ? detail.pending_action_id.trim()
-                    : null,
-            arguments:
-                detail.arguments && typeof detail.arguments === 'object' && !Array.isArray(detail.arguments)
-                    ? detail.arguments
-                    : {},
-            context:
-                detail.context && typeof detail.context === 'object' && !Array.isArray(detail.context)
-                    ? detail.context
-                    : {},
+            pending_action_id: pendingResolved,
+            arguments: args,
+            context: ctx,
         };
-        this._emitAssistantEvent('action_invoked', payload);
         const fn = this.actionHandlers['assistant:action_invoked'];
         if (typeof fn === 'function') {
+            this._emitAssistantEvent('action_invoked', payload);
             fn(payload);
             return;
         }
-        void this._tryDefaultEmbeddedLaraApply(payload);
+        if (payload.action_kind === 'open_entity') {
+            const ok = _tryDispatchEmbeddedRouterOpenEntity(args, ctx);
+            queueMicrotask(() => {
+                try {
+                    this._emitAssistantEvent('action_invoked', payload);
+                } catch (err) {
+                    const m = err instanceof Error ? err.message : String(err);
+                    console.warn('platform-embed-chat: action_invoked emit failed', err);
+                    this._appendLocalAssistantEcho(
+                        `Не удалось уведомить хост о действии: ${m}`,
+                    );
+                }
+            });
+            if (!ok) {
+                this._appendLocalAssistantEcho(
+                    'Не удалось открыть сущность: нет маршрута в приложении, неверный entity_id или чат без полноценного router.',
+                );
+            }
+            return;
+        }
+        void this._tryDefaultEmbeddedLaraApply(payload).catch((err) => {
+            const m = err instanceof Error ? err.message : String(err);
+            console.warn('platform-embed-chat: Lara default apply rejected', err);
+            this._appendLocalAssistantEcho(`Ошибка применения действия: ${m}`);
+        });
+        queueMicrotask(() => {
+            try {
+                this._emitAssistantEvent('action_invoked', payload);
+            } catch (err) {
+                const m = err instanceof Error ? err.message : String(err);
+                console.warn('platform-embed-chat: action_invoked emit failed', err);
+                this._appendLocalAssistantEcho(
+                    `Не удалось уведомить хост о действии: ${m}`,
+                );
+            }
+        });
     };
 
     /** @param {string} raw */
@@ -1223,45 +1379,36 @@ export class PlatformEmbedChat extends LitElement {
         if (payload.action_kind !== 'apply') {
             return;
         }
-        let pidRaw = payload.pending_action_id;
-        if (
-            (typeof pidRaw !== 'string' || !pidRaw.trim())
-            && payload.arguments && typeof payload.arguments === 'object'
-        ) {
-            const argPid = payload.arguments.pending_action_id;
-            if (typeof argPid === 'string' && argPid.trim()) {
-                pidRaw = argPid.trim();
-            }
-        }
-        const pid = typeof pidRaw === 'string' ? pidRaw.trim() : '';
+        const pid = _normalizePendingActionIdFromPayload(payload);
         if (!pid) {
+            this._appendLocalAssistantEcho(
+                'Не удалось подтвердить действие: нет pending_action_id. Повторите шаг создания черновика в чате.',
+            );
             return;
         }
         const root = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim().replace(/\/$/, '')) || '';
         if (!root) {
-            throw new Error('platform-embed-chat: flowsBaseUrl is required for default Lara pending apply');
+            this._appendLocalAssistantEcho(
+                'Не задан flowsBaseUrl: нельзя применить действие Lara. Обратитесь к администратору.',
+            );
+            return;
         }
         const contextIdRaw = typeof this.getA2aContextId === 'function' ? this.getA2aContextId() : '';
         const contextId = typeof contextIdRaw === 'string' ? contextIdRaw.trim() : '';
         if (!contextId) {
-            throw new Error('platform-embed-chat: missing A2A contextId before Lara apply');
+            this._appendLocalAssistantEcho(
+                'Нет идентификатора сессии чата — отправьте сообщение заново и снова нажмите «Создать заметку».',
+            );
+            return;
         }
         if (this._embeddedLaraApplyInFlight) {
             return;
         }
 
-        const getHeaders = async () => {
-            if (typeof this.getAuthToken !== 'function') {
-                return {};
-            }
-            const h = await this.getAuthToken();
-            return h && typeof h === 'object' ? h : {};
-        };
-
         this._embeddedLaraApplyInFlight = true;
         const url = `${root}/api/v1/lara/pending-actions/apply`;
         try {
-            const heads = await getHeaders();
+            const heads = await this._outboundFlowsRequestHeaders();
             const resp = await fetch(url, {
                 method: 'POST',
                 credentials: this.useCredentials ? 'include' : 'omit',
@@ -1433,12 +1580,31 @@ export class PlatformEmbedChat extends LitElement {
         }
     }
 
-    async _getEmbedAuthHeaders() {
-        if (typeof this.getAuthToken !== 'function') {
-            return {};
+    /**
+     * Исходящие заголовки к flows API (A2A, Lara apply, credentials): Authorization из getAuthToken
+     * и X-Platform-Namespace из выбора CRM для company-id (localStorage/UI), см. core/clients/service_client.py.
+     * @returns {Promise<Record<string, string>>}
+     */
+    async _outboundFlowsRequestHeaders() {
+        const out = /** @type {Record<string, string>} */ ({});
+        if (typeof this.getAuthToken === 'function') {
+            const h = await this.getAuthToken();
+            if (h && typeof h === 'object') {
+                Object.assign(out, h);
+            }
         }
-        const h = await this.getAuthToken();
-        return h && typeof h === 'object' ? h : {};
+        const cid = typeof this.companyId === 'string' ? this.companyId.trim() : '';
+        if (cid !== '') {
+            const ns = getActivePlatformNamespaceName(cid);
+            if (typeof ns === 'string' && ns.trim() !== '') {
+                out['X-Platform-Namespace'] = ns.trim();
+            }
+        }
+        return out;
+    }
+
+    async _getEmbedAuthHeaders() {
+        return this._outboundFlowsRequestHeaders();
     }
 
     async _loadEmbedCredentials() {
@@ -1802,14 +1968,7 @@ export class PlatformEmbedChat extends LitElement {
             ? `${root}/api/v1/embed/${encodeURIComponent(this.embedId)}`
             : `${root}/api/v1/${encodeURIComponent(this.flowId)}`;
         const run = async () => {
-            const getHeaders = async () => {
-                if (typeof this.getAuthToken !== 'function') {
-                    return {};
-                }
-                const h = await this.getAuthToken();
-                return h && typeof h === 'object' ? h : {};
-            };
-            const extra = await getHeaders();
+            const extra = await this._outboundFlowsRequestHeaders();
             await fetch(url, {
                 method: 'POST',
                 credentials: this.useCredentials ? 'include' : 'omit',
@@ -1884,13 +2043,7 @@ export class PlatformEmbedChat extends LitElement {
         this._streamAbort = new AbortController();
         this.requestUpdate();
 
-        const getHeaders = async () => {
-            if (typeof this.getAuthToken !== 'function') {
-                return {};
-            }
-            const h = await this.getAuthToken();
-            return h && typeof h === 'object' ? h : {};
-        };
+        const getHeaders = () => this._outboundFlowsRequestHeaders();
 
         const variables = await this._mergeSendMetadataVariables();
         this._emitAssistantEvent('context_requested', {

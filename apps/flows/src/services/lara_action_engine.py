@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from typing import Any, Awaitable, Callable
@@ -14,6 +15,10 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 ACTION_SCHEMA_VERSION = "1.0.0"
+
+_APPLY_LOCK_TTL_SECONDS = 120
+_APPLY_CONTENTION_POLL_SEC = 0.025
+_APPLY_CONTENTION_MAX_POLLS = 80
 
 
 class LaraActionEngine:
@@ -30,6 +35,10 @@ class LaraActionEngine:
     @staticmethod
     def _pending_key(company_id: str, pending_action_id: str) -> str:
         return f"assistant:pending_action:{company_id}:{pending_action_id}"
+
+    @staticmethod
+    def _apply_lock_key(company_id: str, pending_action_id: str) -> str:
+        return f"assistant:pending_apply_lock:{company_id}:{pending_action_id}"
 
     @staticmethod
     def _validate_owner(action: dict[str, Any], company_id: str, user_id: str, context_id: str) -> None:
@@ -124,6 +133,28 @@ class LaraActionEngine:
             raise ValueError("Pending action payload is invalid")
         return parsed
 
+    async def _wait_apply_or_raise_contention(
+        self,
+        *,
+        company_id: str,
+        user_id: str,
+        context_id: str,
+        pending_action_id: str,
+        idempotency_key: str | None,
+    ) -> dict[str, Any]:
+        for _ in range(_APPLY_CONTENTION_MAX_POLLS):
+            await asyncio.sleep(_APPLY_CONTENTION_POLL_SEC)
+            action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
+            self._validate_owner(action, company_id, user_id, context_id)
+            st = action.get("status")
+            if st == "applied":
+                if idempotency_key and action.get("idempotency_key") != idempotency_key:
+                    raise ValueError("idempotency_key mismatch for already applied action")
+                return action
+            if st != "previewed":
+                raise ValueError(f"Unsupported pending action status: {action.get('status')}")
+        raise ValueError("Timeout waiting for concurrent Lara pending-action apply")
+
     async def apply_action(
         self,
         *,
@@ -134,38 +165,54 @@ class LaraActionEngine:
         idempotency_key: str | None,
         apply_fn: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
     ) -> dict[str, Any]:
-        action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
-        self._validate_owner(action, company_id, user_id, context_id)
+        lock_key = self._apply_lock_key(company_id, pending_action_id)
+        nx = getattr(self._redis, "set_nx", None)
+        if not callable(nx):
+            raise RuntimeError("Redis client must support set_nx for Lara apply_action")
+        lock_ok = await nx(lock_key, "1", _APPLY_LOCK_TTL_SECONDS)
+        if not lock_ok:
+            return await self._wait_apply_or_raise_contention(
+                company_id=company_id,
+                user_id=user_id,
+                context_id=context_id,
+                pending_action_id=pending_action_id,
+                idempotency_key=idempotency_key,
+            )
+        try:
+            action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
+            self._validate_owner(action, company_id, user_id, context_id)
 
-        if action.get("status") == "applied":
-            if idempotency_key and action.get("idempotency_key") != idempotency_key:
-                raise ValueError("idempotency_key mismatch for already applied action")
+            if action.get("status") == "applied":
+                if idempotency_key and action.get("idempotency_key") != idempotency_key:
+                    raise ValueError("idempotency_key mismatch for already applied action")
+                return action
+            if action.get("status") != "previewed":
+                raise ValueError(f"Unsupported pending action status: {action.get('status')}")
+
+            resolved_idempotency_key = idempotency_key or action.get("idempotency_key")
+            if resolved_idempotency_key != action.get("idempotency_key"):
+                raise ValueError("idempotency_key mismatch")
+
+            result = await apply_fn(action)
+            if not isinstance(result, dict):
+                raise ValueError("apply_fn must return an object")
+
+            action["status"] = "applied"
+            action["result"] = result
+            action["applied_at"] = self._now_iso()
+            action["updated_at"] = self._now_iso()
+            key = self._pending_key(company_id, pending_action_id)
+            is_saved = await self._redis.set(key, json.dumps(action, ensure_ascii=False), ttl=self._ttl_seconds)
+            if not is_saved:
+                raise RuntimeError("Failed to persist applied action")
+            logger.info(
+                "lara_action_applied action_id=%s pending_action_id=%s",
+                action.get("action_id"),
+                pending_action_id,
+            )
             return action
-        if action.get("status") != "previewed":
-            raise ValueError(f"Unsupported pending action status: {action.get('status')}")
-
-        resolved_idempotency_key = idempotency_key or action.get("idempotency_key")
-        if resolved_idempotency_key != action.get("idempotency_key"):
-            raise ValueError("idempotency_key mismatch")
-
-        result = await apply_fn(action)
-        if not isinstance(result, dict):
-            raise ValueError("apply_fn must return an object")
-
-        action["status"] = "applied"
-        action["result"] = result
-        action["applied_at"] = self._now_iso()
-        action["updated_at"] = self._now_iso()
-        key = self._pending_key(company_id, pending_action_id)
-        is_saved = await self._redis.set(key, json.dumps(action, ensure_ascii=False), ttl=self._ttl_seconds)
-        if not is_saved:
-            raise RuntimeError("Failed to persist applied action")
-        logger.info(
-            "lara_action_applied action_id=%s pending_action_id=%s",
-            action.get("action_id"),
-            pending_action_id,
-        )
-        return action
+        finally:
+            await self._redis.delete(lock_key)
 
     async def reject_action(
         self,

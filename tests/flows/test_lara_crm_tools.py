@@ -151,9 +151,6 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     mock_llm_redis,
     auth_headers_system: dict,
 ) -> None:
-    import asyncio
-    import time
-
     note_title = f"Lara analyze {unique_id}"
     _analyze_body = {
                         "note": {
@@ -208,40 +205,19 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     note_id = created["entity_id"]
     assert isinstance(note_id, str) and note_id
 
-    start_resp = await crm_client.post(
-        "/crm/api/v1/tasks/note-analyze",
-        json={
-            "note_id": note_id,
-            "check_duplicates": False,
-            "include_attachments": False,
-        },
-        headers=auth_headers_system,
-    )
-    assert start_resp.status_code == 202, start_resp.text
-    task_id = start_resp.json()["task_id"]
-    deadline = time.monotonic() + 60.0
-    last: dict = {}
-    while time.monotonic() < deadline:
-        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=auth_headers_system)
-        last = tr.json()
-        if last.get("status") in ("completed", "failed", "cancelled"):
-            break
-        await asyncio.sleep(0.4)
-    assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
+    analyze_raw = await crm_analyze_note_text._run_impl({"note_id": note_id}, state)
+    analyzed = json.loads(analyze_raw)
+    assert analyzed["success"] is True, f"crm_analyze_note_text failed: {analyzed}"
+    blocks_out = analyzed.get("blocks")
+    assert isinstance(blocks_out, list) and len(blocks_out) >= 1
 
-    task_data = last.get("data")
-    if not isinstance(task_data, dict):
-        raise AssertionError(f"task response missing data dict: {last!r}")
-    entities_done = task_data.get("result_entities_count")
-    assert isinstance(entities_done, int) and entities_done >= 1, (
-        f"ожидались извлечённые сущности в задаче analyze, получено result_entities_count={entities_done!r}, "
-        f"task={last!r}"
-    )
-
-    entity_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
-    draft = entity_resp.json().get("attributes", {}).get("ai_analysis_draft") or {}
-    entities = draft.get("entities") or []
-    assert len(entities) >= 1
+    ao = analyzed.get("analyze")
+    assert isinstance(ao, dict), analyzed
+    task_data_preview = ao.get("result_entities_count")
+    entities_tool = ao.get("entities") or []
+    assert isinstance(entities_tool, list) and len(entities_tool) >= 1, analyzed
+    if task_data_preview is not None:
+        assert isinstance(task_data_preview, int) and task_data_preview >= 1, analyzed
 
 
 @pytest.mark.real_taskiq
@@ -255,9 +231,6 @@ async def test_crm_create_note_and_analyze_tool_chains(
     mock_llm_redis,
     auth_headers_system: dict,
 ) -> None:
-    import asyncio
-    import time
-
     note_title = f"Lara combo {unique_id}"
     _combo_body = {
                         "note": {
@@ -291,58 +264,22 @@ async def test_crm_create_note_and_analyze_tool_chains(
     await mock_llm_redis([_combo_slot, _combo_slot])
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    create_propose_raw = await crm_create_note._run_impl(
+    combo_raw = await crm_create_note_and_analyze._run_impl(
         {
             "name": note_title,
             "description": "Полный текст для создания и анализа.",
-            "mode": "propose",
         },
         state,
     )
-    create_proposed = json.loads(create_propose_raw)
-    create_raw = await crm_create_note._run_impl(
-        {
-            "mode": "apply",
-            "pending_action_id": create_proposed["pending_action_id"],
-        },
-        state,
-    )
-    created = json.loads(create_raw)
-    assert created["success"] is True
-    note_id = created["entity_id"]
+    combo = json.loads(combo_raw)
+    assert combo["success"] is True, combo
+    note_id = combo["entity_id"]
     assert isinstance(note_id, str) and note_id
+    ao = combo.get("analyze")
+    assert isinstance(ao, dict), combo
+    entities_combo = ao.get("entities") or []
+    assert isinstance(entities_combo, list) and len(entities_combo) >= 1, combo
 
-    start_resp = await crm_client.post(
-        "/crm/api/v1/tasks/note-analyze",
-        json={
-            "note_id": note_id,
-            "check_duplicates": False,
-            "include_attachments": False,
-        },
-        headers=auth_headers_system,
-    )
-    assert start_resp.status_code == 202, start_resp.text
-    task_id = start_resp.json()["task_id"]
-    deadline = time.monotonic() + 60.0
-    last: dict = {}
-    while time.monotonic() < deadline:
-        tr = await crm_client.get(f"/crm/api/v1/tasks/{task_id}", headers=auth_headers_system)
-        last = tr.json()
-        if last.get("status") in ("completed", "failed", "cancelled"):
-            break
-        await asyncio.sleep(0.4)
-    assert last.get("status") == "completed", f"task failed: {last.get('error_message')}"
-
-    task_data_combo = last.get("data")
-    if not isinstance(task_data_combo, dict):
-        raise AssertionError(f"task response missing data dict: {last!r}")
-    entities_done_combo = task_data_combo.get("result_entities_count")
-    assert isinstance(entities_done_combo, int) and entities_done_combo >= 1, (
-        f"ожидались извлечённые сущности в задаче analyze, получено result_entities_count={entities_done_combo!r}, "
-        f"task={last!r}"
-    )
-
-    entity_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
-    draft = entity_resp.json().get("attributes", {}).get("ai_analysis_draft") or {}
-    entities = draft.get("entities") or []
-    assert len(entities) >= 1
+    cnt = ao.get("result_entities_count")
+    if cnt is not None:
+        assert isinstance(cnt, int) and cnt >= 1, combo

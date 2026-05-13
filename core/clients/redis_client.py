@@ -145,6 +145,23 @@ class RedisClient:
                 logger.warning(f"Set failed for key {key}: {e}")
                 return False
 
+    async def set_nx(self, key: str, value: str, ttl_seconds: int) -> bool:
+        """SET key value NX EX ttl — True только если ключ раньше отсутствовал."""
+        if not await self._ensure_connected():
+            return False
+        try:
+            ok = await self._client.set(key, value, nx=True, ex=ttl_seconds)
+            return bool(ok)
+        except Exception as e:
+            logger.warning(f"set_nx failed for key {key}: {e}")
+            if await self._ensure_connected():
+                try:
+                    ok = await self._client.set(key, value, nx=True, ex=ttl_seconds)
+                    return bool(ok)
+                except Exception as e2:
+                    logger.warning(f"set_nx retry failed for key {key}: {e2}")
+            return False
+
     async def setex(self, key: str, seconds: int, value: str) -> bool:
         """Устанавливает значение с TTL"""
         if not await self._ensure_connected():

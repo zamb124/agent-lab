@@ -545,7 +545,18 @@ export class VoiceMediaSession extends EventTarget {
 
         const openPromise = new Promise((resolve, reject) => {
             ws.addEventListener('open', () => resolve(undefined), { once: true });
-            ws.addEventListener('error', (e) => reject(e), { once: true });
+            ws.addEventListener(
+                'error',
+                () => {
+                    reject(
+                        new Error(
+                            `voice/ws/connect_failed url=${url} ` +
+                                '(проверьте сервис voice на :8015 и `make app`; в dev WS /voice проксируется с того же Host, первый сегмент пути `voice`).',
+                        ),
+                    );
+                },
+                { once: true },
+            );
         });
 
         /** Сначала mic+AudioContext (ближе к user gesture), затем ждём OPEN. Иначе PCM приходит, пока сокет CONNECTING — кадры терялись. */
