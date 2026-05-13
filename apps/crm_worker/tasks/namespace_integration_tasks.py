@@ -108,6 +108,8 @@ async def run_namespace_integration_job(
         title = _notification_cancelled_title(label, job=job)
         await _notify_task_user(
             row.user_id,
+            repo,
+            company_id,
             task_id=task_id,
             task_type="namespace_integration_job",
             namespace=row.namespace,
@@ -171,6 +173,8 @@ async def run_namespace_integration_job(
         msg = _stats_message(stats)
         await _notify_task_user(
             row.user_id,
+            repo,
+            company_id,
             task_id=task_id,
             task_type="namespace_integration_job",
             namespace=row.namespace,
@@ -206,6 +210,8 @@ async def run_namespace_integration_job(
         title = _notification_title(label, job=job, ok=False)
         await _notify_task_user(
             row.user_id,
+            repo,
+            company_id,
             task_id=task_id,
             task_type="namespace_integration_job",
             namespace=row.namespace,

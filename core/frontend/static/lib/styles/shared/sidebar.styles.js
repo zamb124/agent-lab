@@ -31,7 +31,17 @@ export const sidebarHostStyles = css`
     }
 
     :host([collapsed]) .sidebar-content {
-        padding: var(--space-3);
+        padding: var(--space-3) var(--space-2);
+        padding-bottom: 0;
+    }
+
+    /*
+     * В expanded отрицательный margin даёт полноширинные nav-item без «ступеньки»;
+     * при collapsed узкая колонка + overflow:hidden обрезают содержимое слева.
+     */
+    :host([collapsed]) .sidebar-nav {
+        margin-inline: 0;
+        padding-inline: 0;
     }
 
     :host([collapsed]) .sidebar-logo {
@@ -68,6 +78,9 @@ export const sidebarHostStyles = css`
 
     :host([collapsed]) .sidebar-footer {
         padding: var(--space-3) 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
     }
 
     /* ========== MOBILE MODE ========== */

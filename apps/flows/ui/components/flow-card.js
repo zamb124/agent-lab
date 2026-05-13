@@ -279,11 +279,20 @@ export class FlowCard extends PlatformElement {
 
             :host([collapsed]) .flow-header {
                 justify-content: center;
-                padding: var(--space-3);
+                padding: var(--space-2);
+            }
+
+            :host([collapsed]) .flow-avatar {
+                width: 36px;
+                height: 36px;
+                font-size: var(--text-xs);
             }
 
             :host([collapsed]) .flow-card {
                 border-radius: var(--radius-lg);
+                box-sizing: border-box;
+                max-width: 100%;
+                margin-inline: auto;
             }
 
             @media (max-width: 767px) {

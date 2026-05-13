@@ -13,8 +13,9 @@
  *     Компания (если есть хотя бы одна в списке; «Создать компанию» — только
  *     при роли owner текущей компании), Календарь, Документация, язык (en|ru),
  *     переключатель темы, Выйти.
- *   - в свернутом sidebar (`platform-sidebar[collapsed]`) меню переходит
- *     в `position: fixed` через CSS-переменные `--user-menu-fixed-*`.
+ *   - в свернутом sidebar: `platform-service-sidebar[collapsed]` или
+ *     `platform-sidebar[collapsed]` (вторая недоступна из slot=footer без вложения);
+ *     меню в `position: fixed` через `--user-menu-fixed-*` (`_syncCollapsedMenuPosition`).
  *   - z-index панели при открытии: `nextModalLayerZIndex()` (modal-z-stack.js), inline на `.user-menu`.
  *
  * i18n namespace: 'platform' (см. core/i18n/translations/{ru,en}/platform.json).
@@ -304,10 +305,18 @@ export class PlatformUser extends PlatformElement {
         this.style.removeProperty('--user-menu-fixed-width');
     }
 
+    _collapsedInServiceShell() {
+        const service = this.closest('platform-service-sidebar');
+        return service instanceof HTMLElement && service.hasAttribute('collapsed');
+    }
+
     _syncCollapsedMenuPosition() {
         if (!this._menuOpen) return;
-        const sidebar = this.closest('platform-sidebar');
-        if (!sidebar || !sidebar.hasAttribute('collapsed')) {
+        const innerSidebar = this.closest('platform-sidebar');
+        const collapsed =
+            this._collapsedInServiceShell() ||
+            (innerSidebar instanceof HTMLElement && innerSidebar.hasAttribute('collapsed'));
+        if (!collapsed) {
             this._clearCollapsedMenuPosition();
             return;
         }
@@ -493,11 +502,15 @@ export class PlatformUser extends PlatformElement {
 
             :host-context(platform-sidebar[collapsed]) .user-info,
             :host-context(platform-sidebar[collapsed]) .chevron,
-            :host-context(platform-sidebar[collapsed]) .toolbar-slot {
+            :host-context(platform-sidebar[collapsed]) .toolbar-slot,
+            :host-context(platform-service-sidebar[collapsed]) .user-info,
+            :host-context(platform-service-sidebar[collapsed]) .chevron,
+            :host-context(platform-service-sidebar[collapsed]) .toolbar-slot {
                 display: none;
             }
 
-            :host-context(platform-sidebar[collapsed]) .user-button {
+            :host-context(platform-sidebar[collapsed]) .user-button,
+            :host-context(platform-service-sidebar[collapsed]) .user-button {
                 justify-content: center;
                 width: 40px;
                 height: 40px;
@@ -511,12 +524,14 @@ export class PlatformUser extends PlatformElement {
                 box-shadow: none;
             }
 
-            :host-context(platform-sidebar[collapsed]) .user-button:hover {
+            :host-context(platform-sidebar[collapsed]) .user-button:hover,
+            :host-context(platform-service-sidebar[collapsed]) .user-button:hover {
                 background: var(--glass-solid-subtle);
                 box-shadow: none;
             }
 
-            :host-context(platform-sidebar[collapsed]) .user-menu {
+            :host-context(platform-sidebar[collapsed]) .user-menu,
+            :host-context(platform-service-sidebar[collapsed]) .user-menu {
                 position: fixed;
                 left: var(--user-menu-fixed-left, 0px);
                 bottom: var(--user-menu-fixed-bottom, auto);

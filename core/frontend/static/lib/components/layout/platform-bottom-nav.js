@@ -15,9 +15,13 @@
  *     badge?:    string|number, // опц. бейдж
  *   }
  *
- * Активная вкладка определяется по state.router.routeKey:
- *   - точное совпадение routeKey, ИЛИ
- *   - текущий route — потомок item.routeKey в parent-цепочке state.router.routes.
+ * Активная вкладка (для item с `routeKey`): среди маршрутов в `items` выбирается
+ * **ближайший предок** текущего `state.router.routeKey` — обход от текущего ключа
+ * вверх по `parent` в `state.router.routes`. Так на `/billing` активна только вкладка
+ * `billing`, а не `dashboard`, хотя у маршрута в дереве родитель `dashboard`.
+ * Дочерние страницы без своей вкладки подсвечивают первый совпавший предок (например
+ * `platform_services` → вкладка `dashboard` в консоли).
+ * Items только со `sheet` не получают активности по маршруту.
  *
  * hide-on-routes (атрибут JSON-массива routeKeys) — на этих маршрутах капсула скрыта
  * (полноэкранный редактор, OnlyOffice iframe и т.д.).
@@ -35,22 +39,21 @@ function buildParentMap(routes) {
     return byKey;
 }
 
-function isRouteDescendantOf(routes, currentKey, ancestorKey) {
-    if (!currentKey || !ancestorKey) return false;
-    if (currentKey === ancestorKey) return true;
+function routeAncestorKeys(routes, currentKey) {
+    if (!currentKey || typeof currentKey !== 'string') return [];
     const byKey = buildParentMap(routes);
-    let cursor = byKey.get(currentKey);
+    const keys = [];
+    let k = currentKey;
     const visited = new Set();
-    while (cursor) {
-        if (visited.has(cursor.key)) return false;
-        visited.add(cursor.key);
-        if (cursor.key === ancestorKey) return true;
-        const parent = typeof cursor.parent === 'string' && cursor.parent.length > 0
-            ? byKey.get(cursor.parent)
-            : null;
-        cursor = parent;
+    while (k && typeof k === 'string') {
+        if (visited.has(k)) return keys;
+        visited.add(k);
+        keys.push(k);
+        const node = byKey.get(k);
+        if (!node || typeof node.parent !== 'string' || node.parent.length === 0) break;
+        k = node.parent;
     }
-    return false;
+    return keys;
 }
 
 export class PlatformBottomNav extends PlatformElement {
@@ -200,13 +203,24 @@ export class PlatformBottomNav extends PlatformElement {
         }));
     }
 
-    updated(changed) {
-        super.updated && super.updated(changed);
+    /**
+     * Снимок роутера нужен до render(): updated() вызывается после render(),
+     * иначе активная вкладка один цикл отстаёт от state.router (Dashboard подсвечен на Team).
+     */
+    willUpdate(changed) {
+        super.willUpdate(changed);
         const v = this._routerSelect ? this._routerSelect.value : null;
         if (v) {
             this._routeKey = v.routeKey;
             this._routes = Array.isArray(v.routes) ? v.routes : [];
+        } else {
+            this._routeKey = null;
+            this._routes = [];
         }
+    }
+
+    updated(changed) {
+        super.updated(changed);
         const hide = this._shouldHide();
         if (hide && !this.hasAttribute('hidden')) {
             this.setAttribute('hidden', '');
@@ -223,10 +237,33 @@ export class PlatformBottomNav extends PlatformElement {
         return this.hideOnRoutes.includes(cur);
     }
 
-    _isActive(item) {
-        if (!this._routeKey) return false;
+    _computeBottomNavActiveRouteKey() {
+        const cur = this._routeKey;
+        if (!cur || typeof cur !== 'string' || !Array.isArray(this.items)) return null;
+        const navRouteKeys = new Set();
+        for (const it of this.items) {
+            if (
+                it
+                && typeof it.routeKey === 'string'
+                && it.routeKey.length > 0
+                && !(typeof it.sheet === 'string' && it.sheet.length > 0)
+            ) {
+                navRouteKeys.add(it.routeKey);
+            }
+        }
+        if (navRouteKeys.size === 0) return null;
+        const chain = routeAncestorKeys(this._routes || [], cur);
+        for (const k of chain) {
+            if (navRouteKeys.has(k)) return k;
+        }
+        return null;
+    }
+
+    _isActive(item, activeRouteKey) {
+        if (typeof item.sheet === 'string' && item.sheet.length > 0) return false;
         if (!item || typeof item.routeKey !== 'string' || item.routeKey.length === 0) return false;
-        return isRouteDescendantOf(this._routes || [], this._routeKey, item.routeKey);
+        if (!activeRouteKey) return false;
+        return item.routeKey === activeRouteKey;
     }
 
     _onTap(item) {
@@ -245,8 +282,8 @@ export class PlatformBottomNav extends PlatformElement {
         this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey: item.routeKey, params });
     }
 
-    _renderTab(item) {
-        const active = this._isActive(item);
+    _renderTab(item, activeRouteKey) {
+        const active = this._isActive(item, activeRouteKey);
         const label = this.t(item.labelKey);
         const badge = item.badge;
         return html`
@@ -273,9 +310,10 @@ export class PlatformBottomNav extends PlatformElement {
         if (!Array.isArray(this.items) || this.items.length === 0) {
             return html``;
         }
+        const activeRouteKey = this._computeBottomNavActiveRouteKey();
         return html`
             <nav class="nav-capsule" role="tablist" aria-label=${this.t('mobile_nav.aria', null, 'platform')}>
-                ${this.items.map((it) => this._renderTab(it))}
+                ${this.items.map((it) => this._renderTab(it, activeRouteKey))}
             </nav>
         `;
     }
