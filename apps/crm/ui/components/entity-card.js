@@ -507,6 +507,31 @@ export class CRMEntityCard extends PlatformElement {
                 min-height: 1.5em;
             }
 
+            .semantic-index-ribbon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                align-self: flex-start;
+                width: 32px;
+                height: 32px;
+                margin-bottom: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--crm-stroke);
+                background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+                color: var(--text-primary);
+            }
+            .semantic-index-ribbon--pending_embedding platform-icon {
+                flex-shrink: 0;
+                color: var(--warning, #d97706);
+            }
+            .semantic-index-ribbon--absent {
+                background: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
+            }
+            .semantic-index-ribbon--absent platform-icon {
+                flex-shrink: 0;
+                color: var(--text-tertiary);
+            }
+
             .hero {
                 display: flex;
                 align-items: flex-start;
@@ -2074,6 +2099,26 @@ export class CRMEntityCard extends PlatformElement {
         return `entities.status.${v}`;
     }
 
+    _renderSemanticIndexRibbon(entity) {
+        if (!entity || typeof entity !== 'object') return nothing;
+        const st = entity.semantic_text_index_status;
+        if (st !== 'pending_embedding' && st !== 'absent') return nothing;
+        const labelKey = st === 'pending_embedding'
+            ? 'entity_card.semantic_text_index_pending'
+            : 'entity_card.semantic_text_index_absent';
+        const tipKey = `${labelKey}_tooltip`;
+        return html`
+            <div
+                class="semantic-index-ribbon semantic-index-ribbon--${st}"
+                role="status"
+                title=${this.t(tipKey)}
+                aria-label=${this.t(tipKey)}
+            >
+                <platform-icon name="zap" size="18" ?filled=${true}></platform-icon>
+            </div>
+        `;
+    }
+
     _renderHero(entity, nameValue, descriptionValue) {
         const readonly = this._isReadOnlyShell();
         const pct = searchScorePercent(entity);
@@ -2704,6 +2749,7 @@ export class CRMEntityCard extends PlatformElement {
 
         return html`
             <div class="scroll">
+                ${this._renderSemanticIndexRibbon(entity)}
                 <div class="edit-page-sheet">
                     <div class="entity-card-layout-container ${this.compactStack ? 'entity-card-layout-container--force-stack' : ''}">
                     <div class="edit-two-col">
@@ -2799,6 +2845,7 @@ export class CRMEntityCard extends PlatformElement {
         return html`
             <div class="scroll">
                 ${this._renderTypeBadge()}
+                ${this._renderSemanticIndexRibbon(entity)}
                 ${this._renderHero(entity, nameValue, descValue)}
                 <div class="sheet-block">
                     <div class="sheet-cell-head">${this.t('entity_modal.label_attributes')}</div>
@@ -2995,6 +3042,7 @@ export class CRMEntityCard extends PlatformElement {
         const disabled = this._loadingCard || form.submitting || !has_name;
         return html`
             <form class="scroll" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
+                ${this._renderSemanticIndexRibbon(entity)}
                 <div class="edit-page-sheet">
                     ${this.hostToolbar
                         ? nothing
@@ -3107,6 +3155,7 @@ export class CRMEntityCard extends PlatformElement {
         return html`
             <form class="scroll form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
                 ${this._renderTypeBadge()}
+                ${this._renderSemanticIndexRibbon(this._entityData)}
                 ${this._renderHero(this._entityData, draft.name, draft.description)}
                 <div class="sheet-block">
                     <platform-field

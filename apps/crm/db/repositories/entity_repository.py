@@ -30,11 +30,13 @@ from sqlalchemy import (
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
+from apps.crm.models.api import SemanticTextIndexStatus
 from core.context import get_context
 from core.config import get_settings
 from core.rag import RAGRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
+from core.rag.providers.pgvector_provider import PgVectorProvider
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
@@ -119,6 +121,33 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             "entity_type": entity.entity_type,
             "ttl_seconds": 0,
         }
+
+    async def batch_semantic_text_index_status(
+        self,
+        entities: List[CRMEntity],
+    ) -> Dict[str, Optional[SemanticTextIndexStatus]]:
+        """
+        Статус семантического индекса основного текста (document_id = entity_id).
+
+        Для активного провайдера не-pgvector — по каждой сущности ``None``.
+        """
+        if not entities:
+            return {}
+        provider = self._rag.provider
+        if not isinstance(provider, PgVectorProvider):
+            return {e.entity_id: None for e in entities}
+        triples: List[Tuple[str, str, str]] = []
+        for e in entities:
+            ns = (e.namespace or "default").strip()
+            triples.append((ns, str(e.entity_id).strip(), str(e.company_id).strip()))
+        triple_status = await provider.batch_document_semantic_index_status(triples)
+        result: Dict[str, Optional[SemanticTextIndexStatus]] = {}
+        for e in entities:
+            ns = (e.namespace or "default").strip()
+            key = (ns, str(e.entity_id).strip(), str(e.company_id).strip())
+            status = triple_status[key]
+            result[e.entity_id] = status
+        return result
 
     @staticmethod
     def _parse_datetime_filter_value(value: Any) -> datetime:

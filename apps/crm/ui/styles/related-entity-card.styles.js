@@ -113,6 +113,41 @@ export const relatedEntityCardSharedStyles = css`
     .neighbor-line .related-card.related-card--with-remove {
         padding-right: 44px;
     }
+    .neighbor-line:has(.neighbor-semantic-index):has(.neighbor-remove) .related-card.related-card--with-remove {
+        padding-right: 88px;
+    }
+    .neighbor-line:has(.neighbor-semantic-index):not(:has(.neighbor-remove)) .related-card {
+        padding-right: 44px;
+    }
+    .neighbor-semantic-index {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 1;
+        box-sizing: border-box;
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: var(--radius-md);
+        padding: 0;
+        margin: 0;
+        background: transparent;
+        color: var(--text-tertiary);
+        cursor: default;
+        pointer-events: auto;
+    }
+    .neighbor-line:has(.neighbor-remove) .neighbor-semantic-index {
+        right: 48px;
+    }
+    .neighbor-semantic-index--pending_embedding {
+        color: color-mix(in srgb, var(--warning, #f59e0b) 90%, var(--text-primary));
+    }
+    .neighbor-semantic-index--absent {
+        opacity: 0.85;
+    }
     .neighbor-remove {
         position: absolute;
         top: 8px;

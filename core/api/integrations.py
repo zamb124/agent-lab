@@ -118,7 +118,12 @@ async def oauth_callback(
 
     oauth_service = request.app.state.container.oauth_service
     accept_language = request.headers.get("accept-language")
-    oauth_locale = resolve_oauth_integration_locale(accept_language)
+    fallback_locale = resolve_oauth_integration_locale(
+        accept_language,
+        language_cookie=request.cookies.get("language"),
+    )
+    peeked_locale = await oauth_service.peek_oauth_state_ui_locale(state)
+    oauth_locale = peeked_locale if peeked_locale is not None else fallback_locale
     corr = oauth_error_correlation_ids(request)
     try:
         credential, return_path, flow_context, post_auth_redirect_origin = await oauth_service.complete_oauth(

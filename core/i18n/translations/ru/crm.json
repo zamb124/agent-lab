@@ -260,7 +260,15 @@
         "connection_strength": "Сила связи - {{percent}}%",
         "delete_object_tooltip": "Удалить объект",
         "view_tags_empty": "Нет тегов",
-        "view_status_empty": "Не указан"
+        "view_status_empty": "Не указан",
+        "semantic_text_index_pending": "Семантический поиск по тексту сущности временно недоступен: ожидается векторизация (эмбеддинги).",
+        "semantic_text_index_pending_tooltip": "Текст в индексе хранится без векторов. После пополнения баланса или восстановления сервиса эмбеддинги подставятся автоматически.",
+        "semantic_text_index_absent": "Основной текст сущности не найден в семантическом индексе.",
+        "semantic_text_index_absent_tooltip": "Чанки для этой сущности в RAG не созданы или были удалены.",
+        "semantic_text_index_pending_short": "Векторизация",
+        "semantic_text_index_pending_short_tooltip": "Эмбеддинги ожидаются; семантический поиск по этой карточке пока не работает.",
+        "semantic_text_index_absent_short": "Не в индексе",
+        "semantic_text_index_absent_short_tooltip": "Текст не проиндексирован для семантического поиска."
     },
     "grants": {
         "section_title": "Управление доступом",

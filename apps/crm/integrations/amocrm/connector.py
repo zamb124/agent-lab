@@ -15,6 +15,7 @@ from apps.crm.integrations.amocrm.type_extensions import (
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     GuidedIntegrationLink,
+    OAuthErrorLocale,
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
@@ -58,6 +59,7 @@ class AmoCRMConnector:
         company_id: str,
         user_id: str,
         return_origin: str | None = None,
+        oauth_ui_locale: OAuthErrorLocale | None = None,
     ) -> str:
         service = f"amocrm:{namespace_name.strip()}"
         return await self._container.oauth_service.build_auth_url(
@@ -69,6 +71,7 @@ class AmoCRMConnector:
             return_path=return_path,
             amocrm_subdomain=subdomain.strip(),
             return_origin=return_origin,
+            oauth_ui_locale=oauth_ui_locale,
         )
 
     async def sync_entities(self, namespace_name: str, **kwargs: Any) -> dict[str, int]:

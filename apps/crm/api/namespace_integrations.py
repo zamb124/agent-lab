@@ -4,13 +4,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from apps.crm.api.tasks import _active_task_conflict, _to_response
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import TaskResponse
 from apps.crm.services.task_service import ActiveTaskExistsError
+from core.api.integration_oauth_error_html import resolve_oauth_integration_locale
 from core.context import get_context
 from core.integrations.providers.amocrm import normalize_amocrm_subdomain_query
 
@@ -115,6 +116,7 @@ async def list_namespace_integrations(
     response_model=AuthorizeResponse,
 )
 async def integration_authorize_url(
+    request: Request,
     namespace_name: str,
     provider: str,
     container: ContainerDep,
@@ -150,6 +152,10 @@ async def integration_authorize_url(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         ro = return_origin.strip() if isinstance(return_origin, str) and return_origin.strip() else None
+        oauth_ui_locale = resolve_oauth_integration_locale(
+            request.headers.get("accept-language"),
+            language_cookie=request.cookies.get("language"),
+        )
         url = await connector.build_authorize_url(
             namespace_name=namespace_name.strip(),
             subdomain=sub,
@@ -157,6 +163,7 @@ async def integration_authorize_url(
             company_id=ctx.active_company.company_id,
             user_id=ctx.user.user_id,
             return_origin=ro,
+            oauth_ui_locale=oauth_ui_locale,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

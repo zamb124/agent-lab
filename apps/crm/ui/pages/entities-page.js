@@ -676,6 +676,16 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 flex-direction: column;
                 gap: 6px;
             }
+            .card-title-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-width: 0;
+            }
+            .card-title-row .card-title {
+                flex: 1;
+                min-width: 0;
+            }
             .card-type-icon {
                 width: 36px;
                 height: 36px;
@@ -695,6 +705,22 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 min-width: 0;
+            }
+            .semantic-index-icon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                width: 32px;
+                height: 32px;
+                border-radius: var(--radius-md);
+                color: var(--text-tertiary);
+            }
+            .semantic-index-icon--pending_embedding {
+                color: color-mix(in srgb, var(--warning, #f59e0b) 90%, var(--text-primary));
+            }
+            .semantic-index-icon--absent {
+                opacity: 0.85;
             }
             .card-header-end {
                 display: flex;
@@ -1894,6 +1920,26 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `;
     }
 
+    _semanticIndexListIcon(entity) {
+        const st = entity?.semantic_text_index_status;
+        if (st !== 'pending_embedding' && st !== 'absent') return nothing;
+        const shortKey = st === 'pending_embedding'
+            ? 'entity_card.semantic_text_index_pending_short'
+            : 'entity_card.semantic_text_index_absent_short';
+        const tipKey = `${shortKey}_tooltip`;
+        return html`
+            <span
+                class="semantic-index-icon semantic-index-icon--${st}"
+                role="img"
+                title=${this.t(tipKey)}
+                aria-label=${this.t(tipKey)}
+                @click=${(e) => e.stopPropagation()}
+            >
+                <platform-icon name="zap" size="18" ?filled=${true}></platform-icon>
+            </span>
+        `;
+    }
+
     _renderEntityCard(entity) {
         const typeConfig = this._entityTypeConfig(entity);
         const bgColor = this._hexToRgba(typeConfig.color, 0.15);
@@ -1940,11 +1986,15 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                                 </div>
                             `;
                         })()}
-                        <h3 class="card-title">${entity.name}</h3>
+                        <div class="card-title-row">
+                            <h3 class="card-title">${entity.name}</h3>
+                            ${showHeaderEnd ? nothing : this._semanticIndexListIcon(entity)}
+                        </div>
                     </div>
                     ${showHeaderEnd
                         ? html`
                             <div class="card-header-end">
+                                ${this._semanticIndexListIcon(entity)}
                                 <div
                                     class="entity-card-drag-handle"
                                     draggable="true"

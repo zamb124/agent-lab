@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
 
@@ -35,6 +36,7 @@ class NamespaceIntegrationConnector(Protocol):
         company_id: str,
         user_id: str,
         return_origin: str | None = None,
+        oauth_ui_locale: OAuthErrorLocale | None = None,
     ) -> str:
         """URL OAuth для подключения (открыть в браузере)."""
         ...

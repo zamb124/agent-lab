@@ -258,6 +258,134 @@ class TestOAuthCallbackGuidedIntegrationError:
         assert b"/crm/settings/spaces" in resp.content
 
     @pytest.mark.asyncio
+    async def test_returns_html_russian_when_language_cookie_ru(
+        self, flows_client, flows_app,
+    ) -> None:
+        exc = GuidedIntegrationError(
+            code="test_oauth_guided_cookie_ru",
+            title_ru="Заголовок по-русски",
+            title_en="EN title",
+            message_ru="Тело ru",
+            message_en="EN body",
+            links=(
+                GuidedIntegrationLink(
+                    href="/crm/settings/spaces",
+                    label_ru="Пространства",
+                    label_en="Spaces",
+                ),
+            ),
+        )
+        oauth = flows_app.state.container.oauth_service
+        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+            resp = await flows_client.get(
+                "/flows/api/v1/integrations/oauth/callback",
+                params={"code": "x", "state": "y"},
+                headers={
+                    "Sec-Fetch-Dest": "document",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Cookie": "language=ru",
+                },
+            )
+        assert resp.status_code == 400
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert "Заголовок по-русски".encode("utf-8") in resp.content
+
+    @pytest.mark.asyncio
+    async def test_returns_html_russian_when_oauth_state_ui_locale_overrides_accept_en(
+        self, flows_client, flows_app,
+    ) -> None:
+        exc = GuidedIntegrationError(
+            code="test_oauth_state_locale_ru",
+            title_ru="Заголовок по-русски",
+            title_en="EN title",
+            message_ru="Тело ru",
+            message_en="EN body",
+            links=(),
+        )
+        oauth = flows_app.state.container.oauth_service
+        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+            with patch.object(
+                oauth,
+                "peek_oauth_state_ui_locale",
+                new=AsyncMock(return_value="ru"),
+            ):
+                resp = await flows_client.get(
+                    "/flows/api/v1/integrations/oauth/callback",
+                    params={"code": "x", "state": "y"},
+                    headers={
+                        "Sec-Fetch-Dest": "document",
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                )
+        assert resp.status_code == 400
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert "Заголовок по-русски".encode("utf-8") in resp.content
+
+    @pytest.mark.asyncio
+    async def test_returns_html_for_browser_accept_without_sec_fetch_dest(
+        self, flows_client, flows_app,
+    ) -> None:
+        exc = GuidedIntegrationError(
+            code="test_oauth_guided_html_accept",
+            title_ru="RU title",
+            title_en="EN title",
+            message_ru="RU body",
+            message_en="EN body",
+            links=(
+                GuidedIntegrationLink(
+                    href="/crm/settings/spaces",
+                    label_ru="Lru",
+                    label_en="Len",
+                ),
+            ),
+        )
+        oauth = flows_app.state.container.oauth_service
+        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+            resp = await flows_client.get(
+                "/flows/api/v1/integrations/oauth/callback",
+                params={"code": "x", "state": "y"},
+                headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en",
+                },
+            )
+        assert resp.status_code == 400
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert b"EN title" in resp.content
+
+    @pytest.mark.asyncio
+    async def test_returns_json_when_explicit_application_json_accept(
+        self, flows_client, flows_app,
+    ) -> None:
+        exc = GuidedIntegrationError(
+            code="test_oauth_guided_json_accept",
+            title_ru="RU title",
+            title_en="EN title",
+            message_ru="RU body",
+            message_en="EN body",
+            links=(
+                GuidedIntegrationLink(
+                    href="/crm/settings/spaces",
+                    label_ru="Lru",
+                    label_en="Len",
+                ),
+            ),
+        )
+        oauth = flows_app.state.container.oauth_service
+        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+            resp = await flows_client.get(
+                "/flows/api/v1/integrations/oauth/callback",
+                params={"code": "x", "state": "y"},
+                headers={
+                    "Accept": "application/json",
+                    "Accept-Language": "en",
+                },
+            )
+        assert resp.status_code == 400
+        assert resp.headers.get("content-type", "").startswith("application/json")
+        assert resp.json()["code"] == "test_oauth_guided_json_accept"
+
+    @pytest.mark.asyncio
     async def test_value_error_returns_html_when_document_navigation(
         self, flows_client, flows_app,
     ) -> None:

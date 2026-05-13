@@ -331,6 +331,35 @@ class TestOAuthService:
         assert state_data["user_id"] == f"user-{unique_id}"
 
     @pytest.mark.asyncio
+    async def test_build_auth_url_stores_oauth_ui_locale_peek_reads(
+        self,
+        oauth_service: OAuthService,
+        fake_storage: FakeStorage,
+        unique_id: str,
+        monkeypatch,
+    ) -> None:
+        _patch_auth_config(monkeypatch)
+
+        await oauth_service.build_auth_url(
+            provider=IntegrationProvider.GOOGLE,
+            service="docs",
+            scopes=["https://www.googleapis.com/auth/documents"],
+            user_id=f"user-{unique_id}",
+            company_id=f"company-{unique_id}",
+            redirect_uri="http://localhost/callback",
+            oauth_ui_locale="ru",
+        )
+
+        stored_keys = [k for k in fake_storage._data if k.startswith("integration_oauth_state:")]
+        assert len(stored_keys) == 1
+        state_data = json.loads(fake_storage._data[stored_keys[0]])
+        assert state_data["oauth_ui_locale"] == "ru"
+        state_token = stored_keys[0].split(":", 1)[1]
+        peeked = await oauth_service.peek_oauth_state_ui_locale(state_token)
+        assert peeked == "ru"
+        assert await oauth_service.peek_oauth_state_ui_locale("missing-token") is None
+
+    @pytest.mark.asyncio
     async def test_build_auth_url_default_redirect_uri_includes_service_path(
         self,
         oauth_service: OAuthService,

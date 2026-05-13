@@ -260,7 +260,15 @@
         "connection_strength": "Connection strength - {{percent}}%",
         "delete_object_tooltip": "Delete object",
         "view_tags_empty": "No tags",
-        "view_status_empty": "Not set"
+        "view_status_empty": "Not set",
+        "semantic_text_index_pending": "Semantic search over this entity text is temporarily unavailable: embedding is pending.",
+        "semantic_text_index_pending_tooltip": "Chunks are stored without vectors. Embeddings will appear automatically after billing is restored or the service recovers.",
+        "semantic_text_index_absent": "This entity text is not present in the semantic index.",
+        "semantic_text_index_absent_tooltip": "No RAG chunks for this entity or they were removed.",
+        "semantic_text_index_pending_short": "Embedding pending",
+        "semantic_text_index_pending_short_tooltip": "Embeddings are pending; semantic search does not include this card yet.",
+        "semantic_text_index_absent_short": "Not indexed",
+        "semantic_text_index_absent_short_tooltip": "Text is not indexed for semantic search."
     },
     "grants": {
         "section_title": "Access control",

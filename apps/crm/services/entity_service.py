@@ -62,6 +62,7 @@ from apps.crm.services.crm_summary_ws_broadcast import (
 )
 from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
 from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
+from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
 from core.clients.a2a_client import A2AClient
 from core.company_ai import AICapability, resolve_llm_for_capability
@@ -4503,11 +4504,14 @@ class EntityService:
                 related_entity_ids.add(rel.source_entity_id)
 
         related_entities = await self._entity_repo.get_by_ids(list(related_entity_ids))
-        
+        related_entities_payload = await self._related_entities_as_api_dicts(related_entities)
+
         attachments = await self._attachment_service.get_attachments(entity_id)
-        
+
+        entity_payload = await self._entity_as_api_dict(entity)
+
         return {
-            "entity": self._entity_to_dict(entity),
+            "entity": entity_payload,
             "relationships": [
                 {
                     "relationship_id": rel.relationship_id,
@@ -4524,7 +4528,7 @@ class EntityService:
                 }
                 for rel in relationships
             ],
-            "related_entities": [self._entity_to_dict(e) for e in related_entities],
+            "related_entities": related_entities_payload,
             "attachments": attachments
         }
     
@@ -4560,13 +4564,29 @@ class EntityService:
         all_related_ids -= set(entity_ids)
 
         related_entities = await self._entity_repo.get_by_ids(list(all_related_ids)) if all_related_ids else []
-        related_by_id = {e.entity_id: e for e in related_entities}
+        related_payload_by_id: Dict[str, Dict[str, Any]] = {}
+        if related_entities:
+            enriched_related = await self._related_entities_as_api_dicts(related_entities)
+            for rd in enriched_related:
+                eid = rd.get("entity_id")
+                if isinstance(eid, str) and eid:
+                    related_payload_by_id[eid] = rd
 
         attachments_list = await asyncio.gather(
             *[self._attachment_service.get_attachments(eid) for eid in entity_ids if eid in entities_by_id]
         )
         existing_ids = [eid for eid in entity_ids if eid in entities_by_id]
         attachments_by_entity = dict(zip(existing_ids, attachments_list))
+
+        center_entities = [entities_by_id[eid] for eid in entity_ids if eid in entities_by_id]
+        center_payload_by_id: Dict[str, Dict[str, Any]] = {}
+        if center_entities:
+            enriched_centers = await build_entity_responses_with_semantic_index(
+                self._entity_repo,
+                center_entities,
+            )
+            for resp in enriched_centers:
+                center_payload_by_id[resp.entity_id] = resp.model_dump(mode="json")
 
         result: dict[str, dict[str, Any]] = {}
         for eid in entity_ids:
@@ -4579,7 +4599,7 @@ class EntityService:
                 neighbor = rel.target_entity_id if rel.source_entity_id == eid else rel.source_entity_id
                 rel_neighbor_ids.add(neighbor)
             result[eid] = {
-                "entity": self._entity_to_dict(entity),
+                "entity": center_payload_by_id[eid],
                 "relationships": [
                     {
                         "relationship_id": rel.relationship_id,
@@ -4597,13 +4617,25 @@ class EntityService:
                     for rel in rels
                 ],
                 "related_entities": [
-                    self._entity_to_dict(related_by_id[nid])
+                    related_payload_by_id[nid]
                     for nid in rel_neighbor_ids
-                    if nid in related_by_id
+                    if nid in related_payload_by_id
                 ],
                 "attachments": attachments_by_entity.get(eid, []),
             }
         return result
+
+    async def _entity_as_api_dict(self, entity: CRMEntity) -> Dict[str, Any]:
+        enriched = await build_entity_responses_with_semantic_index(self._entity_repo, [entity])
+        if len(enriched) != 1:
+            raise ValueError("_entity_as_api_dict: expected a single enriched entity")
+        return enriched[0].model_dump(mode="json")
+
+    async def _related_entities_as_api_dicts(self, entities: List[CRMEntity]) -> List[Dict[str, Any]]:
+        if not entities:
+            return []
+        enriched = await build_entity_responses_with_semantic_index(self._entity_repo, entities)
+        return [resp.model_dump(mode="json") for resp in enriched]
 
     @staticmethod
     def _entity_to_dict(entity: CRMEntity) -> Dict[str, Any]:

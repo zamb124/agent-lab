@@ -1,5 +1,7 @@
 """
-HTML для ошибок универсального OAuth callback (навигация браузера, Sec-Fetch-Dest: document).
+HTML для ошибок универсального OAuth callback (навигация браузера).
+
+Ветка HTML: Sec-Fetch-Dest: document и/или Accept с text/html (прокси без Fetch Metadata).
 """
 
 from __future__ import annotations
@@ -16,26 +18,80 @@ from core.integrations.guided_integration_error import (
 
 def oauth_callback_prefers_html_response(request: Request) -> bool:
     """
-    Top-level браузерный переход на callback — Sec-Fetch-Dest: document.
-    Программные клиенты (pytest, curl без Fetch Metadata) чаще без этого заголовка; им — JSON.
+    Ответ с человекочитаемой HTML-страницей вместо JSON для ошибок callback.
+
+    Условия:
+    - Sec-Fetch-Dest: document (Fetch Metadata в Chromium), или
+    - Accept содержит text/html / application/xhtml+xml и первый тип не только application/json.
+
+    JSON остаётся для явного Accept: application/json и для */* (httpx/pytest, curl по умолчанию).
     """
     raw = request.headers.get("sec-fetch-dest")
-    return isinstance(raw, str) and raw.strip().lower() == "document"
+    if isinstance(raw, str) and raw.strip().lower() == "document":
+        return True
+    accept = request.headers.get("accept")
+    if not isinstance(accept, str) or not accept.strip():
+        return False
+    lowered = accept.strip().lower()
+    primary = lowered.split(",", maxsplit=1)[0].strip()
+    if primary.partition(";")[0].strip() == "application/json":
+        return False
+    return "text/html" in lowered or "application/xhtml+xml" in lowered
 
 
-def resolve_oauth_integration_locale(accept_language: str | None) -> OAuthErrorLocale:
-    """Первый подходящий тег Accept-Language: en-* → en, иначе ru."""
+def _oauth_locale_from_accept_language_weighted(accept_language: str) -> OAuthErrorLocale:
+    """
+    ru vs en по RFC‑шному порядку тегов и качества q= (не только «первый тег в списке»).
+    Иные языки не назначают локаль; если ни ru, ни en не указаны — ru по умолчанию платформы.
+    """
+    ru_q = 0.0
+    en_q = 0.0
+    for part in accept_language.split(","):
+        chunk = part.strip()
+        if not chunk:
+            continue
+        tag_segment = chunk.split(";", 1)
+        tag_raw = tag_segment[0].strip().lower()
+        q_val = 1.0
+        if len(tag_segment) > 1:
+            for param in tag_segment[1].split(";"):
+                param_stripped = param.strip()
+                if param_stripped.lower().startswith("q="):
+                    try:
+                        q_val = float(param_stripped[2:].strip())
+                    except ValueError:
+                        q_val = 0.0
+                    break
+        primary = tag_raw.split("-", maxsplit=1)[0]
+        if primary == "ru":
+            ru_q = max(ru_q, q_val)
+        elif primary == "en":
+            en_q = max(en_q, q_val)
+    if ru_q == 0.0 and en_q == 0.0:
+        return "ru"
+    if en_q > ru_q:
+        return "en"
+    return "ru"
+
+
+def resolve_oauth_integration_locale(
+    accept_language: str | None,
+    *,
+    language_cookie: str | None = None,
+) -> OAuthErrorLocale:
+    """
+    Локаль страницы ошибки OAuth: совпадает с выбором в SPA.
+
+    Приоритет: cookie ``language`` (ru/en), затем Accept-Language с учётом q=, иначе ru.
+    """
+    raw_cookie = (language_cookie or "").strip().lower()
+    if raw_cookie == "ru":
+        return "ru"
+    if raw_cookie == "en":
+        return "en"
     if not isinstance(accept_language, str) or not accept_language.strip():
         return "ru"
-    for part in accept_language.split(","):
-        tag_raw = part.split(";")[0].strip().lower()
-        if not tag_raw:
-            continue
-        primary = tag_raw.split("-", 1)[0]
-        if primary == "en":
-            return "en"
-        return "ru"
-    return "ru"
+    return _oauth_locale_from_accept_language_weighted(accept_language.strip())
 
 
 def build_integration_oauth_error_html(

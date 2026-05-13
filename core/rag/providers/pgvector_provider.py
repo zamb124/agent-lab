@@ -6,11 +6,11 @@ RAG провайдер на базе pgvector (PostgreSQL).
 from core.logging import get_logger
 import os
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import tiktoken
 from core.config.testing import is_testing
-from sqlalchemy import and_, delete, func, or_, select, text, update
+from sqlalchemy import and_, case, delete, func, or_, select, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.db.models import VectorDocument
@@ -739,6 +739,80 @@ class PgVectorProvider(BaseRAGProvider):
         if deleted:
             logger.info(f"Удален документ {document_id}: {deleted} chunks")
         return deleted > 0
+
+    async def batch_document_semantic_index_status(
+        self,
+        keys: List[Tuple[str, str, str]],
+    ) -> Dict[Tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]]:
+        """
+        Агрегат по chunk-ам vector_documents для троек ``(namespace_id, document_id, company_id)``.
+
+        - ``absent`` — нет строк.
+        - ``pending_embedding`` — есть строка с ``embedding IS NULL``.
+        - ``ready`` — есть строки, все с непустым ``embedding``.
+        """
+        if not keys:
+            return {}
+        unique_keys = list(dict.fromkeys(keys))
+        out: Dict[Tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]] = {
+            k: "absent" for k in unique_keys
+        }
+
+        null_chunks_expr = func.coalesce(
+            func.sum(case((VectorDocument.embedding.is_(None), 1), else_=0)),
+            0,
+        ).label("null_chunks")
+        chunk_count = func.count().label("chunk_count")
+
+        stmt = (
+            select(
+                VectorDocument.namespace_id,
+                VectorDocument.document_id,
+                VectorDocument.company_id,
+                chunk_count,
+                null_chunks_expr,
+            )
+            .where(
+                tuple_(
+                    VectorDocument.namespace_id,
+                    VectorDocument.document_id,
+                    VectorDocument.company_id,
+                ).in_(unique_keys)
+            )
+            .group_by(
+                VectorDocument.namespace_id,
+                VectorDocument.document_id,
+                VectorDocument.company_id,
+            )
+        )
+
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            rows = result.all()
+
+        for row in rows:
+            ns, doc_id, cid, cnt, null_chunks = (
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+            )
+            if cid is None:
+                continue
+            key = (str(ns), str(doc_id), str(cid))
+            if key not in out:
+                continue
+            null_int = int(null_chunks or 0)
+            total = int(cnt or 0)
+            if null_int > 0:
+                out[key] = "pending_embedding"
+            elif total > 0:
+                out[key] = "ready"
+            else:
+                out[key] = "absent"
+
+        return out
 
     async def reembed_stale_documents(
         self,

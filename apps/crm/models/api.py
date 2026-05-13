@@ -3,8 +3,10 @@ Pydantic модели для API endpoints.
 """
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import Dict, Any, List, Optional, Literal
 from datetime import date, datetime
+from typing import Any, Dict, List, Literal, Optional
+
+SemanticTextIndexStatus = Literal["absent", "pending_embedding", "ready"]
 
 from core.models.identity_models import NamespaceCRMSettings, BoardStage
 
@@ -93,6 +95,13 @@ class EntityResponse(BaseModel):
     match_type: Optional[str] = Field(
         default=None,
         description="Источник совпадения в гибридном поиске, когда применимо.",
+    )
+    semantic_text_index_status: Optional[SemanticTextIndexStatus] = Field(
+        default=None,
+        description=(
+            "Семантический индекс основного текста сущности (pgvector, document_id = entity_id). "
+            "None — не pgvector или поле не включено в ответ."
+        ),
     )
 
     created_at: datetime

@@ -62,6 +62,26 @@ export class CRMRelatedNeighborRows extends PlatformElement {
         this.emit('relationship-remove', { relationshipId });
     }
 
+    _semanticIndexNeighborIndicator(thumb) {
+        const st = thumb?.semantic_text_index_status;
+        if (st !== 'pending_embedding' && st !== 'absent') return nothing;
+        const shortKey = st === 'pending_embedding'
+            ? 'entity_card.semantic_text_index_pending_short'
+            : 'entity_card.semantic_text_index_absent_short';
+        const tipKey = `${shortKey}_tooltip`;
+        return html`
+            <span
+                class="neighbor-semantic-index neighbor-semantic-index--${st}"
+                role="img"
+                title=${this.t(tipKey)}
+                aria-label=${this.t(tipKey)}
+                @click=${(e) => e.stopPropagation()}
+            >
+                <platform-icon name="zap" size="18" ?filled=${true}></platform-icon>
+            </span>
+        `;
+    }
+
     render() {
         if (!Array.isArray(this.rows)) {
             throw new Error('crm-related-neighbor-rows: rows must be an array');
@@ -142,6 +162,7 @@ export class CRMRelatedNeighborRows extends PlatformElement {
                                     ${scoreBlock}
                                 </span>
                             </button>
+                            ${this._semanticIndexNeighborIndicator(thumb)}
                             ${this.showRemove
                                 ? html`
                                     <button

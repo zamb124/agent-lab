@@ -17,6 +17,7 @@ from uuid import uuid4
 from core.config import get_settings
 from core.http.client import get_httpx_client
 from core.utils.domain import is_allowed_integration_return_origin
+from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import (
     IntegrationCredential,
     IntegrationProvider,
@@ -135,6 +136,7 @@ class OAuthService:
         flow_context: dict[str, Any] | None = None,
         amocrm_subdomain: str | None = None,
         return_origin: str | None = None,
+        oauth_ui_locale: OAuthErrorLocale | None = None,
     ) -> str:
         """
         Генерирует OAuth authorization URL.
@@ -146,6 +148,9 @@ class OAuthService:
 
         return_origin: фактический origin вкладки (например http://system.lvh.me:8002) для редиректа
         после успешного OAuth; должен быть в том же тенант-кластере, что и platform_public_base_url.
+
+        oauth_ui_locale: локаль SPA при старте OAuth (ru/en), сохраняется в state для страницы ошибки
+        callback после редиректа с провайдера (куки браузера на callback могут не совпасть с вкладкой приложения).
 
         flow_context (если передан) содержит идентификаторы flow-сессии
         (flow_id, session_id, task_id, context_id, branch_id, channel, context_data)
@@ -191,6 +196,8 @@ class OAuthService:
                     "return_origin не из того же origin-кластера, что server.platform_public_base_url"
                 )
             state_payload["post_auth_redirect_origin"] = ro
+        if oauth_ui_locale == "ru" or oauth_ui_locale == "en":
+            state_payload["oauth_ui_locale"] = oauth_ui_locale
         if flow_context is not None:
             state_payload["flow_context"] = flow_context
         await self._storage.set(
@@ -222,6 +229,30 @@ class OAuthService:
             provider.value, service, user_id, company_id,
         )
         return f"{oauth_config.auth_url}?{query}"
+
+    async def peek_oauth_state_ui_locale(self, state_token: str) -> OAuthErrorLocale | None:
+        """
+        Читает oauth_ui_locale из state до complete_oauth (state затем удаляется).
+
+        Нужен для HTML ошибок callback: после редиректа с внешнего OAuth-провайдера cookie language
+        на приложении часто не совпадает с локалью вкладки при старте authorize.
+        """
+        if not isinstance(state_token, str) or not state_token.strip():
+            return None
+        state_key = f"{OAUTH_STATE_PREFIX}:{state_token.strip()}"
+        raw_state = await self._storage.get(key=state_key, force_global=True)
+        if raw_state is None:
+            return None
+        try:
+            payload = json.loads(raw_state)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        loc = payload.get("oauth_ui_locale")
+        if loc == "ru" or loc == "en":
+            return loc
+        return None
 
     async def complete_oauth(
         self,

@@ -167,8 +167,11 @@ def _hosts_same_tenant_cluster(o_host: str, p_host: str) -> bool:
 
 def is_allowed_integration_return_origin(origin: str, platform_public_base_url: str | None) -> bool:
     """
-    Разрешённый origin браузера после OAuth: тот же scheme и порт, хост в том же тенант-кластере,
-    что и server.platform_public_base_url. Исключает open-redirect на чужие хосты.
+    Разрешённый origin вкладки после OAuth: тот же scheme, хост в том же тенант-кластере,
+    что и server.platform_public_base_url, и совпадающий порт (или локальный dev: lvh.me,
+    localhost, dev-IP — разный порт допустим при том же кластере хостов).
+
+    Исключает open-redirect на чужие хосты в проде.
     """
     if not origin or not str(origin).strip():
         return False
@@ -187,7 +190,12 @@ def is_allowed_integration_return_origin(origin: str, platform_public_base_url: 
     o_effective = o_port if o_port else _default_port_for_scheme(o.scheme)
     p_effective = p_port if p_port else _default_port_for_scheme(p.scheme)
     if o_effective != p_effective:
-        return False
+        if not (
+            is_local(o_host)
+            and is_local(p_host)
+            and _hosts_same_tenant_cluster(o_host, p_host)
+        ):
+            return False
     return _hosts_same_tenant_cluster(o_host, p_host)
 
 

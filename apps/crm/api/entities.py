@@ -41,6 +41,7 @@ from apps.crm.taskiq_analyze_errors import (
     parse_validation_from_task_message,
 )
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
+from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.dependencies import ContainerDep
 from core.clients import ServiceClient
 from core.context import get_context
@@ -49,6 +50,15 @@ from core.websocket.publisher import notify_user, Notification, NotificationType
 from taskiq.exceptions import TaskiqResultTimeoutError
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
+
+
+async def _single_entity_response(
+    *,
+    repo,
+    entity: CRMEntity,
+) -> EntityResponse:
+    items = await build_entity_responses_with_semantic_index(repo, [entity])
+    return items[0]
 
 
 @router.get("/person-entity/self", response_model=EntityResponse)
@@ -66,7 +76,7 @@ async def get_person_entity_for_current_user(
     entity = await container.entity_repository.get(person_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Person entity not found")
-    return EntityResponse.model_validate(entity)
+    return await _single_entity_response(repo=container.entity_repository, entity=entity)
 
 
 @router.post("", response_model=EntityResponse)
@@ -99,7 +109,7 @@ async def create_entity(
         raise HTTPException(status_code=422, detail=exc.field_errors)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return EntityResponse.model_validate(entity)
+    return await _single_entity_response(repo=container.entity_repository, entity=entity)
 
 
 @router.post("/bulk", response_model=BulkCreateResponse)
@@ -111,7 +121,7 @@ async def bulk_create_entities(
     if len(body.items) > 200:
         raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
 
-    created = []
+    created_entities: List[CRMEntity] = []
     errors = []
     for idx, item in enumerate(body.items):
         try:
@@ -129,9 +139,13 @@ async def bulk_create_entities(
                 priority=item.priority,
                 assignees=item.assignees,
             )
-            created.append(EntityResponse.model_validate(entity))
+            created_entities.append(entity)
         except (ValueError, SchemaValidationError) as exc:
             errors.append(BulkErrorItem(index=idx, error=str(exc)))
+    created = await build_entity_responses_with_semantic_index(
+        container.entity_repository,
+        created_entities,
+    )
     return BulkCreateResponse(created=created, errors=errors)
 
 
@@ -144,14 +158,18 @@ async def bulk_update_entities(
     if len(body.items) > 200:
         raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
 
-    updated = []
+    updated_entities: List[CRMEntity] = []
     errors = []
     for idx, item in enumerate(body.items):
         try:
             entity = await container.entity_service.update_entity(item.entity_id, item.updates)
-            updated.append(EntityResponse.model_validate(entity))
+            updated_entities.append(entity)
         except ValueError as exc:
             errors.append(BulkErrorItem(index=idx, entity_id=item.entity_id, error=str(exc)))
+    updated = await build_entity_responses_with_semantic_index(
+        container.entity_repository,
+        updated_entities,
+    )
     return BulkUpdateResponse(updated=updated, errors=errors)
 
 
@@ -208,8 +226,13 @@ async def merge_entities(
         filtered = await container.access_control_service.filter_fields(merged, user_id, company_id)
     except PermissionError:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    status_by_id = await container.entity_repository.batch_semantic_text_index_status([merged])
+    merge_entity_resp = EntityResponse.model_validate(filtered).model_copy(
+        update={"semantic_text_index_status": status_by_id.get(merged.entity_id)},
+    )
     return EntityMergeResponse(
-        entity=EntityResponse.model_validate(filtered),
+        entity=merge_entity_resp,
         merged_from_entity_id=merged_from_id,
     )
 
@@ -252,8 +275,12 @@ async def _execute_entity_query(
             limit=body.limit,
             cursor=body.cursor,
         )
+        items = await build_entity_responses_with_semantic_index(
+            container.entity_repository,
+            entities,
+        )
         return CursorPage[EntityResponse](
-            items=[EntityResponse.model_validate(e) for e in entities],
+            items=items,
             next_cursor=next_cursor,
             has_more=has_more,
         )
@@ -272,12 +299,14 @@ async def _execute_entity_query(
             filter_field_types=filter_field_types,
             limit=body.limit,
         )
-        items = []
-        for entity, score, match_type in results:
-            resp = EntityResponse.model_validate(entity)
+        entities_only = [row[0] for row in results]
+        items = await build_entity_responses_with_semantic_index(
+            container.entity_repository,
+            entities_only,
+        )
+        for resp, (_, score, match_type) in zip(items, results):
             resp.score = score
             resp.match_type = match_type
-            items.append(resp)
         return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
     if body.search_mode == "text":
@@ -290,12 +319,14 @@ async def _execute_entity_query(
             filter_field_types=filter_field_types,
             limit=body.limit,
         )
-        items = []
-        for entity, score in results:
-            resp = EntityResponse.model_validate(entity)
+        entities_only = [row[0] for row in results]
+        items = await build_entity_responses_with_semantic_index(
+            container.entity_repository,
+            entities_only,
+        )
+        for resp, (_, score) in zip(items, results):
             resp.score = score
             resp.match_type = "text"
-            items.append(resp)
         return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
     results = await container.entity_service.search_entities(
@@ -307,12 +338,14 @@ async def _execute_entity_query(
         filter_field_types=filter_field_types,
         limit=body.limit,
     )
-    items = []
-    for entity, score in results:
-        resp = EntityResponse.model_validate(entity)
+    entities_only = [row[0] for row in results]
+    items = await build_entity_responses_with_semantic_index(
+        container.entity_repository,
+        entities_only,
+    )
+    for resp, (_, score) in zip(items, results):
         resp.score = score
         resp.match_type = "semantic"
-        items.append(resp)
     return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
 
 
@@ -402,11 +435,15 @@ async def export_entities(
                 limit=page_size,
                 cursor=cursor,
             )
-            for e in batch:
+            enriched_batch = await build_entity_responses_with_semantic_index(
+                container.entity_repository,
+                batch,
+            )
+            for resp in enriched_batch:
                 prefix = "" if first else ",\n"
                 first = False
                 yield prefix + json_lib.dumps(
-                    EntityResponse.model_validate(e).model_dump(mode="json"),
+                    resp.model_dump(mode="json"),
                     ensure_ascii=False,
                 )
             remaining -= len(batch)
@@ -522,7 +559,7 @@ async def get_entity(
     try:
         filtered = await container.access_control_service.filter_fields(entity, user_id, company_id)
         if isinstance(filtered, CRMEntity):
-            return EntityResponse.model_validate(filtered)
+            return await _single_entity_response(repo=container.entity_repository, entity=filtered)
         return filtered
     except PermissionError:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -564,7 +601,7 @@ async def update_entity(
         raise HTTPException(status_code=422, detail=exc.field_errors)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return EntityResponse.model_validate(updated)
+    return await _single_entity_response(repo=container.entity_repository, entity=updated)
 
 
 @router.delete("/{entity_id}")

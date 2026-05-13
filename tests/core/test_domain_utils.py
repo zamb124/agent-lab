@@ -87,6 +87,16 @@ def test_is_allowed_integration_return_origin_lvh_subdomain() -> None:
     assert is_allowed_integration_return_origin("http://evil.com:8002", pub) is False
 
 
+def test_is_allowed_integration_return_origin_lvh_port_mismatch_local_dev() -> None:
+    pub = "http://lvh.me:8002"
+    assert is_allowed_integration_return_origin("http://system.lvh.me:8003", pub) is True
+
+
+def test_is_allowed_integration_return_origin_prod_ports_must_match() -> None:
+    pub = "https://humanitec.ru"
+    assert is_allowed_integration_return_origin("https://acme.humanitec.ru:8443", pub) is False
+
+
 def test_is_allowed_integration_return_origin_humanitec() -> None:
     pub = "https://humanitec.ru"
     assert is_allowed_integration_return_origin("https://acme.humanitec.ru", pub) is True
