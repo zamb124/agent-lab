@@ -25,7 +25,8 @@ def validate_tool_args_against_parameters_schema(
     Совпадает с FunctionTool (Pydantic), чтобы пустые/нетипичные tool_calls давали понятную ошибку.
     """
 
-    # jsonschema транзитивная зависимость (через FastAPI/OpenAPI pipeline).
+    # Явная зависимость проекта (группа core в pyproject.toml); в prod без --dev
+    # schemathesis/jsonschema из lock не попадают в образ.
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import ValidationError as JsValidationError
 
