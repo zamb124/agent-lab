@@ -69,6 +69,98 @@ async def _apply_should_not_run() -> dict[str, bool]:
 
 
 @pytest.mark.asyncio
+async def test_apply_rejects_wrong_idempotency_key_when_previewed() -> None:
+    redis = InMemoryRedis()
+    engine = LaraActionEngine(redis_client=redis, ttl_seconds=60)
+    action = await engine.preview_action(
+        company_id="c1",
+        user_id="u1",
+        context_id="ctx1",
+        capability="crm.note",
+        operation="create",
+        target={"service": "crm"},
+        payload={"name": "n"},
+        preview={"summary": "create"},
+        risk="low",
+        idempotency_key="golden",
+    )
+    pending_action_id = action["pending_action_id"]
+    with pytest.raises(ValueError, match="idempotency_key mismatch"):
+        await engine.apply_action(
+            company_id="c1",
+            user_id="u1",
+            context_id="ctx1",
+            pending_action_id=pending_action_id,
+            idempotency_key="wrong",
+            apply_fn=_apply_ok,
+        )
+
+
+@pytest.mark.asyncio
+async def test_reject_action_marks_previewed_as_rejected() -> None:
+    redis = InMemoryRedis()
+    engine = LaraActionEngine(redis_client=redis, ttl_seconds=60)
+    action = await engine.preview_action(
+        company_id="c1",
+        user_id="u1",
+        context_id="ctx1",
+        capability="crm.note",
+        operation="create",
+        target={"service": "crm"},
+        payload={"name": "x"},
+        preview={"summary": "x"},
+        risk="low",
+    )
+    out = await engine.reject_action(
+        company_id="c1",
+        user_id="u1",
+        context_id="ctx1",
+        pending_action_id=action["pending_action_id"],
+        reason="cancelled-by-test",
+    )
+    assert out["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_apply_already_applied_rejects_wrong_idempotency_key() -> None:
+    redis = InMemoryRedis()
+    engine = LaraActionEngine(redis_client=redis, ttl_seconds=60)
+    action = await engine.preview_action(
+        company_id="c1",
+        user_id="u1",
+        context_id="ctx1",
+        capability="crm.note",
+        operation="create",
+        target={"service": "crm"},
+        payload={"name": "n"},
+        preview={"summary": "create"},
+        risk="low",
+        idempotency_key="golden",
+    )
+    pending_action_id = action["pending_action_id"]
+    await engine.apply_action(
+        company_id="c1",
+        user_id="u1",
+        context_id="ctx1",
+        pending_action_id=pending_action_id,
+        idempotency_key="golden",
+        apply_fn=lambda _: _apply_ok(),
+    )
+    async def apply_should_fail() -> dict[str, bool]:
+        raise AssertionError("apply_fn must not run when idempotency already applied")
+
+    with pytest.raises(ValueError, match="idempotency_key mismatch for already applied"):
+        await engine.apply_action(
+            company_id="c1",
+            user_id="u1",
+            context_id="ctx1",
+            pending_action_id=pending_action_id,
+            idempotency_key="wrong-after-apply",
+            apply_fn=apply_should_fail,
+        )
+
+
+@pytest.mark.asyncio
 async def test_owner_guard_rejects_different_user() -> None:
     redis = InMemoryRedis()
     engine = LaraActionEngine(redis_client=redis, ttl_seconds=60)

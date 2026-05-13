@@ -14,6 +14,18 @@ from core.context import get_context
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
 
 
+class _MinimalLaraToolState:
+    """Минимальный state для LaraFacade при HTTP/embed apply (нужен только context_id)."""
+
+    __slots__ = ("context_id",)
+
+    def __init__(self, context_id: str) -> None:
+        cid = str(context_id).strip()
+        if not cid:
+            raise ValueError("context_id must be non-empty")
+        self.context_id = cid
+
+
 class LaraFacade:
     """Безопасный фасад для тулов: preview/apply через LaraActionEngine."""
 
@@ -283,3 +295,38 @@ class LaraFacade:
             idempotency_key=idempotency_key,
             apply_fn=_apply,
         )
+
+    async def apply_pending_action_from_http(
+        self,
+        *,
+        pending_action_id: str,
+        context_id: str,
+        idempotency_key: str | None,
+    ) -> dict[str, Any]:
+        pid = pending_action_id.strip()
+        if not pid:
+            raise ValueError("pending_action_id is required")
+        state = _MinimalLaraToolState(context_id)
+        company_id, _, _ = self._require_runtime_ids(state)
+        peek = await self._action_engine.get_action(company_id=company_id, pending_action_id=pid)
+        capability = peek.get("capability")
+        operation = peek.get("operation")
+        if capability == "crm.note" and operation == "create":
+            return await self.apply_crm_create_note(
+                pending_action_id=pid,
+                state=state,
+                idempotency_key=idempotency_key,
+            )
+        if capability == "flows.node" and operation == "patch":
+            return await self.apply_node_patch(
+                pending_action_id=pid,
+                state=state,
+                idempotency_key=idempotency_key,
+            )
+        if capability == "flows.flow" and operation == "patch":
+            return await self.apply_flow_patch(
+                pending_action_id=pid,
+                state=state,
+                idempotency_key=idempotency_key,
+            )
+        raise ValueError(f"Unsupported pending action capability={capability} operation={operation}")

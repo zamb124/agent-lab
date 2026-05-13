@@ -77,8 +77,6 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
     assert preview_buttons[0]["action_id"] == "crm.note.create.apply"
     raw = await crm_create_note._run_impl(
         {
-            "name": f"Lara note {unique_id}",
-            "description": "Тело заметки для теста тула.",
             "mode": "apply",
             "pending_action_id": proposed["pending_action_id"],
         },
@@ -200,8 +198,6 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     create_proposed = json.loads(create_propose_raw)
     create_raw = await crm_create_note._run_impl(
         {
-            "name": note_title,
-            "description": "Текст заметки для AI-анализа.",
             "mode": "apply",
             "pending_action_id": create_proposed["pending_action_id"],
         },
@@ -306,8 +302,6 @@ async def test_crm_create_note_and_analyze_tool_chains(
     create_proposed = json.loads(create_propose_raw)
     create_raw = await crm_create_note._run_impl(
         {
-            "name": note_title,
-            "description": "Полный текст для создания и анализа.",
             "mode": "apply",
             "pending_action_id": create_proposed["pending_action_id"],
         },

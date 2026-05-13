@@ -864,3 +864,251 @@ async def test_search_multiple_namespaces_filters_plus_lexical_no_duplicate_kwar
 async def test_provider_name(rag_provider_pgvector):
     """provider_name возвращает 'pgvector'."""
     assert rag_provider_pgvector.provider_name == "pgvector"
+
+
+# -- Reembed stale chunks: fetch_stale_chunks_for_reembed --
+
+
+async def _insert_vector_row(
+    session_factory,
+    *,
+    id_: str,
+    namespace_id: str,
+    company_id: str | None,
+    content: str,
+    embedding_model: str | None,
+) -> None:
+    """Прямая вставка строки в ``vector_documents`` (без embedding) для тестов reembed."""
+    async with session_factory() as session:
+        row = VectorDocument(
+            id=id_,
+            namespace_id=namespace_id,
+            company_id=company_id,
+            document_id=f"doc_{id_}",
+            document_name=f"doc_{id_}.txt",
+            content=content,
+            embedding=None,
+            embedding_model=embedding_model,
+            chunk_index=0,
+            total_chunks=1,
+        )
+        session.add(row)
+        await session.commit()
+
+
+async def _stale_chunks_for_company(
+    provider, *, limit: int, target_embedding_model: str, company_id: str
+) -> list[tuple[str, str, str]]:
+    """
+    Берёт страничный fetch и фильтрует на стороне теста по ``company_id``.
+
+    Тестовая БД общая и в ней могут висеть stale-чанки от других тестов; ``LIMIT``
+    провайдера применяется ДО фильтра по компании, поэтому увеличиваем порог и
+    проверяем только свою компанию.
+    """
+    rows = await provider.fetch_stale_chunks_for_reembed(
+        limit=limit, target_embedding_model=target_embedding_model,
+    )
+    return [row for row in rows if row[2] == company_id]
+
+
+@pytest.mark.asyncio
+async def test_fetch_stale_chunks_includes_only_non_null_company(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    """
+    ``fetch_stale_chunks_for_reembed`` пропускает строки с ``company_id IS NULL``
+    и пустую строку; берёт только stale (``embedding_model IS NULL`` или != target).
+    Доп. проверка: orphan-строки не появляются в общей выборке вообще.
+    """
+    sf = rag_provider_pgvector._session_factory
+    target = "target/model-1"
+
+    await _insert_vector_row(sf, id_=f"r1_{rag_company_id}", namespace_id=ns_name,
+                             company_id=rag_company_id, content="ok stale",
+                             embedding_model=None)
+    await _insert_vector_row(sf, id_=f"r2_{rag_company_id}", namespace_id=ns_name,
+                             company_id=None, content="orphan null",
+                             embedding_model=None)
+    await _insert_vector_row(sf, id_=f"r3_{rag_company_id}", namespace_id=ns_name,
+                             company_id="", content="orphan empty",
+                             embedding_model=None)
+    await _insert_vector_row(sf, id_=f"r4_{rag_company_id}", namespace_id=ns_name,
+                             company_id=rag_company_id, content="not stale",
+                             embedding_model=target)
+
+    own = await _stale_chunks_for_company(
+        rag_provider_pgvector, limit=10000, target_embedding_model=target,
+        company_id=rag_company_id,
+    )
+    own_ids = {row[0] for row in own}
+    assert f"r1_{rag_company_id}" in own_ids
+    assert f"r4_{rag_company_id}" not in own_ids
+
+    all_rows = await rag_provider_pgvector.fetch_stale_chunks_for_reembed(
+        limit=10000, target_embedding_model=target,
+    )
+    all_ids = {row[0] for row in all_rows}
+    assert f"r2_{rag_company_id}" not in all_ids
+    assert f"r3_{rag_company_id}" not in all_ids
+    for row in all_rows:
+        assert row[2] is not None and row[2] != ""
+
+
+@pytest.mark.asyncio
+async def test_fetch_stale_chunks_skips_empty_content(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    sf = rag_provider_pgvector._session_factory
+    target = "target/model-2"
+    await _insert_vector_row(sf, id_=f"r1_{rag_company_id}", namespace_id=ns_name,
+                             company_id=rag_company_id, content="",
+                             embedding_model=None)
+    await _insert_vector_row(sf, id_=f"r2_{rag_company_id}", namespace_id=ns_name,
+                             company_id=rag_company_id, content="kept",
+                             embedding_model=None)
+    own = await _stale_chunks_for_company(
+        rag_provider_pgvector, limit=10000, target_embedding_model=target,
+        company_id=rag_company_id,
+    )
+    own_ids = {row[0] for row in own}
+    assert f"r1_{rag_company_id}" not in own_ids
+    assert f"r2_{rag_company_id}" in own_ids
+
+
+@pytest.mark.asyncio
+async def test_fetch_stale_chunks_takes_rows_with_other_embedding_model(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    """Чанки с моделью != target тоже считаются stale."""
+    sf = rag_provider_pgvector._session_factory
+    target = "target/model-new"
+    await _insert_vector_row(sf, id_=f"r_old_{rag_company_id}", namespace_id=ns_name,
+                             company_id=rag_company_id, content="legacy chunk",
+                             embedding_model="target/model-old")
+    own = await _stale_chunks_for_company(
+        rag_provider_pgvector, limit=10000, target_embedding_model=target,
+        company_id=rag_company_id,
+    )
+    assert any(row[0] == f"r_old_{rag_company_id}" for row in own)
+
+
+@pytest.mark.asyncio
+async def test_fetch_stale_chunks_rejects_zero_limit(rag_provider_pgvector):
+    with pytest.raises(ValueError, match="limit must be positive"):
+        await rag_provider_pgvector.fetch_stale_chunks_for_reembed(
+            limit=0, target_embedding_model="any",
+        )
+
+
+# -- Orphan-cleanup: delete_orphan_company_chunks --
+
+
+@pytest.mark.asyncio
+async def test_delete_orphan_company_chunks_removes_null_and_empty(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    """Удаляет только строки с NULL или пустым ``company_id``, не трогает остальные."""
+    sf = rag_provider_pgvector._session_factory
+    await _insert_vector_row(sf, id_=f"keep_{rag_company_id}", namespace_id=ns_name,
+                             company_id=rag_company_id, content="keep me",
+                             embedding_model=None)
+    await _insert_vector_row(sf, id_=f"orphan_null_{rag_company_id}", namespace_id=ns_name,
+                             company_id=None, content="drop null",
+                             embedding_model=None)
+    await _insert_vector_row(sf, id_=f"orphan_empty_{rag_company_id}", namespace_id=ns_name,
+                             company_id="", content="drop empty",
+                             embedding_model=None)
+
+    deleted = await rag_provider_pgvector.delete_orphan_company_chunks(limit=100)
+    assert deleted >= 2
+
+    async with sf() as session:
+        ids_left = {
+            row[0]
+            for row in (
+                await session.execute(
+                    select(VectorDocument.id).where(VectorDocument.id.like(f"%_{rag_company_id}"))
+                )
+            ).all()
+        }
+    assert f"keep_{rag_company_id}" in ids_left
+    assert f"orphan_null_{rag_company_id}" not in ids_left
+    assert f"orphan_empty_{rag_company_id}" not in ids_left
+
+
+@pytest.mark.asyncio
+async def test_delete_orphan_company_chunks_respects_limit(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    sf = rag_provider_pgvector._session_factory
+    for i in range(3):
+        await _insert_vector_row(sf, id_=f"orphan_{i}_{rag_company_id}", namespace_id=ns_name,
+                                 company_id=None, content=f"c{i}",
+                                 embedding_model=None)
+    deleted_first = await rag_provider_pgvector.delete_orphan_company_chunks(limit=2)
+    assert deleted_first == 2
+    deleted_rest = await rag_provider_pgvector.delete_orphan_company_chunks(limit=10)
+    assert deleted_rest >= 1
+
+
+@pytest.mark.asyncio
+async def test_delete_orphan_company_chunks_returns_zero_when_empty(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    sf = rag_provider_pgvector._session_factory
+    await _insert_vector_row(sf, id_=f"only_keep_{rag_company_id}", namespace_id=ns_name,
+                             company_id=rag_company_id, content="keep",
+                             embedding_model=None)
+    await rag_provider_pgvector.delete_orphan_company_chunks(limit=100)
+    deleted = await rag_provider_pgvector.delete_orphan_company_chunks(limit=100)
+    assert deleted == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_orphan_company_chunks_rejects_zero_limit(rag_provider_pgvector):
+    with pytest.raises(ValueError, match="limit must be positive"):
+        await rag_provider_pgvector.delete_orphan_company_chunks(limit=0)
+
+
+# -- Reembed write API: write_reembed_chunk_embeddings + embedding_model_name --
+
+
+@pytest.mark.asyncio
+async def test_write_reembed_chunk_embeddings_updates_vector_and_model(
+    rag_provider_pgvector, ns_name, rag_company_id
+):
+    sf = rag_provider_pgvector._session_factory
+    chunk_id = f"writeback_{rag_company_id}"
+    await _insert_vector_row(sf, id_=chunk_id, namespace_id=ns_name,
+                             company_id=rag_company_id, content="payload",
+                             embedding_model=None)
+
+    new_vector = [0.0] * 1024
+    new_vector[0] = 0.5
+    target = "writeback/model-1"
+    written = await rag_provider_pgvector.write_reembed_chunk_embeddings(
+        [(chunk_id, new_vector)], target,
+    )
+    assert written == 1
+
+    async with sf() as session:
+        row = (
+            await session.execute(
+                select(VectorDocument).where(VectorDocument.id == chunk_id)
+            )
+        ).scalar_one()
+    assert row.embedding_model == target
+    assert row.embedding is not None
+
+
+@pytest.mark.asyncio
+async def test_write_reembed_chunk_embeddings_empty_input_is_noop(rag_provider_pgvector):
+    written = await rag_provider_pgvector.write_reembed_chunk_embeddings([], "any")
+    assert written == 0
+
+
+@pytest.mark.asyncio
+async def test_embedding_model_name_matches_runtime_model(rag_provider_pgvector):
+    """Public ``embedding_model_name()`` совпадает с конфигом ``EmbeddingService.model``."""
+    assert rag_provider_pgvector.embedding_model_name() == rag_provider_pgvector.embedding_service.model

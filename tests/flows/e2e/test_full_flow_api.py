@@ -34,6 +34,43 @@ def get_task_response(data: Dict[str, Any]) -> str:
     return ""
 
 
+def _e2e_router_flow_create_payload(flow_id: str) -> dict[str, Any]:
+    """Граф классификатора для E2E (условные рёбра)."""
+    return {
+        "flow_id": flow_id,
+        "name": "E2E Router Agent",
+        "entry": "classifier",
+        "nodes": {
+            "classifier": {
+                "type": "code",
+                "code": """
+async def run(state):
+    content = state.get('content', '')
+    if 'urgent' in content.lower():
+        state['route'] = 'urgent'
+    else:
+        state['route'] = 'normal'
+    return state
+""",
+            },
+            "urgent_handler": {
+                "type": "code",
+                "code": "async def run(state):\n    state['response'] = 'URGENT: Processing immediately!'\n    return state",
+            },
+            "normal_handler": {
+                "type": "code",
+                "code": "async def run(state):\n    state['response'] = 'Normal: Added to queue'\n    return state",
+            },
+        },
+        "edges": [
+            {"from": "classifier", "to": "urgent_handler", "condition": "route == urgent"},
+            {"from": "classifier", "to": "normal_handler", "condition": "route == normal"},
+            {"from": "urgent_handler", "to": None},
+            {"from": "normal_handler", "to": None},
+        ],
+    }
+
+
 class TestE2EFlowCreationViaAPI:
     """E2E: Создание flow полностью через API."""
 
@@ -147,50 +184,24 @@ class TestE2EFlowWithConditions:
         """Создаём flow с условными переходами."""
         response = await client.post(
             "/flows/api/v1/flows/",
-            json={
-                "flow_id": "e2e_router_flow",
-                "name": "E2E Router Agent",
-                "entry": "classifier",
-                "nodes": {
-                    "classifier": {
-                        "type": "code",
-                        "code": """
-async def run(state):
-    content = state.get('content', '')
-    if 'urgent' in content.lower():
-        state['route'] = 'urgent'
-    else:
-        state['route'] = 'normal'
-    return state
-""",
-                    },
-                    "urgent_handler": {
-                        "type": "code",
-                        "code": "async def run(state):\n    state['response'] = 'URGENT: Processing immediately!'\n    return state",
-                    },
-                    "normal_handler": {
-                        "type": "code",
-                        "code": "async def run(state):\n    state['response'] = 'Normal: Added to queue'\n    return state",
-                    },
-                },
-                "edges": [
-                    {"from": "classifier", "to": "urgent_handler", "condition": "route == urgent"},
-                    {"from": "classifier", "to": "normal_handler", "condition": "route == normal"},
-                    {"from": "urgent_handler", "to": None},
-                    {"from": "normal_handler", "to": None},
-                ],
-            },
+            json=_e2e_router_flow_create_payload("e2e_router_flow"),
         )
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_router_flow_urgent_path(self, client, unique_id):
         """Тест urgent пути."""
+        flow_id = f"e2e_router_flow_{unique_id}"
+        created = await client.post(
+            "/flows/api/v1/flows/",
+            json=_e2e_router_flow_create_payload(flow_id),
+        )
+        assert created.status_code == 200, created.text
         response = await client.post(
             "/flows/api/v1/tasks/submit",
             json={
-                "flow_id": "e2e_router_flow",
-                "session_id": f"e2e_router_flow:e2e-router-urgent-{unique_id}",
+                "flow_id": flow_id,
+                "session_id": f"{flow_id}:e2e-router-urgent-{unique_id}",
                 "content": "This is URGENT!",
             },
         )
@@ -201,11 +212,17 @@ async def run(state):
     @pytest.mark.asyncio
     async def test_router_flow_normal_path(self, client, unique_id):
         """Тест normal пути."""
+        flow_id = f"e2e_router_flow_{unique_id}"
+        created = await client.post(
+            "/flows/api/v1/flows/",
+            json=_e2e_router_flow_create_payload(flow_id),
+        )
+        assert created.status_code == 200, created.text
         response = await client.post(
             "/flows/api/v1/tasks/submit",
             json={
-                "flow_id": "e2e_router_flow",
-                "session_id": f"e2e_router_flow:e2e-router-normal-{unique_id}",
+                "flow_id": flow_id,
+                "session_id": f"{flow_id}:e2e-router-normal-{unique_id}",
                 "content": "Regular request",
             },
         )

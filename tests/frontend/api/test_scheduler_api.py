@@ -11,6 +11,7 @@ from apps.scheduler.main import (
     CALENDAR_SYNC_TASK_NAME,
     CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
     RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
+    RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
     RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
     SPAN_BILLING_SETTLEMENT_TASK_NAME,
     SYSTEM_SCHEDULER_COMPANY_ID,
@@ -220,6 +221,8 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
                 return []
             if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME:
                 return []
+            if filters.task_name == RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME:
+                return []
             if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
                 return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
@@ -236,13 +239,14 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
 
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
-    assert len(fake_service.created_requests) == 5
+    assert len(fake_service.created_requests) == 6
     names = {r.task_name for r in fake_service.created_requests}
     assert names == {
         CALENDAR_SYNC_TASK_NAME,
         CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
         RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
         RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+        RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
         CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
     }
     by_name = {r.task_name: r for r in fake_service.created_requests}
@@ -282,6 +286,8 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             if filters.task_name == RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME:
                 return []
             if filters.task_name == RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME:
+                return []
+            if filters.task_name == RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME:
                 return []
             if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
                 return []

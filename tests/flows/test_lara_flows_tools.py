@@ -126,10 +126,6 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
 
     apply_raw = await flows_patch_node._run_impl(
         {
-            "flow_id": flow_id,
-            "branch_id": "base",
-            "node_id": "main",
-            "patch_json": json.dumps({"prompt": new_prompt}),
             "mode": "apply",
             "pending_action_id": pending_action_id,
         },

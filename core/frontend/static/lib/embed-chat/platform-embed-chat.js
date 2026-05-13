@@ -604,6 +604,8 @@ export class PlatformEmbedChat extends LitElement {
         this._stickToBottom = true;
         /** После отправки пользователя ждём завершения стрима — для счётчика на FAB drawer. */
         this._pendingAssistantReplyNotify = false;
+        /** @type {boolean} */
+        this._embeddedLaraApplyInFlight = false;
         /** @type {string|null} */
         this._voiceStreamAssistantId = null;
         /** @type {Record<string, unknown>|null} */
@@ -1125,8 +1127,177 @@ export class PlatformEmbedChat extends LitElement {
         const fn = this.actionHandlers['assistant:action_invoked'];
         if (typeof fn === 'function') {
             fn(payload);
+            return;
         }
+        void this._tryDefaultEmbeddedLaraApply(payload);
     };
+
+    /** @param {string} raw */
+    _appendLocalAssistantEcho(raw) {
+        const text = typeof raw === 'string' ? raw.trim() : '';
+        if (!text) {
+            return;
+        }
+        const msg = {
+            id: `a_${++mid}`,
+            role: 'assistant',
+            content: text,
+            streaming: false,
+            reasoning: '',
+            operatorReply: '',
+            toolCalls: [],
+            toolResults: [],
+            blocks: [],
+            inputRequired: null,
+            breakpoint: null,
+        };
+        this._messages = [...this._messages, msg];
+        this._stickToBottom = true;
+        this.requestUpdate();
+    }
+
+    /** @param {unknown} body */
+    _summarizeEmbeddedLaraApply(body) {
+        if (!body || typeof body !== 'object') {
+            return 'Готово.';
+        }
+        const o = /** @type {Record<string, unknown>} */ (body);
+        const res = o.result;
+        const resDict = res && typeof res === 'object' && !Array.isArray(res) ? /** @type {Record<string, unknown>} */ (res) : null;
+        if (resDict) {
+            const m = resDict.message;
+            if (typeof m === 'string' && m.trim()) {
+                return m.trim();
+            }
+            const ent = resDict.entity;
+            const entDict = ent && typeof ent === 'object' && !Array.isArray(ent)
+                ? /** @type {Record<string, unknown>} */ (ent)
+                : null;
+            if (entDict) {
+                const nm = entDict.name;
+                if (typeof nm === 'string' && nm.trim()) {
+                    return nm.trim();
+                }
+            }
+        }
+        const st = o.status;
+        if (st === 'applied') {
+            return 'Действие применено.';
+        }
+        return 'Готово.';
+    }
+
+    /** @param {Response} resp @param {unknown} body */
+    _embeddedLaraApplyHttpErrorText(resp, body) {
+        const fb = `${resp.status} ${resp.statusText || ''}`.trim();
+        if (!body || typeof body !== 'object') {
+            return fb;
+        }
+        const detail = /** @type {Record<string, unknown>} */ (body).detail;
+        if (typeof detail === 'string' && detail.trim()) {
+            return detail.trim();
+        }
+        if (Array.isArray(detail)) {
+            const parts = detail
+                .map((item) => {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    const loc = Array.isArray(item.loc) ? item.loc.join('.') : '';
+                    const msg = typeof item.msg === 'string' ? item.msg.trim() : '';
+                    if (loc && msg) {
+                        return `${loc}: ${msg}`;
+                    }
+                    return msg;
+                })
+                .filter((x) => x);
+            if (parts.length > 0) {
+                return parts.join('; ');
+            }
+        }
+        return fb;
+    }
+
+    /** @param {Record<string, unknown>} payload */
+    async _tryDefaultEmbeddedLaraApply(payload) {
+        if (payload.action_kind !== 'apply') {
+            return;
+        }
+        let pidRaw = payload.pending_action_id;
+        if (
+            (typeof pidRaw !== 'string' || !pidRaw.trim())
+            && payload.arguments && typeof payload.arguments === 'object'
+        ) {
+            const argPid = payload.arguments.pending_action_id;
+            if (typeof argPid === 'string' && argPid.trim()) {
+                pidRaw = argPid.trim();
+            }
+        }
+        const pid = typeof pidRaw === 'string' ? pidRaw.trim() : '';
+        if (!pid) {
+            return;
+        }
+        const root = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim().replace(/\/$/, '')) || '';
+        if (!root) {
+            throw new Error('platform-embed-chat: flowsBaseUrl is required for default Lara pending apply');
+        }
+        const contextIdRaw = typeof this.getA2aContextId === 'function' ? this.getA2aContextId() : '';
+        const contextId = typeof contextIdRaw === 'string' ? contextIdRaw.trim() : '';
+        if (!contextId) {
+            throw new Error('platform-embed-chat: missing A2A contextId before Lara apply');
+        }
+        if (this._embeddedLaraApplyInFlight) {
+            return;
+        }
+
+        const getHeaders = async () => {
+            if (typeof this.getAuthToken !== 'function') {
+                return {};
+            }
+            const h = await this.getAuthToken();
+            return h && typeof h === 'object' ? h : {};
+        };
+
+        this._embeddedLaraApplyInFlight = true;
+        const url = `${root}/api/v1/lara/pending-actions/apply`;
+        try {
+            const heads = await getHeaders();
+            const resp = await fetch(url, {
+                method: 'POST',
+                credentials: this.useCredentials ? 'include' : 'omit',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    ...heads,
+                },
+                body: JSON.stringify({
+                    pending_action_id: pid,
+                    context_id: contextId,
+                }),
+            });
+            /** @type {unknown} */
+            let parsed = null;
+            try {
+                const rawText = await resp.text();
+                if (rawText) {
+                    parsed = JSON.parse(rawText);
+                }
+            } catch {
+                parsed = null;
+            }
+            if (!resp.ok) {
+                const errLine = `Не удалось применить действие (${this._embeddedLaraApplyHttpErrorText(resp, parsed)})`;
+                this._appendLocalAssistantEcho(errLine);
+                return;
+            }
+            this._appendLocalAssistantEcho(this._summarizeEmbeddedLaraApply(parsed));
+        } catch (e) {
+            const m = e instanceof Error ? e.message : String(e);
+            this._appendLocalAssistantEcho(`Ошибка сети при применении: ${m}`);
+        } finally {
+            this._embeddedLaraApplyInFlight = false;
+        }
+    }
 
     _normalizedEventNamespace() {
         const raw = typeof this.eventNamespace === 'string' ? this.eventNamespace.trim() : '';

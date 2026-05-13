@@ -27,6 +27,7 @@ SPAN_BILLING_SETTLEMENT_TASK_NAME = "span_billing_settlement_tick"
 PAYMENT_SYNC_TASK_NAME = "payment_sync_tick"
 RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME = "rag_cleanup_expired_documents_tick"
 RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME = "rag_reembed_stale_documents_tick"
+RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME = "rag_cleanup_orphan_company_chunks_tick"
 CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME = "crm_reembed_stale_documents_tick"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 
@@ -223,6 +224,13 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
         task_name=RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
         cron=cfg.reembed_cron,
         log_label="RAG reembed stale",
+    )
+    await _ensure_rag_ttl_cleanup_schedule(
+        container=container,
+        config_enabled=cfg.orphan_cleanup_enabled,
+        task_name=RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
+        cron=cfg.orphan_cleanup_cron,
+        log_label="RAG orphan company chunks cleanup",
     )
     await _ensure_crm_reembed_schedule(
         container=container,

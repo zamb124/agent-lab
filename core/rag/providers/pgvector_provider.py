@@ -200,7 +200,12 @@ class PgVectorProvider(BaseRAGProvider):
     async def close(self):
         await self._engine.dispose()
 
-    def _embedding_model_name(self) -> str:
+    @property
+    def embedding_service(self) -> EmbeddingService:
+        """Сервис эмбеддингов pgvector (для оркестраторов фоновых задач)."""
+        return self._embedding_service
+
+    def embedding_model_name(self) -> str:
         """Идентификатор текущей модели эмбеддинга для записи в embedding_model."""
         return self._embedding_service.model
 
@@ -457,7 +462,7 @@ class PgVectorProvider(BaseRAGProvider):
         try:
             embeddings: List[Optional[List[float]]] = await self._embedding_service.generate_embeddings(chunks)
             embedding_tokens = self._embedding_service.count_tokens(chunks)
-            embedding_model: Optional[str] = self._embedding_model_name()
+            embedding_model: Optional[str] = self.embedding_model_name()
             indexing_runtime["embedding"] = self._embedding_service.runtime_snapshot(
                 embedding_tokens=embedding_tokens
             )
@@ -814,51 +819,51 @@ class PgVectorProvider(BaseRAGProvider):
 
         return out
 
-    async def reembed_stale_documents(
+    async def fetch_stale_chunks_for_reembed(
         self,
         *,
-        batch_size: int,
+        limit: int,
         target_embedding_model: str,
-    ) -> int:
+    ) -> List[Tuple[str, str, str]]:
         """
-        Перевекторизует чанки с устаревшим или отсутствующим ``embedding_model``.
+        Кандидаты на перевекторизацию: ``(id, content, company_id)``.
 
-        Выбирает до ``batch_size`` строк, где ``embedding_model IS NULL``
-        либо не совпадает с ``target_embedding_model``, генерирует новый
-        embedding через ``EmbeddingService`` и записывает ``embedding``
-        и ``embedding_model`` обратно в БД.
-
-        Возвращает количество реально обработанных чанков.
+        Возвращает только строки с непустым ``company_id`` (NULL/'' разбираются
+        отдельным maintenance-тиком ``rag_cleanup_orphan_company_chunks_tick``).
+        Стабильный порядок по ``company_id``/``id`` — для группировки по компании.
         """
+        if limit <= 0:
+            raise ValueError("fetch_stale_chunks_for_reembed: limit must be positive")
+        stale_where = or_(
+            VectorDocument.embedding_model.is_(None),
+            VectorDocument.embedding_model != target_embedding_model,
+        )
         async with self._session_factory() as session:
             stmt = (
-                select(VectorDocument.id, VectorDocument.content)
-                .where(
-                    or_(
-                        VectorDocument.embedding_model.is_(None),
-                        VectorDocument.embedding_model != target_embedding_model,
-                    )
-                )
+                select(VectorDocument.id, VectorDocument.content, VectorDocument.company_id)
+                .where(stale_where)
                 .where(VectorDocument.content.isnot(None))
                 .where(VectorDocument.content != "")
-                .limit(batch_size)
+                .where(VectorDocument.company_id.isnot(None))
+                .where(VectorDocument.company_id != "")
+                .order_by(VectorDocument.company_id.asc(), VectorDocument.id.asc())
+                .limit(limit)
             )
             result = await session.execute(stmt)
             rows = list(result.all())
+        return [(str(row[0]), str(row[1]), str(row[2])) for row in rows]
 
-        if not rows:
-            logger.info(
-                "reembed_stale_documents: свежих кандидатов нет, target=%s",
-                target_embedding_model,
-            )
+    async def write_reembed_chunk_embeddings(
+        self,
+        doc_embeddings: List[Tuple[str, List[float]]],
+        target_embedding_model: str,
+    ) -> int:
+        """Записывает векторы для списка ``(chunk_id, embedding)``."""
+        if not doc_embeddings:
             return 0
-
-        texts = [row[1] for row in rows]
-        embeddings = await self._embedding_service.generate_embeddings(texts)
-
         updated = 0
         async with self._session_factory() as session:
-            for (doc_id, _text), emb in zip(rows, embeddings):
+            for doc_id, emb in doc_embeddings:
                 upd = (
                     update(VectorDocument)
                     .where(VectorDocument.id == doc_id)
@@ -870,13 +875,37 @@ class PgVectorProvider(BaseRAGProvider):
                 upd_result = await session.execute(upd)
                 updated += upd_result.rowcount or 0
             await session.commit()
-
-        logger.info(
-            "reembed_stale_documents: обработано %d чанков, target=%s",
-            updated,
-            target_embedding_model,
-        )
         return updated
+
+    async def delete_orphan_company_chunks(self, *, limit: int) -> int:
+        """
+        Батчевое удаление чанков ``vector_documents`` без ``company_id``.
+
+        У таких строк нет владельца — биллинг и поиск по тенанту невозможны.
+        Зовётся отдельным maintenance-тиком, не reembed.
+        """
+        if limit <= 0:
+            raise ValueError("delete_orphan_company_chunks: limit must be positive")
+        async with self._session_factory() as session:
+            ids_stmt = (
+                select(VectorDocument.id)
+                .where(
+                    or_(
+                        VectorDocument.company_id.is_(None),
+                        VectorDocument.company_id == "",
+                    )
+                )
+                .order_by(VectorDocument.id.asc())
+                .limit(limit)
+            )
+            result = await session.execute(ids_stmt)
+            ids = [row[0] for row in result.all()]
+            if not ids:
+                return 0
+            del_stmt = delete(VectorDocument).where(VectorDocument.id.in_(ids))
+            del_result = await session.execute(del_stmt)
+            await session.commit()
+        return int(del_result.rowcount or 0)
 
     # -- Search --
 
@@ -888,7 +917,7 @@ class PgVectorProvider(BaseRAGProvider):
         filters: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> List[RAGSearchResult]:
-        embedding_model = self._embedding_model_name()
+        embedding_model = self.embedding_model_name()
         channels = kwargs.get("channels")
         use_hybrid_rrf = (
             isinstance(channels, dict)

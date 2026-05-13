@@ -15,6 +15,33 @@ from pydantic import BaseModel
 from apps.flows.src.models.tool_reference import CallParameter
 
 
+def validate_tool_args_against_parameters_schema(
+    *,
+    schema: Dict[str, Any],
+    arguments: Dict[str, Any],
+) -> None:
+    """
+    Строгая проверка аргументов CodeTool против JSON Schema (как у LLM-провайдера).
+    Совпадает с FunctionTool (Pydantic), чтобы пустые/нетипичные tool_calls давали понятную ошибку.
+    """
+
+    # jsonschema транзитивная зависимость (через FastAPI/OpenAPI pipeline).
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import ValidationError as JsValidationError
+
+    if not isinstance(schema, dict):
+        raise ValueError("parameters_schema must be a dict")
+
+    try:
+        Draft202012Validator(schema).validate(arguments)
+    except JsValidationError as exc:
+        path = ".".join(str(p) for p in exc.path) if exc.path else ""
+        msg = f"{exc.message}"
+        if path:
+            msg = f"{path}: {msg}"
+        raise ValueError(f"Tool arguments failed JSON Schema validation ({msg})") from exc
+
+
 def sanitize_parameters_schema_for_llm(schema: Dict[str, Any]) -> Dict[str, Any]:
     """Убирает служебные title из корня и свойств — меньше шума для провайдера."""
     out = copy.deepcopy(schema)

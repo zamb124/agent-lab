@@ -1349,6 +1349,20 @@ class RagTtlConfig(BaseModel):
         le=2000,
         description="Максимум чанков за один тик перевекторизации.",
     )
+    orphan_cleanup_enabled: bool = Field(
+        default=True,
+        description="Фоновое удаление чанков vector_documents без company_id (orphan).",
+    )
+    orphan_cleanup_cron: str = Field(
+        default="*/15 * * * *",
+        description="Cron (UTC) для тика чистки orphan-чанков без company_id.",
+    )
+    orphan_cleanup_batch_size: int = Field(
+        default=500,
+        ge=1,
+        le=5000,
+        description="Максимум orphan-чанков (company_id IS NULL/'') за один тик.",
+    )
 
 
 class RAGConfig(BaseModel):

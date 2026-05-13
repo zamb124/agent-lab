@@ -25,6 +25,10 @@ alwaysApply: false
 
 Pre-flight **не заменяет settlement**: джоба пишет usage без pre-flight; при нуле баланса запись usage по выполненной операции возможна. Оценка по токенам до вызова LLM не делается (фаза 1 — только balance > 0).
 
+### Фоновые embedding (reembed RAG)
+
+Для тиков перевекторизации stale chunks (`core/rag/reembed_stale_documents.py::execute_reembed_tick`) не используется `require_balance_for_billable_operation` (не спамить владельца уведомлениями из scheduler). Вместо этого — **`BillingService.company_may_incur_embedding_charge(company_id) -> bool`**: те же флаги `balance_enforcement_*` и exempt-список; при выключенном enforcement всегда `True`; компания не найдена в БД — `False`; иначе разрешено только при **`balance > 0`**. Отказ — чанки остаются stale до пополнения или попадания компании в exempt.
+
 `can_use_resource` остаётся для проверок с учётом стоимости и месячного лимита; в settlement не вызывается.
 
 ## OpenRouter и рубли

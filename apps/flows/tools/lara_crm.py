@@ -8,7 +8,7 @@ import json
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import quote
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.eval.platform_services import get_lara_facade
 from apps.flows.src.eval.state_utils import push_ui_event
@@ -85,8 +85,12 @@ class CrmSearchEntitiesArgs(BaseModel):
 class CrmCreateNoteArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(..., min_length=1, description="Заголовок заметки.")
-    description: str = Field(..., min_length=1, description="Текст заметки (тело).")
+    mode: Literal["propose", "apply"] = Field(
+        "propose",
+        description="propose — подготовить создание заметки для подтверждения; apply — выполнить по pending_action_id.",
+    )
+    name: Optional[str] = Field(None, description="Заголовок заметки (обязателен при mode=propose).")
+    description: Optional[str] = Field(None, description="Текст заметки (обязателен при mode=propose).")
     note_date: Optional[str] = Field(
         None,
         description="Дата заметки YYYY-MM-DD; только если уместно по смыслу.",
@@ -94,10 +98,6 @@ class CrmCreateNoteArgs(BaseModel):
     namespace: Optional[str] = Field(
         None,
         description="Пространство имён CRM; null — из контекста сессии.",
-    )
-    mode: Literal["propose", "apply"] = Field(
-        "propose",
-        description="propose — подготовить создание заметки для подтверждения; apply — выполнить по pending_action_id.",
     )
     pending_action_id: Optional[str] = Field(
         None,
@@ -108,7 +108,38 @@ class CrmCreateNoteArgs(BaseModel):
         description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
 
-    @field_validator("note_date", "namespace", mode="before")
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v.strip() or None
+        return v
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_description(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else None
+        return v
+
+    @model_validator(mode="after")
+    def _mode_requirements(self):  # noqa: ANN201
+        if self.mode == "apply":
+            if self.pending_action_id is None or not str(self.pending_action_id).strip():
+                raise ValueError("pending_action_id is required when mode='apply'")
+            return self
+        if self.name is None:
+            raise ValueError("name is required when mode='propose'")
+        if self.description is None:
+            raise ValueError("description is required when mode='propose'")
+        return self
+
+    @field_validator("note_date", "namespace", "pending_action_id", mode="before")
     @classmethod
     def _optional_str_note(cls, v: Any) -> Any:
         if v is None:
@@ -195,12 +226,11 @@ class FlowsReadContextArgs(BaseModel):
 class FlowsPatchNodeArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    flow_id: str = Field(..., min_length=1, description="ID flow.")
-    node_id: str = Field(..., min_length=1, description="ID ноды для изменения.")
-    patch_json: str = Field(
-        ...,
-        min_length=2,
-        description="JSON-объект изменений ноды. Пример: {\"prompt\": \"...\"}.",
+    flow_id: Optional[str] = Field(None, description="ID flow (обязателен при mode=propose).")
+    node_id: Optional[str] = Field(None, description="ID ноды (обязателен при mode=propose).")
+    patch_json: Optional[str] = Field(
+        None,
+        description="JSON-объект изменений ноды при mode=propose.",
     )
     branch_id: Optional[str] = Field(
         None,
@@ -219,16 +249,41 @@ class FlowsPatchNodeArgs(BaseModel):
         description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
 
+    @field_validator("pending_action_id", mode="before")
+    @classmethod
+    def _strip_pending_patch_node(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v.strip() or None
+        return v
+
+    @model_validator(mode="after")
+    def _flows_patch_node_mode(self):  # noqa: ANN201
+        if self.mode == "apply":
+            if self.pending_action_id is None:
+                raise ValueError("pending_action_id is required when mode='apply'")
+            return self
+        fid = self.flow_id
+        nid = self.node_id
+        pj = self.patch_json
+        if not fid or not str(fid).strip():
+            raise ValueError("flow_id is required when mode='propose'")
+        if not nid or not str(nid).strip():
+            raise ValueError("node_id is required when mode='propose'")
+        if pj is None or not str(pj).strip():
+            raise ValueError("patch_json is required when mode='propose'")
+        return self
+
 
 class FlowsPatchFlowArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    flow_id: str = Field(..., min_length=1, description="ID flow.")
-    patch_json: str = Field(
-        ...,
-        min_length=2,
+    flow_id: Optional[str] = Field(None, description="ID flow (обязателен при mode=propose).")
+    patch_json: Optional[str] = Field(
+        None,
         description=(
-            "JSON-объект изменений flow. Разрешённые поля: name, description, tags, variables."
+            "JSON-объект изменений flow при mode=propose. Разрешённые поля: name, description, tags, variables."
         ),
     )
     mode: Literal["propose", "apply"] = Field(
@@ -243,6 +298,27 @@ class FlowsPatchFlowArgs(BaseModel):
         None,
         description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
+
+    @field_validator("pending_action_id", mode="before")
+    @classmethod
+    def _strip_pending_patch_flow(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v.strip() or None
+        return v
+
+    @model_validator(mode="after")
+    def _flows_patch_flow_mode(self):  # noqa: ANN201
+        if self.mode == "apply":
+            if self.pending_action_id is None:
+                raise ValueError("pending_action_id is required when mode='apply'")
+            return self
+        if self.flow_id is None or not str(self.flow_id).strip():
+            raise ValueError("flow_id is required when mode='propose'")
+        if self.patch_json is None or not str(self.patch_json).strip():
+            raise ValueError("patch_json is required when mode='propose'")
+        return self
 
 
 def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -375,8 +451,8 @@ async def crm_search_entities(
     ),
 )
 async def crm_create_note(
-    name: str,
-    description: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
     note_date: Optional[str] = None,
     namespace: Optional[str] = None,
     mode: Literal["propose", "apply"] = "propose",
@@ -392,6 +468,8 @@ async def crm_create_note(
     clean_note_date = str(note_date).strip() if note_date and str(note_date).strip() else None
 
     if mode == "propose":
+        if name is None or description is None:
+            raise ValueError("name and description are required for mode=propose")
         action = await facade.preview_crm_create_note(
             name=name.strip(),
             description=description,
@@ -755,9 +833,9 @@ async def flows_read_context(
     ),
 )
 async def flows_patch_node(
-    flow_id: str,
-    node_id: str,
-    patch_json: str,
+    flow_id: Optional[str] = None,
+    node_id: Optional[str] = None,
+    patch_json: Optional[str] = None,
     branch_id: Optional[str] = None,
     mode: Literal["propose", "apply"] = "propose",
     pending_action_id: Optional[str] = None,
@@ -775,14 +853,16 @@ async def flows_patch_node(
             return "base"
         return cleaned
 
-    patch = json.loads(patch_json)
-    if not isinstance(patch, dict):
-        raise ValueError("patch_json must be a JSON object")
-
-    resolved_branch_id = normalize_branch_id(branch_id)
     facade = get_lara_facade()
 
     if mode == "propose":
+        if flow_id is None or node_id is None or patch_json is None:
+            raise ValueError("flow_id, node_id and patch_json are required for mode=propose")
+        patch = json.loads(patch_json)
+        if not isinstance(patch, dict):
+            raise ValueError("patch_json must be a JSON object")
+
+        resolved_branch_id = normalize_branch_id(branch_id)
         action = await facade.preview_node_patch(
             flow_id=flow_id,
             node_id=node_id,
@@ -858,18 +938,35 @@ async def flows_patch_node(
         state=state,
         idempotency_key=idempotency_key,
     )
+    target = action.get("target")
+    if not isinstance(target, dict):
+        raise ValueError("Invalid pending node patch target payload")
+    flow_resolved = target.get("flow_id")
+    node_resolved = target.get("node_id")
+    if not isinstance(flow_resolved, str) or not flow_resolved.strip():
+        raise ValueError("Pending action target.flow_id is missing")
+    if not isinstance(node_resolved, str) or not node_resolved.strip():
+        raise ValueError("Pending action target.node_id is missing")
+    resolved_branch_id = normalize_branch_id(target.get("branch_id"))
+
     preview_data = action.get("preview")
     if not isinstance(preview_data, dict):
         raise ValueError("Invalid action preview payload")
     node_before = preview_data.get("node_before")
     node_after = preview_data.get("node_after")
+    action_payload = action.get("payload")
+    patch_restored: Dict[str, Any]
+    if isinstance(action_payload, dict) and isinstance(action_payload.get("patch"), dict):
+        patch_restored = action_payload["patch"]
+    else:
+        patch_restored = {}
     event_payload = {
         "action": action,
         "patch_kind": "node",
-        "flow_id": flow_id,
+        "flow_id": flow_resolved,
         "branch_id": resolved_branch_id,
-        "node_id": node_id,
-        "changes": patch,
+        "node_id": node_resolved,
+        "changes": patch_restored,
         "open_editor": True,
     }
     push_ui_event(
@@ -882,13 +979,13 @@ async def flows_patch_node(
     result = {
         "success": True,
         "mode": mode,
-        "flow_id": flow_id,
+        "flow_id": flow_resolved,
         "branch_id": resolved_branch_id,
-        "node_id": node_id,
+        "node_id": node_resolved,
         "pending_action_id": pending_action_id,
         "node_before": node_before,
         "node_after": node_after,
-        "blocks": [{"type": "text", "text": f"Изменение для ноды {node_id} применено."}],
+        "blocks": [{"type": "text", "text": f"Изменение для ноды {node_resolved} применено."}],
     }
     return json.dumps(result, ensure_ascii=False)
 
@@ -912,8 +1009,8 @@ async def flows_patch_node(
     ),
 )
 async def flows_patch_flow(
-    flow_id: str,
-    patch_json: str,
+    flow_id: Optional[str] = None,
+    patch_json: Optional[str] = None,
     mode: Literal["propose", "apply"] = "propose",
     pending_action_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
@@ -922,21 +1019,23 @@ async def flows_patch_flow(
     if state is None:
         raise ValueError("state is required")
 
-    patch = json.loads(patch_json)
-    if not isinstance(patch, dict):
-        raise ValueError("patch_json must be a JSON object")
-
-    allowed_fields = {"name", "description", "tags", "variables"}
-    unsupported = sorted(set(patch.keys()) - allowed_fields)
-    if unsupported:
-        raise ValueError(
-            f"Unsupported flow patch fields: {', '.join(unsupported)}. "
-            "Allowed: name, description, tags, variables."
-        )
-
     facade = get_lara_facade()
 
     if mode == "propose":
+        if flow_id is None or patch_json is None:
+            raise ValueError("flow_id and patch_json are required for mode=propose")
+        patch = json.loads(patch_json)
+        if not isinstance(patch, dict):
+            raise ValueError("patch_json must be a JSON object")
+
+        allowed_fields = {"name", "description", "tags", "variables"}
+        unsupported = sorted(set(patch.keys()) - allowed_fields)
+        if unsupported:
+            raise ValueError(
+                f"Unsupported flow patch fields: {', '.join(unsupported)}. "
+                "Allowed: name, description, tags, variables."
+            )
+
         action = await facade.preview_flow_patch(
             flow_id=flow_id,
             patch=patch,
@@ -996,16 +1095,31 @@ async def flows_patch_flow(
         state=state,
         idempotency_key=idempotency_key,
     )
+    target = action.get("target")
+    if not isinstance(target, dict):
+        raise ValueError("Invalid pending flow patch target payload")
+    flow_resolved = target.get("flow_id")
+    if not isinstance(flow_resolved, str) or not flow_resolved.strip():
+        raise ValueError("Pending action target.flow_id is missing")
+
     preview_data = action.get("preview")
     if not isinstance(preview_data, dict):
         raise ValueError("Invalid action preview payload")
     flow_before = preview_data.get("flow_before")
     flow_after = preview_data.get("flow_after")
+
+    payload = action.get("payload")
+    patch_restored: Dict[str, Any]
+    if isinstance(payload, dict) and isinstance(payload.get("patch"), dict):
+        patch_restored = payload["patch"]
+    else:
+        patch_restored = {}
+
     apply_payload = {
         "action": action,
         "patch_kind": "flow",
-        "flow_id": flow_id,
-        "flow_changes": patch,
+        "flow_id": flow_resolved,
+        "flow_changes": patch_restored,
         "open_editor": True,
     }
     push_ui_event(
@@ -1018,10 +1132,283 @@ async def flows_patch_flow(
     result = {
         "success": True,
         "mode": mode,
-        "flow_id": flow_id,
+        "flow_id": flow_resolved,
         "pending_action_id": pending_action_id,
         "flow_before": flow_before,
         "flow_after": flow_after,
-        "blocks": [{"type": "text", "text": f"Изменение для flow {flow_id} применено."}],
+        "blocks": [{"type": "text", "text": f"Изменение для flow {flow_resolved} применено."}],
     }
     return json.dumps(result, ensure_ascii=False)
+
+
+class CrmGetEntityArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    entity_id: str = Field(..., min_length=1, description="entity_id CRM.")
+
+
+class CrmCreateEntityArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    entity_type: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    entity_subtype: Optional[str] = None
+    namespace: Optional[str] = None
+    description: Optional[str] = None
+    attributes: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+
+
+class CrmCreateRelationshipArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    source_entity_id: str = Field(..., min_length=1)
+    target_entity_id: str = Field(..., min_length=1)
+    relationship_type: str = Field(..., min_length=1)
+    namespace: Optional[str] = None
+    weight: float = Field(default=1.0, ge=0.0)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class CrmListEntityTypesArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    namespace: Optional[str] = None
+
+
+class CrmDailySummaryArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    date: str = Field(..., min_length=10, max_length=10, description="YYYY-MM-DD.")
+    namespace: Optional[str] = None
+    force_rebuild: bool = False
+
+
+@tool(
+    name="crm_get_entity",
+    description=(
+        "Загружает сущность CRM по entity_id (GET /crm/api/v1/entities/{id}). "
+        "Возвращает JSON и card-блок для чата."
+    ),
+    tags=["crm", "lara"],
+    args_schema=CrmGetEntityArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {
+            "success": True,
+            "entity": {"entity_id": args.get("entity_id"), "name": "Mock", "entity_type": "note"},
+        },
+        ensure_ascii=False,
+    ),
+)
+async def crm_get_entity(entity_id: str, state: Optional[dict] = None) -> str:
+    if state is None:
+        raise ValueError("state is required")
+    cid = entity_id.strip()
+    if not cid:
+        raise ValueError("entity_id is required")
+    client = ServiceClient()
+    try:
+        raw = await client.get("crm", f"/crm/api/v1/entities/{quote(cid, safe='')}")
+    except ServiceClientError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
+    if not isinstance(raw, dict):
+        return json.dumps({"success": False, "error": "crm_get_entity: invalid response"}, ensure_ascii=False)
+    blocks: List[Dict[str, Any]] = [
+        {
+            "type": "card",
+            "title": raw.get("name") or cid,
+            "subtitle": str(raw.get("entity_type") or ""),
+        },
+    ]
+    return json.dumps({"success": True, "entity": raw, "blocks": blocks}, ensure_ascii=False)
+
+
+@tool(
+    name="crm_create_entity",
+    description=(
+        "Создаёт сущность CRM (POST /crm/api/v1/entities): entity_type и name обязательны. "
+        "namespace берётся из active_namespace если не указан. Для confirm-first заметок используй crm_create_note."
+    ),
+    tags=["crm", "lara", "mutation"],
+    args_schema=CrmCreateEntityArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {"success": True, "entity": {"entity_id": "mock-e1", "name": args.get("name")}},
+        ensure_ascii=False,
+    ),
+)
+async def crm_create_entity(
+    entity_type: str,
+    name: str,
+    entity_subtype: Optional[str] = None,
+    namespace: Optional[str] = None,
+    description: Optional[str] = None,
+    attributes: Optional[Dict[str, Any]] = None,
+    tags: Optional[List[str]] = None,
+    state: Optional[dict] = None,
+) -> str:
+    if state is None:
+        raise ValueError("state is required")
+    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
+    body: Dict[str, Any] = {
+        "entity_type": entity_type.strip(),
+        "name": name.strip(),
+        "namespace": ns,
+    }
+    if entity_subtype and str(entity_subtype).strip():
+        body["entity_subtype"] = entity_subtype.strip()
+    if description and str(description).strip():
+        body["description"] = description.strip()
+    if attributes:
+        body["attributes"] = attributes
+    if tags:
+        body["tags"] = tags
+    client = ServiceClient()
+    try:
+        created = await client.post("crm", "/crm/api/v1/entities", json=body)
+    except ServiceClientError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
+    if not isinstance(created, dict) or not created.get("entity_id"):
+        return json.dumps({"success": False, "error": "crm_create_entity: invalid response"}, ensure_ascii=False)
+    blocks = [{"type": "card", "title": created.get("name") or "Entity", "subtitle": created["entity_id"]}]
+    return json.dumps({"success": True, "entity": created, "blocks": blocks}, ensure_ascii=False)
+
+
+@tool(
+    name="crm_create_relationship",
+    description=(
+        "Создаёт связь (POST /crm/api/v1/relationships между source и target)."
+    ),
+    tags=["crm", "lara", "mutation", "graph"],
+    args_schema=CrmCreateRelationshipArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {"success": True, "relationship_id": "rel-mock"},
+        ensure_ascii=False,
+    ),
+)
+async def crm_create_relationship(
+    source_entity_id: str,
+    target_entity_id: str,
+    relationship_type: str,
+    namespace: Optional[str] = None,
+    weight: float = 1.0,
+    confidence: float = 1.0,
+    state: Optional[dict] = None,
+) -> str:
+    if state is None:
+        raise ValueError("state is required")
+    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
+    payload_obj = {
+        "source_entity_id": source_entity_id.strip(),
+        "target_entity_id": target_entity_id.strip(),
+        "relationship_type": relationship_type.strip(),
+        "namespace": ns,
+        "weight": weight,
+        "confidence": confidence,
+    }
+    client = ServiceClient()
+    try:
+        raw = await client.post("crm", "/crm/api/v1/relationships", json=payload_obj)
+    except ServiceClientError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
+    if not isinstance(raw, dict) or not raw.get("relationship_id"):
+        return json.dumps({"success": False, "error": "crm_create_relationship: invalid response"}, ensure_ascii=False)
+    bid = raw["relationship_id"]
+    txt = (
+        f"Связь {relationship_type.strip()} создана ({bid}): "
+        f"{payload_obj['source_entity_id']} → {payload_obj['target_entity_id']}."
+    )
+    blocks: List[Dict[str, Any]] = [{"type": "text", "text": txt}]
+    return json.dumps({"success": True, "relationship": raw, "blocks": blocks}, ensure_ascii=False)
+
+
+@tool(
+    name="crm_list_entity_types",
+    description=("Каталог типов для namespace (GET /crm/api/v1/entity-types?namespace=)."),
+    tags=["crm", "lara"],
+    args_schema=CrmListEntityTypesArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {"success": True, "items": [{"type_id": "note"}], "blocks": [{"type": "text", "text": "mock"}]},
+        ensure_ascii=False,
+    ),
+)
+async def crm_list_entity_types(namespace: Optional[str] = None, state: Optional[dict] = None) -> str:
+    if state is None:
+        raise ValueError("state is required")
+    ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
+    client = ServiceClient()
+    qp = quote(ns, safe="")
+    path = f"/crm/api/v1/entity-types?namespace={qp}"
+    try:
+        raw = await client.get("crm", path)
+    except ServiceClientError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
+    if not isinstance(raw, dict):
+        return json.dumps({"success": False, "error": "crm_list_entity_types: invalid response envelope"}, ensure_ascii=False)
+    rows_payload = raw.get("items")
+    if not isinstance(rows_payload, list):
+        return json.dumps({"success": False, "error": "crm_list_entity_types: invalid items"}, ensure_ascii=False)
+    compact = [
+        {"type_id": x.get("type_id"), "name": x.get("name"), "parent_type_id": x.get("parent_type_id")}
+        for x in rows_payload
+        if isinstance(x, dict)
+    ]
+    lines = compact[:80]
+    blocks: List[Dict[str, Any]] = [
+        {
+            "type": "table",
+            "title": "Типы сущностей",
+            "columns": [
+                {"key": "type_id", "label": "type_id"},
+                {"key": "name", "label": "Имя"},
+                {"key": "parent_type_id", "label": "Родитель"},
+            ],
+            "rows": lines,
+        }
+    ]
+    return json.dumps(
+        {"success": True, "namespace": ns, "count": len(compact), "items": compact, "blocks": blocks},
+        ensure_ascii=False,
+    )
+
+
+@tool(
+    name="crm_daily_summary",
+    description=(
+        "Сводка заметок за день (POST /crm/api/v1/entities/daily-summary, date YYYY-MM-DD)."
+    ),
+    tags=["crm", "lara", "summaries"],
+    args_schema=CrmDailySummaryArgs,
+    mock_response=lambda args, state=None: json.dumps(
+        {"success": True, "summary": "mock", "blocks": [{"type": "text", "text": "mock"}]},
+        ensure_ascii=False,
+    ),
+)
+async def crm_daily_summary(
+    date: str,
+    namespace: Optional[str] = None,
+    force_rebuild: bool = False,
+    state: Optional[dict] = None,
+) -> str:
+    if state is None:
+        raise ValueError("state is required")
+    d_raw = date.strip()
+    if not d_raw:
+        raise ValueError("date is required")
+    body: Dict[str, Any] = {"date": d_raw, "force_rebuild": bool(force_rebuild)}
+    ns_clear = namespace if namespace and str(namespace).strip() else None
+    if ns_clear:
+        body["namespace"] = ns_clear
+    client = ServiceClient()
+    try:
+        raw = await client.post("crm", "/crm/api/v1/entities/daily-summary", json=body)
+    except ServiceClientError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
+    if not isinstance(raw, dict):
+        return json.dumps({"success": False, "error": "crm_daily_summary: invalid response"}, ensure_ascii=False)
+    summary_text = raw.get("summary")
+    if isinstance(summary_text, str) and summary_text.strip():
+        main = summary_text.strip()
+    else:
+        main = json.dumps(raw, ensure_ascii=False)[:2500]
+    blocks: List[Dict[str, Any]] = [{"type": "text", "text": main}]
+    return json.dumps({"success": True, "response": raw, "blocks": blocks}, ensure_ascii=False)

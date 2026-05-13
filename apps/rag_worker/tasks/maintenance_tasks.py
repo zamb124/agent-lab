@@ -9,9 +9,9 @@ from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
 from core.config import get_settings
 from core.context import Context, clear_context, set_context
-from core.context.system_task_context import build_system_auth_context
 from core.files.processors import FileProcessor
 from core.logging import get_logger
+from core.rag.reembed_stale_documents import execute_reembed_tick
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
 
@@ -219,57 +219,48 @@ async def rag_cleanup_expired_documents_tick(
     retry_on_error=True,
     max_retries=2,
 )
-async def rag_reembed_stale_documents_tick(
-    scheduler_task_id: str | None = None,
-    company_id: str | None = None,
-) -> Dict[str, Any]:
-    """
-    Перевекторизует чанки RAG с ``embedding_model IS NULL``.
+async def rag_reembed_stale_documents_tick(scheduler_task_id: str) -> Dict[str, Any]:
+    return await execute_reembed_tick(
+        container=get_rag_container(),
+        channel="rag_worker",
+        scheduler_task_id=scheduler_task_id,
+    )
 
-    Один тик обрабатывает не более ``rag.ttl.reembed_batch_size`` чанков.
-    Отключение: ``rag.ttl.reembed_enabled: false``.
+
+@broker.task(
+    task_name="rag_cleanup_orphan_company_chunks_tick",
+    queue_name="rag",
+    retry_on_error=True,
+    max_retries=2,
+)
+async def rag_cleanup_orphan_company_chunks_tick(scheduler_task_id: str) -> Dict[str, Any]:
     """
-    _ = company_id
+    Батчево удаляет ``vector_documents`` без ``company_id`` (NULL/'').
+
+    Такие строки осиротевшие — биллинг и поиск по тенанту невозможны; они появляются
+    исторически (legacy) и подлежат удалению. reembed-тик их не обрабатывает.
+    """
+    if not scheduler_task_id or not scheduler_task_id.strip():
+        raise ValueError("rag_cleanup_orphan_company_chunks_tick: scheduler_task_id обязателен")
     settings = get_settings()
-    reembed_cfg = settings.rag.ttl
-    if not reembed_cfg.reembed_enabled:
+    cfg = settings.rag.ttl
+    if not cfg.orphan_cleanup_enabled:
         return {
             "skipped": True,
             "scheduler_task_id": scheduler_task_id,
-            "reembedded": 0,
+            "deleted": 0,
         }
-
-    container = get_rag_container()
-    provider = container.rag_provider
-    target_model = provider._embedding_model_name()
-    batch_size = reembed_cfg.reembed_batch_size
-    system_context = await build_system_auth_context(
-        container=container,
-        trace_id=f"scheduler:rag_reembed_stale_documents:{scheduler_task_id or 'manual'}",
-        session_id=f"rag_reembed_stale_documents:{scheduler_task_id or 'manual'}",
-        channel="rag_worker",
-    )
-    set_context(system_context)
-    try:
-        reembedded = await provider.reembed_stale_documents(
-            batch_size=batch_size,
-            target_embedding_model=target_model,
-        )
-    finally:
-        clear_context()
-
+    provider = get_rag_container().rag_provider
+    deleted = await provider.delete_orphan_company_chunks(limit=cfg.orphan_cleanup_batch_size)
     logger.info(
-        "rag.reembed_stale.tick_done",
+        "rag.orphan_cleanup.tick_done",
         scheduler_task_id=scheduler_task_id,
-        target_embedding_model=target_model,
-        batch_size=batch_size,
-        reembedded=reembedded,
+        batch_size=cfg.orphan_cleanup_batch_size,
+        deleted=deleted,
     )
-
     return {
         "skipped": False,
         "scheduler_task_id": scheduler_task_id,
-        "target_embedding_model": target_model,
-        "batch_size": batch_size,
-        "reembedded": reembedded,
+        "batch_size": cfg.orphan_cleanup_batch_size,
+        "deleted": deleted,
     }

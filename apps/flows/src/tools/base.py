@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Type, Uni
 from pydantic import BaseModel
 
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
 
 
 def sanitize_tool_name(name: str) -> str:
@@ -362,7 +363,10 @@ class CodeTool(BaseTool):
     async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """Выполняет inline код через SafeEval."""
         full_args = self._apply_defaults(args)
-        
+        schema = self._parameters
+        if isinstance(schema, dict) and schema.get("type") == "object":
+            validate_tool_args_against_parameters_schema(schema=schema, arguments=dict(full_args))
+
         variables = state.variables
         
         # Резолвим resources из конфига tool

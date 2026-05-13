@@ -350,12 +350,21 @@ class TestAnalyzeWithAttachments:
         assert upload.status_code == 200, upload.text
 
         summary_text = f"Менеджер {unique_id} провёл встречу по проекту."
-        await mock_llm_redis([
-            # 1-й вызов: summarize_attachment
-            {"type": "text", "content": json.dumps({"summary": summary_text})},
-            # 2-й вызов: analyze
-            {"type": "text", "content": _analyze_llm_response(note_name=note_name, person_name=f"Менеджер {unique_id}")},
-        ])
+        # 42k символов → несколько фрагментов summarize_attachment (чанк ~18k).
+        summarize_item = {"type": "text", "content": json.dumps({"summary": summary_text})}
+        await mock_llm_redis(
+            [
+                summarize_item,
+                summarize_item,
+                summarize_item,
+                {
+                    "type": "text",
+                    "content": _analyze_llm_response(
+                        note_name=note_name, person_name=f"Менеджер {unique_id}"
+                    ),
+                },
+            ]
+        )
 
         task, resp = await _analyze_note_task(crm_client, auth_headers_system, note_id, check_duplicates=False)
         assert len(resp.json().get("entities") or []) >= 1

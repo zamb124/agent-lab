@@ -44,9 +44,10 @@ globs:
 
 При смене модели эмбеддинга миграция обнуляет `embedding` (`ALTER COLUMN embedding TYPE vector(N) USING NULL`). Старые чанки временно недоступны (`embedding_model IS NULL`).
 
-- `PgVectorProvider.reembed_stale_documents(batch_size, target_embedding_model) -> int` (`core/rag/providers/pgvector_provider.py`): берёт чанки `embedding_model IS NULL` или ≠ целевой, регенерирует embedding и записывает обратно (с `embedding_model`).
-- TaskIQ задачи (планируются `scheduler`): `rag_reembed_stale_documents_tick` (очередь `rag`, `DATABASE__RAG_URL`), `crm_reembed_stale_documents_tick` (очередь `crm`, `DATABASE__CRM_URL`).
-- Конфиг `rag.ttl` (`RagTtlConfig`): `reembed_enabled` (default `true`), `reembed_cron` (default `"*/5 * * * *"`), `reembed_batch_size` (default 50, 1..2000). ENV: `RAG__TTL__REEMBED_*`.
+- **Единственная точка входа** — `core/rag/reembed_stale_documents.py::execute_reembed_tick(*, container, channel, scheduler_task_id)`. Берёт in-process pgvector через `get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)`, `company_repository`/`user_repository` — из переданного контейнера (`BaseContainer`). Внутри: SELECT `fetch_stale_chunks_for_reembed(limit=rag.ttl.reembed_batch_size)` (фильтр `company_id IS NOT NULL AND != ''` — на стороне SQL), группировка по `company_id` (стабильный порядок), для каждой компании — тихая проверка баланса **`BillingService.company_may_incur_embedding_charge`** (без `notify_user`), `pick_company_billing_user` + `build_job_context` (`core/context/job_context.py`), один батч `EmbeddingService.generate_embeddings` + `write_reembed_chunk_embeddings`. Скип-группы (нет компании / низкий баланс / нет owner) остаются stale до следующего тика — без overscan и magic numbers.
+- **TaskIQ-обёртки** (`apps/crm_worker/tasks/reembed_tasks.py`, `apps/rag_worker/tasks/maintenance_tasks.py::rag_reembed_stale_documents_tick`) — тонкие, по 5 LOC: один вызов `execute_reembed_tick`. Глобальный системный `Context` вокруг тика не используется — биллинг и JWT соответствуют владельцу чанка.
+- **Orphan-чанки** (`company_id IS NULL`) reembed-тиком не обрабатываются (без owner биллинг и поиск по тенанту невозможны). Их удаляет отдельный TaskIQ `rag_cleanup_orphan_company_chunks_tick` пачками `rag.ttl.orphan_cleanup_batch_size` через `PgVectorProvider.delete_orphan_company_chunks`.
+- Конфиг `rag.ttl` (`RagTtlConfig`): `reembed_enabled` (default `true`), `reembed_cron` (default `"*/5 * * * *"`), `reembed_batch_size` (default 50, 1..2000), `orphan_cleanup_enabled` (default `true`), `orphan_cleanup_cron` (default `"*/15 * * * *"`), `orphan_cleanup_batch_size` (default 500, 1..5000). ENV: `RAG__TTL__REEMBED_*`, `RAG__TTL__ORPHAN_CLEANUP_*`.
 - Батчи не блокируют поиск.
 
 ## Провайдеры

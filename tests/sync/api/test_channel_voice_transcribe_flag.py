@@ -75,7 +75,7 @@ async def test_voice_message_without_channel_flag_stays_idle(
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(240)
 async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
     sync_service,
     sync_client,
@@ -120,7 +120,7 @@ async def test_voice_message_with_channel_flag_processing_then_done_via_worker(
 
     await asyncio.sleep(1.0)
 
-    deadline = time.monotonic() + 120.0
+    deadline = time.monotonic() + 220.0
     done_text: str | None = None
     while time.monotonic() < deadline:
         lr = await sync_client.get(

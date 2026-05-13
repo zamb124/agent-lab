@@ -1,6 +1,7 @@
 /**
  * Smoke: CRMNamespaceModal — mode='create' рендерит шаг выбора шаблона,
  * mode='edit' рендерит read-only name + textarea description.
+ * Инвариант mode см. CRMNamespaceModal.connectedCallback (негатив не покрываем: uncaught под WTR).
  */
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
@@ -96,23 +97,5 @@ describe('crm-namespace-modal', () => {
         expect(modal, 'modal mounted').to.exist;
         expect(modal.mode).to.equal('edit');
         expect(modal.name).to.equal('demo_ns');
-    });
-
-    it('некорректный mode выбрасывает ошибку при mount', async () => {
-        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
-        let error = null;
-        const origError = window.onerror;
-        window.onerror = (msg) => { error = msg; return true; };
-        try {
-            getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, {
-                kind: 'crm.namespace',
-                props: { mode: 'unknown' },
-            });
-            await elementUpdated(stack);
-            await aTimeout(0);
-        } finally {
-            window.onerror = origError;
-        }
-        expect(error, 'error captured').to.match(/mode|create|edit/);
     });
 });

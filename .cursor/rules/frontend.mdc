@@ -324,6 +324,13 @@ await publish_ui_event_to_user(user_id=..., type="crm/note/updated", payload={"n
 
 WS-эффект форвардит фрейм, фронт диспатчит как обычное событие. Компонент: `this.useEvent('crm/note/updated', handler)`.
 
+### Embed Lara — pending apply из чата
+
+- `platform-embed-chat`: при событии `embed-block-action` эмитируется `assistant:action_invoked` для хоста.
+- Если задан `actionHandlers['assistant:action_invoked']` — только он (нет дефолтного apply через LLM).
+- Иначе при `action_kind === 'apply'` выполняется `POST {flowsBaseUrl}/api/v1/lara/pending-actions/apply` с `{ pending_action_id, context_id }`; `context_id` берётся из внутреннего A2A (`getA2aContextId()`). Требуется непустой `flowsBaseUrl`.
+- Поток блоков действий превью продолжает идти через UI-event `action_previewed` (`_mergeBlocksFromUiEvents`), не через сырой `tool_result.actions`.
+
 ## Публичный каталог лендинга (BFF frontend)
 
 Анонимные HTTP-эндпоинты `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу — только виджеты компании **`system`** с `landing_visible` и непустым `landing_card_image_url`. UI: маршрут `digital-workers` (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики `frontend/landing_agents_load` и `frontend/landing_demo_session` в `landing-demo.resource.js`; пробный чат через `platform-embed-chat-drawer` + гостевой JWT из POST session. Лимит сообщений гостя — `EmbedConfig.guest_max_user_messages` (применяется в flows для A2A `message/send`/`message/stream` при непустом `contextId`).
