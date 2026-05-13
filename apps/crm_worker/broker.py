@@ -78,6 +78,13 @@ async def crm_worker_startup(state: TaskiqState) -> None:
     await notification_manager.start_redis_listener(settings.database.redis_url)
     await _ensure_reconcile_schedule()
     logger.info("worker.starting", service="crm_worker")
+    reconciled = await container.task_service.reconcile_stale_worker_tasks()
+    if reconciled:
+        logger.warning(
+            "worker.reconcile_stale_crm_tasks",
+            service="crm_worker",
+            reconciled=reconciled,
+        )
 
 
 async def crm_worker_shutdown(state: TaskiqState) -> None:

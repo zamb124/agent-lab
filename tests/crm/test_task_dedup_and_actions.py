@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -700,3 +700,156 @@ class TestNamespaceIntegrationCancelFinalize:
         assert body["stage"] == "cancelled"
         assert body["cancel_requested"] is False
         assert body["progress_pct"] == 50
+
+
+class TestStaleTasksAndWorkerGuards:
+    @pytest.mark.asyncio
+    async def test_worker_terminal_patch_does_not_overwrite_cancelled(
+        self,
+        crm_container,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        """После отмены воркер не может записать completed поверх cancelled."""
+        ns = f"g_{unique_id}"
+        tid = f"race-{unique_id}"
+        task = _make_task(
+            tid,
+            "note_analyze",
+            "running",
+            ns,
+            "system",
+            system_user_id,
+            data={"note_id": "note-x"},
+        )
+        await _insert_task(crm_container, task, "system", ns, system_user_id)
+        await crm_container.task_repository.patch_progress(
+            tid,
+            "system",
+            status="cancelled",
+            stage="cancelled",
+            progress_pct=50,
+            completed_at=_NOW(),
+            cancel_requested=False,
+        )
+        await crm_container.task_repository.patch_progress(
+            tid,
+            "system",
+            status="completed",
+            stage="completed",
+            progress_pct=100,
+            completed_at=_NOW(),
+        )
+        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        assert row is not None
+        assert row.status == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_second_cancel_finalizes_note_analyze_when_cancel_requested(
+        self,
+        crm_client: AsyncClient,
+        crm_container,
+        auth_headers_system: dict,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        """Повторный POST /cancel для note_analyze с cancel_requested завершает задачу."""
+        ns = f"g_{unique_id}"
+        tid = f"note-stuck-{unique_id}"
+        now = _NOW()
+        task = CRMTask(
+            task_id=tid,
+            task_type="note_analyze",
+            status="running",
+            stage="analyzing",
+            progress_pct=57,
+            company_id="system",
+            namespace=ns,
+            user_id=system_user_id,
+            data={"note_id": f"n-{unique_id}", "note_name": "x", "mode": "analyze"},
+            cancel_requested=True,
+            started_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        await _insert_task(crm_container, task, "system", ns, system_user_id)
+
+        resp = await crm_client.post(
+            f"/crm/api/v1/tasks/{tid}/cancel",
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "cancelled"
+        assert body["cancel_requested"] is False
+        assert body["progress_pct"] == 57
+
+    @pytest.mark.asyncio
+    async def test_reconcile_stale_worker_marks_running_as_failed(
+        self,
+        crm_container,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        """Задачи с устаревшим updated_at закрываются reconcile_stale_worker_tasks."""
+        ns = f"g_{unique_id}"
+        tid = f"stale-{unique_id}"
+        old = _NOW() - timedelta(minutes=120)
+        task = CRMTask(
+            task_id=tid,
+            task_type="daily_summary",
+            status="running",
+            stage="summarizing_day",
+            progress_pct=50,
+            company_id="system",
+            namespace=ns,
+            user_id=system_user_id,
+            data={"date_str": "2024-06-01", "reason": "test"},
+            cancel_requested=False,
+            started_at=old,
+            created_at=old,
+            updated_at=old,
+        )
+        await _insert_task(crm_container, task, "system", ns, system_user_id)
+
+        n = await crm_container.task_service.reconcile_stale_worker_tasks()
+        assert n == 1
+        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        assert row is not None
+        assert row.status == "failed"
+        assert row.error_message is not None
+        assert "воркер" in (row.error_message or "").lower() or "worker" in (row.error_message or "").lower()
+
+    @pytest.mark.asyncio
+    async def test_reconcile_stale_cancel_requested_becomes_cancelled(
+        self,
+        crm_container,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        old = _NOW() - timedelta(minutes=120)
+        ns = f"g_{unique_id}"
+        tid = f"stale-cancel-{unique_id}"
+        task = CRMTask(
+            task_id=tid,
+            task_type="knowledge_import",
+            status="running",
+            stage="importing",
+            progress_pct=40,
+            company_id="system",
+            namespace=ns,
+            user_id=system_user_id,
+            data={},
+            cancel_requested=True,
+            started_at=old,
+            created_at=old,
+            updated_at=old,
+        )
+        await _insert_task(crm_container, task, "system", ns, system_user_id)
+
+        n = await crm_container.task_service.reconcile_stale_worker_tasks()
+        assert n == 1
+        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        assert row is not None
+        assert row.status == "cancelled"
+        assert row.cancel_requested is False

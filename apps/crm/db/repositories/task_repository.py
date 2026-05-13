@@ -96,6 +96,11 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
                 base_where.append(
                     CRMTask.status.not_in(("completed", "failed", "cancelled", "rolled_back"))
                 )
+            # Завершение из воркера не перетирает уже финализированную запись
+            # (пользователь успел отменить через API, пока воркер дописывал результат)
+            _worker_terminal = ("completed", "failed", "cancelled")
+            if values.get("status") in _worker_terminal:
+                base_where.append(CRMTask.status.in_(("pending", "running")))
             if data_patch:
                 await session.execute(
                     update(CRMTask)
@@ -109,6 +114,42 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
                     .values(**values)
                 )
             await session.commit()
+
+    async def reconcile_stale_active_tasks_older_than(self, *, cutoff: datetime) -> list[CRMTask]:
+        """Активные задачи без обновления status/progress дольше cutoff → failed или cancelled.
+
+        Вызывается при старте crm_worker после реверса зависших сообщений TaskIQ в Redis.
+        cancel_requested: статус cancelled; иначе failed с пояснением прерывания.
+        """
+        async with self._db.session() as session:
+            stmt = select(CRMTask).where(
+                CRMTask.status.in_(("pending", "running")),
+                CRMTask.updated_at < cutoff,
+            )
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+            now = datetime.now(timezone.utc)
+            msg_failed = (
+                "Задача прервана: нет активности воркера (перезапуск сервиса или сбой процесса)."
+            )
+            for row in rows:
+                if row.cancel_requested:
+                    row.status = "cancelled"
+                    row.stage = "cancelled"
+                    row.completed_at = now
+                    row.cancel_requested = False
+                    row.error_message = None
+                else:
+                    row.status = "failed"
+                    row.stage = "failed"
+                    row.progress_pct = 100
+                    row.completed_at = now
+                    row.error_message = msg_failed
+                row.updated_at = now
+            await session.commit()
+            for row in rows:
+                await session.refresh(row)
+        return rows
 
     async def list_for_namespace(
         self,

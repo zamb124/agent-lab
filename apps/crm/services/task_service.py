@@ -11,9 +11,10 @@ import hashlib
 
 from core.logging import get_logger
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
+from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
 from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
@@ -24,18 +25,24 @@ from apps.crm.models.api import (
     TaskCreatedEntitiesResponse,
     TaskResponse,
 )
+from apps.crm.services.crm_task_ws_broadcast import broadcast_crm_task_updated_for_user
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     store_pending_import_text,
 )
-from core.context import get_context
+from core.context import clear_context, get_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import User
+from core.models.i18n_models import Language
 from core.utils.knowledge_text_split import validate_chunk_max_chars
 
 logger = get_logger(__name__)
 MAX_SOURCE_TEXT_INLINE_CHARS = 100_000
 MAX_SOURCE_FILES_PER_IMPORT = 80
 ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
+# Нет ни progress patch, ни смены статуса дольше этого окна → запись считаем потерянной при рестарте воркера.
+STALE_CRM_TASK_INACTIVITY = timedelta(minutes=10)
 
 if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
@@ -472,11 +479,7 @@ class TaskService:
         if row.status in ("completed", "failed", "rolled_back", "cancelled"):
             raise ValueError(f"Задача в статусе {row.status}, отмена недоступна")
 
-        if (
-            row.cancel_requested
-            and row.status in ("pending", "running")
-            and row.task_type == "namespace_integration_job"
-        ):
+        if row.cancel_requested and row.status in ("pending", "running"):
             now = datetime.now(timezone.utc)
             pct = int(row.progress_pct)
             await self._task_repo.patch_progress(
@@ -491,11 +494,54 @@ class TaskService:
             updated = await self._task_repo.get(task_id)
             if updated is None:
                 raise ValueError(f"Задача не найдена: {task_id}")
+            await broadcast_crm_task_updated_for_user(user_id=updated.user_id, row=updated)
             return updated
 
         await self._task_repo.patch_progress(task_id, row.company_id, cancel_requested=True)
         row.cancel_requested = True
         return row
+
+    async def reconcile_stale_worker_tasks(self) -> int:
+        """Закрывает «потерянные» active-задачи после рестарта crm_worker (нет обновлений в БД)."""
+        cutoff = datetime.now(timezone.utc) - STALE_CRM_TASK_INACTIVITY
+        rows = await self._task_repo.reconcile_stale_active_tasks_older_than(cutoff=cutoff)
+        if not rows:
+            return 0
+        container = get_crm_container()
+        for row in rows:
+            if row.task_type == "note_analyze" and row.status == "failed":
+                note_payload = row.data if isinstance(row.data, dict) else {}
+                raw_note = note_payload.get("note_id")
+                note_id = raw_note if isinstance(raw_note, str) and raw_note else None
+                if note_id:
+                    company_row = await container.company_repository.get(row.company_id)
+                    if company_row is None:
+                        logger.warning(
+                            "crm.reconcile_stale_task.company_missing task_id=%s company_id=%s",
+                            row.task_id,
+                            row.company_id,
+                        )
+                    else:
+                        set_context(
+                            Context(
+                                user=User(user_id=row.user_id, name="CRM worker"),
+                                active_company=company_row,
+                                session_id=f"crm-reconcile:{row.company_id}",
+                                channel="taskiq",
+                                active_namespace=row.namespace,
+                                language=Language.RU,
+                            )
+                        )
+                        try:
+                            await self._entity_service.record_note_analysis_failure(
+                                note_id,
+                                row.error_message or "",
+                            )
+                        finally:
+                            clear_context()
+            await broadcast_crm_task_updated_for_user(user_id=row.user_id, row=row)
+        logger.info("crm.tasks.reconcile_stale_finished reconciled=%s", len(rows))
+        return len(rows)
 
     async def rollback_task(self, task_id: str) -> CRMTask:
         row = await self._task_repo.get(task_id)
