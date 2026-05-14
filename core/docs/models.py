@@ -2,7 +2,7 @@
 Модели для сервиса документации.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -123,7 +123,7 @@ class DocumentationResponse(BaseModel):
     """Ответ с документацией."""
     language: str
     perspective: str
-    
+
     modules: List[str] = []  # список доступных модулей
     module_methods: Dict[str, List[ModuleMethod]] = {}  # методы модулей
     globals: List[GlobalVariable] = []

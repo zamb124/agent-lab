@@ -2,16 +2,16 @@
 API для проверки статуса микросервисов
 """
 import asyncio
-
-from core.logging import get_logger
 import time
+
 import httpx
 from fastapi import APIRouter, Query
 
-from core.pagination import OffsetPage
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ServiceStatus
 from core.clients.service_client import ServiceClientError
+from core.logging import get_logger
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/services", tags=["services"])

@@ -3,16 +3,16 @@ Registry API - совместимость с platformweb.
 Предоставляет endpoints для получения списка flows и tools.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from apps.flows.src.dependencies import ContainerDep
-from core.logging import get_logger
-from apps.flows.src.models import FlowConfig, BranchConfig
+from apps.flows.src.models import BranchConfig, FlowConfig
 from apps.flows.src.services.flows_loader import get_all_flows
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -27,7 +27,7 @@ def get_base_url(request: Request) -> str:
         scheme = forwarded_proto.lower()
     else:
         scheme = request.url.scheme
-    
+
     # Используем X-Forwarded-Host, который содержит host:port от Nginx
     forwarded_host = request.headers.get("x-forwarded-host")
     if forwarded_host:
@@ -42,7 +42,7 @@ def get_base_url(request: Request) -> str:
                 host = f"{host}:443"
             elif scheme == "http":
                 host = f"{host}:80"
-    
+
     return f"{scheme}://{host}"
 
 
@@ -186,12 +186,12 @@ async def get_providers_values(container: ContainerDep) -> List[str]:
 async def get_models_values(container: ContainerDep, provider: Optional[str] = None) -> List[str]:
     """
     Список доступных моделей.
-    
+
     Args:
-        provider: Провайдер (bothub, openrouter, openai, provider_litserve). 
+        provider: Провайдер (bothub, openrouter, openai, provider_litserve).
                   Если не указан - используется текущий из конфига.
     """
-    
+
     if provider:
         models = await container.llm_models_service.get_models_by_provider(provider)
     else:
@@ -204,12 +204,12 @@ async def get_models_values(container: ContainerDep, provider: Optional[str] = N
 async def sync_models(container: ContainerDep, provider: Optional[str] = None) -> Dict[str, Any]:
     """
     Синхронизация моделей от провайдеров.
-    
+
     Args:
-        provider: Провайдер для синхронизации. 
+        provider: Провайдер для синхронизации.
                   Если не указан - синхронизируются ВСЕ настроенные провайдеры.
     """
-    
+
     if provider:
         count = await container.llm_models_service.sync_models_by_provider(provider)
         return {"provider": provider, "count": count}

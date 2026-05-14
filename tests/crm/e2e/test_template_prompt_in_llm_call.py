@@ -30,7 +30,6 @@ import pytest
 
 from apps.crm.system_templates import NAMESPACE_TEMPLATE_SEEDS
 
-
 _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 
 

@@ -2,26 +2,27 @@
 API для управления конфигурациями встраиваемых виджетов.
 """
 
-from core.logging import get_logger
 import html
 import json
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from core.pagination import OffsetPage
+from apps.frontend.dependencies import ContainerDep
+from core.clients.service_client import ServiceClientError
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.logging import get_logger
 from core.models.embed_models import (
     DEFAULT_EMBED_INPUT_PLACEHOLDER,
     EmbedConfig,
     EmbedMapping,
     EmbedStatus,
 )
+from core.pagination import OffsetPage
 from core.utils.tokens import get_token_service
-from apps.frontend.dependencies import ContainerDep
-from core.clients.service_client import ServiceClientError
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
@@ -288,20 +289,20 @@ async def create_embed_config(
 ):
     """
     Создание новой конфигурации виджета.
-    
+
     Проверяет авторизацию, существование агента и создает:
     1. EmbedConfig в компании
     2. Глобальный маппинг embed_id -> company_id
     """
     if not hasattr(request.state, 'user') or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
+
     user = request.state.user
     company_id = user.active_company_id
-    
+
     if not company_id:
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
-    
+
     try:
         agent = await container.service_client.get(
             "flows", f"/flows/api/v1/flows/{request_data.flow_id}"
@@ -330,10 +331,10 @@ async def create_embed_config(
                 )
         else:
             branch_id = "default"
-    
+
     # Генерируем уникальный embed_id
     embed_id = f"embed_{uuid.uuid4().hex[:16]}"
-    
+
     interface_locale = _normalize_interface_locale(request_data.interface_locale)
 
     allowed_origins: list[str] = []
@@ -387,17 +388,17 @@ async def create_embed_config(
         preview_share_link=False,
         created_by=user.user_id,
     )
-    
+
     embed_config_repo = container.embed_config_repository
     await embed_config_repo.set(config)
-    
+
     # Создаем глобальный маппинг
     mapping = EmbedMapping(embed_id=embed_id, company_id=company_id)
     embed_mapping_repo = container.embed_mapping_repository
     await embed_mapping_repo.set(mapping)
-    
+
     logger.info(f"Создана конфигурация виджета {embed_id} для компании {company_id}")
-    
+
     return _embed_config_to_response(config)
 
 @router.get("", response_model=OffsetPage[EmbedConfigResponse])
@@ -409,18 +410,18 @@ async def list_embed_configs(
 ):
     """
     Получение списка всех конфигураций виджетов компании.
-    
+
     Автоматически фильтруется по активной компании (is_global=False).
     """
     if not hasattr(request.state, 'user') or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
+
     user = request.state.user
     company_id = user.active_company_id
-    
+
     if not company_id:
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
-    
+
     embed_config_repo = container.embed_config_repository
     configs = await embed_config_repo.list(limit=limit, offset=offset)
 
@@ -440,10 +441,10 @@ async def get_embed_config(
     """Получение конфигурации виджета по ID"""
     if not hasattr(request.state, 'user') or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
+
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
-    
+
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
@@ -462,16 +463,16 @@ async def update_embed_config(
     """Обновление конфигурации виджета"""
     if not hasattr(request.state, 'user') or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
+
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
-    
+
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
     if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
-    
+
     # Обновляем только переданные поля
     update_data = request_data.model_dump(exclude_unset=True)
     if "guest_max_user_messages" in update_data:
@@ -502,9 +503,9 @@ async def update_embed_config(
 
     config.updated_at = datetime.now(timezone.utc)
     await embed_config_repo.set(config)
-    
+
     logger.info(f"Обновлена конфигурация виджета {embed_id}")
-    
+
     return _embed_config_to_response(config)
 
 @router.delete("/{embed_id}")
@@ -515,32 +516,32 @@ async def delete_embed_config(
 ):
     """
     Удаление конфигурации виджета.
-    
+
     Удаляет:
     1. EmbedConfig из компании
     2. Глобальный маппинг embed_id -> company_id
     """
     if not hasattr(request.state, 'user') or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
+
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
-    
+
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
     if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
-    
+
     # Удаляем конфигурацию
     await embed_config_repo.delete(embed_id)
-    
+
     # Удаляем глобальный маппинг
     embed_mapping_repo = container.embed_mapping_repository
     await embed_mapping_repo.delete_by_embed_id(embed_id)
-    
+
     logger.info(f"Удалена конфигурация виджета {embed_id}")
-    
+
     return {"success": True, "message": "Конфигурация успешно удалена"}
 
 @router.get("/{embed_id}/code", response_model=EmbedCodeResponse)
@@ -551,15 +552,15 @@ async def get_embed_code(
 ):
     """
     Получение кода для встраивания виджета.
-    
+
     Возвращает готовый HTML код со скриптом для вставки на сайт.
     """
     if not hasattr(request.state, 'user') or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
+
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
-    
+
     if not config:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
@@ -577,7 +578,7 @@ async def get_embed_code(
     # Определяем base URL
     from core.config import get_settings
     settings = get_settings()
-    
+
     # Канонический Web Component путь
     if settings.server.env == "production":
         script_url = "https://cdn.humanitec.ru/lib/embed-chat/humanitec-embed-autoload.js"

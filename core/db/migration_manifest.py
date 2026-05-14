@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import importlib
 import json
-from pathlib import Path
 
 from core.config.loader import get_project_root
 

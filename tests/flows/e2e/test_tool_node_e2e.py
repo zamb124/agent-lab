@@ -43,7 +43,7 @@ def get_task_response(task: Dict[str, Any]) -> str:
     msg = task.get("status", {}).get("message")
     if msg and msg.get("parts"):
         return msg["parts"][0].get("text", "")
-    
+
     # Если нет - ищем в artifacts (node_complete с result_preview)
     artifacts = task.get("artifacts", [])
     for artifact in reversed(artifacts):
@@ -52,7 +52,7 @@ def get_task_response(task: Dict[str, Any]) -> str:
             data = part.get("data", {})
             if data.get("event") == "node_complete" and data.get("result_preview"):
                 return data["result_preview"]
-    
+
     return ""
 
 

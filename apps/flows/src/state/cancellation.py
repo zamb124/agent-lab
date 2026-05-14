@@ -13,8 +13,8 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING, Optional
 
 from core.clients import RedisClient
-from core.logging import get_logger
 from core.errors import FlowWallClockTimeoutError
+from core.logging import get_logger
 
 if TYPE_CHECKING:
     from core.state import ExecutionState

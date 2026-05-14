@@ -5,6 +5,7 @@
 """
 
 import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -25,7 +26,7 @@ class TestMockViaA2AMetadata:
     async def test_mock_tool_via_metadata(self, client: AsyncClient, unique_id: str):
         """Mock tool через metadata.__mock__ в A2A запросе."""
         flow_id = "example_react"
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -45,7 +46,7 @@ class TestMockViaA2AMetadata:
                 }
             }
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "result" in data
@@ -55,7 +56,7 @@ class TestMockViaA2AMetadata:
     async def test_mock_llm_via_metadata(self, client: AsyncClient, unique_id: str):
         """Mock LLM ответов через metadata.__mock__ в A2A запросе."""
         flow_id = "example_react"
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -75,11 +76,11 @@ class TestMockViaA2AMetadata:
                 }
             }
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "result" in data
-        
+
         # Проверяем что mock LLM ответ использован
         task = data["result"]
         if task.get("artifacts"):
@@ -94,7 +95,7 @@ class TestMockViaA2AMetadata:
     async def test_mock_disabled_uses_real(self, client: AsyncClient, unique_id: str, mock_llm):
         """Mock выключен - используется реальный LLM (mock_llm из conftest)."""
         flow_id = "example_react"
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -112,11 +113,11 @@ class TestMockViaA2AMetadata:
                 }
             }
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "result" in data
-        
+
         # mock_llm из conftest вернёт "Test response", не mock из metadata
         task = data["result"]
         if task.get("artifacts"):
@@ -137,7 +138,7 @@ class TestMockViaFlowConfig:
         """Agent может иметь default mock конфиг."""
         # example_react имеет mock конфиг в agent.json
         flow_id = "example_react"
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -150,7 +151,7 @@ class TestMockViaFlowConfig:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
 
@@ -162,7 +163,7 @@ class TestMockViaBranchConfig:
         """Skill с mock для tools."""
         flow_id = "example_react"
         branch_id = "test_tools"  # Skill с mock для tools
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -175,7 +176,7 @@ class TestMockViaBranchConfig:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -183,7 +184,7 @@ class TestMockViaBranchConfig:
         """Skill с mock для LLM."""
         flow_id = "example_react"
         branch_id = "test_llm"  # Skill с mock LLM
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -199,10 +200,10 @@ class TestMockViaBranchConfig:
                 }
             }
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Skill test_llm должен вернуть mock ответ
         if "result" in data and data["result"].get("artifacts"):
             artifact_text = ""
@@ -222,7 +223,7 @@ class TestMockHierarchy:
         """Metadata.__mock__ переопределяет skill mock."""
         flow_id = "example_react"
         branch_id = "test_llm"  # Skill с mock LLM
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -243,10 +244,10 @@ class TestMockHierarchy:
                 }
             }
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         if "result" in data and data["result"].get("artifacts"):
             artifact_text = ""
             for artifact in data["result"]["artifacts"]:
@@ -261,7 +262,7 @@ class TestMockHierarchy:
         """Tools мержатся между уровнями."""
         flow_id = "example_react"
         branch_id = "test_tools"  # Skill с mock для calculator
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -283,7 +284,7 @@ class TestMockHierarchy:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
 
@@ -295,7 +296,7 @@ class TestMockWithGraphAgent:
         """Mock function node в graph flow."""
         flow_id = "example_graph"
         branch_id = "test_function_nodes"  # Skill с mock для function нод
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -308,7 +309,7 @@ class TestMockWithGraphAgent:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -316,7 +317,7 @@ class TestMockWithGraphAgent:
         """Mock llm_node node в graph flow."""
         flow_id = "example_graph"
         branch_id = "test_llm_nodes"  # Skill с mock для react нод
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -332,7 +333,7 @@ class TestMockWithGraphAgent:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -340,7 +341,7 @@ class TestMockWithGraphAgent:
         """Full mock для всего graph flow."""
         flow_id = "example_graph"
         branch_id = "test_full_graph"  # Skill с full mock
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -353,7 +354,7 @@ class TestMockWithGraphAgent:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
 
@@ -364,7 +365,7 @@ class TestMockPermissions:
     async def test_admin_can_use_mock(self, client: AsyncClient, unique_id: str):
         """Admin пользователь может использовать mock."""
         flow_id = "example_react"
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             headers={
@@ -386,14 +387,14 @@ class TestMockPermissions:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_developers_can_use_mock(self, client: AsyncClient, unique_id: str):
         """Developers группа может использовать mock."""
         flow_id = "example_react"
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             headers={
@@ -415,7 +416,7 @@ class TestMockPermissions:
                 }
             }
         )
-        
+
         assert response.status_code == 200
 
 
@@ -426,7 +427,7 @@ class TestMockStreaming:
     async def test_mock_llm_streaming(self, client: AsyncClient, unique_id: str):
         """Mock LLM работает с streaming."""
         flow_id = "example_react"
-        
+
         async with client.stream(
             "POST",
             f"/flows/api/v1/{flow_id}",
@@ -448,12 +449,12 @@ class TestMockStreaming:
             }
         ) as response:
             assert response.status_code == 200
-            
+
             events = []
             async for line in response.aiter_lines():
                 if line.startswith("data:"):
                     events.append(line)
-            
+
             # Должны быть события от mock LLM
             assert len(events) > 0
 

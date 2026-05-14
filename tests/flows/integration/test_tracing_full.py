@@ -5,7 +5,7 @@
 
 1. ReAct агент (example_react):
    - llm_node spans: весь ReAct-цикл ноды (LLM + tools)
-   - react.iteration spans: каждая итерация ReAct цикла  
+   - react.iteration spans: каждая итерация ReAct цикла
    - llm spans: каждый вызов LLM с токенами и duration
    - tool spans: каждый вызов tool с аргументами и результатом
    - субагент spans: вложенные агенты как tools
@@ -17,7 +17,7 @@
    - путь выполнения: условные переходы видны по последовательности
 
 3. Контекст:
-   - user_id, session_agent  
+   - user_id, session_agent
    - task_id, flow_id
 
 4. Иерархия:
@@ -27,8 +27,6 @@
 
 import asyncio
 import time
-import uuid
-from datetime import datetime
 from typing import Any, Dict, List
 
 import pytest
@@ -37,8 +35,8 @@ from core.clients.llm import setup_mock_responses
 from core.logging import get_logger
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
 from core.tracing.provider import set_tracing_enabled
+from core.tracing.tracer import set_span_repository, set_tracing_service_name
 
 logger = get_logger(__name__)
 
@@ -90,16 +88,16 @@ def enable_tracing_for_test(container):
     set_tracing_service_name("platform-test")
     set_span_repository(container.span_repository)
     set_tracing_enabled(True)
-    
+
     yield
-    
+
     # Не отключаем после теста - spans останутся для анализа
 
 
 class TestLlmNodeTracing:
     """
     Тесты трейсинга ReAct агента (example_react).
-    
+
     Проверяем что все этапы работы агента записываются:
     - Каждая итерация ReAct цикла
     - Каждый вызов LLM
@@ -116,16 +114,16 @@ class TestLlmNodeTracing:
     ):
         """
         Полный тест ReAct агента: tool вызов → финальный ответ.
-        
+
         Сценарий:
         1. Агент получает запрос "Посчитай 2+2"
         2. Агент вызывает calculator tool
         3. Агент формирует финальный ответ
-        
+
         Ожидаемые spans:
         - llm_node span
         - react.iteration spans (минимум 2)
-        - llm spans (минимум 2)  
+        - llm spans (минимум 2)
         - tool.calculator span
         """
         # Mock LLM ответы: tool_call → final answer
@@ -159,60 +157,60 @@ class TestLlmNodeTracing:
         assert response.status_code == 200, f"API error: {response.text}"
         result = response.json()
         assert "error" not in result, f"JSON-RPC error: {result}"
-        
+
         # Извлекаем task_id из результата для поиска spans
         task_result = result.get("result", {})
         task_id = task_result.get("id")
-        
+
         spans = await _wait_spans(
             container, task_id, "example_react", filter_agent_id="example_react"
         )
 
         span_names = [s.get("operation_name", "") for s in spans]
-        
-        logger.info(f"=== TEST: test_llm_node_full_trace_with_tool ===")
+
+        logger.info("=== TEST: test_llm_node_full_trace_with_tool ===")
         logger.info(f"Task ID: {task_id}")
         logger.info(f"Spans count: {len(spans)}")
         logger.info(f"Span names: {span_names}")
-        
+
         # === СТРОГИЕ ПРОВЕРКИ - ТЕСТ ПАДАЕТ ЕСЛИ SPANS НЕ ЗАПИСАЛИСЬ ===
-        
+
         assert len(spans) > 0, \
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
-        
+
         # 1. FLOW SPAN - обязательно
         flow_spans = [s for s in spans if s.get("operation_name", "").startswith("flow.")]
         assert len(flow_spans) >= 1, \
             f"ДОЛЖЕН быть flow.example_react span! Получено: {span_names}"
-        
+
         # 2. NODE SPAN - обязательно (main нода)
         node_spans = [s for s in spans if s.get("operation_name", "").startswith("node.")]
         assert len(node_spans) >= 1, \
             f"ДОЛЖЕН быть node.llm_node.main span! Получено: {span_names}"
-        
+
         # 3. LLM_NODE SPAN - обязательно
         llm_node_spans = [
             s for s in spans if s.get("operation_name", "").startswith("llm_node.")
         ]
         assert len(llm_node_spans) > 0, \
             f"ДОЛЖЕН быть llm_node span. Получено: {span_names}"
-        
+
         # 4. LLM SPANS (минимум 2: tool_call + final)
         llm_spans = [s for s in spans if "llm" in s.get("operation_name", "").lower()]
         assert len(llm_spans) >= 2, \
             f"ДОЛЖНО быть минимум 2 LLM spans. Получено {len(llm_spans)}: {span_names}"
-        
+
         # 5. TOOL SPAN - calculator
         tool_spans = [s for s in spans if "calculator" in s.get("operation_name", "")]
         assert len(tool_spans) >= 1, \
             f"ДОЛЖЕН быть tool.calculator span. Получено: {span_names}"
-        
+
         # 6. REACT ITERATION SPANS
         iteration_spans = [s for s in spans if "react.iteration" in s.get("operation_name", "")]
         assert len(iteration_spans) >= 2, \
             f"ДОЛЖНО быть минимум 2 react.iteration spans. Получено: {span_names}"
-        
-        logger.info(f"✓ Все обязательные spans присутствуют: flow, node, llm_node, llm, tool, iteration")
+
+        logger.info("✓ Все обязательные spans присутствуют: flow, node, llm_node, llm, tool, iteration")
 
     @pytest.mark.asyncio
     async def test_llm_node_interrupt_trace(
@@ -224,7 +222,7 @@ class TestLlmNodeTracing:
     ):
         """
         Тест трейсинга interrupt (ask_user).
-        
+
         Сценарий:
         1. Агент вызывает ask_user tool
         2. Должен быть interrupt span
@@ -257,7 +255,7 @@ class TestLlmNodeTracing:
 
         assert response.status_code == 200, f"API error: {response.text}"
         result = response.json()
-        
+
         # Проверяем что вернулся interrupt
         task_result = result.get("result", {})
         task_id = task_result.get("id")
@@ -268,8 +266,8 @@ class TestLlmNodeTracing:
         spans = await _wait_spans(container, task_id, "example_react")
 
         span_names = [s.get("operation_name", "") for s in spans]
-        
-        logger.info(f"=== TEST: test_llm_node_interrupt_trace ===")
+
+        logger.info("=== TEST: test_llm_node_interrupt_trace ===")
         logger.info(f"Task ID: {task_id}")
         logger.info(f"Spans: {span_names}")
 
@@ -277,8 +275,8 @@ class TestLlmNodeTracing:
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
 
         # Проверяем наличие interrupt или ask_user span
-        interrupt_spans = [s for s in spans 
-                         if "interrupt" in s.get("operation_name", "").lower() 
+        interrupt_spans = [s for s in spans
+                         if "interrupt" in s.get("operation_name", "").lower()
                          or "ask_user" in s.get("operation_name", "")]
         assert len(interrupt_spans) >= 1, \
             f"Должен быть interrupt или ask_user span. Получено: {span_names}"
@@ -293,7 +291,7 @@ class TestLlmNodeTracing:
     ):
         """
         Тест трейсинга с вызовом субагента.
-        
+
         example_main_agent имеет tool example_subflow (вложенный subflow).
         При вызове субагента должны записаться spans обоих агентов.
         """
@@ -336,8 +334,8 @@ class TestLlmNodeTracing:
         spans = await _wait_spans(container, task_id, "example_react")
 
         span_names = [s.get("operation_name", "") for s in spans]
-        
-        logger.info(f"=== TEST: test_llm_node_with_subagent_trace ===")
+
+        logger.info("=== TEST: test_llm_node_with_subagent_trace ===")
         logger.info(f"Task ID: {task_id}")
         logger.info(f"Spans: {span_names}")
 
@@ -346,7 +344,7 @@ class TestLlmNodeTracing:
 
         # Должны быть spans для main agent и для subagent
         # Вложенный subflow вызывается как tool — будет tool.example_subflow span
-        subagent_tool_spans = [s for s in spans 
+        subagent_tool_spans = [s for s in spans
                               if "example_subflow" in s.get("operation_name", "")]
         assert len(subagent_tool_spans) >= 1, \
             f"Должен быть tool.example_subflow span. Получено: {span_names}"
@@ -355,12 +353,12 @@ class TestLlmNodeTracing:
 class TestGraphFlowTracing:
     """
     Тесты трейсинга Graph flow (example_graph).
-    
+
     Graph flow имеет:
     - classifier (function) - определяет route
     - order_processor, complaint_processor, general_processor (llm_node)
     - formatter (function)
-    
+
     Проверяем что по spans видно какой путь был выбран.
     """
 
@@ -374,9 +372,9 @@ class TestGraphFlowTracing:
     ):
         """
         Тест пути "заказ" в graph flow.
-        
+
         Сообщение содержит "заказ" → classifier выбирает order_processor.
-        
+
         Путь: classifier → order_processor → formatter
         """
         setup_mock_responses(response_queue=[
@@ -407,8 +405,8 @@ class TestGraphFlowTracing:
         spans = await _wait_spans(container, task_id, "example_graph")
 
         span_names = [s.get("operation_name", "") for s in spans]
-        
-        logger.info(f"=== TEST: test_graph_flow_order_path_trace ===")
+
+        logger.info("=== TEST: test_graph_flow_order_path_trace ===")
         logger.info(f"Task ID: {task_id}")
         logger.info(f"Spans: {span_names}")
 
@@ -416,27 +414,27 @@ class TestGraphFlowTracing:
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
 
         # === СТРОГИЕ ПРОВЕРКИ ДЛЯ GRAPH FLOW ===
-        
+
         # 1. FLOW SPAN
         flow_spans = [s for s in spans if s.get("operation_name", "").startswith("flow.")]
         assert len(flow_spans) >= 1, \
             f"ДОЛЖЕН быть flow.example_graph span! Получено: {span_names}"
-        
+
         # 2. NODE SPANS для пути: classifier → order_processor → formatter
         classifier_spans = [s for s in spans if "classifier" in s.get("operation_name", "")]
         assert len(classifier_spans) >= 1, \
             f"ДОЛЖЕН быть node для classifier! Путь: classifier→order_processor→formatter. Получено: {span_names}"
-        
-        order_spans = [s for s in spans if "order_processor" in s.get("operation_name", "") 
+
+        order_spans = [s for s in spans if "order_processor" in s.get("operation_name", "")
                       or "order" in s.get("operation_name", "").lower()]
         assert len(order_spans) >= 1, \
             f"ДОЛЖЕН быть span для order_processor! Получено: {span_names}"
-        
+
         formatter_spans = [s for s in spans if "formatter" in s.get("operation_name", "")]
         assert len(formatter_spans) >= 1, \
             f"ДОЛЖЕН быть node для formatter! Получено: {span_names}"
-        
-        logger.info(f"✓ Graph flow путь ORDER верифицирован: classifier → order_processor → formatter")
+
+        logger.info("✓ Graph flow путь ORDER верифицирован: classifier → order_processor → formatter")
 
     @pytest.mark.asyncio
     async def test_graph_flow_complaint_path_trace(
@@ -448,7 +446,7 @@ class TestGraphFlowTracing:
     ):
         """
         Тест пути "жалоба" в graph flow.
-        
+
         Сообщение содержит "жалоба" → classifier выбирает complaint_processor.
         """
         setup_mock_responses(response_queue=[
@@ -479,8 +477,8 @@ class TestGraphFlowTracing:
         spans = await _wait_spans(container, task_id, "example_graph")
 
         span_names = [s.get("operation_name", "") for s in spans]
-        
-        logger.info(f"=== TEST: test_graph_flow_complaint_path_trace ===")
+
+        logger.info("=== TEST: test_graph_flow_complaint_path_trace ===")
         logger.info(f"Task ID: {task_id}")
         logger.info(f"Spans: {span_names}")
 
@@ -488,18 +486,18 @@ class TestGraphFlowTracing:
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
 
         # === СТРОГИЕ ПРОВЕРКИ ДЛЯ COMPLAINT ПУТИ ===
-        
+
         # NODE SPANS для пути: classifier → complaint_processor → formatter
         classifier_spans = [s for s in spans if "classifier" in s.get("operation_name", "")]
         assert len(classifier_spans) >= 1, \
             f"ДОЛЖЕН быть node для classifier! Получено: {span_names}"
-        
-        complaint_spans = [s for s in spans if "complaint_processor" in s.get("operation_name", "") 
+
+        complaint_spans = [s for s in spans if "complaint_processor" in s.get("operation_name", "")
                          or "complaint" in s.get("operation_name", "").lower()]
         assert len(complaint_spans) >= 1, \
             f"ДОЛЖЕН быть span для complaint_processor! Получено: {span_names}"
-        
-        logger.info(f"✓ Graph flow путь COMPLAINT верифицирован: classifier → complaint_processor → formatter")
+
+        logger.info("✓ Graph flow путь COMPLAINT верифицирован: classifier → complaint_processor → formatter")
 
     @pytest.mark.asyncio
     async def test_graph_flow_general_path_trace(
@@ -511,7 +509,7 @@ class TestGraphFlowTracing:
     ):
         """
         Тест пути "general" в graph flow.
-        
+
         Сообщение не содержит "заказ", "жалоба", "кот", "привет" → classifier выбирает general_processor.
         """
         setup_mock_responses(response_queue=[
@@ -542,8 +540,8 @@ class TestGraphFlowTracing:
         spans = await _wait_spans(container, task_id, "example_graph")
 
         span_names = [s.get("operation_name", "") for s in spans]
-        
-        logger.info(f"=== TEST: test_graph_flow_general_path_trace ===")
+
+        logger.info("=== TEST: test_graph_flow_general_path_trace ===")
         logger.info(f"Task ID: {task_id}")
         logger.info(f"Spans: {span_names}")
 
@@ -551,24 +549,24 @@ class TestGraphFlowTracing:
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
 
         # === СТРОГИЕ ПРОВЕРКИ ДЛЯ GENERAL ПУТИ ===
-        
+
         # NODE SPANS для пути: classifier → general_processor → formatter
         classifier_spans = [s for s in spans if "classifier" in s.get("operation_name", "")]
         assert len(classifier_spans) >= 1, \
             f"ДОЛЖЕН быть node для classifier! Получено: {span_names}"
-        
-        general_spans = [s for s in spans if "general_processor" in s.get("operation_name", "") 
+
+        general_spans = [s for s in spans if "general_processor" in s.get("operation_name", "")
                         or "general" in s.get("operation_name", "").lower()]
         assert len(general_spans) >= 1, \
             f"ДОЛЖЕН быть span для general_processor! Получено: {span_names}"
-        
-        logger.info(f"✓ Graph flow путь GENERAL верифицирован: classifier → general_processor → formatter")
+
+        logger.info("✓ Graph flow путь GENERAL верифицирован: classifier → general_processor → formatter")
 
 
 class TestSpanAttributes:
     """
     Тесты проверки атрибутов spans.
-    
+
     Каждый span должен содержать контекстную информацию:
     - span_id, trace_id, parent_span_id
     - operation_name
@@ -615,27 +613,27 @@ class TestSpanAttributes:
         assert len(spans) > 0, \
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
 
-        logger.info(f"=== TEST: test_span_has_required_attributes ===")
-        
+        logger.info("=== TEST: test_span_has_required_attributes ===")
+
         for span in spans:
             # Обязательные поля
             assert span.get("span_id"), f"span_id обязателен: {span}"
             assert span.get("trace_id"), f"trace_id обязателен: {span}"
             assert span.get("operation_name"), f"operation_name обязателен: {span}"
             assert span.get("start_time"), f"start_time обязателен: {span}"
-            
+
             # flow_id должен быть example_react (для spans с flow_id)
             if span.get("flow_id"):
                 assert span.get("flow_id") == "example_react", \
                     f"flow_id должен быть example_react, получено: {span.get('flow_id')}"
-            
+
             logger.info(f"Span OK: {span.get('operation_name')}")
 
 
 class TestSpanHierarchy:
     """
     Тесты иерархии spans (parent-child).
-    
+
     Spans должны быть связаны через parent_span_id.
     Можно построить дерево выполнения.
     """
@@ -650,12 +648,12 @@ class TestSpanHierarchy:
     ):
         """
         Тест иерархии parent-child.
-        
+
         llm_node span - root
           └── react.iteration.1
                 ├── llm span
                 └── tool span
-          └── react.iteration.2  
+          └── react.iteration.2
                 └── llm span
         """
         setup_mock_responses(response_queue=[
@@ -689,17 +687,17 @@ class TestSpanHierarchy:
         assert len(spans) > 0, \
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
 
-        logger.info(f"=== TEST: test_span_parent_child_hierarchy ===")
+        logger.info("=== TEST: test_span_parent_child_hierarchy ===")
 
         # Строим дерево
         span_map = {s["span_id"]: s for s in spans}
         root_spans = [s for s in spans if not s.get("parent_span_id")]
         child_spans = [s for s in spans if s.get("parent_span_id")]
-        
+
         logger.info(f"Total spans: {len(spans)}")
         logger.info(f"Root spans: {len(root_spans)}")
         logger.info(f"Child spans: {len(child_spans)}")
-        
+
         for span in spans:
             parent_id = span.get("parent_span_id")
             if parent_id:
@@ -708,7 +706,7 @@ class TestSpanHierarchy:
                 logger.info(f"  {span.get('operation_name')} -> parent: {parent_name}")
             else:
                 logger.info(f"  {span.get('operation_name')} [ROOT]")
-        
+
         # Должны быть child spans (иерархия должна быть)
         assert len(child_spans) > 0, \
             f"Должны быть child spans с parent_span_id. Spans: {[s.get('operation_name') for s in spans]}"
@@ -770,11 +768,11 @@ class TestTracingAPI:
             if data.get("traces_count", 0) > 0:
                 break
             await asyncio.sleep(0.05)
-        
-        logger.info(f"=== TEST: test_get_traces_by_task_api ===")
+
+        logger.info("=== TEST: test_get_traces_by_task_api ===")
         logger.info(f"Task ID: {task_id}")
         logger.info(f"Traces count: {data.get('traces_count')}")
-        
+
         assert data["traces_count"] > 0, (
             f"КРИТИЧЕСКАЯ ОШИБКА: search вернул 0 traces для task {task_id}"
         )
@@ -828,9 +826,9 @@ class TestTracingAPI:
                 break
             await asyncio.sleep(0.05)
 
-        logger.info(f"=== TEST: test_get_traces_by_flow_api ===")
+        logger.info("=== TEST: test_get_traces_by_flow_api ===")
         logger.info(f"Traces count for flow example_react: {data['traces_count']}")
-        
+
         assert data["traces_count"] > 0
         traces_list = data.get("traces")
         assert isinstance(traces_list, list)
@@ -878,10 +876,10 @@ class TestTracingAPI:
             if data.get("traces_count", 0) > 0:
                 break
             await asyncio.sleep(0.05)
-        
-        logger.info(f"=== TEST: test_search_traces_api ===")
+
+        logger.info("=== TEST: test_search_traces_api ===")
         logger.info(f"Search results: {data['traces_count']} traces")
-        
+
         assert "traces_count" in data
         assert "traces" in data
         assert data["traces_count"] > 0

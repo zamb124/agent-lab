@@ -75,7 +75,7 @@ class RedisClient:
                 except Exception:
                     logger.warning("Redis connection lost, reconnecting...")
                     self._client = None
-            
+
             # Переподключаемся с exponential backoff
             for attempt in range(self._max_retries):
                 try:
@@ -90,14 +90,14 @@ class RedisClient:
                         await asyncio.sleep(wait_time)
                     else:
                         logger.error(f"Failed to reconnect to Redis after {self._max_retries} attempts")
-            
+
             return False
 
     async def get(self, key: str) -> Optional[str]:
         """Получает значение по ключу с auto-reconnect"""
         if not await self._ensure_connected():
             return None
-        
+
         try:
             return await self._client.get(key)
         except Exception as e:
@@ -134,7 +134,7 @@ class RedisClient:
         """Устанавливает значение по ключу с auto-reconnect"""
         if not await self._ensure_connected():
             return False
-        
+
         for attempt in range(2):
             try:
                 await self._client.set(key, value, ex=ttl)
@@ -223,7 +223,7 @@ class RedisClient:
         """Публикует сообщение в канал Pub/Sub с auto-reconnect и retry"""
         if not await self._ensure_connected():
             raise RuntimeError("Redis client not connected after retries")
-        
+
         # Попытка публикации с одним retry
         for attempt in range(2):
             try:
@@ -237,8 +237,8 @@ class RedisClient:
                 raise
 
     async def subscribe(
-        self, 
-        channel: str, 
+        self,
+        channel: str,
         timeout: float = 300.0,
         max_timeout: float = 3600.0,
         ready_event: Optional[asyncio.Event] = None,
@@ -260,19 +260,19 @@ class RedisClient:
         """
         if not await self._ensure_connected():
             raise RuntimeError("Redis client not connected")
-        
+
         pubsub = self._client.pubsub()
-        
+
         try:
             await pubsub.subscribe(channel)
             logger.debug(f"Subscribed to {channel}")
-            
+
             if ready_event:
                 ready_event.set()
-            
+
             start_time = time.monotonic()
             last_activity = start_time
-            
+
             while True:
                 now = time.monotonic()
                 if now - start_time >= max_timeout:
@@ -285,7 +285,7 @@ class RedisClient:
                         "Subscription idle-timeout on %s after %.1fs idle", channel, now - last_activity
                     )
                     break
-                
+
                 try:
                     message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                     if message and message["type"] == "message":

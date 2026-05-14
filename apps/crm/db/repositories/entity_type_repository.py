@@ -12,6 +12,7 @@ from sqlalchemy import update as sa_update
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import EntityType
+from core.db.utils import get_rowcount
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -51,7 +52,9 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def get_parent_type_id_map_for_namespace(self, namespace: str) -> dict[str, Optional[str]]:
+    async def get_parent_type_id_map_for_namespace(
+        self, namespace: str
+    ) -> dict[str, Optional[str]]:
         """type_id -> parent_type_id в рамках одного namespace."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -69,7 +72,11 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     ) -> int:
         company_id = self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(func.count()).select_from(EntityType).where(EntityType.company_id == company_id)
+            stmt = (
+                select(func.count())
+                .select_from(EntityType)
+                .where(EntityType.company_id == company_id)
+            )
             if namespace is not None:
                 stmt = stmt.where(EntityType.namespace == namespace)
             result = await session.execute(stmt)
@@ -246,6 +253,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             is_context_anchor=src.is_context_anchor,
             extractable=src.extractable,
             is_voice_target=src.is_voice_target,
+            auto_resolve_suggests=src.auto_resolve_suggests,
             created_at=datetime.now(timezone.utc),
         )
         return await self.create(clone)
@@ -266,4 +274,4 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             )
             result = await session.execute(stmt)
             await session.commit()
-            return (result.rowcount or 0) > 0
+            return get_rowcount(result) > 0

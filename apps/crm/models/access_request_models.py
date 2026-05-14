@@ -24,9 +24,9 @@ class ResourceType(str, Enum):
 
 class AccessRequestCreate(BaseModel):
     """Создание запроса на доступ"""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     resource_type: ResourceType = Field(
         title="Тип ресурса",
         description="Тип ресурса (note или entity)"
@@ -57,9 +57,9 @@ class AccessRequestCreate(BaseModel):
 
 class AccessRequestUpdate(BaseModel):
     """Обновление статуса запроса"""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     status: AccessRequestStatus = Field(
         title="Новый статус"
     )
@@ -67,9 +67,9 @@ class AccessRequestUpdate(BaseModel):
 
 class AccessRequestResponse(BaseModel):
     """Ответ с данными запроса на доступ"""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     request_id: str = Field(title="ID запроса")
     company_id: str = Field(title="ID компании")
     requester_id: str = Field(title="ID запрашивающего")
@@ -80,7 +80,7 @@ class AccessRequestResponse(BaseModel):
     status: str = Field(title="Статус")
     created_at: datetime = Field(title="Дата создания")
     updated_at: datetime = Field(title="Дата обновления")
-    
+
     # Дополнительные поля для UI
     requester_name: Optional[str] = Field(default=None, title="Имя запрашивающего")
     resource_title: Optional[str] = Field(default=None, title="Название ресурса")

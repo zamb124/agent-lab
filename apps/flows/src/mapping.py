@@ -20,7 +20,7 @@ Zero-Guess: работает с ExecutionState напрямую (но может
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Union
 
 from core.variables import VarResolver
 
@@ -66,7 +66,7 @@ class MappingResolver:
     def get_nested_value(data: Any, path: str) -> Any:
         """
         Получает значение по вложенному пути из любого объекта.
-        
+
         Работает с ExecutionState (через атрибуты) и с dict (через ключи).
 
         Args:

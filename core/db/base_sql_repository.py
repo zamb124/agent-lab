@@ -3,7 +3,7 @@
 """
 
 from abc import ABC
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     import asyncpg
@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 class BaseSQLRepository(ABC):
     """
     Базовый репозиторий для работы с SQL таблицами через asyncpg.
-    
+
     В отличие от BaseRepository (Key-Value JSONB), этот класс
     предназначен для работы с реляционными таблицами напрямую.
     """

@@ -14,10 +14,9 @@ from apps.voice.providers.streaming_adapters import (
     StreamingVADProvider,
 )
 from core.clients.stt_client import BaseSTTClient, MockSTTClient, STTTranscriptionResult
-from core.files.models import AudioTranscriptionStatus
 from core.clients.tts_client import MockTTSClient
 from core.clients.vad_client import MockVADClient
-
+from core.files.models import AudioTranscriptionStatus
 
 # === StreamingSTTProvider ===
 

@@ -5,7 +5,6 @@
 """
 
 from typing import Optional
-from pydantic import Field
 
 from core.config import BaseSettings
 
@@ -13,11 +12,11 @@ from core.config import BaseSettings
 class FrontendSettings(BaseSettings):
     """
     Настройки Frontend сервиса.
-    
+
     Наследуется от BaseSettings, добавляя специфичные для Frontend поля.
     Все базовые поля (database, auth, logging, etc) доступны из родителя.
     """
-    
+
     # Пока специфичных настроек нет, но можно добавить при необходимости
     # Например:
     # session_timeout: int = Field(default=7200, description="Таймаут сессии в секундах")
@@ -30,7 +29,7 @@ _frontend_settings: Optional[FrontendSettings] = None
 def get_frontend_settings() -> FrontendSettings:
     """
     Получает настройки Frontend сервиса.
-    
+
     Создает FrontendSettings из конфигурации, загружая базовые настройки
     и добавляя специфичные для Frontend.
     """
@@ -40,7 +39,7 @@ def get_frontend_settings() -> FrontendSettings:
 
         merged_config = load_merged_config(service_name="frontend", silent=True)
         _frontend_settings = FrontendSettings(**merged_config)
-    
+
     return _frontend_settings
 
 

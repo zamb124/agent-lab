@@ -1,18 +1,18 @@
 """
 Кастомный Field для моделей с поддержкой UI метаданных.
 
-КРИТИЧНО для Pydantic v2: 
+КРИТИЧНО для Pydantic v2:
 - ВСЕ кастомные поля идут ТОЛЬКО в json_schema_extra
 - НИЧЕГО кроме стандартных Pydantic параметров НЕ передается в FieldInfo
 """
 
-from typing import Any, Optional, Dict
-from pydantic.fields import FieldInfo
+from typing import Any, Dict, Optional
 
+from pydantic.fields import FieldInfo
 
 # Список кастомных UI полей
 CUSTOM_UI_FIELDS = {
-    'frozen', 'readonly', 'placeholder', 'groups', 'widget_attrs', 
+    'frozen', 'readonly', 'placeholder', 'groups', 'widget_attrs',
     'exclude_from_form', 'editable_in_table', 'hidden'
 }
 
@@ -36,16 +36,16 @@ def Field(
 ) -> Any:
     """
     Кастомный Field для Pydantic v2.
-    
+
     UI-специфичные поля (readonly, placeholder, etc) переносятся в json_schema_extra.
     В FieldInfo передаются ТОЛЬКО стандартные Pydantic параметры.
     """
-    
+
     if frozen:
         readonly = True
-    
+
     our_extra: Dict[str, Any] = {}
-    
+
     if frozen is not None:
         our_extra['frozen'] = frozen
     if readonly:
@@ -62,25 +62,25 @@ def Field(
         our_extra['editable_in_table'] = editable_in_table
     if hidden:
         our_extra['hidden'] = hidden
-    
+
     existing_extra = kwargs.get('json_schema_extra')
     if existing_extra and isinstance(existing_extra, dict):
         our_extra = {**existing_extra, **our_extra}
-    
+
     if our_extra:
         kwargs['json_schema_extra'] = our_extra
-    
+
     # Формируем параметры для FieldInfo (ТОЛЬКО стандартные Pydantic поля!)
     field_kwargs = {
         'title': title,
         'description': description,
     }
-    
+
     if default_factory is not None:
         field_kwargs['default_factory'] = default_factory
     if alias is not None:
         field_kwargs['alias'] = alias
-    
+
     # Добавляем остальные стандартные Pydantic поля из kwargs
     standard_fields = {
         'gt', 'ge', 'lt', 'le', 'multiple_of', 'max_length', 'min_length',
@@ -88,11 +88,11 @@ def Field(
         'discriminator', 'json_schema_extra', 'validation_alias', 'serialization_alias',
         'strict', 'coerce_numbers_to_str', 'allow_inf_nan'
     }
-    
+
     for key in standard_fields:
         if key in kwargs:
             field_kwargs[key] = kwargs[key]
-    
+
     return FieldInfo(default=default, **field_kwargs)
 
 

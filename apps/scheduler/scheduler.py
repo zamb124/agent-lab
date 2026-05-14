@@ -11,23 +11,32 @@ settings = get_scheduler_settings()
 setup_logging(service_name="scheduler", logging_config=settings.logging)
 
 # Импорты модулей с @broker.task — регистрируют задачи на брокерах до create_scheduler и проверки.
-import apps.flows.src.tasks.flow_tasks  # noqa: F401, E402
-import apps.flows.src.tasks.eval_task  # noqa: F401, E402
-import apps.flows.src.tasks.tool_tasks  # noqa: F401, E402
-import apps.flows.src.tasks.llm_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.push_notification_tasks  # noqa: F401, E402
-import apps.flows.src.tasks.scheduled_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402
-import apps.crm_worker.tasks.scheduled_integration_sync_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.daily_summary_tasks  # noqa: F401, E402
 import apps.crm_worker.tasks.reembed_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.scheduled_integration_sync_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.suggest_tasks  # noqa: F401, E402
+import apps.flows.src.tasks.eval_task  # noqa: F401, E402
+import apps.flows.src.tasks.flow_tasks  # noqa: F401, E402
+import apps.flows.src.tasks.llm_tasks  # noqa: F401, E402
+import apps.flows.src.tasks.scheduled_tasks  # noqa: F401, E402
+import apps.flows.src.tasks.tool_tasks  # noqa: F401, E402
+import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
+import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
+import apps.idle_worker.tasks.push_notification_tasks  # noqa: F401, E402
+import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402
 import apps.rag_worker.tasks.maintenance_tasks  # noqa: F401, E402
-
-from apps.crm.scheduled_integration_constants import (
+from apps.crm.scheduled_integration_constants import (  # noqa: E402
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
 )
-from apps.scheduler.dispatch import create_scheduler, require_tasks_registered_for_scheduler
+from apps.crm.scheduled_task_constants import (  # noqa: E402
+    CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME,
+    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
+    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+)
+from apps.scheduler.dispatch import (  # noqa: E402
+    create_scheduler,
+    require_tasks_registered_for_scheduler,
+)
 
 _FLOWS_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "process_flow_task",
@@ -60,7 +69,9 @@ _RAG_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
 
 _CRM_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
-    "crm_reembed_stale_documents_tick",
+    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+    CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME,
+    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
 )
 
 require_tasks_registered_for_scheduler(

@@ -4,14 +4,14 @@ Google OAuth провайдер авторизации.
 АДАПТИРОВАНО: убраны локальные импорты, try-except блоки
 """
 
-from core.logging import get_logger
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 from urllib.parse import urlencode
 
-from core.identity.base_provider import BaseAuthProvider
-from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.config.models import AuthProviderConfig
 from core.http import request_public_oauth
+from core.identity.base_provider import BaseAuthProvider
+from core.logging import get_logger
+from core.models.identity_models import AuthProvider, ProviderUserInfo
 
 logger = get_logger(__name__)
 class GoogleProvider(BaseAuthProvider):
@@ -23,12 +23,12 @@ class GoogleProvider(BaseAuthProvider):
     def get_authorization_url(self, state: str, redirect_uri: str) -> str:
         """Формирует URL для авторизации через Google"""
         params = self._build_auth_params(state, redirect_uri)
-        
+
         params.update({
             "access_type": "offline",
             "prompt": "consent",
         })
-        
+
         return f"{self.auth_url}?{urlencode(params)}"
 
     async def exchange_code_for_token(

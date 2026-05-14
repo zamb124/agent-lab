@@ -2,7 +2,7 @@
 MCP Tool Wrapper - обёртка для вызова MCP tools через MCPClient.
 """
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig
@@ -19,13 +19,13 @@ logger = get_logger(__name__)
 class MCPTool(BaseTool):
     """
     Tool для вызова MCP сервера.
-    
+
     Вызывает tool на удалённом MCP сервере через MCPClient.
     """
-    
+
     name: str = "mcp_tool"
     description: str = "MCP tool"
-    
+
     def __init__(
         self,
         tool_id: str,
@@ -43,7 +43,7 @@ class MCPTool(BaseTool):
         self._parameters = parameters or {}
         self._parameters_schema = parameters_schema
         self.tags = tags or ["mcp"]
-    
+
     @property
     def parameters(self) -> Dict[str, Any]:
         """JSON Schema параметров."""
@@ -51,10 +51,10 @@ class MCPTool(BaseTool):
             return self._parameters_schema
         if not self._parameters:
             return {"type": "object", "properties": {}, "required": []}
-        
+
         properties = {}
         required = []
-        
+
         for param_name, param in self._parameters.items():
             properties[param_name] = {
                 "type": param.type,
@@ -62,40 +62,40 @@ class MCPTool(BaseTool):
             }
             if param.required:
                 required.append(param_name)
-        
+
         return {
             "type": "object",
             "properties": properties,
             "required": required,
         }
-    
+
     async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
         Вызывает MCP tool на удалённом сервере.
-        
+
         Args:
             args: Аргументы для MCP tool
             state: ExecutionState агента
-            
+
         Returns:
             Текстовый результат от MCP tool
         """
         variables = state.variables if hasattr(state, 'variables') else {}
-        
+
         client = MCPClient(
             config=self._mcp_server_config,
             variables=variables,
             timeout=60.0,
         )
-        
+
         try:
             result = await client.call_tool(self._mcp_tool_name, args)
-            
+
             if result.is_error:
                 return f"MCP tool error: {result.get_text()}"
-            
+
             return result.get_text()
-            
+
         except MCPClientError as e:
             logger.error(f"MCP tool call failed: {e}")
             return f"MCP tool error: {e}"

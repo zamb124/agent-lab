@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from core.identity.system_bootstrap import ensure_system_admin_membership, ensure_system_company_exists
+from core.identity.system_bootstrap import (
+    ensure_system_admin_membership,
+    ensure_system_company_exists,
+)
 from core.models.identity_models import Company, User
 
 

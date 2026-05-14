@@ -3,9 +3,9 @@
 """
 
 from core.variables.resolver import (
-    VariableResolver,
     UnmatchedBracesError,
     VariableResolutionError,
+    VariableResolver,
     VarResolver,
     get_state,
     set_state_in_context,

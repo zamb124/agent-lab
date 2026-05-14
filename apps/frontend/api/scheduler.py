@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from core.pagination import OffsetPage
 from apps.frontend.dependencies import ContainerDep
+from core.pagination import OffsetPage
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,

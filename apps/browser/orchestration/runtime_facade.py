@@ -14,8 +14,8 @@ from apps.browser.engine.page_lease_manager import PageLeaseManager
 from apps.browser.engine.playwright_interactor import PlaywrightBrowserInteractor
 from apps.browser.engine.session_store import SessionStateStore
 from apps.browser.engine.types import BrowserRuntimeSettingsView
-from apps.browser.observe.session_artifacts import ControlSessionArtifactsWriter
 from apps.browser.observe.observe_store import ControlObserveStore
+from apps.browser.observe.session_artifacts import ControlSessionArtifactsWriter
 
 
 class BrowserRuntimeFacade:

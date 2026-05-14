@@ -35,11 +35,32 @@ const TASK_TYPE_FILTERS = Object.freeze([
     Object.freeze({ id: '', labelKey: 'namespace_tasks_page.filter_all' }),
     Object.freeze({ id: 'knowledge_import', labelKey: 'namespace_tasks_page.filter_knowledge_import' }),
     Object.freeze({ id: 'note_analyze', labelKey: 'namespace_tasks_page.filter_note_analyze' }),
+    Object.freeze({
+        id: 'note_analysis_draft_repair',
+        labelKey: 'namespace_tasks_page.filter_note_analysis_draft_repair',
+    }),
+    Object.freeze({ id: 'note_markdown_format', labelKey: 'namespace_tasks_page.filter_note_markdown_format' }),
     Object.freeze({ id: 'daily_summary', labelKey: 'namespace_tasks_page.filter_daily_summary' }),
     Object.freeze({ id: 'period_summary', labelKey: 'namespace_tasks_page.filter_period_summary' }),
     Object.freeze({
         id: 'namespace_integration_job',
         labelKey: 'namespace_tasks_page.filter_namespace_integration_job',
+    }),
+    Object.freeze({
+        id: 'namespace_suggests_tick',
+        labelKey: 'namespace_tasks_page.filter_namespace_suggests_tick',
+    }),
+    Object.freeze({
+        id: 'scheduled_namespace_integration_sync',
+        labelKey: 'namespace_tasks_page.filter_scheduled_namespace_integration_sync',
+    }),
+    Object.freeze({
+        id: 'reconcile_daily_summary_tick',
+        labelKey: 'namespace_tasks_page.filter_reconcile_daily_summary_tick',
+    }),
+    Object.freeze({
+        id: 'reembed_stale_documents_tick',
+        labelKey: 'namespace_tasks_page.filter_reembed_stale_documents_tick',
     }),
 ]);
 
@@ -48,8 +69,15 @@ const ACTIVE_STATUSES = new Set(['pending', 'running']);
 const TYPE_LABEL_KEYS = Object.freeze({
     knowledge_import: 'namespace_tasks_page.type_knowledge_import',
     note_analyze: 'namespace_tasks_page.type_note_analyze',
+    note_analysis_draft_repair: 'namespace_tasks_page.type_note_analysis_draft_repair',
+    note_markdown_format: 'namespace_tasks_page.type_note_markdown_format',
     daily_summary: 'namespace_tasks_page.type_daily_summary',
     period_summary: 'namespace_tasks_page.type_period_summary',
+    namespace_suggests_tick: 'namespace_tasks_page.type_namespace_suggests_tick',
+    scheduled_namespace_integration_sync:
+        'namespace_tasks_page.type_scheduled_namespace_integration_sync',
+    reconcile_daily_summary_tick: 'namespace_tasks_page.type_reconcile_daily_summary_tick',
+    reembed_stale_documents_tick: 'namespace_tasks_page.type_reembed_stale_documents_tick',
 });
 
 const STATUS_LABEL_KEYS = Object.freeze({

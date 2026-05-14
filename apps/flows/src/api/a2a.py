@@ -29,16 +29,16 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.a2a import A2AChannel
-from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
-from core.context import get_context
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.models import FlowConfig
+from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
+from core.context import get_context
 from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_REDIS_PREFIX,
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
 )
 from core.logging import get_logger
-from apps.flows.src.models import FlowConfig
 from core.ui_events import publish_ui_event_to_user
 from core.utils.tokens import TokenData, TokenType
 
@@ -67,11 +67,11 @@ def _get_user_groups(request: Request) -> list[str]:
     """Извлекает группы пользователя из request.state.user."""
     if not hasattr(request.state, "user") or request.state.user is None:
         return []
-    
+
     user = request.state.user
     if isinstance(user, dict):
         return user.get("grps", []) or user.get("groups", []) or []
-    
+
     return getattr(user, "grps", []) or getattr(user, "groups", []) or []
 
 router = APIRouter(tags=["public", "a2a"])
@@ -267,7 +267,7 @@ async def _get_flow_config(
 ) -> Optional[FlowConfig]:
     """
     Получает конфигурацию агента.
-    
+
     Args:
         flow_id: ID агента
         container: DI-контейнер
@@ -286,7 +286,7 @@ def _get_base_url(request: Request) -> str:
         scheme = forwarded_proto.lower()
     else:
         scheme = request.url.scheme
-    
+
     # Используем X-Forwarded-Host, который содержит host:port от Nginx
     forwarded_host = request.headers.get("x-forwarded-host")
     if forwarded_host:
@@ -301,27 +301,27 @@ def _get_base_url(request: Request) -> str:
                 host = f"{host}:443"
             elif scheme == "http":
                 host = f"{host}:80"
-    
+
     return f"{scheme}://{host}"
 
 
 @router.get("/{flow_id}/.well-known/agent-card.json")
 async def get_agent_card_well_known(
-    flow_id: str, 
+    flow_id: str,
     request: Request,
     container: ContainerDep,
     v: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Agent Card по well-known URL.
-    
+
     Query params:
         v: версия агента (опционально)
     """
     config = await _get_flow_config(flow_id, container, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-    
+
     context = get_context()
     channel = A2AChannel(flow_id, context=context, flow_config=config)
     base_url = _get_base_url(request)
@@ -333,21 +333,21 @@ async def get_agent_card_well_known(
 
 @router.get("/{flow_id}")
 async def get_agent_card(
-    flow_id: str, 
+    flow_id: str,
     request: Request,
     container: ContainerDep,
     v: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Agent Card по A2A спецификации - GET на URL агента.
-    
+
     Query params:
         v: версия агента (опционально)
     """
     config = await _get_flow_config(flow_id, container, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-    
+
     context = get_context()
     channel = A2AChannel(flow_id, context=context, flow_config=config)
     base_url = _get_base_url(request)
@@ -396,7 +396,7 @@ async def _json_rpc_handler_internal(
 ):
     """
     JSON-RPC handler для A2A протокола.
-    
+
     Версия агента может быть указана:
     - Query param: ?v=20241226120000000000
     - В metadata запроса: {"metadata": {"version": "20241226120000000000"}}
@@ -411,7 +411,7 @@ async def _json_rpc_handler_internal(
                 "error": {"code": -32700, "message": f"Parse error: {e}"},
             }
         )
-    
+
     if not isinstance(body, dict):
         return JSONResponse(
             {
@@ -420,12 +420,12 @@ async def _json_rpc_handler_internal(
                 "error": {"code": -32600, "message": "Invalid Request: expected JSON object"},
             }
         )
-    
+
     rpc_id = body.get("id")
     method = body.get("method")
     _raw_params = body.get("params")
     params_dict: Dict[str, Any] = _raw_params if isinstance(_raw_params, dict) else {}
-    
+
     token_data = getattr(request.state, "token_data", None)
     if _is_embed_session_token(token_data):
         if not isinstance(token_data, TokenData):
@@ -481,7 +481,7 @@ async def _json_rpc_handler_internal(
     # Версия: приоритет query param > metadata.version
     metadata = params_dict.get("metadata") or {}
     version = v or metadata.get("version")
-    
+
     config = await _get_flow_config(flow_id, container, version=version)
     if not config:
         version_info = f" version '{version}'" if version else ""
@@ -492,7 +492,7 @@ async def _json_rpc_handler_internal(
                 "error": {"code": -32000, "message": f"Flow not found: {flow_id}{version_info}"},
             }
         )
-    
+
     if not method:
         return {
             "jsonrpc": "2.0",
@@ -509,16 +509,16 @@ async def _json_rpc_handler_internal(
 
     # Получаем Context из middleware (установлен при авторизации)
     context = get_context()
-    
+
     handler = A2AChannel(flow_id, context=context, flow_config=config)
-    
+
     # Группы пользователя для проверки permissions
     # 1. Из metadata (для тестов и internal calls)
     # 2. Из request.state.user (из JWT через middleware)
     metadata = params_dict.get("metadata") or {}
     user_groups = metadata.get("__user_groups__") or _get_user_groups(request)
     channel_context = {"user_groups": user_groups}
-    
+
     # Добавляем groups в metadata для передачи в worker (для проверки permissions на tools)
     if params_dict.get("metadata") is None:
         params_dict["metadata"] = {}
@@ -645,7 +645,7 @@ async def _json_rpc_handler_internal(
                 "id": rpc_id,
                 "result": card,
             }
-        
+
         return {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32601, "message": f"Method not found: {method}"}}
 
     except PermissionDenied as e:
@@ -728,7 +728,7 @@ async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> D
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-    
+
     result = await channel.get_branch(branch_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
@@ -743,13 +743,13 @@ async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
-    
+
     # 'base' — это базовый агент без конкретной ветки
     if branch_id != "base":
         branch = await channel.get_branch(branch_id)
         if branch is None:
             raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
-    
+
     return await channel.get_branch_tools(branch_id)
 
 

@@ -19,8 +19,8 @@ def _type_label(obj: object) -> str:
 
 
 def build_runtime_namespace_global_variables() -> List[GlobalVariable]:
-    from core.docs.data.python.globals import GLOBALS as STATIC_GLOBALS
     from apps.flows.src.eval.namespace import PythonNamespaceBuilder
+    from core.docs.data.python.globals import GLOBALS as STATIC_GLOBALS
 
     documented = {g["name"] for g in STATIC_GLOBALS}
     ns = PythonNamespaceBuilder().build()

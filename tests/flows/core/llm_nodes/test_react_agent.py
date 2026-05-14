@@ -7,12 +7,11 @@ State и messages - A2A типы.
 """
 
 import pytest
-from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 
-from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
-from core.state import ExecutionState
+from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.tools import calculator
+from core.state import ExecutionState
 
 
 async def run_agent_to_completion(runner, input_data, state):

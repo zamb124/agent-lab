@@ -3,7 +3,7 @@ Pydantic модели для профиля пользователя CRM.
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,9 +42,9 @@ class TelegramLinkResponse(BaseModel):
 
 class UserProfileCreate(BaseModel):
     """Создание/обновление профиля"""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     user_id: Optional[str] = Field(
         default=None,
         max_length=100,
@@ -92,9 +92,9 @@ class UserProfileCreate(BaseModel):
 
 class UserProfileResponse(BaseModel):
     """Ответ с данными профиля"""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     profile_id: str = Field(title="ID профиля")
     user_id: str = Field(title="ID пользователя")
     company_id: str = Field(title="ID компании")
@@ -108,7 +108,7 @@ class UserProfileResponse(BaseModel):
     widget_config: Dict[str, Any] = Field(default_factory=dict, title="Настройки виджетов")
     created_at: datetime = Field(title="Дата создания")
     updated_at: datetime = Field(title="Дата обновления")
-    
+
     # Статистика
     notes_count: int = Field(default=0, title="Количество заметок")
     tasks_completed: int = Field(default=0, title="Завершенных задач")
@@ -117,9 +117,9 @@ class UserProfileResponse(BaseModel):
 
 class UserStatsResponse(BaseModel):
     """Статистика пользователя для графика продуктивности"""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     notes_by_date: dict = Field(default_factory=dict, title="Заметки по датам")
     tasks_by_date: dict = Field(default_factory=dict, title="Задачи по датам")
     total_notes: int = Field(default=0)

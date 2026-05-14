@@ -15,12 +15,18 @@ import re
 import time
 import uuid
 from datetime import date
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from apps.flows.src.container import get_container
 from apps.flows.src.eval import compile_function
 from apps.flows.src.models import NodeConfig, TestCaseConfig
-from apps.flows.src.models.flow_config import CheckConfig, CheckType, InputConfig, InputType, TestTurn
+from apps.flows.src.models.flow_config import (
+    CheckConfig,
+    CheckType,
+    InputConfig,
+    InputType,
+    TestTurn,
+)
 from apps.flows.src.tasks.llm_tasks import invoke_llm
 from core.context import get_context
 from core.logging import get_logger
@@ -37,7 +43,7 @@ LOOP_DETECTION_WINDOW = 3
 class TestRunner:
     """
     Универсальный runner для тестирования.
-    
+
     Тестирует callable: (ExecutionState) -> ExecutionState.
     Поддерживает агентов и отдельные ноды.
     """
@@ -64,7 +70,7 @@ class TestRunner:
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Запускает тест со стримингом.
-        
+
         Для каждого turn:
         1. Генерирует input (text/function/node)
         2. Вызывает target_callable(state)
@@ -77,10 +83,10 @@ class TestRunner:
         turns_count = 0
         step_scores: ScoresType = {}
         initial_state_dict = test_case.initial_state or {}
-        
+
         context_id = str(uuid.uuid4())
         session_id = f"{self.target_id}:{context_id}"
-        
+
         execution_state = ExecutionState(
             task_id=task_id,
             context_id=context_id,
@@ -156,7 +162,7 @@ class TestRunner:
 
                     step_key = f"step_{i + 1}"
                     step_scores[step_key] = check_result.get("result", 10.0)
-                    
+
                     for k, v in check_result.items():
                         if k != "result" and k not in step_scores:
                             step_scores[k] = v
@@ -235,7 +241,7 @@ class TestRunner:
 
             execution_state.content = tester_response
             execution_state = await self.target_callable(execution_state)
-            
+
             flow_response = execution_state.response or ""
 
             dialog.append({"role": "assistant", "content": flow_response})
@@ -308,7 +314,7 @@ class TestRunner:
     ) -> Dict[str, float]:
         """Выполняет проверку. Всегда возвращает Dict[str, float] (0-10)."""
         state_dict = execution_state.model_dump()
-        
+
         if check_config.type == CheckType.STRING:
             result = self._execute_string_checker(check_config.value, state_dict, response)
             return {"result": 10.0 if result else 0.0}
@@ -331,7 +337,7 @@ class TestRunner:
     def _normalize_check_result(self, result: Any) -> Dict[str, float]:
         """
         Нормализует результат проверки к единой структуре: Dict[str, float] (0-10).
-        
+
         True -> {"result": 10.0}
         False -> {"result": 0.0}
         число -> {"result": число}
@@ -339,10 +345,10 @@ class TestRunner:
         """
         if isinstance(result, bool):
             return {"result": 10.0 if result else 0.0}
-        
+
         if isinstance(result, (int, float)):
             return {"result": float(result)}
-        
+
         if isinstance(result, dict):
             normalized = {}
             for k, v in result.items():
@@ -353,7 +359,7 @@ class TestRunner:
                 elif v is None:
                     normalized[k] = 0.0
             return normalized if normalized else {"result": 10.0}
-        
+
         return {"result": 10.0}
 
     def _execute_string_checker(
@@ -475,7 +481,7 @@ class TestRunner:
         """Получает конфигурацию ноды: inline dict, из графа flow по session/skill/version или node_repository."""
         if input_config.node:
             return NodeConfig(**input_config.node)
-        
+
         node_id = input_config.value
         if node_id and execution_state:
             container = get_container()
@@ -489,13 +495,13 @@ class TestRunner:
                 config = dict(node_dict)
                 config.setdefault("node_id", node_id)
                 return NodeConfig(**config)
-        
+
         if node_id:
             container = get_container()
             node_config = await container.node_repository.get(node_id)
             if node_config is not None:
                 return node_config
-        
+
         raise ValueError(
             f"node config is required for NODE input type: "
             f"neither 'node' inline config nor flow node '{node_id}' found"
@@ -612,7 +618,7 @@ class TestRunner:
         """Получает конфигурацию судьи: inline dict, из графа flow по session/skill/version или node_repository."""
         if check_config.node:
             return NodeConfig(**check_config.node)
-        
+
         node_id = check_config.value
         if node_id and execution_state:
             container = get_container()
@@ -626,13 +632,13 @@ class TestRunner:
                 config = dict(node_dict)
                 config.setdefault("node_id", node_id)
                 return NodeConfig(**config)
-        
+
         if node_id:
             container = get_container()
             node_config = await container.node_repository.get(node_id)
             if node_config is not None:
                 return node_config
-        
+
         raise ValueError(
             f"node config is required for NODE check type: "
             f"neither 'node' inline config nor flow node '{node_id}' found"

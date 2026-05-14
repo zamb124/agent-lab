@@ -2,37 +2,35 @@
 Репозиторий для AccessGrants.
 """
 
-from typing import List, Optional, Type, Tuple, Dict
-from sqlalchemy import func, select, update, delete, or_, and_, tuple_
+from typing import Dict, List, Optional, Tuple, Type
 
-from apps.crm.db.models import AccessGrant
+from sqlalchemy import and_, delete, func, or_, select, update
+
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
-from core.context import get_context
+from apps.crm.db.models import AccessGrant
+from core.db.utils import get_rowcount
 
 
 class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
     """Репозиторий для работы с AccessGrants"""
-    
+
     def __init__(self, db: CRMDatabase):
         super().__init__(db)
-    
+
     @property
     def model_class(self) -> Type[AccessGrant]:
         return AccessGrant
-    
+
     @property
     def id_field(self) -> str:
         return "grant_id"
-    
+
     async def find_by_resource(
-        self,
-        resource_type: str,
-        resource_id: str,
-        resource_company_id: Optional[str] = None
+        self, resource_type: str, resource_id: str, resource_company_id: Optional[str] = None
     ) -> List[AccessGrant]:
         """
         Найти все grants для ресурса.
-        
+
         Args:
             resource_company_id: Company ID ресурса (не запрашивающего пользователя!)
                                 Если None, ищет во всех компаниях
@@ -43,10 +41,10 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
                 .where(AccessGrant.resource_type == resource_type)
                 .where(AccessGrant.resource_id == resource_id)
             )
-            
+
             if resource_company_id:
                 query = query.where(AccessGrant.company_id == resource_company_id)
-            
+
             result = await session.execute(query)
             return list(result.scalars().all())
 
@@ -88,7 +86,7 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
                 .values(resource_id=new_entity_id)
             )
             await session.commit()
-            return int(result.rowcount or 0)
+            return get_rowcount(result)
 
     async def deduplicate_entity_grants(self, company_id: str, entity_id: str) -> None:
         """
@@ -112,7 +110,7 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
             for gid in to_delete:
                 await session.execute(delete(AccessGrant).where(AccessGrant.grant_id == gid))
             await session.commit()
-    
+
     async def find_by_resources_batch(
         self,
         resource_keys: list[tuple[str, str]],
@@ -141,5 +139,3 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
             if key in grants_map:
                 grants_map[key].append(grant)
         return grants_map
-
-

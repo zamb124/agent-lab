@@ -106,6 +106,8 @@ class A2AClient:
         branch_id: str = "default",
         metadata: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
+        *,
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Отправляет задачу внешнему агенту.
@@ -117,6 +119,7 @@ class A2AClient:
             branch_id: ID ветки агента (в metadata уходит как `branch`)
             metadata: Дополнительные данные
             headers: Дополнительные HTTP-заголовки (до слияния с контекстом)
+            timeout: Переопределение таймаута HTTP для этого запроса (секунды).
 
         Returns:
             Ответ агента
@@ -149,7 +152,7 @@ class A2AClient:
         final_metadata = metadata.copy() if metadata else {}
         if branch_id and branch_id != "default":
             final_metadata["branch"] = branch_id
-        
+
         if final_metadata:
             payload["params"]["metadata"] = final_metadata
 
@@ -167,13 +170,14 @@ class A2AClient:
                 request_headers["X-Trace-Id"] = context.trace_id
             if context.language and "Accept-Language" not in request_headers:
                 request_headers["Accept-Language"] = context.language.value
-        
+
         logger.debug(f"A2A send_task to {url}: {content[:100]}...")
 
         try:
+            effective_timeout = self.timeout if timeout is None else timeout
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             out_headers = {**request_headers, "Content-Type": "application/json"}
-            async with get_httpx_client(timeout=self.timeout, follow_redirects=True) as client:
+            async with get_httpx_client(timeout=effective_timeout, follow_redirects=True) as client:
                 response = await client.post(url, content=body, headers=out_headers)
 
                 if response.status_code != 200:
@@ -199,16 +203,16 @@ class A2AClient:
     def _parse_a2a_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
         """
         Парсит A2A JSONRPC ответ и извлекает response из artifacts.
-        
+
         Args:
             raw_response: Raw JSONRPC response
-            
+
         Returns:
             Нормализованный ответ с полями response и status
         """
         # Извлекаем result из JSONRPC обёртки
         task_result = raw_response.get("result", raw_response)
-        
+
         # Получаем статус
         status_obj = task_result.get("status", {})
         status = status_obj.get("state", "completed") if isinstance(status_obj, dict) else "completed"
@@ -238,7 +242,7 @@ class A2AClient:
                         res_val = data["res"]
                         if isinstance(res_val, str) and res_val.strip():
                             response_text += res_val.strip() + "\n"
-        
+
         return {
             "response": response_text.strip(),
             "status": status,

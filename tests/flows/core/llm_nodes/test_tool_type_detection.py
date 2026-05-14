@@ -8,26 +8,26 @@
 - Работает с кастомными tools (не только стандартные reason/finish)
 """
 
-import pytest
 from typing import Any, Dict
 
-from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+import pytest
+
 from apps.flows.src.models import NodeConfig, ReactConfig, ReactLoopMode
-from apps.flows.src.models.node_config import NodeLLMOverride
-from core.state import ExecutionState
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.src.tools.decorator import FunctionTool
-from apps.flows.tools import reason, finish, final_answer, calculator
+from apps.flows.tools import calculator, final_answer, finish, reason
+from core.state import ExecutionState
 
 
 class CustomReasonTool(BaseTool):
     """Кастомный reasoning tool с другим именем."""
-    
+
     name = "my_think"
     description = "Custom reasoning tool"
     react_role = ReactToolRole.REASON
-    
+
     async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         thought = args.get("thought", "")
         if state and "reasoning_history" not in state:
@@ -39,22 +39,22 @@ class CustomReasonTool(BaseTool):
 
 class CustomExitTool(BaseTool):
     """Кастомный exit tool с другим именем."""
-    
+
     name = "complete"
     description = "Custom exit tool"
     react_role = ReactToolRole.EXIT
-    
+
     async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         return args.get("answer", "Done")
 
 
 class RegularTool(BaseTool):
     """Обычный tool без специального типа."""
-    
+
     name = "helper"
     description = "Regular helper tool"
     react_role = ReactToolRole.STANDARD
-    
+
     async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         return "helped"
 
@@ -398,8 +398,8 @@ class TestReminderWithToolNames:
             pass
 
         messages = state.messages
-        system_messages = [
-            m for m in messages 
+        [
+            m for m in messages
             if hasattr(m, "role") and str(m.role) == "Role.agent"
         ]
 

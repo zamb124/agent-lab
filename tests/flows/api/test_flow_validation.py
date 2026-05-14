@@ -62,7 +62,7 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "missing_entry" in error_codes
 
@@ -83,7 +83,7 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "entry_not_found" in error_codes
 
@@ -106,7 +106,7 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "edge_from_not_found" in error_codes
 
@@ -129,7 +129,7 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "edge_to_not_found" in error_codes
 
@@ -150,12 +150,12 @@ class TestFlowValidationStructure:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         # Valid - нет критических ошибок, но есть warning
         warnings = [e for e in data["errors"] if e["severity"] == "warning"]
         warning_codes = [w["code"] for w in warnings]
         assert "unreachable_nodes" in warning_codes
-        
+
         # Проверяем что orphan в details
         unreachable_warning = next(w for w in warnings if w["code"] == "unreachable_nodes")
         assert "orphan" in unreachable_warning["details"]["unreachable"]
@@ -183,7 +183,7 @@ class TestFlowValidationReferences:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "node_not_found" not in error_codes
 
@@ -207,7 +207,7 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "node_not_found" in error_codes
 
@@ -231,7 +231,7 @@ class TestFlowValidationReferences:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -256,7 +256,7 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "tool_not_found" in error_codes
 
@@ -285,7 +285,7 @@ class TestFlowValidationReferences:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -308,7 +308,7 @@ class TestFlowValidationReferences:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -332,7 +332,7 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "tool_not_found" in error_codes
 
@@ -355,7 +355,7 @@ class TestFlowValidationReferences:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -379,7 +379,7 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "flow_not_found" in error_codes
 
@@ -402,7 +402,7 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "remote_flow_no_target" in error_codes
 
@@ -434,10 +434,10 @@ class TestFlowValidationVariables:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "undefined_variable" not in error_codes
-        
+
         # Проверяем что переменная собрана
         assert "my_api_key" in data["var_keys_used"]
 
@@ -464,7 +464,7 @@ class TestFlowValidationVariables:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "undefined_variable" in error_codes
 
@@ -489,7 +489,7 @@ class TestFlowValidationVariables:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "undefined_variable" not in error_codes
 
@@ -516,7 +516,7 @@ class TestFlowValidationVariables:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "undefined_variable" in error_codes
 
@@ -543,7 +543,7 @@ class TestFlowValidationInlineCode:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         # state_keys_used должен содержать найденные ключи
         assert "content" in data["state_keys_used"]
         assert "result" in data["state_keys_used"]
@@ -567,10 +567,10 @@ class TestFlowValidationInlineCode:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         info_messages = [e for e in data["errors"] if e["severity"] == "info"]
         assert len(info_messages) > 0
-        
+
         code_info = [e for e in info_messages if e["code"] == "inline_code_state_keys"]
         assert len(code_info) > 0
 
@@ -584,7 +584,7 @@ class TestFlowValidationExampleGraph:
         flow_path = BUNDLES_DIR / "example_graph" / "flow.json"
         with open(flow_path) as f:
             flow_config = json.load(f)
-        
+
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -597,18 +597,18 @@ class TestFlowValidationExampleGraph:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         # Должен быть валидным (агенты предзагружены)
         errors = [e for e in data["errors"] if e["severity"] == "error"]
-        
+
         # Выводим ошибки для отладки
         for err in errors:
             print(f"Error: {err['code']} - {err['message']}")
-        
+
         # example_graph может иметь ссылки на несуществующие агенты в тестах
         # Проверяем только структуру
         structure_errors = [
-            e for e in errors 
+            e for e in errors
             if e["code"] in ["missing_entry", "entry_not_found", "edge_from_not_found", "edge_to_not_found"]
         ]
         assert len(structure_errors) == 0, f"Structure errors: {structure_errors}"
@@ -619,7 +619,7 @@ class TestFlowValidationExampleGraph:
         flow_path = BUNDLES_DIR / "example_graph" / "flow.json"
         with open(flow_path) as f:
             flow_config = json.load(f)
-        
+
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -631,7 +631,7 @@ class TestFlowValidationExampleGraph:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         # classifier имеет inline code с state.get('content'), state['route']
         assert "content" in data["state_keys_used"]
         assert "route" in data["state_keys_used"]
@@ -642,7 +642,7 @@ class TestFlowValidationExampleGraph:
         flow_path = BUNDLES_DIR / "example_graph" / "flow.json"
         with open(flow_path) as f:
             flow_config = json.load(f)
-        
+
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -654,7 +654,7 @@ class TestFlowValidationExampleGraph:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         # Variables секция использует @var:company_name и @var:support_contacts
         assert "company_name" in data["var_keys_used"]
         assert "support_contacts" in data["var_keys_used"]
@@ -691,7 +691,7 @@ class TestFlowValidationComplexCases:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         errors = [e for e in data["errors"] if e["severity"] == "error"]
         assert len(errors) == 0
 
@@ -721,7 +721,7 @@ class TestFlowValidationComplexCases:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         errors = [e for e in data["errors"] if e["severity"] == "error"]
         assert len(errors) == 0
 
@@ -740,7 +740,7 @@ class TestFlowValidationComplexCases:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         # entry не найден
         error_codes = [e["code"] for e in data["errors"]]
         assert "entry_not_found" in error_codes
@@ -776,11 +776,11 @@ class TestFlowValidationComplexCases:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         # mode не определён
         undefined_errors = [e for e in data["errors"] if e["code"] == "undefined_variable"]
         assert len(undefined_errors) > 0
-        
+
         # api_key определён, mode нет
         assert "api_key" in data["var_keys_used"]
         assert "mode" in data["var_keys_used"]
@@ -805,7 +805,7 @@ class TestFlowValidationComplexCases:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        
+
         error_codes = [e["code"] for e in data["errors"]]
         assert "build_failed" in error_codes
 
@@ -829,7 +829,7 @@ class TestFlowValidationComplexCases:
         )
         assert response.status_code == 200
         data = response.json()
-        
+
         # Агент как tool должен быть найден
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes

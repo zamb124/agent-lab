@@ -8,7 +8,6 @@ from apps.provider_litserve.openai_server_contracts import (
     build_provider_litserve_v1_models_response,
 )
 
-
 pytestmark = pytest.mark.timeout(15)
 
 

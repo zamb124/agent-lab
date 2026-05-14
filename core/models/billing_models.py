@@ -3,9 +3,10 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict
 from enum import Enum
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, ConfigDict
 
 from core.fields import Field
 
@@ -13,7 +14,7 @@ from core.fields import Field
 class TariffPlan(str, Enum):
     """Тарифные планы"""
     FREE = "free"           # Бесплатный
-    BASIC = "basic"         # Базовый  
+    BASIC = "basic"         # Базовый
     PREMIUM = "premium"     # Премиум
     ENTERPRISE = "enterprise" # Корпоративный
 
@@ -32,9 +33,9 @@ class UsageType(str, Enum):
 
 class UsageRecord(BaseModel):
     """Запись об использовании ресурсов"""
-    
+
     model_config = ConfigDict(storage_prefix="usage")
-    
+
     usage_id: str = Field(
         title="ID записи",
         json_schema_extra={"readOnly": True}
@@ -42,18 +43,18 @@ class UsageRecord(BaseModel):
     user_id: str = Field(title="ID пользователя")
     company_id: str = Field(title="ID компании")
     session_id: Optional[str] = Field(default=None, title="ID сессии")
-    
+
     # Что использовалось
     usage_type: UsageType = Field(title="Тип использования")
     resource_name: str = Field(title="Название ресурса")  # "weather_api", "gpt-4", etc
-    
+
     # Стоимость и метрики
     cost: float = Field(default=0.0, title="Стоимость в RUB")
     quantity: int = Field(default=1, title="Количество")  # токены, вызовы, байты
-    
+
     # Метаданные
     metadata: Dict[str, Any] = Field(default_factory=dict, title="Дополнительные данные")
-    
+
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

@@ -2,15 +2,15 @@
 Единая система токенов для платформы Humanitec.
 """
 
-import jwt
-
-from core.logging import get_logger
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
+import jwt
 from pydantic import BaseModel, Field
 
 from core.config import get_settings
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class TokenType(str, Enum):
@@ -21,7 +21,7 @@ class TokenType(str, Enum):
 
 class TokenData(BaseModel):
     """Данные токена"""
-    
+
     user_id: str = Field(description="ID пользователя")
     company_id: str = Field(description="ID компании")
     roles: List[str] = Field(default_factory=list, description="Роли пользователя в компании")
@@ -34,20 +34,20 @@ class TokenData(BaseModel):
 
 class TokenService:
     """Единый сервис управления токенами"""
-    
+
     SESSION_EXPIRES = 86400 * 7           # 7 дней
     API_TOKEN_EXPIRES = 86400 * 365 * 2   # 2 года
     EMBED_SESSION_EXPIRES = 300           # 5 минут
-    
+
     def __init__(self):
         settings = get_settings()
         self.secret_key = settings.auth.jwt_secret_key
-        
+
         if not self.secret_key:
             raise ValueError("JWT secret key не настроен в конфигурации (auth.jwt_secret_key)")
-        
+
         self.algorithm = 'HS256'
-    
+
     def create_token(
         self,
         user_id: str,
@@ -61,7 +61,7 @@ class TokenService:
     ) -> str:
         """
         Создает JWT токен.
-        
+
         Args:
             user_id: ID пользователя
             company_id: ID компании
@@ -71,7 +71,7 @@ class TokenService:
             session_id: ID OAuth сессии (опционально)
             metadata: Дополнительные данные (provider, user_name и т.д.)
             email: Email пользователя
-            
+
         Returns:
             JWT токен
         """
@@ -82,10 +82,10 @@ class TokenService:
                 expires_in = self.EMBED_SESSION_EXPIRES
             else:
                 expires_in = self.SESSION_EXPIRES
-        
+
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=expires_in)
-        
+
         token_data = TokenData(
             user_id=user_id,
             company_id=company_id,
@@ -97,18 +97,18 @@ class TokenService:
             email=email,
             metadata=metadata or {},
         )
-        
+
         payload = token_data.model_dump()
         payload['iat'] = int(now.timestamp())
         payload['exp'] = int(expires_at.timestamp())
         payload['token_type'] = token_data.token_type.value
-        
+
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
-        
+
         logger.info(f"Создан {token_type.value} токен для пользователя {user_id}, компания {company_id}")
-        
+
         return token
-    
+
     def create_api_token(
         self,
         user_id: str,
@@ -118,13 +118,13 @@ class TokenService:
     ) -> str:
         """
         Создает долгоживущий API токен для интеграций.
-        
+
         Args:
             user_id: ID пользователя
             company_id: ID компании
             roles: Роли пользователя
             expires_in: Время жизни (по умолчанию 2 года)
-            
+
         Returns:
             JWT токен
         """
@@ -154,20 +154,20 @@ class TokenService:
             expires_in=expires_in,
             metadata=metadata,
         )
-    
+
     def validate_token(self, token: str) -> Optional[TokenData]:
         """
         Проверяет JWT токен и возвращает данные.
-        
+
         Args:
             token: JWT токен для проверки
-            
+
         Returns:
             Данные токена или None если недействителен
         """
         if not token:
             return None
-        
+
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
         except jwt.ExpiredSignatureError:
@@ -179,18 +179,18 @@ class TokenService:
         except jwt.InvalidTokenError as e:
             logger.warning(f"JWT токен имеет неверный формат: {e}")
             return None
-        
+
         payload['iat'] = datetime.fromtimestamp(payload['iat'], tz=timezone.utc)
         payload['exp'] = datetime.fromtimestamp(payload['exp'], tz=timezone.utc)
-        
+
         token_data = TokenData.model_validate(payload)
-        
+
         if token_data.exp < datetime.now(timezone.utc):
             logger.warning("JWT токен истек")
             return None
-        
+
         logger.debug(f"JWT токен валиден: user={token_data.user_id}, company={token_data.company_id}")
-        
+
         return token_data
 
 _token_service: Optional[TokenService] = None

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
-from core.clients.speech_override import SpeechOverride
-from core.context import Context
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.flow_speech_settings import (
     FlowSpeechSettings,
@@ -13,6 +11,8 @@ from apps.flows.src.models.flow_speech_settings import (
     FlowSpeechTtsBlock,
     FlowSpeechVadBlock,
 )
+from core.clients.speech_override import SpeechOverride
+from core.context import Context
 
 PLATFORM_FLOW_SPEECH_LAYERS_KEY = "platform_flow_speech_layers"
 

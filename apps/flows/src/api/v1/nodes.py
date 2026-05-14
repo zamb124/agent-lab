@@ -8,12 +8,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from core.pagination import OffsetPage
 from apps.flows.src.dependencies import ContainerDep
-from core.logging import get_logger
-from apps.flows.src.models import NodeConfig, ToolReference, NodeLLMOverride
+from apps.flows.src.models import LLMConfig, NodeConfig, ToolReference
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.tool_reference import CallParameter
+from core.logging import get_logger
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,7 @@ router = APIRouter(tags=["nodes"])
 
 class NodeLLMOverrideRequest(BaseModel):
     """Request для переопределения LLM настроек ноды."""
-    
+
     model: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
@@ -86,13 +86,9 @@ def _convert_inline_tool(tool_data: Dict[str, Any]) -> ToolReference:
                 description=v.get("description", ""),
                 required=v.get("required", True),
             )
-    
+
     react_role_raw = tool_data.get("react_role")
-    react_role = (
-        ReactToolRole(react_role_raw)
-        if react_role_raw
-        else ReactToolRole.STANDARD
-    )
+    react_role = ReactToolRole(react_role_raw) if react_role_raw else ReactToolRole.STANDARD
 
     return ToolReference(
         tool_id=tool_data["tool_id"],
@@ -135,9 +131,7 @@ async def list_nodes(
 
 
 @router.post("/", response_model=NodeResponse)
-async def create_node(
-    request: NodeCreateRequest, container: ContainerDep
-) -> NodeResponse:
+async def create_node(request: NodeCreateRequest, container: ContainerDep) -> NodeResponse:
     """Создает новую ноду"""
     tools = []
     for tool_ref in request.tools:
@@ -174,9 +168,7 @@ async def create_node(
 
 
 @router.get("/{node_id}", response_model=NodeResponse)
-async def get_node(
-    node_id: str, container: ContainerDep
-) -> NodeResponse:
+async def get_node(node_id: str, container: ContainerDep) -> NodeResponse:
     """Получает ноду по ID"""
     node = await container.node_repository.get(node_id)
     if node is None:
@@ -230,9 +222,7 @@ async def update_node(
 
 
 @router.delete("/{node_id}")
-async def delete_node(
-    node_id: str, container: ContainerDep
-) -> dict:
+async def delete_node(node_id: str, container: ContainerDep) -> dict:
     """Удаляет ноду"""
     deleted = await container.node_repository.delete(node_id)
     if not deleted:

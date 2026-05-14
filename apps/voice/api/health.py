@@ -13,7 +13,6 @@ from fastapi import APIRouter
 
 from apps.voice.container import get_voice_container
 
-
 health_router = APIRouter(prefix="/health", tags=["voice"])
 
 

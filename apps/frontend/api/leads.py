@@ -2,8 +2,6 @@
 Заявки с лендинга: запись в shared storage (ключи company:system:request:*).
 """
 import json
-
-from core.logging import get_logger
 import re
 import uuid
 from datetime import datetime, timezone
@@ -14,6 +12,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 from apps.frontend.dependencies import ContainerDep
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 REQUEST_STORAGE_PREFIX = f"company:{SYSTEM_COMPANY_ID}:request:"

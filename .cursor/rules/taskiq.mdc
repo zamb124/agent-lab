@@ -50,7 +50,7 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 
 Новая задача, попадающая в Redis-расписание: импорт модуля в `apps/scheduler/scheduler.py` + имя в одном из `_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES` / `_IDLE_SCHEDULER_REQUIRED_TASK_NAMES` / `_CRM_SCHEDULER_REQUIRED_TASK_NAMES`. Для `execute_inline_code` ключ — `apps.flows.src.tasks.eval_task:execute_inline_code`.
 
-**Воркер обязан импортировать тот же модуль**, иначе при выполнении будет «task is not found». Пример: `crm_reembed_stale_documents_tick` — модуль `apps.crm_worker.tasks.reembed_tasks` в `apps/crm_worker/worker.py`.
+**Воркер обязан импортировать тот же модуль**, иначе при выполнении будет «task is not found». Пример: `crm_reembed_stale_documents_tick` — модуль `apps.crm_worker.tasks.reembed_tasks` в `apps/crm_worker/worker.py`; `crm_reconcile_daily_summary` — модуль `apps.crm_worker.tasks.daily_summary_tasks` в `apps/crm_worker/worker.py` и `apps/scheduler/scheduler.py`.
 
 `QueueAwareTaskiqScheduler` (`core/scheduler/scheduler.py`): при срабатывании записи вызывает `AsyncKicker` на **брокере целевой очереди** (по `labels['queue_name']`). Иначе `RedisStreamBroker.kick` падает в fallback на stream `flows_worker`, и `flows_worker` получает сообщения с именами idle-задач без handler (warning «task is not found»).
 

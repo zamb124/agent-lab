@@ -26,36 +26,36 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from a2a.types import Message, Part, Role, TextPart
 
-from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
+from apps.flows.src.clients.external_api_client import ExternalAPIClient
+from apps.flows.src.container import get_container
+from apps.flows.src.mapping import MappingResolver
+from apps.flows.src.mock import get_mock_for_node
+from apps.flows.src.models import NodeConfig, NodeLLMOverride, ReactConfig
+from apps.flows.src.models.enums import NodeType
+from apps.flows.src.models.external_api import ExternalAPIConfig
+from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
+from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from apps.flows.src.runtime.llm_resource_override import (
     infer_unique_llm_resource_key_from_merged_maps,
     resolve_llm_override_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
-from apps.flows.src.clients.external_api_client import ExternalAPIClient
+from apps.flows.src.state.interrupt_manager import InterruptManager
 from core.clients.llm import get_llm
-from apps.flows.src.container import get_container
-from apps.flows.src.mapping import MappingResolver
-from apps.flows.src.mock import get_mock_for_node
-from apps.flows.src.models import NodeLLMOverride, NodeConfig, ReactConfig
-from apps.flows.src.models.enums import NodeType
-from apps.flows.src.models.operator_schemas import OperatorTaskStatus
-from apps.flows.src.models.external_api import ExternalAPIConfig
 from core.context import get_context as get_request_context
+from core.errors import NodeWallClockTimeoutError, ResourceNotFoundError
+from core.logging import get_logger
 from core.state import (
     ExecutionExceptionRecord,
     ExecutionState,
     parse_interrupt_body_from_external_dict,
 )
+from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.state.mutation_policy import (
     forbid_frozen_update_key,
     should_skip_field_on_user_returned_state_copy,
 )
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
-from apps.flows.src.state.interrupt_manager import InterruptManager
-from core.logging import get_logger
-from core.errors import NodeWallClockTimeoutError, ResourceNotFoundError
 from core.tracing.operation_span import traced_operation
 
 if TYPE_CHECKING:
@@ -79,7 +79,7 @@ class NodeRunMethod:
         from apps.flows.src.container import get_container
 
         container = get_container()
-        
+
         # Внутри воркера выполняем локально
         if not container.use_worker:
             return await self._node._run_internal(state)
@@ -111,20 +111,20 @@ class NodeRunDescriptor:
 class BaseNode(ABC):
     """
     Базовый класс для нод. Node = функция ExecutionState -> ExecutionState.
-    
+
     Template Method паттерн:
     - run(state) или run.kiq(state) - единая точка входа для всех нод
     - _resolve_inputs() - единообразный резолвинг input_mapping
     - _get_filtered_messages() - фильтрация messages
     - _run_impl() - конкретная логика каждой ноды
-    
+
     Конфигурация:
     - input_mapping: Dict - маппинг входных данных из state
     - output_mapping: Dict[str, str] - маппинг полей результата -> state fields
     - save_to_messages: bool - добавлять результат в messages
     - message_field: str - какое поле писать в messages (по умолчанию diff стейта)
     - messages_filter: "all" / "own" / List[str] — срез по metadata.node_id
-    
+
     Контракт _run_impl() для ВСЕХ нод:
     - Возвращает Any (dict, str, None, etc)
     - dict: поля записываются в state через output_mapping
@@ -165,7 +165,7 @@ class BaseNode(ABC):
     def _resolve_inputs(self, state: ExecutionState) -> Dict[str, Any]:
         """
         Единообразный резолвинг input_mapping для всех типов нод.
-        
+
         Returns:
             Dict с резолвнутыми значениями из input_mapping
         """
@@ -225,26 +225,26 @@ class BaseNode(ABC):
     async def _resolve_resources(self, state: ExecutionState) -> Dict[str, Any]:
         """
         Резолвит ресурсы для ноды.
-        
+
         Иерархия (node > skill > flow): flow/skill из БД по session_flow_id и flow_config_version.
-        
+
         Returns:
             Dict[resource_id, wrapper] для использования в namespace
         """
         container = get_container()
-        
+
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
             state.flow_config_version,
         )
-        
+
         # Ресурсы ноды из конфига
         node_resources = self.config.get("resources", {})
-        
+
         if not flow_resources and not skill_resources and not node_resources:
             return {}
-        
+
         return await container.resource_resolver.resolve_for_node(
             flow_resources=flow_resources,
             skill_resources=skill_resources,
@@ -258,7 +258,7 @@ class BaseNode(ABC):
     async def _run_internal(self, state: ExecutionState) -> ExecutionState:
         """
         Внутренняя реализация выполнения ноды.
-        
+
         1. Проверка mock
         2. Сохранение snapshot для diff (если save_to_messages без message_field)
         3. Резолвинг input_mapping -> inputs
@@ -274,11 +274,11 @@ class BaseNode(ABC):
             for key, value in mock_data.items():
                 setattr(state, key, value)
             return state
-        
+
         state_before = None
         if self.save_to_messages and not self.message_field:
             state_before = state.model_dump(exclude_none=False)
-        
+
         inputs = self._resolve_inputs(state)
 
         node_timeout = self.config.get("node_timeout_seconds")
@@ -325,18 +325,18 @@ class BaseNode(ABC):
                 self._copy_state_back(result, state, full_trust=False)
             else:
                 self._apply_output_mapping(state, result)
-        
+
         if self.save_to_messages:
             message_content = self._get_message_content(state, state_before, result)
             if message_content:
                 self._append_to_messages(state, message_content)
-        
+
         return state
-    
+
     def _apply_output_mapping(self, state: ExecutionState, result: Any) -> None:
         """
         Записывает результат в state через output_mapping.
-        
+
         Если result - dict:
           - С output_mapping: result[key] -> state[mapped_field]
           - Без output_mapping: result[key] -> state[key] (напрямую)
@@ -355,13 +355,13 @@ class BaseNode(ABC):
                     setattr(state, key, value)
         else:
             setattr(state, "result", result)
-    
+
     def _get_message_content(
         self, state: ExecutionState, state_before: Optional[Dict], result: Any
     ) -> Optional[str]:
         """
         Определяет что записать в messages.
-        
+
         Приоритет поиска message_field:
         1. result[message_field] если result - dict
         2. state.message_field
@@ -377,15 +377,15 @@ class BaseNode(ABC):
             return self._compute_state_diff(state_before, state)
         else:
             return str(result) if result is not None else None
-    
+
     def _compute_state_diff(
         self, state_before: Dict[str, Any], state_after: ExecutionState
     ) -> Optional[str]:
         """Вычисляет diff между состояниями для записи в messages."""
         state_after_dict = state_after.model_dump(exclude_none=False)
-        
+
         skip_fields = {"messages", "prompt_history", "node_history", "nested_states"}
-        
+
         diff_parts = []
         for key, new_value in state_after_dict.items():
             if key in skip_fields:
@@ -393,7 +393,7 @@ class BaseNode(ABC):
             old_value = state_before.get(key)
             if old_value != new_value and new_value is not None:
                 diff_parts.append(f"{key}: {new_value}")
-        
+
         if not diff_parts:
             return None
         return "\n".join(diff_parts)
@@ -402,11 +402,11 @@ class BaseNode(ABC):
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
         Конкретная логика ноды.
-        
+
         Args:
             state: ExecutionState для чтения/записи
             inputs: Резолвнутые данные из input_mapping
-            
+
         Returns:
             Результат (dict - поля записываются в state через output_mapping)
         """
@@ -444,15 +444,15 @@ class BaseNode(ABC):
         Сбрасывает current_nodes чтобы вложенный flow начал со своего entry.
         """
         new_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
-        
+
         for key, value in inputs.items():
             setattr(new_state, key, value)
-        
+
         new_state.messages = self._get_filtered_messages(state)
-        
+
         # Сбрасываем current_nodes — вложенный flow начнёт со своего entry
         new_state.current_nodes = []
-        
+
         return new_state
 
     def as_tool(
@@ -511,7 +511,7 @@ class LlmNode(BaseNode):
     ):
         super().__init__(node_id or self.name, config)
         cfg = self.config
-        
+
         self.prompt_template = self.prompt or cfg.get("prompt", "")
         self.tool_refs = cfg.get("tools", []) or self.tools
         raw_override = cfg.get("llm_override")
@@ -527,7 +527,7 @@ class LlmNode(BaseNode):
             self.llm_config_dict = dict(raw_llm)
         else:
             self.llm_config_dict = {}
-        
+
         self._node_config = node_config
         self._runner = None
         self._loaded_tools: Optional[List[Any]] = None
@@ -583,7 +583,7 @@ class LlmNode(BaseNode):
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
         Выполняет ReAct цикл.
-        
+
         _copy_state_back мержит все изменения из рабочей копии state обратно в state.
         При structured_output возвращает dict с полями из JSON ответа.
         """
@@ -646,12 +646,12 @@ class LlmNode(BaseNode):
         """Возвращает список tools."""
         if self._loaded_tools is not None:
             return self._loaded_tools
-        
+
         # Загружаем tools из tool_refs если они есть
         if self.tool_refs:
             self._loaded_tools = await self._load_tools(state)
             return self._loaded_tools
-        
+
         # Если нет tool_refs, возвращаем атрибут класса tools (для кастомных нод)
         # Атрибут класса tools должен содержать уже готовые объекты, не конфиги
         return self.tools
@@ -804,7 +804,7 @@ class LlmNode(BaseNode):
         react_dict = self.config.get("react") if self.config else None
         if react_dict:
             react_config = ReactConfig(**react_dict)
-        
+
         # Structured output из config
         structured_output = self.config.get("structured_output", False) if self.config else False
         output_schema = self.config.get("output_schema") if self.config else None
@@ -837,11 +837,11 @@ class LlmNode(BaseNode):
     async def _load_tools(self, state: Optional[ExecutionState] = None) -> List[Any]:
         """
         Создаёт tools из inline конфигов.
-        
+
         Иерархия resources для tools как у CodeNode: flow → node → tool (правее сильнее).
         """
         container = get_container()
-        
+
         flow_resources: Dict[str, Any] = {}
         skill_resources: Dict[str, Any] = {}
         if state is not None:
@@ -854,7 +854,7 @@ class LlmNode(BaseNode):
             skill_resources = dict(sr) if sr else {}
         node_resources_cfg = self.config.get("resources", {}) or {}
         merged_node_level = {**flow_resources, **skill_resources, **node_resources_cfg}
-        
+
         if merged_node_level:
             enriched_refs = []
             for ref in self.tool_refs:
@@ -866,7 +866,7 @@ class LlmNode(BaseNode):
                 else:
                     enriched_refs.append(ref)
             return await container.tool_registry.create_tools(enriched_refs)
-        
+
         return await container.tool_registry.create_tools(self.tool_refs)
 
     async def before_prompt_render(
@@ -905,7 +905,7 @@ class LlmNode(BaseNode):
 class CodeNode(BaseNode):
     """
     Универсальная нода для выполнения кода.
-    
+
     Поддерживает разные языки (python, javascript, go).
     Только runner.execute_tool(code, args, state) по строке ``code`` из конфига;
     ``tool_id`` — идентификатор для UI/ссылок, не путь к FunctionTool в процессе.
@@ -914,14 +914,14 @@ class CodeNode(BaseNode):
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
         cfg = self.config
-        
+
         self.language = cfg.get("language", "python")
         self.code = cfg.get("code")
         self.tool_id = cfg.get("tool_id")
         self.args_schema = cfg.get("args_schema")
-        
+
         self._runner = None
-        
+
         # Для Python можно загрузить из function path
         if self.language == "python" and self.code is None and cfg.get("function"):
             self._load_from_function_path(cfg["function"])
@@ -960,12 +960,12 @@ class CodeNode(BaseNode):
     def _build_args(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Формирует args из inputs с учетом defaults из args_schema."""
         args = {}
-        
+
         if self.args_schema:
             for name, schema in self.args_schema.items():
                 if "default" in schema:
                     args[name] = schema["default"]
-        
+
         args.update(inputs)
         return args
 
@@ -1000,7 +1000,7 @@ class FlowNode(BaseNode):
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
         Запускает вложенный Flow.
-        
+
         _copy_state_back мержит изменения из вложенного flow обратно в state.
         """
         if not self.flow_id:
@@ -1024,7 +1024,7 @@ class RemoteFlowNode(BaseNode):
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
         cfg = self.config
-        
+
         self.url = cfg.get("url")
         self.remote_registry_flow_id = cfg.get("flow_id")
         self.branch_id = cfg.get("branch_id", "default")
@@ -1160,14 +1160,14 @@ class ExternalAPINode(BaseNode):
 class MCPNode(BaseNode):
     """
     Вызов MCP tool как нода графа.
-    
+
     Подключается к MCP серверу и вызывает указанный tool.
     """
 
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
         cfg = self.config
-        
+
         self.server_id = cfg.get("server_id")
         self.tool_name = cfg.get("tool_name")
         self.extra_headers = cfg.get("headers", {})
@@ -1179,43 +1179,43 @@ class MCPNode(BaseNode):
             raise ValueError(f"MCPNode '{self.node_id}': server_id is required")
         if not self.tool_name:
             raise ValueError(f"MCPNode '{self.node_id}': tool_name is required")
-        
+
         container = get_container()
-        
+
         server = await container.mcp_server_repository.get(self.server_id)
         if not server:
             raise ValueError(f"MCP server not found: {self.server_id}")
-        
+
         if self.extra_headers:
             merged_headers = {**server.headers, **self.extra_headers}
             server.headers = merged_headers
-        
+
         variables = state.variables
-        
+
         from apps.flows.src.clients.mcp_client import MCPHttpClient
-        
+
         client = MCPHttpClient(server, variables)
         result = await client.call_tool(self.tool_name, inputs)
-        
+
         if result.is_error:
             raise ValueError(f"MCP tool error: {result.get_text()}")
-        
+
         text_result = result.get_text()
-        
+
         for field, state_field in self.state_mapping.items():
             setattr(state, state_field, text_result)
-        
+
         setattr(state, "mcp_result", text_result)
-        
+
         return text_result
 
 
 class ChannelNode(BaseNode):
     """
     Универсальная нода отправки сообщений в каналы.
-    
+
     Поддерживаемые каналы: telegram, email, webhook, whatsapp, sms.
-    
+
     Конфигурация:
     {
         "type": "channel",
@@ -1230,7 +1230,7 @@ class ChannelNode(BaseNode):
             "text": "@state:response"
         }
     }
-    
+
     Поддерживаемые actions:
     - send_message: текстовое сообщение
     - send_photo: фото с подписью
@@ -1242,9 +1242,9 @@ class ChannelNode(BaseNode):
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
         cfg = self.config
-        
+
         from apps.flows.src.models.enums import ChannelType
-        
+
         channel_value = cfg.get("channel", "telegram")
         self.channel = ChannelType(channel_value) if isinstance(channel_value, str) else channel_value
         self.action = cfg.get("action", "send_message")
@@ -1253,17 +1253,17 @@ class ChannelNode(BaseNode):
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """Отправляет сообщение через channel handler."""
         from apps.flows.src.variables import VariableResolver, VarResolver
-        
+
         container = get_container()
         handler = container.channel_registry.get(self.channel)
-        
+
         # Собираем все переменные (flow, компании, системные)
         all_variables = VariableResolver.resolve_all(local_vars=state.variables)
-        
+
         # Merge channel_config с inputs
         config = {**self.channel_config}
         config = VarResolver.resolve_deep(config, all_variables)
-        
+
         async with traced_operation(
             "flows.channel.execute_action",
             event_type="channel.action",
@@ -1279,7 +1279,7 @@ class ChannelNode(BaseNode):
                 config=config,
                 variables=all_variables,
             )
-        
+
         setattr(state, "channel_result", result)
         setattr(state, "result", result)
 
@@ -1452,7 +1452,7 @@ def _infer_node_type_from_fields(node_config: Dict[str, Any]) -> None:
 async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:
     """
     Создаёт ноду через NodeRegistry.
-    
+
     Zero-Guess: неизвестный тип = исключение.
     """
     node_config = dict(node_config)
@@ -1478,16 +1478,16 @@ async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:
         raise ValueError(
             f"Node '{node_id}': type is required (поля: {keys})"
         )
-    
+
     try:
         node_type = NodeType(node_type_value) if isinstance(node_type_value, str) else node_type_value
     except ValueError:
         raise ValueError(f"Unknown node type: {node_type_value}")
-    
+
     container = get_container()
     try:
         node_class = container.node_registry.get(node_type)
     except ResourceNotFoundError:
         raise ValueError(f"Unknown node type: {node_type_value}")
-    
+
     return node_class.from_config(node_id, node_config)

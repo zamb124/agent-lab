@@ -5,11 +5,13 @@
 """
 
 from typing import Dict, List, Optional, Self
+
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
-from core.config.models import LLMConfig, PushConfig as CorePushConfig, S3Config
+from core.config.models import LLMConfig, S3Config
+from core.config.models import PushConfig as CorePushConfig
 
 FLOWS_PUBLIC_API_PREFIX = "/flows/api/v1"
 
@@ -86,9 +88,9 @@ class FlowSettings(BaseSettings):
     Наследуется от BaseSettings, добавляя поля для LLM, S3, внешних flows и т.д.
     Базовые поля (database, auth, logging и др.) — из родителя.
     """
-    
+
     service_name: str = Field(default="flows", description="Имя сервиса")
-    
+
     # Сервисные конфиги
     llm: LLMConfig = Field(default_factory=LLMConfig)
     s3: S3Config = Field(default_factory=S3Config)

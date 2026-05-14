@@ -2,21 +2,23 @@
 API для семантического поиска.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from apps.rag.config import get_rag_settings
+from core.billing.exceptions import BillingBalanceBlockedError
 from core.logging import get_logger
 from core.rag.base_provider import validate_metadata_filters
-from core.rag.models import RAGSearchResult
 from core.rag.factory import get_rag_provider
+from core.rag.models import RAGSearchResult
 from core.rag.post_retrieval_rerank import (
+    RerankerClientError,
     apply_rerank_after_retrieve,
     apply_rerank_after_retrieve_grouped,
-    RerankerClientError,
 )
-from core.billing.exceptions import BillingBalanceBlockedError
-from apps.rag.config import get_rag_settings
+
 from ..dependencies import ContainerDep
 from .namespace_access import require_registered_rag_namespace
 
@@ -55,25 +57,25 @@ async def search_in_namespace(
 ) -> SearchResponse:
     """
     Выполняет семантический поиск в namespace.
-    
+
     Args:
         namespace_id: ID namespace
         request: Параметры поиска
         provider: Имя провайдера (опционально)
-    
+
     Returns:
         Результаты поиска
     """
     await require_registered_rag_namespace(namespace_id, container)
 
     settings = get_rag_settings()
-    
+
     try:
         if request.filters is not None:
             validate_metadata_filters(request.filters)
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
-        
+
         search_kwargs: Dict[str, Any] = {}
         if request.channels is not None:
             search_kwargs["channels"] = request.channels
@@ -151,17 +153,17 @@ async def global_search(
 ) -> GlobalSearchResponse:
     """
     Выполняет поиск по нескольким namespace текущей компании.
-    
+
     Args:
         request: Параметры поиска
         provider: Имя провайдера (опционально)
-    
+
     Returns:
         Результаты поиска по каждому namespace
     """
     # Провайдер сам добавит company_id через контекст, просто передаем namespace names
     valid_namespace_ids = request.namespace_ids
-    
+
     if not valid_namespace_ids:
         raise HTTPException(
             status_code=400,
@@ -170,9 +172,9 @@ async def global_search(
 
     for ns_id in valid_namespace_ids:
         await require_registered_rag_namespace(ns_id, container)
-    
+
     settings = get_rag_settings()
-    
+
     try:
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
@@ -208,7 +210,7 @@ async def global_search(
             profile_sd=None,
             settings=settings,
         )
-        
+
         total_results = sum(len(r) for r in results.values())
         logger.info(f"Глобальный поиск '{request.query}': найдено {total_results} результатов")
 

@@ -7,7 +7,7 @@ from typing import Any, Optional
 import pytest
 
 from apps.browser.engine.page_lease_manager import PageLeaseManager
-from apps.browser.engine.types import ContextSignature, SessionMode
+from apps.browser.engine.types import ContextSignature
 
 
 class _FakePage:

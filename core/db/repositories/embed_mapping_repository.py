@@ -2,11 +2,11 @@
 Репозиторий для глобального маппинга embed_id -> company_id.
 """
 
-from core.logging import get_logger
 from typing import Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
+from core.logging import get_logger
 from core.models.embed_models import EmbedMapping
 
 logger = get_logger(__name__)
@@ -14,10 +14,10 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
     """
     Глобальный маппинг для поиска компании по embed_id.
     is_global=True - маппинг доступен глобально без префикса компании.
-    
+
     Ключи: embed_mapping:{embed_id}
     """
-    
+
     is_global = True
 
     def __init__(self, storage: Storage):
@@ -34,14 +34,14 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
 
     def _extract_entity_id(self, entity: EmbedMapping) -> str:
         return entity.embed_id
-    
+
     async def get_company_id(self, embed_id: str) -> Optional[str]:
         """
         Получение company_id по embed_id.
-        
+
         Args:
             embed_id: ID виджета
-            
+
         Returns:
             company_id или None если маппинг не найден
         """
@@ -49,17 +49,17 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
         if mapping:
             logger.debug(f"Найден маппинг для {embed_id} -> {mapping.company_id}")
             return mapping.company_id
-        
+
         logger.warning(f"Маппинг для {embed_id} не найден")
         return None
-    
+
     async def delete_by_embed_id(self, embed_id: str) -> bool:
         """
         Удаление маппинга по embed_id.
-        
+
         Args:
             embed_id: ID виджета
-            
+
         Returns:
             True если удален, False если не найден
         """

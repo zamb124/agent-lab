@@ -27,15 +27,14 @@ platform.billing.settlement_quantity_rub; правило llm_openrouter_usd_to_r
 
 from __future__ import annotations
 
-from core.models.billing_models import UsageType
-from core.tracing import attributes as trace_attr
-
 from core.billing.settlement_rules import (
     SettlementApplicationMode,
     SettlementRule,
     SettlementRuleMatch,
     SettlementRulesDocument,
 )
+from core.models.billing_models import UsageType
+from core.tracing import attributes as trace_attr
 
 
 def default_settlement_rules_document() -> SettlementRulesDocument:

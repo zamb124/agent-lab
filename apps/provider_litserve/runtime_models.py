@@ -5,8 +5,6 @@ from __future__ import annotations
 from threading import RLock
 from typing import Any, Literal
 
-from core.config.models import ProviderLitserveInfraConfig
-
 from apps.provider_litserve.model_registry import (
     build_embedding_api_pairs,
     build_rerank_api_pairs,
@@ -15,6 +13,7 @@ from apps.provider_litserve.model_registry import (
     build_vad_api_pairs,
     list_ready_active_models,
 )
+from core.config.models import ProviderLitserveInfraConfig
 
 ModelKind = Literal["llm", "embedding", "rerank", "stt", "tts", "vad"]
 

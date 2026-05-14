@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "patch_entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "draft_entity_id": { "type": "string" },
+          "entity_type": { "type": ["string", "null"] },
+          "entity_subtype": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] },
+          "attributes": {
+            "type": ["object", "null"],
+            "additionalProperties": true
+          },
+          "note_date": { "type": ["string", "null"] },
+          "due_date": { "type": ["string", "null"] },
+          "priority": { "type": ["string", "null"] },
+          "assignees": {
+            "type": ["array", "null"],
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["draft_entity_id"],
+        "additionalProperties": false
+      }
+    },
+    "repair_notes": { "type": ["string", "null"] }
+  },
+  "required": ["patch_entities"],
+  "additionalProperties": false
+}

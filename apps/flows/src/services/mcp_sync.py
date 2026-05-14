@@ -14,9 +14,8 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.mcp import MCPServerConfig, MCPToolInfo
 from apps.flows.src.models.tool_reference import ToolReference
-from core.logging import get_logger
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
-
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

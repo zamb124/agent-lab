@@ -34,7 +34,6 @@ from core.clients.voice_resolver import get_tts_streamer
 from core.context import get_context
 from core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 synthesize_router = APIRouter(prefix="/api/v1", tags=["voice-synthesize"])

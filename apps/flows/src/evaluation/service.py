@@ -11,9 +11,9 @@ from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 from apps.flows.src.container import get_container
 from apps.flows.src.db import EvaluationRepository
 from apps.flows.src.models import TestCaseConfig
-from apps.flows.src.models.flow_config import TestTarget
 from apps.flows.src.models.enums import TestTargetType
 from apps.flows.src.models.evaluation_result import EvaluationResult, EvaluationRunSummary
+from apps.flows.src.models.flow_config import TestTarget
 from core.logging import get_logger
 from core.state import ExecutionState
 
@@ -472,28 +472,28 @@ class EvaluationService:
     ) -> tuple[Callable, str]:
         """
         Создает callable и target_id на основе target конфигурации.
-        
+
         Returns:
             (callable, target_id)
         """
         target = test_case.target
-        
+
         # target не указан — тестируем текущий flow
         if not target:
             callable_ = await self._create_flow_callable(flow_id, branch_id)
             return callable_, f"{flow_id}:{branch_id}"
-        
+
         if target.type == TestTargetType.FLOW:
             target_flow_id = target.flow_id or flow_id
             target_branch_id = target.branch_id or branch_id
             callable_ = await self._create_flow_callable(target_flow_id, target_branch_id)
             return callable_, f"{target_flow_id}:{target_branch_id}"
-        
+
         if target.type == TestTargetType.NODE:
             callable_ = self._create_node_callable(target)
             node_id = target.node_config.get("node_id", "inline_node") if target.node_config else "inline_node"
             return callable_, f"node:{node_id}"
-        
+
         raise ValueError(f"Unknown target type: {target.type}")
 
     async def _create_flow_callable(
@@ -502,10 +502,10 @@ class EvaluationService:
         """Callable `run` для собранного flow (FlowFactory)."""
         container = get_container()
         runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
-        
+
         if not runtime_flow:
             raise ValueError(f"Flow not found: {flow_id}")
-        
+
         return runtime_flow.run
 
     def _create_node_callable(
@@ -514,18 +514,18 @@ class EvaluationService:
         """Создает callable для ноды из inline конфига."""
         if not target.node_config:
             raise ValueError("node_config is required for NODE target type")
-        
+
         container = get_container()
-        
+
         node_type = target.node_config.get("type")
         if not node_type:
             raise ValueError("node_config must contain 'type' field")
-        
+
         from apps.flows.src.models.enums import NodeType
         node_type_enum = NodeType(node_type)
-        
+
         node_class = container.node_registry.get(node_type_enum)
         node_id = target.node_config.get("node_id", "test_node")
         node = node_class.from_config(node_id, target.node_config)
-        
+
         return node.run

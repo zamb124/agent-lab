@@ -6,17 +6,15 @@ Endpoints:
 - /entities/{entity_id}/related - прямо связанные entities
 """
 
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from apps.crm.models.graph import (
-    InfluenceGraphResponse,
-    RelatedEntitiesResponse
-)
-from apps.crm.services.graph_service import GraphEntityLimitExceededError
 from apps.crm.dependencies import ContainerDep
+from apps.crm.models.graph import InfluenceGraphResponse, RelatedEntitiesResponse
+from apps.crm.services.graph_service import GraphEntityLimitExceededError
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -128,7 +126,7 @@ async def get_influence_graph(
     rel_types_list = None
     if relationship_types:
         rel_types_list = [rt.strip() for rt in relationship_types.split(",")]
-    
+
     try:
         graph = await container.graph_service.build_influence_graph(
             entity_id=entity_id,
@@ -175,15 +173,15 @@ async def get_related_entities(
 ):
     """
     Получить прямо связанные entities (1 уровень).
-    
+
     Args:
         entity_id: ID центральной entity
         direction: "incoming" | "outgoing" | "both"
         relationship_type: Фильтр по типу связи
-    
+
     Returns:
         Связанные entities разделенные по направлению
-    
+
     Raises:
         404: Entity не найдена
     """

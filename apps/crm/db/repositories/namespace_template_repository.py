@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import NamespaceTemplate, NamespaceTemplateType
+from core.db.utils import get_rowcount
 
 
 class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
@@ -39,9 +40,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
     async def count_all(self, company_id: Optional[str] = None) -> int:
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(func.count()).where(
-                NamespaceTemplate.company_id == effective_company_id
-            )
+            stmt = select(func.count()).where(NamespaceTemplate.company_id == effective_company_id)
             result = await session.execute(stmt)
             value = result.scalar()
             if value is None:
@@ -49,9 +48,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             return int(value)
 
     async def get_by_template_id(
-        self,
-        template_id: str,
-        company_id: Optional[str] = None
+        self, template_id: str, company_id: Optional[str] = None
     ) -> Optional[NamespaceTemplate]:
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -159,7 +156,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             )
             result = await session.execute(stmt)
             await session.commit()
-            return bool(result.rowcount)
+            return get_rowcount(result) > 0
 
     async def delete_template_with_types(self, template_key: str) -> bool:
         return await self.delete(template_key)

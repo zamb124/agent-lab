@@ -7,7 +7,6 @@ Traces API — OTEL-трейсы flows.
 Ответ совместим с platform-trace-viewer: { spans: [...] } где spans — дерево.
 """
 
-from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query

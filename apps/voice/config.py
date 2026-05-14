@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from typing import Optional
 
+from pydantic import Field
+
 from core.config import BaseSettings
 from core.config.models import (
     VoiceBargeInSettings,
     VoiceQueueSettings,
 )
-from pydantic import Field
 
 
 class VoiceServiceSettings(BaseSettings):

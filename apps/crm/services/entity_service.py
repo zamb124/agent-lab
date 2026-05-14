@@ -6,37 +6,16 @@
 """
 
 import asyncio
-import time
-from collections import deque
-from typing import Awaitable, Callable, List, Optional, Dict, Any, Tuple, Set, Literal
-
-from pydantic import BaseModel, ConfigDict, Field
-from datetime import datetime, timezone, date, timedelta
-import uuid
+import json
 import re
+import time
+import uuid
+from collections import deque
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Set, Tuple
 
-from apps.crm.db.models import CRMEntity, CRMTask, EntityType
-from apps.crm.models.api import (
-    AIAnalyzeRequest,
-    AIAnalyzeResponse,
-    AIAnalyzeRelationshipExtracted,
-    AIAnalysisDraftApplyResult,
-    AIAnalysisDraftPatchRequest,
-    AIAnalysisDraftStored,
-    AIAnalysisRelationshipDraft,
-    AIExtractedEntity,
-    DeduplicateResult,
-    EntityMergeRequest,
-)
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
-from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
-from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
-from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
-from apps.crm.db.repositories.task_repository import TaskRepository
-from apps.crm.db.models import Relationship
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
 from apps.crm.constants_graph import (
     COMPANY_ENTITY_TYPE,
     IN_CONTEXT_RELATIONSHIP_TYPE,
@@ -45,7 +24,38 @@ from apps.crm.constants_graph import (
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_USER_ID_ATTR,
 )
+from apps.crm.db.models import CRMEntity, CRMTask, EntityType, Relationship, RelationshipType
+from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
+from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
+from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
+from apps.crm.db.repositories.entity_repository import EntityRepository
+from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
+from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
+from apps.crm.db.repositories.task_repository import TaskRepository
+from apps.crm.models.api import (
+    AIAnalysisDraftApplyResult,
+    AIAnalysisDraftPatchRequest,
+    AIAnalysisDraftRepairFlowResult,
+    AIAnalysisDraftStored,
+    AIAnalysisRelationshipDraft,
+    AIAnalyzeRelationshipExtracted,
+    AIAnalyzeRequest,
+    AIAnalyzeResponse,
+    AIExtractedEntity,
+    DeduplicateResult,
+    DraftEntityPatch,
+    EntityMergeRequest,
+)
 from apps.crm.services.attachment_service import AttachmentService
+from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.crm_summary_ws_broadcast import (
+    broadcast_crm_daily_summary_updated,
+    broadcast_crm_period_summary_updated,
+)
+from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
+from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
+from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.file_text_reader import load_text_and_name_from_stored_file_id
 from apps.crm.services.note_attachment_description import (
     ATTACHMENT_SUMMARIZE_CHUNK_MAX_CHARS,
@@ -54,45 +64,37 @@ from apps.crm.services.note_attachment_description import (
     split_text_into_summarize_chunks,
     truncate_attachment_text_for_note,
 )
-from apps.crm.services.user_person_service import UserPersonService
-from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
-from apps.crm.services.crm_summary_ws_broadcast import (
-    broadcast_crm_daily_summary_updated,
-    broadcast_crm_period_summary_updated,
-)
-from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
-from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
-from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
+from apps.crm.services.user_person_service import UserPersonService
 from core.clients.a2a_client import A2AClient
-from core.company_ai import AICapability, resolve_llm_for_capability
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
-from core.models.identity_models import Namespace, NamespaceCRMSettings
 from core.models.i18n_models import Language
-import json
+from core.models.identity_models import Namespace, NamespaceCRMSettings
 
 logger = get_logger(__name__)
-from core.config import get_settings
-from apps.crm.config import get_crm_settings
-from apps.crm.services.task_board_presets import (
+from apps.crm.config import get_crm_settings  # noqa: E402
+from apps.crm.services.task_board_presets import (  # noqa: E402
     resolve_allowed_task_status_ids,
     resolve_task_board_stages,
     task_board_key,
 )
-from core.utils.chunked_async import map_reduce_tree, run_chunked_map
+from core.config import get_settings  # noqa: E402
+from core.utils.chunked_async import map_reduce_tree, run_chunked_map  # noqa: E402
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
 
 _AI_NOTE_ANALYSIS_ERROR_MAX_LEN = 8000
 
-_RESOLVED_NOTE_NEIGHBOR_REL_TYPES: frozenset[str] = frozenset({
-    "linked",
-    "mentions",
-    IN_CONTEXT_RELATIONSHIP_TYPE,
-    NOTE_VOICE_RELATIONSHIP_TYPE,
-})
+_RESOLVED_NOTE_NEIGHBOR_REL_TYPES: frozenset[str] = frozenset(
+    {
+        "linked",
+        "mentions",
+        IN_CONTEXT_RELATIONSHIP_TYPE,
+        NOTE_VOICE_RELATIONSHIP_TYPE,
+    }
+)
 
 SUMMARY_ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 _DAILY_SUMMARY_CARD_SNIPPET_MAX = 500
@@ -144,6 +146,7 @@ def _clamp_period_dates_for_summary(
 
 def _canonical_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
+
 
 ANALYSIS_DRAFT_APPLY_MAX_ROUNDS = 3
 
@@ -210,6 +213,9 @@ def _extract_entity_type_fields(entity_type) -> list[dict[str, Any]]:
             description = defn.get("description")
             if description:
                 field["description"] = description
+            json_type = defn.get("type")
+            if isinstance(json_type, str) and json_type.strip():
+                field["type"] = json_type.strip()
             if defn.get("type") == "enum" and isinstance(defn.get("values"), list):
                 field["values"] = defn["values"]
             result.append(field)
@@ -227,17 +233,27 @@ class _AnalyzePipelineState(BaseModel):
     attachment_summaries: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+_DRAFT_ONLY_ENTITY_ATTR_KEYS: frozenset[str] = frozenset({"platform_ai_draft_task_completed"})
+
+
+def _strip_draft_only_entity_attrs(attrs: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    out = dict(attrs or {})
+    for k in _DRAFT_ONLY_ENTITY_ATTR_KEYS:
+        out.pop(k, None)
+    return out
+
+
 class EntityService:
     """
     Сервис для работы с entities в CRM.
-    
+
     Основные функции:
     - CRUD operations для любого типа entity
     - AI анализ текста с составными промптами
     - Извлечение entities и relationships
     - Каскадное удаление через Saga pattern
     """
-    
+
     def __init__(
         self,
         entity_repo: EntityRepository,
@@ -253,8 +269,8 @@ class EntityService:
         access_grant_repo: AccessGrantRepository,
         access_request_repo: AccessRequestRepository,
         company_mapping_repo: CompanyMappingRepository,
-        company_repo: "CompanyRepository" = None,
-        access_control: "AccessControlService" = None,
+        company_repo: "CompanyRepository" = None,  # noqa: F821
+        access_control: "AccessControlService" = None,  # noqa: F821
         task_repository: Optional[TaskRepository] = None,
     ):
         self._entity_repo = entity_repo
@@ -273,7 +289,7 @@ class EntityService:
         self._company_repo = company_repo
         self._access_control = access_control
         self._task_repository = task_repository
-    
+
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
@@ -364,7 +380,11 @@ class EntityService:
         namespace: str,
         entity_subtype: Optional[str] = None,
     ) -> None:
-        """Проверяет attributes сущности на соответствие required_fields / optional_fields типа."""
+        """Проверяет attributes сущности на соответствие required_fields / optional_fields типа.
+
+        Перед проверкой приводит значения полей с type integer/number из строковой формы,
+        если это однозначно (типичный вывод LLM).
+        """
         type_id = entity_subtype or entity_type
         entity_type_model = await self._entity_type_repo.get_by_type_id(
             type_id,
@@ -374,6 +394,32 @@ class EntityService:
             raise ValueError(f"Entity type not found: {type_id}")
 
         required = entity_type_model.required_fields or {}
+        optional = entity_type_model.optional_fields or {}
+
+        def _field_spec(field_name: str) -> Optional[dict[str, Any]]:
+            req = required.get(field_name)
+            if isinstance(req, dict):
+                return req
+            opt = optional.get(field_name)
+            if isinstance(opt, dict):
+                return opt
+            return None
+
+        for attr_key in list(attributes.keys()):
+            val = attributes.get(attr_key)
+            if val is None:
+                continue
+            spec = _field_spec(attr_key)
+            if spec is None:
+                continue
+            expected_type_raw = spec.get("type")
+            if not isinstance(expected_type_raw, str):
+                continue
+            expected_type = expected_type_raw.strip()
+            if not expected_type:
+                continue
+            attributes[attr_key] = self._coerce_attribute_value_for_schema(val, expected_type)
+
         if not required:
             return
 
@@ -412,6 +458,58 @@ class EntityService:
             raise ValueError(f"Недопустимая стадия доски задач: {st_clean!r}")
 
     @staticmethod
+    def _parse_decimal_string_for_schema(raw: str) -> Optional[float]:
+        """Разбор строки в float для полей integer/number (пробелы, NBSP, запятые)."""
+        s = raw.strip().replace("\u00a0", "")
+        if s == "":
+            return None
+        compact = s.replace(" ", "")
+        candidates = [
+            compact,
+            compact.replace(",", "."),
+            compact.replace(",", ""),
+        ]
+        for cand in candidates:
+            try:
+                return float(cand)
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _coerce_attribute_value_for_schema(value: Any, expected_type: str) -> Any:
+        """Приводит значение к JSON-типу поля там, где это однозначно (числа из строк)."""
+        if expected_type == "integer":
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float):
+                return int(value) if value.is_integer() else value
+            if isinstance(value, str):
+                parsed = EntityService._parse_decimal_string_for_schema(value)
+                if parsed is None:
+                    return value
+                if not parsed.is_integer():
+                    return value
+                return int(parsed)
+            return value
+
+        if expected_type == "number":
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                parsed = EntityService._parse_decimal_string_for_schema(value)
+                if parsed is None:
+                    return value
+                return float(parsed)
+            return value
+
+        return value
+
+    @staticmethod
     def _check_field_type(value: Any, expected_type: str) -> bool:
         type_map = {
             "string": str,
@@ -425,7 +523,25 @@ class EntityService:
         python_type = type_map.get(expected_type)
         if python_type is None:
             return True
+        if expected_type == "integer":
+            if isinstance(value, bool):
+                return False
+            return isinstance(value, int)
+        if expected_type == "number":
+            if isinstance(value, bool):
+                return False
+            return isinstance(value, (int, float))
         return isinstance(value, python_type)
+
+    @staticmethod
+    def _draft_repair_field_type_rules_doc() -> str:
+        return (
+            "В спецификации полей типов сущностей ключ type задаёт JSON-тип значения атрибута: "
+            "string, integer, number, boolean, array, object, external_refs. "
+            "Для enum используйте type=enum и массив values из строк. "
+            "Числовые поля в черновике должны быть JSON-числами (не строками); "
+            "при сохранении строковые значения с однозначным числовым смыслом приводятся к integer/number."
+        )
 
     @staticmethod
     def _build_filter_operator_matrix() -> Dict[str, set[str]]:
@@ -461,7 +577,9 @@ class EntityService:
         }
 
     @staticmethod
-    def _collect_entity_type_field_specs(entity_type_model: EntityType) -> Dict[str, Dict[str, Any]]:
+    def _collect_entity_type_field_specs(
+        entity_type_model: EntityType,
+    ) -> Dict[str, Dict[str, Any]]:
         field_specs: Dict[str, Dict[str, Any]] = {}
         required_fields = entity_type_model.required_fields or {}
         optional_fields = entity_type_model.optional_fields or {}
@@ -557,7 +675,9 @@ class EntityService:
             if not field_name.startswith("attributes."):
                 raise ValueError(f"Unsupported filter field: {field_name}")
             if type_id is None:
-                raise ValueError("entity_type or entity_subtype is required for attributes.* filters")
+                raise ValueError(
+                    "entity_type or entity_subtype is required for attributes.* filters"
+                )
             attr_name = field_name.split(".", 1)[1]
             field_spec = field_specs.get(attr_name)
             if field_spec is None:
@@ -583,7 +703,9 @@ class EntityService:
             field_type = _resolve_field_type(field_name)
             allowed_ops = operator_matrix.get(field_type, {"$eq", "$ne"})
             if operator not in allowed_ops:
-                raise ValueError(f"Operator '{operator}' is not allowed for field type '{field_type}'")
+                raise ValueError(
+                    f"Operator '{operator}' is not allowed for field type '{field_type}'"
+                )
             self._validate_filter_value_type(field_type, operator, value)
             used_field_types[field_name] = field_type
 
@@ -606,8 +728,7 @@ class EntityService:
         )
         if et is None or not et.is_voice_target:
             raise ValueError(
-                f"Тип {ent.entity_type!r} не может быть голосом заметки "
-                f"(is_voice_target=False)"
+                f"Тип {ent.entity_type!r} не может быть голосом заметки (is_voice_target=False)"
             )
 
     async def _validate_context_target(self, entity_id: str, company_id: str) -> None:
@@ -654,8 +775,12 @@ class EntityService:
         if mode == "none":
             return None
         if mode == "self":
-            return await self._user_person_service.get_or_create_person_entity_id(user_id, company_id)
-        last_id = await self._user_person_service.resolve_last_voice_entity_id(user_id, company_id, namespace)
+            return await self._user_person_service.get_or_create_person_entity_id(
+                user_id, company_id
+            )
+        last_id = await self._user_person_service.resolve_last_voice_entity_id(
+            user_id, company_id, namespace
+        )
         if last_id:
             await self._validate_voice_target(last_id, company_id)
             return last_id
@@ -711,7 +836,9 @@ class EntityService:
                 updated_at=now,
             )
             await self._relationship_repo.create(voice_row)
-            await self._user_person_service.record_last_voice_entity(user_id, namespace, resolved_voice_id)
+            await self._user_person_service.record_last_voice_entity(
+                user_id, namespace, resolved_voice_id
+            )
         if resolved_context_id:
             ctx_row = Relationship(
                 relationship_id=str(uuid.uuid4()),
@@ -814,7 +941,9 @@ class EntityService:
             return syn
         return f"{syn} id={row.entity_id}"
 
-    async def _list_notes_for_date(self, date_str: str, namespace: Optional[str] = None) -> List[CRMEntity]:
+    async def _list_notes_for_date(
+        self, date_str: str, namespace: Optional[str] = None
+    ) -> List[CRMEntity]:
         query_filters: dict[str, Any] = {
             "field": "note_date",
             "op": "$eq",
@@ -860,9 +989,9 @@ class EntityService:
         notes = await self._list_notes_for_date(date_str=date_str, namespace=namespace)
         source_version = self._build_source_version(notes)
         return notes, source_version
-    
+
     async def create_entity(
-        self, 
+        self,
         entity_type: str,
         name: str,
         description: Optional[str] = None,
@@ -873,10 +1002,10 @@ class EntityService:
         context_entity_id: Optional[str] = None,
         voice_entity_in_payload: bool = False,
         context_entity_in_payload: bool = False,
-        **kwargs
+        **kwargs,
     ) -> CRMEntity:
         """Создает новую entity"""
-        
+
         # user_id ОБЯЗАТЕЛЕН - берем из kwargs или из контекста
         user_id = kwargs.pop("user_id", None)
         if not user_id:
@@ -939,7 +1068,7 @@ class EntityService:
             attributes=attributes or {},
             tags=tags or [],
             company_id=self._get_company_id(),
-            **kwargs
+            **kwargs,
         )
 
         attachment_text_merged = False
@@ -969,7 +1098,9 @@ class EntityService:
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
 
         if attachment_text_merged:
-            from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
+            from apps.crm.services.note_markdown_format_schedule import (
+                schedule_note_markdown_format,
+            )
 
             await schedule_note_markdown_format(
                 note_id=entity.entity_id,
@@ -1020,14 +1151,13 @@ class EntityService:
             )
 
         return entity
-    
+
     async def get_entity(
-        self, 
+        self,
         entity_id: str,
-        
     ) -> Optional[CRMEntity]:
         """Получает entity по ID"""
-        
+
         return await self._entity_repo.get(entity_id)
 
     async def list_entities_by_ids_ordered(self, entity_ids: List[str]) -> List[CRMEntity]:
@@ -1058,7 +1188,10 @@ class EntityService:
         if survivor.namespace != source.namespace:
             raise ValueError("Разный namespace: слияние запрещено")
 
-        if survivor.entity_type == NOTE_ROOT_ENTITY_TYPE_ID and source.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
+        if (
+            survivor.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
+            and source.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
+        ):
             raise ValueError("Слияние двух заметок (note) не поддерживается")
 
         mapping_survivor = await self._company_mapping_repo.get_by_entity(survivor_id)
@@ -1069,9 +1202,7 @@ class EntityService:
         for ent, role in ((survivor, "survivor"), (source, "source")):
             attrs = ent.attributes or {}
             if attrs.get(PLATFORM_USER_ID_ATTR):
-                raise ValueError(
-                    f"Слияние персональной contact-сущности ({role}) запрещено"
-                )
+                raise ValueError(f"Слияние персональной contact-сущности ({role}) запрещено")
 
         scalar_choices = dict(body.scalar_choices)
         attr_choices = dict(body.attribute_choices)
@@ -1098,8 +1229,7 @@ class EntityService:
         extra_scalar = set(scalar_choices) - conflict_scalar_keys
         if extra_scalar:
             raise ValueError(
-                "Лишние ключи в scalar_choices (нет конфликта): "
-                + ", ".join(sorted(extra_scalar))
+                "Лишние ключи в scalar_choices (нет конфликта): " + ", ".join(sorted(extra_scalar))
             )
 
         sa = dict(survivor.attributes or {})
@@ -1119,9 +1249,7 @@ class EntityService:
             else:
                 conflict_attr_keys.add(k)
                 if k not in attr_choices:
-                    raise ValueError(
-                        f"Конфликт attributes[{k!r}]: укажите attribute_choices"
-                    )
+                    raise ValueError(f"Конфликт attributes[{k!r}]: укажите attribute_choices")
                 side = attr_choices[k]
                 if side not in ("survivor", "source"):
                     raise ValueError(f"Недопустимое значение attribute_choices[{k!r}]: {side!r}")
@@ -1130,8 +1258,7 @@ class EntityService:
         extra_attr = set(attr_choices) - conflict_attr_keys
         if extra_attr:
             raise ValueError(
-                "Лишние ключи в attribute_choices (нет конфликта): "
-                + ", ".join(sorted(extra_attr))
+                "Лишние ключи в attribute_choices (нет конфликта): " + ", ".join(sorted(extra_attr))
             )
 
         def _union_str_lists(a: List[str], b: List[str]) -> List[str]:
@@ -1140,9 +1267,7 @@ class EntityService:
         merged_tags = _union_str_lists(survivor.tags, source.tags)
         merged_assignees = _union_str_lists(survivor.assignees, source.assignees)
         merged_attachments = list(
-            dict.fromkeys(
-                [*(survivor.attachment_ids or []), *(source.attachment_ids or [])]
-            )
+            dict.fromkeys([*(survivor.attachment_ids or []), *(source.attachment_ids or [])])
         )
 
         await self._relationship_repo.rewrite_entity_id(company_id, source_id, survivor_id)
@@ -1152,14 +1277,10 @@ class EntityService:
             company_id, source_id, survivor_id
         )
 
-        await self._access_grant_repo.remap_entity_resource_id(
-            company_id, source_id, survivor_id
-        )
+        await self._access_grant_repo.remap_entity_resource_id(company_id, source_id, survivor_id)
         await self._access_grant_repo.deduplicate_entity_grants(company_id, survivor_id)
 
-        await self._access_request_repo.remap_entity_resource_id(
-            company_id, source_id, survivor_id
-        )
+        await self._access_request_repo.remap_entity_resource_id(company_id, source_id, survivor_id)
         await self._access_request_repo.deduplicate_pending_entity_requests(survivor_id)
 
         source_fresh = await self._entity_repo.get(source_id)
@@ -1193,9 +1314,9 @@ class EntityService:
         if out is None:
             raise ValueError("Сущность survivor не найдена после слияния")
         return (out, source_id)
-    
+
     async def update_entity(
-        self, 
+        self,
         entity_id: str,
         updates: Dict[str, Any],
         voice_entity_id: Optional[str] = None,
@@ -1204,8 +1325,7 @@ class EntityService:
         context_entity_in_payload: bool = False,
     ) -> CRMEntity:
         """Обновляет entity"""
-        
-        
+
         entity = await self._entity_repo.get(entity_id)
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
@@ -1218,7 +1338,11 @@ class EntityService:
         next_namespace = self._resolve_namespace_for_write(
             updates["namespace"] if "namespace" in updates else entity.namespace
         )
-        next_entity_type = updates["entity_type"] if "entity_type" in updates else getattr(entity, "entity_type", None)
+        next_entity_type = (
+            updates["entity_type"]
+            if "entity_type" in updates
+            else getattr(entity, "entity_type", None)
+        )
         next_entity_subtype = (
             updates["entity_subtype"]
             if "entity_subtype" in updates
@@ -1278,7 +1402,7 @@ class EntityService:
 
         entity.updated_at = datetime.now(timezone.utc)
         await self._entity_repo.update(entity)
-        
+
         logger.info(f"Updated entity: {entity_id}")
 
         if is_note:
@@ -1290,12 +1414,18 @@ class EntityService:
                     date_str=old_note_date,
                     namespace=old_namespace,
                 )
-            if new_note_date is not None and (new_note_date != old_note_date or new_namespace != old_namespace):
+            if new_note_date is not None and (
+                new_note_date != old_note_date or new_namespace != old_namespace
+            ):
                 await self.enqueue_daily_summary_rebuild(
                     date_str=new_note_date,
                     namespace=new_namespace,
                 )
-            if new_note_date is not None and new_note_date == old_note_date and new_namespace == old_namespace:
+            if (
+                new_note_date is not None
+                and new_note_date == old_note_date
+                and new_namespace == old_namespace
+            ):
                 await self.enqueue_daily_summary_rebuild(
                     date_str=new_note_date,
                     namespace=new_namespace,
@@ -1354,7 +1484,7 @@ class EntityService:
                 await self._sync_note_mention_links(entity.entity_id, mention_ids, ns)
 
         return entity
-    
+
     async def list_entities(
         self,
         entity_type: Optional[str] = None,
@@ -1376,7 +1506,11 @@ class EntityService:
         user_id = self._get_user_id()
         company_id = self._get_company_id()
 
-        eff_entity_type, list_note_family, note_family_legacy = await self._list_by_cursor_note_family_args(
+        (
+            eff_entity_type,
+            list_note_family,
+            note_family_legacy,
+        ) = await self._list_by_cursor_note_family_args(
             entity_type,
             entity_subtype,
             namespace,
@@ -1430,7 +1564,11 @@ class EntityService:
         namespace: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Возвращает границы timeline по created_at."""
-        min_created_at, max_created_at, total_entities = await self._entity_repo.get_created_at_bounds(
+        (
+            min_created_at,
+            max_created_at,
+            total_entities,
+        ) = await self._entity_repo.get_created_at_bounds(
             entity_type=entity_type,
             entity_subtype=entity_subtype,
             namespace=namespace,
@@ -1440,7 +1578,7 @@ class EntityService:
             "max_created_at": max_created_at.isoformat() if max_created_at else None,
             "total_entities": total_entities,
         }
-    
+
     @staticmethod
     def _get_related_entity_id(relationship: Relationship, current_entity_id: str) -> str:
         if relationship.source_entity_id == current_entity_id:
@@ -1481,26 +1619,32 @@ class EntityService:
     ) -> List[str]:
         """
         Возвращает все сущности, созданные этой заметкой, которые не имеют связей с ДРУГИМИ заметками.
-        
+
         Логика:
         1. Строим граф связей заметки
         2. Для каждой сущности проверяем: есть ли связи с ДРУГИМИ заметками (entity_type == NOTE_ROOT_ENTITY_TYPE_ID и entity_id != note_entity_id)
         3. Если нет таких связей - сущность подлежит удалению
-        
+
         Это защищает от удаления сущностей, которые связаны с другими заметками.
         """
         relationships_by_entity = await self._build_entity_component_relationships(note_entity_id)
         component_order = list(relationships_by_entity.keys())
 
-        logger.info(f"[_collect_exclusive_related_entities_for_note] note_id={note_entity_id}, component_order={component_order}")
+        logger.info(
+            f"[_collect_exclusive_related_entities_for_note] note_id={note_entity_id}, component_order={component_order}"
+        )
 
         # Получаем source_entity_id и entity_type для всех сущностей в компоненте
         entities = await self._entity_repo.get_by_ids(component_order)
         source_entity_id_map = {e.entity_id: e.source_entity_id for e in entities}
         entity_type_map = {e.entity_id: e.entity_type for e in entities}
 
-        logger.info(f"[_collect_exclusive_related_entities_for_note] source_entity_id_map: {source_entity_id_map}")
-        logger.info(f"[_collect_exclusive_related_entities_for_note] entity_type_map: {entity_type_map}")
+        logger.info(
+            f"[_collect_exclusive_related_entities_for_note] source_entity_id_map: {source_entity_id_map}"
+        )
+        logger.info(
+            f"[_collect_exclusive_related_entities_for_note] entity_type_map: {entity_type_map}"
+        )
 
         exclusive_entity_ids = []
 
@@ -1510,18 +1654,20 @@ class EntityService:
 
             # Сущность должна быть создана этой заметкой
             if source_entity_id_map.get(entity_id) != note_entity_id:
-                logger.info(f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} not created by this note (source={source_entity_id_map.get(entity_id)})")
+                logger.info(
+                    f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} not created by this note (source={source_entity_id_map.get(entity_id)})"
+                )
                 continue
 
             # Проверяем связи с ДРУГИМИ заметками
             relationships = relationships_by_entity.get(entity_id, [])
             has_other_note_connection = False
             other_note_connections = []
-            
+
             for relationship in relationships:
                 related_entity_id = self._get_related_entity_id(relationship, entity_id)
                 related_type = entity_type_map.get(related_entity_id)
-                
+
                 # Если связанная сущность - заметка и это НЕ текущая заметка
                 if related_type == NOTE_ROOT_ENTITY_TYPE_ID and related_entity_id != note_entity_id:
                     has_other_note_connection = True
@@ -1529,11 +1675,17 @@ class EntityService:
 
             if not has_other_note_connection:
                 exclusive_entity_ids.append(entity_id)
-                logger.info(f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} can be deleted (no connections to other notes)")
+                logger.info(
+                    f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} can be deleted (no connections to other notes)"
+                )
             else:
-                logger.info(f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} has connections to other notes: {other_note_connections}")
+                logger.info(
+                    f"[_collect_exclusive_related_entities_for_note] Entity {entity_id} has connections to other notes: {other_note_connections}"
+                )
 
-        logger.info(f"[_collect_exclusive_related_entities_for_note] final exclusive_entity_ids: {exclusive_entity_ids}")
+        logger.info(
+            f"[_collect_exclusive_related_entities_for_note] final exclusive_entity_ids: {exclusive_entity_ids}"
+        )
         return exclusive_entity_ids
 
     async def get_exclusive_related_entities_for_note(
@@ -1541,7 +1693,9 @@ class EntityService:
         note_entity_id: str,
     ) -> List[Dict[str, Any]]:
         """Возвращает список сущностей, которые будут удалены каскадно вместе с заметкой."""
-        exclusive_entity_ids = await self._collect_exclusive_related_entities_for_note(note_entity_id)
+        exclusive_entity_ids = await self._collect_exclusive_related_entities_for_note(
+            note_entity_id
+        )
         if not exclusive_entity_ids:
             return []
 
@@ -1568,6 +1722,7 @@ class EntityService:
 
         saga = EntityDeletionSaga()
         deleted_relationships: List[Relationship] = []
+
         async def delete_relationships() -> None:
             nonlocal deleted_relationships
             relationships = await self._relationship_repo.get_by_entity(entity_id)
@@ -1590,21 +1745,27 @@ class EntityService:
         async def restore_entity_to_db() -> None:
             await self._entity_repo.create(entity)
 
-        saga.add_step(SagaStep(
-            name="Delete relationships",
-            execute_fn=delete_relationships,
-            compensate_fn=restore_relationships
-        ))
-        saga.add_step(SagaStep(
-            name="Delete attachments",
-            execute_fn=delete_attachments,
-            compensate_fn=restore_attachments
-        ))
-        saga.add_step(SagaStep(
-            name="Delete entity",
-            execute_fn=delete_entity_from_db,
-            compensate_fn=restore_entity_to_db
-        ))
+        saga.add_step(
+            SagaStep(
+                name="Delete relationships",
+                execute_fn=delete_relationships,
+                compensate_fn=restore_relationships,
+            )
+        )
+        saga.add_step(
+            SagaStep(
+                name="Delete attachments",
+                execute_fn=delete_attachments,
+                compensate_fn=restore_attachments,
+            )
+        )
+        saga.add_step(
+            SagaStep(
+                name="Delete entity",
+                execute_fn=delete_entity_from_db,
+                compensate_fn=restore_entity_to_db,
+            )
+        )
 
         await saga.execute()
         return entity
@@ -1626,7 +1787,9 @@ class EntityService:
             return False
 
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
-            exclusive_related_entity_ids = await self._collect_exclusive_related_entities_for_note(entity_id)
+            exclusive_related_entity_ids = await self._collect_exclusive_related_entities_for_note(
+                entity_id
+            )
             for related_entity_id in exclusive_related_entity_ids:
                 related_entity = await self._entity_repo.get(related_entity_id)
                 if related_entity is None:
@@ -1635,7 +1798,9 @@ class EntityService:
                     )
                     continue
                 await self._delete_entity_with_saga(related_entity_id)
-                logger.info(f"Deleted exclusive related entity for note {entity_id}: {related_entity_id}")
+                logger.info(
+                    f"Deleted exclusive related entity for note {entity_id}: {related_entity_id}"
+                )
 
             await self._delete_entity_with_saga(entity_id)
             logger.info(
@@ -1664,7 +1829,7 @@ class EntityService:
             )
 
         return True
-    
+
     async def search_entities(
         self,
         query: str,
@@ -1771,17 +1936,17 @@ class EntityService:
         """
         if not text or len(text) < 3:
             return []
-        
+
         words = text.lower().split()
         search_phrases = []
-        
+
         for i in range(len(words)):
             if i + 1 < len(words):
-                search_phrases.append(f"{words[i]} {words[i+1]}")
+                search_phrases.append(f"{words[i]} {words[i + 1]}")
             search_phrases.append(words[i])
-        
+
         unique_phrases = list(set(search_phrases))[:5]
-        
+
         combined_query = " ".join(unique_phrases)
 
         scored = await self._entity_repo.search_with_similarity(
@@ -1798,11 +1963,12 @@ class EntityService:
         )
 
         matched = [
-            entity for entity in entities
+            entity
+            for entity in entities
             if any(phrase in entity.name.lower() for phrase in unique_phrases)
         ]
         return matched if matched else entities[:10]
-    
+
     @staticmethod
     def _normalize_name_for_relationship_key(name: str) -> str:
         s = name.strip().lower()
@@ -1814,12 +1980,9 @@ class EntityService:
 
     def _assign_draft_ids_to_note_and_entities(self, state: _AnalyzePipelineState) -> None:
         if state.note is not None:
-            state.note = state.note.model_copy(
-                update={"draft_entity_id": str(uuid.uuid4())}
-            )
+            state.note = state.note.model_copy(update={"draft_entity_id": str(uuid.uuid4())})
         state.entities = [
-            e.model_copy(update={"draft_entity_id": str(uuid.uuid4())})
-            for e in state.entities
+            e.model_copy(update={"draft_entity_id": str(uuid.uuid4())}) for e in state.entities
         ]
 
     def _draft_entity_key_to_id_index(
@@ -1878,14 +2041,16 @@ class EntityService:
                 logger.warning(
                     "analyze: LLM вернул связь с source, для которого нет черновика сущности: "
                     "type=%r name=%r — связь пропущена",
-                    st, sn,
+                    st,
+                    sn,
                 )
                 continue
             if tk not in key_index:
                 logger.warning(
                     "analyze: LLM вернул связь с target, для которого нет черновика сущности: "
                     "type=%r name=%r — связь пропущена",
-                    tt, tn,
+                    tt,
+                    tn,
                 )
                 continue
             out.append(
@@ -1951,7 +2116,13 @@ class EntityService:
 
         await self.update_entity(note_id, {"attributes": attrs})
 
-    async def record_note_analysis_failure(self, note_id: str, error_message: str) -> None:
+    async def record_note_analysis_failure(
+        self,
+        note_id: str,
+        error_message: str,
+        *,
+        apply_failures: Optional[List[Dict[str, str]]] = None,
+    ) -> None:
         note = await self._entity_repo.get(note_id)
         if note is None:
             return
@@ -1968,6 +2139,22 @@ class EntityService:
         attrs = dict(note.attributes or {})
         attrs["ai_analysis_last_error"] = msg
         attrs["ai_analysis_last_error_at"] = datetime.now(timezone.utc).isoformat()
+        if apply_failures:
+            cleaned: List[Dict[str, str]] = []
+            for row in apply_failures:
+                if not isinstance(row, dict):
+                    continue
+                cleaned.append(
+                    {
+                        "draft_entity_id": str(row.get("draft_entity_id", "")),
+                        "entity_name": str(row.get("entity_name", "")),
+                        "entity_type": str(row.get("entity_type", "")),
+                        "message": str(row.get("message", "")),
+                    }
+                )
+            attrs["ai_analysis_apply_failures"] = cleaned
+        else:
+            attrs.pop("ai_analysis_apply_failures", None)
         await self.update_entity(note_id, {"attributes": attrs})
 
     async def clear_note_analysis_error(self, note_id: str) -> None:
@@ -1975,42 +2162,215 @@ class EntityService:
         if note is None:
             return
         attrs = dict(note.attributes or {})
-        if "ai_analysis_last_error" not in attrs and "ai_analysis_last_error_at" not in attrs:
+        error_keys = (
+            "ai_analysis_last_error",
+            "ai_analysis_last_error_at",
+            "ai_analysis_apply_failures",
+        )
+        if not any(k in attrs for k in error_keys):
             return
-        attrs.pop("ai_analysis_last_error", None)
-        attrs.pop("ai_analysis_last_error_at", None)
+        for k in error_keys:
+            attrs.pop(k, None)
         await self.update_entity(note_id, {"attributes": attrs})
 
-    async def request_note_markdown_format(self, note_id: str) -> str:
-        """Поставить в очередь форматирование текста заметки в Markdown (LitServe, TaskIQ)."""
-        from apps.crm.services.note_markdown_format_schedule import enqueue_note_markdown_format_task
+    async def _load_all_relationship_types_for_company(self) -> List[RelationshipType]:
+        out: List[RelationshipType] = []
+        offset = 0
+        limit = 200
+        while True:
+            page = await self._relationship_type_repo.get_all_for_company(
+                include_system=True,
+                limit=limit,
+                offset=offset,
+            )
+            if not page:
+                break
+            out.extend(page)
+            if len(page) < limit:
+                break
+            offset += limit
+        return out
 
-        note = await self.get_entity(note_id)
-        if not note:
+    async def _validate_draft_repair_patch_list(
+        self,
+        draft: AIAnalysisDraftStored,
+        patches: List[DraftEntityPatch],
+        *,
+        namespace_for_types: str,
+    ) -> None:
+        by_id: Dict[str, AIExtractedEntity] = {
+            e.draft_entity_id: e for e in draft.entities if e.draft_entity_id
+        }
+        if draft.note is not None and draft.note.draft_entity_id:
+            n_id = draft.note.draft_entity_id
+            by_id[n_id] = draft.note
+        seen_ids: Set[str] = set()
+        for p in patches:
+            did = p.draft_entity_id
+            if did in seen_ids:
+                raise ValueError(f"draft_repair: дубликат draft_entity_id в patch_entities: {did!r}")
+            seen_ids.add(did)
+            ent = by_id.get(did)
+            if ent is None:
+                raise ValueError(f"draft_repair: неизвестный draft_entity_id: {did!r}")
+
+            et_after = ent.entity_type
+            if p.entity_type is not None:
+                s = str(p.entity_type).strip()
+                if not s:
+                    raise ValueError(f"draft_repair: пустой entity_type (draft_entity_id={did!r})")
+                et_after = s
+
+            sub_after = ent.entity_subtype
+            if p.entity_subtype is not None:
+                st = str(p.entity_subtype).strip()
+                sub_after = st if st else None
+
+            merged_attrs = dict(ent.attributes or {})
+            if p.attributes is not None:
+                merged_attrs.update(p.attributes)
+
+            await self._validate_entity_attributes(
+                et_after,
+                merged_attrs,
+                namespace_for_types,
+                entity_subtype=sub_after,
+            )
+
+    async def repair_analysis_draft_via_flow(self, note_id: str) -> AIAnalysisDraftStored:
+        """Вызывает CRM flow (ветка draft_repair) и патчит ai_analysis_draft."""
+        from core.config import get_settings
+
+        note, draft = await self._load_analysis_draft_from_note(note_id)
+        attrs = note.attributes or {}
+        summary_raw = attrs.get("ai_analysis_last_error")
+        summary = summary_raw.strip() if isinstance(summary_raw, str) else ""
+        failures_raw = attrs.get("ai_analysis_apply_failures")
+        has_failures_list = isinstance(failures_raw, list) and len(failures_raw) > 0
+        if not summary and not has_failures_list:
+            raise ValueError(
+                "Нет сохранённой ошибки применения черновика — починка по запросу не выполняется"
+            )
+
+        ns_for_types = self._normalize_namespace(note.namespace) or (note.namespace or "default")
+
+        entity_rows = await self._entity_type_repo.load_all_entity_types_for_company(namespace=ns_for_types)
+        rel_rows = await self._load_all_relationship_types_for_company()
+        parent_map = await self._entity_type_repo.get_parent_type_id_map_for_namespace(ns_for_types)
+
+        cleaned_failures: List[Dict[str, str]] = []
+        if isinstance(failures_raw, list):
+            for row in failures_raw:
+                if not isinstance(row, dict):
+                    continue
+                cleaned_failures.append(
+                    {
+                        "draft_entity_id": str(row.get("draft_entity_id", "")),
+                        "entity_name": str(row.get("entity_name", "")),
+                        "entity_type": str(row.get("entity_type", "")),
+                        "message": str(row.get("message", "")),
+                    }
+                )
+
+        catalog_et = [
+            {
+                "type_id": et.type_id,
+                "namespace": et.namespace,
+                "parent_type_id": et.parent_type_id,
+                "name": et.name,
+                "extractable": et.extractable,
+                "required_fields": et.required_fields or {},
+                "optional_fields": et.optional_fields or {},
+            }
+            for et in entity_rows
+        ]
+        catalog_rt = [
+            {
+                "type_id": rt.type_id,
+                "name": rt.name,
+                "description": rt.description,
+                "prompt": rt.prompt,
+                "is_directed": rt.is_directed,
+                "inverse_type_id": rt.inverse_type_id,
+            }
+            for rt in rel_rows
+        ]
+
+        repair_context = {
+            "draft": draft.model_dump(mode="json"),
+            "apply_failure_summary": summary,
+            "apply_failures": cleaned_failures,
+            "entity_types_catalog": catalog_et,
+            "relationship_types_catalog": catalog_rt,
+            "parent_type_map": parent_map,
+            "type_constraints_for_llm": EntityService._draft_repair_field_type_rules_doc(),
+        }
+        repair_context_json = json.dumps(repair_context, ensure_ascii=False)
+        variables: Dict[str, Any] = {
+            **_crm_llm_interface_language_vars(),
+            "repair_context_json": repair_context_json,
+        }
+
+        settings_global = get_settings()
+        flows_base_url = settings_global.server.get_flows_service_url().rstrip("/")
+        crm_settings = get_crm_settings()
+        timeout_sec = crm_settings.analysis_draft_repair_a2a_timeout_seconds
+
+        response = await self._a2a_client.send_task(
+            base_url=f"{flows_base_url}/flows/api/v1/crm",
+            content="CRM: починка черновика AI-анализа заметки",
+            branch_id="draft_repair",
+            metadata={"variables": variables},
+            timeout=timeout_sec,
+        )
+
+        result_data = self._extract_data_from_a2a_response(response)
+        if not result_data or "patch_entities" not in result_data:
+            raise ValueError("Ответ flow draft_repair не содержит patch_entities")
+
+        try:
+            flow_result = AIAnalysisDraftRepairFlowResult.model_validate(result_data)
+        except ValidationError as exc:
+            raise ValueError(f"Невалидный ответ flow draft_repair: {exc}") from exc
+
+        if not flow_result.patch_entities:
+            notes = flow_result.repair_notes.strip() if isinstance(flow_result.repair_notes, str) else ""
+            if notes:
+                raise ValueError(notes)
+            raise ValueError("Модель не вернула patch_entities для исправления черновика")
+
+        await self._validate_draft_repair_patch_list(
+            draft,
+            flow_result.patch_entities,
+            namespace_for_types=ns_for_types,
+        )
+
+        patch_body = AIAnalysisDraftPatchRequest(
+            expected_version=draft.draft_version,
+            patch_entities=list(flow_result.patch_entities),
+        )
+        updated = await self.patch_analysis_draft(note_id, patch_body)
+        await self.clear_note_analysis_error(note_id)
+        return updated
+
+    async def discard_note_analysis_draft(self, note_id: str) -> None:
+        note = await self._entity_repo.get(note_id)
+        if note is None:
             raise ValueError("Заметка не найдена")
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
             raise ValueError("Ожидалась заметка (entity_type=note)")
-
-        ctx = get_context()
-        user_id = ctx.user.user_id if ctx and ctx.user else None
-        company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-        if not user_id or not company_id:
-            raise ValueError("Контекст пользователя или компании отсутствует")
-        if not await self._access_control.can_write_entity(note, user_id, company_id):
-            raise PermissionError("Недостаточно прав для изменения заметки")
-
-        desc = note.description
-        if desc is None or not str(desc).strip():
-            raise ValueError("Текст заметки пуст")
-
-        ns = note.namespace or "default"
-        await enqueue_note_markdown_format_task(
-            note_id=note_id,
-            company_id=company_id,
-            namespace=ns,
-            expected_updated_at_iso=note.updated_at.isoformat(),
+        attrs = dict(note.attributes or {})
+        keys = (
+            "ai_analysis_draft",
+            "ai_analysis_last_error",
+            "ai_analysis_last_error_at",
+            "ai_analysis_apply_failures",
         )
-        return note_id
+        if not any(k in attrs for k in keys):
+            return
+        for k in keys:
+            attrs.pop(k, None)
+        await self.update_entity(note_id, {"attributes": attrs})
 
     async def _load_analysis_draft_from_note(
         self,
@@ -2072,6 +2432,35 @@ class EntityService:
             and r.target_draft_entity_id in remaining_draft_ids
         ]
 
+        ns_for_types = self._normalize_namespace(note.namespace) or (note.namespace or "default")
+
+        existing_entity_ids: Set[str] = {
+            e.draft_entity_id for e in entities if e.draft_entity_id
+        }
+        if draft.note is not None and draft.note.draft_entity_id:
+            existing_entity_ids.add(draft.note.draft_entity_id)
+        existing_entity_ids.update(draft.known_entity_id_map.keys())
+
+        seen_new_ent: Set[str] = set()
+        appended_entities: List[AIExtractedEntity] = []
+        for ent in body.add_entities:
+            did = ent.draft_entity_id
+            if not did:
+                raise ValueError("add_entities: отсутствует draft_entity_id")
+            if did in existing_entity_ids or did in seen_new_ent:
+                raise ValueError(f"add_entities: draft_entity_id уже занят или повторяется: {did!r}")
+            seen_new_ent.add(did)
+            await self._resolve_storage_type_for_note_family(
+                ent.entity_type,
+                ent.entity_subtype,
+                ns_for_types,
+            )
+            appended_entities.append(ent)
+
+        entities = [*entities, *appended_entities]
+        existing_entity_ids.update(seen_new_ent)
+
+        note_row = draft.note
         by_draft_entity = {e.draft_entity_id: i for i, e in enumerate(entities)}
         seen_entity_patch: Set[str] = set()
         for p in body.patch_entities:
@@ -2082,15 +2471,61 @@ class EntityService:
             seen_entity_patch.add(p.draft_entity_id)
             idx = by_draft_entity.get(p.draft_entity_id)
             if idx is None:
+                if (
+                    note_row is not None
+                    and note_row.draft_entity_id
+                    and p.draft_entity_id == note_row.draft_entity_id
+                ):
+                    ent = note_row
+                    updates: Dict[str, Any] = {}
+                    if p.entity_type is not None:
+                        et = str(p.entity_type).strip()
+                        if not et:
+                            raise ValueError(
+                                f"patch_entities: пустой entity_type не допускается "
+                                f"(draft_entity_id={p.draft_entity_id})"
+                            )
+                        updates["entity_type"] = et
+                    if p.name is not None:
+                        updates["name"] = p.name
+                    if p.description is not None:
+                        updates["description"] = p.description
+                    if p.entity_subtype is not None:
+                        st = str(p.entity_subtype).strip()
+                        updates["entity_subtype"] = st if st else None
+                    if p.note_date is not None:
+                        updates["note_date"] = p.note_date
+                    if p.due_date is not None:
+                        updates["due_date"] = p.due_date
+                    if p.priority is not None:
+                        updates["priority"] = p.priority
+                    if p.assignees is not None:
+                        updates["assignees"] = p.assignees
+                    if p.attributes is not None:
+                        merged = dict(ent.attributes or {})
+                        merged.update(p.attributes)
+                        updates["attributes"] = merged
+                    if updates:
+                        note_row = ent.model_copy(update=updates)
+                    continue
                 raise ValueError(f"Нет сущности с draft_entity_id={p.draft_entity_id}")
             ent = entities[idx]
             updates: Dict[str, Any] = {}
+            if p.entity_type is not None:
+                et = str(p.entity_type).strip()
+                if not et:
+                    raise ValueError(
+                        f"patch_entities: пустой entity_type не допускается "
+                        f"(draft_entity_id={p.draft_entity_id})"
+                    )
+                updates["entity_type"] = et
             if p.name is not None:
                 updates["name"] = p.name
             if p.description is not None:
                 updates["description"] = p.description
             if p.entity_subtype is not None:
-                updates["entity_subtype"] = p.entity_subtype
+                st = str(p.entity_subtype).strip()
+                updates["entity_subtype"] = st if st else None
             if p.note_date is not None:
                 updates["note_date"] = p.note_date
             if p.due_date is not None:
@@ -2117,9 +2552,7 @@ class EntityService:
             seen_rel_patch.add(p.draft_relationship_id)
             idx = by_rel.get(p.draft_relationship_id)
             if idx is None:
-                raise ValueError(
-                    f"Нет связи с draft_relationship_id={p.draft_relationship_id}"
-                )
+                raise ValueError(f"Нет связи с draft_relationship_id={p.draft_relationship_id}")
             rel = rels[idx]
             ru: Dict[str, Any] = {}
             if p.weight is not None:
@@ -2133,12 +2566,63 @@ class EntityService:
             if ru:
                 rels[idx] = rel.model_copy(update=ru)
 
+        rel_tuple_seen: Set[Tuple[str, str, str]] = {
+            (r.source_draft_entity_id, r.target_draft_entity_id, r.relationship_type)
+            for r in rels
+        }
+        existing_rel_ids: Set[str] = {r.draft_relationship_id for r in rels}
+
+        valid_rel_type_ids = {
+            t.type_id
+            for t in await self._relationship_type_repo.get_all_for_company(include_system=True)
+        }
+
+        seen_new_rel: Set[str] = set()
+        appended_rels: List[AIAnalysisRelationshipDraft] = []
+        for rel in body.add_relationships:
+            rid = rel.draft_relationship_id
+            if not rid:
+                raise ValueError("add_relationships: отсутствует draft_relationship_id")
+            if rid in existing_rel_ids or rid in seen_new_rel:
+                raise ValueError(
+                    f"add_relationships: draft_relationship_id уже занят или повторяется: {rid!r}"
+                )
+            seen_new_rel.add(rid)
+            tup = (
+                rel.source_draft_entity_id,
+                rel.target_draft_entity_id,
+                rel.relationship_type,
+            )
+            if tup in rel_tuple_seen:
+                raise ValueError(
+                    f"add_relationships: дублируется связь source={tup[0]!r} "
+                    f"target={tup[1]!r} type={tup[2]!r}"
+                )
+            if rel.relationship_type not in valid_rel_type_ids:
+                raise ValueError(f"add_relationships: неизвестный тип связи: {rel.relationship_type}")
+            if rel.source_draft_entity_id not in existing_entity_ids:
+                raise ValueError(
+                    f"add_relationships: неизвестный source_draft_entity_id: "
+                    f"{rel.source_draft_entity_id}"
+                )
+            if rel.target_draft_entity_id not in existing_entity_ids:
+                raise ValueError(
+                    f"add_relationships: неизвестный target_draft_entity_id: "
+                    f"{rel.target_draft_entity_id}"
+                )
+            rel_tuple_seen.add(tup)
+            existing_rel_ids.add(rid)
+            appended_rels.append(rel)
+
+        rels = [*rels, *appended_rels]
+
         next_draft = AIAnalysisDraftStored(
             draft_version=draft.draft_version + 1,
             updated_at=datetime.now(timezone.utc).isoformat(),
-            note=draft.note,
+            note=note_row,
             entities=entities,
             relationships=rels,
+            known_entity_id_map=dict(draft.known_entity_id_map),
         )
 
         attrs = dict(note.attributes or {})
@@ -2173,7 +2657,9 @@ class EntityService:
                 existing_row = await self._entity_repo.get(existing_id)
                 if not existing_row:
                     raise ValueError(f"dedup_existing_id не найден в БД: {existing_id}")
-                merged_attrs = {**(existing_row.attributes or {}), **(ent.attributes or {})}
+                merged_attrs = _strip_draft_only_entity_attrs(
+                    {**(existing_row.attributes or {}), **(ent.attributes or {})}
+                )
                 raw = ent.model_dump()
                 await self.update_entity(
                     existing_id,
@@ -2192,9 +2678,7 @@ class EntityService:
         if ent.dedup_action in (None, "create"):
             created = await self._create_entity_from_draft_row(ent, namespace, source_entity_id)
             return (did, created.entity_id, "created")
-        raise ValueError(
-            f"Неизвестный dedup_action={ent.dedup_action!r} (draft_entity_id={did})"
-        )
+        raise ValueError(f"Неизвестный dedup_action={ent.dedup_action!r} (draft_entity_id={did})")
 
     async def _apply_analysis_draft_entity_rows_with_retries(
         self,
@@ -2240,9 +2724,7 @@ class EntityService:
 
         if pending:
             created_real_ids = [
-                id_fragment[did]
-                for did in id_fragment
-                if kind_by_draft.get(did) == "created"
+                id_fragment[did] for did in id_fragment if kind_by_draft.get(did) == "created"
             ]
             for eid in reversed(created_real_ids):
                 ok = await self.delete_entity(eid)
@@ -2321,12 +2803,14 @@ class EntityService:
         # known entities (member, company) разрешаются напрямую без update_entity
         id_map.update(draft.known_entity_id_map)
 
-        id_fragment, created_entity_ids, updated_entity_ids = (
-            await self._apply_analysis_draft_entity_rows_with_retries(
-                draft.entities,
-                namespace,
-                source_entity_id=note_id,
-            )
+        (
+            id_fragment,
+            created_entity_ids,
+            updated_entity_ids,
+        ) = await self._apply_analysis_draft_entity_rows_with_retries(
+            draft.entities,
+            namespace,
+            source_entity_id=note_id,
         )
         id_map.update(id_fragment)
 
@@ -2482,7 +2966,7 @@ class EntityService:
             description=ent.description,
             entity_subtype=storage_subtype,
             namespace=namespace,
-            attributes=raw.get("attributes") or {},
+            attributes=_strip_draft_only_entity_attrs(raw.get("attributes")),
             tags=raw.get("tags") or [],
             note_date=note_date,
             due_date=self._parse_optional_date_iso(raw.get("due_date")),
@@ -2527,7 +3011,7 @@ class EntityService:
             entity_types,
             relationship_types,
             request.extract_entity_types,
-            request.extract_relationship_types
+            request.extract_relationship_types,
         )
         ctx = get_context()
         known_entities: list[dict[str, Any]] = []
@@ -2535,16 +3019,21 @@ class EntityService:
         if ctx and ctx.user:
             company_id = self._get_company_id()
             member_entity_id = await self._user_person_service.get_or_create_person_entity_id(
-                ctx.user.user_id, company_id,
+                ctx.user.user_id,
+                company_id,
             )
             member_entity = await self._entity_repo.get(member_entity_id)
             if member_entity:
-                known_entities.append({
-                    "entity_id": member_entity.entity_id,
-                    "name": member_entity.name,
-                    "type": "member",
-                    "description": self._effective_description_for_analyze_inject(member_entity),
-                })
+                known_entities.append(
+                    {
+                        "entity_id": member_entity.entity_id,
+                        "name": member_entity.name,
+                        "type": "member",
+                        "description": self._effective_description_for_analyze_inject(
+                            member_entity
+                        ),
+                    }
+                )
                 _known_entity_rows.append(member_entity)
 
             company_entities = await self._entity_repo.find_by_attribute(
@@ -2555,12 +3044,14 @@ class EntityService:
             )
             if company_entities:
                 ce = company_entities[0]
-                known_entities.append({
-                    "entity_id": ce.entity_id,
-                    "name": ce.name,
-                    "type": "company",
-                    "description": self._effective_description_for_analyze_inject(ce),
-                })
+                known_entities.append(
+                    {
+                        "entity_id": ce.entity_id,
+                        "name": ce.name,
+                        "type": "company",
+                        "description": self._effective_description_for_analyze_inject(ce),
+                    }
+                )
                 _known_entity_rows.append(ce)
 
         resolved_for_note: list[str] = []
@@ -2572,19 +3063,23 @@ class EntityService:
                 row = await self._entity_repo.get(eid)
                 if row is None:
                     continue
-                known_entities.append({
-                    "entity_id": row.entity_id,
-                    "name": row.name,
-                    "type": row.entity_type,
-                    "description": self._effective_description_for_analyze_inject(row),
-                })
+                known_entities.append(
+                    {
+                        "entity_id": row.entity_id,
+                        "name": row.name,
+                        "type": row.entity_type,
+                        "description": self._effective_description_for_analyze_inject(row),
+                    }
+                )
                 _known_entity_rows.append(row)
 
         prefix_parts: list[str] = []
         anchor_types = [et for et in entity_types if et.is_context_anchor]
         if anchor_types:
             anchor_lines = "\n".join(f"- {et.name} ({et.type_id})" for et in anchor_types)
-            prefix_parts.append("ТИПЫ-ЯКОРЯ КОНТЕКСТА (привязка заметок к сделке, лиду и т.д.):\n" + anchor_lines)
+            prefix_parts.append(
+                "ТИПЫ-ЯКОРЯ КОНТЕКСТА (привязка заметок к сделке, лиду и т.д.):\n" + anchor_lines
+            )
         if prefix_parts:
             prompt = "\n\n".join(prefix_parts) + "\n\n" + prompt
 
@@ -2641,7 +3136,9 @@ class EntityService:
 
         injected_known: list[AIExtractedEntity] = []
         if _known_entity_rows:
-            injected_known = self._inject_known_entities_into_analyze_state(state, _known_entity_rows)
+            injected_known = self._inject_known_entities_into_analyze_state(
+                state, _known_entity_rows
+            )
 
         # Сохраняем dedup_existing_id до model_copy в _assign_draft_ids_to_note_and_entities
         injected_known_existing_ids: set[str] = {
@@ -2663,8 +3160,7 @@ class EntityService:
                 if e.dedup_existing_id in injected_known_existing_ids and e.draft_entity_id:
                     known_entity_id_map[e.draft_entity_id] = e.dedup_existing_id
             state.entities = [
-                e for e in state.entities
-                if e.dedup_existing_id not in injected_known_existing_ids
+                e for e in state.entities if e.dedup_existing_id not in injected_known_existing_ids
             ]
 
         ai_result = AIAnalyzeResponse(
@@ -2695,21 +3191,21 @@ class EntityService:
             if len(batch) < page_limit:
                 return collected
             offset += page_limit
-    
+
     def _build_composite_prompt(
         self,
         entity_types: List,
         relationship_types: List,
         extract_entity_types: Optional[List[str]],
-        extract_relationship_types: Optional[List[str]]
+        extract_relationship_types: Optional[List[str]],
     ) -> str:
         """Строит составной промпт из типов"""
         prompt_parts = [
             "Проанализируй текст и извлеки следующие сущности и связи:",
             "",
-            "ТИПЫ СУЩНОСТЕЙ:"
+            "ТИПЫ СУЩНОСТЕЙ:",
         ]
-        
+
         for et in entity_types:
             if not et.extractable:
                 continue
@@ -2725,19 +3221,25 @@ class EntityService:
                     for field in fields:
                         req_mark = " [обязательное]" if field["required"] else ""
                         desc_part = f": {field['description']}" if field.get("description") else ""
-                        values_part = f" Допустимые значения: {field['values']}" if field.get("values") else ""
-                        prompt_parts.append(f"  - `{field['name']}` ({field['label']}){req_mark}{desc_part}{values_part}")
-        
+                        values_part = (
+                            f" Допустимые значения: {field['values']}"
+                            if field.get("values")
+                            else ""
+                        )
+                        prompt_parts.append(
+                            f"  - `{field['name']}` ({field['label']}){req_mark}{desc_part}{values_part}"
+                        )
+
         prompt_parts.append("\nТИПЫ СВЯЗЕЙ:")
-        
+
         for rt in relationship_types:
             if extract_relationship_types and rt.type_id not in extract_relationship_types:
                 continue
-            
+
             if rt.prompt:
                 prompt_parts.append(f"\n{rt.name} ({rt.type_id}):")
                 prompt_parts.append(rt.prompt)
-        
+
         return "\n".join(prompt_parts)
 
     async def _inject_mentioned_entities_into_analyze_state(
@@ -2771,15 +3273,16 @@ class EntityService:
             if not row:
                 raise ValueError(f"Упомянутая сущность не найдена: {mid}")
             if row.company_id != company_id:
-                raise ValueError(
-                    f"Упомянутая сущность {mid} принадлежит другой компании"
-                )
+                raise ValueError(f"Упомянутая сущность {mid} принадлежит другой компании")
             if row.namespace != namespace:
                 raise ValueError(
                     f"Упомянутая сущность {mid} в namespace {row.namespace!r}, "
                     f"ожидался {namespace!r}"
                 )
-            k = (row.entity_type.lower().strip(), self._normalize_name_for_relationship_key(row.name))
+            k = (
+                row.entity_type.lower().strip(),
+                self._normalize_name_for_relationship_key(row.name),
+            )
             if k in occupied:
                 continue
             occupied.add(k)
@@ -2792,9 +3295,7 @@ class EntityService:
                 "entity_subtype": row.entity_subtype,
             }
             state.entities.append(
-                AIExtractedEntity.model_validate(
-                    self._normalize_entity_payload(payload)
-                )
+                AIExtractedEntity.model_validate(self._normalize_entity_payload(payload))
             )
 
     def _inject_known_entities_into_analyze_state(
@@ -2813,15 +3314,19 @@ class EntityService:
         """
         occupied: set[tuple[str, str]] = set()
         if state.note is not None:
-            occupied.add((
-                state.note.entity_type.lower().strip(),
-                self._normalize_name_for_relationship_key(state.note.name),
-            ))
+            occupied.add(
+                (
+                    state.note.entity_type.lower().strip(),
+                    self._normalize_name_for_relationship_key(state.note.name),
+                )
+            )
         for ent in state.entities:
-            occupied.add((
-                ent.entity_type.lower().strip(),
-                self._normalize_name_for_relationship_key(ent.name),
-            ))
+            occupied.add(
+                (
+                    ent.entity_type.lower().strip(),
+                    self._normalize_name_for_relationship_key(ent.name),
+                )
+            )
 
         injected: list[AIExtractedEntity] = []
         for row in entity_rows:
@@ -2839,9 +3344,7 @@ class EntityService:
                 "attributes": dict(row.attributes or {}),
                 "entity_subtype": row.entity_subtype,
             }
-            synthetic = AIExtractedEntity.model_validate(
-                self._normalize_entity_payload(payload)
-            )
+            synthetic = AIExtractedEntity.model_validate(self._normalize_entity_payload(payload))
             synthetic.dedup_action = "merge"
             synthetic.dedup_existing_id = row.entity_id
             state.entities.append(synthetic)
@@ -2863,10 +3366,7 @@ class EntityService:
 
         settings = get_settings()
 
-        extractable_entity_types = [
-            et for et in entity_types
-            if et.prompt and et.extractable
-        ]
+        extractable_entity_types = [et for et in entity_types if et.prompt and et.extractable]
         variables = {
             **_crm_llm_interface_language_vars(),
             "text": text,
@@ -2880,7 +3380,8 @@ class EntityService:
             ],
             "relationship_types": [
                 {"type": rt.type_id, "prompt": rt.prompt or ""}
-                for rt in relationship_types if rt.prompt
+                for rt in relationship_types
+                if rt.prompt
             ],
         }
 
@@ -2893,9 +3394,7 @@ class EntityService:
             base_url=f"{flows_base_url}/flows/api/v1/crm",
             content=text,
             branch_id="analyze",
-            metadata={
-                "variables": variables
-            },
+            metadata={"variables": variables},
         )
 
         result_data = self._extract_data_from_a2a_response(response)
@@ -2905,9 +3404,7 @@ class EntityService:
         note_obj: Optional[AIExtractedEntity] = None
         note_data = normalized_result.get(NOTE_ROOT_ENTITY_TYPE_ID)
         if isinstance(note_data, dict):
-            note_obj = AIExtractedEntity.model_validate(
-                self._normalize_entity_payload(note_data)
-            )
+            note_obj = AIExtractedEntity.model_validate(self._normalize_entity_payload(note_data))
 
         entities_data = normalized_result.get("entities")
         if not isinstance(entities_data, list):
@@ -2918,14 +3415,13 @@ class EntityService:
         for i, raw_ent in enumerate(entities_data):
             if not isinstance(raw_ent, dict):
                 raise ValueError(f"entities[{i}] должен быть объектом")
-            parsed = AIExtractedEntity.model_validate(
-                self._normalize_entity_payload(raw_ent)
-            )
+            parsed = AIExtractedEntity.model_validate(self._normalize_entity_payload(raw_ent))
             if parsed.entity_type.lower() in note_family_lc:
                 logger.warning(
                     "analyze: LLM вернул сущность note-семейства (type=%r, name=%r) "
                     "в массиве entities — пропущена (заметка уже представлена в поле note)",
-                    parsed.entity_type, parsed.name,
+                    parsed.entity_type,
+                    parsed.name,
                 )
                 continue
             entity_list.append(parsed)
@@ -2944,10 +3440,12 @@ class EntityService:
         if isinstance(summaries_data, list):
             for item in summaries_data:
                 if isinstance(item, dict) and item.get("filename") and item.get("summary"):
-                    attachment_summaries.append({
-                        "filename": str(item["filename"]),
-                        "summary": str(item["summary"]),
-                    })
+                    attachment_summaries.append(
+                        {
+                            "filename": str(item["filename"]),
+                            "summary": str(item["summary"]),
+                        }
+                    )
 
         return _AnalyzePipelineState(
             note=note_obj,
@@ -2986,9 +3484,7 @@ class EntityService:
         entities_data = normalized.get("entities")
         if isinstance(entities_data, list):
             normalized["entities"] = [
-                self._normalize_entity_payload(entity)
-                if isinstance(entity, dict)
-                else entity
+                self._normalize_entity_payload(entity) if isinstance(entity, dict) else entity
                 for entity in entities_data
             ]
 
@@ -3019,17 +3515,17 @@ class EntityService:
     def _extract_data_from_a2a_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """
         Извлекает структурированные данные из A2A response.
-        
+
         Поддерживает:
         1. data parts в artifacts
         2. text parts с JSON в markdown (```json ... ```)
         """
         # A2AClient возвращает нормализованный ответ с полем raw
         raw_response = response.get("raw", response)
-        
+
         if "result" not in raw_response:
             return {}
-        
+
         task_result = raw_response["result"]
         artifacts = task_result.get("artifacts")
         if artifacts is None:
@@ -3070,6 +3566,10 @@ class EntityService:
                                         NOTE_ROOT_ENTITY_TYPE_ID,
                                         "summary",
                                         "structured_output",
+                                        "is_duplicate",
+                                        "decisions",
+                                        "action",
+                                        "patch_entities",
                                     )
                                 ):
                                     return data
@@ -3078,10 +3578,10 @@ class EntityService:
         for artifact in artifacts:
             if "parts" not in artifact:
                 continue
-            
+
             for part in artifact["parts"]:
                 part_kind = part.get("kind") or part.get("type")
-                
+
                 if part_kind == "data" and "data" in part:
                     data = part["data"]
                     if not isinstance(data, dict):
@@ -3108,6 +3608,7 @@ class EntityService:
                             "summary",
                             "structured_output",
                             "decisions",
+                            "patch_entities",
                         )
                     ):
                         return data
@@ -3158,7 +3659,7 @@ class EntityService:
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Извлекает JSON из текста (включая markdown code blocks)."""
-        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', text, re.IGNORECASE)
+        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE)
         if json_match:
             try:
                 parsed = json.loads(json_match.group(1).strip())
@@ -3324,7 +3825,7 @@ class EntityService:
             if not name_stripped:
                 continue
             entries.append((name_stripped, name_stripped, entity_id))
-            for alias in (entity.get("aliases") or []):
+            for alias in entity.get("aliases") or []:
                 alias_stripped = alias.strip() if alias else ""
                 if alias_stripped:
                     entries.append((alias_stripped, name_stripped, entity_id))
@@ -3789,14 +4290,10 @@ class EntityService:
         input_entities = self._extract_entities_from_notes(analyzed_notes)
 
         async def map_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
-            return await self._call_summarize_chunk_skill(
-                batch, date_str, namespace
-            )
+            return await self._call_summarize_chunk_skill(batch, date_str, namespace)
 
         async def merge_batch(partials: List[Dict[str, Any]]) -> Dict[str, Any]:
-            return await self._call_summarize_merge_skill(
-                partials, date_str, namespace
-            )
+            return await self._call_summarize_merge_skill(partials, date_str, namespace)
 
         structured = await map_reduce_tree(
             cards,
@@ -3936,6 +4433,7 @@ class EntityService:
             return False
 
         from apps.crm_worker.tasks.daily_summary_tasks import rebuild_daily_summary_task
+
         context = get_context()
         if not context:
             raise ValueError("Нет контекста для отправки задачи rebuild_daily_summary")
@@ -4010,7 +4508,9 @@ class EntityService:
                 and _canonical_json(cached_state.get("source_version"))
                 == _canonical_json(current_version)
             ):
-                normalized_entities = self._normalize_summary_entity_list(cached_state.get("entities"))
+                normalized_entities = self._normalize_summary_entity_list(
+                    cached_state.get("entities")
+                )
                 return {
                     **cached_state,
                     "entities": normalized_entities,
@@ -4110,7 +4610,9 @@ class EntityService:
             namespace=namespace,
             date_str=date_str,
         )
-        if cached is not None and _canonical_json(cached.get("source_version")) == _canonical_json(ver):
+        if cached is not None and _canonical_json(cached.get("source_version")) == _canonical_json(
+            ver
+        ):
             return cached
 
         hydrated = await self._try_hydrate_daily_from_s3(
@@ -4147,9 +4649,7 @@ class EntityService:
         datetime.fromisoformat(date_from)
         datetime.fromisoformat(date_to)
         max_days = get_crm_settings().period_summary_max_days
-        date_from, date_to, _ = _clamp_period_dates_for_summary(
-            date_from, date_to, max_days
-        )
+        date_from, date_to, _ = _clamp_period_dates_for_summary(date_from, date_to, max_days)
         days = _iter_iso_dates_inclusive(date_from, date_to)
 
         company_id = self._get_company_id()
@@ -4323,14 +4823,40 @@ class EntityService:
         if not context:
             raise ValueError("Нет контекста для отправки задачи rebuild_period_summary")
 
+        user_id = self._get_user_id()
+        normalized_namespace = self._normalize_namespace(namespace)
+        task_namespace = normalized_namespace or SUMMARY_ALL_NAMESPACES_TASK_KEY
+        task_id: Optional[str] = None
+
+        if self._task_repository is not None:
+            task_row = CRMTask(
+                task_id=str(uuid.uuid4()),
+                task_type="period_summary",
+                status="running",
+                stage="summarizing_day",
+                progress_pct=10,
+                company_id=company_id,
+                namespace=task_namespace,
+                user_id=user_id,
+                started_at=datetime.now(timezone.utc),
+                data={
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "reason": "event",
+                },
+            )
+            await self._task_repository.create(task_row)
+            task_id = task_row.task_id
+
         await rebuild_period_summary_task.kiq(
             company_id=company_id,
             date_from=date_from,
             date_to=date_to,
-            namespace=self._normalize_namespace(namespace),
+            namespace=normalized_namespace,
             reason="event",
             auth_token=context.auth_token,
-            user_id=self._get_user_id(),
+            user_id=user_id,
+            task_id=task_id,
         )
         return True
 
@@ -4391,9 +4917,7 @@ class EntityService:
             return fields
 
         company_id = self._get_company_id()
-        current_bundle = await self._collect_period_days_bundle(
-            date_from, date_to, namespace
-        )
+        current_bundle = await self._collect_period_days_bundle(date_from, date_to, namespace)
 
         cached_state = await self._daily_summary_cache_service.get_period_state(
             company_id=company_id,
@@ -4472,7 +4996,6 @@ class EntityService:
     async def get_entity_card(
         self,
         entity_id: str,
-        
     ) -> Dict[str, Any]:
         """
         Получает полную карточку entity с контекстом:
@@ -4480,22 +5003,21 @@ class EntityService:
         - Все relationships
         - Связанные entities
         - Attachments
-        
+
         Args:
             entity_id: ID entity
             company_id: ID компании
-        
+
         Returns:
             Dict с полной информацией о entity
         """
-        
-        
+
         entity = await self._entity_repo.get(entity_id)
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
-        
+
         relationships = await self._relationship_repo.get_by_entity(entity_id)
-        
+
         related_entity_ids = set()
         for rel in relationships:
             if rel.source_entity_id == entity_id:
@@ -4529,9 +5051,9 @@ class EntityService:
                 for rel in relationships
             ],
             "related_entities": related_entities_payload,
-            "attachments": attachments
+            "attachments": attachments,
         }
-    
+
     async def get_bulk_entity_cards(
         self,
         entity_ids: list[str],
@@ -4559,11 +5081,15 @@ class EntityService:
         all_related_ids: set[str] = set()
         for eid, rels in relationships_by_entity.items():
             for rel in rels:
-                neighbor = rel.target_entity_id if rel.source_entity_id == eid else rel.source_entity_id
+                neighbor = (
+                    rel.target_entity_id if rel.source_entity_id == eid else rel.source_entity_id
+                )
                 all_related_ids.add(neighbor)
         all_related_ids -= set(entity_ids)
 
-        related_entities = await self._entity_repo.get_by_ids(list(all_related_ids)) if all_related_ids else []
+        related_entities = (
+            await self._entity_repo.get_by_ids(list(all_related_ids)) if all_related_ids else []
+        )
         related_payload_by_id: Dict[str, Dict[str, Any]] = {}
         if related_entities:
             enriched_related = await self._related_entities_as_api_dicts(related_entities)
@@ -4573,7 +5099,11 @@ class EntityService:
                     related_payload_by_id[eid] = rd
 
         attachments_list = await asyncio.gather(
-            *[self._attachment_service.get_attachments(eid) for eid in entity_ids if eid in entities_by_id]
+            *[
+                self._attachment_service.get_attachments(eid)
+                for eid in entity_ids
+                if eid in entities_by_id
+            ]
         )
         existing_ids = [eid for eid in entity_ids if eid in entities_by_id]
         attachments_by_entity = dict(zip(existing_ids, attachments_list))
@@ -4596,7 +5126,9 @@ class EntityService:
             rels = relationships_by_entity.get(eid, [])
             rel_neighbor_ids: set[str] = set()
             for rel in rels:
-                neighbor = rel.target_entity_id if rel.source_entity_id == eid else rel.source_entity_id
+                neighbor = (
+                    rel.target_entity_id if rel.source_entity_id == eid else rel.source_entity_id
+                )
                 rel_neighbor_ids.add(neighbor)
             result[eid] = {
                 "entity": center_payload_by_id[eid],
@@ -4631,7 +5163,9 @@ class EntityService:
             raise ValueError("_entity_as_api_dict: expected a single enriched entity")
         return enriched[0].model_dump(mode="json")
 
-    async def _related_entities_as_api_dicts(self, entities: List[CRMEntity]) -> List[Dict[str, Any]]:
+    async def _related_entities_as_api_dicts(
+        self, entities: List[CRMEntity]
+    ) -> List[Dict[str, Any]]:
         if not entities:
             return []
         enriched = await build_entity_responses_with_semantic_index(self._entity_repo, entities)
@@ -4671,7 +5205,7 @@ class EntityService:
     ) -> List[DeduplicateResult]:
         """
         Проверяет каждую entity на дубликат.
-        
+
         Логика:
         1. Семантический поиск по name + description (RAG-запросы параллельно)
         2. similarity > 0.95 -> точный дубликат, merge сразу
@@ -4792,7 +5326,7 @@ class EntityService:
                 f"dedup LLM: ожидалось {len(need_llm)} решений, получено {len(merged)}"
             )
         return merged
-    
+
     def _merge_descriptions(self, existing: Optional[str], new: Optional[str]) -> str:
         """Объединяет описания"""
         if not existing:
@@ -4802,11 +5336,9 @@ class EntityService:
         if new.lower() in existing.lower():
             return existing
         return f"{existing}\n\n{new}"
-    
+
     async def _call_deduplicate_agent(
-        self,
-        extracted: AIExtractedEntity,
-        candidate: CRMEntity
+        self, extracted: AIExtractedEntity, candidate: CRMEntity
     ) -> DeduplicateResult:
         """Вызывает агента со skill deduplicate для сравнения сущностей"""
         settings = get_settings()
@@ -4829,16 +5361,26 @@ class EntityService:
                 "attributes": candidate.attributes,
             },
         }
-        
+
         response = await self._a2a_client.send_task(
             base_url=f"{flows_base_url}/flows/api/v1/crm",
             content=f"Compare: {extracted.name} vs {candidate.name}",
             branch_id="deduplicate",
-            metadata={"variables": variables}
+            metadata={"variables": variables},
         )
-        
+
         result_data = self._extract_data_from_a2a_response(response)
-        
+        if not isinstance(result_data, dict):
+            result_data = {}
+        for _ in range(8):
+            if "is_duplicate" in result_data or result_data.get("action"):
+                break
+            nested = result_data.get("structured_output")
+            if isinstance(nested, dict):
+                result_data = nested
+                continue
+            break
+
         return DeduplicateResult(
             is_duplicate=result_data.get("is_duplicate", False),
             confidence=result_data.get("confidence", 0.0),
@@ -4847,7 +5389,7 @@ class EntityService:
             existing_entity_id=candidate.entity_id if result_data.get("is_duplicate") else None,
             existing_entity_name=candidate.name if result_data.get("is_duplicate") else None,
             merged_attributes=result_data.get("merged_attributes"),
-            merged_description=result_data.get("merged_description")
+            merged_description=result_data.get("merged_description"),
         )
 
     @staticmethod
@@ -4959,7 +5501,9 @@ class EntityService:
                 raise ValueError("deduplicate_batch: каждый элемент decisions должен быть объектом")
             pi = dec.get("pair_index")
             if not isinstance(pi, int):
-                raise ValueError("deduplicate_batch: pair_index обязателен и должен быть целым числом")
+                raise ValueError(
+                    "deduplicate_batch: pair_index обязателен и должен быть целым числом"
+                )
             by_pair_index[pi] = dec
 
         out: Dict[int, DeduplicateResult] = {}

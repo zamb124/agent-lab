@@ -3,13 +3,11 @@
 Используется реальный HTTP сервер.
 """
 
-import asyncio
 import pytest
 from aiohttp import web
 
 from core.clients import A2AClient, A2AClientError
 from core.clients.a2a_client import _extract_task_status_message
-
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 
 

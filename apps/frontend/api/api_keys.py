@@ -2,18 +2,16 @@
 API для управления API ключами компании
 """
 import hashlib
-
-from core.logging import get_logger
 import secrets
 from datetime import datetime, timezone
-from typing import List
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from core.pagination import OffsetPage
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ApiKey, ApiKeyCreate, ApiKeyCreated, ApiKeyUpdate
 from core.db.models.platform import ApiKeyRecord
+from core.logging import get_logger
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])

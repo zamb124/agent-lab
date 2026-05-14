@@ -4,16 +4,16 @@
 Хранит данные в отдельной таблице usage.
 """
 
-from core.logging import get_logger
 from datetime import datetime
 from typing import Any, List, Optional
 
 from sqlalchemy import DateTime, cast, select
 
 from core.db.base_repository import BaseRepository
-from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _admin_ilike, _facet_query_fragment
 from core.db.storage import Storage
+from core.logging import get_logger
 from core.models.billing_models import UsageRecord
+from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _admin_ilike, _facet_query_fragment
 
 logger = get_logger(__name__)
 ADMIN_USAGE_MAX_LIMIT = 5000
@@ -24,7 +24,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
     is_global=False - записи изолированы по компаниям.
     Хранит данные в таблице usage в shared_db.
     """
-    
+
     is_global = False
 
     def __init__(self, storage: Storage):
@@ -44,13 +44,13 @@ class UsageRepository(BaseRepository[UsageRecord]):
 
     def _extract_entity_id(self, entity: UsageRecord) -> str:
         return entity.usage_id
-    
+
     async def set(self, entity: UsageRecord) -> bool:
         """Сохраняет запись с resource_name в ключе"""
         base_key = self._get_key_with_resource(entity.resource_name, entity.usage_id)
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
-        
+
         data = entity.model_dump_json()
         return await self._storage._set_with_table(final_key, data, table_name)
 

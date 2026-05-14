@@ -4,8 +4,9 @@
 User Story: AI создает обобщенный отчет за день.
 """
 
-import pytest
 from datetime import date
+
+import pytest
 
 from tests.fixtures.crm_test_setup import (
     wait_daily_summary_rebuild_done,
@@ -15,12 +16,12 @@ from tests.fixtures.crm_test_setup import (
 @pytest.mark.real_taskiq
 class TestDailySummary:
     """Дневной саммари от AI"""
-    
+
     @pytest.mark.asyncio
     async def test_generate_daily_summary(self, crm_client, unique_id, auth_headers_system):
         """Саммари за день: версия источника и фоновый пересчёт без LLM, пока нет ai_analysis_applied_at."""
         today = f"2096-05-{hash(unique_id) % 28 + 1:02d}"
-        
+
         for i in range(3):
             await crm_client.post("/crm/api/v1/entities/", json={
                 "entity_type": "note",
@@ -29,7 +30,7 @@ class TestDailySummary:
                 "description": f"Описание события {i} дня",
                 "note_date": today
             }, headers=auth_headers_system)
-        
+
         first_response = await crm_client.post("/crm/api/v1/entities/daily-summary", json={
             "date": today
         }, headers=auth_headers_system)
@@ -52,12 +53,12 @@ class TestDailySummary:
     async def test_empty_day_summary(self, crm_client, unique_id, auth_headers_system):
         """Саммари пустого дня"""
         future_date = "2099-12-31"
-        
+
         response = await crm_client.post("/crm/api/v1/entities/daily-summary", json={
             "date": future_date
         }, headers=auth_headers_system)
         assert response.status_code == 200
-        
+
         summary = response.json()
         assert summary is not None
         assert "revalidating" in summary

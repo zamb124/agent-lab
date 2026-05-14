@@ -35,15 +35,15 @@ async def _require_balance_for_llm_resource() -> None:
 class LLMResource:
     """
     Ресурс для работы с LLM.
-    
+
     Пример:
         summary = await gpt4.complete("Summarize this: " + text)
-        
+
         response = await claude.chat([
             {"role": "user", "content": "Hello"}
         ])
     """
-    
+
     def __init__(
         self,
         provider: str,
@@ -70,7 +70,7 @@ class LLMResource:
             dict(extra_request_headers) if extra_request_headers else None
         )
         self._client = None
-    
+
     def _get_client(self):
         """Возвращает LLM клиент."""
         if self._client is None:
@@ -84,7 +84,7 @@ class LLMResource:
                 folder_id=self.folder_id,
             )
         return self._client
-    
+
     def _billing_resource_name(self) -> str:
         if is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
             return "llm:byok"
@@ -98,12 +98,12 @@ class LLMResource:
     ) -> str:
         """
         Генерация текста по промпту.
-        
+
         Args:
             prompt: Текстовый промпт
             temperature: Температура (переопределяет дефолт)
             max_tokens: Макс. токенов (переопределяет дефолт)
-            
+
         Returns:
             Сгенерированный текст
         """
@@ -132,7 +132,7 @@ class LLMResource:
                 chat_kw["extra_headers"] = self._extra_headers
             response = await client.chat(prompt, **chat_kw)
             return self._extract_text(response)
-    
+
     async def chat(
         self,
         messages: List[Dict[str, str]],
@@ -141,12 +141,12 @@ class LLMResource:
     ) -> str:
         """
         Чат с историей сообщений.
-        
+
         Args:
             messages: Список сообщений [{"role": "user/assistant", "content": "..."}]
             temperature: Температура
             max_tokens: Макс. токенов
-            
+
         Returns:
             Ответ модели
         """
@@ -175,7 +175,7 @@ class LLMResource:
                 chat_kw["extra_headers"] = self._extra_headers
             response = await client.chat(messages, **chat_kw)
             return self._extract_text(response)
-    
+
     def _extract_text(self, response: Any) -> str:
         """Извлекает текст из ответа LLM."""
         if hasattr(response, "parts") and response.parts:
@@ -184,7 +184,7 @@ class LLMResource:
         if hasattr(response, "content"):
             return response.content
         return str(response)
-    
+
     async def chat_with_tools(
         self,
         messages: List[Dict[str, str]],
@@ -193,11 +193,11 @@ class LLMResource:
     ) -> Dict[str, Any]:
         """
         Чат с поддержкой tools.
-        
+
         Args:
             messages: История сообщений
             tools: Список tools в OpenAI формате
-            
+
         Returns:
             Ответ с tool_calls если есть
         """
@@ -222,6 +222,6 @@ class LLMResource:
                 "content": response.content if hasattr(response, "content") else "",
                 "tool_calls": response.tool_calls if hasattr(response, "tool_calls") else [],
             }
-    
+
     def __repr__(self) -> str:
         return f"<LLMResource provider={self.provider} model={self.model}>"

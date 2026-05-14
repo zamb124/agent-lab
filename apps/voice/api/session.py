@@ -30,7 +30,6 @@ from core.clients.voice_resolver import get_tts_streamer
 from core.logging import get_logger
 from core.utils.background import run_with_log_context
 
-
 logger = get_logger(__name__)
 
 router = APIRouter(

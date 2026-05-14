@@ -18,7 +18,6 @@ from core.context import get_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 transcribe_router = APIRouter(prefix="/api/v1", tags=["voice-transcribe"])

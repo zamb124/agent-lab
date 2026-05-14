@@ -1,6 +1,5 @@
 """Тесты перекодирования голосовых под iOS (AAC M4A)."""
 
-import shutil
 
 import pytest
 

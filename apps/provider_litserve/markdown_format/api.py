@@ -6,7 +6,10 @@ from typing import Any, cast
 
 import litserve as ls
 
-from apps.provider_litserve.markdown_format.engines import MarkdownFormatEngine, parse_format_markdown_body
+from apps.provider_litserve.markdown_format.engines import (
+    MarkdownFormatEngine,
+    parse_format_markdown_body,
+)
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
 

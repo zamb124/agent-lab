@@ -4,13 +4,13 @@
 АДАПТИРОВАНО: убраны try-except блоки, локальные импорты
 """
 
-from core.logging import get_logger
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 from core.config.models import AuthProviderConfig
-from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.http import request_public_oauth
+from core.logging import get_logger
+from core.models.identity_models import AuthProvider, ProviderUserInfo
 
 logger = get_logger(__name__)
 class BaseAuthProvider(ABC):
@@ -115,27 +115,27 @@ class BaseAuthProvider(ABC):
         if not self.config.enabled:
             logger.warning(f"Провайдер {self.provider_name.value} отключен")
             return False
-        
+
         if not self.client_id:
             logger.warning(f"client_id не настроен для {self.provider_name.value}")
             return False
-        
+
         if not self.client_secret:
             logger.warning(f"client_secret не настроен для {self.provider_name.value}")
             return False
-        
+
         if not self.auth_url:
             logger.warning(f"auth_url не настроен для {self.provider_name.value}")
             return False
-        
+
         if not self.token_url:
             logger.warning(f"token_url не настроен для {self.provider_name.value}")
             return False
-        
+
         if not self.userinfo_url:
             logger.warning(f"userinfo_url не настроен для {self.provider_name.value}")
             return False
-        
+
         return True
 
     def _build_auth_params(self, state: str, redirect_uri: str) -> dict:

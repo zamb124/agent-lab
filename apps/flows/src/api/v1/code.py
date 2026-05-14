@@ -14,25 +14,25 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
-from core.logging import get_logger
-from core.state import ExecutionState
+from apps.flows.src.api.v1.flows import _inline_tools_list
+from apps.flows.src.container import FlowContainer
+from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.runtime.nodes import create_node
+from apps.flows.src.services.platform_tool_docs import collect_platform_tool_docs
+from apps.flows.src.services.runtime_namespace_doc import build_runtime_namespace_global_variables
+from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from core.context import get_context
 from core.docs import DocumentationQuery
-from core.docs.service import get_documentation_service
 from core.docs.models import (
     CodeTemplate,
     GlobalVariable,
     PlatformToolDoc,
     StateField,
 )
-from core.context import get_context
+from core.docs.service import get_documentation_service
 from core.errors import SafeEvalError
-from apps.flows.src.runtime.nodes import create_node
-from apps.flows.src.api.v1.flows import _inline_tools_list
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.services.platform_tool_docs import collect_platform_tool_docs
-from apps.flows.src.services.runtime_namespace_doc import build_runtime_namespace_global_variables
-from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from core.logging import get_logger
+from core.state import ExecutionState
 
 router = APIRouter(tags=["code"])
 logger = get_logger(__name__)
@@ -59,11 +59,11 @@ async def get_code_completions(
 ) -> CodeCompletionsResponse:
     """
     Возвращает данные для autocomplete в редакторе кода.
-    
+
     Args:
         language: Язык программирования (python, javascript)
         perspective: Ракурс (editor, flow, tool, node)
-    
+
     Returns:
         modules: доступные модули для import
         globals: глобальные переменные (llm, context, etc.)
@@ -87,13 +87,13 @@ async def get_code_completions(
     )
 
     response = service.query(query)
-    
+
     # Конвертируем module_methods в dict формат для API
     module_methods = {
         name: [{"name": m.name, "type": m.type, "doc": m.doc} for m in methods]
         for name, methods in response.module_methods.items()
     }
-    
+
     return CodeCompletionsResponse(
         modules=response.modules,
         globals=response.globals,
@@ -150,7 +150,7 @@ async def get_code_templates(
 ) -> TemplatesResponse:
     """
     Возвращает список шаблонов кода с фильтрацией.
-    
+
     Args:
         language: Язык программирования (python, javascript)
         category: Фильтр по категории (http, llm, interaction, data, files, state, logic, basic)
@@ -159,10 +159,10 @@ async def get_code_templates(
     """
     _ = container
     service = get_documentation_service()
-    
+
     categories = [category] if category else None
     tag_list = tags.split(",") if tags else None
-    
+
     query = DocumentationQuery(
         language=language,
         node_type=node_type,
@@ -173,7 +173,7 @@ async def get_code_templates(
         include_builtins=False,
         include_state_fields=False,
     )
-    
+
     response = service.query(query)
     return TemplatesResponse(templates=response.templates)
 
@@ -233,7 +233,7 @@ class SourceResponse(BaseModel):
 async def get_function_source(container: ContainerDep, function_path: str) -> SourceResponse:
     """
     Возвращает исходный код функции по её пути.
-    
+
     Пример: apps.flows.bundles.<flow_id>.functions.my_function
     """
     _ = container
@@ -308,7 +308,7 @@ async def get_flow_functions(container: ContainerDep, flow_id: str) -> FlowFunct
 async def get_tool_source(container: ContainerDep, tool_path: str) -> SourceResponse:
     """
     Возвращает исходный код tool класса по его пути.
-    
+
     Пример: apps.flows.tools.math_tools.calculator
     """
     _ = container
@@ -321,7 +321,7 @@ async def get_tool_source(container: ContainerDep, tool_path: str) -> SourceResp
 def _get_source_by_path(path: str) -> SourceResponse:
     """
     Получает исходный код по пути к модулю/классу/функции/методу.
-    
+
     Поддерживает:
     - module.function
     - module.ClassName
@@ -446,30 +446,30 @@ def _parse_function_signature(code: str, func_name: Optional[str] = None) -> Dic
     Парсит сигнатуру функции из Python кода.
     """
     import ast
-    
+
     tree = ast.parse(code)
     target_names = [func_name] if func_name else ["execute", "run"]
-    
+
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name in target_names or (func_name is None and not node.name.startswith("_")):
                 params = {}
                 args = node.args
-                
+
                 num_args = len(args.args)
                 num_defaults = len(args.defaults)
                 first_default_idx = num_args - num_defaults
-                
+
                 for i, arg in enumerate(args.args):
                     param_name = arg.arg
-                    
+
                     if param_name in ("self", "cls", "state", "args"):
                         continue
-                    
+
                     type_str = "string"
                     if arg.annotation:
                         type_str = ast.unparse(arg.annotation)
-                    
+
                     has_default = i >= first_default_idx
                     default_value = None
                     if has_default:
@@ -479,22 +479,22 @@ def _parse_function_signature(code: str, func_name: Optional[str] = None) -> Dic
                             default_value = ast.literal_eval(default_node)
                         except (ValueError, TypeError):
                             default_value = ast.unparse(default_node)
-                    
+
                     json_type = _python_type_to_json_type(type_str)
-                    
+
                     params[param_name] = {
                         "type": json_type,
                         "python_type": type_str,
                         "required": not has_default,
                         "default": default_value,
                     }
-                
+
                 return {
                     "func_name": node.name,
                     "parameters": params,
                     "is_async": isinstance(node, ast.AsyncFunctionDef),
                 }
-    
+
     raise ValueError(f"Функция не найдена: {target_names}")
 
 
@@ -506,10 +506,10 @@ async def parse_signature(container: ContainerDep, request: ParseSignatureReques
     _ = container
     if not request.code or not request.code.strip():
         return ParseSignatureResponse(success=False, error="Код пустой")
-    
+
     try:
         result = _parse_function_signature(request.code, request.func_name)
-        
+
         args_schema = {}
         for param_name, param_info in result["parameters"].items():
             schema_item = {
@@ -519,7 +519,7 @@ async def parse_signature(container: ContainerDep, request: ParseSignatureReques
             if param_info["default"] is not None:
                 schema_item["default"] = param_info["default"]
             args_schema[param_name] = schema_item
-        
+
         parameters = {
             name: ParameterInfo(
                 type=info["type"],
@@ -529,14 +529,14 @@ async def parse_signature(container: ContainerDep, request: ParseSignatureReques
             )
             for name, info in result["parameters"].items()
         }
-        
+
         return ParseSignatureResponse(
             success=True,
             func_name=result["func_name"],
             parameters=parameters,
             args_schema=args_schema,
         )
-    
+
     except SyntaxError as e:
         return ParseSignatureResponse(success=False, error=f"Синтаксическая ошибка: {e}")
     except ValueError as e:
@@ -665,7 +665,7 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
     Валидирует код без выполнения.
     """
     code = request.code
-    node_type = _require_execute_node_type(request.node_type or "code")
+    _require_execute_node_type(request.node_type or "code")
     warnings = []
 
     if not code or not code.strip():
@@ -673,7 +673,7 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
 
     runner = container.python_code_runner
     valid, error = runner.validate(code)
-    
+
     if not valid:
         return ValidateResponse(valid=False, error=error)
 
@@ -681,7 +681,7 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
     import re
     if not re.search(r"(?:async\s+)?def\s+\w+\s*\(", code):
         return ValidateResponse(valid=False, error="Функция не найдена в коде")
-    
+
     return ValidateResponse(valid=True, warnings=warnings)
 
 
@@ -695,13 +695,13 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
 
     try:
         input_state_normalized = copy.deepcopy(input_state_raw)
-        task_id = input_state_normalized.setdefault("task_id", str(uuid.uuid4()))
+        input_state_normalized.setdefault("task_id", str(uuid.uuid4()))
         context_id = input_state_normalized.setdefault("context_id", str(uuid.uuid4()))
         input_state_normalized.setdefault("user_id", "test_user")
         flow_id = request.flow_id or request.node_config.get("flow_id") or "test-flow"
         if "session_id" not in input_state_normalized:
             input_state_normalized["session_id"] = f"{flow_id}:{context_id}"
-        
+
         input_state_normalized.setdefault("current_nodes", [])
         input_state_normalized.setdefault("branch_id", "default")
         input_state_normalized.setdefault("messages", [])
@@ -781,27 +781,27 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
 def _validate_node_config(config: Dict[str, Any]) -> None:
     """Валидация обязательных полей для каждого типа ноды."""
     node_type = config.get("type")
-    
+
     if node_type == "code":
         if not config.get("code") and not config.get("tool_id") and not config.get("function"):
             raise SafeEvalError("code, tool_id или function обязателен для code")
-    
+
     elif node_type == "external_api":
         if not config.get("url"):
             raise ValueError("url обязателен для external_api")
-    
+
     elif node_type == "remote_flow":
         if not config.get("url") and not config.get("flow_id"):
             raise ValueError("url или flow_id обязателен для remote_flow")
-    
+
     elif node_type == "flow":
         if not config.get("flow_id"):
             raise ValueError("flow_id обязателен для flow")
-    
+
     elif node_type == "llm_node":
         if not config.get("prompt"):
             raise ValueError("prompt обязателен для llm_node")
-    
+
     elif node_type == "mcp":
         if not config.get("server_id"):
             raise ValueError("server_id обязателен для mcp")
@@ -813,7 +813,7 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
     """Строит node_config из ExecuteRequest."""
     config = request.node_config.copy()
     config["type"] = _require_execute_node_type(str(request.node_type))
-    
+
     # Обратная совместимость: если node_config пустой, но есть поля напрямую в request
     # (старый формат API)
     if not config and hasattr(request, '__dict__'):
@@ -822,9 +822,9 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
         for key, value in request_dict.items():
             if key not in ("node_type", "state", "node_config", "flow_id", "branch_id") and value is not None:
                 config[key] = value
-    
+
     _validate_node_config(config)
-    
+
     return config
 
 
@@ -842,12 +842,12 @@ async def _execute_node(
     if "session_id" not in state_data:
         context_id = state_data.get("context_id", str(uuid.uuid4()))
         state_data["session_id"] = f"{flow_id}:{context_id}"
-    
+
     if node_config.get("type") == "llm_node" and "tools" in node_config:
         tools = node_config["tools"]
         if tools:
             node_config = {**node_config, "tools": await _inline_tools_list(tools, container)}
-    
+
     node = await create_node("test_node", node_config)
     state = ExecutionState.model_validate(state_data)
     result_state = await node.run(state)

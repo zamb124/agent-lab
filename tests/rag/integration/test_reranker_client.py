@@ -11,12 +11,12 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
 
-from core.rag.post_retrieval_rerank import RerankerClientError, RerankerHTTPClient
 from core.context import clear_context, set_context
 from core.models.billing_models import UsageType
 from core.models.context_models import Context, Language
 from core.models.identity_models import Company, User
 from core.rag.models import RAGSearchResult
+from core.rag.post_retrieval_rerank import RerankerClientError, RerankerHTTPClient
 
 from .rerank_v1_rerank_stub import create_v1_rerank_stub_app, get_rerank_upstream
 

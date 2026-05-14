@@ -6,7 +6,7 @@ Container - Dependency Injection контейнер.
 
 Пример:
     from core.container import BaseContainer, lazy
-    
+
     class MyContainer(BaseContainer):
         @lazy
         def my_service(self):

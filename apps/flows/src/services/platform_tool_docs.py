@@ -10,9 +10,9 @@ import json
 from enum import Enum
 from typing import List
 
+from apps.flows.src.container import FlowContainer
 from core.context import get_context
 from core.docs.models import PlatformToolDoc
-from apps.flows.src.container import FlowContainer
 
 _MAX_CODE_PREVIEW_CHARS = 4000
 

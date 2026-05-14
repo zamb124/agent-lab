@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from core.models.identity_models import BoardStage, NamespaceCRMSettings, TaskBoardPreset
 

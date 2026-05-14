@@ -4,14 +4,14 @@ Resources - система ресурсов для агентов.
 Resource = переиспользуемый компонент доступный нодам.
 """
 
-from apps.flows.src.resources.resolver import ResourceResolver
-from apps.flows.src.resources.wrappers import CodeModule, LLMResource, FilesResource
 from apps.flows.src.resources.providers import (
     BaseResourceProvider,
     CodeResourceProvider,
-    LLMResourceProvider,
     FilesResourceProvider,
+    LLMResourceProvider,
 )
+from apps.flows.src.resources.resolver import ResourceResolver
+from apps.flows.src.resources.wrappers import CodeModule, FilesResource, LLMResource
 
 __all__ = [
     "ResourceResolver",

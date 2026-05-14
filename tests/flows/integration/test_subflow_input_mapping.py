@@ -9,8 +9,8 @@ FlowNode поддерживает input_mapping для передачи конк
 }
 """
 
+
 import pytest
-from typing import Any, Dict
 
 from apps.flows.src.runtime.nodes import FlowNode
 from core.state import ExecutionState
@@ -36,7 +36,7 @@ class TestSubflowInputMapping:
         )
 
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs == {}
 
     def test_prepare_state_no_mapping(self):

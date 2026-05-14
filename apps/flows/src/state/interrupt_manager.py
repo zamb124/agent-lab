@@ -15,10 +15,10 @@ Zero-Guess: все методы работают с ExecutionState, не Dict.
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from apps.flows.src.runtime.a2a_messages import build_user_message
 from core.logging import get_logger
 from core.state import ExecutionState, InterruptData, InterruptPathItem
 from core.state.interrupt import InterruptBody, InterruptSystemContext
-from apps.flows.src.runtime.a2a_messages import build_user_message
 
 logger = get_logger(__name__)
 
@@ -46,7 +46,7 @@ class InterruptManager:
             nested_state: State вложенного вызова
         """
         from apps.flows.src.state.execution_state import NestedStateData
-        
+
         saved = NestedStateData(
             messages=list(nested_state.messages),
             interrupt_path=list(nested_state.interrupt_path),
@@ -71,7 +71,7 @@ class InterruptManager:
             ExecutionState вложенного вызова
         """
         from apps.flows.src.state.execution_state import NestedStateData
-        
+
         saved = parent_state.nested_states.get(nested_id)
 
         if saved is None:
@@ -99,7 +99,7 @@ class InterruptManager:
     def push_interrupt_path(state: ExecutionState, call_info: InterruptPathItem) -> None:
         """
         Добавляет элемент в НАЧАЛО пути interrupt.
-        
+
         При interrupt исключение пробрасывается снизу вверх, каждый уровень
         добавляет себя. При resume мы идём сверху вниз, поэтому внешние
         уровни должны быть в начале списка.

@@ -16,7 +16,6 @@ import pytest
 import pytest_asyncio
 
 from apps.flows.src.container import get_container
-from apps.flows.src.models import FlowConfig
 from core.state import ExecutionState
 
 
@@ -49,7 +48,7 @@ class TestFastTrackSkill:
         # flow.edges - нормализованный список словарей с ключами "from", "to", "condition"
         edges_to_null = [e for e in flow.edges if e.get("to") is None]
         edge_sources = {e["from"] for e in edges_to_null}
-        
+
         assert "order_processor" in edge_sources
         assert "complaint_processor" in edge_sources
         assert "general_processor" in edge_sources
@@ -198,7 +197,7 @@ class TestOrdersOnlySkill:
 class TestCodeNodesSkill:
     """
     Тесты для skill 'test_function_nodes'.
-    
+
     ВАЖНО: mock.enabled в skill конфиге НЕ применяется автоматически.
     Это просто конфигурация для будущего использования.
     Skill использует базовый classifier и formatter.
@@ -269,7 +268,7 @@ class TestCodeNodesSkill:
 class TestLlmNodesSkill:
     """
     Тесты для skill 'test_llm_nodes'.
-    
+
     ВАЖНО: mock.enabled в skill конфиге НЕ применяется автоматически.
     Используем mock_llm_with_queue для LLM вызовов.
     """
@@ -289,7 +288,7 @@ class TestLlmNodesSkill:
     async def test_order_processor_executes(self, app, mock_llm_with_queue):
         """Order processor выполняется и возвращает ответ."""
         mock_llm_with_queue(["Заказ обработан успешно"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_nodes")
 
@@ -310,7 +309,7 @@ class TestLlmNodesSkill:
     async def test_complaint_processor_executes(self, app, mock_llm_with_queue):
         """Complaint processor выполняется и возвращает ответ."""
         mock_llm_with_queue(["Жалоба зарегистрирована"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_nodes")
 
@@ -331,7 +330,7 @@ class TestLlmNodesSkill:
     async def test_general_processor_executes(self, app, mock_llm_with_queue):
         """General processor выполняется и возвращает ответ."""
         mock_llm_with_queue(["Общий ответ"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_nodes")
 
@@ -352,7 +351,7 @@ class TestLlmNodesSkill:
 class TestLlmGraphSkill:
     """
     Тесты для skill 'test_llm_graph'.
-    
+
     ВАЖНО: mock.enabled в skill конфиге НЕ применяется автоматически.
     Используем mock_llm_with_queue для LLM вызовов.
     """
@@ -379,7 +378,7 @@ class TestLlmGraphSkill:
     ):
         """Все маршруты выполняются корректно с mock LLM."""
         mock_llm_with_queue(["Mock LLM ответ"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_llm_graph")
 
@@ -400,7 +399,7 @@ class TestLlmGraphSkill:
 class TestRouteOrderSkill:
     """
     Тесты для skill 'test_route_order'.
-    
+
     ВАЖНО: mock.enabled в skill конфиге НЕ применяется автоматически.
     Classifier работает по базовой логике на основе содержимого.
     """
@@ -420,7 +419,7 @@ class TestRouteOrderSkill:
     async def test_order_route_executes(self, app, mock_llm_with_queue):
         """Order route выполняется корректно."""
         mock_llm_with_queue(["Заказ обработан"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_order")
 
@@ -441,7 +440,7 @@ class TestRouteOrderSkill:
     async def test_complaint_still_routes_to_complaint(self, app, mock_llm_with_queue):
         """Жалоба идет в complaint (mock не переопределяет classifier)."""
         mock_llm_with_queue(["Жалоба обработана"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_order")
 
@@ -463,7 +462,7 @@ class TestRouteOrderSkill:
 class TestRouteComplaintSkill:
     """
     Тесты для skill 'test_route_complaint'.
-    
+
     ВАЖНО: mock.enabled в skill конфиге НЕ применяется автоматически.
     Classifier работает по базовой логике на основе содержимого.
     """
@@ -483,7 +482,7 @@ class TestRouteComplaintSkill:
     async def test_complaint_route_executes(self, app, mock_llm_with_queue):
         """Complaint route выполняется корректно."""
         mock_llm_with_queue(["Жалоба зарегистрирована"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_complaint")
 
@@ -504,7 +503,7 @@ class TestRouteComplaintSkill:
     async def test_order_still_routes_to_order(self, app, mock_llm_with_queue):
         """Заказ идет в order (mock не переопределяет classifier)."""
         mock_llm_with_queue(["Заказ обработан"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_route_complaint")
 
@@ -526,7 +525,7 @@ class TestRouteComplaintSkill:
 class TestFullGraphSkill:
     """
     Тесты для skill 'test_full_graph'.
-    
+
     ВАЖНО: mock.enabled в skill конфиге НЕ применяется автоматически.
     Используем mock_llm_with_queue для LLM вызовов.
     """
@@ -546,7 +545,7 @@ class TestFullGraphSkill:
     async def test_full_graph_execution(self, app, mock_llm_with_queue):
         """Граф выполняется полностью."""
         mock_llm_with_queue(["Полный ответ"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_full_graph")
 
@@ -568,7 +567,7 @@ class TestFullGraphSkill:
     async def test_all_routes_work(self, app, mock_llm_with_queue):
         """Все маршруты работают в этом skill."""
         mock_llm_with_queue(["Response"])
-        
+
         container = get_container()
         flow = await container.flow_factory.get_flow("example_graph", branch_id="test_full_graph")
 
@@ -670,12 +669,12 @@ class TestDefaultSkill:
         result = await flow.run(state)
 
         assert result.get("route") == "cat", f"Route должен быть 'cat', получен {result.get('route')}"
-        
+
         # Проверяем что выполнился cat_fact_api, а не general_processor
         executed_nodes = result.get("node_history", {})
         assert "cat_fact_api" in executed_nodes, "cat_fact_api должен быть выполнен"
         assert "general_processor" not in executed_nodes, "general_processor НЕ должен быть выполнен для route=cat"
-        
+
         # cat_fact_api записывает api_response, formatter форматирует в response
         # Проверяем что api_response содержит факт или response содержит CAT
         assert result.get("api_response") is not None or "CAT" in str(result.get("response", "")).upper()
@@ -776,10 +775,10 @@ class TestSkillStatePreservation:
         mock_llm_with_queue(["Response"])
 
         container = get_container()
-        
+
         for branch_id in ["fast_track", "orders_only", "test_function_nodes"]:
             flow = await container.flow_factory.get_flow("example_graph", branch_id=branch_id)
-            
+
             state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -788,7 +787,7 @@ class TestSkillStatePreservation:
             content="заказ"
         )
             result = await flow.run(state)
-            
+
             assert "variables" in result, f"Variables отсутствуют в skill {branch_id}"
             assert "order_prefix" in result["variables"], f"order_prefix отсутствует в skill {branch_id}"
 

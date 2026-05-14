@@ -7,14 +7,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from core.clients import A2AClient
 from apps.flows.config import ExternalFlowConfig
 from apps.flows.src.container import get_container
-from core.db.repositories import Variable
-from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
+from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
-from apps.flows.src.services.flow_factory import FlowFactory
+from core.clients import A2AClient
+from core.db.repositories import Variable
 
 
 class TestFlowFactory:

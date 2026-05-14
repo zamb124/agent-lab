@@ -34,8 +34,7 @@ from core.clients.speech_provider_catalog import (
 )
 from core.clients.voice_resolver import invalidate_company_overrides_cache
 from core.config import get_settings
-from core.db.company_voice_provider_secrets import merge_secrets
-from core.db.company_voice_provider_secrets import unset_secrets_sentinel
+from core.db.company_voice_provider_secrets import merge_secrets, unset_secrets_sentinel
 from core.db.repositories.company_voice_provider_repository import VoiceKind
 from core.logging import get_logger
 from core.models.identity_models import User

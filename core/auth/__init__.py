@@ -2,13 +2,13 @@
 Модуль авторизации и permissions.
 """
 
+from core.auth.errors import PermissionDeniedA2AError
 from core.auth.permissions import (
     ADMIN_GROUP,
     DEFAULT_PERMISSION,
     PermissionChecker,
     permission_checker,
 )
-from core.auth.errors import PermissionDeniedA2AError
 from core.errors import PermissionDeniedError
 
 _lazy_imports = {

@@ -9,8 +9,8 @@ import pytest
 from taskiq.scheduler.scheduled_task import ScheduledTask
 
 from core.scheduler.models import (
-    PlatformScheduledTask,
     PlatformScheduleCreateRequest,
+    PlatformScheduledTask,
     PlatformScheduleFilter,
     PlatformScheduleType,
     ScheduledTaskStatus,

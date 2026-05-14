@@ -5,22 +5,22 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Any, Optional
 
 from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    Index,
+    Integer,
     String,
     Text,
-    DateTime,
-    Integer,
-    Boolean,
-    Float,
-    CheckConstraint,
-    Index,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models.base import Base
 

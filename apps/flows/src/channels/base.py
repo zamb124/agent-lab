@@ -28,35 +28,39 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.message import get_message_text, new_agent_text_message
+from a2a.utils.message import new_agent_text_message
 
-from core.auth import permission_checker
-from core.auth.errors import PermissionDeniedA2AError
-from core.billing.exceptions import BillingBalanceBlockedError
 from apps.flows.config import get_settings
+from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
 from apps.flows.src.container import get_container
-from core.context import Context, User, clear_context, get_context, set_context
-from core.logging import bind_log_context, get_logger
-from core.logging.attributes import LOG_SESSION_AGENT
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
-from apps.flows.src.models.flow_config import Edge, FlowConfig, BranchConfig
 from apps.flows.src.models.enums import MergeMode, NodeType
+from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
-from apps.flows.src.state.cancellation import CancellationToken, FlowCancelled, set_cancellation_token
+from apps.flows.src.state.cancellation import (
+    CancellationToken,
+    FlowCancelled,
+    set_cancellation_token,
+)
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
-from core.state import ExecutionState
-from core.state.trigger_runtime import TriggerRuntimeSnapshot
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
+from apps.flows.src.utils import extract_json_from_response
 from apps.idle_worker.tasks.push_notification_tasks import send_task_update
+from core.auth import permission_checker
+from core.auth.errors import PermissionDeniedA2AError
+from core.billing.exceptions import BillingBalanceBlockedError
+from core.context import Context, clear_context, get_context, set_context
+from core.logging import bind_log_context, get_logger
+from core.logging.attributes import LOG_SESSION_AGENT
+from core.state import ExecutionState
+from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
+from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
-from apps.flows.src.utils import extract_json_from_response
-from apps.flows.src.variables import VariableResolver
-from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
+
 logger = get_logger(__name__)
 
 
@@ -79,41 +83,38 @@ def effective_stream_task_id_for_session(
 class PermissionDenied(Exception):
     """
     Исключение для отсутствия прав доступа.
-    
+
     Содержит PermissionDeniedA2AError для формирования JSON-RPC ответа.
     """
-    
+
     def __init__(self, error: PermissionDeniedA2AError):
         self.error = error
         super().__init__(error.message)
 
 
 # PreparedTaskParams вынесен в types.py чтобы избежать циклических импортов
-from apps.flows.src.channels.types import PreparedTaskParams
+from apps.flows.src.channels.types import PreparedTaskParams  # noqa: E402
 
 
 class BaseChannel(ABC):
     """
     Абстрактный базовый класс канала коммуникации.
-    
+
     Определяет интерфейс для всех каналов: A2A, Telegram, WhatsApp и др.
     Содержит основную логику выполнения задач.
     """
-    
+
     name: str  # Имя канала: "a2a", "telegram", "whatsapp"
-    
+
     def __init__(
-        self, 
-        flow_id: str, 
-        context: Optional[Context] = None,
-        flow_config: Optional[Any] = None
+        self, flow_id: str, context: Optional[Context] = None, flow_config: Optional[Any] = None
     ):
         self.flow_id = flow_id
         self.context = context or get_context()
         self._flow_config = flow_config
-    
+
     # === Универсальный метод отправки сообщения ===
-    
+
     @abstractmethod
     async def send_to_user(
         self,
@@ -123,24 +124,24 @@ class BaseChannel(ABC):
     ) -> None:
         """
         Отправляет сообщение пользователю через канал.
-        
+
         Args:
             content: Текст сообщения
             buttons: Кнопки быстрого ответа (опционально)
             attachments: Вложения (опционально)
         """
         pass
-    
+
     # === Общие утилитарные методы ===
-    
+
     def _generate_session_id(self, context_id: str) -> str:
         """Генерирует session_id из flow_id и context_id."""
         return f"{self.flow_id}:{context_id}"
-    
+
     def _generate_ids(self, message: Optional[Message] = None) -> tuple[str, str]:
         """
         Генерирует task_id и context_id.
-        
+
         Returns:
             Tuple (task_id, context_id)
         """
@@ -151,14 +152,14 @@ class BaseChannel(ABC):
             task_id = str(uuid.uuid4())
             context_id = str(uuid.uuid4())
         return task_id, context_id
-    
+
     def _get_user_groups_from_context(self, context: Any) -> List[str]:
         """
         Извлекает группы пользователя из контекста.
-        
+
         Args:
             context: контекст запроса (dict с user_groups или Context)
-            
+
         Returns:
             Список групп пользователя
         """
@@ -167,16 +168,18 @@ class BaseChannel(ABC):
             if self.context and self.context.metadata:
                 return self.context.metadata.get("grps", []) or []
             return []
-        
+
         if isinstance(context, dict):
             return context.get("user_groups", []) or []
-        
+
         if isinstance(context, Context):
             return context.metadata.get("grps", []) or []
-        
+
         return getattr(context, "user_groups", []) or []
 
-    async def _normalize_request_variables(self, request_variables: Dict[str, Any]) -> Dict[str, Any]:
+    async def _normalize_request_variables(
+        self, request_variables: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Нормализует metadata.variables от клиента перед merge в runtime_flow.variables.
 
@@ -197,7 +200,7 @@ class BaseChannel(ABC):
             else:
                 resolved[key] = raw_value
         return resolved
-    
+
     async def check_permissions(
         self,
         user_groups: List[str],
@@ -214,24 +217,22 @@ class BaseChannel(ABC):
             PermissionDenied: если нет доступа к агенту или ветке
         """
         config = get_settings()
-        
+
         # Если проверка permissions отключена - пропускаем
         if not config.auth.permissions_enabled:
             return
-        
+
         container = get_container()
         flow_config = await container.flow_repository.get(self.flow_id)
-        
+
         if flow_config is None:
             return
-        
+
         # Проверка permission на агента
         if not permission_checker.check_flow_permission(user_groups, flow_config.permission):
             required = permission_checker.normalize(flow_config.permission)
-            raise PermissionDenied(
-                PermissionDeniedA2AError.for_flow(self.flow_id, required)
-            )
-        
+            raise PermissionDenied(PermissionDeniedA2AError.for_flow(self.flow_id, required))
+
         # Проверка permission на ветку графа
         branch_config = None
         if flow_config.branches and branch_id in flow_config.branches:
@@ -241,17 +242,19 @@ class BaseChannel(ABC):
             if not permission_checker.check_branch_permission(
                 user_groups, branch_config.permission, flow_config.permission
             ):
-                effective_perm = branch_config.permission if branch_config.permission else flow_config.permission
+                effective_perm = (
+                    branch_config.permission if branch_config.permission else flow_config.permission
+                )
                 required = permission_checker.normalize(effective_perm)
                 raise PermissionDenied(
                     PermissionDeniedA2AError.for_branch(branch_id, self.flow_id, required)
                 )
-    
+
     async def _get_state(self, session_id: str) -> Optional[ExecutionState]:
         """Получает state из StateManager."""
         container = get_container()
         return await container.state_manager.get_state(session_id)
-    
+
     async def _save_state(self, session_id: str, state: ExecutionState) -> None:
         """Сохраняет state в StateManager."""
         container = get_container()
@@ -265,9 +268,7 @@ class BaseChannel(ABC):
         """
         direct = self._generate_session_id(lookup_id)
         st = await self._get_state(direct)
-        if st is not None and (
-            st.context_id == lookup_id or st.task_id == lookup_id
-        ):
+        if st is not None and (st.context_id == lookup_id or st.task_id == lookup_id):
             return direct
 
         container = get_container()
@@ -311,25 +312,25 @@ class BaseChannel(ABC):
     ) -> PreparedTaskParams:
         """
         Подготовка общих параметров для process_task.
-        
+
         Общая логика для всех каналов.
         Берет данные пользователя из Context, если он установлен.
         """
         if task_id is None or context_id is None:
             task_id, context_id = self._generate_ids(message)
-        
+
         # Получаем данные пользователя из Context канала
         # ВАЖНО: session_id агента НЕ берется из Context.session_id (это авторизационная сессия)
         # Сессия агента генерируется на основе context_id из сообщения
         if self.context and self.context.user:
             if user_id is None:
                 user_id = self.context.user.user_id
-        
+
         # Сессия агента всегда генерируется на основе context_id
         session_id = self._generate_session_id(context_id)
-        
+
         state = await self._get_state(session_id)
-        
+
         is_takeover_user_reply = False
         takeover_operator_task_id: str | None = None
 
@@ -361,12 +362,12 @@ class BaseChannel(ABC):
                     if op_task is not None:
                         is_takeover_user_reply = True
                         takeover_operator_task_id = op_task
-        
+
         # Объединяем metadata из Context канала с переданным metadata
         final_metadata = metadata or {}
         if self.context and self.context.metadata:
             final_metadata = {**self.context.metadata, **final_metadata}
-        
+
         return PreparedTaskParams(
             task_id=task_id,
             context_id=context_id,
@@ -381,19 +382,19 @@ class BaseChannel(ABC):
             is_takeover_user_reply=is_takeover_user_reply,
             takeover_operator_task_id=takeover_operator_task_id,
         )
-    
+
     async def create_task(self, params: PreparedTaskParams) -> None:
         """
         Создаёт задачу в TaskIQ worker.
-        
+
         Кикает process_flow_task в очередь Redis.
         События публикуются в Redis Pub/Sub и доступны через EventSubscriber.
         """
         if self.context is None:
             raise ValueError("Context is not set. Context must be created in middleware.")
-        
+
         context_data = self.context.to_dict()
-        
+
         # Создаем trace context для propagation в worker
         trace_context_data = None
         if is_tracing_enabled():
@@ -412,10 +413,10 @@ class BaseChannel(ABC):
                 is_resume=params.is_resume,
             )
             trace_context_data = trace_ctx.to_dict()
-        
+
         from apps.flows.src.tasks.flow_tasks import process_flow_task
         from core.config import get_settings
-        
+
         broker_url = get_settings().tasks.broker_url
         logger.info("flow.create_task.broker", broker_url=broker_url)
         logger.debug(f"[create_task] Kicking task_id={params.task_id} for flow_id={self.flow_id}")
@@ -435,9 +436,9 @@ class BaseChannel(ABC):
             trace_context=trace_context_data,
         )
         logger.debug(f"[create_task] Task kicked to TaskIQ: task_id={params.task_id}")
-    
+
     # === Основной метод выполнения задачи ===
-    
+
     async def _run_trigger_output_actions_if_applicable(
         self,
         params: PreparedTaskParams,
@@ -484,19 +485,19 @@ class BaseChannel(ABC):
             trigger_config=trigger.config,
             original_payload=original_payload,
         )
-    
+
     async def process_task(self, params: PreparedTaskParams) -> Dict[str, Any]:
         """
         Обрабатывает запрос через агента.
-        
+
         STREAM-FIRST: Все события публикуются в Redis Pub/Sub через Emitter.
         API подписывается на канал и стримит события клиенту.
-        
+
         Returns:
             Результат выполнения
         """
         container = get_container()
-        
+
         # Context должен быть установлен в middleware и передан через context_data
         # Обновляем только специфичные для задачи поля
         self.context.session_id = params.session_id
@@ -504,7 +505,7 @@ class BaseChannel(ABC):
         self.context.flow_id = self.flow_id
         if params.metadata:
             self.context.metadata = {**self.context.metadata, **params.metadata}
-        
+
         # Устанавливаем в ContextVar для доступа из других компонентов
         set_context(self.context)
         bind_log_context(**{LOG_SESSION_AGENT: params.session_id})
@@ -512,16 +513,18 @@ class BaseChannel(ABC):
         # Загружаем state для определения task_id, resume и закреплённой версии flow
         container = get_container()
         saved_state = await container.state_manager.get_state(params.session_id)
-        
+
         effective_task_id = effective_stream_task_id_for_session(params.task_id, saved_state)
-        
-        logger.debug(f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})")
-        
+
+        logger.debug(
+            f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})"
+        )
+
         # Получаем breakpoints из metadata
         breakpoints = {}
         if params.metadata and "breakpoints" in params.metadata:
             breakpoints = params.metadata["breakpoints"]
-        
+
         exec_state = ExecutionState(
             task_id=effective_task_id,
             context_id=params.context_id,
@@ -532,9 +535,9 @@ class BaseChannel(ABC):
             breakpoints=breakpoints,
         )
         emitter = Emitter(container.redis_client, exec_state)
-        
+
         logger.debug(f"[process_task] Emitter created for stream:{effective_task_id}")
-        
+
         try:
             pinned_version = saved_state.flow_config_version if saved_state else None
             try:
@@ -555,12 +558,16 @@ class BaseChannel(ABC):
                 # Извлекаем значения если они были в FlowVariableConfig формате
                 final_override_vars = {}
                 for key, value in resolved_override_vars.items():
-                    if isinstance(value, dict) and "value" in value and ("public" in value or "title" in value or "description" in value):
+                    if (
+                        isinstance(value, dict)
+                        and "value" in value
+                        and ("public" in value or "title" in value or "description" in value)
+                    ):
                         final_override_vars[key] = value["value"]
                     else:
                         final_override_vars[key] = value
                 override_vars = final_override_vars
-                
+
                 runtime_flow.variables = {**runtime_flow.variables, **override_vars}
 
             identity_vars = flow_variables_from_request_context(self.context)
@@ -569,9 +576,9 @@ class BaseChannel(ABC):
 
             user_id = self.context.user.user_id if self.context.user else params.user_id
             user_groups = self.context.metadata.get("grps", []) or []
-            
+
             state = saved_state
-            
+
             if state is None:
                 state = create_initial_state(
                     task_id=effective_task_id,
@@ -597,15 +604,15 @@ class BaseChannel(ABC):
                 state.task_id = effective_task_id
                 state.context_id = params.context_id
                 state.session_id = params.session_id
-            
+
             state.user_id = user_id
             state.user_groups = user_groups
-            
+
             if params.files_data:
                 state.files = list(state.files) + params.files_data
-            
+
             state.variables = {**state.variables, **runtime_flow.variables}
-            
+
             request_triggers = params.metadata.get("triggers") if params.metadata else None
             if request_triggers:
                 merged: Dict[str, TriggerRuntimeSnapshot] = dict(state.triggers)
@@ -618,15 +625,15 @@ class BaseChannel(ABC):
                         msg = f"metadata.triggers[{tid!r}] must be dict or TriggerRuntimeSnapshot"
                         raise TypeError(msg)
                 state.triggers = merged
-            
+
             cfg_ver = (runtime_flow.config or {}).get("version")
             if cfg_ver and not state.flow_config_version:
                 state.flow_config_version = str(cfg_ver)
-            
+
             # Обновляем breakpoints из metadata (для отладки)
             if breakpoints:
                 state.breakpoints = breakpoints
-            
+
             # Резолвим mock конфиг из всех уровней иерархии
             flow_config = await container.flow_factory.get_flow_config_snapshot(
                 self.flow_id, state.flow_config_version
@@ -638,36 +645,38 @@ class BaseChannel(ABC):
                     attach_flow_speech_layers_to_context,
                 )
 
-                attach_flow_speech_layers_to_context(
-                    self.context, flow_config, params.branch_id
-                )
-            
+                attach_flow_speech_layers_to_context(self.context, flow_config, params.branch_id)
+
             branch_mock = None
             if flow_config and flow_config.branches and params.branch_id in flow_config.branches:
                 branch_cfg_snapshot = flow_config.branches[params.branch_id]
                 branch_mock = branch_cfg_snapshot.mock
-            
+
             request_mock = params.metadata.get("mock") if params.metadata else None
-            
+
             # Проверка прав на использование mock через request metadata
             if request_mock:
                 config = get_settings()
                 global_mock = config.mock.model_dump() if config.mock else None
-                mock_config = resolve_mock_config(global_mock, root_flow_mock, branch_mock, request_mock)
-                
+                mock_config = resolve_mock_config(
+                    global_mock, root_flow_mock, branch_mock, request_mock
+                )
+
                 if not check_mock_permission(user_groups, mock_config):
                     logger.warning(f"Mock access denied for user {user_id}")
                     request_mock = None
-            
+
             # Резолвим итоговый mock конфиг
             config = get_settings()
             global_mock = config.mock.model_dump() if config.mock else None
-            mock_config = resolve_mock_config(global_mock, root_flow_mock, branch_mock, request_mock)
-            
+            mock_config = resolve_mock_config(
+                global_mock, root_flow_mock, branch_mock, request_mock
+            )
+
             if mock_config.enabled:
                 state.mock = mock_config.model_dump(exclude_none=False)
                 logger.info(f"[mock] Mock enabled for session {params.session_id}")
-            
+
             final_response = ""
 
             if params.is_resume and state.interrupt:
@@ -743,10 +752,8 @@ class BaseChannel(ABC):
                 await self._send_push_notification(
                     params.task_id, params.context_id, "completed", final_response
                 )
-                await self._run_trigger_output_actions_if_applicable(
-                    params, state, flow_config
-                )
-            
+                await self._run_trigger_output_actions_if_applicable(params, state, flow_config)
+
             messages_count = len(state.messages)
 
             logger.info(
@@ -755,13 +762,13 @@ class BaseChannel(ABC):
                 f"interrupt={bool(state.interrupt)}"
             )
             await self._save_state(params.session_id, state)
-            
+
             # Сериализация interrupt
             if state.interrupt:
                 interrupt_dict = interrupt_to_response_dict(state.interrupt)
             else:
                 interrupt_dict = None
-            
+
             status = "input-required" if state.interrupt else "completed"
 
             return {
@@ -773,29 +780,25 @@ class BaseChannel(ABC):
         except BillingBalanceBlockedError as e:
             logger.error(f"Billing balance blocked: {e}")
             await emitter.emit_error(str(e))
-            await self._send_push_notification(
-                params.task_id, params.context_id, "failed", str(e)
-            )
+            await self._send_push_notification(params.task_id, params.context_id, "failed", str(e))
             raise
 
         except Exception as e:
             logger.error(f"Error in process_task: {e}")
             await emitter.emit_error(str(e))
-            await self._send_push_notification(
-                params.task_id, params.context_id, "failed", str(e)
-            )
+            await self._send_push_notification(params.task_id, params.context_id, "failed", str(e))
             raise
         finally:
             clear_context()
-    
+
     async def _send_push_notification(
         self, task_id: str, context_id: str, state: str, message: str
     ) -> None:
         """Отправляет push notification через TaskIQ."""
         await send_task_update.kiq(task_id, context_id, state, message, True)
-    
+
     # === Общая реализация on_get_task ===
-    
+
     async def _get_task_from_state(self, lookup_id: str) -> Optional[Task]:
         """
         Получает Task из state.
@@ -812,7 +815,7 @@ class BaseChannel(ABC):
 
         if state is None:
             return None
-        
+
         if state.interrupt:
             task_state = TaskState.input_required
             response = state.interrupt.question
@@ -825,18 +828,18 @@ class BaseChannel(ABC):
         else:
             task_state = TaskState.working
             response = ""
-        
+
         messages: List[Message] = list(state.messages)
-        
+
         task_id = state.task_id
-        
+
         return Task(
             id=task_id,
             contextId=state.context_id,
             status=TaskStatus(state=task_state, message=new_agent_text_message(response)),
             history=messages if messages else None,
         )
-    
+
     async def _cancel_task_in_state(self, lookup_id: str) -> Optional[Task]:
         """Отменяет Task в state (``id`` из ``tasks/cancel`` = task_id или context_id)."""
         session_id = await self._resolve_session_id_for_a2a_lookup(lookup_id)
@@ -860,86 +863,80 @@ class BaseChannel(ABC):
                 message=new_agent_text_message("Task cancelled"),
             ),
         )
-    
+
     # === Обязательные методы (abstract) ===
-    
+
     @abstractmethod
     async def on_message_send(
         self, params: MessageSendParams, context: Any = None
     ) -> Union[Task, Message]:
         """
         Отправка сообщения (синхронно).
-        
+
         Возвращает Task или Message в зависимости от типа запроса.
         """
         pass
-    
+
     @abstractmethod
     async def on_message_stream(
         self, params: MessageSendParams, context: Any = None
     ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
         """
         Отправка сообщения (streaming).
-        
+
         Yield'ит события по мере генерации.
         """
         pass
-    
+
     @abstractmethod
-    async def on_get_task(
-        self, params: TaskQueryParams, context: Any = None
-    ) -> Optional[Task]:
+    async def on_get_task(self, params: TaskQueryParams, context: Any = None) -> Optional[Task]:
         """Получение задачи по ID."""
         pass
-    
+
     @abstractmethod
-    async def on_cancel_task(
-        self, params: TaskIdParams, context: Any = None
-    ) -> Optional[Task]:
+    async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Optional[Task]:
         """Отмена задачи."""
         pass
-    
+
     @abstractmethod
     async def on_resubscribe_to_task(
         self, params: TaskIdParams, context: Any = None
     ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
         """Переподписка на события задачи."""
         pass
-    
+
     # === Опциональные методы (push notifications) ===
-    
+
     async def on_set_task_push_notification_config(
         self, params: TaskPushNotificationConfig, context: Any = None
     ) -> TaskPushNotificationConfig:
         """Установка конфигурации push notification."""
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
-    
+
     async def on_get_task_push_notification_config(
         self, params: Any, context: Any = None
     ) -> Optional[TaskPushNotificationConfig]:
         """Получение конфигурации push notification."""
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
-    
+
     async def on_list_task_push_notification_config(
         self, params: Any, context: Any = None
     ) -> List[TaskPushNotificationConfig]:
         """Список конфигураций push notification."""
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
-    
+
     async def on_delete_task_push_notification_config(
         self, params: Any, context: Any = None
     ) -> None:
         """Удаление конфигурации push notification."""
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
-    
+
     # === Опциональные методы (A2A agent-card) ===
-    
-    async def on_get_authenticated_extended_card(
-        self, params: Any, context: Any = None
-    ) -> Any:
+
+    async def on_get_authenticated_extended_card(self, params: Any, context: Any = None) -> Any:
         """Получение расширенной карточки агента."""
         raise NotImplementedError(f"Channel '{self.name}' does not support extended card")
-    
+
     # === Branches CRUD ===
 
     async def list_branches(self) -> List[Dict[str, Any]]:
@@ -998,7 +995,7 @@ class BaseChannel(ABC):
             "permission": branch_cfg.permission,
             "branch_body": branch_body,
         }
-    
+
     async def create_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Создать новую ветку (branch)."""
         container = get_container()
@@ -1008,13 +1005,19 @@ class BaseChannel(ABC):
 
         if config.branches and branch_id in config.branches:
             raise ValueError(f"Ветка '{branch_id}' уже существует")
-        
+
         branch_body = data.get("branch_body", {})
-        
+
         # Zero-Guess: валидация неизвестных полей в branch_body
         allowed_branch_body_fields = {
-            "entry", "nodes", "nodes_mode", "edges", "edges_mode",
-            "variables", "variables_mode", "mock"
+            "entry",
+            "nodes",
+            "nodes_mode",
+            "edges",
+            "edges_mode",
+            "variables",
+            "variables_mode",
+            "mock",
         }
         unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
@@ -1022,7 +1025,7 @@ class BaseChannel(ABC):
                 f"Unknown fields in branch_body: {sorted(unknown_fields)}. "
                 f"Allowed fields: {sorted(allowed_branch_body_fields)}"
             )
-        
+
         edges = None
         if branch_body.get("edges"):
             edges = []
@@ -1037,7 +1040,7 @@ class BaseChannel(ABC):
                     )
                 else:
                     edges.append(edge)
-        
+
         branch_kwargs: dict[str, Any] = {
             "name": data.get("name", branch_id),
             "description": data.get("description", ""),
@@ -1055,15 +1058,15 @@ class BaseChannel(ABC):
             branch_kwargs["variables_mode"] = MergeMode(branch_body["variables_mode"])
 
         new_branch_cfg = BranchConfig(**branch_kwargs)
-        
+
         if config.branches is None:
             config.branches = {}
-        
+
         config.branches[branch_id] = new_branch_cfg
-        
+
         # Применяем ветку к текущему конфигу и валидируем
         effective = container.flow_factory._apply_branch(config, branch_id)
-        
+
         validator = FlowValidator(
             flow_repository=container.flow_repository,
             tool_repository=container.tool_repository,
@@ -1071,26 +1074,33 @@ class BaseChannel(ABC):
         )
         validation_result = await validator.validate(
             nodes=effective["nodes"],
-            edges=[{"from": e.from_node, "to": e.to_node, "condition": e.condition} for e in effective["edges"]],
+            edges=[
+                {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+                for e in effective["edges"]
+            ],
             entry=effective["entry"],
             variables=effective["variables"],
             flow_id=self.flow_id,
         )
-        
+
         if not validation_result.valid:
-            errors = [e.message for e in validation_result.errors if e.severity == ValidationSeverity.ERROR]
+            errors = [
+                e.message
+                for e in validation_result.errors
+                if e.severity == ValidationSeverity.ERROR
+            ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
-        
+
         await container.flow_repository.set(config)
-        
+
         logger.info(f"Создана ветка: {branch_id}")
-        
+
         return {
             "status": "success",
             "message": f"Ветка '{branch_id}' создана",
             "branch_id": branch_id,
         }
-    
+
     async def update_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Обновить существующую ветку (branch)."""
         container = get_container()
@@ -1100,13 +1110,19 @@ class BaseChannel(ABC):
 
         if not config.branches or branch_id not in config.branches:
             raise ValueError(f"Ветка '{branch_id}' не найдена")
-        
+
         branch_body = data.get("branch_body", {})
-        
+
         # Zero-Guess: валидация неизвестных полей в branch_body
         allowed_branch_body_fields = {
-            "entry", "nodes", "nodes_mode", "edges", "edges_mode",
-            "variables", "variables_mode", "mock"
+            "entry",
+            "nodes",
+            "nodes_mode",
+            "edges",
+            "edges_mode",
+            "variables",
+            "variables_mode",
+            "mock",
         }
         unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
@@ -1114,7 +1130,7 @@ class BaseChannel(ABC):
                 f"Unknown fields in branch_body: {sorted(unknown_fields)}. "
                 f"Allowed fields: {sorted(allowed_branch_body_fields)}"
             )
-        
+
         edges = None
         if branch_body.get("edges"):
             edges = []
@@ -1129,7 +1145,7 @@ class BaseChannel(ABC):
                     )
                 else:
                     edges.append(edge)
-        
+
         existing_branch = config.branches.get(branch_id) if config.branches else None
         nodes_mode = MergeMode(
             branch_body["nodes_mode"]
@@ -1168,15 +1184,15 @@ class BaseChannel(ABC):
             variables=branch_body.get("variables", {}),
             variables_mode=variables_mode,
         )
-        
+
         if config.branches is None:
             config.branches = {}
-        
+
         config.branches[branch_id] = updated_branch_cfg
-        
+
         # Применяем ветку к текущему конфигу и валидируем
         effective = container.flow_factory._apply_branch(config, branch_id)
-        
+
         validator = FlowValidator(
             flow_repository=container.flow_repository,
             tool_repository=container.tool_repository,
@@ -1184,26 +1200,33 @@ class BaseChannel(ABC):
         )
         validation_result = await validator.validate(
             nodes=effective["nodes"],
-            edges=[{"from": e.from_node, "to": e.to_node, "condition": e.condition} for e in effective["edges"]],
+            edges=[
+                {"from": e.from_node, "to": e.to_node, "condition": e.condition}
+                for e in effective["edges"]
+            ],
             entry=effective["entry"],
             variables=effective["variables"],
             flow_id=self.flow_id,
         )
-        
+
         if not validation_result.valid:
-            errors = [e.message for e in validation_result.errors if e.severity == ValidationSeverity.ERROR]
+            errors = [
+                e.message
+                for e in validation_result.errors
+                if e.severity == ValidationSeverity.ERROR
+            ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
-        
+
         await container.flow_repository.set(config)
-        
+
         logger.info(f"Обновлена ветка: {branch_id}")
-        
+
         return {
             "status": "success",
             "message": f"Ветка '{branch_id}' обновлена",
             "branch_id": branch_id,
         }
-    
+
     async def delete_branch(self, branch_id: str) -> Dict[str, Any]:
         """Удалить ветку (branch)."""
         container = get_container()
@@ -1222,30 +1245,31 @@ class BaseChannel(ABC):
             "message": f"Ветка '{branch_id}' удалена",
             "branch_id": branch_id,
         }
-    
+
     # === Tools ===
-    
+
     async def get_branch_tools(self, branch_id: str) -> List[Dict[str, Any]]:
         """Получить список tools для ветки."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             return []
-        
+
         effective = container.flow_factory._apply_branch(config, branch_id)
         # Graph flow если есть реальные переходы между нодами (не только to: null)
         real_edges = [
-            e for e in effective["edges"]
+            e
+            for e in effective["edges"]
             if (e.to_node if hasattr(e, "to_node") else e.get("to")) is not None
         ]
         is_graph_flow = len(real_edges) > 0
-        
+
         tools_set = set()
         inline_tools = {}
-        
+
         for node_id, node_config in effective["nodes"].items():
             node_type = node_config.get("type")
-            
+
             # Собираем inline tools из code nodes
             if node_type == NodeType.CODE.value:
                 if node_config.get("code"):
@@ -1255,11 +1279,11 @@ class BaseChannel(ABC):
                         "name": node_config.get("name", tool_id),
                         "description": node_config.get("description", ""),
                         "code": node_config.get("code", ""),
-                        "args_schema": node_config.get("args_schema", {})
+                        "args_schema": node_config.get("args_schema", {}),
                     }
                 elif node_config.get("tool_id"):
                     tools_set.add(node_config["tool_id"])
-            
+
             # Собираем inline tools из llm_node nodes
             elif node_type == NodeType.LLM_NODE.value:
                 tools_list = node_config.get("tools", [])
@@ -1271,10 +1295,14 @@ class BaseChannel(ABC):
                         tool_id = (
                             tool_ref.tool_id
                             if hasattr(tool_ref, "tool_id")
-                            else (tool_ref.get("tool_id") if isinstance(tool_ref, dict) else str(tool_ref))
+                            else (
+                                tool_ref.get("tool_id")
+                                if isinstance(tool_ref, dict)
+                                else str(tool_ref)
+                            )
                         )
                         tools_set.add(tool_id)
-                
+
                 if node_config.get("node_id"):
                     node_db_config = await container.node_repository.get(node_config["node_id"])
                     if node_db_config and node_db_config.tools:
@@ -1286,12 +1314,16 @@ class BaseChannel(ABC):
                                 tool_id = (
                                     tool_ref.tool_id
                                     if hasattr(tool_ref, "tool_id")
-                                    else (tool_ref.get("tool_id") if isinstance(tool_ref, dict) else str(tool_ref))
+                                    else (
+                                        tool_ref.get("tool_id")
+                                        if isinstance(tool_ref, dict)
+                                        else str(tool_ref)
+                                    )
                                 )
                                 tools_set.add(tool_id)
-        
+
         tools_info = []
-        
+
         # Добавляем inline tools
         for tool_id, tool_config in inline_tools.items():
             inline_attrs: dict = {
@@ -1310,7 +1342,7 @@ class BaseChannel(ABC):
                     "attributes": inline_attrs,
                 }
             )
-        
+
         # Добавляем referenced tools
         for tool_id in sorted(tools_set):
             tool_ref = await container.tool_repository.get(tool_id)
@@ -1334,35 +1366,39 @@ class BaseChannel(ABC):
             else:
                 flow_config = await container.flow_repository.get(tool_id)
                 if flow_config:
-                    tools_info.append({
-                        "name": tool_id,
-                        "type": "function",
-                        "attributes": {
-                            "description": flow_config.description or "",
-                            "flow_display_name": flow_config.name or tool_id,
-                            "source": "flow",
-                        },
-                    })
+                    tools_info.append(
+                        {
+                            "name": tool_id,
+                            "type": "function",
+                            "attributes": {
+                                "description": flow_config.description or "",
+                                "flow_display_name": flow_config.name or tool_id,
+                                "source": "flow",
+                            },
+                        }
+                    )
                 else:
-                    tools_info.append({
-                        "name": tool_id,
-                        "type": "function",
-                        "attributes": {
-                            "description": "",
-                            "source": "reference",
-                        },
-                    })
-        
+                    tools_info.append(
+                        {
+                            "name": tool_id,
+                            "type": "function",
+                            "attributes": {
+                                "description": "",
+                                "source": "reference",
+                            },
+                        }
+                    )
+
         if is_graph_flow:
             for node_id, node_config in effective["nodes"].items():
                 node_type = node_config.get("type", "unknown")
                 node_name = node_id
-                
+
                 if node_config.get("flow_id"):
                     flow_config = await container.flow_repository.get(node_config["flow_id"])
                     if flow_config:
                         node_name = flow_config.name
-                
+
                 description = f"Нода типа '{node_type}'"
                 if node_config.get("flow_id"):
                     description = f"Агент: {node_name}"
@@ -1374,49 +1410,53 @@ class BaseChannel(ABC):
                     description = "Ресурс на графе"
                 elif node_type == NodeType.HITL_NODE.value:
                     description = "Оператор очереди"
-                
-                tools_info.append({
-                    "name": node_id,
-                    "type": "node",
-                    "attributes": {
-                        "description": description,
-                        "node_type": node_type,
-                        "node_name": node_name,
-                    },
-                })
-            
+
+                tools_info.append(
+                    {
+                        "name": node_id,
+                        "type": "node",
+                        "attributes": {
+                            "description": description,
+                            "node_type": node_type,
+                            "node_name": node_name,
+                        },
+                    }
+                )
+
             for edge in effective["edges"]:
                 from_node = edge.from_node if hasattr(edge, "from_node") else edge.get("from")
                 to_node = edge.to_node if hasattr(edge, "to_node") else edge.get("to")
                 condition = edge.condition if hasattr(edge, "condition") else edge.get("condition")
-                
+
                 edge_name = f"{from_node} -> {to_node or 'end'}"
                 description = f"Переход от '{from_node}' к '{to_node or 'конец'}'"
                 if condition:
                     description += f" (условие: {condition})"
-                
-                tools_info.append({
-                    "name": edge_name,
-                    "type": "edge",
-                    "attributes": {
-                        "description": description,
-                        "from_node": from_node,
-                        "to_node": to_node,
-                        "condition": condition,
-                    },
-                })
-        
+
+                tools_info.append(
+                    {
+                        "name": edge_name,
+                        "type": "edge",
+                        "attributes": {
+                            "description": description,
+                            "from_node": from_node,
+                            "to_node": to_node,
+                            "condition": condition,
+                        },
+                    }
+                )
+
         return tools_info
-    
+
     # === Schema ===
-    
+
     async def get_branch_schema(self) -> Dict[str, Any]:
         """Получить JSON Schema для создания ветки."""
         container = get_container()
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
+
         return {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "type": "object",
@@ -1425,16 +1465,16 @@ class BaseChannel(ABC):
             "required": [],
             "additionalProperties": True,
         }
-    
+
     # === A2A AgentCard (спека) ===
-    
+
     async def get_agent_card(self, base_url: str) -> Dict[str, Any]:
         """Собрать AgentCard (A2A) для этого flow_id."""
         container = get_container()
         config = self._flow_config or await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
-        
+
         branches_map = await container.flow_factory.get_branches(self.flow_id)
 
         card_branch_entries = []
@@ -1476,12 +1516,12 @@ class BaseChannel(ABC):
             defaultOutputModes=["text/plain"],
             supportsAuthenticatedExtendedCard=False,
         )
-        
+
         card_dict = card.model_dump(by_alias=True, exclude_none=True)
         skills_payload = card_dict.pop("skills", None)
         if skills_payload is not None:
             card_dict["branches"] = skills_payload
-        
+
         # Добавляем публичные variables как дополнительное поле (не входит в стандарт A2A)
         public_vars = {}
         flow_variables = config.variables or {}
@@ -1516,21 +1556,23 @@ class BaseChannel(ABC):
 # BaseChannelHandler - для отправки сообщений в каналы (Telegram, Email, Webhook)
 # =============================================================================
 
+
 class BaseChannelHandler(ABC):
     """
     Базовый класс для отправки сообщений в каналы.
-    
+
     Отличие от BaseChannel:
     - BaseChannel - получение и обработка сообщений ОТ агента
     - BaseChannelHandler - отправка сообщений В канал (Telegram, Email, Webhook)
-    
+
     Каждый handler реализует методы send_message, send_photo, send_document.
     Метод execute_action - универсальный диспетчер действий.
     """
-    
+
     from apps.flows.src.models.enums import ChannelType
+
     channel_type: ChannelType
-    
+
     @abstractmethod
     async def send_message(
         self,
@@ -1542,19 +1584,19 @@ class BaseChannelHandler(ABC):
     ) -> Dict[str, Any]:
         """
         Отправляет текстовое сообщение.
-        
+
         Args:
             recipient: Получатель (chat_id для Telegram, email для Email)
             text: Текст сообщения
             config: Конфигурация канала (bot_token, parse_mode, etc)
             variables: Переменные для резолвинга @var:
             **kwargs: Дополнительные параметры (reply_to_message_id, etc)
-            
+
         Returns:
             Ответ от API канала
         """
         pass
-    
+
     @abstractmethod
     async def send_photo(
         self,
@@ -1567,7 +1609,7 @@ class BaseChannelHandler(ABC):
     ) -> Dict[str, Any]:
         """
         Отправляет фото.
-        
+
         Args:
             recipient: Получатель
             photo: URL или bytes фото
@@ -1576,7 +1618,7 @@ class BaseChannelHandler(ABC):
             caption: Подпись к фото
         """
         pass
-    
+
     @abstractmethod
     async def send_document(
         self,
@@ -1590,7 +1632,7 @@ class BaseChannelHandler(ABC):
     ) -> Dict[str, Any]:
         """
         Отправляет документ/файл.
-        
+
         Args:
             recipient: Получатель
             document: URL или bytes документа
@@ -1600,7 +1642,7 @@ class BaseChannelHandler(ABC):
             filename: Имя файла
         """
         pass
-    
+
     async def execute_action(
         self,
         action: str,
@@ -1610,36 +1652,37 @@ class BaseChannelHandler(ABC):
     ) -> Dict[str, Any]:
         """
         Универсальный диспетчер действий.
-        
+
         Вызывает соответствующий метод (send_message, send_photo, etc).
-        
+
         Args:
             action: Название действия (send_message, send_photo, send_document)
             params: Параметры действия (recipient, text, photo, etc)
             config: Конфигурация канала
             variables: Переменные для резолвинга
-            
+
         Returns:
             Результат выполнения действия
         """
         method = getattr(self, action, None)
-        
+
         if method is None:
             raise ValueError(
                 f"Unknown action '{action}' for channel {self.channel_type.value}. "
                 f"Available: send_message, send_photo, send_document"
             )
-        
+
         logger.info(
             f"Channel {self.channel_type.value}: executing {action} "
             f"to {params.get('recipient', 'unknown')}"
         )
-        
+
         return await method(config=config, variables=variables, **params)
-    
+
     def _resolve_value(self, value: Any, variables: Dict[str, Any]) -> Any:
         """Резолвит @var: значения."""
         if not isinstance(value, str):
             return value
         from apps.flows.src.mapping import MappingResolver
+
         return MappingResolver.resolve_vars_in_string(value, variables)

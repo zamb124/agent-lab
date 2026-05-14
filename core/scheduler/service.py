@@ -13,8 +13,8 @@ from taskiq.kicker import AsyncKicker
 
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
-    PlatformScheduledTask,
     PlatformScheduleCreateRequest,
+    PlatformScheduledTask,
     PlatformScheduleFilter,
     PlatformScheduleType,
     ScheduledTaskStatus,

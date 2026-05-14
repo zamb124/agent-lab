@@ -3,22 +3,22 @@
 """
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.config.models import LoggingConfig
+import pytest
+
 from core.clients.loki_client import (
     LokiClient,
     LokiClientError,
-    _build_trace_query,
-    _build_session_query,
     _build_request_id_query,
+    _build_session_query,
     _build_span_id_query,
+    _build_trace_query,
     _build_user_id_query,
-    _parse_loki_response,
     _parse_entry,
+    _parse_loki_response,
 )
-
+from core.config.models import LoggingConfig
 
 # ---------------------------------------------------------------------------
 # Query builders

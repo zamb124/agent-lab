@@ -1,6 +1,7 @@
 from apps.flows.src.models.enums import ReactToolRole
+
 from .base import BaseTool, ExternalAPITool
-from .decorator import tool, FunctionTool
+from .decorator import FunctionTool, tool
 
 __all__ = [
     "BaseTool",

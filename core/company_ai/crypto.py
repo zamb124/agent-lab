@@ -18,7 +18,6 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from core.config import get_settings
 
-
 _SECRET_MASK_VISIBLE_TAIL = 4
 
 

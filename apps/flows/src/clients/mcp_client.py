@@ -7,10 +7,9 @@ MCP (Model Context Protocol) использует JSON-RPC 2.0.
 - SSE (Server-Sent Events) - POST запросы с event stream ответами
 """
 
-import json
 import hashlib
-import uuid
-from typing import Any, AsyncIterator, Dict, List, Optional
+import json
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -18,7 +17,6 @@ from apps.flows.src.models.mcp import (
     MCPCallResult,
     MCPServerConfig,
     MCPToolInfo,
-    MCPTransportType,
 )
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
@@ -39,14 +37,14 @@ class MCPClientError(Exception):
 class MCPClient:
     """
     Универсальный MCP клиент с поддержкой HTTP и SSE транспортов.
-    
+
     Поддерживает:
     - HTTP транспорт (JSON-RPC over HTTP POST)
     - SSE транспорт (JSON-RPC over Server-Sent Events)
     - Session management через Mcp-Session-Id header
     - Резолвинг @var: в headers
     """
-    
+
     def __init__(
         self,
         config: MCPServerConfig,
@@ -59,31 +57,31 @@ class MCPClient:
         self.session_id: Optional[str] = None  # Получаем от сервера
         self._request_id = 0
         self._initialized = False
-    
+
     def _next_request_id(self) -> int:
         """Генерирует следующий ID запроса."""
         self._request_id += 1
         return self._request_id
-    
+
     def _resolve_headers(self, include_session: bool = True) -> Dict[str, str]:
         """Резолвит headers с @var: ссылками."""
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
-        
+
         # Session ID добавляется только после инициализации
         if include_session and self.session_id:
             headers["Mcp-Session-Id"] = self.session_id
-        
+
         for key, value in self.config.headers.items():
             if isinstance(value, str) and "@var:" in value:
                 headers[key] = VarResolver.resolve_text(value, self.variables)
             else:
                 headers[key] = value
-        
+
         return headers
-    
+
     @staticmethod
     def _jsonrpc_envelope_from_body(text: str) -> Optional[Dict[str, Any]]:
         """
@@ -150,7 +148,7 @@ class MCPClient:
     async def _read_response_text(self, response: httpx.Response) -> str:
         await response.aread()
         return response.text
-    
+
     async def _rpc_call(
         self,
         method: str,
@@ -159,15 +157,15 @@ class MCPClient:
     ) -> tuple[Any, httpx.Headers]:
         """
         Выполняет JSON-RPC 2.0 вызов через HTTP или SSE.
-        
+
         Args:
             method: Имя метода (initialize, tools/list, tools/call)
             params: Параметры метода
             include_session: Включать ли session_id в headers
-            
+
         Returns:
             Кортеж (результат, response headers)
-            
+
         Raises:
             MCPClientError: При ошибке вызова
         """
@@ -179,9 +177,9 @@ class MCPClient:
         }
         if params:
             payload["params"] = params
-        
+
         headers = self._resolve_headers(include_session=include_session)
-        
+
         logger.debug(f"MCP RPC call: {method} to {self.config.url}")
 
         if method == "tools/call":
@@ -248,28 +246,28 @@ class MCPClient:
                     raise MCPClientError(
                         f"MCP: empty response for {method} (content-type={ct!r}, body={snippet!r})"
                     )
-        
+
         if "error" in result:
             error = result["error"]
             raise MCPClientError(
                 f"MCP RPC error: {error.get('code')} - {error.get('message')}"
             )
-        
+
         return result.get("result"), response_headers
-    
+
     async def initialize(self) -> Dict[str, Any]:
         """
         Инициализирует MCP сессию.
-        
+
         После initialize сервер возвращает Mcp-Session-Id в headers,
         который нужно использовать для последующих запросов.
-        
+
         Returns:
             Информация о сервере (capabilities, serverInfo)
         """
         if self._initialized:
             return {}
-        
+
         result, headers = await self._rpc_call(
             "initialize",
             {
@@ -282,27 +280,27 @@ class MCPClient:
             },
             include_session=False,  # Первый запрос без session
         )
-        
+
         # Получаем session_id из response headers
         self.session_id = headers.get("mcp-session-id") or headers.get("Mcp-Session-Id")
-        
+
         self._initialized = True
         logger.info(f"MCP session initialized: {self.session_id}")
-        
+
         return result
-    
+
     async def list_tools(self) -> List[MCPToolInfo]:
         """
         Получает список доступных tools с MCP сервера.
-        
+
         Returns:
             Список MCPToolInfo
         """
         if not self._initialized:
             await self.initialize()
-        
+
         result, _ = await self._rpc_call("tools/list")
-        
+
         tools = []
         for tool_data in result.get("tools", []):
             tools.append(MCPToolInfo(
@@ -310,10 +308,10 @@ class MCPClient:
                 description=tool_data.get("description"),
                 input_schema=tool_data.get("inputSchema"),
             ))
-        
+
         logger.info(f"MCP server {self.config.server_id}: {len(tools)} tools available")
         return tools
-    
+
     async def call_tool(
         self,
         tool_name: str,
@@ -321,17 +319,17 @@ class MCPClient:
     ) -> MCPCallResult:
         """
         Вызывает tool на MCP сервере.
-        
+
         Args:
             tool_name: Имя tool
             arguments: Аргументы вызова
-            
+
         Returns:
             MCPCallResult с результатом
         """
         if not self._initialized:
             await self.initialize()
-        
+
         logger.debug(f"MCP tool call: {tool_name}")
 
         result, _ = await self._rpc_call(
@@ -363,25 +361,25 @@ async def get_mcp_client(
 ) -> MCPClient:
     """
     Получает или создает MCP клиент для сервера.
-    
+
     Args:
         config: Конфигурация MCP сервера
         variables: Переменные для резолвинга @var:
         timeout: Таймаут запросов
-        
+
     Returns:
         Инициализированный MCPClient
     """
     cache_key = f"{config.server_id}"
-    
+
     if cache_key in _client_cache:
         client = _client_cache[cache_key]
         client.variables = variables or {}
         return client
-    
+
     client = MCPClient(config, variables, timeout)
     await client.initialize()
-    
+
     _client_cache[cache_key] = client
     return client
 
@@ -389,7 +387,7 @@ async def get_mcp_client(
 def clear_mcp_client_cache(server_id: Optional[str] = None) -> None:
     """
     Очищает кэш MCP клиентов.
-    
+
     Args:
         server_id: ID сервера для очистки. None = очистить всё.
     """

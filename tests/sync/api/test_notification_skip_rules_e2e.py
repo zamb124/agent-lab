@@ -24,9 +24,9 @@ import redis.asyncio as redis_async
 
 from core.config import get_settings
 from core.utils.tokens import get_token_service
-
 from tests.sync.api._helpers import create_topic_channel_via_http
 from tests.sync.api._realtime_helpers import (
+    PubSubReceive,
     add_member_via_http,
     connect_ws,
     http_owner,
@@ -71,8 +71,11 @@ async def test_notify_user_skipped_when_recipient_has_sync_ws_presence(
 
     async with http_owner(sync_auth_token) as http:
         channel_id = await create_topic_channel_via_http(
-            http, http.headers,
-            company_id=company_id, unique_id=unique_id, suffix="presence",
+            http,
+            http.headers,
+            company_id=company_id,
+            unique_id=unique_id,
+            suffix="presence",
             channel_name="presence_ch",
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
@@ -81,7 +84,8 @@ async def test_notify_user_skipped_when_recipient_has_sync_ws_presence(
         await asyncio.sleep(0.3)
         async with http_owner(sync_auth_token) as http:
             await send_text_message(
-                http, http.headers,
+                http,
+                http.headers,
                 channel_id=channel_id,
                 text=f"presence-skip {unique_id}",
             )
@@ -115,13 +119,17 @@ async def test_notify_user_delivered_when_recipient_offline(
 
     async with http_owner(sync_auth_token) as http:
         channel_id = await create_topic_channel_via_http(
-            http, http.headers,
-            company_id=company_id, unique_id=unique_id, suffix="offline",
+            http,
+            http.headers,
+            company_id=company_id,
+            unique_id=unique_id,
+            suffix="offline",
             channel_name="offline_ch",
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
         await send_text_message(
-            http, http.headers,
+            http,
+            http.headers,
             channel_id=channel_id,
             text=f"offline-deliver {unique_id} {uuid.uuid4().hex[:6]}",
         )
@@ -159,8 +167,11 @@ async def test_notify_user_skipped_when_channel_muted(
 
     async with http_owner(sync_auth_token) as http:
         channel_id = await create_topic_channel_via_http(
-            http, http.headers,
-            company_id=company_id, unique_id=unique_id, suffix="mute",
+            http,
+            http.headers,
+            company_id=company_id,
+            unique_id=unique_id,
+            suffix="mute",
             channel_name="mute_ch",
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
@@ -174,7 +185,8 @@ async def test_notify_user_skipped_when_channel_muted(
 
     async with http_owner(sync_auth_token) as http:
         await send_text_message(
-            http, http.headers,
+            http,
+            http.headers,
             channel_id=channel_id,
             text=f"muted {unique_id}",
         )
@@ -207,8 +219,11 @@ async def test_mention_notification_delivered_even_with_sync_ws_presence(
 
     async with http_owner(sync_auth_token) as http:
         channel_id = await create_topic_channel_via_http(
-            http, http.headers,
-            company_id=company_id, unique_id=unique_id, suffix="ment",
+            http,
+            http.headers,
+            company_id=company_id,
+            unique_id=unique_id,
+            suffix="ment",
             channel_name="ment_ch",
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
@@ -217,7 +232,8 @@ async def test_mention_notification_delivered_even_with_sync_ws_presence(
         await asyncio.sleep(0.3)
         async with http_owner(sync_auth_token) as http:
             await send_text_message(
-                http, http.headers,
+                http,
+                http.headers,
                 channel_id=channel_id,
                 text=f"hi @{user2_id} {unique_id}",
                 mentioned_user_ids=[user2_id],

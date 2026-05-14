@@ -6,7 +6,7 @@ Redis: предпочтение egress proxy по origin (нормализова
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from core.config import get_settings

@@ -2,9 +2,9 @@
 Web Push Service для отправки push-уведомлений
 """
 import json
-from typing import Optional, List
+from typing import List, Optional
 
-from pywebpush import webpush, WebPushException
+from pywebpush import WebPushException, webpush
 
 from core.logging import get_logger
 from core.push.models import PushSubscription
@@ -43,7 +43,7 @@ class WebPushService:
     ) -> bool:
         """
         Отправить push-уведомление на устройство
-        
+
         Returns:
             True если успешно, False если ошибка или подписка истекла
         """
@@ -98,12 +98,12 @@ class WebPushService:
     ) -> List[str]:
         """
         Отправить push на все устройства пользователя
-        
+
         Returns:
             Список endpoints с истекшими подписками (для удаления)
         """
         expired_endpoints = []
-        
+
         for subscription in subscriptions:
             if subscription.endpoint.startswith("apns:"):
                 continue
@@ -118,7 +118,7 @@ class WebPushService:
             )
             if not success:
                 expired_endpoints.append(subscription.endpoint)
-        
+
         return expired_endpoints
 
 

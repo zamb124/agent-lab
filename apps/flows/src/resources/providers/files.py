@@ -4,7 +4,7 @@ FilesResourceProvider - провайдер для files ресурсов.
 
 from typing import Any, Dict
 
-from apps.flows.src.models import ResourceDefinition, FilesResourceConfig
+from apps.flows.src.models import FilesResourceConfig, ResourceDefinition
 from apps.flows.src.resources.providers.base import BaseResourceProvider
 from apps.flows.src.resources.wrappers import FilesResource
 from core.logging import get_logger
@@ -15,13 +15,13 @@ logger = get_logger(__name__)
 class FilesResourceProvider(BaseResourceProvider):
     """
     Провайдер для Files ресурсов.
-    
+
     Создаёт FilesResource для работы с S3/MinIO.
     """
-    
+
     def __init__(self, container: Any = None):
         self._container = container
-    
+
     async def resolve(
         self,
         definition: ResourceDefinition,
@@ -29,22 +29,22 @@ class FilesResourceProvider(BaseResourceProvider):
     ) -> FilesResource:
         """
         Создаёт FilesResource.
-        
+
         Args:
             definition: Определение ресурса с files конфигом
             variables: Переменные агента
-            
+
         Returns:
             FilesResource для работы с файлами
         """
         resolved_config = self._resolve_variable_refs(definition.config, variables)
         config = FilesResourceConfig.model_validate(resolved_config)
-        
+
         logger.debug(
             f"Files resource '{definition.resource_id}' loaded: "
             f"bucket={config.bucket}, prefix={config.prefix}"
         )
-        
+
         return FilesResource(
             bucket=config.bucket,
             prefix=config.prefix,

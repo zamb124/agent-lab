@@ -18,22 +18,22 @@ logger = get_logger(__name__)
 async def download_certificate(container: ContainerDep):
     """
     Скачать SSL сертификат для установки в браузер.
-    
+
     Сертификат необходим для работы Service Worker и PWA функций
     при использовании самоподписанного сертификата.
     """
     _ = container
     cert_path = Path("/app/ssl/platform.crt")
-    
+
     if not cert_path.exists():
         logger.warning(f"SSL сертификат не найден: {cert_path}")
         raise HTTPException(
             status_code=404,
             detail="SSL сертификат не найден. Обратитесь к администратору."
         )
-    
+
     logger.info("Запрос на скачивание SSL сертификата")
-    
+
     return FileResponse(
         cert_path,
         media_type="application/x-x509-ca-cert",

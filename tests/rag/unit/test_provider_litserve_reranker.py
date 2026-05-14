@@ -3,9 +3,9 @@
 import pytest
 from fastapi import HTTPException
 
+from apps.provider_litserve.openai_server_contracts import placeholder_rerank_scores
 from apps.provider_litserve.reranker.engines import LocalRerankerEngine, parse_rerank_body
 from core.config.models import ProviderLitserveInfraConfig
-from apps.provider_litserve.openai_server_contracts import placeholder_rerank_scores
 
 
 def _cfg(**kwargs: object) -> ProviderLitserveInfraConfig:

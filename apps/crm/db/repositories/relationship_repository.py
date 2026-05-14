@@ -7,13 +7,14 @@
 
 import base64
 import json as _json
+from typing import Dict, List, Optional, Tuple
 
-from typing import List, Optional, Dict, Tuple
-from sqlalchemy import select, delete, or_, update, tuple_
+from sqlalchemy import delete, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 
-from apps.crm.db.base import CRMDatabase, BaseCRMRepository
+from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import Relationship
+from core.db.utils import get_rowcount
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -21,19 +22,16 @@ logger = get_logger(__name__)
 
 class RelationshipRepository(BaseCRMRepository[Relationship]):
     """Репозиторий для relationships в PostgreSQL"""
-    
+
     @property
     def model_class(self) -> type[Relationship]:
         return Relationship
-    
+
     @property
     def id_field(self) -> str:
         return "relationship_id"
-    
-    async def get_by_entity(
-        self,
-        entity_id: str
-    ) -> List[Relationship]:
+
+    async def get_by_entity(self, entity_id: str) -> List[Relationship]:
         """Получает все связи сущности (source и target)"""
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -41,12 +39,12 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
                 Relationship.company_id == company_id,
                 or_(
                     Relationship.source_entity_id == entity_id,
-                    Relationship.target_entity_id == entity_id
-                )
+                    Relationship.target_entity_id == entity_id,
+                ),
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
-    
+
     async def get_by_entity_for_graph(
         self,
         entity_id: str,
@@ -70,7 +68,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             stmt = select(Relationship).where(
                 or_(
                     Relationship.source_entity_id == entity_id,
-                    Relationship.target_entity_id == entity_id
+                    Relationship.target_entity_id == entity_id,
                 )
             )
 
@@ -83,7 +81,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
 
             result = await session.execute(stmt)
             return list(result.scalars().all())
-    
+
     async def find_exact(
         self,
         source_id: str,
@@ -133,7 +131,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             if existing_after is not None:
                 return existing_after
             raise
-    
+
     async def delete_outgoing_by_source_and_types(
         self,
         source_entity_id: str,
@@ -151,12 +149,9 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             )
             result = await session.execute(stmt)
             await session.commit()
-            return int(result.rowcount or 0)
+            return get_rowcount(result)
 
-    async def delete_by_entity(
-        self,
-        entity_id: str
-    ) -> int:
+    async def delete_by_entity(self, entity_id: str) -> int:
         """Удаляет все связи сущности"""
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -164,34 +159,33 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
                 Relationship.company_id == company_id,
                 or_(
                     Relationship.source_entity_id == entity_id,
-                    Relationship.target_entity_id == entity_id
-                )
+                    Relationship.target_entity_id == entity_id,
+                ),
             )
             result = await session.execute(stmt)
             await session.commit()
-            
-            logger.info(f"Deleted {result.rowcount} relationships for entity:{entity_id}")
-            return result.rowcount
-    
+
+            count = get_rowcount(result)
+            logger.info(f"Deleted {count} relationships for entity:{entity_id}")
+            return count
+
     async def get_outgoing(
-        self,
-        source_entity_id: str,
-        relationship_type: Optional[str] = None
+        self, source_entity_id: str, relationship_type: Optional[str] = None
     ) -> List[Relationship]:
         """Получает исходящие связи от сущности"""
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(Relationship).where(
                 Relationship.company_id == company_id,
-                Relationship.source_entity_id == source_entity_id
+                Relationship.source_entity_id == source_entity_id,
             )
-            
+
             if relationship_type:
                 stmt = stmt.where(Relationship.relationship_type == relationship_type)
-            
+
             result = await session.execute(stmt)
             return list(result.scalars().all())
-    
+
     async def get_neighbors(
         self,
         entity_ids: List[str],
@@ -221,7 +215,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             stmt = select(Relationship).where(
                 or_(
                     Relationship.source_entity_id.in_(entity_ids),
-                    Relationship.target_entity_id.in_(entity_ids)
+                    Relationship.target_entity_id.in_(entity_ids),
                 )
             )
 
@@ -234,20 +228,22 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
 
             if relationship_namespace is not None and relationship_namespace.strip() != "":
                 stmt = stmt.where(Relationship.namespace == relationship_namespace)
-            
+
             result = await session.execute(stmt)
             relationships = list(result.scalars().all())
-            
+
             neighbors_map: Dict[str, List[Relationship]] = {eid: [] for eid in entity_ids}
             for rel in relationships:
                 if rel.source_entity_id in entity_ids:
                     neighbors_map[rel.source_entity_id].append(rel)
                 if rel.target_entity_id in entity_ids:
                     neighbors_map[rel.target_entity_id].append(rel)
-            
-            logger.debug(f"Loaded neighbors for {len(entity_ids)} entities: {len(relationships)} relationships")
+
+            logger.debug(
+                f"Loaded neighbors for {len(entity_ids)} entities: {len(relationships)} relationships"
+            )
             return neighbors_map
-    
+
     async def get_all_for_graph(
         self,
         limit: int = 1000,
@@ -261,9 +257,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         """
         company_id = self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(Relationship).where(
-                Relationship.company_id == company_id
-            )
+            stmt = select(Relationship).where(Relationship.company_id == company_id)
 
             if cursor is not None:
                 payload = _json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
@@ -322,8 +316,8 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
                 .values(target_entity_id=new_entity_id)
             )
             await session.commit()
-            n_src = int(res_src.rowcount or 0)
-            n_tgt = int(res_tgt.rowcount or 0)
+            n_src = get_rowcount(res_src)
+            n_tgt = get_rowcount(res_tgt)
             logger.info(
                 f"Rewrote entity_id {old_entity_id} -> {new_entity_id}: "
                 f"source_rows={n_src} target_rows={n_tgt}"
@@ -339,14 +333,14 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             )
             result = await session.execute(stmt)
             await session.commit()
-            return int(result.rowcount or 0) > 0
+            return get_rowcount(result) > 0
 
     async def deduplicate_relationships_for_entity(self, entity_id: str) -> None:
         """
         Удаляет петли source==target и дубликаты по ключу
         (namespace, source, target, relationship_type), оставляя запись с минимальным relationship_id.
         """
-        company_id = self._get_company_id()
+        self._get_company_id()
         rels = await self.get_by_entity(entity_id)
         loops = [r for r in rels if r.source_entity_id == r.target_entity_id]
         for r in loops:
@@ -369,4 +363,3 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             for r in group:
                 if r.relationship_id != keeper.relationship_id:
                     await self.delete_by_relationship_id(r.relationship_id)
-

@@ -10,9 +10,9 @@ from __future__ import annotations
 from typing import Awaitable, Callable, Optional
 
 from apps.crm.models.api import (
+    AIAnalysisDraftApplyResult,
     AIAnalyzeRequest,
     AIAnalyzeResponse,
-    AIAnalysisDraftApplyResult,
     NoteProcessingConfig,
     NoteProcessingResult,
 )

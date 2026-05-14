@@ -5,10 +5,10 @@ SyncContainer - DI контейнер для Sync сервиса.
 Добавляет Sync-специфичные репозитории (SQLAlchemy реляционные).
 """
 
-from core.logging import get_logger
 from typing import Optional
 
 from core.container import BaseContainer, lazy
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class SyncContainer(BaseContainer):

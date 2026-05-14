@@ -1,10 +1,8 @@
 """Репозиторий для работы с сообщениями (SQLAlchemy)."""
 
 import json
-
-from core.logging import get_logger
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict, List, Optional, Type
 
 from sqlalchemy import and_, func, or_, select, text, tuple_, update
@@ -14,6 +12,7 @@ from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannelMember, SyncMessage, SyncMessageContent
 from apps.sync.models.messages import MessageContentModel
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 @dataclass(frozen=True)

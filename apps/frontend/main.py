@@ -2,43 +2,47 @@
 Frontend Service - FastAPI приложение для управления платформой
 """
 
-from core.logging import get_logger
-import os
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from core.config.testing import is_testing
-from datetime import UTC, datetime
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, PlainTextResponse, Response
-from apps.frontend.api.auth import router as auth_router
-from apps.frontend.api.companies import router as companies_router
-from apps.frontend.api.company_voice_providers import (
-    router as company_voice_providers_router,
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
 )
+from fastapi.staticfiles import StaticFiles
+
+from apps.frontend.api.ai_providers import router as ai_providers_router
+from apps.frontend.api.api_keys import router as api_keys_router
+from apps.frontend.api.auth import router as auth_router
+from apps.frontend.api.billing import router as billing_router
+from apps.frontend.api.companies import router as companies_router
 from apps.frontend.api.company_pronunciation_rules import (
     router as company_pronunciation_rules_router,
 )
+from apps.frontend.api.company_voice_providers import (
+    router as company_voice_providers_router,
+)
+from apps.frontend.api.embed_configs import router as embed_configs_router
+from apps.frontend.api.invites import router as invites_router
+from apps.frontend.api.leads import lead_requests_router, leads_router
+from apps.frontend.api.payments_webhook import router as payments_webhook_router
+from apps.frontend.api.platform_billing import router as platform_billing_router
 from apps.frontend.api.platform_pronunciation_rules import (
     router as platform_pronunciation_rules_router,
 )
-from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
-from apps.frontend.api.embed_configs import router as embed_configs_router
+from apps.frontend.api.platform_tracing import router as platform_tracing_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.public_site import router as public_site_router
-from apps.frontend.api.invites import router as invites_router
-from apps.frontend.api.team import router as team_router
-from apps.frontend.api.api_keys import router as api_keys_router
-from apps.frontend.api.billing import router as billing_router
-from apps.frontend.api.settings import router as settings_router
-from apps.frontend.api.ai_providers import router as ai_providers_router
-from apps.frontend.api.services import router as services_router
 from apps.frontend.api.scheduler import router as scheduler_router
-from apps.frontend.api.leads import leads_router, lead_requests_router
-from apps.frontend.api.platform_tracing import router as platform_tracing_router
-from apps.frontend.api.platform_billing import router as platform_billing_router
-from apps.frontend.api.payments_webhook import router as payments_webhook_router
+from apps.frontend.api.services import router as services_router
+from apps.frontend.api.settings import router as settings_router
+from apps.frontend.api.team import router as team_router
+from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from apps.frontend.container import get_frontend_container
@@ -47,11 +51,16 @@ from apps.frontend.services.flow_preview_guest_html import (
     build_flow_preview_guest_html,
     build_flow_preview_unavailable_html,
 )
-from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.app.factory import create_service_app
-from core.identity.flow_preview_handoff import consume_flow_preview_handoff, peek_flow_preview_handoff
+from core.config.testing import is_testing
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
+from core.identity.flow_preview_handoff import (
+    consume_flow_preview_handoff,
+    peek_flow_preview_handoff,
+)
 from core.identity.system_bootstrap import ensure_system_admin_membership
+from core.logging import get_logger
+from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 
 logger = get_logger(__name__)
@@ -534,8 +543,9 @@ app.add_middleware(StaticCoreModuleCorsMiddleware)
 
 if __name__ == "__main__":
     import uvicorn
+
     from apps.frontend.config import get_frontend_settings
-    
+
     settings = get_frontend_settings()
     uvicorn.run(
         "apps.frontend.main:app",

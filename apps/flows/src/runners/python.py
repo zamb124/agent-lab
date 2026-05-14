@@ -5,7 +5,7 @@ PythonCodeRunner - выполнение Python кода.
 from __future__ import annotations
 
 import inspect
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
@@ -25,9 +25,9 @@ class PythonCodeRunner(BaseCodeRunner):
     """
     Выполнение Python кода.
     """
-    
+
     language = "python"
-    
+
     def __init__(
         self,
         context: Optional[Any] = None,
@@ -61,21 +61,21 @@ class PythonCodeRunner(BaseCodeRunner):
         if snap is None or state is None or not isinstance(state, ES):
             return
         assert_frozen_fields_unchanged(state, snap)
-    
+
     async def execute(
-        self, 
-        code: str, 
-        state: 'ExecutionState', 
+        self,
+        code: str,
+        state: 'ExecutionState',
         func_name: str = "run"
     ) -> Any:
         """
         Выполняет код ноды.
-        
+
         Args:
             code: Python код с определением функции
             state: ExecutionState для передачи
             func_name: Имя функции для вызова
-            
+
         Returns:
             Результат выполнения
         """
@@ -88,7 +88,7 @@ class PythonCodeRunner(BaseCodeRunner):
                 result = func(state)
         self._assert_frozen_if_needed(state, snap)
         return result
-    
+
     async def execute_tool(
         self,
         code: str,
@@ -97,16 +97,16 @@ class PythonCodeRunner(BaseCodeRunner):
     ) -> Any:
         """
         Выполняет код tool.
-        
+
         Поддерживает два формата:
         1. Функция: def execute(args, state) или async def execute(args, state) (или последняя top-level функция)
         2. Класс: class MyTool(BaseTool) с async run
-        
+
         Args:
             code: Python код
             args: Аргументы вызова tool
             state: State (опционально)
-            
+
         Returns:
             Результат выполнения
         """
@@ -115,7 +115,7 @@ class PythonCodeRunner(BaseCodeRunner):
             self.namespace_builder.variables = dict(state.variables)
 
         target, is_class = self.compiler.compile_tool(code)
-        
+
         snap = self._snapshot_frozen_if_state(state)
         with user_code_state_mutation_guard():
             if is_class:
@@ -145,14 +145,14 @@ class PythonCodeRunner(BaseCodeRunner):
                         result = func(**kwargs)
         self._assert_frozen_if_needed(state, snap)
         return result
-    
+
     def validate(self, code: str) -> Tuple[bool, Optional[str]]:
         """
         Валидирует Python код.
-        
+
         Args:
             code: Python код
-            
+
         Returns:
             Tuple[bool, Optional[str]] - (valid, error_message)
         """

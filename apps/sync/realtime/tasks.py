@@ -25,8 +25,6 @@ from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import (
     SYNC_MESSAGE_TEXT_MAX_CHARS,
-    AudioAttachmentContent,
-    AudioTranscriptionStatus,
     CallTranscriptContent,
     CallTranscriptEntry,
     MessageContentModel,
@@ -39,15 +37,21 @@ from apps.sync.realtime.events import event_call_recording_failed, event_message
 from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
-from core.models.identity_models import User
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
-from core.files.models import FileRecord, FileStatus, VideoAttachmentContent
+from core.files.models import (
+    AudioAttachmentContent,
+    AudioTranscriptionStatus,
+    FileRecord,
+    FileStatus,
+    VideoAttachmentContent,
+)
 from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models.identity_models import User
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 from core.utils.tokens import get_token_service

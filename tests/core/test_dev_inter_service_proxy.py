@@ -1,9 +1,9 @@
 """DevInterServiceProxy: сопоставление первого сегмента пути и имени процесса."""
 
 from core.middleware.dev_inter_service_proxy import (
+    _ONLYOFFICE_STATIC_SEGMENTS,
     _is_local_target_for_process,
     _is_onlyoffice_upstream_path,
-    _ONLYOFFICE_STATIC_SEGMENTS,
 )
 
 

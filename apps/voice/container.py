@@ -31,7 +31,6 @@ from core.clients.voice_resolver import (
 from core.container.base import BaseContainer, lazy
 from core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 

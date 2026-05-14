@@ -5,7 +5,7 @@
 import pytest
 
 from apps.flows.src.models.enums import ReactToolRole
-from apps.flows.src.services.flow_validator import FlowValidator, FlowValidationResult
+from apps.flows.src.services.flow_validator import FlowValidationResult, FlowValidator
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.tools import calculator, final_answer, finish, reason
 

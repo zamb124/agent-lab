@@ -23,7 +23,7 @@ _tracer_provider: Optional[TracerProvider] = None
 def setup_tracing(config: "TracingConfig") -> None:
     """
     Инициализирует OpenTelemetry трейсинг.
-    
+
     Args:
         config: Конфигурация трейсинга
     """

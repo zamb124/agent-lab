@@ -9,6 +9,8 @@ import pytest
 from apps.scheduler.main import (
     CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME,
     CALENDAR_SYNC_TASK_NAME,
+    CRM_RECONCILE_DAILY_SUMMARY_CRON,
+    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
     CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
     RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME,
     RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
@@ -98,13 +100,17 @@ class TestFrontendSchedulerApi:
 
         monkeypatch.setattr(frontend_container.scheduler_client, "pause_schedule", _pause)
 
-        response = await frontend_client_with_auth.post("/frontend/api/scheduler/schedules/task-1/pause")
+        response = await frontend_client_with_auth.post(
+            "/frontend/api/scheduler/schedules/task-1/pause"
+        )
         assert response.status_code == 200
         payload = response.json()
         assert payload["id"] == "task-1"
         assert payload["status"] == "paused"
 
-    async def test_run_now_schedule(self, frontend_client_with_auth, frontend_container, monkeypatch):
+    async def test_run_now_schedule(
+        self, frontend_client_with_auth, frontend_container, monkeypatch
+    ):
         async def _run_now(task_id: str):
             assert task_id == "task-1"
             payload = self._task_payload()
@@ -113,7 +119,9 @@ class TestFrontendSchedulerApi:
 
         monkeypatch.setattr(frontend_container.scheduler_client, "run_schedule_now", _run_now)
 
-        response = await frontend_client_with_auth.post("/frontend/api/scheduler/schedules/task-1/run-now")
+        response = await frontend_client_with_auth.post(
+            "/frontend/api/scheduler/schedules/task-1/run-now"
+        )
         assert response.status_code == 200
         payload = response.json()
         assert payload["id"] == "task-1"
@@ -131,7 +139,9 @@ class TestFrontendSchedulerApi:
         assert payload["id"] == "task-1"
         assert payload["target_service"] == "flows"
 
-    async def test_create_schedule(self, frontend_client_with_auth, frontend_container, monkeypatch):
+    async def test_create_schedule(
+        self, frontend_client_with_auth, frontend_container, monkeypatch
+    ):
         async def _create(request):
             assert request.target_service == "flows"
             assert request.task_name == "sync_llm_models_task"
@@ -156,38 +166,52 @@ class TestFrontendSchedulerApi:
         payload = response.json()
         assert payload["id"] == "task-1"
 
-    async def test_resume_schedule(self, frontend_client_with_auth, frontend_container, monkeypatch):
+    async def test_resume_schedule(
+        self, frontend_client_with_auth, frontend_container, monkeypatch
+    ):
         async def _resume(task_id: str):
             assert task_id == "task-1"
             return self._task_payload(status="pending")
 
         monkeypatch.setattr(frontend_container.scheduler_client, "resume_schedule", _resume)
 
-        response = await frontend_client_with_auth.post("/frontend/api/scheduler/schedules/task-1/resume")
+        response = await frontend_client_with_auth.post(
+            "/frontend/api/scheduler/schedules/task-1/resume"
+        )
         assert response.status_code == 200
         payload = response.json()
         assert payload["status"] == "pending"
 
-    async def test_cancel_schedule(self, frontend_client_with_auth, frontend_container, monkeypatch):
+    async def test_cancel_schedule(
+        self, frontend_client_with_auth, frontend_container, monkeypatch
+    ):
         async def _cancel(task_id: str):
             assert task_id == "task-1"
             return self._task_payload(status="cancelled")
 
         monkeypatch.setattr(frontend_container.scheduler_client, "cancel_schedule", _cancel)
 
-        response = await frontend_client_with_auth.post("/frontend/api/scheduler/schedules/task-1/cancel")
+        response = await frontend_client_with_auth.post(
+            "/frontend/api/scheduler/schedules/task-1/cancel"
+        )
         assert response.status_code == 200
         payload = response.json()
         assert payload["status"] == "cancelled"
 
-    async def test_get_schedule_redis_snapshot(self, frontend_client_with_auth, frontend_container, monkeypatch):
+    async def test_get_schedule_redis_snapshot(
+        self, frontend_client_with_auth, frontend_container, monkeypatch
+    ):
         async def _get_redis_snapshot(task_id: str):
             assert task_id == "task-1"
             return self._redis_snapshot_payload()
 
-        monkeypatch.setattr(frontend_container.scheduler_client, "get_schedule_redis_snapshot", _get_redis_snapshot)
+        monkeypatch.setattr(
+            frontend_container.scheduler_client, "get_schedule_redis_snapshot", _get_redis_snapshot
+        )
 
-        response = await frontend_client_with_auth.get("/frontend/api/scheduler/schedules/task-1/redis")
+        response = await frontend_client_with_auth.get(
+            "/frontend/api/scheduler/schedules/task-1/redis"
+        )
         assert response.status_code == 200
         payload = response.json()
         assert payload["schedule_task_id"] == "task-1"
@@ -225,6 +249,8 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
                 return []
             if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
                 return []
+            if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME:
+                return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
         async def create(self, company_id, user_id, request):
@@ -239,7 +265,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
 
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
-    assert len(fake_service.created_requests) == 6
+    assert len(fake_service.created_requests) == 7
     names = {r.task_name for r in fake_service.created_requests}
     assert names == {
         CALENDAR_SYNC_TASK_NAME,
@@ -248,13 +274,20 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
         RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME,
         RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME,
         CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+        CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
     }
     by_name = {r.task_name: r for r in fake_service.created_requests}
     assert by_name[CALENDAR_SYNC_TASK_NAME].schedule_type == PlatformScheduleType.CRON
     assert by_name[CALENDAR_SYNC_TASK_NAME].cron == "*/1 * * * *"
-    assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+    assert (
+        by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+    )
     assert by_name[CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME].cron == "*/1 * * * *"
-    assert by_name[RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+    assert (
+        by_name[RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME].schedule_type == PlatformScheduleType.CRON
+    )
+    assert by_name[CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME].queue_name == "crm"
+    assert by_name[CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME].cron == CRM_RECONCILE_DAILY_SUMMARY_CRON
 
 
 @pytest.mark.asyncio
@@ -291,6 +324,8 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
                 return []
             if filters.task_name == CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME:
                 return []
+            if filters.task_name == CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME:
+                return []
             raise AssertionError(f"unexpected task_name={filters.task_name!r}")
 
         async def resume(self, company_id, schedule_task_id):
@@ -316,7 +351,9 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
 
     assert fake_service.resumed_task_id == "paused-1"
     assert fake_service.meeting_reminder_create is not None
-    assert fake_service.meeting_reminder_create.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME
+    assert (
+        fake_service.meeting_reminder_create.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME
+    )
 
 
 @pytest.mark.asyncio
@@ -352,7 +389,9 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
 
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
-    span_reqs = [r for r in fake_service.created_requests if r.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME]
+    span_reqs = [
+        r for r in fake_service.created_requests if r.task_name == SPAN_BILLING_SETTLEMENT_TASK_NAME
+    ]
     assert len(span_reqs) == 1
     assert span_reqs[0].schedule_type == PlatformScheduleType.CRON
     assert span_reqs[0].cron == "*/5 * * * *"

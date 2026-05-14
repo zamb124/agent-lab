@@ -2,11 +2,12 @@
 Модели базы данных сервиса flows.
 """
 
-from datetime import datetime, timezone, date
+from datetime import date, datetime, timezone
 from typing import Any, Optional
-from sqlalchemy import String, Index, UniqueConstraint, Integer, Date, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
 

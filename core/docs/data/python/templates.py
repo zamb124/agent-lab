@@ -16,19 +16,19 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(url: str, state: dict = None):
     """
     HTTP GET запрос к внешнему API.
-    
+
     Args:
         url: URL для запроса
         state: Текущее состояние
-    
+
     Returns:
         JSON ответ от API
     """
     response = await httpx.get(url)
-    
+
     if response.status_code != 200:
         return {"error": f"HTTP {response.status_code}"}
-    
+
     return response.json()
 ''',
     },
@@ -42,20 +42,20 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(url: str, data: dict = None, state: dict = None):
     """
     HTTP POST запрос к внешнему API.
-    
+
     Args:
         url: URL для запроса
         data: Данные для отправки
         state: Текущее состояние
-    
+
     Returns:
         JSON ответ от API
     """
     response = await httpx.post(url, json=data or {})
-    
+
     if response.status_code not in (200, 201):
         return {"error": f"HTTP {response.status_code}"}
-    
+
     return response.json()
 ''',
     },
@@ -69,11 +69,11 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(prompt: str, state: dict = None):
     """
     Вызов LLM с промптом.
-    
+
     Args:
         prompt: Текст запроса к LLM
         state: Текущее состояние
-    
+
     Returns:
         Текстовый ответ от LLM
     """
@@ -94,11 +94,11 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(question: str = "Уточните, пожалуйста", state: dict = None):
     """
     Запрашивает информацию у пользователя.
-    
+
     Args:
         question: Вопрос для пользователя
         state: Текущее состояние
-    
+
     Returns:
         Ничего - выполнение прерывается
     """
@@ -115,19 +115,19 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(text: str, state: dict = None):
     """
     Извлекает JSON из текста (включая markdown блоки).
-    
+
     Args:
         text: Текст с JSON
         state: Текущее состояние
-    
+
     Returns:
         Распарсенный JSON или ошибка
     """
     data = extract_json(text)
-    
+
     if data is None:
         return {"error": "JSON не найден в тексте"}
-    
+
     return data
 ''',
     },
@@ -141,18 +141,18 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(state: dict = None):
     """
     Обрабатывает файлы из state.
-    
+
     Args:
         state: Текущее состояние с файлами
-    
+
     Returns:
         Информация о файлах
     """
     files = get_files(state)
-    
+
     if not files:
         return {"message": "Файлы не найдены"}
-    
+
     results = []
     for file_info in files:
         res = await reader.read(file_info)
@@ -164,7 +164,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
             "page_count": res.page_count,
             "text_preview": preview,
         })
-    
+
     return {"files": results}
 ''',
     },
@@ -178,19 +178,19 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(key: str, value: str = None, state: dict = None):
     """
     Читает или устанавливает значение в state.
-    
+
     Args:
         key: Ключ (поддерживает путь через точку)
         value: Значение для установки (опционально)
         state: Текущее состояние
-    
+
     Returns:
         Текущее или новое значение
     """
     if value is not None:
         set_nested(state, key, value)
         return {"key": key, "value": value, "action": "set"}
-    
+
     current = get_nested(state, key)
     return {"key": key, "value": current, "action": "get"}
 ''',
@@ -205,23 +205,23 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(file_name: str = None, state: dict = None):
     """
     Поиск файла по имени и извлечение текста.
-    
+
     Args:
         file_name: Имя файла (подстрока); без имени — последний файл в списке вложений
         state: Текущее состояние
-    
+
     Returns:
         Текст файла или ошибка
     """
     files = get_files(state)
     finfo = find_file(files, file_name)
-    
+
     if not finfo:
         return {"error": f"Файл не найден: {file_name}"}
-    
+
     res = await reader.read(finfo)
     text = "\\n".join(p.text for p in res.pages if p.text)
-    
+
     return {
         "name": finfo["name"],
         "page_count": res.page_count,
@@ -239,7 +239,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(prompt: str, state: dict = None):
     """
     LLM с tools: определяет tool_calls, выполняет и возвращает.
-    
+
     Args:
         prompt: Промпт для LLM
         state: Текущее состояние
@@ -253,7 +253,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
 
     msg = await llm.chat(prompt, tools=[calc])
     text = get_message_text(msg)
-    
+
     if text:
         return {"response": text}
 
@@ -264,7 +264,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
             args = json.loads(tc["function"]["arguments"])
             res = await calc.run(args, state)
             results.append(res)
-    
+
     return {"tool_results": results}
 ''',
     },
@@ -278,7 +278,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def execute(query: str, state: dict = None):
     """
     Поиск сущностей через CRM API.
-    
+
     Args:
         query: Поисковый запрос
         state: Текущее состояние
@@ -330,14 +330,14 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def run(state):
     """HTTP GET запрос к API."""
     url = state.get("api_url", "https://api.example.com/data")
-    
+
     response = await httpx.get(url)
-    
+
     if response.status_code == 200:
         state["api_response"] = response.json()
     else:
         state["api_error"] = f"HTTP {response.status_code}"
-    
+
     return state
 ''',
     },
@@ -352,14 +352,14 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     """HTTP POST запрос к API."""
     url = state.get("api_url", "https://api.example.com/data")
     data = state.get("post_data", {})
-    
+
     response = await httpx.post(url, json=data)
-    
+
     if response.status_code in (200, 201):
         state["api_response"] = response.json()
     else:
         state["api_error"] = f"HTTP {response.status_code}"
-    
+
     return state
 ''',
     },
@@ -438,7 +438,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def run(state):
     """Вызов LLM с контекстом из state."""
     content = state.get("content", "")
-    
+
     prompt = f"Обработай следующий запрос: {content}"
     msg = await llm.chat(prompt)
     text = ""
@@ -459,21 +459,21 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def run(state):
     """Классификация текста через LLM."""
     content = state.get("content", "")
-    
+
     prompt = f"""Классифицируй запрос пользователя.
 Категории: question, complaint, request, greeting, other
 
 Запрос: {content}
 
 Ответь одним словом - категорией."""
-    
+
     msg = await llm.chat(prompt)
     raw = ""
     if msg.parts:
         part = msg.parts[0].root
         raw = getattr(part, "text", "") or ""
     state["category"] = raw.strip().lower()
-    
+
     return state
 ''',
     },
@@ -488,7 +488,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     """Запрос дополнительной информации у пользователя."""
     if not state.get("user_email"):
         ask_user("Пожалуйста, укажите ваш email")
-    
+
     state["email_confirmed"] = True
     return state
 ''',
@@ -503,14 +503,14 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def run(state):
     """Извлечение JSON из текста."""
     text = state.get("raw_text", "")
-    
+
     data = extract_json(text)
-    
+
     if data:
         state["extracted_data"] = data
     else:
         state["extraction_error"] = "JSON не найден"
-    
+
     return state
 ''',
     },
@@ -524,11 +524,11 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def run(state):
     """Обработка прикрепленных файлов."""
     files = get_files(state)
-    
+
     if not files:
         state["response"] = "Файлы не найдены"
         return state
-    
+
     results = []
     for file_info in files:
         res = await reader.read(file_info)
@@ -539,7 +539,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
             "page_count": res.page_count,
             "text_preview": preview,
         })
-    
+
     state["files_info"] = results
     return state
 ''',
@@ -554,7 +554,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def run(state):
     """Условная логика с разными путями."""
     category = state.get("category", "other")
-    
+
     if category == "complaint":
         state["response"] = "Передаю вашу жалобу специалисту..."
         state["next_node"] = "complaint_handler"
@@ -564,7 +564,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     else:
         state["response"] = "Чем могу помочь?"
         state["next_node"] = "default_handler"
-    
+
     return state
 ''',
     },
@@ -578,9 +578,9 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
         "code": '''async def run(state):
     """Установка ответа пользователю."""
     content = state.get("content", "")
-    
+
     state["response"] = f"Вы написали: {content}"
-    
+
     return state
 ''',
     },
@@ -596,15 +596,15 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     file_name = state.get("target_file")
     files = get_files(state)
     finfo = find_file(files, file_name)
-    
+
     if not finfo:
         state["response"] = f"Файл {file_name!r} не найден"
         return state
-    
+
     res = await reader.read(finfo)
     state["file_text"] = "\\n".join(p.text for p in res.pages if p.text)
     state["file_name"] = finfo["name"]
-    
+
     return state
 ''',
     },
@@ -627,7 +627,7 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     content = state.get("content", "")
     msg = await llm.chat(content, tools=[lookup, ask_user_tool])
     state["response"] = get_message_text(msg) or ""
-    
+
     return state
 ''',
     },
@@ -642,10 +642,10 @@ FUNCTION_TEMPLATES: List[Dict[str, Any]] = [
     """Запрос недостающих данных через FlowInterrupt."""
     if not state.get("city"):
         ask_user("В каком городе вы находитесь?")
-    
+
     if not state.get("phone"):
         raise FlowInterrupt(question="Укажите ваш номер телефона")
-    
+
     state["profile_complete"] = True
     return state
 ''',

@@ -4,18 +4,17 @@
 Используют реальную БД через app fixture.
 """
 
+
 import pytest
-from typing import Any, Dict
 
 from apps.flows.src.container import get_container
-from core.db.repositories import Variable
 from apps.flows.src.models import (
-    NodeConfig,
-    FlowConfig,
-    ToolReference,
     CodeMode,
-    SessionConfig,
+    FlowConfig,
+    NodeConfig,
+    ToolReference,
 )
+from core.db.repositories import Variable
 from core.state import ExecutionState
 
 

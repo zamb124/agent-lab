@@ -9,9 +9,7 @@
 - mock
 """
 
-import pytest
-from apps.flows.src.models import FlowConfig, Edge, MergeMode, BranchConfig
-from apps.flows.src.container import get_container
+from apps.flows.src.models import BranchConfig, Edge, FlowConfig, MergeMode
 
 
 class TestSkillVariablesOverride:
@@ -357,13 +355,13 @@ class TestSkillEdgesOverride:
         result = container.flow_factory._apply_branch(config, "custom")
 
         assert len(result["edges"]) == 4
-        
+
         classifier_edges = [e for e in result["edges"] if e.from_node == "classifier"]
         assert len(classifier_edges) == 2
-        
+
         classifier_to_route_a = next(e for e in result["edges"] if e.from_node == "classifier" and e.to_node == "route_a")
         assert "priority" in classifier_to_route_a.condition
-        
+
         classifier_to_route_b = next(e for e in result["edges"] if e.from_node == "classifier" and e.to_node == "route_b")
         assert classifier_to_route_b.condition == "route == 'b'"
 
@@ -422,14 +420,14 @@ class TestSkillEntryOverride:
 
 class TestSkillMockOverride:
     """Тесты переопределения mock через skill.
-    
+
     Mock резолвится отдельно через resolve_mock_config, не через _apply_skill.
     """
 
     def test_mock_enabled_in_skill(self):
         """Skill включает mock."""
         from apps.flows.src.mock.resolver import resolve_mock_config
-        
+
         flow_mock = {"enabled": False}
         skill_mock = {"enabled": True}
 
@@ -440,7 +438,7 @@ class TestSkillMockOverride:
     def test_mock_tools_override(self):
         """Skill переопределяет mock tools."""
         from apps.flows.src.mock.resolver import resolve_mock_config
-        
+
         flow_mock = {
             "enabled": False,
             "tools": {"calculator": 42}
@@ -459,7 +457,7 @@ class TestSkillMockOverride:
     def test_mock_llm_in_skill(self):
         """Skill добавляет mock LLM responses."""
         from apps.flows.src.mock.resolver import resolve_mock_config
-        
+
         flow_mock = {"enabled": False}
         skill_mock = {
             "enabled": True,
@@ -484,7 +482,7 @@ class TestSkillMockOverride:
     def test_mock_nodes_in_skill(self):
         """Skill добавляет mock для nodes."""
         from apps.flows.src.mock.resolver import resolve_mock_config
-        
+
         flow_mock = {"enabled": False}
         skill_mock = {
             "enabled": True,
@@ -500,7 +498,7 @@ class TestSkillMockOverride:
     def test_mock_agents_in_skill(self):
         """Skill добавляет mock для agents."""
         from apps.flows.src.mock.resolver import resolve_mock_config
-        
+
         flow_mock = {"enabled": False}
         skill_mock = {
             "enabled": True,
@@ -520,7 +518,7 @@ class TestSkillCombinedOverrides:
     def test_full_skill_override(self, container):
         """Skill переопределяет все компоненты (кроме mock - резолвится отдельно)."""
         from apps.flows.src.mock.resolver import resolve_mock_config
-        
+
         config = FlowConfig(
             flow_id="test_full",
             name="Test",

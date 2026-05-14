@@ -8,7 +8,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

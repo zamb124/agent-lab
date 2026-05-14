@@ -6,7 +6,11 @@ from typing import Optional
 
 from .cbr_rate_provider import (
     get_current_rate as get_cbr_usd_to_rub_rate,
+)
+from .cbr_rate_provider import (
     refresh_loop_coro as cbr_rate_refresh_loop_coro,
+)
+from .cbr_rate_provider import (
     refresh_rate_once as refresh_cbr_rate,
 )
 from .exceptions import BillingBalanceBlockedError

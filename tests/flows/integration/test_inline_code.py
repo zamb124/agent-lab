@@ -3,11 +3,12 @@
 """
 
 import pytest
-from apps.flows.src.runtime import Flow
-from apps.flows.src.runtime.nodes import create_node, CodeNode, CodeNode
-from apps.flows.src.models import FlowConfig, Edge, CodeMode, ToolReference
-from apps.flows.src.tools.base import CodeTool
+
 from apps.flows.src.eval import SafeEvalError
+from apps.flows.src.models import Edge, FlowConfig
+from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.nodes import CodeNode, create_node
+from apps.flows.src.tools.base import CodeTool
 from core.state import ExecutionState
 
 
@@ -26,7 +27,7 @@ async def run(state):
 """
         }
         node = await create_node("test_inline", node_config)
-        
+
         assert isinstance(node, CodeNode)
         assert node.node_id == "test_inline"
 
@@ -38,7 +39,7 @@ async def run(state):
             "function": "json.loads"
         }
         node = await create_node("test_ref", node_config)
-        
+
         assert isinstance(node, CodeNode)
         assert node.node_id == "test_ref"
 
@@ -51,7 +52,7 @@ async def run(state):
     return state
 """
         node = CodeNode(node_id="doubler", config={"code": code})
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -60,7 +61,7 @@ async def run(state):
             value=21
         )
         result = await node.run(state)
-        
+
         assert result["doubled"] == 42
 
     @pytest.mark.asyncio
@@ -73,7 +74,7 @@ async def run(state):
     return state
 """
         node = CodeNode(node_id="greeter", config={"code": code})
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -82,7 +83,7 @@ async def run(state):
             variables={"company": "Platform"}
         )
         result = await node.run(state)
-        
+
         assert result["greeting"] == "Hello, Platform!"
 
     @pytest.mark.asyncio
@@ -96,7 +97,7 @@ async def run(state):
     return state
 """
         node = CodeNode(node_id="bad_node", config={"code": code})
-        
+
         with pytest.raises(SafeEvalError, match="Import of 'os' is not allowed"):
             await node.run(ExecutionState(
                 task_id="test-task",
@@ -131,7 +132,7 @@ async def run(state):
                 Edge(from_node="process", to_node=None)
             ]
         )
-        
+
         flow = await Flow.from_config(
             config={
                 "id": config.flow_id,
@@ -142,7 +143,7 @@ async def run(state):
             },
             variables={}
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -151,7 +152,7 @@ async def run(state):
             input=42
         )
         result = await flow.run(state)
-        
+
         assert result["processed"] is True
         assert result["value"] == 142
 
@@ -197,7 +198,7 @@ async def run(state):
                 Edge(from_node="step3", to_node=None)
             ]
         )
-        
+
         flow = await Flow.from_config(
             config={
                 "id": config.flow_id,
@@ -208,7 +209,7 @@ async def run(state):
             },
             variables={}
         )
-        
+
         from core.state import ExecutionState
         result = await flow.run(ExecutionState(
             task_id="test-task",
@@ -216,7 +217,7 @@ async def run(state):
             user_id="test-user",
             session_id="test-agent:test-context",
         ))
-        
+
         assert result["step1"] == "done"
         assert result["step2"] == "done"
         assert result["step3"] == "done"
@@ -247,7 +248,7 @@ async def run(state):
                 Edge(from_node="parse", to_node=None)
             ]
         )
-        
+
         flow = await Flow.from_config(
             config={
                 "id": config.flow_id,
@@ -258,7 +259,7 @@ async def run(state):
             },
             variables={}
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -267,7 +268,7 @@ async def run(state):
             json_input='{"name": "Test", "value": 123}'
         )
         result = await flow.run(state)
-        
+
         assert result["name"] == "Test"
         assert result["parsed"]["value"] == 123
 
@@ -312,7 +313,7 @@ async def run(state):
                 Edge(from_node="negative", to_node=None)
             ]
         )
-        
+
         flow = await Flow.from_config(
             config={
                 "id": config.flow_id,
@@ -323,7 +324,7 @@ async def run(state):
             },
             variables={}
         )
-        
+
         # Позитивный путь
         state1 = ExecutionState(
             task_id="test-task",
@@ -334,7 +335,7 @@ async def run(state):
         )
         result1 = await flow.run(state1)
         assert result1["result"] == "positive_path"
-        
+
         # Негативный путь
         state2 = ExecutionState(
             task_id="test-task",
@@ -366,7 +367,7 @@ async def run(state):
                 Edge(from_node="bad", to_node=None)
             ]
         )
-        
+
         flow = await Flow.from_config(
             config={
                 "id": config.flow_id,
@@ -377,7 +378,7 @@ async def run(state):
             },
             variables={}
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -423,7 +424,7 @@ async def run(state):
                 Edge(from_node="second", to_node=None)
             ]
         )
-        
+
         flow = await Flow.from_config(
             config={
                 "id": config.flow_id,
@@ -434,7 +435,7 @@ async def run(state):
             },
             variables={}
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -442,7 +443,7 @@ async def run(state):
             session_id="test-agent:test-context",
         )
         result = await flow.run(state)
-        
+
         assert result.get("first_done") is True
         assert result.get("second_done") is True
         assert result.get("counter") == 2
@@ -465,7 +466,7 @@ async def execute(args, state):
             code=code,
             description="Сложение двух чисел"
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -487,7 +488,7 @@ async def execute(args, state):
             tool_id="double",
             code=code
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -510,7 +511,7 @@ async def execute(args, state):
             tool_id="greet",
             code=code
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -536,7 +537,7 @@ async def execute(args, state):
             tool_id="parse_name",
             code=code
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -559,7 +560,7 @@ async def execute(args, state):
             tool_id="bad_tool",
             code=code
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -573,21 +574,21 @@ async def execute(args, state):
     async def test_inline_tool_schema(self):
         """Inline tool генерирует правильную schema."""
         from apps.flows.src.models.tool_reference import CallParameter
-        
+
         params = {
             "x": CallParameter(type="number", description="First number"),
             "y": CallParameter(type="number", description="Second number")
         }
-        
+
         tool = CodeTool(
             tool_id="add",
             code="async def execute(args, state): return args['x'] + args['y']",
             description="Add two numbers",
             parameters=params
         )
-        
+
         schema = tool.to_openai_schema()
-        
+
         assert schema["function"]["name"] == "add"
         assert schema["function"]["description"] == "Add two numbers"
         assert "x" in schema["function"]["parameters"]["properties"]
@@ -609,14 +610,14 @@ async def execute(args, state):
     return args.get('value', 0) * 3
 """
         }
-        
+
         # Загружаем через factory с inline конфигом
         tool = await container.tool_registry.create_tool(tool_config)
-        
+
         assert tool is not None
         assert isinstance(tool, CodeTool)
         assert tool.name == "test_inline_tool"
-        
+
         # Выполняем
         state = ExecutionState(
             task_id="test-task",
@@ -664,7 +665,7 @@ class TestInlineNodeWithHttpx:
 async def run(state):
     # Реальный запрос к cat facts API
     response = await httpx.get("https://catfact.ninja/fact")
-    
+
     if response.status_code == 200:
         data = response.json()
         state['cat_fact'] = data.get('fact', '')
@@ -673,11 +674,11 @@ async def run(state):
     else:
         state['http_success'] = False
         state['error'] = f"HTTP {response.status_code}"
-    
+
     return state
 """
         node = CodeNode(node_id="cat_facts", config={"code": code})
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -685,7 +686,7 @@ async def run(state):
             session_id="test-agent:test-context",
         )
         result = await node.run(state)
-        
+
         assert result["http_success"] is True
         assert "cat_fact" in result
         assert isinstance(result["cat_fact"], str)
@@ -749,7 +750,7 @@ async def run(state):
         },
         headers={"Content-Type": "application/json"}
     )
-    
+
     if response.status_code in [200, 201]:
         data = response.json()
         state['post_id'] = data.get('id')
@@ -758,11 +759,11 @@ async def run(state):
     else:
         state['http_success'] = False
         state['error'] = f"HTTP {response.status_code}: {response.text}"
-    
+
     return state
 """
         node = CodeNode(node_id="http_post", config={"code": code})
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -770,7 +771,7 @@ async def run(state):
             session_id="test-agent:test-context",
         )
         result = await node.run(state)
-        
+
         assert result["http_success"] is True
         assert "post_id" in result
         assert result["post_id"] is not None
@@ -786,7 +787,7 @@ async def run(state):
         "https://catfact.ninja/facts",
         params={"limit": 2, "max_length": 100}
     )
-    
+
     if response.status_code == 200:
         data = response.json()
         facts = data.get('data', [])
@@ -797,11 +798,11 @@ async def run(state):
     else:
         state['http_success'] = False
         state['error'] = f"HTTP {response.status_code}"
-    
+
     return state
 """
         node = CodeNode(node_id="http_params", config={"code": code})
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -809,7 +810,7 @@ async def run(state):
             session_id="test-agent:test-context",
         )
         result = await node.run(state)
-        
+
         assert result["http_success"] is True
         assert result["facts_count"] == 2
         assert "first_fact" in result
@@ -822,14 +823,14 @@ async def run(state):
 async def run(state):
     # Запрос к несуществующему endpoint
     response = await httpx.get("https://catfact.ninja/nonexistent", timeout=5.0)
-    
+
     state['status_code'] = response.status_code
     state['is_error'] = response.status_code >= 400
-    
+
     return state
 """
         node = CodeNode(node_id="http_error", config={"code": code})
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -837,7 +838,7 @@ async def run(state):
             session_id="test-agent:test-context",
         )
         result = await node.run(state)
-        
+
         assert "status_code" in result
         assert result["is_error"] is True
         assert result["status_code"] >= 400
@@ -867,7 +868,7 @@ async def run(state):
                 Edge(from_node="fetch_data", to_node=None)
             ]
         )
-        
+
         flow = await Flow.from_config(
             config={
                 "id": config.flow_id,
@@ -878,7 +879,7 @@ async def run(state):
             },
             variables={}
         )
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -886,7 +887,7 @@ async def run(state):
             session_id="test-agent:test-context",
         )
         result = await flow.run(state)
-        
+
         assert result["processed"] is True
         assert "fact" in result
         assert isinstance(result["fact"], str)

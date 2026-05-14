@@ -11,7 +11,6 @@ from core.docs.models import (
     GlobalVariable,
     ModuleMethod,
     PlatformToolDoc,
-    StateField,
 )
 
 

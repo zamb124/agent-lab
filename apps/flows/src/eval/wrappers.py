@@ -10,9 +10,9 @@ import httpx
 from a2a.types import Message
 from pydantic import BaseModel
 
-from core.clients.llm.factory import get_llm, MessageInput
-from core.errors import SafeEvalError
+from core.clients.llm.factory import MessageInput, get_llm
 from core.context import get_current_channel
+from core.errors import SafeEvalError
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 
@@ -116,15 +116,15 @@ class SafeLLMClient:
     ) -> Message | T:
         """
         Единый метод вызова LLM.
-        
+
         Принимает messages в любом формате и возвращает:
         - T (экземпляр Pydantic модели) если указан response_model
         - Message с tool_calls если указаны tools (и нет response_model)
         - Message с текстом в остальных случаях
-        
+
         Args:
             messages: Сообщения в любом формате:
-                - str: "Привет!" 
+                - str: "Привет!"
                 - List[str]: ["Привет!", "Привет! Как дела?", "Отлично!"]
                 - Message или List[Message]: A2A сообщения
                 - Dict или List[Dict]: {"role": "user", "content": "..."}
@@ -140,26 +140,26 @@ class SafeLLMClient:
             seed: Фиксированный seed (детерминизм), если провайдер поддерживает
             reasoning_effort: Режим reasoning (OpenAI-совместимые API), строка
             extra_body: Доп. поля тела запроса к провайдеру (dict); мержатся поверх сформированного JSON и перекрывают совпадающие ключи
-        
+
         Returns:
             Message или экземпляр response_model
-            
+
         Examples:
             # Простой чат
             msg = await llm.chat("Привет!")
             text = msg.parts[0].root.text
-            
+
             # С параметрами
             msg = await llm.chat("Расскажи историю", temperature=0.9, max_tokens=500)
-            
+
             # Structured output
             class User(BaseModel):
                 name: str
                 age: int
-                
+
             user = await llm.chat("Extract: John is 25", response_model=User)
             print(user.name, user.age)
-            
+
             # Function calling: @tool(...) def my_tool(...): ...  ->  tools=[my_tool]
             msg = await llm.chat("2+2?", tools=[my_tool])
         """

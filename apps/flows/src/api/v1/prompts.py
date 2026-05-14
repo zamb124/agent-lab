@@ -33,7 +33,7 @@ async def render_prompt(
 ) -> RenderPromptResponse:
     """
     Рендерит промпт с подстановкой переменных.
-    
+
     Используется для предпросмотра промпта с резолвом переменных.
     """
     # Резолвим @var: ссылки в variables перед рендерингом
@@ -41,7 +41,7 @@ async def render_prompt(
     if request.variables:
         # Резолвим все @var: ссылки через VariablesService
         resolved_variables = await container.variables_service.resolve(request.variables)
-        
+
         # Извлекаем значения из FlowVariableConfig формата если нужно
         if isinstance(resolved_variables, dict):
             cleaned_variables = {}
@@ -52,7 +52,7 @@ async def render_prompt(
                 else:
                     cleaned_variables[key] = value
             resolved_variables = cleaned_variables
-    
+
     rendered = VariableResolver.render_template(
         template=request.prompt,
         local_vars=resolved_variables,

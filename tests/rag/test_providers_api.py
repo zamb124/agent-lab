@@ -15,11 +15,11 @@ async def test_list_providers(rag_client, auth_headers_system):
     response = await rag_client.get("/rag/api/v1/providers", headers=auth_headers_system)
     assert response.status_code == 200
     data = response.json()
-    
+
     assert "items" in data
     assert "current_provider" in data
     assert len(data["items"]) > 0
-    
+
     provider = data["items"][0]
     assert "name" in provider
     assert "enabled" in provider
@@ -33,9 +33,9 @@ async def test_list_providers_pgvector_present(rag_client, auth_headers_system):
     response = await rag_client.get("/rag/api/v1/providers", headers=auth_headers_system)
     assert response.status_code == 200
     data = response.json()
-    
+
     pgvector = next((p for p in data["items"] if p["name"] == "pgvector"), None)
-    
+
     assert pgvector is not None
     assert pgvector["enabled"] is True
 
@@ -50,7 +50,7 @@ async def test_switch_provider_pgvector(rag_client, auth_headers_system):
     )
     assert response.status_code == 200
     data = response.json()
-    
+
     assert data["success"] is True
     assert data["provider"] == "pgvector"
     assert "message" in data
@@ -66,7 +66,7 @@ async def test_switch_provider_invalid(rag_client, auth_headers_system):
     )
     assert response.status_code == 400
     data = response.json()
-    
+
     assert "detail" in data
     assert "invalid_provider" in data["detail"].lower()
 

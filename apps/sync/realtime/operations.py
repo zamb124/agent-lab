@@ -45,14 +45,13 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
 from apps.sync.container import SyncContainer
-from apps.sync.db.models import SyncCall, SyncCallLink, SyncCallParticipant, SyncChannel
+from apps.sync.db.models import SyncCall, SyncCallLink, SyncChannel
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.calls import (
     CallLinkCreate,
     CallLinkInfo,
     CallLinkPatch,
     CallLinkRead,
-    CallParticipantRead,
     CallRead,
     CallScheduledLinkRead,
     GuestJoinRequest,
@@ -60,27 +59,22 @@ from apps.sync.models.calls import (
 )
 from apps.sync.models.channels import (
     ChannelCreate,
-    ChannelMemberAdd,
     ChannelMemberRead,
-    ChannelNotificationSettingsUpdate,
     ChannelRead,
     ChannelUpdate,
 )
 from apps.sync.models.common import UserBrief
 from apps.sync.models.company_members import CompanyMemberRead
 from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import (
-    AudioAttachmentContent,
-    AudioTranscriptionStatus,
     MessageContentModel,
     MessageContentType,
     MessageCreate,
     MessageEdit,
     MessageRead,
     MessageStatus,
-    TextPlainContent,
 )
-from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.threads import ThreadCreate, ThreadRead, ThreadRow
 from apps.sync.realtime.call_handlers import (
     _call_read_from_entities,
@@ -136,10 +130,9 @@ from core.calls.models import SignalType, TurnCredentials
 from core.calls.turn import generate_turn_credentials
 from core.config import get_settings
 from core.context import get_context
-from core.files.models import FileRecord
+from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus, FileRecord
 from core.logging import get_logger
 from core.models.identity_models import User
-from core.pagination import ListResponse, OffsetPage
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)

@@ -42,7 +42,6 @@ from core.logging.attributes import (
     EVENT_TASK_FAILED,
     EVENT_TASK_FINISHED,
     EVENT_TASK_STARTED,
-    LOG_COMPANY_ID,
     LOG_NAMESPACE,
     LOG_SESSION_ID,
     LOG_TASK_DURATION_MS,
@@ -50,10 +49,8 @@ from core.logging.attributes import (
     LOG_TASK_NAME,
     LOG_TASK_QUEUE,
     LOG_TASK_RETRY,
-    LOG_USER_ID,
 )
 from core.logging.scope import _ScopeToken
-
 
 _LABEL_TRACE_ID = "trace_id"
 _LABEL_USER_ID = "user_id"

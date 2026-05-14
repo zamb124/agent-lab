@@ -18,9 +18,9 @@
 """
 
 import pytest
+
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
-from core.db import Storage
 
 
 class TestFlowRepositoryTwoTables:
@@ -74,7 +74,6 @@ class TestFlowRepositoryTwoTables:
         """
         container = get_container()
         repo = container.flow_repository
-        storage: Storage = container.storage
 
         flow_id = f"test_get_latest_source_{unique_id}"
         agent = FlowConfig(
@@ -106,7 +105,6 @@ class TestFlowRepositoryTwoTables:
         """
         container = get_container()
         repo = container.flow_repository
-        storage: Storage = container.storage
 
         flow_id = f"test_get_version_source_{unique_id}"
         agent = FlowConfig(
@@ -117,12 +115,12 @@ class TestFlowRepositoryTwoTables:
         )
 
         await repo.set(agent)
-        
+
         # Проверяем что агент создан
         loaded_agent = await repo.get(flow_id)
         assert loaded_agent is not None, "Агент должен быть создан"
         assert loaded_agent.version is not None, "Версия должна быть установлена"
-        
+
         versions = await repo.list_versions(flow_id)
         if len(versions) == 0:
             # Если версий нет, используем версию из агента
@@ -166,7 +164,7 @@ class TestFlowRepositoryTwoTables:
         retrieved_agent = await repo.get(flow_id)
         assert retrieved_agent is not None, "Агент ДОЛЖЕН быть доступен через get()"
         assert retrieved_agent.name == "Test Agent v49", "Должна быть последняя версия"
-        
+
         # list_all() ДОЛЖЕН вернуть агента (с достаточно большим limit)
         all_agents = await repo.list(limit=1000)
         agent_ids = [a.flow_id for a in all_agents]
@@ -218,7 +216,7 @@ class TestFlowRepositoryTwoTables:
         agent2 = await repo.get(later_agent_id)
         assert agent1 is not None, "Первый агент ДОЛЖЕН быть доступен"
         assert agent2 is not None, "Второй агент ДОЛЖЕН быть доступен"
-        
+
         # list_all() ДОЛЖЕН вернуть ОБОИХ агентов (с большим limit)
         all_agents = await repo.list(limit=1000)
         agent_ids = [a.flow_id for a in all_agents]
@@ -236,7 +234,6 @@ class TestFlowRepositoryTwoTables:
         """
         container = get_container()
         repo = container.flow_repository
-        storage: Storage = container.storage
 
         flow_id = f"test_delete_both_tables_{unique_id}"
         agent = FlowConfig(
@@ -273,7 +270,6 @@ class TestFlowRepositoryTwoTables:
         """
         container = get_container()
         repo = container.flow_repository
-        storage: Storage = container.storage
 
         flow_id = f"test_rollback_copy_{unique_id}"
         agent = FlowConfig(
@@ -341,11 +337,11 @@ class TestFlowRepositoryTwoTables:
         for flow_id in agent_ids:
             agent = await repo.get(flow_id)
             assert agent is not None, f"Агент {flow_id} ДОЛЖЕН быть доступен"
-        
+
         # list_all() ДОЛЖЕН вернуть всех агентов (с большим limit)
         all_agents = await repo.list(limit=1000)
         all_agent_ids = [a.flow_id for a in all_agents]
-        
+
         for flow_id in agent_ids:
             assert flow_id in all_agent_ids, f"Агент {flow_id} ДОЛЖЕН быть в списке"
 
@@ -386,7 +382,7 @@ class TestFlowRepositoryTwoTables:
     async def test_table_isolation_strict(self, app, unique_id):
         """
         СТРОГИЙ ТЕСТ: Таблицы agents и agents_versions полностью изолированы.
-        
+
         Проверяет что:
         - Данные в agents не содержат версионных ключей
         - Данные в agents_versions не содержат актуальных конфигов без версий
@@ -394,7 +390,6 @@ class TestFlowRepositoryTwoTables:
         """
         container = get_container()
         repo = container.flow_repository
-        storage: Storage = container.storage
 
         flow_id = f"test_table_isolation_{unique_id}"
         agent = FlowConfig(
@@ -411,16 +406,16 @@ class TestFlowRepositoryTwoTables:
         # Проверяем что агент создан правильно
         loaded_agent = await repo.get(flow_id)
         assert loaded_agent is not None, "Агент должен быть создан"
-        
+
         # Проверяем что версия создана
         loaded_version = await repo.get_version(flow_id, version)
         assert loaded_version is not None, "Версия должна быть создана"
-        
+
         # Проверяем что ключи не содержат некорректных суффиксов
         agent_key = repo._get_key(flow_id)
         assert ":v" not in agent_key, "Ключ агента не должен содержать :v"
         assert not agent_key.endswith(":latest"), "Ключ агента не должен заканчиваться на :latest"
-        
+
         # Проверяем что версионный ключ содержит :v
         version_key = repo._get_key(f"{flow_id}_v{version}")
         assert "_v" in version_key, "Ключ версии должен содержать _v"

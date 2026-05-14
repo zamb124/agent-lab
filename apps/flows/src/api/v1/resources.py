@@ -8,10 +8,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from core.pagination import OffsetPage
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import ResourceType, ResourceDefinition
+from apps.flows.src.models import ResourceDefinition, ResourceType
 from core.logging import get_logger
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 
@@ -92,7 +92,7 @@ async def get_resource(
     resource = await container.resource_repository.get(resource_id)
     if resource is None:
         raise HTTPException(status_code=404, detail="Resource not found")
-    
+
     return ResourceResponse(
         resource_id=resource.resource_id,
         type=resource.type,
@@ -117,7 +117,7 @@ async def create_resource(
             status_code=409,
             detail=f"Resource '{request.resource_id}' already exists"
         )
-    
+
     resource = ResourceDefinition(
         resource_id=request.resource_id,
         type=request.type,
@@ -127,10 +127,10 @@ async def create_resource(
         tags=request.tags,
         permission=request.permission,
     )
-    
+
     await container.resource_repository.set(resource)
     logger.info(f"Resource created: {resource.resource_id}")
-    
+
     return ResourceResponse(
         resource_id=resource.resource_id,
         type=resource.type,
@@ -152,16 +152,16 @@ async def update_resource(
     resource = await container.resource_repository.get(resource_id)
     if resource is None:
         raise HTTPException(status_code=404, detail="Resource not found")
-    
+
     # Обновляем только переданные поля
     update_data = request.model_dump(exclude_unset=True)
     resource_dict = resource.model_dump()
     resource_dict.update(update_data)
-    
+
     updated_resource = ResourceDefinition.model_validate(resource_dict)
     await container.resource_repository.set(updated_resource)
     logger.info(f"Resource updated: {resource_id}")
-    
+
     return ResourceResponse(
         resource_id=updated_resource.resource_id,
         type=updated_resource.type,
@@ -182,6 +182,6 @@ async def delete_resource(
     deleted = await container.resource_repository.delete(resource_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Resource not found")
-    
+
     logger.info(f"Resource deleted: {resource_id}")
     return {"status": "deleted", "resource_id": resource_id}

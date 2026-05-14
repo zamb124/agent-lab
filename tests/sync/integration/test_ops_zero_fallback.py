@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.sync.container import SyncContainer
 from apps.sync.realtime.command_router import SYNC_OPERATIONS
 from apps.sync.realtime.operations import parse_payload, resolve_company_id
 from core.models.identity_models import User

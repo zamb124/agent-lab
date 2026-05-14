@@ -1,14 +1,10 @@
 """API для управления namespaces и их шаблонами в CRM."""
 
 import asyncio
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from core.context import get_context
-from core.logging import get_logger
-from core.models.identity_models import Namespace, NamespaceCRMSettings
-from core.pagination import OffsetPage
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     NamespaceCreateRequest,
@@ -17,25 +13,31 @@ from apps.crm.models.api import (
     NamespaceResponse,
     NamespaceTemplateCreateRequest,
     NamespaceTemplateDetailsResponse,
+    NamespaceTemplateResponse,
     NamespaceTemplateSchemaEnumSet,
     NamespaceTemplateSchemaFieldType,
     NamespaceTemplateSchemaOperator,
     NamespaceTemplateSchemaOptionsResponse,
-    NamespaceTemplateResponse,
     NamespaceTemplateTypeResponse,
     NamespaceTemplateTypeUpsertRequest,
     NamespaceTemplateUpdateRequest,
+    NamespaceUpdateRequest,
     TaskBoardEditorBoardResponse,
     TaskBoardEditorStateResponse,
     TaskBoardStagesApiResponse,
-    NamespaceUpdateRequest,
 )
+from apps.crm.scheduled_task_constants import CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME
 from apps.crm.services.task_board_presets import (
     build_task_board_editor_boards,
     resolve_task_board_stages,
     task_board_key,
 )
 from apps.crm.system_templates import REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS
+from core.context import get_context
+from core.logging import get_logger
+from core.models.identity_models import Namespace, NamespaceCRMSettings
+from core.pagination import OffsetPage
+from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleType
 
 logger = get_logger(__name__)
 
@@ -88,6 +90,7 @@ async def _namespace_response(
         integration_badges=badges,
     )
 
+
 SCHEMA_OPTIONS_RESPONSE = NamespaceTemplateSchemaOptionsResponse(
     field_types=[
         NamespaceTemplateSchemaFieldType(type_id="string", label="Строка"),
@@ -97,15 +100,25 @@ SCHEMA_OPTIONS_RESPONSE = NamespaceTemplateSchemaOptionsResponse(
         NamespaceTemplateSchemaFieldType(type_id="boolean", label="Булево"),
         NamespaceTemplateSchemaFieldType(type_id="date", label="Дата"),
         NamespaceTemplateSchemaFieldType(type_id="datetime", label="Дата и время"),
-        NamespaceTemplateSchemaFieldType(type_id="enum", label="Enum", supports_enum_values=True, supports_enum_set=True),
+        NamespaceTemplateSchemaFieldType(
+            type_id="enum", label="Enum", supports_enum_values=True, supports_enum_set=True
+        ),
         NamespaceTemplateSchemaFieldType(type_id="array", label="Массив"),
         NamespaceTemplateSchemaFieldType(type_id="object", label="Объект"),
         NamespaceTemplateSchemaFieldType(type_id="external_refs", label="Внешние ссылки"),
     ],
     enum_sets=[
-        NamespaceTemplateSchemaEnumSet(enum_set_id="priority", label="Приоритет", values=["low", "medium", "high", "urgent"]),
-        NamespaceTemplateSchemaEnumSet(enum_set_id="task_status", label="Статус задачи", values=["todo", "in_progress", "blocked", "done"]),
-        NamespaceTemplateSchemaEnumSet(enum_set_id="confidence", label="Уверенность", values=["low", "medium", "high"]),
+        NamespaceTemplateSchemaEnumSet(
+            enum_set_id="priority", label="Приоритет", values=["low", "medium", "high", "urgent"]
+        ),
+        NamespaceTemplateSchemaEnumSet(
+            enum_set_id="task_status",
+            label="Статус задачи",
+            values=["todo", "in_progress", "blocked", "done"],
+        ),
+        NamespaceTemplateSchemaEnumSet(
+            enum_set_id="confidence", label="Уверенность", values=["low", "medium", "high"]
+        ),
         NamespaceTemplateSchemaEnumSet(enum_set_id="yes_no", label="Да/Нет", values=["yes", "no"]),
     ],
     operators=[
@@ -123,10 +136,14 @@ def _normalize_allowed_type_ids(raw_value: list[str]) -> list[str]:
     normalized: list[str] = []
     for raw_item in raw_value:
         if not isinstance(raw_item, str):
-            raise HTTPException(status_code=422, detail="allowed_type_ids must contain only strings")
+            raise HTTPException(
+                status_code=422, detail="allowed_type_ids must contain only strings"
+            )
         value = raw_item.strip()
         if not value:
-            raise HTTPException(status_code=422, detail="allowed_type_ids must not contain empty values")
+            raise HTTPException(
+                status_code=422, detail="allowed_type_ids must not contain empty values"
+            )
         if value not in normalized:
             normalized.append(value)
     return normalized
@@ -210,7 +227,9 @@ async def create_namespace_template(
     template_repo = container.namespace_template_repository
     existing = await template_repo.get_by_template_id(request.template_id)
     if existing is not None:
-        raise HTTPException(status_code=409, detail=f"Template {request.template_id} already exists")
+        raise HTTPException(
+            status_code=409, detail=f"Template {request.template_id} already exists"
+        )
     created = await template_repo.create_template(
         template_id=request.template_id,
         name=request.name,
@@ -241,7 +260,9 @@ async def get_template_task_board_editor_state(
     if template is None:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
     template_types = await template_repo.list_types(template.template_key)
-    allowed = [item.type_id for item in template_types if isinstance(item.type_id, str) and item.type_id]
+    allowed = [
+        item.type_id for item in template_types if isinstance(item.type_id, str) and item.type_id
+    ]
     crm = NamespaceCRMSettings()
     raw_crm = getattr(template, "crm_settings", None)
     if raw_crm is not None and isinstance(raw_crm, dict) and len(raw_crm) > 0:
@@ -353,7 +374,9 @@ async def delete_namespace_template(
     await template_repo.delete_template_with_types(template.template_key)
 
 
-@router.post("/templates/{template_id}/types", response_model=NamespaceTemplateTypeResponse, status_code=201)
+@router.post(
+    "/templates/{template_id}/types", response_model=NamespaceTemplateTypeResponse, status_code=201
+)
 async def upsert_template_type(
     template_id: str,
     request: NamespaceTemplateTypeUpsertRequest,
@@ -460,7 +483,9 @@ async def get_namespace_task_board_stages(
 
     existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
     if existing_namespace is None:
-        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
+        )
 
     crm = (
         existing_namespace.crm_settings
@@ -489,7 +514,9 @@ async def get_namespace_task_board_editor_state(
 
     existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
     if existing_namespace is None:
-        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
+        )
 
     service = container.namespace_template_service
     payload = await service.get_namespace_editability(normalized_namespace_name)
@@ -524,7 +551,9 @@ async def get_namespace_editability(
 
     existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
     if existing_namespace is None:
-        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
+        )
 
     service = container.namespace_template_service
     payload = await service.get_namespace_editability(normalized_namespace_name)
@@ -543,7 +572,9 @@ async def update_namespace(
 
     existing_namespace = await container.namespace_repository.get(normalized_namespace_name)
     if existing_namespace is None:
-        raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
+        )
 
     allowed_type_ids = None
     if request.allowed_type_ids is not None:
@@ -556,7 +587,9 @@ async def update_namespace(
                 detail=f"Unknown type_id values: {', '.join(unknown_type_ids)}",
             )
 
-    editability = await container.namespace_template_service.get_namespace_editability(normalized_namespace_name)
+    editability = await container.namespace_template_service.get_namespace_editability(
+        normalized_namespace_name
+    )
     if allowed_type_ids is not None:
         locked_type_ids = set(editability["locked_type_ids"])
         expanded = await container.namespace_template_service.expanded_allowed_type_ids_for_namespace_update(
@@ -580,13 +613,34 @@ async def update_namespace(
     if request.crm_settings is not None:
         ns = await container.namespace_repository.get(normalized_namespace_name)
         if ns is None:
-            raise HTTPException(status_code=404, detail=f"Namespace {normalized_namespace_name} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Namespace {normalized_namespace_name} not found"
+            )
         prev = ns.crm_settings or NamespaceCRMSettings()
         incoming = request.crm_settings
         data = prev.model_dump()
         for field_name in incoming.model_fields_set:
             data[field_name] = getattr(incoming, field_name)
-        ns.crm_settings = NamespaceCRMSettings.model_validate(data)
+        new_settings = NamespaceCRMSettings.model_validate(data)
+
+        if "suggests" in incoming.model_fields_set:
+            if prev.suggests.schedule_task_id:
+                await container.scheduler_client.cancel_schedule(prev.suggests.schedule_task_id)
+            new_settings.suggests.schedule_task_id = None
+
+            if new_settings.suggests.enabled:
+                req = PlatformScheduleCreateRequest(
+                    target_service="crm",
+                    task_name=CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME,
+                    queue_name="crm",
+                    schedule_type=PlatformScheduleType.CRON,
+                    cron=new_settings.suggests.cron,
+                    payload={"company_id": ns.company_id, "namespace": normalized_namespace_name},
+                )
+                created = await container.scheduler_client.create_schedule(req)
+                new_settings.suggests.schedule_task_id = created.id
+
+        ns.crm_settings = new_settings
         await container.namespace_repository.set(ns)
         updated_namespace = ns
 

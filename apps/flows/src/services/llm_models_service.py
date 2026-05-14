@@ -6,18 +6,18 @@ from typing import Dict, List, Optional
 import httpx
 
 from apps.flows.config import get_settings
-from core.http import ProxyStrategy, get_httpx_client
 from apps.flows.src.db import LLMModelRepository
+from apps.flows.src.models import LLMModel
 from core.clients import SchedulerClient
+from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.scheduler.models import (
     PlatformScheduleCreateRequest,
-    PlatformScheduleFilter,
     PlatformScheduledTask,
+    PlatformScheduleFilter,
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
-from apps.flows.src.models import LLMModel
 
 logger = get_logger(__name__)
 
@@ -55,7 +55,7 @@ class LLMModelsService:
         }
 
         # Используем программируемый API с стратегией direct_first
-        from core.http.client import request_with_strategy, ProxyStrategy
+        from core.http.client import ProxyStrategy, request_with_strategy
 
         response = await request_with_strategy(
             "GET",
@@ -93,7 +93,7 @@ class LLMModelsService:
         }
 
         # Используем программируемый API с стратегией direct_first
-        from core.http.client import request_with_strategy, ProxyStrategy
+        from core.http.client import ProxyStrategy, request_with_strategy
 
         response = await request_with_strategy(
             "GET",
@@ -123,7 +123,7 @@ class LLMModelsService:
         headers = {"Authorization": f"Bearer {cfg.api_key}"}
 
         # Используем программируемый API с стратегией direct_first
-        from core.http.client import request_with_strategy, ProxyStrategy
+        from core.http.client import ProxyStrategy, request_with_strategy
 
         response = await request_with_strategy(
             "GET",
@@ -163,7 +163,7 @@ class LLMModelsService:
             "Content-Type": "application/json",
         }
 
-        from core.http.client import request_with_strategy, ProxyStrategy
+        from core.http.client import ProxyStrategy, request_with_strategy
 
         response = await request_with_strategy(
             "GET",
@@ -247,15 +247,15 @@ class LLMModelsService:
         """Синхронизация моделей от ВСЕХ настроенных провайдеров."""
         settings = get_settings()
         results = {}
-        
+
         # BotHub
         if settings.llm.bothub and settings.llm.bothub.api_key:
             results["bothub"] = await self.sync_models_by_provider("bothub")
-        
+
         # OpenRouter
         if settings.llm.openrouter and settings.llm.openrouter.api_key:
             results["openrouter"] = await self.sync_models_by_provider("openrouter")
-        
+
         # OpenAI
         if settings.llm.openai and settings.llm.openai.api_key:
             results["openai"] = await self.sync_models_by_provider("openai")
@@ -267,7 +267,7 @@ class LLMModelsService:
         provider_cfg = settings.provider_litserve
         if provider_cfg.api.base_url:
             results["provider_litserve"] = await self.sync_models_by_provider("provider_litserve")
-        
+
         total = sum(results.values())
         logger.info(f"Синхронизировано {total} моделей от всех провайдеров: {results}")
         return results

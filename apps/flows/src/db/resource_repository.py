@@ -8,7 +8,7 @@ from core.db import BaseRepository, Storage
 
 class ResourceRepository(BaseRepository[ResourceDefinition]):
     """Репозиторий для shared ресурсов."""
-    
+
     is_global = False
     owner_service = "flows"
 
@@ -17,10 +17,10 @@ class ResourceRepository(BaseRepository[ResourceDefinition]):
 
     def _get_key(self, entity_id: str) -> str:
         return f"resource:{entity_id}"
-    
+
     def _get_prefix(self) -> str:
         return "resource:"
-    
+
     def _get_table_name(self) -> str:
         return "resources"
 

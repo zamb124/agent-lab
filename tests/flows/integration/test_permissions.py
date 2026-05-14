@@ -11,14 +11,12 @@
 БЕЗ МОКОВ кроме LLM.
 """
 
-import json
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import pytest
 
-from apps.flows.src.models import Edge, FlowConfig, BranchConfig
-
+from apps.flows.src.models import BranchConfig, Edge, FlowConfig
 
 # =============================================================================
 # Хелперы
@@ -59,7 +57,7 @@ async def flow_with_permission(container, unique_id):
     Доступен только пользователям с группой managers или admin.
     """
     flow_id = f"perm_flow_{unique_id}"
-    
+
     config = FlowConfig(
         flow_id=flow_id,
         name="Permission Test Agent",
@@ -73,11 +71,11 @@ async def flow_with_permission(container, unique_id):
         },
         edges=[Edge(from_node="main", to_node=None)],
     )
-    
+
     await container.flow_repository.set(config)
-    
+
     yield flow_id
-    
+
     await container.flow_repository.delete(flow_id)
 
 
@@ -88,7 +86,7 @@ async def flow_with_skill_permission(container, unique_id):
     Agent доступен users и vip, но skill только для vip.
     """
     flow_id = f"skill_perm_flow_{unique_id}"
-    
+
     config = FlowConfig(
         flow_id=flow_id,
         name="Skill Permission Test Agent",
@@ -117,11 +115,11 @@ async def flow_with_skill_permission(container, unique_id):
             ),
         },
     )
-    
+
     await container.flow_repository.set(config)
-    
+
     yield flow_id
-    
+
     await container.flow_repository.delete(flow_id)
 
 
@@ -131,10 +129,10 @@ async def flow_with_tool_permission(container, unique_id, mock_llm_with_queue):
     Agent с tool, который требует permission = "special".
     """
     from apps.flows.src.models import CodeMode, ToolReference
-    
+
     flow_id = f"tool_perm_flow_{unique_id}"
     tool_id = f"special_tool_{unique_id}"
-    
+
     tool_ref = ToolReference(
         tool_id=tool_id,
         name="Special Tool",
@@ -146,9 +144,9 @@ async def execute(args, state):
 """,
         permission="special",
     )
-    
+
     await container.tool_repository.set(tool_ref)
-    
+
     config = FlowConfig(
         flow_id=flow_id,
         name="Tool Permission Test Agent",
@@ -163,16 +161,16 @@ async def execute(args, state):
         },
         edges=[Edge(from_node="main", to_node=None)],
     )
-    
+
     await container.flow_repository.set(config)
-    
+
     mock_llm_with_queue([
         {"type": "tool_call", "tool": tool_id, "args": {}},
         "Tool result received",
     ])
-    
+
     yield flow_id, tool_id
-    
+
     await container.flow_repository.delete(flow_id)
     await container.tool_repository.delete(tool_id)
 
@@ -198,9 +196,9 @@ class TestFlowPermission:
         config = get_settings()
         original = config.auth.permissions_enabled
         monkeypatch.setattr(config.auth, "permissions_enabled", True)
-        
+
         flow_id = flow_with_permission
-        
+
         # Запрос без групп (пустой __user_groups__ в metadata)
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -213,13 +211,13 @@ class TestFlowPermission:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         assert "error" in data, f"Expected error, got: {data}"
         assert data["error"]["code"] == -32008
         assert "Permission denied" in data["error"]["message"]
-        
+
         # Восстанавливаем
         monkeypatch.setattr(config.auth, "permissions_enabled", original)
 
@@ -233,9 +231,9 @@ class TestFlowPermission:
         from apps.flows.config import get_settings
         config = get_settings()
         monkeypatch.setattr(config.auth, "permissions_enabled", True)
-        
+
         flow_id = flow_with_permission
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json=_rpc_request(
@@ -247,9 +245,9 @@ class TestFlowPermission:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         assert "error" in data
         assert data["error"]["code"] == -32008
 
@@ -263,9 +261,9 @@ class TestFlowPermission:
         from apps.flows.config import get_settings
         config = get_settings()
         monkeypatch.setattr(config.auth, "permissions_enabled", True)
-        
+
         flow_id = flow_with_permission
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json=_rpc_request(
@@ -277,9 +275,9 @@ class TestFlowPermission:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         assert "result" in data, f"Expected result, got: {data}"
         assert "error" not in data
 
@@ -293,9 +291,9 @@ class TestFlowPermission:
         from apps.flows.config import get_settings
         config = get_settings()
         monkeypatch.setattr(config.auth, "permissions_enabled", True)
-        
+
         flow_id = flow_with_permission
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json=_rpc_request(
@@ -307,9 +305,9 @@ class TestFlowPermission:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         assert "result" in data, f"Expected result, got: {data}"
 
 
@@ -331,9 +329,9 @@ class TestSkillPermission:
         from apps.flows.config import get_settings
         config = get_settings()
         monkeypatch.setattr(config.auth, "permissions_enabled", True)
-        
+
         flow_id = flow_with_skill_permission
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json=_rpc_request(
@@ -348,9 +346,9 @@ class TestSkillPermission:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         assert "error" in data
         assert data["error"]["code"] == -32008
         assert "branch" in data["error"]["message"].lower() or "vip" in str(data["error"])
@@ -365,9 +363,9 @@ class TestSkillPermission:
         from apps.flows.config import get_settings
         config = get_settings()
         monkeypatch.setattr(config.auth, "permissions_enabled", True)
-        
+
         flow_id = flow_with_skill_permission
-        
+
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json=_rpc_request(
@@ -382,9 +380,9 @@ class TestSkillPermission:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         assert "result" in data, f"Expected result, got: {data}"
 
     @pytest.mark.asyncio
@@ -399,9 +397,9 @@ class TestSkillPermission:
         from apps.flows.config import get_settings
         config = get_settings()
         monkeypatch.setattr(config.auth, "permissions_enabled", True)
-        
+
         flow_id = flow_with_skill_permission
-        
+
         # users имеют доступ к flow и default branch
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -417,9 +415,9 @@ class TestSkillPermission:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         # users имеют доступ к default branch
         assert "result" in data, f"Expected result, got: {data}"
 
@@ -442,9 +440,9 @@ class TestPermissionsDisabled:
         from apps.flows.config import get_settings
         config = get_settings()
         monkeypatch.setattr(config.auth, "permissions_enabled", False)
-        
+
         flow_id = flow_with_permission
-        
+
         # Даже без групп есть доступ
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
@@ -457,9 +455,9 @@ class TestPermissionsDisabled:
             ),
             headers={"X-Internal-Service-Key": "test-internal-service-key"},
         )
-        
+
         data = response.json()
-        
+
         assert "result" in data, f"Expected result when permissions disabled, got: {data}"
         assert "error" not in data
 

@@ -24,23 +24,23 @@ def set_current_trace_context(trace_context: Optional[Dict[str, Any]]) -> None:
 class TraceContext(BaseModel):
     """
     Контекст трейса для передачи между процессами.
-    
+
     Передается через TaskIQ для сохранения связи между API запросом и worker.
     """
 
     trace_id: str
     span_id: str
     parent_span_id: Optional[str] = None
-    
+
     # Данные пользователя для записи в spans
     user_id: Optional[str] = None
     user_name: Optional[str] = None
     user_groups: List[str] = Field(default_factory=list)
-    
+
     # Сессии
     session_auth: Optional[str] = None
     session_agent: Optional[str] = None
-    
+
     # Идентификаторы запроса
     task_id: Optional[str] = None
     context_id: Optional[str] = None
@@ -61,7 +61,7 @@ class TraceContext(BaseModel):
     def to_traceparent(self) -> str:
         """
         W3C Trace Context формат.
-        
+
         Format: {version}-{trace-id}-{parent-id}-{trace-flags}
         """
         return f"00-{self.trace_id}-{self.span_id}-01"

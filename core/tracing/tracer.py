@@ -78,7 +78,7 @@ def get_tracer() -> "PlatformTracer":
 class PlatformTracer:
     """
     Централизованный трейсер для платформы Platform.
-    
+
     Создает spans с правильными атрибутами и сохраняет в PostgreSQL.
     """
 
@@ -112,7 +112,7 @@ class PlatformTracer:
         ctx = span.get_span_context()
         trace_id = format(ctx.trace_id, "032x")
         span_id = format(ctx.span_id, "016x")
-        
+
         parent_ctx = span.parent
         parent_span_id = format(parent_ctx.span_id, "016x") if parent_ctx else None
 
@@ -239,7 +239,7 @@ class PlatformTracer:
         """Возвращает базовые атрибуты для всех spans."""
         if trace_ctx is None:
             return {}
-        
+
         attrs = {}
         if trace_ctx.user_id:
             attrs[attr.ATTR_USER_ID] = trace_ctx.user_id
@@ -263,7 +263,7 @@ class PlatformTracer:
             attrs[attr.ATTR_CHANNEL] = trace_ctx.channel
         if trace_ctx.is_resume:
             attrs[attr.ATTR_IS_RESUME] = trace_ctx.is_resume
-        
+
         return attrs
 
     @asynccontextmanager
@@ -520,7 +520,7 @@ class PlatformTracer:
     ) -> None:
         """
         Записывает полный LLM request в span.
-        
+
         Args:
             span: OpenTelemetry span
             messages: Список сообщений в формате OpenAI
@@ -658,7 +658,7 @@ class PlatformTracer:
         """Записывает snapshot state в span."""
         # Конвертируем ExecutionState в dict для JSON сериализации
         state_dict = state.model_dump(exclude_none=False)
-        
+
         snapshot = {
             k: v
             for k, v in state_dict.items()
@@ -715,7 +715,7 @@ class PlatformTracer:
         attributes[attr.ATTR_PROMPT_NODE_ID] = node_id
         attributes[attr.ATTR_PROMPT_TEMPLATE_LENGTH] = len(template)
         attributes[attr.ATTR_PROMPT_VARIABLES_COUNT] = len(variables)
-        
+
         # Фильтруем переменные - оставляем только скалярные значения
         safe_vars = {
             k: v for k, v in variables.items()

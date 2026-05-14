@@ -21,24 +21,28 @@
     )
 """
 
-import os
-from pathlib import Path
-from typing import Type, Callable, List, Optional, Any, Tuple
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, Callable, List, Optional, Tuple, Type
 
-from core.config.testing import is_testing
-
-from fastapi import FastAPI, APIRouter, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from pydantic_settings import BaseSettings as PydanticBaseSettings
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-
-from core.config.loader import get_project_root, load_merged_config
-from core.config import set_settings
+from core.api.auth import router as core_auth_router
+from core.api.calendar import router as core_calendar_router
+from core.api.companies import router as core_companies_router
+from core.api.integrations import router as core_integrations_router
+from core.api.team import router as core_team_router
 from core.app.health_payload import build_health_payload
+from core.app.i18n_routes import register_platform_i18n_routes
+from core.app.pwa_routes import register_platform_pwa_routes
+from core.config import set_settings
+from core.config.loader import get_project_root, load_merged_config
+from core.config.testing import is_testing
 from core.logging import (
     SystemLogScope,
     get_logger,
@@ -47,28 +51,21 @@ from core.logging import (
 from core.middleware.access_log import AccessLogMiddleware
 from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
-from core.middleware.platform_error_envelope import PlatformHttpErrorEnvelopeMiddleware
 from core.middleware.dev_inter_service_proxy import (
     DevInterServiceProxyMiddleware,
     DevInterServiceWsProxyMiddleware,
 )
-from core.tracing import setup_tracing
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
-from core.websocket.manager import notification_manager
-from core.websocket.router import router as ws_router
-from core.api.auth import router as core_auth_router
-from core.api.calendar import router as core_calendar_router
-from core.api.companies import router as core_companies_router
-from core.api.integrations import router as core_integrations_router
-from core.api.team import router as core_team_router
-from core.push.router import router as push_router
+from core.middleware.platform_error_envelope import PlatformHttpErrorEnvelopeMiddleware
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
 from core.push.fcm_credentials import resolve_fcm_credentials
 from core.push.fcm_service import init_fcm_push_service
+from core.push.router import router as push_router
 from core.push.service import init_web_push_service
-from core.app.pwa_routes import register_platform_pwa_routes
-from core.app.i18n_routes import register_platform_i18n_routes
+from core.tracing import setup_tracing
+from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.websocket.manager import notification_manager
+from core.websocket.router import router as ws_router
 
 logger = get_logger(__name__)
 
@@ -125,7 +122,7 @@ def create_service_app(
 ) -> FastAPI:
     """
     Создает FastAPI приложение для сервиса.
-    
+
     Args:
         service_name: Имя сервиса (например, "flows")
         settings_class: Класс настроек (наследник BaseSettings)
@@ -148,11 +145,11 @@ def create_service_app(
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         services_spa_index: Путь к ``index.html`` SPA; если файл существует, регистрируются
             ``GET /{public_segment}/services`` и ``GET /{public_segment}/services/`` с тем же HTML.
-        
+
     Returns:
         Настроенное FastAPI приложение
     """
-    
+
     # Загрузка конфигурации (silent: без записей до setup_logging)
     settings, project_root = load_service_settings(service_name, settings_class)
 
@@ -162,7 +159,7 @@ def create_service_app(
 
     # Получение контейнера
     container = get_container()
-    
+
     # Lifespan: системный скоуп — нет request_id/user_id, но нужен canonical service.name
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -174,7 +171,7 @@ def create_service_app(
 
     async def _run_startup(app: FastAPI) -> None:
         logger.info("service.starting", service=service_name)
-        
+
         # Инициализация трейсинга
         if settings.tracing.enabled:
             setup_tracing(settings.tracing)
@@ -186,11 +183,11 @@ def create_service_app(
                 set_tracing_service_name(service_name)
                 set_span_repository(container.span_repository)
             logger.info("Трейсинг инициализирован")
-        
+
         # Redis pub/sub listener для WebSocket уведомлений
         await notification_manager.start_redis_listener(settings.database.redis_url)
         logger.info("Notification manager запущен")
-        
+
         # Инициализация глобального BillingService
         from core.billing import set_billing_service
         set_billing_service(container.billing_service)
@@ -199,8 +196,8 @@ def create_service_app(
         # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
         # затем фоновое обновление каждые 5 минут.
         # Fallback при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
-        from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
         from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
+        from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
         from core.utils.background import run_with_log_context
 
         _cbr_fallback = settings.billing.usd_to_rub_rate
@@ -223,7 +220,7 @@ def create_service_app(
         if hasattr(container, "file_repository"):
             initialize_default_processors(container.file_repository)
             logger.info("initialize_default_processors: FileReader может грузить файлы по file_id / S3")
-        
+
         # Инициализация WebPushService
         if settings.push.enabled:
             init_web_push_service(
@@ -253,11 +250,11 @@ def create_service_app(
                 token_uri=fcm.token_uri,
             )
             logger.info("FcmPushService инициализирован project_id=%s", fcm.project_id)
-        
+
         # Кастомный startup
         if on_startup:
             await on_startup(app, container, settings)
-        
+
         logger.info("service.started", service=service_name)
 
     async def _run_shutdown(app: FastAPI) -> None:
@@ -270,7 +267,7 @@ def create_service_app(
         # stop_redis_listener обнуляет глобальный клиент и ломает notify_user в чужих тестах.
         if not is_testing():
             await notification_manager.stop_redis_listener()
-    
+
     # Создание приложения
     app = FastAPI(
         title=title or f"{service_name.title()} Service",
@@ -282,7 +279,7 @@ def create_service_app(
         redoc_url=redoc_url,
         openapi_url=openapi_url,
     )
-    
+
     app.state.container = container
     app.state.settings = settings
 
@@ -323,12 +320,12 @@ def create_service_app(
         if settings.server.debug:
             payload["exception_detail"] = str(exc)[:4096]
         return JSONResponse(status_code=500, content=payload)
-    
+
     # Дополнительные атрибуты state
     if extra_state:
         for key, value in extra_state.items():
             setattr(app.state, key, value)
-    
+
     # CORS собираем здесь, подключаем в конце create_service_app (внешний слой стека).
     # Иначе preflight OPTIONS обрабатывает AuthMiddleware раньше и отдаёт 404 без ACAO.
     _cors_kw: dict[str, Any] = {
@@ -353,7 +350,7 @@ def create_service_app(
     # Access log (внешний слой: вход в request-скоуп — request_id/trace_id;
     # видит финальный status_code и duration_ms; снимает скоуп в finally).
     app.add_middleware(AccessLogMiddleware, service_name=service_name)
-    
+
     # Дополнительные middleware
     if extra_middlewares:
         for middleware_class, kwargs in extra_middlewares:
@@ -381,19 +378,19 @@ def create_service_app(
     else:
         api_prefix = f"/{url_route_segment}"
     logger.info("service.api_prefix", api_prefix=api_prefix)
-    
+
     # Инициализация репозиториев для CRUD роутеров
     if repository_names:
         for repo_name in repository_names:
             _ = getattr(container, repo_name)
-    
+
     # CRUD роутеры
     if include_crud_routers:
         crud_routers = container.get_crud_routers()
         logger.info("service.crud_routers_loaded", count=len(crud_routers))
         for router in crud_routers:
             app.include_router(router, prefix=api_prefix)
-    
+
     # API роутеры (с prefix /service_name/api/v1)
     if routers:
         for router in routers:
@@ -448,7 +445,7 @@ def create_service_app(
     ws_path = f"{ws_prefix}/ws/notifications" if service_name != "core" else "/ws/notifications"
     logger.info("service.router_attached", router="ws_notifications", path=ws_path)
     app.include_router(ws_router, prefix=ws_prefix, tags=["websocket"])
-    
+
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
     if pages_routers:
         for router in pages_routers:
@@ -459,7 +456,7 @@ def create_service_app(
             else:
                 # Роутер без префикса подключается как есть
                 app.include_router(router, tags=tags)
-    
+
     # Статические файлы
     if static_mounts:
         for mount_path, directory, name in static_mounts:
@@ -510,7 +507,7 @@ def create_service_app(
     @app.get(f"/{service_name}/health")
     async def health():
         return build_health_payload(settings)
-    
+
     @app.get("/")
     async def root():
         return {
@@ -518,22 +515,22 @@ def create_service_app(
             "version": version,
             "status": "running"
         }
-    
+
     # Testing endpoint (ТОЛЬКО в TESTING режиме)
     if is_testing():
         @app.get(f"/{service_name}/test", response_class=HTMLResponse)
         async def test_page():
             """
             Универсальная пустая страница для E2E UI тестов.
-            
+
             Доступна ТОЛЬКО в TESTING режиме на всех сервисах:
             - CRM: http://localhost:9003/crm/test
             - Frontend: http://localhost:9004/frontend/test
             - Agents: http://localhost:9001/agents/test
             - RAG: http://localhost:9002/rag/test
-            
+
             Страница пустая для тестирования компонентов
-            
+
             Предоставляет:
             - importmap для lit (локальные пути /static/core/assets/js/lit/)
             - Доступ к /static/core/* (все core компоненты)
@@ -573,7 +570,7 @@ def create_service_app(
     <div id="test-root"></div>
 </body>
 </html>"""
-        
+
         logger.info(
             "service.test_endpoint_enabled",
             service=service_name,

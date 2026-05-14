@@ -3,11 +3,11 @@ Variables - управление переменными агентов.
 """
 
 from core.variables import (
-    VariableResolver,
-    VariableResolutionError,
-    VarResolver,
     UnmatchedBracesError,
+    VariableResolutionError,
+    VariableResolver,
     VariablesService,
+    VarResolver,
     get_state,
     set_state_in_context,
 )

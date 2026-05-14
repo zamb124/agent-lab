@@ -12,11 +12,11 @@ from typing import Any, Dict, Optional
 def check_calculator_result(state: Dict[str, Any], response: str) -> bool:
     """
     Проверяет что ответ калькулятора содержит число 42.
-    
+
     Args:
         state: State после выполнения
         response: Ответ агента
-    
+
     Returns:
         True если ответ содержит "42"
     """
@@ -63,25 +63,25 @@ def universal_test_function(
 ) -> Any:
     """
     Универсальная функция: sender + checker в одном.
-    
+
     - Без state: возвращает input для отправки
     - Со state: проверяет результат
-    
+
     Args:
         state: None для режима sender, dict для режима checker
         response: Ответ агента (только в режиме checker)
-    
+
     Returns:
         str (input) в режиме sender, bool в режиме checker
     """
     if state is None:
         # Режим sender - возвращаем input
         return "Привет! Как дела?"
-    
+
     # Режим checker - проверяем ответ
     if not response:
         return False
-    
+
     # Проверяем что есть хоть какой-то ответ
     return len(response) > 5
 

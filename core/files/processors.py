@@ -4,16 +4,12 @@
 """
 
 import hashlib
-
-from core.logging import get_logger
 import json
-import logging
 import mimetypes
 import re
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-
 from urllib.parse import quote
 
 from core.context import get_context
@@ -28,6 +24,7 @@ from core.files.models import (
     FileStatus,
 )
 from core.files.s3_client import S3Client, S3ClientFactory
+from core.logging import get_logger
 
 if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
@@ -478,7 +475,7 @@ def initialize_default_processors(file_repository) -> None:
     """
     Инициализирует дефолтные процессоры с заданным file_repository.
     Вызывается при старте приложения в lifespan.
-    
+
     Args:
         file_repository: FileRepository из контейнера приложения
     """

@@ -18,7 +18,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.dependencies import ContainerDep
-from core.clients.tts_pronunciation.models import PronunciationRule, PronunciationRuleSet, NormalizationConfig, CompiledPronunciation
+from core.clients.tts_pronunciation.models import (
+    CompiledPronunciation,
+    NormalizationConfig,
+    PronunciationRule,
+    PronunciationRuleSet,
+)
 from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
 from core.clients.voice_resolver import invalidate_company_overrides_cache
 from core.logging import get_logger

@@ -8,14 +8,14 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from core.pagination import OffsetPage
-from apps.crm.models.api import EntityTypeCreate, EntityTypeUpdate, EntityTypeResponse
+from apps.crm.color_palette import assign_color_from_palette
+from apps.crm.db.models import EntityType
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.dependencies import ContainerDep
-from apps.crm.db.models import EntityType
-from apps.crm.color_palette import assign_color_from_palette
 from apps.crm.entity_type_list_filter import resolve_list_entity_query_pair
+from apps.crm.models.api import EntityTypeCreate, EntityTypeResponse, EntityTypeUpdate
 from core.context import get_context
+from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
 
@@ -120,6 +120,7 @@ def _entity_type_to_response(
         weight_coefficient=entity.weight_coefficient,
         is_context_anchor=entity.is_context_anchor,
         is_voice_target=entity.is_voice_target,
+        auto_resolve_suggests=entity.auto_resolve_suggests,
         extractable=entity.extractable,
         created_at=entity.created_at,
         list_entity_type=lt,
@@ -226,6 +227,7 @@ async def create_entity_type(
         company_id=company_id,
         is_context_anchor=data.is_context_anchor,
         is_voice_target=data.is_voice_target,
+        auto_resolve_suggests=data.auto_resolve_suggests,
     )
 
     await repo.create_custom_type(entity_type, company_id)
@@ -272,6 +274,8 @@ async def update_entity_type(
         fields["is_context_anchor"] = data.is_context_anchor
     if data.is_voice_target is not None:
         fields["is_voice_target"] = data.is_voice_target
+    if data.auto_resolve_suggests is not None:
+        fields["auto_resolve_suggests"] = data.auto_resolve_suggests
 
     resolved_color = fields.get("color") or entity_type.color
     if not resolved_color or not resolved_color.strip():

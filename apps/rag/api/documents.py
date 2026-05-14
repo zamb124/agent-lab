@@ -3,21 +3,22 @@ API для управления документами RAG.
 """
 
 import json
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.rag.config import get_rag_settings
 from apps.rag_worker.tasks.indexing_tasks import index_rag_document_s3_task
 from core.context import get_context
-from core.pagination import OffsetPage
 from core.files.models import FileResponse
 from core.files.processors import FileProcessor
 from core.logging import get_logger
+from core.pagination import OffsetPage
 from core.rag.factory import get_rag_provider
 from core.rag.models import RAGDocument
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
-from apps.rag.config import get_rag_settings
+
 from ..dependencies import ContainerDep
 from .namespace_access import (
     require_registered_rag_namespace,
@@ -121,7 +122,6 @@ async def list_documents(
     """Список документов в namespace (completed + in-progress)."""
     settings = get_rag_settings()
     rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
-    provider_name = provider or settings.rag.default_provider
 
     completed_docs = await rag_provider.list_documents(namespace_id, limit=limit)
 

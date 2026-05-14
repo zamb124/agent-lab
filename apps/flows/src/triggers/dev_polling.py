@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 class TelegramPollingBot:
     """Polling для одного Telegram бота."""
-    
+
     def __init__(
         self,
         flow_id: str,
@@ -38,11 +38,11 @@ class TelegramPollingBot:
         self.allowed_updates = allowed_updates
         self.offset = 0
         self.running = False
-    
+
     @property
     def bot_key(self) -> str:
         return f"{self.flow_id}:{self.trigger_id}"
-    
+
     async def delete_webhook(self):
         """Удаляет webhook перед polling."""
         url = f"{get_settings().telegram.api_base}/bot{self.bot_token}/deleteWebhook"
@@ -52,7 +52,7 @@ class TelegramPollingBot:
                 logger.info(f"[{self.bot_key}] Webhook deleted")
         except httpx.HTTPError as e:
             logger.warning(f"[{self.bot_key}] Failed to delete webhook: {e}")
-    
+
     async def get_updates(self, client) -> List[Dict[str, Any]]:
         """Long polling getUpdates."""
         try:
@@ -65,50 +65,50 @@ class TelegramPollingBot:
                 },
                 timeout=35.0,
             )
-            
+
             if response.status_code != 200:
                 logger.error(f"[{self.bot_key}] API error: {response.text}")
                 return []
-            
+
             data = response.json()
             if not data.get("ok"):
                 logger.error(f"[{self.bot_key}] API error: {data}")
                 return []
-            
+
             return data.get("result", [])
-            
+
         except httpx.TimeoutException:
             return []
         except httpx.HTTPError as e:
             logger.error(f"[{self.bot_key}] getUpdates HTTP error: {e}")
             await asyncio.sleep(5)
             return []
-    
+
     async def run(self):
         """Основной цикл polling."""
         self.running = True
-        
+
         await self.delete_webhook()
-        
+
         logger.info(f"[{self.bot_key}] Polling started (token: ...{self.bot_token[-8:]})")
-        
+
         async with get_httpx_client(strategy=ProxyStrategy.SMART) as client:
             while self.running:
                 updates = await self.get_updates(client)
-                
+
                 for update in updates:
                     update_id = update.get("update_id", 0)
                     self.offset = update_id + 1
-                    
+
                     message = update.get("message", {})
                     text = message.get("text", "")[:30] if message else ""
                     chat_id = message.get("chat", {}).get("id") if message else None
-                    
+
                     logger.info(
                         f"[{self.bot_key}] Update {update_id}: "
                         f"chat={chat_id}, text='{text}...'"
                     )
-                    
+
                     try:
                         await self.handler_callback(
                             self.flow_id,
@@ -120,9 +120,9 @@ class TelegramPollingBot:
                         raise
                     except Exception as e:
                         logger.error(f"[{self.bot_key}] Handler error: {e}", exc_info=True)
-        
+
         logger.info(f"[{self.bot_key}] Polling stopped")
-    
+
     def stop(self):
         self.running = False
 
@@ -130,30 +130,30 @@ class TelegramPollingBot:
 class TelegramDevPolling:
     """
     Менеджер dev polling для всех Telegram триггеров.
-    
+
     Запускается при старте сервера в dev режиме.
     Периодически сканирует агенты и запускает/останавливает polling боты.
     """
-    
+
     def __init__(self):
         self.bots: Dict[str, TelegramPollingBot] = {}
         self.running = False
         self._task: Optional[asyncio.Task] = None
         self._scan_interval = 10  # секунд между сканированиями
-    
+
     async def _get_telegram_triggers(self) -> List[Dict[str, Any]]:
         """Собирает все Telegram триггеры из агентов всех компаний."""
         from apps.flows.src.container import get_container
-        from core.context import set_context, clear_context
-        from core.models import Context, Company, User
-        
+        from core.context import clear_context, set_context
+        from core.models import Company, Context, User
+
         triggers = []
         container = get_container()
-        
+
         # Получаем все subdomains из БД напрямую
         subdomains = await self._get_all_subdomains(container)
         logger.info(f"Scanning subdomains: {subdomains}")
-        
+
         dev_user = User(user_id="system", email="system@dev.local", name="System")
 
         for subdomain in subdomains:
@@ -172,7 +172,7 @@ class TelegramDevPolling:
                     channel="system",
                 )
                 set_context(context)
-                
+
                 logger.info(f"[{subdomain}] Loading flows...")
                 try:
                     all_flows = await asyncio.wait_for(
@@ -186,22 +186,22 @@ class TelegramDevPolling:
                 except Exception as e:
                     logger.error(f"[{subdomain}] flow list failed: {e}", exc_info=True)
                     continue
-                
+
                 for flow_cfg in all_flows:
                     if not flow_cfg.triggers:
                         logger.debug(f"[{subdomain}:{flow_cfg.flow_id}] No triggers")
                         continue
-                    
+
                     logger.info(f"[{subdomain}:{flow_cfg.flow_id}] Has {len(flow_cfg.triggers)} triggers: {list(flow_cfg.triggers.keys())}")
-                    
+
                     for trigger_id, trigger in flow_cfg.triggers.items():
                         trigger_type = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
                         logger.info(f"[{subdomain}:{flow_cfg.flow_id}:{trigger_id}] type={trigger_type}, enabled={trigger.enabled}")
                         if trigger_type != "telegram" or not trigger.enabled:
                             continue
-                        
+
                         bot_token = trigger.config.get("bot_token", "")
-                        
+
                         # Резолвим @var:
                         if bot_token.startswith("@var:"):
                             var_name = bot_token[5:]
@@ -215,11 +215,11 @@ class TelegramDevPolling:
                                 bot_token = var_config.value or ""
                             else:
                                 bot_token = str(var_config)
-                        
+
                         if not bot_token:
                             logger.warning(f"[{flow_cfg.flow_id}:{trigger_id}] No bot_token found, config={trigger.config}")
                             continue
-                        
+
                         logger.info(f"[{flow_cfg.flow_id}:{trigger_id}] Found telegram trigger with token ...{bot_token[-8:]}")
                         triggers.append({
                             "flow_id": flow_cfg.flow_id,
@@ -236,7 +236,7 @@ class TelegramDevPolling:
 
         clear_context()
         return triggers
-    
+
     async def _get_all_subdomains(self, container) -> List[str]:
         """Уникальные идентификаторы tenant (сегмент company:*:flow:*) по ключам в таблице flows."""
         try:
@@ -244,7 +244,7 @@ class TelegramDevPolling:
             all_data = await container.flow_repository._storage._get_all_by_prefix_and_table(
                 "company:", flows_table, 10_000, 0
             )
-            
+
             subdomains = set()
             for key in all_data.keys():
                 # Формат: company:{subdomain}:flow:{flow_id}
@@ -252,13 +252,13 @@ class TelegramDevPolling:
                     parts = key.split(":")
                     if len(parts) >= 2:
                         subdomains.add(parts[1])
-            
+
             logger.debug(f"Found subdomains: {subdomains}")
             return list(subdomains)
         except Exception as e:
             logger.error(f"Error getting subdomains: {e}", exc_info=True)
             raise
-    
+
     async def _handle_update(
         self,
         flow_id: str,
@@ -308,16 +308,16 @@ class TelegramDevPolling:
             logger.debug(
                 f"Dev polling POST {path} ok: {response.status_code} {response.text[:200]}"
             )
-    
+
     async def _sync_bots(self):
         """Синхронизирует polling боты с текущими триггерами."""
         from apps.flows.src.triggers.handlers.base import TriggerRegistrationError
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 
         triggers = await self._get_telegram_triggers()
-        
+
         current_keys: Set[str] = set()
-        
+
         for trigger_data in triggers:
             key = f"{trigger_data['flow_id']}:{trigger_data['trigger_id']}"
 
@@ -350,37 +350,37 @@ class TelegramDevPolling:
                 self.bots[key] = bot
                 asyncio.create_task(bot.run())
                 logger.info(f"Started polling bot: {key}")
-        
+
         # Останавливаем удалённые
         for key in list(self.bots.keys()):
             if key not in current_keys:
                 self.bots[key].stop()
                 del self.bots[key]
                 logger.info(f"Stopped polling bot: {key}")
-    
+
     async def run(self):
         """Основной цикл сканирования."""
         self.running = True
-        
+
         logger.info("=" * 50)
         logger.info("Telegram Dev Polling started")
         logger.info("=" * 50)
-        
+
         while self.running:
             await self._sync_bots()
             await asyncio.sleep(self._scan_interval)
-        
+
         # Останавливаем все боты
         for bot in self.bots.values():
             bot.stop()
-        
+
         logger.info("Telegram Dev Polling stopped")
-    
+
     def start(self) -> asyncio.Task:
         """Запускает polling в background."""
         self._task = asyncio.create_task(self.run())
         return self._task
-    
+
     def stop(self):
         """Останавливает polling."""
         self.running = False
@@ -404,11 +404,11 @@ def get_dev_polling() -> TelegramDevPolling:
 async def start_dev_polling():
     """Запускает dev polling если в dev окружении."""
     settings = get_settings()
-    
+
     if settings.server.env != "development":
         logger.info("Not in development mode, skipping Telegram dev polling")
         return
-    
+
     polling = get_dev_polling()
     polling.start()
     logger.info("Telegram dev polling task started")

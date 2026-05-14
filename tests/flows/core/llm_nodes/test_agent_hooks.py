@@ -4,12 +4,13 @@
 Проверяет работу before_prompt_render и after_prompt_render хуков.
 """
 
-import pytest
 from typing import Any, Dict
 
+import pytest
+
+from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
 from core.state import ExecutionState
 
 
@@ -93,9 +94,9 @@ class TestBeforePromptRenderHook:
             session_id="test-agent:test-context",
             variables={"test_var": "test_value"}
         )
-        
+
         rendered = await runner_with_hooks._render_prompt(state)
-        
+
         assert "Дополнительная инструкция" in rendered
         assert "custom_value" in rendered
 
@@ -109,9 +110,9 @@ class TestBeforePromptRenderHook:
             session_id="test-agent:test-context",
             variables={"test_var": "test_value"}
         )
-        
+
         rendered = await runner_with_hooks._render_prompt(state)
-        
+
         # Переменная test_var должна быть резолвнута
         assert "test_value" in rendered
         # Кастомная переменная должна быть добавлена
@@ -129,9 +130,9 @@ class TestBeforePromptRenderHook:
             user_role="admin",
             context="support"
         )
-        
+
         rendered = await runner_with_hooks._render_prompt(state)
-        
+
         # Хук должен получить state и использовать его
         assert "test_value" in rendered
 
@@ -149,9 +150,9 @@ class TestAfterPromptRenderHook:
             session_id="test-agent:test-context",
             variables={"test_var": "test_value"}
         )
-        
+
         rendered = await runner_with_hooks._render_prompt(state)
-        
+
         assert "Финальная заметка: промпт обработан хуком." in rendered
 
     @pytest.mark.asyncio
@@ -165,9 +166,9 @@ class TestAfterPromptRenderHook:
             variables={"test_var": "test_value"},
             additional_context="Дополнительная информация"
         )
-        
+
         rendered = await runner_with_hooks._render_prompt(state)
-        
+
         # Хук должен получить state
         assert "test_value" in rendered
 
@@ -185,9 +186,9 @@ class TestHooksWithoutAgent:
             session_id="test-agent:test-context",
             variables={"test_var": "test_value"}
         )
-        
+
         rendered = await runner_without_hooks._render_prompt(state)
-        
+
         assert "Ты помощник" in rendered
         assert "test_value" in rendered
         # Не должно быть текста из хуков
@@ -205,18 +206,18 @@ class TestHooksWithoutAgent:
             session_id="test-agent:test-context",
         )
         state_dict = state.model_dump(exclude_none=False)
-        
+
         agent = runner_without_hooks.llm_node
         template, vars_before = await agent.before_prompt_render(
             "Ты помощник. {test_var}", state_dict, variables.copy()
         )
-        
+
         assert template == "Ты помощник. {test_var}"
         assert vars_before == variables
-        
+
         rendered = "Ты помощник. test_value"
         rendered_after = await agent.after_prompt_render(rendered, state_dict)
-        
+
         assert rendered_after == rendered
 
 
@@ -233,9 +234,9 @@ class TestHooksIntegration:
             session_id="test-agent:test-context",
             variables={"test_var": "test_value"}
         )
-        
+
         rendered = await runner_with_hooks._render_prompt(state)
-        
+
         # before_prompt_render должен добавить инструкцию
         assert "Дополнительная инструкция" in rendered
         assert "custom_value" in rendered
@@ -254,9 +255,9 @@ class TestHooksIntegration:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        
+
         rendered = await runner_with_hooks._render_prompt(state)
-        
+
         # Системные переменные должны быть доступны в хуках
         # (если они есть в контексте)
         assert "Ты помощник" in rendered

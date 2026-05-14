@@ -37,7 +37,6 @@ from apps.flows.src.state.cancellation import (
 )
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from core.errors import FlowWallClockTimeoutError, NodeWallClockTimeoutError, SafeEvalError
-from core.state import ExecutionState
 
 
 @pytest.mark.asyncio

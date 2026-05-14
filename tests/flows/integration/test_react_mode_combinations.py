@@ -11,12 +11,10 @@
 ПРАВИЛО: Мок только LLM. Tools, state, flow - реальные.
 """
 
-import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from core.state import ExecutionState
-
 
 # ============================================================================
 # INLINE TOOL DEFINITIONS
@@ -1158,7 +1156,7 @@ class TestEdgeCases:
 class TestExplicitModeStreaming:
     """
     Тесты стриминга в EXPLICIT режиме.
-    
+
     В EXPLICIT режиме текстовые артефакты НЕ должны стримиться до вызова exit_tool.
     Это критически важно чтобы пользователь не видел промежуточные ответы LLM.
     """
@@ -1168,24 +1166,25 @@ class TestExplicitModeStreaming:
     ):
         """
         Текстовые артефакты НЕ стримятся до вызова exit_tool.
-        
+
         Сценарий:
         1. LLM отвечает текстом (без exit_tool) - reminder добавляется
         2. LLM вызывает exit_tool
-        
+
         Ожидание: текстовые артефакты первого ответа НЕ должны быть в событиях.
         """
         from a2a.types import TaskArtifactUpdateEvent
-        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-        from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
+
         from apps.flows.src.models import ReactLoopMode
         from apps.flows.src.models.enums import ReactToolRole
-        from apps.flows.src.tools.base import CodeTool
+        from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
         from apps.flows.src.models.tool_reference import CallParameter
+        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+        from apps.flows.src.tools.base import CodeTool
 
         flow_id = f"explicit_streaming_{unique_id}"
-        container = get_container()
-        
+        get_container()
+
         finish_tool = CodeTool(
             tool_id="finish",
             code="async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
@@ -1228,7 +1227,7 @@ class TestExplicitModeStreaming:
             messages=[]
         )
         events = []
-        
+
         async for event in runner.run({"content": "Привет"}, state):
             events.append(event)
 
@@ -1250,13 +1249,14 @@ class TestExplicitModeStreaming:
     ):
         """
         В AUTO режиме текстовые артефакты ДОЛЖНЫ стримиться.
-        
+
         Контрольный тест: AUTO режим работает как раньше.
         """
         from a2a.types import TaskArtifactUpdateEvent
-        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-        from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
+
         from apps.flows.src.models import ReactLoopMode
+        from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
+        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 
         flow_id = f"auto_streaming_{unique_id}"
 
@@ -1291,7 +1291,7 @@ class TestExplicitModeStreaming:
             messages=[]
         )
         events = []
-        
+
         async for event in runner.run({"content": "Привет"}, state):
             events.append(event)
 

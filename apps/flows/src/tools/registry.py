@@ -9,16 +9,15 @@ Zero-Guess Architecture:
 
 from typing import Any, Dict, List, Optional, Union
 
-from core.logging import get_logger
-from apps.flows.src.models import ToolReference
-from apps.flows.src.models.mcp import MCPServerConfig
-from apps.flows.src.models.enums import CodeMode, NodeType
-from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
+from apps.flows.src.models import ToolReference
+from apps.flows.src.models.enums import CodeMode, NodeType, ReactToolRole
+from apps.flows.src.models.mcp import MCPServerConfig
+from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.base import BaseTool, CodeTool
 from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 from apps.flows.src.tools.mcp_wrapper import MCPTool
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -72,7 +71,7 @@ def _browser_runtime_mcp_tool_parameters_schema(
 class ToolRegistry:
     """
     Реестр инструментов.
-    
+
     Единая точка для:
     - Регистрации builtin tools
     - Создания тулов из конфигов с полем code
@@ -111,22 +110,10 @@ class ToolRegistry:
             return
 
         from apps.flows.tools import (
+            ask_user,
             calculator,
+            cancel_scheduled_task,
             create_file,
-            sandbox_codegen,
-            gdocs_append_text,
-            gdocs_create_document,
-            gdocs_delete_range,
-            gdocs_find_replace,
-            gdocs_insert_text,
-            gdocs_read_document,
-            gdocs_share_document,
-            format_text_markdown,
-            pravo_catalog_search,
-            pravo_document_rag_search,
-            rag_add_text,
-            rag_create_namespace,
-            rag_search,
             crm_analyze_note_text,
             crm_create_entity,
             crm_create_note,
@@ -139,18 +126,30 @@ class ToolRegistry:
             fill_docx_template,
             final_answer,
             finish,
+            format_text_markdown,
+            gdocs_append_text,
+            gdocs_create_document,
+            gdocs_delete_range,
+            gdocs_find_replace,
+            gdocs_insert_text,
+            gdocs_read_document,
+            gdocs_share_document,
+            hitl_operator_task,
+            list_scheduled_tasks,
+            pravo_catalog_search,
+            pravo_document_rag_search,
             push_embed_blocks,
+            rag_add_text,
+            rag_create_namespace,
+            rag_search,
             read_file,
             reason,
-            self_check,
-            ask_user,
-            summarize_text,
-            hitl_operator_task,
+            sandbox_codegen,
             schedule_cron_task,
             schedule_interval_task,
             schedule_one_time_task,
-            list_scheduled_tasks,
-            cancel_scheduled_task,
+            self_check,
+            summarize_text,
         )
 
         builtin_tools = [
@@ -437,19 +436,19 @@ class ToolRegistry:
             MCPTool
         """
         from apps.flows.src.container import get_container
-        
+
         tool_id = config.get("tool_id", "mcp_tool")
         mcp_server_id = config.get("mcp_server_id")
         mcp_tool_name = config.get("mcp_tool_name")
-        
+
         if not mcp_server_id:
             raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_server_id'")
         if not mcp_tool_name:
             raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_tool_name'")
-        
+
         container = get_container()
         server_config = await container.mcp_server_repository.get(mcp_server_id)
-        
+
         if not server_config:
             raise ValueError(f"MCP server '{mcp_server_id}' not found")
 
@@ -484,14 +483,14 @@ class ToolRegistry:
             parameters_schema=parameters_schema,
             tags=config.get("tags"),
         )
-        
+
         self.register(tool)
         return tool
 
     def _create_node_as_tool(self, config: Dict[str, Any]) -> BaseTool:
         """
         Создает NodeAsToolWrapper из inline llm_node конфига.
-        
+
         Args:
             config: {
                 "tool_id": "my_node",
@@ -500,13 +499,13 @@ class ToolRegistry:
                 "tools": [...],
                 ...
             }
-        
+
         Returns:
             NodeAsToolWrapper
         """
         # Lazy import to avoid circular dependency
         from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
-        
+
         return NodeAsToolWrapper(
             node_config=config,
             tool_registry=self

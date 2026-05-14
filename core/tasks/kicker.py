@@ -32,7 +32,6 @@ from taskiq.kicker import AsyncKicker
 from core.config import get_settings
 from core.logging import get_log_context
 
-
 _LABEL_REQUEST_ID = "request_id"
 _LABEL_TRACE_ID = "trace_id"
 _LABEL_SERVICE_NAME = "service_name"

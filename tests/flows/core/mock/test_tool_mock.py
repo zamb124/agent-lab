@@ -4,8 +4,9 @@
 Mock через state.mock["tools"].
 """
 
-import pytest
 from typing import Any, Dict, Optional
+
+import pytest
 
 from apps.flows.src.tools.base import BaseTool, CodeTool
 from core.state import ExecutionState
@@ -13,23 +14,23 @@ from core.state import ExecutionState
 
 class SimpleTool(BaseTool):
     """Простой tool для тестов."""
-    
+
     name = "simple_tool"
     description = "Simple test tool"
-    
+
     async def _run_impl(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
         return f"real_result_{args.get('input', 'default')}"
 
 
 class ToolWithCustomMock(BaseTool):
     """Tool с переопределённым execute_mock."""
-    
+
     name = "tool_with_custom_mock"
     description = "Tool with custom mock"
-    
+
     async def _run_impl(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
         return "real_result"
-    
+
     async def execute_mock(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
         return f"custom_mock_{args.get('value', 0)}"
 
@@ -53,9 +54,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({"input": "test"}, state)
-        
+
         assert result == "mock_from_state"
 
     @pytest.mark.asyncio
@@ -78,9 +79,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({}, state)
-        
+
         assert result["status"] == "success"
         assert result["data"] == [1, 2, 3]
         assert result["nested"]["key"] == "value"
@@ -101,9 +102,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({"input": "test"}, state)
-        
+
         # Реальный результат, не mock
         assert result == "real_result_test"
 
@@ -123,9 +124,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({"input": "test"}, state)
-        
+
         # Реальный результат
         assert result == "real_result_test"
 
@@ -140,9 +141,9 @@ class TestBaseToolMockFromState:
             session_id="test-agent:test-context",
             mock={}  # Пустой конфиг
         )
-        
+
         result = await tool.run({"value": 42}, state)
-        
+
         # TESTING=true установлен в conftest, должен использовать execute_mock
         assert result == "custom_mock_42"
 
@@ -156,9 +157,9 @@ class TestBaseToolMockFromState:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        
+
         result = await tool.run({"value": 123}, state)
-        
+
         # TESTING=true, используется execute_mock
         assert result == "custom_mock_123"
 
@@ -178,9 +179,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({"input": "test"}, state)
-        
+
         # None не является валидным mock, используется real
         # Но get_mock_for_tool возвращает None если tools[id] is None
         # так что реальный execute вызовется
@@ -202,9 +203,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({}, state)
-        
+
         assert result == 0
 
     @pytest.mark.asyncio
@@ -223,9 +224,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({}, state)
-        
+
         assert result == ""
 
     @pytest.mark.asyncio
@@ -244,9 +245,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({}, state)
-        
+
         assert result is False
 
     @pytest.mark.asyncio
@@ -265,9 +266,9 @@ class TestBaseToolMockFromState:
                 }
             }
         )
-        
+
         result = await tool.run({}, state)
-        
+
         assert result == []
 
 
@@ -282,7 +283,7 @@ async def execute(args, state):
     return f"inline_result_{args.get('x', 0)}"
 """
         tool = CodeTool(tool_id="inline_test", code=code)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -295,9 +296,9 @@ async def execute(args, state):
                 }
             }
         )
-        
+
         result = await tool.run({"x": 5}, state)
-        
+
         assert result == "mock_inline_result"
 
     @pytest.mark.asyncio
@@ -308,7 +309,7 @@ async def execute(args, state):
     return f"inline_result_{args.get('x', 0)}"
 """
         tool = CodeTool(tool_id="inline_test", code=code)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -319,9 +320,9 @@ async def execute(args, state):
                 "tools": {}  # Нет mock для inline_test
             }
         )
-        
+
         result = await tool.run({"x": 42}, state)
-        
+
         assert result == "inline_result_42"
 
 
@@ -332,21 +333,21 @@ class TestToolMockWithPermissions:
     async def test_mock_respects_permissions(self, monkeypatch):
         """Mock работает с включенными permissions."""
         from core.config.base import BaseSettings
-        
+
         monkeypatch.setenv("AUTH__PERMISSIONS_ENABLED", "true")
         new_settings = BaseSettings()
-        
+
         import apps.flows.config
         monkeypatch.setattr(apps.flows.config, "_settings", new_settings)
-        
+
         class ProtectedTool(BaseTool):
             name = "protected_tool"
             description = "Protected tool"
             permission = "admin"
-            
+
             async def _run_impl(self, args, state=None):
                 return "real_result"
-        
+
         tool = ProtectedTool()
         state = ExecutionState(
             task_id="test-task",
@@ -359,9 +360,9 @@ class TestToolMockWithPermissions:
             },
             user={"grps": ["admin"]}  # Пользователь с правами
         )
-        
+
         result = await tool.run({}, state)
-        
+
         # Mock должен работать для пользователя с правами
         assert result == "mock_result"
 
@@ -369,21 +370,21 @@ class TestToolMockWithPermissions:
     async def test_permission_denied_before_mock(self, monkeypatch):
         """Permission проверяется до mock."""
         from core.config.base import BaseSettings
-        
+
         monkeypatch.setenv("AUTH__PERMISSIONS_ENABLED", "true")
         new_settings = BaseSettings()
-        
+
         import apps.flows.config
         monkeypatch.setattr(apps.flows.config, "_settings", new_settings)
-        
+
         class ProtectedTool(BaseTool):
             name = "protected_tool"
             description = "Protected tool"
             permission = "admin"
-            
+
             async def _run_impl(self, args, state=None):
                 return "real_result"
-        
+
         tool = ProtectedTool()
         state = ExecutionState(
             task_id="test-task",
@@ -396,9 +397,9 @@ class TestToolMockWithPermissions:
             },
             user={"grps": ["users"]}  # Нет прав
         )
-        
+
         result = await tool.run({}, state)
-        
+
         # Должно вернуть сообщение об ошибке, не mock
         assert "нет прав" in result
 

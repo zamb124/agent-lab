@@ -25,7 +25,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from core.clients.llm.model_routing import LLM_ROUTING_PROVIDER_SLUGS
 
-
 METADATA_KEY = "ai_providers"
 
 

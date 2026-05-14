@@ -4,8 +4,8 @@ API для управления грантами (общие операции).
 
 from fastapi import APIRouter, HTTPException
 
-from apps.crm.models.grant_models import AccessGrantResponse
 from apps.crm.dependencies import ContainerDep
+from apps.crm.models.grant_models import AccessGrantResponse
 from core.context import get_context
 
 router = APIRouter(prefix="/grants", tags=["Grants Management"])
@@ -20,7 +20,7 @@ async def revoke_grant(
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         await container.access_grant_service.revoke_grant(grant_id, ctx.user.user_id)
         return {"success": True}

@@ -36,7 +36,6 @@ from starlette.websockets import WebSocketState
 
 from core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 

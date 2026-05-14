@@ -9,9 +9,9 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     import asyncpg
@@ -21,12 +21,10 @@ try:
 except ImportError:
     asyncpg = None
 
-from core.state import ExecutionState
-from core.logging import get_logger
 from apps.flows.src.models import SessionConfig, SessionStatus
-
-from core.db import BaseRepository
-from core.db import Storage
+from core.db import BaseRepository, Storage
+from core.logging import get_logger
+from core.state import ExecutionState
 
 logger = get_logger(__name__)
 
@@ -333,7 +331,7 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
 
         async with self._storage._get_session() as session:
             from sqlalchemy import text
-            
+
             count_query = text(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
             count_result = await session.execute(count_query, params)
             total = count_result.scalar()
@@ -346,7 +344,7 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
             """)
             query_params = params.copy()
             query_params.update({"limit": limit, "offset": offset})
-            
+
             result = await session.execute(query, query_params)
             rows = result.mappings().all()
 
@@ -356,7 +354,7 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
                 raw_data = row["value"]
                 if isinstance(raw_data, str):
                     raw_data = json.loads(raw_data)
-                
+
                 # Извлекаем state.data (так как храним StateData)
                 state_data = raw_data.get("data", raw_data)
 
@@ -366,19 +364,19 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
                     session_id = session_id[len(tenant_prefix):]
 
                 user_id_from_state = state_data.get("user_id", "")
-                
+
                 session_parts = session_id.split(":") if ":" in session_id else [session_id]
-                
+
                 if len(session_parts) >= 3 and session_parts[0] == "eval":
                     flow_id_from_session = session_parts[1]
                     context_id_from_session = session_parts[2]
                 else:
                     flow_id_from_session = session_parts[0] if session_parts else ""
                     context_id_from_session = session_parts[-1] if len(session_parts) > 1 else session_id
-                
+
                 messages = state_data.get("messages", [])
                 message_count = len(messages) if isinstance(messages, list) else 0
-                
+
                 first_message = self._extract_first_message(messages)
 
                 session = SessionConfig(

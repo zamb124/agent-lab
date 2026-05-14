@@ -4,9 +4,10 @@
 Каждый сервис регистрирует свои модели, функцию получения URL и путь к Alembic-дереву.
 """
 
-from core.logging import get_logger
 from dataclasses import dataclass
 from typing import Callable, List
+
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 @dataclass

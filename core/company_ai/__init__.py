@@ -39,6 +39,10 @@ from core.company_ai.resolver import (
     resolve_voice_for_company,
 )
 from core.company_ai.schema import (
+    CUSTOM_PROVIDER_REF_PREFIX,
+    CUSTOM_PROVIDER_SLUG,
+    METADATA_KEY,
+    PLATFORM_LLM_PROVIDERS,
     AICapability,
     CapabilityLiteral,
     CompanyAIProviders,
@@ -47,10 +51,6 @@ from core.company_ai.schema import (
     CompanyLLMOverride,
     CompanyRerankOverride,
     CompanyVoiceOverride,
-    CUSTOM_PROVIDER_REF_PREFIX,
-    CUSTOM_PROVIDER_SLUG,
-    METADATA_KEY,
-    PLATFORM_LLM_PROVIDERS,
 )
 
 __all__ = [

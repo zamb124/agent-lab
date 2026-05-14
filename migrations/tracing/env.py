@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from core.db.models.tracing import Spans  # noqa: F401
 from core.db.models.base import Base
+from core.db.models.tracing import Spans  # noqa: F401
 
 config = context.config
 logger = logging.getLogger("alembic.env")

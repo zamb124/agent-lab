@@ -4,6 +4,7 @@ anonymous-страницы без 403.
 """
 
 import pytest
+
 from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
 

@@ -4,7 +4,6 @@
 
 import asyncio
 from pathlib import Path
-import os
 
 from core.config.loader import load_merged_config
 from core.config.models import LoggingConfig
@@ -16,37 +15,39 @@ setup_logging(
     LoggingConfig.model_validate(dict(_FLOWS_BOOTSTRAP_MERGED.get("logging") or {})),
 )
 
-from core.config.testing import is_testing
-from fastapi import FastAPI
-from fastapi import HTTPException
-from fastapi.responses import RedirectResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.sessions import SessionMiddleware
+from fastapi import FastAPI, HTTPException  # noqa: E402
+from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
-from core.app import create_service_app
-from core.context import set_context, clear_context
-from core.identity.system_bootstrap import (
+from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, FlowSettings, get_settings  # noqa: E402
+from apps.flows.src.api import (  # noqa: E402
+    a2a_router,
+    chat_router,
+    registry_router,
+    websocket_router,
+)
+from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
+from apps.flows.src.container import get_container  # noqa: E402
+from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
+from apps.flows.src.services.flows_loader import load_tools_to_db  # noqa: E402
+from apps.flows.src.services.mcp_sync import (  # noqa: E402
+    ensure_default_mcp_servers_for_company,
+    sync_auto_mcp_servers_for_company,
+)
+from apps.flows.src.tasks.company_init_tasks import init_company_resources  # noqa: E402
+from core.app import create_service_app  # noqa: E402
+from core.config.testing import is_testing  # noqa: E402
+from core.context import clear_context, set_context  # noqa: E402
+from core.identity.system_bootstrap import (  # noqa: E402
     SYSTEM_ADMIN_EMAIL,
     ensure_system_admin_membership,
 )
-from core.models.context_models import Context, Language
-from core.models.identity_models import User, Company
-from core.utils.background import run_with_log_context
-from core.utils.tokens import get_token_service
-from apps.flows.src.api import a2a_router, chat_router, registry_router, websocket_router
-from apps.flows.src.api.v1 import api_v1_router
-from apps.flows.config import FlowSettings, FLOWS_PUBLIC_API_PREFIX, get_settings
-from apps.flows.src.container import get_container
-from apps.flows.src.services.flows_loader import load_flows_to_db, load_tools_to_db
-from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware
-from core.logging import get_logger
-from apps.flows.src.services.mcp_sync import (
-                ensure_default_mcp_servers_for_company,
-                sync_auto_mcp_servers_for_company,
-            )
-from apps.flows.src.tasks.company_init_tasks import init_company_resources
-
-
+from core.logging import get_logger  # noqa: E402
+from core.models.context_models import Context, Language  # noqa: E402
+from core.models.identity_models import Company, User  # noqa: E402
+from core.utils.background import run_with_log_context  # noqa: E402
+from core.utils.tokens import get_token_service  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -58,7 +59,9 @@ _FLOWS_DEV_CORS_ORIGIN_REGEX = (
 )
 
 
-async def _build_scheduler_auth_context(container: object, trace_id: str, session_id: str) -> Context:
+async def _build_scheduler_auth_context(
+    container: object, trace_id: str, session_id: str
+) -> Context:
     company, user = await ensure_system_admin_membership(container)
     if user is None:
         raise ValueError(
@@ -76,7 +79,9 @@ async def _build_scheduler_auth_context(container: object, trace_id: str, sessio
         session_id=session_id,
         channel="system",
         language=Language.RU,
-        active_company=Company(company_id=company.company_id, name=company.name, subdomain=company.subdomain),
+        active_company=Company(
+            company_id=company.company_id, name=company.name, subdomain=company.subdomain
+        ),
         user_companies=[],
         trace_id=trace_id,
         auth_token=auth_token,
@@ -114,8 +119,10 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             break
         except Exception as e:
             if attempt < max_startup_retries - 1:
-                wait = 2 ** attempt
-                logger.warning(f"Redis connection failed (attempt {attempt+1}), retry in {wait}s: {e}")
+                wait = 2**attempt
+                logger.warning(
+                    f"Redis connection failed (attempt {attempt + 1}), retry in {wait}s: {e}"
+                )
                 await asyncio.sleep(wait)
             else:
                 logger.error("Failed to connect to Redis on startup")
@@ -283,20 +290,22 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
     # Telegram Dev Polling (только в development)
     if settings.server.env == "development" and not is_testing():
         from apps.flows.src.triggers.dev_polling import start_dev_polling
+
         await start_dev_polling()
         logger.info("Telegram dev polling запущен")
 
 
 async def on_shutdown(app: FastAPI, container):
     """Логика при остановке сервиса flows."""
-    
+
     # Остановка Telegram dev polling
     try:
         from apps.flows.src.triggers.dev_polling import stop_dev_polling
+
         await stop_dev_polling()
     except Exception as e:
         logger.warning(f"Error stopping dev polling: {e}")
-    
+
     # Остановка фоновой синхронизации моделей
     if not is_testing():
         try:
@@ -309,7 +318,7 @@ async def on_shutdown(app: FastAPI, container):
             await container.llm_models_service.stop_background_sync()
         finally:
             clear_context()
-    
+
     # Закрываем Redis с error handling
     try:
         await container.redis_client.close()
@@ -344,12 +353,16 @@ app = create_service_app(
     on_startup=on_startup,
     on_shutdown=on_shutdown,
     extra_middlewares=[
-        (SessionMiddleware, {
-            "secret_key": _flow_settings.auth.jwt_secret_key or "dev-secret-key-change-in-production",
-            "session_cookie": "platform_session",
-            "same_site": "lax",
-            "https_only": False,
-        }),
+        (
+            SessionMiddleware,
+            {
+                "secret_key": _flow_settings.auth.jwt_secret_key
+                or "dev-secret-key-change-in-production",
+                "session_cookie": "platform_session",
+                "same_site": "lax",
+                "https_only": False,
+            },
+        ),
     ],
     cors_origins=list(_flow_settings.cors_allow_origins),
     cors_allow_origin_regex=_cors_regex,

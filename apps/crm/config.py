@@ -5,6 +5,7 @@
 """
 
 from typing import Optional
+
 from pydantic import Field
 
 from core.config import BaseSettings
@@ -13,12 +14,12 @@ from core.config import BaseSettings
 class CRMSettings(BaseSettings):
     """
     Настройки CRM сервиса.
-    
+
     Наследуется от BaseSettings, добавляя специфичные для CRM поля.
     Все базовые поля (database, auth, logging, etc) доступны из родителя.
     URL сервиса flows берется из server.flows_service_url (SERVER__FLOWS_SERVICE_URL).
     """
-    
+
     rag_namespace_prefix: str = Field(
         default="crm_",
         description="Префикс namespace для CRM сущностей в RAG"
@@ -60,6 +61,12 @@ class CRMSettings(BaseSettings):
         ge=1.0,
         description="Таймаут ожидания TaskIQ (analyze/apply) при синхронном HTTP: kiq + wait_result",
     )
+    analysis_draft_repair_a2a_timeout_seconds: float = Field(
+        default=120.0,
+        ge=15.0,
+        le=600.0,
+        description="HTTP-таймаут A2A при починке черновика AI (ветка draft_repair CRM flow), сек.",
+    )
     daily_summary_chunk_size: int = Field(
         default=5,
         ge=1,
@@ -99,7 +106,7 @@ _crm_settings: Optional[CRMSettings] = None
 def get_crm_settings() -> CRMSettings:
     """
     Получает настройки CRM сервиса.
-    
+
     Создает CRMSettings из конфигурации, загружая базовые настройки
     и добавляя специфичные для CRM.
     """
@@ -111,7 +118,7 @@ def get_crm_settings() -> CRMSettings:
         merged_config = load_merged_config(service_name="crm", silent=True)
         _crm_settings = CRMSettings(**merged_config)
         core_set_settings(_crm_settings)
-    
+
     return _crm_settings
 
 

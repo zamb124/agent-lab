@@ -3,7 +3,6 @@
 """
 
 import pytest
-from httpx import AsyncClient
 
 from apps.flows.src.utils import extract_json_from_response
 
@@ -81,31 +80,31 @@ class TestA2AArtifacts:
 
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "result" in data
         result = data["result"]
-        
+
         # Проверяем что есть artifacts
         assert "artifacts" in result
         assert result["artifacts"] is not None
         assert len(result["artifacts"]) > 0
-        
+
         artifact = result["artifacts"][0]
         assert artifact["name"] == "response"
         assert "parts" in artifact
         assert len(artifact["parts"]) > 0
-        
+
         part = artifact["parts"][0]
         assert part["kind"] == "data"
         assert "data" in part
         assert "res" in part["data"]
-        
+
         # Когда есть artifacts, status.message НЕ дублирует ответ
         assert result["status"].get("message") is None
-        
+
         # Должен быть timestamp
         assert "timestamp" in result["status"]
-        
+
         # taskId должен быть в user message
         assert result["history"][0].get("taskId") is not None
 
@@ -132,10 +131,10 @@ class TestA2AArtifacts:
 
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "result" in data
         result = data["result"]
-        
+
         # artifacts должен быть None или отсутствовать
         assert result.get("artifacts") is None
 

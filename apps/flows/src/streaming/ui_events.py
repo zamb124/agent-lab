@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.state import ExecutionState
-
 from apps.flows.src.streaming.base import BaseEmitter
+from core.state import ExecutionState
 
 UI_EVENTS_KEY = "ui_events_pending"
 

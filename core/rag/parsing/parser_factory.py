@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from core.rag_indexing_schema import IndexProfileParsingConfig
 from core.rag.parsed_document import ParsedDocument
 from core.rag.parsing.marker_adapter import parse_marker_bytes
 from core.rag.parsing.unstructured_adapter import parse_unstructured_bytes
+from core.rag_indexing_schema import IndexProfileParsingConfig
 
 
 def parse_document_bytes(

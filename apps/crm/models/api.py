@@ -2,17 +2,19 @@
 Pydantic модели для API endpoints.
 """
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
 from datetime import date, datetime
 from typing import Any, Dict, List, Literal, Optional
 
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 SemanticTextIndexStatus = Literal["absent", "pending_embedding", "ready"]
 
-from core.models.identity_models import NamespaceCRMSettings, BoardStage
+from core.models.identity_models import BoardStage, NamespaceCRMSettings  # noqa: E402
 
 
 class EntityCreate(BaseModel):
     """Создание entity"""
+
     entity_type: str
     entity_subtype: Optional[str] = None
     namespace: str = Field(default="default", description="Namespace для изоляции")
@@ -40,6 +42,7 @@ class EntityCreate(BaseModel):
 
 class EntityUpdate(BaseModel):
     """Обновление entity"""
+
     name: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
@@ -61,8 +64,9 @@ class EntityUpdate(BaseModel):
 
 class EntityResponse(BaseModel):
     """Response с entity"""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     entity_id: str
     company_id: str
     namespace: str
@@ -74,12 +78,12 @@ class EntityResponse(BaseModel):
     attributes: Dict[str, Any]
     tags: List[str]
     attachment_ids: List[str]
-    
+
     note_date: Optional[date]
     due_date: Optional[date]
     priority: Optional[str]
     assignees: List[str]
-    
+
     user_id: Optional[str]
     source_entity_id: Optional[str]
     source_company_id: Optional[str]
@@ -108,7 +112,6 @@ class EntityResponse(BaseModel):
     updated_at: datetime
 
 
-
 class EntitySearchFilterNode(BaseModel):
     """DSL-узел фильтра поиска сущностей."""
 
@@ -131,11 +134,11 @@ class EntitySearchFilterNode(BaseModel):
         if (has_and or has_or) and has_leaf:
             raise ValueError("Logical filter node cannot include field/op/value")
 
-        if has_and:
+        if self.and_nodes is not None:
             if len(self.and_nodes) < 2:
                 raise ValueError("$and requires at least 2 child nodes")
             return self
-        if has_or:
+        if self.or_nodes is not None:
             if len(self.or_nodes) < 2:
                 raise ValueError("$or requires at least 2 child nodes")
             return self
@@ -170,30 +173,38 @@ class EntitySearchQueryRequest(BaseModel):
 
 class BulkCreateRequest(BaseModel):
     """Batch создание сущностей (до 200)."""
+
     items: List["EntityCreate"]
+
 
 class BulkUpdateItem(BaseModel):
     entity_id: str
     updates: Dict[str, Any]
 
+
 class BulkUpdateRequest(BaseModel):
     items: List[BulkUpdateItem]
 
+
 class BulkDeleteRequest(BaseModel):
     entity_ids: List[str]
+
 
 class BulkErrorItem(BaseModel):
     index: int
     entity_id: Optional[str] = None
     error: str
 
+
 class BulkCreateResponse(BaseModel):
     created: List[EntityResponse]
     errors: List[BulkErrorItem]
 
+
 class BulkUpdateResponse(BaseModel):
     updated: List[EntityResponse]
     errors: List[BulkErrorItem]
+
 
 class BulkDeleteResponse(BaseModel):
     deleted: List[str]
@@ -202,11 +213,13 @@ class BulkDeleteResponse(BaseModel):
 
 class BulkCardsRequest(BaseModel):
     """Batch загрузка карточек по списку entity_id."""
+
     entity_ids: List[str]
 
 
 class EntityTimelineBoundsResponse(BaseModel):
     """Границы timeline по created_at."""
+
     min_created_at: Optional[datetime]
     max_created_at: Optional[datetime]
     total_entities: int
@@ -239,6 +252,7 @@ class EntityMergeResponse(BaseModel):
 
 class EntityTypeCreate(BaseModel):
     """Создание типа сущности"""
+
     type_id: str
     namespace: str = Field(default="default", min_length=1)
     parent_type_id: Optional[str] = None
@@ -253,10 +267,12 @@ class EntityTypeCreate(BaseModel):
     check_duplicates: bool = True
     is_context_anchor: bool = False
     is_voice_target: bool = False
+    auto_resolve_suggests: bool = False
 
 
 class EntityTypeUpdate(BaseModel):
     """Обновление типа сущности"""
+
     name: Optional[str] = None
     description: Optional[str] = None
     parent_type_id: Optional[str] = None
@@ -267,10 +283,12 @@ class EntityTypeUpdate(BaseModel):
     color: Optional[str] = None
     is_context_anchor: Optional[bool] = None
     is_voice_target: Optional[bool] = None
+    auto_resolve_suggests: Optional[bool] = None
 
 
 class EntityTypeResponse(BaseModel):
     """Response с типом сущности"""
+
     model_config = ConfigDict(from_attributes=True)
 
     type_id: str
@@ -291,6 +309,7 @@ class EntityTypeResponse(BaseModel):
     weight_coefficient: float
     is_context_anchor: bool
     is_voice_target: bool
+    auto_resolve_suggests: bool
     extractable: bool
     created_at: datetime
     list_entity_type: str
@@ -299,6 +318,7 @@ class EntityTypeResponse(BaseModel):
 
 class RelationshipTypeCreate(BaseModel):
     """Создание типа связи"""
+
     type_id: str
     name: str
     description: Optional[str] = None
@@ -312,8 +332,9 @@ class RelationshipTypeCreate(BaseModel):
 
 class RelationshipTypeResponse(BaseModel):
     """Response с типом связи"""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     type_id: str
     company_id: str
     name: str
@@ -330,6 +351,7 @@ class RelationshipTypeResponse(BaseModel):
 
 class RelationshipCreate(BaseModel):
     """Создание связи"""
+
     source_entity_id: str
     target_entity_id: str
     relationship_type: str
@@ -349,8 +371,9 @@ class RelationshipCreate(BaseModel):
 
 class RelationshipResponse(BaseModel):
     """Response со связью"""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     relationship_id: str
     company_id: str
     namespace: str
@@ -368,36 +391,34 @@ class RelationshipResponse(BaseModel):
     updated_at: datetime
 
 
-
 class SearchMentionsRequest(BaseModel):
     """Запрос на поиск упоминаний в тексте"""
+
     text: str = Field(description="Текст для поиска упоминаний")
     namespace: Optional[str] = Field(None, description="Namespace для ограничения поиска")
 
 
 class AIAnalyzeRequest(BaseModel):
     """Запрос на AI анализ текста"""
+
     text: str = Field(description="Текст для анализа")
     extract_entity_types: Optional[List[str]] = Field(
-        default=None,
-        description="Типы для извлечения (None = все)"
+        default=None, description="Типы для извлечения (None = все)"
     )
     extract_relationship_types: Optional[List[str]] = Field(
-        default=None,
-        description="Типы связей для извлечения (None = все кроме linked)"
+        default=None, description="Типы связей для извлечения (None = все кроме linked)"
     )
     mentioned_entity_ids: Optional[List[str]] = Field(
-        default=None,
-        description="ID entities, упомянутых через @"
+        default=None, description="ID entities, упомянутых через @"
     )
     namespace: Optional[str] = Field(
-        default=None,
-        description="Namespace для ограничения типов и дедупликации"
+        default=None, description="Namespace для ограничения типов и дедупликации"
     )
 
 
 class NamespaceCreateRequest(BaseModel):
     """Создание namespace из шаблона."""
+
     name: str = Field(..., description="Имя namespace")
     description: Optional[str] = Field(default=None, description="Описание namespace")
     template_id: str = Field(
@@ -415,6 +436,7 @@ class NamespaceIntegrationBadge(BaseModel):
 
 class NamespaceResponse(BaseModel):
     """Данные namespace."""
+
     name: str
     company_id: str
     description: Optional[str] = None
@@ -425,6 +447,7 @@ class NamespaceResponse(BaseModel):
 
 class NamespaceUpdateRequest(BaseModel):
     """Обновление существующего namespace."""
+
     description: Optional[str] = None
     allowed_type_ids: Optional[List[str]] = None
     crm_settings: Optional[NamespaceCRMSettings] = None
@@ -454,6 +477,7 @@ class TaskBoardEditorStateResponse(BaseModel):
 
 class NamespaceEditabilityResponse(BaseModel):
     """Ограничения редактирования namespace."""
+
     namespace: str
     has_entities: bool
     entity_count: int
@@ -469,6 +493,7 @@ class NamespaceEditabilityResponse(BaseModel):
 
 class NamespaceTemplateResponse(BaseModel):
     """Шаблон namespace."""
+
     template_id: str
     name: str
     description: Optional[str] = None
@@ -566,6 +591,7 @@ class NamespaceTemplateSchemaOptionsResponse(BaseModel):
 
 class AIExtractedEntity(BaseModel):
     """Entity извлеченная AI (без БД полей)"""
+
     model_config = {"extra": "allow"}  # Разрешаем дополнительные поля от AI
 
     draft_entity_id: Optional[str] = Field(
@@ -583,7 +609,7 @@ class AIExtractedEntity(BaseModel):
     due_date: Optional[str] = None
     priority: Optional[str] = None
     assignees: Optional[List[str]] = None
-    
+
     # Поля дедупликации (заполняются после проверки)
     dedup_action: Optional[Literal["create", "merge"]] = None
     dedup_existing_id: Optional[str] = None
@@ -626,17 +652,15 @@ class AIAnalysisRelationshipDraft(BaseModel):
 
 class AIAnalyzeResponse(BaseModel):
     """Результат AI анализа"""
+
     note: Optional[AIExtractedEntity] = Field(
-        default=None,
-        description="Извлеченная заметка с подтипом"
+        default=None, description="Извлеченная заметка с подтипом"
     )
     entities: List[AIExtractedEntity] = Field(
-        default_factory=list,
-        description="Извлеченные entities"
+        default_factory=list, description="Извлеченные entities"
     )
     relationships: List[AIAnalysisRelationshipDraft] = Field(
-        default_factory=list,
-        description="Связи черновика (только draft-id концов)"
+        default_factory=list, description="Связи черновика (только draft-id концов)"
     )
     attachment_summaries: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -650,6 +674,7 @@ class AIAnalyzeResponse(BaseModel):
 
 class AIAnalysisDraftStored(BaseModel):
     """Снимок черновика analyze в attributes заметки (каноническая схема)."""
+
     draft_version: int
     updated_at: str
     note: Optional[AIExtractedEntity] = None
@@ -663,6 +688,7 @@ class AIAnalysisDraftStored(BaseModel):
 
 class DraftEntityPatch(BaseModel):
     draft_entity_id: str
+    entity_type: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
     attributes: Optional[Dict[str, Any]] = None
@@ -686,6 +712,8 @@ class AIAnalysisDraftPatchRequest(BaseModel):
     remove_relationship_draft_ids: List[str] = Field(default_factory=list)
     patch_entities: List[DraftEntityPatch] = Field(default_factory=list)
     patch_relationships: List[DraftRelationshipPatch] = Field(default_factory=list)
+    add_entities: List[AIExtractedEntity] = Field(default_factory=list)
+    add_relationships: List[AIAnalysisRelationshipDraft] = Field(default_factory=list)
 
 
 class AIAnalysisDraftApplyResult(BaseModel):
@@ -694,8 +722,26 @@ class AIAnalysisDraftApplyResult(BaseModel):
     created_relationship_ids: List[str] = Field(default_factory=list)
 
 
+class AIAnalysisDraftRepairFlowResult(BaseModel):
+    """Structured output ветки CRM flow draft_repair."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    patch_entities: List[DraftEntityPatch] = Field(default_factory=list)
+    repair_notes: Optional[str] = None
+
+
+class NoteAnalysisDraftRepairQueuedResponse(BaseModel):
+    """Ответ POST постановки починки черновика в очередь TaskIQ."""
+
+    note_id: str
+    task_id: str
+    queued: bool = True
+
+
 class NoteProcessingConfig(BaseModel):
     """Конфигурация конвейера обработки заметки (analyze + apply)."""
+
     extract_entity_types: Optional[List[str]] = Field(
         default=None,
         description="Типы сущностей для извлечения (None = все типы namespace)",
@@ -728,6 +774,7 @@ class NoteProcessingConfig(BaseModel):
 
 class NoteProcessingResult(BaseModel):
     """Результат полного конвейера обработки заметки (analyze + apply)."""
+
     note_id: str
     created_entity_ids: List[str] = Field(default_factory=list)
     updated_entity_ids: List[str] = Field(default_factory=list)
@@ -736,6 +783,7 @@ class NoteProcessingResult(BaseModel):
 
 class DeduplicateResult(BaseModel):
     """Результат проверки на дубликат"""
+
     is_duplicate: bool
     confidence: float
     reason: str
@@ -773,7 +821,9 @@ class KnowledgeImportStartRequest(BaseModel):
         ...,
         description="Только заметки или нарезка + analyze/apply по каждому чанку",
     )
-    source_file_id: Optional[str] = Field(default=None, description="Один file_id в shared files (legacy)")
+    source_file_id: Optional[str] = Field(
+        default=None, description="Один file_id в shared files (legacy)"
+    )
     source_file_ids: Optional[List[str]] = Field(
         default=None,
         description="Несколько file_id; можно вместе с source_text",
@@ -850,11 +900,13 @@ class StructuredKnowledgeImportRequest(BaseModel):
 
 # ── Unified task models ────────────────────────────────────────────────────────
 
+
 class NoteMarkdownFormatQueuedResponse(BaseModel):
     """Ответ POST …/notes/{note_id}/format-markdown — задача поставлена в TaskIQ."""
 
     status: Literal["queued"] = "queued"
     note_id: str
+    task_id: str
 
 
 class TaskResponse(BaseModel):
@@ -933,4 +985,3 @@ class StartPeriodSummaryRequest(BaseModel):
     date_from: str = Field(..., description="Начало периода YYYY-MM-DD")
     date_to: str = Field(..., description="Конец периода YYYY-MM-DD")
     reason: str = Field(default="manual")
-

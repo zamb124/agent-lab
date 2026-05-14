@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import time
 import uuid
 from contextlib import suppress
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncGenerator,
     Awaitable,
@@ -25,18 +25,10 @@ from typing import (
     Type,
     TypeVar,
     Union,
-    TYPE_CHECKING,
     overload,
 )
-import httpx
-from pydantic import BaseModel
 
-from core.http.client import ProxyStrategy, get_httpx_client
-from core.http.egress_route_preference import (
-    egress_prefer_proxy_set,
-    normalized_http_origin,
-)
-from core.variables import VarResolver, VariableResolutionError
+import httpx
 from a2a.types import (
     Artifact,
     FilePart,
@@ -51,14 +43,21 @@ from a2a.types import (
     TextPart,
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
+from pydantic import BaseModel
 
+from core.clients.llm.logging import log_llm_stream_response
 from core.config import get_settings
 from core.config.base import BaseSettings
-from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
+from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.config.testing import is_testing as _is_testing
-from core.clients.llm.logging import log_llm_stream_response
+from core.http.client import ProxyStrategy, get_httpx_client
+from core.http.egress_route_preference import (
+    egress_prefer_proxy_set,
+    normalized_http_origin,
+)
 from core.logging import get_logger
+from core.variables import VariableResolutionError, VarResolver
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -188,6 +187,7 @@ def _merge_openai_compatible_usage_into_usage_data(
         if isinstance(upstream, (int, float)):
             usage_data["provider_upstream_inference_cost"] = float(upstream)
 
+
 # Типы для messages
 MessageInput = Union[
     str,
@@ -205,7 +205,7 @@ StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
 def _extract_content_parts(parts: List[Any]) -> tuple[List[Dict[str, Any]], bool]:
     """
     Извлекает content parts из списка A2A parts.
-    
+
     Returns:
         Tuple (content_parts, has_files) где:
         - content_parts: список OpenAI content parts
@@ -213,7 +213,7 @@ def _extract_content_parts(parts: List[Any]) -> tuple[List[Dict[str, Any]], bool
     """
     content_parts: List[Dict[str, Any]] = []
     has_files = False
-    
+
     for part in parts:
         # Получаем root - может быть вложенный в Part или напрямую
         if hasattr(part, "root"):
@@ -222,13 +222,13 @@ def _extract_content_parts(parts: List[Any]) -> tuple[List[Dict[str, Any]], bool
             root = part.get("root", part)
         else:
             continue
-        
+
         # TextPart
         if isinstance(root, TextPart):
             content_parts.append({"type": "text", "text": root.text})
         elif isinstance(root, dict) and "text" in root:
             content_parts.append({"type": "text", "text": root["text"]})
-        
+
         # FilePart - конвертируем в image_url
         elif isinstance(root, FilePart):
             has_files = True
@@ -236,28 +236,32 @@ def _extract_content_parts(parts: List[Any]) -> tuple[List[Dict[str, Any]], bool
             if isinstance(file_obj, FileWithBytes):
                 mime_type = file_obj.mime_type or "image/png"
                 b64_data = file_obj.bytes
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}
-                })
+                content_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{b64_data}"},
+                    }
+                )
         elif isinstance(root, dict) and "file" in root:
             has_files = True
             file_obj = root["file"]
             if isinstance(file_obj, dict) and "bytes" in file_obj:
                 mime_type = file_obj.get("mimeType") or file_obj.get("mime_type") or "image/png"
                 b64_data = file_obj["bytes"]
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}
-                })
-    
+                content_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{b64_data}"},
+                    }
+                )
+
     return content_parts, has_files
 
 
 def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any]:
     """
     A2A Message в формат OpenAI API.
-    
+
     Поддерживает:
     - Message объекты
     - dict (после десериализации из state)
@@ -280,13 +284,13 @@ def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any
             else:
                 text_match = re.search(r'text="([^"]*)"', message)
                 content = text_match.group(1) if text_match else message
-            
+
             role_str = "user"
             if "role=<Role.agent:" in message or "role='agent'" in message:
                 role_str = "assistant"
-            
+
             return {"role": role_str, "content": content}
-        
+
         return {"role": "user", "content": message}
 
     # Извлекаем role и metadata
@@ -295,7 +299,7 @@ def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any
         role = role_raw if isinstance(role_raw, (Role, str)) else "user"
         metadata = message.get("metadata") or {}
         parts = message.get("parts", [])
-        
+
         # Если уже есть content напрямую (OpenAI формат)
         if "content" in message and message["content"]:
             return {
@@ -310,7 +314,7 @@ def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any
 
     # Извлекаем content parts (с поддержкой FilePart)
     content_parts, has_files = _extract_content_parts(parts)
-    
+
     # Определяем итоговый content
     if has_files:
         # Multimodal формат - список parts
@@ -322,7 +326,7 @@ def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any
     # Определяем role для результата
     is_system = metadata.get("system", False)
     result_role = "system" if is_system else role_map.get(role, "user")
-    
+
     if metadata.get("tool_call_id"):
         result_role = "tool"
 
@@ -333,7 +337,7 @@ def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any
 
     if metadata.get("tool_calls"):
         result["tool_calls"] = metadata["tool_calls"]
-    
+
     if metadata.get("tool_call_id"):
         result["tool_call_id"] = metadata["tool_call_id"]
 
@@ -342,21 +346,21 @@ def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any
 
 def _messages_to_openai(messages: List[Message | Dict[str, Any] | str]) -> List[Dict[str, Any]]:
     """Внутренняя функция - список A2A Message в формат OpenAI API.
-    
+
     Поддерживает Message объекты, dict'ы и строки (включая строковые представления Message).
     """
     result = []
     for msg in messages:
         converted = _message_to_openai(msg)
         result.append(converted)
-    
+
     return result
 
 
 def _normalize_messages(messages: MessageInput) -> List[Message]:
     """
     Нормализует различные форматы messages в List[Message].
-    
+
     Поддерживает:
     - str: одно сообщение пользователя
     - List[str]: список сообщений (чередуются user/assistant)
@@ -373,10 +377,10 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                 parts=[Part(root=TextPart(text=messages))],
             )
         ]
-    
+
     if isinstance(messages, Message):
         return [messages]
-    
+
     if isinstance(messages, dict):
         role = Role.user if messages.get("role", "user") == "user" else Role.agent
         content = messages.get("content", "")
@@ -387,13 +391,13 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                 parts=[Part(root=TextPart(text=content))],
             )
         ]
-    
+
     if isinstance(messages, list):
         if not messages:
             return []
-        
+
         first = messages[0]
-        
+
         if isinstance(first, str):
             result = []
             for i, text in enumerate(messages):
@@ -406,10 +410,10 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                     )
                 )
             return result
-        
+
         if isinstance(first, Message):
             return messages
-        
+
         if isinstance(first, dict):
             result = []
             for msg in messages:
@@ -423,7 +427,7 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                     )
                 )
             return result
-    
+
     raise ValueError(f"Unsupported messages type: {type(messages)}")
 
 
@@ -451,7 +455,9 @@ class LLMClient:
         self.max_tokens = max_tokens
         self.default_headers = default_headers or {}
         self.timeout = timeout
-        self.llm_provider = llm_provider if llm_provider is not None else _detect_provider(self.base_url)
+        self.llm_provider = (
+            llm_provider if llm_provider is not None else _detect_provider(self.base_url)
+        )
 
     async def stream(
         self,
@@ -476,7 +482,7 @@ class LLMClient:
         Stream-first метод вызова LLM.
 
         Принимает A2A Message, возвращает A2A события.
-        
+
         Args:
             messages: Список сообщений
             tools: Список tools для function calling
@@ -520,16 +526,16 @@ class LLMClient:
 
         if actual_max_tokens:
             body["max_tokens"] = actual_max_tokens
-        
+
         if top_p is not None:
             body["top_p"] = top_p
-        
+
         if top_k is not None:
             body["top_k"] = top_k
-        
+
         if frequency_penalty is not None:
             body["frequency_penalty"] = frequency_penalty
-        
+
         if presence_penalty is not None:
             body["presence_penalty"] = presence_penalty
 
@@ -541,7 +547,7 @@ class LLMClient:
 
         if tools:
             body["tools"] = tools
-        
+
         if response_format:
             body["response_format"] = response_format
 
@@ -549,7 +555,9 @@ class LLMClient:
             for key, val in extra_body.items():
                 body[key] = val
 
-        logger.debug(f"LLM request: messages={len(openai_messages)}, tools={len(tools) if tools else 0}, response_format={bool(response_format)}")
+        logger.debug(
+            f"LLM request: messages={len(openai_messages)}, tools={len(tools) if tools else 0}, response_format={bool(response_format)}"
+        )
         logger.info(
             "LLM STREAM REQUEST:\n"
             f"{_pretty_json({'url': f'{self.base_url}/chat/completions', 'headers': _masked_headers(headers), 'body': body})}"
@@ -574,32 +582,38 @@ class LLMClient:
                             error_chunks = []
                             async for chunk in response.aiter_bytes():
                                 error_chunks.append(chunk)
-                                if len(b''.join(error_chunks)) > 2000:  # Ограничиваем размер
+                                if len(b"".join(error_chunks)) > 2000:  # Ограничиваем размер
                                     break
                             if error_chunks:
-                                full_error = b''.join(error_chunks).decode('utf-8', errors='ignore')
+                                full_error = b"".join(error_chunks).decode("utf-8", errors="ignore")
                                 # Пытаемся найти JSON в ответе
                                 try:
-                                    json_match = re.search(r'\{.*\}', full_error, re.DOTALL)
+                                    json_match = re.search(r"\{.*\}", full_error, re.DOTALL)
                                     if json_match:
                                         error_json = json.loads(json_match.group())
-                                        error_text = json.dumps(error_json, indent=2, ensure_ascii=False)
+                                        error_text = json.dumps(
+                                            error_json, indent=2, ensure_ascii=False
+                                        )
                                     else:
                                         error_text = full_error[:1000]
-                                except:
+                                except Exception:
                                     error_text = full_error[:1000]
                         except Exception as e:
                             logger.debug(f"Could not read error body: {e}")
-                        
+
                         logger.error(f"LLM API error {response.status_code}: {error_text}")
                         logger.error(f"Request URL: {self.base_url}/chat/completions")
                         logger.error(f"Request model: {self.model}")
                         logger.error(f"Request messages count: {len(openai_messages)}")
                         # Логируем первые и последние сообщения для отладки
                         if openai_messages:
-                            logger.error(f"First message role: {openai_messages[0].get('role')}, content length: {len(openai_messages[0].get('content', ''))}")
+                            logger.error(
+                                f"First message role: {openai_messages[0].get('role')}, content length: {len(openai_messages[0].get('content', ''))}"
+                            )
                             if len(openai_messages) > 1:
-                                logger.error(f"Last message role: {openai_messages[-1].get('role')}, content length: {len(openai_messages[-1].get('content', ''))}")
+                                logger.error(
+                                    f"Last message role: {openai_messages[-1].get('role')}, content length: {len(openai_messages[-1].get('content', ''))}"
+                                )
                         response.raise_for_status()
 
                     cancelled_evt = asyncio.Event()
@@ -627,7 +641,9 @@ class LLMClient:
                                     logger.error(
                                         "LLM stream idle timeout: %.1fs without data, "
                                         "chunks_received=%d, model=%s",
-                                        idle, _chunk_count, self.model,
+                                        idle,
+                                        _chunk_count,
+                                        self.model,
                                     )
                                     idle_timeout_evt.set()
                                     with suppress(Exception):
@@ -650,7 +666,9 @@ class LLMClient:
                                     logger.warning(
                                         "LLM stream slow chunk: %.1fs gap before chunk #%d, "
                                         "model=%s",
-                                        inter_chunk, _chunk_count, self.model,
+                                        inter_chunk,
+                                        _chunk_count,
+                                        self.model,
                                     )
                                 if not line.startswith("data: "):
                                     continue
@@ -663,7 +681,9 @@ class LLMClient:
 
                                 # Парсим usage из последнего chunk (stream_options: include_usage)
                                 if chunk.get("usage"):
-                                    _merge_openai_compatible_usage_into_usage_data(chunk["usage"], usage_data)
+                                    _merge_openai_compatible_usage_into_usage_data(
+                                        chunk["usage"], usage_data
+                                    )
 
                                 if not chunk.get("choices"):
                                     continue
@@ -694,7 +714,11 @@ class LLMClient:
                                         )
 
                                 # Логируем delta для отладки reasoning (только если есть подозрительные поля)
-                                if delta.get("reasoning") or delta.get("reasoning_content") or delta.get("type") == "reasoning":
+                                if (
+                                    delta.get("reasoning")
+                                    or delta.get("reasoning_content")
+                                    or delta.get("type") == "reasoning"
+                                ):
                                     logger.debug(f"LLM delta with reasoning fields: {delta}")
 
                                 if delta.get("content"):
@@ -704,7 +728,8 @@ class LLMClient:
                                         contextId=context_id,
                                         taskId=task_id,
                                         artifact=Artifact(
-                                            artifactId=str(uuid.uuid4()), parts=[Part(root=TextPart(text=text))]
+                                            artifactId=str(uuid.uuid4()),
+                                            parts=[Part(root=TextPart(text=text))],
                                         ),
                                         append=True,
                                         last_chunk=False,
@@ -729,14 +754,16 @@ class LLMClient:
 
                                 if reasoning_text:
                                     full_reasoning += reasoning_text
-                                    logger.debug(f"LLM reasoning chunk: {len(reasoning_text)} chars")
+                                    logger.debug(
+                                        f"LLM reasoning chunk: {len(reasoning_text)} chars"
+                                    )
                                     yield TaskArtifactUpdateEvent(
                                         contextId=context_id,
                                         taskId=task_id,
                                         artifact=Artifact(
                                             artifactId=str(uuid.uuid4()),
                                             name="reasoning",
-                                            parts=[Part(root=TextPart(text=reasoning_text))]
+                                            parts=[Part(root=TextPart(text=reasoning_text))],
                                         ),
                                         append=True,
                                         last_chunk=False,
@@ -755,11 +782,13 @@ class LLMClient:
                                             tool_calls_buffer[idx]["id"] = tc["id"]
                                         if tc.get("function"):
                                             if tc["function"].get("name"):
-                                                tool_calls_buffer[idx]["name"] = tc["function"]["name"]
-                                            if tc["function"].get("arguments"):
-                                                tool_calls_buffer[idx]["arguments"] += tc["function"][
-                                                    "arguments"
+                                                tool_calls_buffer[idx]["name"] = tc["function"][
+                                                    "name"
                                                 ]
+                                            if tc["function"].get("arguments"):
+                                                tool_calls_buffer[idx]["arguments"] += tc[
+                                                    "function"
+                                                ]["arguments"]
                         except Exception as e:
                             if cancelled_evt.is_set():
                                 raise LLMStreamUserCancelledError() from e
@@ -845,8 +874,12 @@ class LLMClient:
         logger.info(
             "LLM stream complete: model=%s, chunks=%d, content_len=%d, "
             "reasoning_len=%d, tool_calls=%d, duration=%.1fs",
-            self.model, _chunk_count, len(full_content),
-            len(full_reasoning), len(tool_calls_buffer), stream_duration,
+            self.model,
+            _chunk_count,
+            len(full_content),
+            len(full_reasoning),
+            len(tool_calls_buffer),
+            stream_duration,
         )
 
         log_llm_stream_response(
@@ -870,9 +903,9 @@ class LLMClient:
     ) -> str | Dict[str, Any]:
         """
         Non-streaming вызов LLM.
-        
+
         Удобен для vision/OCR запросов где не нужен streaming.
-        
+
         Args:
             messages: Список A2A сообщений (может содержать FilePart)
             json_output: Запросить JSON формат ответа
@@ -907,34 +940,36 @@ class LLMClient:
             for key, val in extra_body.items():
                 body[key] = val
 
-        logger.info(f"LLM invoke: model={self.model}, messages={len(openai_messages)}, json_output={json_output}")
+        logger.info(
+            f"LLM invoke: model={self.model}, messages={len(openai_messages)}, json_output={json_output}"
+        )
         logger.info(
             "LLM INVOKE REQUEST:\n"
             f"{_pretty_json({'url': f'{self.base_url}/chat/completions', 'headers': _masked_headers(headers), 'body': body})}"
         )
-        
+
         async with get_httpx_client(timeout=self.timeout, strategy=ProxyStrategy.SMART) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 json=body,
             )
-            
+
             if response.status_code != 200:
                 error_text = response.text[:1000]
                 logger.error(f"LLM invoke error: {response.status_code}, {error_text}")
                 response.raise_for_status()
-            
+
             result = response.json()
             logger.info(f"LLM INVOKE RESPONSE:\n{_pretty_json(result)}")
-        
+
         content = result["choices"][0]["message"]["content"]
-        
+
         logger.info(f"LLM invoke response: {len(content) if content else 0} chars")
-        
+
         if json_output and content:
             return json.loads(content)
-        
+
         return content or ""
 
     @overload
@@ -997,15 +1032,15 @@ class LLMClient:
     ) -> Message | T:
         """
         Единый метод вызова LLM.
-        
+
         Принимает messages в любом формате и возвращает:
         - T (экземпляр Pydantic модели) если указан response_model
         - Message с tool_calls если указаны tools (и нет response_model)
         - Message с текстом в остальных случаях
-        
+
         Args:
             messages: Сообщения в любом формате:
-                - str: "Привет!" 
+                - str: "Привет!"
                 - List[str]: ["Привет!", "Привет! Как дела?", "Отлично!"]
                 - Message или List[Message]: A2A сообщения
                 - Dict или List[Dict]: {"role": "user", "content": "..."}
@@ -1018,32 +1053,32 @@ class LLMClient:
             max_tokens: Максимальное количество токенов
             frequency_penalty: Штраф за частоту токенов (-2.0-2.0)
             presence_penalty: Штраф за присутствие токенов (-2.0-2.0)
-        
+
         Returns:
             Message или экземпляр response_model
-            
+
         Examples:
             # Простой чат
             msg = await llm.chat("Привет!")
-            
+
             # С параметрами
             msg = await llm.chat("Расскажи историю", temperature=0.9, max_tokens=500)
-            
+
             # Structured output
             class User(BaseModel):
                 name: str
                 age: int
-                
+
             user = await llm.chat("Extract: John is 25", response_model=User)
             print(user.name, user.age)
-            
+
             # Function calling
             msg = await llm.chat(messages, tools=[...])
             if msg.metadata and msg.metadata.get("tool_calls"):
                 ...
         """
         normalized = _normalize_messages(messages)
-        
+
         response_format = None
         if response_model:
             json_schema = response_model.model_json_schema()
@@ -1055,7 +1090,7 @@ class LLMClient:
                     "schema": json_schema,
                 },
             }
-        
+
         content_parts: List[str] = []
         tool_calls: List[Dict[str, Any]] = []
         last_status_text = ""
@@ -1076,11 +1111,7 @@ class LLMClient:
             extra_headers=extra_headers,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
-                if (
-                    event.artifact
-                    and event.artifact.name != "reasoning"
-                    and event.artifact.parts
-                ):
+                if event.artifact and event.artifact.name != "reasoning" and event.artifact.parts:
                     for part in event.artifact.parts:
                         if hasattr(part, "root") and hasattr(part.root, "text"):
                             content_parts.append(part.root.text)
@@ -1093,7 +1124,7 @@ class LLMClient:
                     tc = event.status.message.metadata.get("tool_calls")
                     if tc:
                         tool_calls = tc
-        
+
         content = "".join(content_parts)
         if response_model:
             text_for_json = content if content.strip() else last_status_text
@@ -1104,7 +1135,7 @@ class LLMClient:
                 )
             data = json.loads(text_for_json)
             return response_model.model_validate(data)
-        
+
         return Message(
             messageId=str(uuid.uuid4()),
             role=Role.agent,
@@ -1120,18 +1151,12 @@ def _resolve_var(value: Optional[str], state: Optional["ExecutionState"]) -> Opt
     if not value.startswith("@var:"):
         return value
     if state is None:
-        raise VariableResolutionError(
-            f"Cannot resolve '{value}' without ExecutionState"
-        )
+        raise VariableResolutionError(f"Cannot resolve '{value}' without ExecutionState")
     resolved = VarResolver.resolve_ref(value, state.variables or {})
     if not isinstance(resolved, str):
-        raise VariableResolutionError(
-            f"Variable '{value}' for LLM config must resolve to string"
-        )
+        raise VariableResolutionError(f"Variable '{value}' for LLM config must resolve to string")
     if not resolved:
-        raise VariableResolutionError(
-            f"Variable '{value}' resolved to empty string"
-        )
+        raise VariableResolutionError(f"Variable '{value}' resolved to empty string")
     return resolved
 
 
@@ -1139,7 +1164,11 @@ def _detect_provider(base_url: Optional[str]) -> Optional[str]:
     """Определяет провайдера по base_url."""
     if not base_url:
         return None
-    if "provider_litserve" in base_url or "localhost:8014" in base_url or "127.0.0.1:8014" in base_url:
+    if (
+        "provider_litserve" in base_url
+        or "localhost:8014" in base_url
+        or "127.0.0.1:8014" in base_url
+    ):
         return "provider_litserve"
     if "openrouter.ai" in base_url:
         return "openrouter"
@@ -1164,7 +1193,7 @@ def get_llm(
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент.
-    
+
     Args:
         model_name: Имя модели
         temperature: Температура
@@ -1197,7 +1226,7 @@ def get_llm(
     resolved_api_key = _resolve_var(api_key, state)
     resolved_base_url = _resolve_var(base_url, state)
     resolved_folder_id = _resolve_var(folder_id, state)
-    
+
     model_config = settings.llm.models.get(model)
     temp = (
         temperature
@@ -1210,7 +1239,7 @@ def get_llm(
         else (model_config.max_tokens if model_config else settings.llm.max_tokens)
     )
     timeout = settings.llm.timeout
-    
+
     # Если указан кастомный api_key - используем его
     if resolved_api_key:
         actual_provider = provider or _detect_provider(resolved_base_url) or settings.llm.provider
@@ -1256,7 +1285,9 @@ def get_llm(
         if actual_provider == "yandex":
             actual_base_url = normalize_openai_v1_base_url(str(actual_base_url).strip())
 
-        logger.info(f"[get_llm] Using custom api_key for provider={actual_provider}, base_url={actual_base_url}")
+        logger.info(
+            f"[get_llm] Using custom api_key for provider={actual_provider}, base_url={actual_base_url}"
+        )
         return LLMClient(
             model=model,
             api_key=resolved_api_key,
@@ -1267,7 +1298,7 @@ def get_llm(
             default_headers=default_headers,
             llm_provider=actual_provider,
         )
-    
+
     # Иначе используем системный конфиг
     actual_provider = provider or settings.llm.provider
 
@@ -1369,9 +1400,17 @@ def get_llm(
 def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
     """Возвращает base_url по умолчанию для провайдера."""
     if provider == "openrouter":
-        return settings.llm.openrouter.base_url if settings.llm.openrouter else "https://openrouter.ai/api/v1"
+        return (
+            settings.llm.openrouter.base_url
+            if settings.llm.openrouter
+            else "https://openrouter.ai/api/v1"
+        )
     if provider == "bothub":
-        return settings.llm.bothub.base_url if settings.llm.bothub else "https://bothub.chat/api/v2/openai/v1"
+        return (
+            settings.llm.bothub.base_url
+            if settings.llm.bothub
+            else "https://bothub.chat/api/v2/openai/v1"
+        )
     if provider == "openai":
         return settings.llm.openai.base_url if settings.llm.openai else "https://api.openai.com/v1"
     if provider == "yandex":
@@ -1393,7 +1432,7 @@ def get_llm_for_state(
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент с учётом mock конфига из state.
-    
+
     Args:
         state: ExecutionState
         model_name: Имя модели
@@ -1403,7 +1442,7 @@ def get_llm_for_state(
         base_url: Base URL провайдера (напрямую или @var:my_url)
         folder_id: Каталог Yandex Cloud при кастомном api_key / override
         max_tokens: Лимит токенов ответа для ноды
-        
+
     Returns:
         MockLLM или реальный LLMClient
     """
@@ -1419,7 +1458,7 @@ def get_llm_for_state(
             mock = MockLLM(model_name=model_name or "mock-gpt-4")
             mock.configure(response_queue=mock_responses)
             return mock
-    
+
     # Реальный LLM клиент
     return get_llm(
         model_name=model_name,
@@ -1450,12 +1489,12 @@ def get_vision_llm(
     settings = get_settings()
     provider = settings.llm.provider
     timeout = settings.llm.timeout
-    
+
     if provider == "openrouter":
         cfg = settings.llm.openrouter
         if not cfg or not cfg.api_key:
             raise ValueError("OpenRouter API key не настроен")
-        
+
         return LLMClient(
             model=model_name,
             api_key=cfg.api_key,
@@ -1467,12 +1506,12 @@ def get_vision_llm(
                 "X-Title": cfg.site_name,
             },
         )
-    
+
     if provider == "bothub":
         cfg = settings.llm.bothub
         if not cfg or not cfg.api_key:
             raise ValueError("Bothub API key не настроен")
-        
+
         return LLMClient(
             model=model_name,
             api_key=cfg.api_key,
@@ -1480,12 +1519,12 @@ def get_vision_llm(
             temperature=0.1,
             timeout=timeout,
         )
-    
+
     if provider == "openai":
         cfg = settings.llm.openai
         if not cfg or not cfg.api_key:
             raise ValueError("OpenAI API key не настроен")
-        
+
         return LLMClient(
             model=model_name,
             api_key=cfg.api_key,
@@ -1523,7 +1562,7 @@ def get_vision_llm(
             timeout=timeout,
             llm_provider=provider,
         )
-    
+
     raise ValueError(f"Неизвестный LLM провайдер: {provider}")
 
 

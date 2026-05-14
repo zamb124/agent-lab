@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from core.db.database import get_session_factory
 from core.db.models import CalendarEventRecord
+from core.db.utils import get_rowcount
 from core.models import (
     CalendarAttendee,
     CalendarEvent,
@@ -146,16 +147,20 @@ class CalendarEventSqlRepository:
                 )
             )
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0
 
-    async def list_in_range(self, company_id: str, start_at: datetime, end_at: datetime, limit: int) -> list[CalendarEvent]:
+    async def list_in_range(
+        self, company_id: str, start_at: datetime, end_at: datetime, limit: int
+    ) -> list[CalendarEvent]:
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
                 select(CalendarEventRecord)
                 .where(
                     CalendarEventRecord.company_id == company_id,
-                    and_(CalendarEventRecord.start_at < end_at, CalendarEventRecord.end_at > start_at),
+                    and_(
+                        CalendarEventRecord.start_at < end_at, CalendarEventRecord.end_at > start_at
+                    ),
                 )
                 .order_by(CalendarEventRecord.start_at.asc())
                 .limit(limit)
@@ -193,5 +198,3 @@ class CalendarEventSqlRepository:
             )
             rows = list(result.scalars().all())
             return [_event_from_record(item) for item in rows]
-
-

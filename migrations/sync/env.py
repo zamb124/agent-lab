@@ -15,18 +15,27 @@ import os
 import sys
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic import context
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.sync.db.models import (  # noqa: F401
-    Base, SyncChannel, SyncChannelMember,
-    SyncThread, SyncMessage, SyncMessageContent,
-    SyncMessageFile, SyncFile, SyncGitResourceRef,
-    SyncCall, SyncCallParticipant, SyncCallLink, SyncCallRecording,
+    Base,
+    SyncCall,
+    SyncCallLink,
+    SyncCallParticipant,
+    SyncCallRecording,
     SyncCallSpeechEgressTrack,
+    SyncChannel,
+    SyncChannelMember,
+    SyncFile,
+    SyncGitResourceRef,
+    SyncMessage,
+    SyncMessageContent,
+    SyncMessageFile,
+    SyncThread,
 )
 
 config = context.config

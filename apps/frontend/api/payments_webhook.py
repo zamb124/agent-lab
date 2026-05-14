@@ -10,13 +10,13 @@ YooMoney отправляет POST application/x-www-form-urlencoded,
 ожидает HTTP 200 OK в ответ.
 """
 
-from core.logging import get_logger
 from typing import Optional
 
 from fastapi import APIRouter, Form, HTTPException, Response
 
 from apps.frontend.dependencies import ContainerDep
 from core.clients.payment import PaymentProviderFactory
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/payments", tags=["payments-webhook"])

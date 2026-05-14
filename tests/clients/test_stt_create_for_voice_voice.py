@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.clients.stt_client import STTClientFactory, CloudRuSTTClient, YandexSTTClient
+from core.clients.stt_client import CloudRuSTTClient, STTClientFactory, YandexSTTClient
 from core.config.models import (
     CloudRuSTTConfig,
     STTProvidersConfig,

@@ -5,9 +5,8 @@
 
 import pytest
 
+from apps.flows.src.models import BranchConfig, Edge, FlowConfig, MergeMode
 from apps.flows.src.runtime import Flow
-from apps.flows.src.models import Edge, FlowConfig, MergeMode, BranchConfig
-from apps.flows.src.services.flow_factory import FlowFactory
 from core.state import ExecutionState
 
 
@@ -273,7 +272,7 @@ class TestApplySkill:
         from_nodes = [e.from_node for e in effective["edges"]]
         assert from_nodes.count("main") == 2
         assert "step2" in from_nodes
-        
+
         main_edges = [e for e in effective["edges"] if e.from_node == "main"]
         assert len(main_edges) == 2
         main_to_nodes = {e.to_node for e in main_edges}

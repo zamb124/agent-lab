@@ -16,10 +16,8 @@
 import pytest
 
 from apps.flows.src.container import get_container
-from apps.flows.src.models import FlowConfig, NodeConfig
-from apps.flows.src.models import CodeMode, ToolReference
+from apps.flows.src.models import FlowConfig
 from core.state import ExecutionState
-
 
 # Фикстуры для tools
 
@@ -79,7 +77,7 @@ class TestInlineReactAgentWithTools:
     Тесты для inline react agent - агент определён прямо в agent.json.
     Каждый тест создаёт flow, запускает его и проверяет результат.
     """
-    
+
     async def test_inline_agent_executes_inline_tool(
         self, app, inline_tool_config, unique_id, mock_llm_with_queue
     ):
@@ -89,7 +87,7 @@ class TestInlineReactAgentWithTools:
         """
         container = get_container()
         flow_id = f"test_inline_tool_{unique_id}"
-        
+
         # Agent с inline agent и inline tool
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -105,13 +103,13 @@ class TestInlineReactAgentWithTools:
             edges=[]
         )
         await container.flow_repository.set(flow_config)
-        
+
         # Mock LLM: сначала вызывает tool, потом отвечает
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "greeter_inline", "args": {"name": "Тест"}},
             {"type": "text", "content": "Приветствие выполнено: Hello, Тест!"},
         ])
-        
+
         # Запускаем flow
         flow = await container.flow_factory.get_flow(flow_id)
         state = ExecutionState(
@@ -122,14 +120,14 @@ class TestInlineReactAgentWithTools:
             content="Поприветствуй Тест"
         )
         result = await flow.run(state)
-        
+
         # Проверяем что агент ответил
         assert "response" in result
         assert "Hello, Тест" in result["response"]
-        
+
         # Cleanup
         await container.flow_repository.delete(flow_id)
-    
+
     async def test_inline_agent_executes_node_as_tool(
         self, helper_node_config, app, unique_id, mock_llm_with_queue
     ):
@@ -138,7 +136,7 @@ class TestInlineReactAgentWithTools:
         """
         flow_id = f"test_node_tool_{unique_id}"
         container = get_container()
-        
+
         # Inline tool config (полный конфиг ноды как tool)
         helper_tool_config = {
             "tool_id": helper_node_config["node_id"],
@@ -148,7 +146,7 @@ class TestInlineReactAgentWithTools:
             "prompt": helper_node_config["prompt"],
             "tools": []
         }
-        
+
         # Agent с inline node как tool (не ссылка, а полный конфиг)
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -164,7 +162,7 @@ class TestInlineReactAgentWithTools:
             edges=[]
         )
         await container.flow_repository.set(flow_config)
-        
+
         # Mock LLM для основного агента и helper node
         mock_llm_with_queue([
             # Основной агент вызывает helper
@@ -174,7 +172,7 @@ class TestInlineReactAgentWithTools:
             # Основной агент финализирует
             {"type": "text", "content": "Helper ответил: Помощь оказана!"},
         ])
-        
+
         factory = container.flow_factory
         agent = await factory.get_flow(flow_id)
         state = ExecutionState(
@@ -185,12 +183,12 @@ class TestInlineReactAgentWithTools:
             content="Мне нужна помощь"
         )
         result = await agent.run(state)
-        
+
         assert "response" in result
-        
+
         # Cleanup
         await container.flow_repository.delete(flow_id)
-    
+
     async def test_inline_agent_executes_db_inline_tool(
         self, calculator_tool_code, app, unique_id, mock_llm_with_queue
     ):
@@ -200,7 +198,7 @@ class TestInlineReactAgentWithTools:
         flow_id = f"test_db_inline_{unique_id}"
         tool_id = f"calc_db_{unique_id}"
         container = get_container()
-        
+
         # Inline tool config (вместо ссылки на БД)
         inline_tool_config = {
             "tool_id": tool_id,
@@ -210,7 +208,7 @@ class TestInlineReactAgentWithTools:
                 "expression": {"type": "string", "description": "Выражение"}
             }
         }
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Test DB Inline Tool",
@@ -225,12 +223,12 @@ class TestInlineReactAgentWithTools:
             edges=[]
         )
         await container.flow_repository.set(flow_config)
-        
+
         mock_llm_with_queue([
             {"type": "tool_call", "tool": tool_id, "args": {"expression": "3+5"}},
             {"type": "text", "content": "Результат: 8"},
         ])
-        
+
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
         state = ExecutionState(
@@ -241,17 +239,17 @@ class TestInlineReactAgentWithTools:
             content="Сколько 3+5?"
         )
         result = await flow.run(state)
-        
+
         assert "response" in result
         assert "8" in result["response"]
-        
+
         # Cleanup
         await container.flow_repository.delete(flow_id)
         await container.tool_repository.delete(tool_id)
-    
+
     async def test_inline_agent_executes_mixed_tools(
-        self, 
-        inline_tool_config, 
+        self,
+        inline_tool_config,
         helper_node_config,
         calculator_tool_code,
         container,
@@ -264,7 +262,7 @@ class TestInlineReactAgentWithTools:
         """
         flow_id = f"test_mixed_{unique_id}"
         db_tool_id = f"calc_mixed_{unique_id}"
-        
+
         # Inline helper node config (вместо ссылки)
         helper_tool_config = {
             "tool_id": helper_node_config["node_id"],
@@ -274,14 +272,14 @@ class TestInlineReactAgentWithTools:
             "prompt": helper_node_config["prompt"],
             "tools": []
         }
-        
+
         # Inline calculator config (вместо DB ссылки)
         calc_tool_config = {
             "tool_id": db_tool_id,
             "description": "Calculator",
             "code": calculator_tool_code
         }
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Test Mixed Tools",
@@ -300,13 +298,13 @@ class TestInlineReactAgentWithTools:
             edges=[]
         )
         await container.flow_repository.set(flow_config)
-        
+
         # Агент вызывает inline tool
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "greeter_inline", "args": {"name": "User"}},
             {"type": "text", "content": "Поприветствовал: Hello, User!"},
         ])
-        
+
         factory = container.flow_factory
         agent = await factory.get_flow(flow_id)
         state = ExecutionState(
@@ -317,9 +315,9 @@ class TestInlineReactAgentWithTools:
             content="Поприветствуй User"
         )
         result = await agent.run(state)
-        
+
         assert "response" in result
-        
+
         # Cleanup
         await container.flow_repository.delete(flow_id)
         await container.node_repository.delete(helper_node_config["node_id"])
@@ -332,7 +330,7 @@ class TestToolExecutionResults:
     """
     Тесты проверяющие что tools реально выполняются и возвращают результат.
     """
-    
+
     async def test_inline_tool_returns_correct_result(
         self, app, unique_id, mock_llm_with_queue
     ):
@@ -340,7 +338,7 @@ class TestToolExecutionResults:
         Inline tool возвращает корректный результат который используется агентом.
         """
         flow_id = f"test_result_{unique_id}"
-        
+
         # Tool который возвращает конкретный результат
         tool_code = """
 async def execute(args: dict, state: dict = None):
@@ -348,7 +346,7 @@ async def execute(args: dict, state: dict = None):
     y = int(args.get('y', 0))
     return f'SUM={x + y}'
 """
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Test Tool Result",
@@ -372,13 +370,13 @@ async def execute(args: dict, state: dict = None):
         )
         container = get_container()
         await container.flow_repository.set(flow_config)
-        
+
         # LLM вызывает tool, получает результат, формирует ответ
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "sum_tool", "args": {"x": 10, "y": 20}},
             {"type": "text", "content": "Сумма: SUM=30"},
         ])
-        
+
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
         state = ExecutionState(
@@ -389,12 +387,12 @@ async def execute(args: dict, state: dict = None):
             content="Сложи 10 и 20"
         )
         result = await flow.run(state)
-        
+
         assert "response" in result
         assert "30" in result["response"]
-        
+
         await container.flow_repository.delete(flow_id)
-    
+
     async def test_tool_receives_state(
         self, app, unique_id, mock_llm_with_queue
     ):
@@ -402,13 +400,13 @@ async def execute(args: dict, state: dict = None):
         Tool получает state и может использовать данные из него.
         """
         flow_id = f"test_state_{unique_id}"
-        
+
         tool_code = """
 async def execute(args: dict, state: dict = None):
     user = state.get('user_name', 'Unknown') if state else 'Unknown'
     return f'Hello, {user}!'
 """
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Test State Access",
@@ -428,12 +426,12 @@ async def execute(args: dict, state: dict = None):
         )
         container = get_container()
         await container.flow_repository.set(flow_config)
-        
+
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "greet_user", "args": {}},
             {"type": "text", "content": "Приветствие: Hello, Виктор!"},
         ])
-        
+
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
         # Передаём user_name в state
@@ -446,11 +444,11 @@ async def execute(args: dict, state: dict = None):
             user_name="Виктор"
         )
         result = await flow.run(state)
-        
+
         assert "response" in result
-        
+
         await container.flow_repository.delete(flow_id)
-    
+
     async def test_multiple_tool_calls_in_sequence(
         self, app, unique_id, mock_llm_with_queue
     ):
@@ -458,7 +456,7 @@ async def execute(args: dict, state: dict = None):
         Агент вызывает несколько tools последовательно.
         """
         flow_id = f"test_sequence_{unique_id}"
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Test Sequential Tools",
@@ -485,14 +483,14 @@ async def execute(args: dict, state: dict = None):
         )
         container = get_container()
         await container.flow_repository.set(flow_config)
-        
+
         # Агент вызывает step1, потом step2, потом отвечает
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "step1", "args": {}},
             {"type": "tool_call", "tool": "step2", "args": {}},
             {"type": "text", "content": "Выполнено: STEP1_DONE, STEP2_DONE"},
         ])
-        
+
         factory = container.flow_factory
         flow = await factory.get_flow(flow_id)
         state = ExecutionState(
@@ -503,8 +501,8 @@ async def execute(args: dict, state: dict = None):
             content="Выполни шаги"
         )
         result = await flow.run(state)
-        
+
         assert "response" in result
-        
+
         await container.flow_repository.delete(flow_id)
 

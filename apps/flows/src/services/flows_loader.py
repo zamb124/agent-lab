@@ -14,29 +14,29 @@ import importlib
 import inspect
 import json
 import mimetypes
-from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict, List, Type
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel
 
-from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
-from apps.flows.src.db import NodeRepository, FlowRepository, ToolRepository
-from core.context import get_context
-from core.files import FileReader, ReadOptions, get_default_file_processor
-from core.logging import get_logger
-from apps.flows.src.models import NodeConfig, FlowConfig, ToolReference, TriggerConfig
+from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
+from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
+from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
+from apps.flows.src.models import FlowConfig, NodeConfig, ToolReference, TriggerConfig
+from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import (
     call_parameters_to_parameters_schema,
     pydantic_model_to_parameters_schema,
 )
-from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
+from core.context import get_context
+from core.files import FileReader, ReadOptions, get_default_file_processor
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -140,7 +140,7 @@ class FlowsLoader:
 
         self.load_registry_yaml()
         registry_entries = self._registry.get("flows", [])
-        
+
         # Если старый формат (список строк), конвертируем в новый
         bundle_ids: list[str] = []
         for entry in registry_entries:
@@ -148,7 +148,7 @@ class FlowsLoader:
                 bundle_ids.append(entry)
             elif isinstance(entry, dict):
                 bundle_ids.append(entry["id"])
-        
+
         logger.info(f"Загрузка {len(bundle_ids)} flow из registry в БД")
 
         # Фаза 1: все nodes.json в кеш (для кросс-ссылок при инлайне tools)
@@ -178,14 +178,14 @@ class FlowsLoader:
     async def _preload_nodes_to_cache(self, bundle_id: str) -> None:
         """Предзагрузка nodes из каталога bundle в кеш (без сохранения flow в БД)."""
         bundle_dir = self.bundles_dir / bundle_id
-        
+
         nodes_path = bundle_dir / "nodes.json"
         if not nodes_path.exists():
             nodes_path = bundle_dir / "agents.json"
-        
+
         if not nodes_path.exists():
             return
-        
+
         await self._load_nodes(bundle_dir, nodes_path)
 
     async def _load_tools_cache(self) -> None:
@@ -502,7 +502,7 @@ class FlowsLoader:
     ) -> Dict[str, Dict[str, Any]]:
         """
         Загружает ноды и встраивает промпты из файлов.
-        
+
         Если нода содержит node_id - мержит с данными из nodes.json (через _nodes_cache).
         """
         nodes = {}
@@ -522,7 +522,7 @@ class FlowsLoader:
             # Инлайним function -> code
             self._inline_function_to_code(node, node_id)
             node = await self._materialize_node_files(node, bundle_dir, node_id)
-            
+
             # Устанавливаем name по умолчанию если не указан
             if "name" not in node:
                 node["name"] = node_id
@@ -536,11 +536,11 @@ class FlowsLoader:
     ) -> Dict[str, Any]:
         """
         Инлайнит промпт из файла.
-        
+
         Поддерживает два формата:
         1. prompt: "prompts/file.md" - автодетект по расширению .md
         2. prompt_file: "prompts/file.md" - явное указание (legacy)
-        
+
         После обработки prompt содержит текст, prompt_file удаляется.
         """
         # Конвертируем prompt_file в prompt (legacy поддержка)
@@ -548,21 +548,21 @@ class FlowsLoader:
             if not node.get("prompt"):
                 node["prompt"] = node["prompt_file"]
             del node["prompt_file"]
-        
+
         prompt = node.get("prompt")
         if not prompt or not isinstance(prompt, str):
             return node
-        
+
         if not prompt.endswith(".md"):
             return node
-        
+
         prompt_path = bundle_dir / prompt
         if not prompt_path.exists():
             raise ValueError(f"Prompt file not found: {prompt_path}")
-        
+
         with open(prompt_path, "r", encoding="utf-8") as f:
             node["prompt"] = f.read()
-        
+
         return node
 
     def _inline_output_schema_file(
@@ -597,7 +597,7 @@ class FlowsLoader:
         cached_node = self._nodes_cache.get(ref_node_id)
         if not cached_node:
             raise ValueError(f"Node '{ref_node_id}' not found in nodes.json")
-        
+
         # Базовые данные из nodes.json
         merged = {
             "type": cached_node.type,
@@ -607,14 +607,14 @@ class FlowsLoader:
             "llm": cached_node.llm_override.model_dump() if cached_node.llm_override else {},
             "code": cached_node.code,
         }
-        
+
         # Tools из cached_node (exclude_none чтобы не было code=None)
         if cached_node.tools:
             merged["tools"] = [
                 t.model_dump(exclude_none=True) if hasattr(t, "model_dump") else t
                 for t in cached_node.tools
             ]
-        
+
         # Переопределения из flow.json имеют приоритет
         for key, value in node_config.items():
             if value is not None and key != "node_id":
@@ -624,7 +624,7 @@ class FlowsLoader:
                     merged["llm"] = {**merged.get("llm", {}), **value}
                 else:
                     merged[key] = value
-        
+
         # Инлайним prompt из файла если это путь к .md
         merged = self._inline_prompt_from_file(merged, bundle_dir)
         return self._inline_output_schema_file(merged, bundle_dir)
@@ -637,18 +637,18 @@ class FlowsLoader:
         function_path = node.get("function")
         if not function_path or node.get("code"):
             return  # Уже есть code или нет function
-        
+
         try:
             # Импортируем функцию по пути
             module_path, func_name = function_path.rsplit(".", 1)
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
-            
+
             # Получаем исходный код функции
             source = inspect.getsource(func)
             node["code"] = source
             del node["function"]
-            
+
             logger.debug(f"Node '{node_id}': инлайнен код из {function_path}")
         except Exception as e:
             logger.error(f"Node '{node_id}': не удалось загрузить код из {function_path}: {e}")
@@ -713,7 +713,7 @@ class FlowsLoader:
     def _inline_tools_in_nodes(self, nodes: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """
         Рекурсивно инлайнит tools в nodes агента.
-        
+
         Для каждой ноды:
         1. Заменяет tool_id на полные конфиги с кодом
         2. Валидирует уникальность reason/exit tools по react_role
@@ -721,7 +721,7 @@ class FlowsLoader:
         """
         for node_id, node_config in nodes.items():
             node_type = node_config.get("type")
-            
+
             # Для нод типа code с tool_id - инлайним код
             if node_type == "code":
                 tool_id = node_config.get("tool_id")
@@ -746,18 +746,18 @@ class FlowsLoader:
                             f"Node '{node_id}' type=tool references tool_id='{tool_id}' "
                             f"which was not found in tools_cache"
                         )
-            
+
             # Инлайним tools внутри llm_node
             inlined_tools = self._inline_tools_recursive(
                 node_config.get("tools", []),
                 context=f"node '{node_id}'"
             )
             node_config["tools"] = inlined_tools
-            
+
             # Валидируем уникальность reason/exit tools
             if node_type == "llm_node":
                 self._validate_llm_node_tools(node_id, inlined_tools)
-        
+
         return nodes
 
     def _inline_tools_recursive(
@@ -765,7 +765,7 @@ class FlowsLoader:
     ) -> List[Dict[str, Any]]:
         """
         Рекурсивно инлайнит список tools.
-        
+
         Args:
             tools: Список tools (строки или dict)
             context: Контекст для логирования
@@ -787,7 +787,7 @@ class FlowsLoader:
     ) -> Dict[str, Any] | None:
         """
         Инлайнит один tool рекурсивно.
-        
+
         Если tool — llm_node (вложенный flow как tool), рекурсивно инлайнит его tools.
         """
         if isinstance(tool, str):
@@ -798,22 +798,22 @@ class FlowsLoader:
                 result = tool_ref.model_dump(exclude_none=True)
                 logger.debug(f"{context}: инлайнен tool '{tool}'")
                 return result
-            
+
             # Если не нашли как tool - ищем в nodes_cache (node используется как tool)
             node_config = self._get_node_from_cache(tool)
             if node_config:
                 return self._inline_node_as_tool(node_config, context, depth)
-            
+
             raise ValueError(f"{context}: ID '{tool}' не найден ни в tools_cache ни в nodes_cache")
 
         elif isinstance(tool, dict):
             tool_id = tool.get("tool_id")
             exec_kind = tool.get("type")
-            
+
             # Если это llm_node (агент как инструмент) - рекурсивно инлайним его tools
             if exec_kind == "llm_node" or tool.get("prompt"):
                 return self._inline_llm_node_tool(tool, context, depth)
-            
+
             # Tool с tool_id без code - ищем в caches
             # Полностью определённые inline tools (не требуют поиска в кэшах)
             inline_node_types = {
@@ -828,7 +828,7 @@ class FlowsLoader:
             if exec_kind in inline_node_types:
                 logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")
                 return tool
-            
+
             if tool_id and not tool.get("code"):
                 # Сначала в tools_cache
                 tool_ref = self._tools_cache.get(tool_id)
@@ -840,19 +840,19 @@ class FlowsLoader:
                             merged[key] = value
                     logger.debug(f"{context}: инлайнен код для tool '{tool_id}'")
                     return merged
-                
+
                 # Если не нашли как tool - ищем в nodes_cache (node как tool)
                 node_config = self._get_node_from_cache(tool_id)
                 if node_config:
                     return self._inline_node_as_tool(node_config, context, depth)
-                
+
                 raise ValueError(f"{context}: tool '{tool_id}' не найден ни в tools_cache ни в nodes_cache")
-            
+
             if not tool.get("code") and not tool.get("prompt"):
                 raise ValueError(f"{context}: inline tool требует 'type', 'code' или 'prompt': {tool}")
-            
+
             return tool
-        
+
         raise ValueError(f"{context}: неизвестный формат tool: {type(tool)}")
 
     def _inline_llm_node_tool(
@@ -864,7 +864,7 @@ class FlowsLoader:
         """
         result = dict(node_config)
         node_id = result.get("tool_id") or result.get("node_id", "unknown")
-        
+
         # Рекурсивно инлайним tools этой ноды
         if "tools" in result:
             inlined_tools = self._inline_tools_recursive(
@@ -873,10 +873,10 @@ class FlowsLoader:
                 depth=depth + 1
             )
             result["tools"] = inlined_tools
-            
+
             # Валидируем уникальность reason/exit tools
             self._validate_llm_node_tools(node_id, inlined_tools)
-        
+
         logger.debug(f"{context}: инлайнен llm_node '{node_id}' (depth={depth})")
         return result
 
@@ -893,13 +893,13 @@ class FlowsLoader:
             "description": node_config.description,
             "prompt": node_config.prompt,
         }
-        
+
         if node_config.llm_override:
             result["llm"] = node_config.llm_override.model_dump()
-        
+
         if node_config.code:
             result["code"] = node_config.code
-        
+
         # Собираем tools для инлайнинга
         tools_list = []
         if node_config.tools:
@@ -907,7 +907,7 @@ class FlowsLoader:
                 t.model_dump(exclude_none=True) if hasattr(t, "model_dump") else t
                 for t in node_config.tools
             ]
-        
+
         # Рекурсивно инлайним tools
         if tools_list:
             inlined_tools = self._inline_tools_recursive(
@@ -916,11 +916,11 @@ class FlowsLoader:
                 depth=depth + 1
             )
             result["tools"] = inlined_tools
-            
+
             # Валидируем уникальность reason/exit tools
             if node_config.type == "llm_node":
                 self._validate_llm_node_tools(node_config.node_id, inlined_tools)
-        
+
         logger.debug(f"{context}: инлайнен node '{node_config.node_id}' as tool")
         return result
 
@@ -931,24 +931,24 @@ class FlowsLoader:
     def _validate_llm_node_tools(self, node_id: str, tools: List[Dict[str, Any]]) -> None:
         """
         Валидирует что в llm_node только 1 reasoning и только 1 exit tool.
-        
+
         Args:
             node_id: ID ноды для сообщения об ошибке
             tools: Список инлайненных tools
-        
+
         Raises:
             ValueError: Если найдено более 1 reasoning или exit tool
         """
         reason_tools = [t for t in tools if t.get("react_role") == "reason"]
         exit_tools = [t for t in tools if t.get("react_role") == "exit"]
-        
+
         if len(reason_tools) > 1:
             names = [t.get("tool_id") or t.get("name") for t in reason_tools]
             raise ValueError(
                 f"Node '{node_id}': только 1 reasoning tool разрешён, "
                 f"найдено {len(reason_tools)}: {names}"
             )
-        
+
         if len(exit_tools) > 1:
             names = [t.get("tool_id") or t.get("name") for t in exit_tools]
             raise ValueError(
@@ -965,24 +965,24 @@ class FlowsLoader:
         return branches
 
     async def load_all_for_company(
-        self, 
+        self,
         company_id: str,
         filter_public: bool = True
     ) -> Dict[str, int]:
         """
         Универсальный метод загрузки для любой компании.
-        
+
         Если company_id == "system" или filter_public == False:
             - Загружает ВСЕ агенты и тулы из registry
-            
+
         Иначе (обычная компания с filter_public == True):
             - Загружает ТОЛЬКО PUBLIC агенты со ВСЕМИ зависимостями
             - Загружает ТОЛЬКО PUBLIC тулы
-        
+
         Args:
             company_id: "system" или ID компании
             filter_public: Фильтровать ли по public флагу
-            
+
         Returns:
             {"flows": count, "tools": count, "nodes": count}
         """
@@ -1000,10 +1000,10 @@ class FlowsLoader:
 
         self._defaults = self._registry.get("defaults", {})
         registry_flow_entries = self._registry.get("flows", [])
-        
+
         # Определяем нужно ли фильтровать
         should_filter = filter_public and company_id != "system"
-        
+
         bundles_to_load: list[str] = []
         for entry in registry_flow_entries:
             if isinstance(entry, str):
@@ -1012,18 +1012,18 @@ class FlowsLoader:
             elif isinstance(entry, dict):
                 entry_flow_id = entry["id"]
                 is_public = entry.get("public", False)
-                
+
                 if not should_filter or is_public:
                     bundles_to_load.append(entry_flow_id)
-        
+
         logger.info(
             f"Загрузка {len(bundles_to_load)} flow для company:{company_id} "
             f"(фильтр public: {should_filter})"
         )
-        
+
         for bundle_id in bundles_to_load:
             await self._preload_nodes_to_cache(bundle_id)
-        
+
         loaded_flow_ids: list[str] = []
         failed_bundle_ids: list[str] = []
         for bundle_id in bundles_to_load:
@@ -1036,18 +1036,18 @@ class FlowsLoader:
             except Exception as e:
                 logger.error(f"Ошибка загрузки bundle {bundle_id}: {e}", exc_info=True)
                 failed_bundle_ids.append(bundle_id)
-        
+
         logger.info(f"Загружено {len(loaded_flow_ids)} flow в company:{company_id}")
         if failed_bundle_ids:
             logger.warning(f"Не удалось загрузить {len(failed_bundle_ids)} bundle: {failed_bundle_ids}")
-        
+
         # Возвращаем статистику
         stats = {
             "flows": len(loaded_flow_ids),
             "tools": 0,  # TODO: если нужна отдельная загрузка tools
             "nodes": len(self._loaded_nodes)
         }
-        
+
         return stats
 
     async def reload_flow_bundle(self, bundle_id: str) -> str:
@@ -1124,7 +1124,7 @@ async def load_tools_to_db(
 ) -> List[str]:
     """
     Загружает tools из Python модулей в БД.
-    
+
     Поддерживает:
     - FunctionTool (созданные через @tool декоратор) - извлекается код функции
     - BaseTool классы - извлекается код класса
@@ -1146,12 +1146,12 @@ async def load_tools_to_db(
 
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
-            
+
             # FunctionTool (декоратор @tool) - инстанс, не класс
             if isinstance(attr, FunctionTool):
                 tool_instance = attr
                 tool_id = tool_instance.name
-                
+
                 # Извлекаем код функции БЕЗ декоратора
                 full_source = inspect.getsource(tool_instance._func)
                 # Убираем декоратор @tool(...) - ищем начало функции
@@ -1163,7 +1163,7 @@ async def load_tools_to_db(
                         func_start = i
                         break
                 source_code = strip_forbidden_platform_import_lines("\n".join(lines[func_start:]))
-                
+
                 if tool_instance.args_schema is not None:
                     args_schema_dict = _call_parameters_from_pydantic_model(tool_instance.args_schema)
                     parameters_schema_full = pydantic_model_to_parameters_schema(
@@ -1184,7 +1184,7 @@ async def load_tools_to_db(
                         mock_map = {"default_response": "callable_mock"}
                     else:
                         mock_map = {"default_response": tool_instance._mock_response}
-                
+
                 tool_ref = ToolReference(
                     tool_id=tool_id,
                     title=tool_id,
@@ -1201,7 +1201,7 @@ async def load_tools_to_db(
                 loaded.append(tool_id)
                 logger.info(f"  {tool_id}: FunctionTool")
                 continue
-            
+
             # BaseTool класс
             if isinstance(attr, type) and issubclass(attr, BaseTool) and attr is not BaseTool:
                 tool_class = attr

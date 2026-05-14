@@ -1,6 +1,5 @@
 """Условия output_actions: канон `evaluate_output_action_condition`."""
 
-import pytest
 
 from apps.flows.src.triggers.output_condition import (
     evaluate_output_action_condition,

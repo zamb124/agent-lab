@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+
 from core.models.identity_models import User
 from core.pagination import ListResponse
 

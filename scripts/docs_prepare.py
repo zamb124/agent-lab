@@ -434,17 +434,17 @@ def _generate_api_docs(ru_dir: Path, en_dir: Path) -> None:
     """Генерирует документацию API из OpenAPI схем."""
     import sys
     from pathlib import Path as PathLib
-    
+
     # Добавляем текущую директорию в sys.path для импорта openapi_to_markdown
     current_dir = PathLib(__file__).resolve().parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
-    
+
     from openapi_to_markdown import main as generate_markdown
-    
+
     logger = __import__("logging").getLogger(__name__)
     logger.info("Генерация документации API из OpenAPI схем...")
-    
+
     try:
         generate_markdown()
         logger.info("✅ Документация API сгенерирована")
@@ -465,7 +465,7 @@ def main() -> None:
     en_path = root / EN_BUILD
     _prepare_ru_build_tree(docs_dir, ru_path)
     _prepare_en_build_tree(docs_dir, en_path)
-    
+
     # Генерация документации API
     _generate_api_docs(ru_path, en_path)
 

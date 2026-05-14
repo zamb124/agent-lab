@@ -18,7 +18,6 @@ from apps.sync.container import get_sync_container
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 
-
 SYNC_BASE_URL = "http://127.0.0.1:9005"
 SYNC_WS_URI = "ws://127.0.0.1:9005/sync/api/ws/notifications"
 

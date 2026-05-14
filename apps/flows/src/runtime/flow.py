@@ -20,32 +20,30 @@ import operator
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from opentelemetry import trace
-
-from apps.flows.src.runtime.exceptions import (
-    EdgeConditionError,
-    FlowInterrupt,
-    BreakpointInterrupt,
-)
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container import get_container
+from apps.flows.src.mapping import MappingResolver
+from apps.flows.src.runtime.exceptions import (
+    BreakpointInterrupt,
+    EdgeConditionError,
+    FlowInterrupt,
+)
 from apps.flows.src.state.cancellation import check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
-from core.state import ExecutionState
-from core.state.mutation_policy import should_skip_field_on_user_returned_state_copy
-from core.state.interrupt import OperatorTaskInterrupt
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
-from apps.flows.src.mapping import MappingResolver
-from core.logging import get_logger
-from core.tracing import get_tracer
-from core.tracing.context import TraceContext, get_current_trace_context
-from core.tracing.provider import is_tracing_enabled
 from core.errors import (
     FlowInfiniteLoopError,
     FlowPrematureCompletionError,
     NodeCallLimitError,
 )
+from core.logging import get_logger
+from core.state import ExecutionState
+from core.state.interrupt import OperatorTaskInterrupt
+from core.state.mutation_policy import should_skip_field_on_user_returned_state_copy
+from core.tracing import get_tracer
+from core.tracing.context import TraceContext, get_current_trace_context
+from core.tracing.provider import is_tracing_enabled
 
 from .nodes import BaseNode, create_node
 
@@ -246,7 +244,7 @@ class Flow:
     async def run(self, state: ExecutionState) -> ExecutionState:
         """
         Единственная точка входа для выполнения flow.
-        
+
         Автоматически определяет режим:
         - Resume: если есть state.interrupt и state.content (ответ пользователя)
         - Start: новый запуск с entry ноды
@@ -306,7 +304,7 @@ class Flow:
                 for node_id in current_nodes:
                     if node_id not in self.nodes:
                         raise ValueError(f"Node '{node_id}' not found in flow '{self.flow_id}'")
-                    
+
                     node = self.nodes[node_id]
                     node_type = node.config.get("type", "function")
                     self._check_node_call_limit(state, node_id, node)
@@ -579,43 +577,43 @@ class Flow:
     ) -> bool:
         """
         Проверяет breakpoint и останавливает выполнение если активен.
-        
+
         Args:
             state: Текущий ExecutionState
             node_id: ID текущей ноды
             node_type: Тип ноды
             emitter: Emitter для публикации событий
-            
+
         Returns:
             True если breakpoint сработал и выполнение остановлено
         """
         logger.info(f"Flow {self.flow_id}: _check_breakpoint node='{node_id}', breakpoint_hit='{state.breakpoint_hit}', breakpoints={state.breakpoints}")
-        
+
         # Если мы продолжаем после breakpoint на этой же ноде - пропускаем проверку
         if state.breakpoint_hit == node_id:
             logger.debug(f"Flow {self.flow_id}: resuming after breakpoint at '{node_id}'")
             state.breakpoint_hit = None
             state.breakpoint_state = None
             return False
-        
+
         # Проверяем есть ли активный breakpoint для этой ноды
         breakpoints = state.breakpoints or {}
         if not breakpoints.get(node_id):
             return False
-        
+
         logger.info(f"Flow {self.flow_id}: breakpoint hit at node '{node_id}'")
-        
+
         # Создаем snapshot state
         state_snapshot = state.model_dump(exclude_none=False)
-        
+
         # Публикуем событие breakpoint
         await emitter.emit_breakpoint(node_id, node_type, state_snapshot)
-        
+
         # Сохраняем данные breakpoint в state
         state.breakpoint_hit = node_id
         state.breakpoint_state = state_snapshot
         state.current_nodes = [node_id]
-        
+
         # Возвращаем True чтобы прервать выполнение
         return True
 
@@ -674,13 +672,13 @@ class Flow:
         """
         if isinstance(condition, dict):
             return self._evaluate_condition_object(condition, state)
-        
+
         return self._evaluate_condition_string(str(condition), state)
 
     def _evaluate_condition_object(self, condition: Dict[str, Any], state: ExecutionState) -> bool:
         """Вычисляет условие в новом объектном формате."""
         condition_type = condition.get("type")
-        
+
         if condition_type == "simple":
             return self._evaluate_simple_condition(condition, state)
         if condition_type == "python":
@@ -695,7 +693,7 @@ class Flow:
         variable = condition.get("variable", "")
         op_str = condition.get("operator", "==")
         value = condition.get("value", "")
-        
+
         ops = {
             "==": operator.eq,
             "!=": operator.ne,
@@ -705,11 +703,11 @@ class Flow:
             "<=": operator.le,
             "in": lambda a, b: a in b if hasattr(b, "__contains__") else False,
         }
-        
+
         op = ops.get(op_str, operator.eq)
         left = MappingResolver.get_nested_value(state, variable)
         right = self._parse_value(str(value)) if not isinstance(value, (bool, int, float)) else value
-        
+
         try:
             return op(left, right)
         except TypeError as e:
@@ -725,7 +723,7 @@ class Flow:
         """
         from apps.flows.src.eval.safe_eval import SafeEval
         from core.errors import SafeEvalError
-        
+
         if not code or "def check" not in code:
             raise ValueError(
                 "Python-условие ребра: требуется непустой код с функцией check(state)"
@@ -804,8 +802,8 @@ class Flow:
 
     @classmethod
     async def from_config(
-        cls, 
-        config: Dict[str, Any], 
+        cls,
+        config: Dict[str, Any],
         variables: Optional[Dict[str, Any]] = None,
     ) -> "Flow":
         """
@@ -820,7 +818,7 @@ class Flow:
         """
         # flow_id может быть в "flow_id" или "id"
         flow_id = config.get("flow_id") or config.get("id")
-        
+
         nodes = {}
         nodes_config = config.get("nodes", {})
         for node_id, node_config in nodes_config.items():
@@ -828,8 +826,8 @@ class Flow:
 
         # variables: параметр > config["resolved_variables"] > config["variables"]
         resolved_variables = (
-            variables 
-            or config.get("resolved_variables") 
+            variables
+            or config.get("resolved_variables")
             or config.get("variables", {})
         )
 

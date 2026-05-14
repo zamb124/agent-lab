@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 class TracingMiddleware(BaseHTTPMiddleware):
     """
     Middleware для автоматического трейсинга HTTP запросов.
-    
+
     Создает root span для каждого запроса с данными из Context.
     """
 

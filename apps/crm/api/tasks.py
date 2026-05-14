@@ -5,12 +5,10 @@ API единого журнала задач CRM (crm_tasks).
 """
 
 import asyncio
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
 
-from core.pagination import OffsetPage
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     StartDailySummaryRequest,
@@ -22,6 +20,7 @@ from apps.crm.models.api import (
     TaskResponse,
 )
 from apps.crm.services.task_service import ActiveTaskExistsError
+from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 

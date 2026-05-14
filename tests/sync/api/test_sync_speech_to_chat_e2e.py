@@ -26,7 +26,6 @@ import httpx
 import pytest
 
 from core.utils.tokens import get_token_service
-
 from tests.sync.api._helpers import seed_namespace_via_repo
 from tests.sync.api._realtime_helpers import (
     http_owner,

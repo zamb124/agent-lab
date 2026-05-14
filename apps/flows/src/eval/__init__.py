@@ -2,13 +2,23 @@
 Safe eval module for executing inline code.
 """
 
-from core.errors import SafeEvalError
-
+from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.constants import (
     ALLOWED_BUILTINS,
     ALLOWED_IMPORT_ROOTS,
     FORBIDDEN_IMPORT_ROOTS,
     FUTURE_IMPORT_NAMES,
+)
+from apps.flows.src.eval.namespace import PythonNamespaceBuilder
+from apps.flows.src.eval.safe_eval import (
+    SafeEval,
+    compile_function,
+    safe_eval,
+)
+from apps.flows.src.eval.shim_registry import (
+    INLINE_SHIMS,
+    get_inline_shim,
+    strict_shim_import_roots,
 )
 from apps.flows.src.eval.state_utils import (
     add_agent_message,
@@ -33,18 +43,7 @@ from apps.flows.src.eval.wrappers import (
     SafeContext,
     SafeLLMClient,
 )
-from apps.flows.src.eval.shim_registry import (
-    INLINE_SHIMS,
-    get_inline_shim,
-    strict_shim_import_roots,
-)
-from apps.flows.src.eval.namespace import PythonNamespaceBuilder
-from apps.flows.src.eval.compiler import PythonCompiler
-from apps.flows.src.eval.safe_eval import (
-    SafeEval,
-    compile_function,
-    safe_eval,
-)
+from core.errors import SafeEvalError
 
 __all__ = [
     "SafeEvalError",

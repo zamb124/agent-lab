@@ -4,14 +4,14 @@ GitHub OAuth провайдер авторизации.
 АДАПТИРОВАНО: убраны локальные импорты, try-except блоки
 """
 
-from core.logging import get_logger
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 from urllib.parse import urlencode
 
-from core.identity.base_provider import BaseAuthProvider
-from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.config.models import AuthProviderConfig
 from core.http import request_public_oauth
+from core.identity.base_provider import BaseAuthProvider
+from core.logging import get_logger
+from core.models.identity_models import AuthProvider, ProviderUserInfo
 
 logger = get_logger(__name__)
 class GithubProvider(BaseAuthProvider):
@@ -35,7 +35,7 @@ class GithubProvider(BaseAuthProvider):
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
         }
-        
+
         response = await request_public_oauth(
             "POST",
             self.token_url,
@@ -66,7 +66,7 @@ class GithubProvider(BaseAuthProvider):
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/vnd.github.v3+json",
         }
-        
+
         user_response = await request_public_oauth(
             "GET", self.userinfo_url, timeout=30.0, headers=headers
         )

@@ -6,12 +6,11 @@
 import pytest
 from aiohttp import web
 
-from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
-
+from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.runtime import Flow
-from apps.flows.src.runtime.nodes import create_node, RemoteFlowNode
-from apps.flows.src.models import FlowConfig, Edge
+from apps.flows.src.runtime.nodes import RemoteFlowNode, create_node
 from core.state import ExecutionState
+from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 
 
 class TestRemoteFlowNode:

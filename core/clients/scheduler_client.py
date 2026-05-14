@@ -9,8 +9,8 @@ from core.pagination import OffsetPage
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
-    PlatformScheduleFilter,
     PlatformScheduledTask,
+    PlatformScheduleFilter,
 )
 
 

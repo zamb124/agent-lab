@@ -13,7 +13,7 @@ from datetime import date
 import pytest
 
 from apps.flows.src.evaluation.runners.test_runner import TestRunner
-from apps.flows.src.models import FlowConfig, NodeConfig
+from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.flow_config import (
     CheckConfig,
     CheckType,
@@ -200,7 +200,7 @@ class TestCheckFunction:
         )
         result = await runner._execute_check(check, execution_state, "Everything is ok", [])
         assert result == {"result": 10.0}
-        
+
         result = await runner._execute_check(check, execution_state, "Not good", [])
         assert result == {"result": 0.0}
 
@@ -249,7 +249,7 @@ class TestCheckFunction:
         )
         result = await runner._execute_check(check, execution_state, "Order has been confirmed", [])
         assert result == {"result": 10.0}
-        
+
         result = await runner._execute_check(check, execution_state, "Request received", [])
         assert result == {"result": 0.0}
 

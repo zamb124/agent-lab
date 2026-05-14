@@ -4,11 +4,11 @@ API для управления командой компании.
 GET /members перенесён в core/api/team.py (доступен во всех сервисах).
 """
 
-from core.logging import get_logger
 from fastapi import APIRouter, HTTPException, Request
 
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import TeamMemberUpdate
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/team", tags=["team"])

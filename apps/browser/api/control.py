@@ -21,8 +21,10 @@ from apps.browser.engine.types import (
     ContextSignature,
 )
 from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
-from apps.browser.interaction.interaction_profiles import InteractionProfileName
-from apps.browser.interaction.interaction_profiles import get_interaction_profile
+from apps.browser.interaction.interaction_profiles import (
+    InteractionProfileName,
+    get_interaction_profile,
+)
 from apps.browser.observe.ax_snapshot import dom_accessibility_tree_dict_from_page
 from apps.browser.observe.snapshot_refs import build_interactive_snapshot_with_refs, parse_ref
 
@@ -274,7 +276,7 @@ class ControlNavigateBody(BaseModel):
     snapshot: bool = False
     capture_pdf: bool = False
     navigation_timeout_ms: int = Field(default=5_000, ge=1000)
-    new_tab: bool = True # костыль, откатить потом. 
+    new_tab: bool = True # костыль, откатить потом.
 
 
 class ControlObserveBody(BaseModel):

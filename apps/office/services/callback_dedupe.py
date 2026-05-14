@@ -8,7 +8,6 @@ import hashlib
 
 import redis.asyncio as redis_async
 
-
 KEY_PREFIX = "office:oo_cb:"
 TTL_SECONDS = 300
 

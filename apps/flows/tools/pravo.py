@@ -13,8 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.tools import tool
 from core.clients.pravo import (
-    PravoClientError,
     PravoClient,
+    PravoClientError,
 )
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError

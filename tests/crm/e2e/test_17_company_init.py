@@ -9,7 +9,7 @@ import pytest
 
 class TestCompanyInit:
     """Инициализация CRM для компании"""
-    
+
     @pytest.mark.asyncio
     async def test_system_types_exist_for_company(self, crm_client, unique_id, auth_headers_system):
         """Системные типы минимального ядра существуют для компании"""
@@ -19,11 +19,11 @@ class TestCompanyInit:
             params={"limit": 1000, "namespace": "default"},
         )
         assert types_resp.status_code == 200
-        
+
         types = types_resp.json()["items"]
         type_ids = [t["type_id"] for t in types]
         types_by_id = {t["type_id"]: t for t in types}
-        
+
         assert "note" in type_ids
         assert "task" in type_ids
         assert "contact" in type_ids
@@ -33,7 +33,7 @@ class TestCompanyInit:
         assert "organization" in type_ids
         assert "project" in type_ids
         assert "topic" in type_ids
-        
+
         for entity_type in types:
             assert entity_type["company_id"] is not None
 
@@ -54,7 +54,7 @@ class TestCompanyInit:
         namespace_t = types_by_id["namespace"]
         assert namespace_t["extractable"] is False
         assert namespace_t["namespace"] == "default"
-    
+
     @pytest.mark.asyncio
     async def test_system_relationship_types_exist(self, crm_client, unique_id, auth_headers_system):
         """Все системные типы связей существуют и неизменяемы"""
@@ -89,7 +89,7 @@ class TestCompanyInit:
             "is_directed": True,
         }, headers=auth_headers_system)
         assert resp.status_code == 200
-    
+
     @pytest.mark.asyncio
     async def test_company_entity_organization_created(self, crm_client, unique_id, auth_headers_system):
         """Entity типа 'organization' для компании создается автоматически"""
@@ -100,13 +100,13 @@ class TestCompanyInit:
         )
         assert orgs_resp.status_code == 200
         orgs = orgs_resp.json()["items"]
-        
+
         assert len(orgs) >= 1
-        
+
         own_org = next((o for o in orgs if o.get("is_owner")), None)
         if own_org:
             assert own_org["entity_type"] == "organization"
-    
+
     @pytest.mark.asyncio
     async def test_system_entity_types_have_prompts(self, crm_client, auth_headers_system):
         """Системные типы сущностей имеют промпты для AI"""
@@ -116,7 +116,7 @@ class TestCompanyInit:
             params={"limit": 1000, "namespace": "default"},
         )
         types = types_resp.json()["items"]
-        
+
         note_type = next((t for t in types if t["type_id"] == "note"), None)
         assert note_type is not None
         assert note_type.get("prompt") is not None or note_type.get("is_system") is True

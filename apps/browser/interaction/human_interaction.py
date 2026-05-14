@@ -13,8 +13,9 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-from apps.browser.interaction.interaction_profiles import InteractionProfile
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+from apps.browser.interaction.interaction_profiles import InteractionProfile
 
 
 @dataclass(frozen=True)

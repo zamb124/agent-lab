@@ -82,9 +82,9 @@ class TestVariablesE2E:
 
         # Проверяем публичные variables из example_react
         assert "company_name" in variables, "company_name должна быть публичной"
-        
+
         assert "max_response_length" in variables, "max_response_length должна быть публичной"
-        
+
         # Проверяем структуру публичной переменной
         company_var = variables["company_name"]
         assert "title" in company_var, "Переменная должна иметь title"
@@ -318,10 +318,10 @@ class TestVariablesE2E:
 
         # 4. Проверяем что все variables применились
         response_text = get_task_response(task)
-        
+
         # Проверяем примитивные переменные
         assert "E2ECompany" in response_text or "1000" in response_text
-        
+
         # Проверяем dict переменные (доступ через точку в промпте)
         assert "E2EUser" in response_text or "e2e@example.com" in response_text or "Москва" in response_text
 
@@ -341,18 +341,17 @@ class TestVariablesE2E:
     ):
         """
         6. Проверяет что переменная current_date из metadata с @var: ссылкой правильно резолвится.
-        
+
         Проблема: когда передается "@var:current_date" в metadata, она должна резолвиться
         через VariablesService.resolve() в значение из БД, а не попадать в промпт как строка "current_date".
         """
-        from datetime import datetime
-        
+
         # Сначала создаем переменную current_date в БД
         # (в реальности она может быть создана заранее)
         var_value = "2024-12-18"
-        
+
         # Создаем переменную через API
-        var_resp = await client.post(
+        await client.post(
             "/flows/api/v1/variables",
             json={
                 "key": "current_date",
@@ -361,7 +360,7 @@ class TestVariablesE2E:
             },
         )
         # Игнорируем ошибку если переменная уже существует
-        
+
         # Настраиваем mock LLM ответ
         mock_llm_with_queue([
             {"type": "text", "content": f"Сегодня {var_value}, я помощник компании TestCompany."}
@@ -400,7 +399,7 @@ class TestVariablesE2E:
 
         # Проверяем что ответ содержит значение из БД (не строку "current_date" или "@var:current_date")
         response_text = get_task_response(task)
-        
+
         # Важно: проверяем что в ответе есть значение из БД
         assert var_value in response_text
         # Проверяем что строка "@var:current_date" или "current_date" НЕ попала в ответ как есть
@@ -414,7 +413,7 @@ class TestVariablesE2E:
     ):
         """
         7. Проверяет рекурсивный резолв @var: ссылок в metadata.
-        
+
         Сценарий:
         - В metadata передается @var: ссылка напрямую
         - Эта переменная содержит другую @var: ссылку
@@ -429,7 +428,7 @@ class TestVariablesE2E:
             "/flows/api/v1/variables",
             json={"key": "api_endpoint", "value": "@var:base_url/v1", "secret": False},
         )
-        
+
         # Настраиваем mock LLM ответ
         mock_llm_with_queue([
             {"type": "text", "content": "API endpoint: https://api.example.com/v1"}
@@ -468,7 +467,7 @@ class TestVariablesE2E:
 
         # Проверяем что обе ссылки были зарезолвлены рекурсивно
         response_text = get_task_response(task)
-        
+
         # Должно быть финальное значение, а не ссылки
         assert "https://api.example.com/v1" in response_text
         assert "@var:api_endpoint" not in response_text
@@ -480,7 +479,7 @@ class TestVariablesE2E:
     ):
         """
         8. Проверяет рекурсивный резолв @var: ссылок внутри JSON объектов в metadata.
-        
+
         Сценарий:
         - В metadata передается JSON объект
         - Внутри JSON есть поля со значениями @var: ссылками
@@ -500,7 +499,7 @@ class TestVariablesE2E:
             "/flows/api/v1/variables",
             json={"key": "db_connection", "value": "@var:db_host:@var:db_port", "secret": False},
         )
-        
+
         # Настраиваем mock LLM ответ
         mock_llm_with_queue([
             {"type": "text", "content": "DB connection: localhost:5432"}
@@ -543,12 +542,12 @@ class TestVariablesE2E:
 
         # Проверяем что все ссылки были зарезолвлены рекурсивно
         response_text = get_task_response(task)
-        
+
         # Должны быть финальные значения
         assert "localhost" in response_text
         assert "5432" in response_text
         assert "localhost:5432" in response_text
-        
+
         # Не должно быть ссылок
         assert "@var:db_host" not in response_text
         assert "@var:db_port" not in response_text
@@ -560,7 +559,7 @@ class TestVariablesE2E:
     ):
         """
         9. Проверяет рекурсивный резолв @var: ссылок в глубоко вложенных JSON структурах.
-        
+
         Сценарий:
         - В metadata передается сложный JSON объект с вложенными объектами и массивами
         - Внутри есть @var: ссылки на разных уровнях вложенности
@@ -579,7 +578,7 @@ class TestVariablesE2E:
             "/flows/api/v1/variables",
             json={"key": "full_service_name", "value": "@var:service_name-v@var:service_version", "secret": False},
         )
-        
+
         # Настраиваем mock LLM ответ
         mock_llm_with_queue([
             {"type": "text", "content": "Service: my-service-v1.0.0"}
@@ -628,12 +627,12 @@ class TestVariablesE2E:
 
         # Проверяем что все ссылки были зарезолвлены рекурсивно
         response_text = get_task_response(task)
-        
+
         # Должны быть финальные значения
         assert "my-service" in response_text
         assert "1.0.0" in response_text
         assert "my-service-v1.0.0" in response_text
-        
+
         # Не должно быть ссылок
         assert "@var:service_name" not in response_text
         assert "@var:service_version" not in response_text

@@ -13,7 +13,6 @@ from a2a.types import (
 )
 
 
-
 def dict_to_config(data: Dict[str, Any]) -> TaskPushNotificationConfig:
     """Конвертирует dict в TaskPushNotificationConfig."""
     push_data = data.get("pushNotificationConfig", {})

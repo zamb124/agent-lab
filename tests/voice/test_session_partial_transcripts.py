@@ -19,7 +19,6 @@ from apps.voice.workers.stt_worker import run_stt_worker
 from core.clients.stt_client import STTTranscriptionResult
 from core.files.models import AudioTranscriptionStatus
 
-
 SPEECH_FRAME = b"\x01\x00" * 320
 SILENCE_FRAME = b"\x00\x00" * 320
 _SILENCE_THRESHOLD = 10

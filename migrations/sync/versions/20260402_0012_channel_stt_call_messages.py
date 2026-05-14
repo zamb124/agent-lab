@@ -1,7 +1,7 @@
 """Канал-only STT: убрать встречи/сегменты, колонки space, call_id и авто-STT на канале."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "sync_0012"

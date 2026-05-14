@@ -1,6 +1,5 @@
 """Тесты маршрутизации AuthMiddleware для Sync."""
 
-import pytest
 from core.middleware.auth.route_config import RouteMatcher, path_allows_spa_fallback
 
 

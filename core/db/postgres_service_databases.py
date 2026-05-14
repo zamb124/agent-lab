@@ -8,7 +8,6 @@ asyncio.run(ensure_postgres_service_databases_async()).
 
 from __future__ import annotations
 
-from core.logging import get_logger
 import re
 from typing import Final
 
@@ -17,6 +16,8 @@ from sqlalchemy import pool, text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 _PG_AUTH_HINT = (

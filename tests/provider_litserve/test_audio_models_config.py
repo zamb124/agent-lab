@@ -18,7 +18,6 @@ from core.config.models import (
     RerankerRuntimeConfig,
 )
 
-
 pytestmark = pytest.mark.timeout(15)
 
 

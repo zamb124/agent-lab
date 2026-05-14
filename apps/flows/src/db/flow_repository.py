@@ -12,9 +12,7 @@ from typing import Dict, List, Optional
 
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
-
-from core.db import BaseRepository
-from core.db import Storage
+from core.db import BaseRepository, Storage
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -31,7 +29,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
     Репозиторий для flow с версионированием.
     Данные изолированы по компаниям (is_global=False).
     """
-    
+
     is_global = False
     owner_service = "flows"
 
@@ -40,10 +38,10 @@ class FlowRepository(BaseRepository[FlowConfig]):
 
     def _get_key(self, entity_id: str) -> str:
         return f"flow:{entity_id}"
-    
+
     def _get_prefix(self) -> str:
         return "flow:"
-    
+
     def _get_table_name(self) -> str:
         return "flows"
 
@@ -56,27 +54,27 @@ class FlowRepository(BaseRepository[FlowConfig]):
     async def set(self, entity: FlowConfig) -> bool:
         """
         Сохраняет новую версию агента.
-        
+
         Генерирует timestamp версию и сохраняет:
         - Версию в flows_versions
         - Актуальный конфиг в flows
         """
         flow_id = entity.flow_id
-        
+
         # Генерируем timestamp версию
         new_version = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
         entity.version = new_version
-        
+
         data = entity.model_dump_json()
-        
+
         # Сохраняем версию в flows_versions
         version_key = self._get_key(f"{flow_id}_v{new_version}")
         final_version_key = self._build_final_key(version_key)
         await self._storage._set_with_table(final_version_key, data, self._get_versions_table())
-        
+
         # Сохраняем актуальный конфиг в flows
         await super().set(entity)
-        
+
         logger.info(f"Flow '{flow_id}' saved as version {new_version}")
         return True
 
@@ -130,10 +128,10 @@ class FlowRepository(BaseRepository[FlowConfig]):
         version_key = self._get_key(f"{flow_id}_v{version}")
         final_version_key = self._build_final_key(version_key)
         data = await self._storage._get_with_session_and_table(final_version_key, self._get_versions_table())
-        
+
         if not data:
             return None
-            
+
         return _flow_config_from_storage_json(data)
 
     async def list_versions(self, flow_id: str) -> List[str]:
@@ -143,7 +141,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         prefix = self._get_key(f"{flow_id}_v")
         final_prefix = self._build_final_key(prefix)
         all_data = await self._storage._get_all_by_prefix_and_table(final_prefix, self._get_versions_table(), 1000)
-        
+
         versions = []
         for key in all_data.keys():
             # Формат: flow:{flow_id}_v{timestamp} или company:{company_id}:flow:{flow_id}_v{timestamp}
@@ -151,7 +149,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
             parts = key.rsplit("_v", 1)
             if len(parts) == 2:
                 versions.append(parts[1])
-        
+
         return sorted(versions, reverse=True)
 
     async def get_many(self, entity_ids: List[str]) -> Dict[str, FlowConfig]:
@@ -177,7 +175,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         all_data = await self._storage._get_all_by_prefix_and_table(
             final_prefix, self._get_table_name(), limit, offset
         )
-        
+
         items: List[FlowConfig] = []
         for key, value in all_data.items():
             try:
@@ -186,7 +184,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
             except Exception as e:
                 logger.warning(f"Failed to parse flow from key {key}: {e}")
                 continue
-        
+
         return items
 
     async def delete(self, flow_id: str) -> bool:
@@ -195,40 +193,40 @@ class FlowRepository(BaseRepository[FlowConfig]):
         Возвращает False если запись не существовала.
         """
         current = await self.get(flow_id)
-        
+
         versions = await self.list_versions(flow_id)
-        
+
         if not current and not versions:
             logger.info(f"Flow '{flow_id}' not found, nothing to delete")
             return False
-        
+
         if current:
             row_key = self._get_key(flow_id)
             final_flow_key = self._build_final_key(row_key)
             await self._storage._delete_with_table(final_flow_key, self._get_table_name())
-        
+
         for version in versions:
             version_key = self._get_key(f"{flow_id}_v{version}")
             final_version_key = self._build_final_key(version_key)
             await self._storage._delete_with_table(final_version_key, self._get_versions_table())
-        
+
         logger.info(f"Flow '{flow_id}' deleted with {len(versions)} versions")
         return True
 
     async def rollback_to_version(self, flow_id: str, version: str) -> bool:
         """
         Откатывает flow к указанной версии.
-        
+
         Копирует указанную версию из flows_versions в flows.
         """
         snapshot = await self.get_version(flow_id, version)
         if snapshot is None:
             return False
-        
+
         data = snapshot.model_dump_json()
         key = self._get_key(flow_id)
         final_key = self._build_final_key(key)
         await self._storage._set_with_table(final_key, data, self._get_table_name())
-        
+
         logger.info(f"Flow '{flow_id}' rolled back to version {version}")
         return True

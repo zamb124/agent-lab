@@ -6,35 +6,35 @@
 """
 
 import json
-
-from core.logging import get_logger
-import uuid
 import secrets
-from typing import Dict, Optional, Type, TYPE_CHECKING
-from datetime import datetime, timezone, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, Dict, Optional, Type
+
 from sqlalchemy import text
 
-from core.models.identity_models import (
-    AuthProvider,
-    User,
-    AuthSession,
-    AuthResult,
-    AuthRequest,
-    ProviderUserInfo,
-)
-from core.identity.base_provider import BaseAuthProvider
-from core.identity.providers.yandex import YandexProvider
-from core.identity.providers.google import GoogleProvider
-from core.identity.providers.github import GithubProvider
-from core.identity.providers.apple import AppleProvider
 from core.auth.utils import compare_passwords
 from core.config import get_settings
+from core.identity.base_provider import BaseAuthProvider
+from core.identity.providers.apple import AppleProvider
+from core.identity.providers.github import GithubProvider
+from core.identity.providers.google import GoogleProvider
+from core.identity.providers.yandex import YandexProvider
+from core.logging import get_logger
+from core.models.identity_models import (
+    AuthProvider,
+    AuthRequest,
+    AuthResult,
+    AuthSession,
+    ProviderUserInfo,
+    User,
+)
 from core.utils.tokens import get_token_service
 
 if TYPE_CHECKING:
-    from core.db.repositories.user_repository import UserRepository
-    from core.db.repositories.company_repository import CompanyRepository
     from core.db.repositories.auth_session_repository import AuthSessionRepository
+    from core.db.repositories.company_repository import CompanyRepository
+    from core.db.repositories.user_repository import UserRepository
 
 logger = get_logger(__name__)
 class AuthService:
@@ -65,7 +65,7 @@ class AuthService:
     def _initialize_providers(self):
         """Инициализирует доступные провайдеры на основе конфигурации"""
         settings = get_settings()
-        
+
         provider_classes: Dict[AuthProvider, Type[BaseAuthProvider]] = {
             AuthProvider.YANDEX: YandexProvider,
             AuthProvider.GOOGLE: GoogleProvider,
@@ -184,10 +184,10 @@ class AuthService:
         session = await self._create_session(user, auth_request.provider, access_token, refresh_token)
 
         token_service = get_token_service()
-        
+
         # Получаем roles для активной компании
         roles = user.companies.get(user.active_company_id, []) if user.active_company_id else []
-        
+
         jwt_token = token_service.create_token(
             user_id=user.user_id,
             company_id=user.active_company_id or "",

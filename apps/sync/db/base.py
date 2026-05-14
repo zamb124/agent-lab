@@ -5,18 +5,20 @@
 с автоматической изоляцией по company_id из контекста.
 """
 
-from core.logging import get_logger
-from typing import Generic, TypeVar, Optional, List, Type
 from abc import ABC, abstractmethod
+from typing import Generic, List, Optional, Type, TypeVar
 
-from sqlalchemy import select, delete, func
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from core.context import get_context
+from core.db.utils import get_rowcount
+from core.logging import get_logger
 
 logger = get_logger(__name__)
-T = TypeVar('T', bound=DeclarativeBase)
+T = TypeVar("T", bound=DeclarativeBase)
+
 
 class SyncDatabase:
     """
@@ -46,6 +48,7 @@ class SyncDatabase:
         if cls._instance is None:
             if db_url is None:
                 from core.config import get_settings
+
                 settings = get_settings()
                 db_url = settings.database.sync_url
                 if not db_url:
@@ -61,6 +64,7 @@ class SyncDatabase:
     def session(self) -> AsyncSession:
         """Создает новую сессию"""
         return self._session_factory()
+
 
 class BaseSyncRepository(ABC, Generic[T]):
     """
@@ -105,9 +109,7 @@ class BaseSyncRepository(ABC, Generic[T]):
     async def get(self, entity_id: str) -> Optional[T]:
         """Получает запись по ID"""
         async with self._db.session() as session:
-            stmt = select(self.model_class).where(
-                self._get_id_column() == entity_id
-            )
+            stmt = select(self.model_class).where(self._get_id_column() == entity_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
@@ -117,9 +119,7 @@ class BaseSyncRepository(ABC, Generic[T]):
             return []
 
         async with self._db.session() as session:
-            stmt = select(self.model_class).where(
-                self._get_id_column().in_(entity_ids)
-            )
+            stmt = select(self.model_class).where(self._get_id_column().in_(entity_ids))
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
@@ -142,12 +142,10 @@ class BaseSyncRepository(ABC, Generic[T]):
     async def delete(self, entity_id: str) -> bool:
         """Удаляет запись по ID"""
         async with self._db.session() as session:
-            stmt = delete(self.model_class).where(
-                self._get_id_column() == entity_id
-            )
+            stmt = delete(self.model_class).where(self._get_id_column() == entity_id)
             result = await session.execute(stmt)
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0
 
     async def list(
         self,
@@ -179,6 +177,7 @@ class BaseSyncRepository(ABC, Generic[T]):
                 stmt = stmt.where(company_col == cid)
             result = await session.execute(stmt)
             return result.scalar() or 0
+
 
 def get_sync_db() -> SyncDatabase:
     """Получает singleton Sync database"""

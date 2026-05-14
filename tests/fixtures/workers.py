@@ -6,6 +6,7 @@
 - Фикстуры для TaskIQ worker и RAGWorker
 """
 
+import asyncio
 import hashlib
 import os
 import signal
@@ -13,10 +14,9 @@ import socket
 import subprocess
 import sys
 import time
-import asyncio
-from urllib.parse import urlparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
+from urllib.parse import urlparse
 
 import pytest
 import redis.asyncio as redis_asyncio
@@ -24,7 +24,6 @@ import redis.exceptions as redis_exceptions
 from filelock import FileLock
 
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
-
 
 # Константы для файлов блокировки и PID
 _TASKIQ_WORKER_LOCK = "/tmp/platform_test_taskiq_worker.lock"
@@ -78,16 +77,16 @@ def _clear_taskiq_stream(stream_name: str, redis_url: str) -> None:
 class SessionWorkerManager:
     """
     Универсальный менеджер для запуска и управления worker процессами в pytest.
-    
+
     Поддерживает:
     - Запуск worker один раз на всю сессию тестов
     - Переиспользование worker несколькими pytest worker'ами (pytest-xdist)
     - Reference counting для корректной остановки worker
     - Очистку старых процессов перед запуском
     - Убийство дочерних процессов (multiprocessing)
-    
+
     Примеры использования:
-    
+
     1. TaskIQ worker:
         manager = SessionWorkerManager(
             name="TaskIQ",
@@ -98,12 +97,12 @@ class SessionWorkerManager:
             cleanup_patterns=["taskiq.*worker", "multiprocessing.spawn"],
             startup_wait=3
         )
-        
+
         @pytest.fixture(scope="session")
         def taskiq_worker():
             with manager.start() as process:
                 yield process
-    
+
     2. Custom worker:
         manager = SessionWorkerManager(
             name="MyWorker",
@@ -116,19 +115,19 @@ class SessionWorkerManager:
             log_file="/tmp/my_worker.log",
             err_file="/tmp/my_worker_err.log"
         )
-        
+
         @pytest.fixture(scope="session")
         def my_worker():
             with manager.start() as process:
                 yield process
-    
+
     Как это работает:
     - При первом запуске теста: создается lock, запускается worker, PID сохраняется, ref_count = 1
     - При параллельном запуске (pytest-xdist): другие pytest worker'ы видят PID, увеличивают ref_count
     - При завершении теста: ref_count уменьшается
     - Когда ref_count становится 0: последний pytest worker убивает worker процесс
     """
-    
+
     def __init__(
         self,
         name: str,
@@ -163,25 +162,25 @@ class SessionWorkerManager:
         self.startup_wait = startup_wait
         self.log_file = log_file or f"/tmp/{name.lower()}_worker.log"
         self.err_file = err_file or f"/tmp/{name.lower()}_worker_err.log"
-        
+
         self.lock = FileLock(self.lock_file, timeout=300)
         self.pid_path = Path(self.pid_file)
         self.ref_count_path = Path(self.ref_count_file)
-    
+
     def _cleanup_old_processes(self):
         """Убивает старые worker процессы по паттернам."""
         print(f"🧹 Очистка старых {self.name} worker процессов...")
-        
+
         for pattern in self.cleanup_patterns:
             subprocess.run(
                 ["pkill", "-9", "-f", pattern],
                 check=False,
                 capture_output=True
             )
-        
+
         time.sleep(0.05)
         print(f"✅ Старые {self.name} worker процессы очищены")
-    
+
     def _increment_ref_count(self) -> int:
         """Увеличивает счетчик ссылок. Возвращает новое значение."""
         ref_count = 1
@@ -192,7 +191,7 @@ class SessionWorkerManager:
                 ref_count = 1
         self.ref_count_path.write_text(str(ref_count))
         return ref_count
-    
+
     def _decrement_ref_count(self) -> int:
         """Уменьшает счетчик ссылок. Возвращает новое значение."""
         ref_count = 0
@@ -201,12 +200,12 @@ class SessionWorkerManager:
                 ref_count = int(self.ref_count_path.read_text().strip()) - 1
             except (ValueError, OSError):
                 ref_count = 0
-        
+
         if ref_count > 0:
             self.ref_count_path.write_text(str(ref_count))
         else:
             self.ref_count_path.unlink(missing_ok=True)
-        
+
         return ref_count
 
     def _build_worker_env(self) -> Dict[str, str]:
@@ -258,7 +257,7 @@ class SessionWorkerManager:
     def _check_existing_worker(self) -> bool:
         """
         Проверяет существующий worker.
-        
+
         Returns:
             True если worker запущен и можно его переиспользовать
         """
@@ -312,15 +311,15 @@ class SessionWorkerManager:
         time.sleep(min(0.05, self.startup_wait))
         if worker_process.poll() is not None:
             _fail()
-    
+
     def _start_worker(self) -> subprocess.Popen:
         """Запускает новый worker процесс."""
         self._cleanup_old_processes()
-        
+
         # Логи: line-buffered + unbuffered python, иначе stderr/stdout воркера долго не попадают в файлы.
         worker_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
         worker_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
-        
+
         worker_env = self._build_worker_env()
         worker_process = subprocess.Popen(
             self.command,
@@ -332,18 +331,18 @@ class SessionWorkerManager:
         # Как SessionServerManager._start_server: убеждаемся, что процесс не вышел сразу.
         # Длинный цикл под filelock не держим — другие pytest-xdist gw ждут на том же lock.
         self._assert_worker_subprocess_alive(worker_process, worker_log, worker_err)
-        
+
         # Сохраняем PID
         self.pid_path.write_text(str(worker_process.pid))
         self._worker_envsig_path().write_text(self._worker_env_signature(), encoding="utf-8")
         print(f"✅ {self.name} worker started (PID: {worker_process.pid})")
-        
+
         return worker_process
-    
+
     def _stop_worker(self, pid: int):
         """Останавливает worker и его дочерние процессы."""
         print(f"🛑 Останавливаем {self.name} worker (PID: {pid}, последний ref)...")
-        
+
         # Убиваем процесс
         try:
             os.kill(pid, signal.SIGTERM)
@@ -355,7 +354,7 @@ class SessionWorkerManager:
                 pass
         except OSError:
             pass
-        
+
         # Убиваем все дочерние процессы
         print(f"🧹 Очистка оставшихся child процессов {self.name}...")
         for pattern in self.cleanup_patterns:
@@ -364,22 +363,21 @@ class SessionWorkerManager:
                 check=False,
                 capture_output=True
             )
-        
+
         self.pid_path.unlink(missing_ok=True)
         self._worker_envsig_path().unlink(missing_ok=True)
         print(f"✅ {self.name} worker stopped (PID: {pid})")
-    
+
     def start(self):
         """
         Контекстный менеджер для запуска worker.
-        
+
         Usage:
             with manager.start() as process:
                 yield process
         """
         worker_process = None
-        is_owner = False
-        
+
         with self.lock:
             # Проверяем существующий worker
             if self._check_existing_worker():
@@ -391,24 +389,23 @@ class SessionWorkerManager:
                 )
             else:
                 # Мы первые - запускаем worker
-                is_owner = True
                 self.ref_count_path.write_text("1")
                 worker_process = self._start_worker()
-        
+
         # Контекстный менеджер для cleanup
         class _WorkerContext:
             def __init__(ctx_self, manager, process):
                 ctx_self.manager = manager
                 ctx_self.process = process
-            
+
             def __enter__(ctx_self):
                 return ctx_self.process
-            
+
             def __exit__(ctx_self, exc_type, exc_val, exc_tb):
                 # Уменьшаем счетчик ссылок под блокировкой
                 with ctx_self.manager.lock:
                     ref_count = ctx_self.manager._decrement_ref_count()
-                    
+
                     if ref_count > 0:
                         print(f"📉 {ctx_self.manager.name} worker refs: {ref_count}")
                     else:
@@ -425,7 +422,7 @@ class SessionWorkerManager:
                                     f"worker: {e}"
                                 )
                                 ctx_self.manager.pid_path.unlink(missing_ok=True)
-        
+
         return _WorkerContext(self, worker_process)
 
 
@@ -437,13 +434,13 @@ class SessionWorkerManager:
 def taskiq_worker():
     """
     Запускает TaskIQ worker для тестов.
-    
+
     В Docker: использует существующий flows_worker_test контейнер
     Локально: запускает worker как subprocess через SessionWorkerManager
-    
+
     scope="session" - worker запускается один раз на все тесты.
-    
-    При pytest-xdist используется filelock для синхронизации - 
+
+    При pytest-xdist используется filelock для синхронизации -
     первый worker запускает TaskIQ worker, остальные ждут и переиспользуют его.
     """
     # Используем SessionWorkerManager для управления worker
@@ -474,7 +471,7 @@ def taskiq_worker():
         log_file="/tmp/taskiq_worker_test.log",
         err_file="/tmp/taskiq_worker_test_err.log",
     )
-    
+
     with manager.start() as worker_process:
         yield worker_process
 
@@ -483,12 +480,12 @@ def taskiq_worker():
 def rag_worker():
     """
     Запускает RAGWorker для обработки RAG задач в тестах.
-    
+
     RAGWorker обрабатывает задачи индексации документов в pgvector через SessionWorkerManager.
-    
+
     scope="session" - worker запускается один раз на все тесты.
-    
-    При pytest-xdist используется filelock для синхронизации - 
+
+    При pytest-xdist используется filelock для синхронизации -
     первый worker запускает RAGWorker, остальные ждут и переиспользуют его.
     """
     # Один процесс: меньше гонок при нагрузочном прогоне и общей БД/S3.
@@ -517,7 +514,7 @@ def rag_worker():
         log_file="/tmp/rag_worker_test.log",
         err_file="/tmp/rag_worker_test_err.log",
     )
-    
+
     with manager.start() as worker_process:
         yield worker_process
 
@@ -639,7 +636,7 @@ def crm_worker():
 def taskiq_broker(rag_worker):
     """
     Возвращает TaskIQ broker для RAG тестов.
-    
+
     Зависит от rag_worker - гарантирует что worker запущен.
     """
     from apps.flows_worker.broker import broker
@@ -651,7 +648,7 @@ def taskiq_scheduler():
     """
     Запускает TaskIQ scheduler как subprocess.
     Scheduler проверяет scheduled tasks и отправляет их worker-у.
-    
+
     scope="session" - scheduler запускается один раз на все тесты.
     """
     import tempfile
@@ -659,7 +656,7 @@ def taskiq_scheduler():
     log_dir = tempfile.mkdtemp(prefix="taskiq_scheduler_")
     stdout_log = open(f"{log_dir}/stdout.log", "w")
     stderr_log = open(f"{log_dir}/stderr.log", "w")
-    
+
     scheduler_process = subprocess.Popen(
         [sys.executable, "-m", "taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"],
         stdout=stdout_log,
@@ -691,7 +688,7 @@ def taskiq_scheduler():
         raise RuntimeError(f"Scheduler failed to start: {stderr}")
 
     yield scheduler_process
-    
+
     scheduler_process.terminate()
     try:
         scheduler_process.wait(timeout=5)
@@ -706,10 +703,10 @@ def taskiq_scheduler():
 class SessionServerManager:
     """
     Универсальный менеджер для запуска HTTP серверов в pytest.
-    
+
     Аналог SessionWorkerManager но для uvicorn серверов.
     Запускает сервер один раз на всю сессию тестов с поддержкой pytest-xdist.
-    
+
     Пример использования:
         manager = SessionServerManager(
             name="RAG",
@@ -719,13 +716,13 @@ class SessionServerManager:
             port=8004,
             startup_wait=2.0
         )
-        
+
         @pytest.fixture(scope="session")
         def rag_server():
             with manager.start():
                 yield
     """
-    
+
     def __init__(
         self,
         name: str,
@@ -767,7 +764,7 @@ class SessionServerManager:
         # timeout=60 даёт массовый filelock.Timeout при параллельном старте flows на 9001.
         _lock_timeout_sec = max(300, int(startup_wait) + 180)
         self.lock = FileLock(self.lock_file, timeout=_lock_timeout_sec)
-    
+
     def _cleanup_old_processes(self):
         """Убивает старые процессы сервера перед запуском."""
         print(f"🧹 Очистка старых {self.name} server процессов...")
@@ -779,35 +776,35 @@ class SessionServerManager:
         )
 
         print(f"✅ Старые {self.name} server процессы очищены")
-    
+
     def _increment_ref_count(self) -> int:
         """Увеличивает счетчик ссылок"""
         if self.ref_count_path.exists():
             count = int(self.ref_count_path.read_text().strip())
         else:
             count = 0
-        
+
         count += 1
         self.ref_count_path.write_text(str(count))
-        
+
         return count
-    
+
     def _decrement_ref_count(self) -> int:
         """Уменьшает счетчик ссылок"""
         if self.ref_count_path.exists():
             count = int(self.ref_count_path.read_text().strip())
         else:
             return 0
-        
+
         count = max(0, count - 1)
-        
+
         if count > 0:
             self.ref_count_path.write_text(str(count))
         else:
             self.ref_count_path.unlink(missing_ok=True)
-        
+
         return count
-    
+
     def _check_existing_server(self) -> bool:
         """Проверяет существующий server"""
         if self.pid_path.exists():
@@ -823,7 +820,7 @@ class SessionServerManager:
                 self.pid_path.unlink(missing_ok=True)
                 self.ref_count_path.unlink(missing_ok=True)
         return False
-    
+
     def _wait_for_port(
         self,
         timeout: float = 30.0,
@@ -840,7 +837,7 @@ class SessionServerManager:
             except (socket.error, OSError):
                 time.sleep(0.1)
         return False
-    
+
     def _wait_port_free(self, timeout: float = 5.0) -> bool:
         """Ждёт пока порт станет свободен для bind."""
         deadline = time.monotonic() + timeout
@@ -893,7 +890,7 @@ class SessionServerManager:
 
         server_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
         server_err = open(self.err_file, "w", buffering=1, encoding="utf-8", errors="replace")
-        
+
         command = [
             sys.executable, "-m", "uvicorn",
             self.app_path,
@@ -901,7 +898,7 @@ class SessionServerManager:
             "--port", str(self.port),
             "--log-level", "error"
         ]
-        
+
         full_env = {**os.environ, **self.env, "PYTHONUNBUFFERED": "1"}
         full_env.pop("PYTEST_XDIST_WORKER", None)
         full_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
@@ -943,12 +940,12 @@ class SessionServerManager:
                 f"{self.name} server died after port became available. "
                 f"Error log:\n{err_content}"
             )
-        
+
         self.pid_path.write_text(str(server_process.pid))
         print(f"✅ {self.name} server started (PID: {server_process.pid}, port: {self.port})")
-        
+
         return server_process
-    
+
     def _stop_server(self, pid: int):
         """Останавливает server и ждёт пока порт освободится."""
         print(f"🛑 Останавливаем {self.name} server (PID: {pid}, последний ref)...")
@@ -967,18 +964,16 @@ class SessionServerManager:
         self.pid_path.unlink(missing_ok=True)
         self._wait_port_free(timeout=3.0)
         print(f"✅ {self.name} server stopped (PID: {pid})")
-    
+
     def start(self):
         """
         Контекстный менеджер для запуска server.
-        
+
         Usage:
             with manager.start():
                 yield
         """
-        server_process = None
-        is_owner = False
-        
+
         with self.lock:
             if self._check_existing_server():
                 existing_pid = int(self.pid_path.read_text().strip())
@@ -988,17 +983,16 @@ class SessionServerManager:
                     f"(PID: {existing_pid}, port: {self.port}, refs: {ref_count})"
                 )
             else:
-                is_owner = True
                 self.ref_count_path.write_text("1")
-                server_process = self._start_server()
-        
+                self._start_server()
+
         class _ServerContext:
             def __init__(ctx_self, manager):
                 ctx_self.manager = manager
-            
+
             def __enter__(ctx_self):
                 return None
-            
+
             def __exit__(ctx_self, exc_type, exc_val, exc_tb):
                 with ctx_self.manager.lock:
                     ref_count = ctx_self.manager._decrement_ref_count()
@@ -1012,5 +1006,5 @@ class SessionServerManager:
                             f"✅ {ctx_self.manager.name} server сохранен "
                             f"(осталось refs: {ref_count})"
                         )
-        
+
         return _ServerContext(self)

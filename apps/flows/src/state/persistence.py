@@ -10,9 +10,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_CHANNEL
-
-from core.state import ExecutionState
 from core.logging import get_logger
+from core.state import ExecutionState
 
 if TYPE_CHECKING:
     from apps.flows.src.db import BaseStateRepository
@@ -47,7 +46,7 @@ def create_initial_state(
 class StateManager:
     """
     Менеджер состояния сессий.
-    
+
     Работает с ExecutionState напрямую.
     Получается через container.state_manager.
     """
@@ -97,11 +96,11 @@ class StateManager:
     async def get_messages(self, state: ExecutionState) -> List[Message]:
         """Получает историю сообщений из ExecutionState."""
         return list(state.messages)
-    
+
     def add_message(self, state: ExecutionState, message: Message) -> None:
         """Добавляет Message в ExecutionState."""
         state.messages.append(message)
-    
+
     def add_user_message(self, state: ExecutionState, content: str) -> None:
         """Добавляет сообщение пользователя в ExecutionState."""
         message = Message(
@@ -112,7 +111,7 @@ class StateManager:
             metadata={"node_id": MESSAGE_SOURCE_CHANNEL},
         )
         self.add_message(state, message)
-    
+
     def add_agent_message(self, state: ExecutionState, content: str) -> None:
         """Добавляет сообщение агента в ExecutionState."""
         message = Message(

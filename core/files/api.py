@@ -8,16 +8,15 @@
   GET    /{file_id}             — метаданные файла
 """
 
-from core.logging import get_logger
 import mimetypes
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
+import httpx
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from botocore.exceptions import ClientError
-import httpx
 
 from core.files.audio_transcode import AudioTranscodeError
 from core.files.http_range import RangeNotSatisfiableError
@@ -26,6 +25,7 @@ from core.files.processors import FileProcessor
 from core.files.reader.service import FileReadError
 from core.files.s3_client import S3ClientFactory
 from core.files.streaming import stream_s3_file
+from core.logging import get_logger
 
 from .read_preview import build_stored_file_text_preview
 

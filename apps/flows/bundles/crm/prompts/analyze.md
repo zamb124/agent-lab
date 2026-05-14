@@ -33,7 +33,7 @@
 {if entity_type.fields}
   Поля `attributes` для этого типа:
   {for field in entity_type.fields}
-  - `{field.name}` ({field.label}){if field.required} [обязательное]{endif}{if field.description}: {field.description}{endif}{if field.values} Допустимые значения: {field.values}{endif}
+  - `{field.name}` ({field.label}){if field.required} [обязательное]{endif}{if field.type} [{field.type}]{endif}{if field.description}: {field.description}{endif}{if field.values} Допустимые значения: {field.values}{endif}
   {endfor}
 {endif}
 {endfor}

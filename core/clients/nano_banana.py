@@ -7,14 +7,13 @@ Nano Banana клиент для генерации изображений чер
 
 import base64
 import json
-
-from core.logging import get_logger
 import re
 from typing import TYPE_CHECKING, List, Optional
 
 from core.clients.llm.factory import get_llm
 from core.config import get_settings
 from core.files.s3_client import S3ClientFactory
+from core.logging import get_logger
 
 if TYPE_CHECKING:
     from core.db.storage import Storage
@@ -58,13 +57,13 @@ class NanoBananaClient:
     ) -> List[str]:
         """
         Генерирует изображения через LLM с multimodal output.
-        
+
         Args:
             prompt: Текстовое описание для генерации
             reference_file_ids: ID файлов-референсов
             num_images: Количество изображений
             is_editing: Режим редактирования
-            
+
         Returns:
             Список file_id сгенерированных изображений
         """

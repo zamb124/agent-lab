@@ -1,7 +1,7 @@
 """Календарные поля у гостевых ссылок и индекс по calendar_event_id."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "sync_0011"
 down_revision = "sync_0010"

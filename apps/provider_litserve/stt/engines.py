@@ -184,7 +184,10 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter):
 
     def load(self, hf_model_id: str, revision: str | None) -> tuple[Any, Any]:
         try:
-            from transformers import AutoModelForCTC, AutoProcessor  # type: ignore[import-not-found]
+            from transformers import (  # type: ignore[import-not-found]
+                AutoModelForCTC,
+                AutoProcessor,
+            )
         except ImportError as exc:
             raise RuntimeError(
                 "STT huggingface_ctc: установите transformers (uv sync --group rag)"

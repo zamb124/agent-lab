@@ -2,48 +2,47 @@
 Базовая конфигурация приложения.
 """
 
-from core.logging import get_logger
-from typing import Any, Dict, Optional, Self
+from typing import Self
 
 from pydantic import ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings as PydanticBaseSettings
 
 from core.config.loader import load_merged_config
-
 from core.config.models import (
     AuthConfig,
+    BillingConfig,
+    CalendarSyncConfig,
     CallsConfig,
     DatabaseConfig,
-    ServerConfig,
-    WorkerConfig,
+    LegalConfig,
+    LLMConfig,
     LoggingConfig,
-    TelegramConfig,
-    WhatsAppConfig,
+    MediaTranscriberConfig,
     NanoBananaConfig,
-    ProxyConfig,
     PaymentProvidersConfig,
     ProviderLitserveConfig,
-    RAGConfig,
-    SGRConfig,
-    LegalConfig,
+    ProxyConfig,
     PublicSiteConfig,
-    TracingConfig,
-    BillingConfig,
-    TasksConfig,
-    CalendarSyncConfig,
-    S3Config,
-    LLMConfig,
     PushConfig,
+    RAGConfig,
+    S3Config,
+    ServerConfig,
+    SGRConfig,
     SpeechProvidersConfig,
-    MediaTranscriberConfig,
+    TasksConfig,
+    TelegramConfig,
+    TracingConfig,
+    WhatsAppConfig,
+    WorkerConfig,
 )
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class BaseSettings(PydanticBaseSettings):
     """
     Базовые настройки приложения.
     Наследуют все сервисы для добавления специфичных полей.
-    
+
     Порядок приоритета (от низшего к высшему):
     1. Дефолты в коде
     2. base config.json
@@ -147,13 +146,13 @@ class _SettingsProxy:
     Всегда делегирует к текущему _settings_instance через get_settings().
     Позволяет импортировать settings на уровне модуля и получать актуальные значения.
     """
-    
+
     def __getattr__(self, name):
         return getattr(get_settings(), name)
-    
+
     def __repr__(self):
         return repr(get_settings())
-    
+
     def __str__(self):
         return str(get_settings())
 

@@ -5,7 +5,6 @@
 """
 
 import asyncio
-
 import uuid
 
 import pytest
@@ -19,10 +18,9 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
 )
-from a2a.utils.artifact import new_text_artifact
 from a2a.utils.message import new_agent_text_message
 
-from apps.flows.src.streaming.subscriber import is_final_event, TERMINAL_STATES
+from apps.flows.src.streaming.subscriber import TERMINAL_STATES, is_final_event
 
 
 class TestIsFinalEvent:
@@ -70,7 +68,7 @@ class TestIsFinalEvent:
 
     def test_working_final_is_not_final(self):
         """state=working + final=True -> НЕ финальное событие.
-        
+
         Это ключевой тест! При tool_call LLM эмитит working+final=True,
         но агент продолжает работу после выполнения tool.
         """
@@ -104,8 +102,8 @@ class TestIsFinalEvent:
 
     def test_artifact_update_is_not_final(self):
         """TaskArtifactUpdateEvent никогда не финальное."""
-        from a2a.types import Artifact, Part, TextPart
-        
+        from a2a.types import Artifact
+
         artifact = Artifact(
             artifactId="test-id",
             parts=[Part(root=TextPart(text="test"))],
@@ -136,9 +134,9 @@ class TestStreamingWithToolCalls:
     @pytest.fixture
     def redis_client(self):
         """Создает Redis клиент для тестов."""
-        from core.clients import RedisClient
         from apps.flows.config import get_settings
-        
+        from core.clients import RedisClient
+
         settings = get_settings()
         return RedisClient(settings.database.redis_url)
 
@@ -146,23 +144,24 @@ class TestStreamingWithToolCalls:
     async def test_subscriber_continues_after_working_final(self, redis_client):
         """
         Подписчик НЕ прекращает подписку при working+final=True.
-        
+
         Сценарий:
         1. LLM решает вызвать tool -> working + final=True
         2. Tool выполняется
         3. LLM отвечает -> completed + final=True
-        
+
         Подписчик должен дождаться completed, а не прекратить на working.
         """
-        from a2a.types import Artifact, Part, TextPart
+        from a2a.types import Artifact
+
         from apps.flows.src.streaming import Emitter, EventSubscriber
         from core.state import ExecutionState
-        
+
         await redis_client.connect()
-        
+
         task_id = "test-tool-call-flow"
         context_id = "test-context"
-        
+
         state = ExecutionState.create(
             task_id=task_id,
             context_id=context_id,
@@ -171,18 +170,18 @@ class TestStreamingWithToolCalls:
         )
         emitter = Emitter(redis_client, state)
         subscriber = EventSubscriber(redis_client)
-        
+
         ready_event = asyncio.Event()
         collected_events = []
-        
+
         async def collect():
             async for event in subscriber.subscribe(task_id, timeout=5.0, ready_event=ready_event):
                 collected_events.append(event)
-        
+
         async def emit_sequence():
             await ready_event.wait()
             await asyncio.sleep(0.05)
-            
+
             # 1. Промежуточное событие: tool call (working + final=True)
             tool_call_msg = Message(
                 message_id=str(uuid.uuid4()),
@@ -196,7 +195,7 @@ class TestStreamingWithToolCalls:
                 status=TaskStatus(state=TaskState.working, message=tool_call_msg),
                 final=True,  # Раньше это прекращало подписку!
             ))
-            
+
             # 2. Текстовые чанки от LLM
             artifact1 = Artifact(
                 artifactId="art1",
@@ -209,7 +208,7 @@ class TestStreamingWithToolCalls:
                 append=True,
                 last_chunk=False,
             ))
-            
+
             artifact2 = Artifact(
                 artifactId="art2",
                 parts=[Part(root=TextPart(text="42"))],
@@ -221,7 +220,7 @@ class TestStreamingWithToolCalls:
                 append=True,
                 last_chunk=True,
             ))
-            
+
             # 3. Финальное событие (completed + final=True)
             await emitter.emit(TaskStatusUpdateEvent(
                 contextId=context_id,
@@ -229,21 +228,21 @@ class TestStreamingWithToolCalls:
                 status=TaskStatus(state=TaskState.completed, message=new_agent_text_message("Done")),
                 final=True,
             ))
-        
+
         try:
             await asyncio.gather(collect(), emit_sequence())
-            
+
             # Проверяем что получили ВСЕ события, а не только первое
             assert len(collected_events) == 4
-            
+
             # Первое - working (tool call)
             assert isinstance(collected_events[0], TaskStatusUpdateEvent)
             assert collected_events[0].status.state == TaskState.working
-            
+
             # Второе и третье - artifact updates
             assert isinstance(collected_events[1], TaskArtifactUpdateEvent)
             assert isinstance(collected_events[2], TaskArtifactUpdateEvent)
-            
+
             # Последнее - completed (финальное)
             assert isinstance(collected_events[3], TaskStatusUpdateEvent)
             assert collected_events[3].status.state == TaskState.completed

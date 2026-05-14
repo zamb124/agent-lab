@@ -27,6 +27,8 @@ from apps.frontend.models import (
     CustomProviderUpdate,
 )
 from core.company_ai import (
+    METADATA_KEY,
+    PLATFORM_LLM_PROVIDERS,
     AICapability,
     CompanyAIProviders,
     CompanyCustomOpenAICompatibleProvider,
@@ -34,8 +36,6 @@ from core.company_ai import (
     CompanyLLMOverride,
     CompanyRerankOverride,
     CompanyVoiceOverride,
-    METADATA_KEY,
-    PLATFORM_LLM_PROVIDERS,
     encrypt_secret,
     mask_encrypted_secret,
     platform_default_model,
@@ -45,9 +45,9 @@ from core.company_ai import (
     resolve_rerank_for_company,
     resolve_voice_for_company,
 )
-from core.context import set_context, clear_context
-from core.models.context_models import Context
+from core.context import clear_context, set_context
 from core.logging import get_logger
+from core.models.context_models import Context
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/settings/ai-providers", tags=["settings", "ai-providers"])

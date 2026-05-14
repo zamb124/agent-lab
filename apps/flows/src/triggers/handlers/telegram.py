@@ -12,15 +12,15 @@ from typing import Any, Dict, List, Optional
 
 from apps.flows.config import get_settings as flows_get_settings
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
-from core.http import ProxyStrategy, get_httpx_client
 from apps.flows.src.triggers.executor import TriggerExecutor
-from apps.flows.src.triggers.verify_draft import normalize_telegram_bot_token_for_api
 from apps.flows.src.triggers.handlers.base import (
     BaseTriggerHandler,
     TriggerRegistrationError,
     TriggerValidationError,
 )
+from apps.flows.src.triggers.verify_draft import normalize_telegram_bot_token_for_api
 from core.config import get_settings
+from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -31,7 +31,7 @@ _TELEGRAM_WEBHOOK_UPDATE_WHITELIST = frozenset({"message", "callback_query"})
 class TelegramTriggerHandler(BaseTriggerHandler):
     """
     Handler для Telegram Bot webhook триггеров.
-    
+
     Telegram конфиг:
     {
         "bot_token": "@var:my_bot_token",
@@ -40,7 +40,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         "commands": ["/start", "/help"],
         "allowed_updates": ["message", "callback_query"]
     }
-    
+
     output_mapping по умолчанию (context — не variables):
     {
         "content": "@trigger:message.text",
@@ -49,13 +49,13 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         "context.username": "@trigger:message.from.username"
     }
     """
-    
+
     trigger_type = TriggerType.TELEGRAM
-    
+
     def __init__(self, base_url: str):
         super().__init__(base_url)
         self._executor = TriggerExecutor()
-    
+
     async def register(
         self,
         flow_id: str,
@@ -63,16 +63,16 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     ) -> TriggerConfig:
         """
         Регистрирует Telegram webhook.
-        
+
         1. Извлекает bot_token из конфига
         2. Генерирует secret_token
         3. Вызывает setWebhook API
         """
         self._log_register(flow_id, trigger.trigger_id)
-        
+
         config = trigger.config
         bot_token = config.get("bot_token")
-        
+
         if not bot_token:
             raise TriggerRegistrationError(
                 trigger_type="telegram",
@@ -80,7 +80,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 trigger_id=trigger.trigger_id,
                 message="bot_token is required",
             )
-        
+
         if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
             bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.branch_id)
         bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
@@ -109,25 +109,25 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
         # Генерируем secret_token для верификации
         secret_token = secrets.token_urlsafe(32)
-        
+
         # Формируем webhook URL
         webhook_url = self.generate_webhook_url(flow_id, trigger.trigger_id)
-        
+
         allowed_updates = TelegramTriggerHandler.normalize_allowed_updates(
             flow_id, trigger.trigger_id, config
         )
         api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/setWebhook"
-        
+
         payload = {
             "url": webhook_url,
             "secret_token": secret_token,
             "allowed_updates": allowed_updates,
             "drop_pending_updates": config.get("drop_pending_updates", False),
         }
-        
+
         async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
             response = await client.post(api_url, json=payload)
-            
+
             if response.status_code != 200:
                 raise TriggerRegistrationError(
                     trigger_type="telegram",
@@ -135,9 +135,9 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                     trigger_id=trigger.trigger_id,
                     message=f"Telegram API error: {response.status_code} - {response.text}",
                 )
-            
+
             result = response.json()
-            
+
             if not result.get("ok"):
                 raise TriggerRegistrationError(
                     trigger_type="telegram",
@@ -145,23 +145,23 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                     trigger_id=trigger.trigger_id,
                     message=f"Telegram API returned: {result.get('description', 'Unknown error')}",
                 )
-        
+
         # Обновляем trigger с runtime данными
         trigger.webhook_url = webhook_url
         trigger.status = TriggerStatus.ACTIVE
         trigger.last_error = None
-        
+
         # Сохраняем secret_token в config для верификации
         trigger.config["_secret_token"] = secret_token
         trigger.config["_bot_token_resolved"] = bot_token
-        
+
         logger.info(
             f"Telegram webhook registered: flow_id={flow_id}, "
             f"trigger={trigger.trigger_id}, url={webhook_url}"
         )
-        
+
         return trigger
-    
+
     async def unregister(
         self,
         flow_id: str,
@@ -171,17 +171,17 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         Снимает Telegram webhook.
         """
         self._log_unregister(flow_id, trigger.trigger_id)
-        
+
         config = trigger.config
         bot_token = config.get("_bot_token_resolved") or config.get("bot_token")
-        
+
         if not bot_token:
             logger.warning(
                 f"No bot_token for unregister: flow_id={flow_id}, "
                 f"trigger={trigger.trigger_id}"
             )
             return
-        
+
         if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
             bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.branch_id)
         bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
@@ -194,11 +194,11 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
         from core.config import get_settings
         api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
-        
+
         try:
             async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
                 response = await client.post(api_url, json={"drop_pending_updates": True})
-                
+
                 if response.status_code == 200:
                     result = response.json()
                     if result.get("ok"):
@@ -216,7 +216,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                     )
         except Exception as e:
             logger.error(f"Error deleting Telegram webhook: {e}")
-    
+
     async def handle(
         self,
         flow_id: str,
@@ -225,27 +225,27 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     ) -> Dict[str, Any]:
         """
         Обрабатывает входящий Telegram Update.
-        
+
         1. Получает trigger конфиг
         2. Валидирует (allowed_users, commands)
         3. Запускает агента
         """
         from apps.flows.src.container import get_container
-        
+
         container = get_container()
         flow_config = await container.flow_repository.get(flow_id)
-        
+
         if not flow_config:
             raise TriggerValidationError(f"Flow not found: {flow_id}")
-        
+
         trigger = flow_config.triggers.get(trigger_id)
-        
+
         if not trigger:
             raise TriggerValidationError(f"Trigger not found: {trigger_id}")
-        
+
         if not trigger.enabled:
             raise TriggerValidationError(f"Trigger is disabled: {trigger_id}")
-        
+
         # Валидируем payload
         await self._validate_update(trigger, payload)
 
@@ -412,7 +412,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 trigger_id="",
                 message=str(e),
             ) from e
-    
+
     def verify_secret_token(
         self,
         trigger: TriggerConfig,

@@ -4,9 +4,8 @@ LitServe API реранкера: POST ``/v1/rerank``, тело ``{query, passage
 
 import litserve as ls
 
-from core.config.models import ProviderLitserveInfraConfig
-
 from apps.provider_litserve.shared import resolve_rerank_device, resolve_torch_device
+from core.config.models import ProviderLitserveInfraConfig
 
 from .engines import LocalRerankerEngine, parse_rerank_body
 

@@ -11,31 +11,32 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
-from core.clients.llm.model_routing import split_provider_prefixed_model
-from core.models import StrictBaseModel
-from core.urn import extract_id
 from apps.flows.src.constants.execution_limits import (
     get_graph_max_iterations,
     get_node_execution_wall_time_cap_seconds,
 )
+from core.clients.llm.model_routing import split_provider_prefixed_model
+from core.models import StrictBaseModel
+from core.urn import extract_id
+
 from .enums import NodeType
 from .exception_absorb_allow import ExceptionAbsorbAllowName
-from .tool_reference import ToolReference
 from .resource import ResourceReference
+from .tool_reference import ToolReference
 
 
 class ReactLoopMode(str, Enum):
     """Режим выхода из ReAct цикла"""
-    
+
     AUTO = "auto"  # Текст без tool_calls = финальный ответ (по умолчанию)
     EXPLICIT = "explicit"  # Выход только через exit_tool
 
 
 class ReactConfig(StrictBaseModel):
     """Конфигурация ReAct цикла для llm_node"""
-    
+
     loop_mode: ReactLoopMode = Field(
         default=ReactLoopMode.AUTO,
         description="Режим выхода: auto (текст = финал) или explicit (только через exit_tool)"
@@ -139,12 +140,12 @@ class NodeLLMOverride(StrictBaseModel):
 class NodeConfig(StrictBaseModel):
     """
     СТРОГАЯ конфигурация ноды.
-    
+
     Zero-Guess Architecture:
     - type: NodeType Enum (не str!)
     - description: обязательное поле
     - input_schema, output_schema для валидации data flow
-    
+
     Поддерживаемые типы:
     - NodeType.LLM_NODE: LLM агент с ReAct циклом
     - NodeType.CODE: выполнение кода (Python, JavaScript, Go)
@@ -161,36 +162,36 @@ class NodeConfig(StrictBaseModel):
     # ОБЯЗАТЕЛЬНЫЕ ПОЛЯ
     node_id: str = Field(..., description="Уникальный идентификатор ноды")
     type: NodeType = Field(..., description="Тип ноды - NodeType Enum")
-    
+
     name: str = Field(..., description="Название ноды")
-    
+
     @field_validator("node_id", mode="before")
     @classmethod
     def validate_node_id(cls, v: str) -> str:
         """Принимает URN или plain ID, извлекает ID."""
         return extract_id(v)
-    
+
     description: str = Field(default="", description="Описание ноды")
-    
+
     @field_validator("description", mode="before")
     @classmethod
     def validate_description(cls, v: Optional[str]) -> str:
         """Конвертирует None в пустую строку."""
         return v if v is not None else ""
-    
+
     # Data Flow контракт (опциональн, но рекомендуется)
     input_schema: Optional[Dict[str, Any]] = Field(default=None, description="JSON Schema входных данных")
     output_schema: Optional[Dict[str, Any]] = Field(default=None, description="JSON Schema выходных данных")
     tags: List[str] = Field(default_factory=list, description="Группы/категории")
-    
+
     # Для llm_node
     prompt: Optional[str] = Field(default=None, description="Системный промпт")
     tools: List[ToolReference] = Field(
         default_factory=list, description="Список инструментов"
     )
     llm_override: Optional[NodeLLMOverride] = Field(
-        default=None, 
-        description="Переопределение LLM настроек (если None - из global config)", 
+        default=None,
+        description="Переопределение LLM настроек (если None - из global config)",
         alias="llm"
     )
     llm_capability: Optional[
@@ -264,7 +265,7 @@ class NodeConfig(StrictBaseModel):
         raise ValueError(
             f"messages_filter: ожидается 'all', 'own' или список строк, получено {type(v).__name__}"
         )
-    
+
     # Structured Output (взаимоисключающе с tools)
     structured_output: bool = Field(
         default=False,
@@ -278,10 +279,10 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="Маппинг полей JSON -> state fields. Если None - поля записываются напрямую"
     )
-    
+
     # Для code-ноды (inline)
     code: Optional[str] = Field(default=None, description="Inline Python код")
-    
+
     # Ресурсы ноды
     resources: Dict[str, ResourceReference] = Field(
         default_factory=dict,
@@ -316,7 +317,7 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="Текст для пользователя; можно переопределить input_mapping.user_facing_message",
     )
-    
+
     # Общее
     local_variables: Dict[str, Any] = Field(
         default_factory=dict, description="Локальные переменные"
@@ -325,7 +326,7 @@ class NodeConfig(StrictBaseModel):
     source: str = Field(default="manual", description="Источник создания")
     created_at: Optional[datetime] = Field(default=None, description="Дата создания")
     updated_at: Optional[datetime] = Field(default=None, description="Дата обновления")
-    
+
     # Контроль доступа для UI
     public_fields: Optional[List[str]] = Field(
         default=None,

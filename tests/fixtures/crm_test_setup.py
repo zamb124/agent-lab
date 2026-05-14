@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import AbstractSet, Any
 
 from httpx import AsyncClient
 
@@ -67,6 +67,7 @@ async def ensure_entity_type_in_namespace(
                 "check_duplicates": bool(src.get("check_duplicates", True)),
                 "is_context_anchor": bool(src.get("is_context_anchor", False)),
                 "is_voice_target": bool(src.get("is_voice_target", False)),
+                "auto_resolve_suggests": bool(src.get("auto_resolve_suggests", False)),
             }
             create_response = await crm_client.post(
                 "/crm/api/v1/entity-types",
@@ -158,14 +159,25 @@ async def wait_for_crm_semantic_search_hit(
     namespace: str = "default",
     max_attempts: int = 60,
     delay_sec: float = 0.15,
+    required_entity_ids: AbstractSet[str] | None = None,
 ) -> None:
-    """Ждём, пока только что созданная сущность попадёт в pgvector (дедуп в analyze)."""
+    """Ждём, пока только что созданная сущность попадёт в pgvector (дедуп в analyze).
+
+    Для пары дубликатов передавайте ``required_entity_ids``: семантический хит по запросу
+    может вернуть одну сущность раньше второй; ``SuggestService`` ищет кандидатов через
+    ``search_with_similarity`` и без второй записи в индекте не создаёт suggest.
+    """
+    required: frozenset[str] | None = (
+        frozenset(required_entity_ids) if required_entity_ids else None
+    )
     for attempt in range(max_attempts):
         response = await crm_client.post(
             "/crm/api/v1/entities/query",
             json={
                 "query": query,
-                "search_mode": "hybrid",
+                # Дедуп в analyze использует только semantic (search_with_similarity), без FTS.
+                # Hybrid мог вернуть хит по тексту до готовности embedding — analyze тогда даёт create.
+                "search_mode": "semantic",
                 "entity_type": entity_type,
                 "namespace": namespace,
                 "limit": 5,
@@ -178,12 +190,27 @@ async def wait_for_crm_semantic_search_hit(
             )
         payload = response.json()
         items = payload.get("items", []) if isinstance(payload, dict) else []
-        if len(items) > 0:
-            return
-        await asyncio.sleep(delay_sec)
+        if len(items) == 0:
+            await asyncio.sleep(delay_sec)
+            continue
+        if required is not None:
+            found = {
+                str(item["entity_id"])
+                for item in items
+                if isinstance(item, dict) and item.get("entity_id") is not None
+            }
+            if not required.issubset(found):
+                await asyncio.sleep(delay_sec)
+                continue
+        return
     raise AssertionError(
         f"семантический поиск не увидел {entity_type!r} query={query!r} "
         f"за {max_attempts * delay_sec:.1f}s"
+        + (
+            f"; required_entity_ids={sorted(required)!r}"
+            if required is not None
+            else ""
+        )
     )
 
 

@@ -9,9 +9,9 @@ from core.clients.payment.base_provider import (
     PaymentResponse,
     WebhookVerificationResult,
 )
-from core.clients.payment.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
-from core.clients.payment.yukassa_provider import YuKassaProvider, YuKassaConfig
 from core.clients.payment.factory import PaymentProviderFactory
+from core.clients.payment.yoomoney_provider import YooMoneyConfig, YooMoneyProvider
+from core.clients.payment.yukassa_provider import YuKassaConfig, YuKassaProvider
 
 __all__ = [
     "BasePaymentProvider",

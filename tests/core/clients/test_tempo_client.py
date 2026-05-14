@@ -2,19 +2,19 @@
 Юнит-тесты для TempoClient: парсинг OTLP JSON и поведение при ошибках.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from core.clients.tempo_client import (
     TempoClient,
     TempoClientError,
-    parse_otlp_trace,
     _bytes_to_hex,
-    _parse_otlp_attributes,
-    _ns_to_iso,
     _normalize_status,
+    _ns_to_iso,
+    _parse_otlp_attributes,
+    parse_otlp_trace,
 )
-
 
 # ---------------------------------------------------------------------------
 # _bytes_to_hex

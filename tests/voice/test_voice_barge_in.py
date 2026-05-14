@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from apps.voice.services.voice_barge_in import BargeInController
 
 

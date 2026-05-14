@@ -84,7 +84,7 @@ async def test_run_reembed_round_embeds_chunk_for_solvent_company(
     )
     target = rag_provider_pgvector.embedding_model_name()
 
-    written = await _run_reembed_round(
+    written, by_company_written = await _run_reembed_round(
         provider=rag_provider_pgvector,
         company_repository=frontend_container.company_repository,
         user_repository=frontend_container.user_repository,
@@ -94,6 +94,7 @@ async def test_run_reembed_round_embeds_chunk_for_solvent_company(
         channel="test_worker",
     )
     assert written >= 1
+    assert by_company_written.get(cid, 0) >= 1
     model, has_emb, exists = await _chunk_state(sf, chunk_id)
     assert exists is True
     assert model == target
@@ -113,7 +114,7 @@ async def test_run_reembed_round_skips_low_balance_company(
         sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="stays stale",
     )
     target = rag_provider_pgvector.embedding_model_name()
-    await _run_reembed_round(
+    _, _ = await _run_reembed_round(
         provider=rag_provider_pgvector,
         company_repository=frontend_container.company_repository,
         user_repository=frontend_container.user_repository,
@@ -148,7 +149,7 @@ async def test_run_reembed_round_skips_company_without_billing_owner(
         sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="no owner stale",
     )
     target = rag_provider_pgvector.embedding_model_name()
-    await _run_reembed_round(
+    _, _ = await _run_reembed_round(
         provider=rag_provider_pgvector,
         company_repository=frontend_container.company_repository,
         user_repository=frontend_container.user_repository,
@@ -176,7 +177,7 @@ async def test_run_reembed_round_skips_chunk_with_missing_company(
         content="dangling company stale",
     )
     target = rag_provider_pgvector.embedding_model_name()
-    await _run_reembed_round(
+    _, _ = await _run_reembed_round(
         provider=rag_provider_pgvector,
         company_repository=frontend_container.company_repository,
         user_repository=frontend_container.user_repository,
@@ -213,7 +214,7 @@ async def test_run_reembed_round_one_bad_company_does_not_fail_others(
     await _insert_stale_chunk(sf, chunk_id=chunk_good, namespace_id=ns,
                               company_id=cid_good, content="good group")
     target = rag_provider_pgvector.embedding_model_name()
-    await _run_reembed_round(
+    _, _ = await _run_reembed_round(
         provider=rag_provider_pgvector,
         company_repository=frontend_container.company_repository,
         user_repository=frontend_container.user_repository,
@@ -270,6 +271,8 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     )
     assert result["skipped"] is False
     assert result["reembedded"] >= 1
+    assert isinstance(result.get("by_company_written"), dict)
+    assert result["by_company_written"].get(cid, 0) >= 1
     target = result["target_embedding_model"]
     model, has_emb, _ = await _chunk_state(sf, chunk_id)
     assert model == target

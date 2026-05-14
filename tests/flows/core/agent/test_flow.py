@@ -4,8 +4,8 @@
 Архитектура: nodes + edges + conditions
 """
 
+
 import pytest
-from typing import Any, Dict
 
 from apps.flows.src.runtime.flow import Flow, FlowInfiniteLoopError
 from apps.flows.src.runtime.nodes import (
@@ -392,8 +392,8 @@ class TestFlowWithEdges:
             ],
         )
 
-        from core.state import ExecutionState
         from core.errors import NodeCallLimitError
+        from core.state import ExecutionState
         with pytest.raises((FlowInfiniteLoopError, NodeCallLimitError)):
             await flow.run(ExecutionState(
                 task_id="test-task",
@@ -455,8 +455,8 @@ class TestFlowWithEdges:
             nodes=nodes,
             edges=[{"from": "loop", "to": "loop"}],
         )
-        from core.state import ExecutionState
         from core.errors import NodeCallLimitError
+        from core.state import ExecutionState
 
         with pytest.raises(NodeCallLimitError) as exc_info:
             await flow.run(
@@ -486,8 +486,8 @@ class TestFlowWithEdges:
                 {"from": "b", "to": "a"},
             ],
         )
-        from core.state import ExecutionState
         from core.errors import FlowInfiniteLoopError
+        from core.state import ExecutionState
 
         with pytest.raises(FlowInfiniteLoopError):
             await flow.run(
@@ -514,8 +514,8 @@ class TestFlowWithEdges:
             nodes=nodes,
             edges=[{"from": "nc", "to": "nc"}],
         )
-        from core.state import ExecutionState
         from core.errors import NodeCallLimitError
+        from core.state import ExecutionState
 
         with pytest.raises(NodeCallLimitError) as exc_info:
             await flow.run(

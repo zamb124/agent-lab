@@ -2,10 +2,10 @@
 Контейнер зависимостей office.
 """
 
-from core.logging import get_logger
 from typing import Optional
 
 from core.container import BaseContainer, lazy
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class OfficeContainer(BaseContainer):

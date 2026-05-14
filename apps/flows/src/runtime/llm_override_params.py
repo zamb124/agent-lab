@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from apps.flows.src.models.node_config import NodeLLMOverride
-from core.variables import VarResolver, VariableResolutionError
+from core.variables import VariableResolutionError, VarResolver
 
 if TYPE_CHECKING:
     from core.state import ExecutionState

@@ -6,13 +6,13 @@ API для получения результатов evaluation.
 """
 
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from core.pagination import OffsetPage
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import EvaluationResult
+from core.pagination import OffsetPage
 
 router = APIRouter(tags=["evaluation"])
 

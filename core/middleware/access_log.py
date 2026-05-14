@@ -37,7 +37,6 @@ from core.logging.attributes import (
     LOG_REQUEST_ID,
 )
 
-
 REQUEST_ID_HEADER = "X-Request-Id"
 TRACE_ID_HEADER = "X-Trace-Id"
 

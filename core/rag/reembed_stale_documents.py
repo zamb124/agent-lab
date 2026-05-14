@@ -74,13 +74,14 @@ async def execute_reembed_tick(
             "skipped": True,
             "scheduler_task_id": scheduler_task_id,
             "reembedded": 0,
+            "by_company_written": {},
         }
 
     provider: _StaleReembedProvider = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
     target_model = provider.embedding_model_name()
     batch_size = reembed_cfg.reembed_batch_size
 
-    reembedded = await _run_reembed_round(
+    reembedded, by_company_written = await _run_reembed_round(
         provider=provider,
         company_repository=container.company_repository,
         user_repository=container.user_repository,
@@ -105,6 +106,7 @@ async def execute_reembed_tick(
         "target_embedding_model": target_model,
         "batch_size": batch_size,
         "reembedded": reembedded,
+        "by_company_written": by_company_written,
     }
 
 
@@ -117,7 +119,7 @@ async def _run_reembed_round(
     target_embedding_model: str,
     scheduler_task_id: str,
     channel: str,
-) -> int:
+) -> tuple[int, dict[str, int]]:
     """Один SELECT batch_size кандидатов + группировка по company_id + embed-write."""
     if batch_size <= 0:
         raise ValueError("_run_reembed_round: batch_size должен быть > 0")
@@ -127,7 +129,7 @@ async def _run_reembed_round(
         target_embedding_model=target_embedding_model,
     )
     if not rows:
-        return 0
+        return 0, {}
 
     groups: Dict[str, List[Tuple[str, str]]] = defaultdict(list)
     for doc_id, content, cid in rows:
@@ -136,6 +138,7 @@ async def _run_reembed_round(
     billing = get_billing_service()
     embedding_service = provider.embedding_service
     total_written = 0
+    by_company_written: dict[str, int] = defaultdict(int)
 
     for cid in sorted(groups.keys()):
         slice_pairs = groups[cid]
@@ -194,7 +197,8 @@ async def _run_reembed_round(
                 target_embedding_model,
             )
             total_written += written
+            by_company_written[cid] += written
         finally:
             clear_context()
 
-    return total_written
+    return total_written, dict(by_company_written)

@@ -48,7 +48,7 @@ async def sync_llm_models_task(
 ) -> dict[str, int]:
     """Синхронизирует модели от всех настроенных LLM провайдеров."""
     container = get_container()
-    
+
     # Создаём системный контекст для доступа к сервису
     scheduler_context = await _build_scheduler_auth_context(
         container=container,
@@ -56,7 +56,7 @@ async def sync_llm_models_task(
         session_id=f"sync_llm_models:{scheduler_task_id}",
     )
     set_context(scheduler_context)
-    
+
     try:
         result = await container.llm_models_service.sync_all_providers()
         total_synced = sum(result.values())

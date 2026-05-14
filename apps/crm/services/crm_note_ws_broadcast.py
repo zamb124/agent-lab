@@ -19,8 +19,7 @@ notification-center, второй — про обновление доменно
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, TypedDict, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Any, Literal, Optional, TypedDict
 
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
@@ -31,8 +30,8 @@ from core.ui_events import publish_ui_event_to_user
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 if TYPE_CHECKING:
-    from core.db.repositories import CompanyRepository
     from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
+    from core.db.repositories import CompanyRepository
 
 logger = get_logger(__name__)
 
@@ -47,6 +46,12 @@ class MarkdownFormatProgressPayload(TypedDict):
     chunks_total: int
 
 
+class DraftRepairProgressPayload(TypedDict):
+    """Дополнение payload при очереди/исполнении AI-починки черновика анализа."""
+
+    phase: Literal["started", "failed", "complete"]
+
+
 async def broadcast_crm_note_event(
     company_id: str,
     namespace: str,
@@ -58,6 +63,7 @@ async def broadcast_crm_note_event(
     access_grant_repository: "AccessGrantRepository",
     skip_notification_center: bool = False,
     markdown_format: MarkdownFormatProgressPayload | None = None,
+    draft_repair: DraftRepairProgressPayload | None = None,
 ) -> None:
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
     recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
@@ -92,6 +98,8 @@ async def broadcast_crm_note_event(
     }
     if markdown_format is not None:
         ui_event_payload["markdown_format"] = markdown_format
+    if draft_repair is not None:
+        ui_event_payload["draft_repair"] = draft_repair
     for user_id in recipient_user_ids:
         if not skip_notification_center:
             await notify_user(

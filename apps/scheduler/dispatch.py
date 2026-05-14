@@ -15,14 +15,14 @@ from taskiq.kicker import AsyncKicker
 from taskiq.scheduler.scheduled_task import ScheduledTask
 from taskiq.utils import maybe_awaitable
 
-from core.logging import get_logger
-from core.logging.attributes import EVENT_TASK_SCHEDULED
-from core.scheduler.source import get_schedule_source
 from apps.crm_worker.broker import broker as crm_broker
 from apps.flows_worker.broker import broker as flows_broker
 from apps.idle_worker.broker import broker as idle_broker
 from apps.rag_worker.broker import broker as rag_broker
 from apps.sync.realtime.broker import broker as sync_broker
+from core.logging import get_logger
+from core.logging.attributes import EVENT_TASK_SCHEDULED
+from core.scheduler.source import get_schedule_source
 
 logger = get_logger(__name__)
 
@@ -154,20 +154,20 @@ def _resolve_queue_name(task_name: str) -> str:
 def create_scheduler(redis_url: str) -> TaskiqScheduler:
     """
     Создает TaskiqScheduler с RedisScheduleSource.
-    
+
     Args:
         redis_url: URL Redis для schedule source
-        
+
     Returns:
         TaskiqScheduler
     """
     source = get_schedule_source(redis_url)
-    
+
     scheduler = QueueAwareTaskiqScheduler(
         broker=flows_broker,
         sources=[source],
     )
-    
+
     logger.info("task.scheduler_created")
     return scheduler
 

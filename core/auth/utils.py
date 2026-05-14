@@ -72,7 +72,7 @@ def generate_access_token(
         "session_id": session_id,
         "exp": expire,
     }
-    
+
     if grps:
         payload["grps"] = grps
 

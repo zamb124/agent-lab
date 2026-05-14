@@ -3,20 +3,20 @@ API для управления namespaces.
 """
 
 import asyncio
-from typing import List, Optional
 import traceback
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from core.logging import get_logger
-from core.pagination import OffsetPage
-from core.rag.models import RAGNamespace
-from core.context import get_context
-from core.models.identity_models import Namespace
-from core.rag.factory import get_rag_provider
-from core.billing.exceptions import BillingBalanceBlockedError
 from apps.rag.config import get_rag_settings
+from core.billing.exceptions import BillingBalanceBlockedError
+from core.context import get_context
+from core.logging import get_logger
+from core.models.identity_models import Namespace
+from core.pagination import OffsetPage
+from core.rag.factory import get_rag_provider
+
 from ..dependencies import ContainerDep
 
 logger = get_logger(__name__)
@@ -67,27 +67,27 @@ async def create_namespace(
 ) -> Namespace:
     """
     Создает новый namespace для текущей компании.
-    
+
     Args:
         request: Данные для создания namespace
         provider: Имя провайдера (опционально)
-    
+
     Returns:
         Созданный namespace
     """
     try:
         context = get_context()
         company_id = context.active_company.company_id
-        
+
         settings = get_rag_settings()
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
-        
+
         # Провайдер сам добавит company_id через контекст
-        rag_namespace = await rag_provider.create_namespace(
+        await rag_provider.create_namespace(
             name=request.name,
             description=request.description
         )
-        
+
         namespace_repo = container.namespace_repository
         namespace = Namespace(
             name=request.name,
@@ -95,7 +95,7 @@ async def create_namespace(
             description=request.description
         )
         await namespace_repo.set(namespace)
-        
+
         logger.info(f"Создан namespace: {request.name} для компании {company_id}")
 
         return namespace
@@ -116,31 +116,31 @@ async def delete_namespace(
 ):
     """
     Удаляет namespace и все его документы.
-    
+
     Args:
         namespace_id: ID namespace для удаления
         provider: Имя провайдера (опционально)
-    
+
     Returns:
         Результат операции
     """
     try:
         context = get_context()
         company_id = context.active_company.company_id
-        
+
         settings = get_rag_settings()
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         namespace_repo = container.namespace_repository
-        
+
         # Удаляем документы из провайдера (может не быть, если namespace пустой)
         provider_deleted = await rag_provider.delete_namespace(namespace_id)
-        
+
         # Проверяем, существует ли namespace в репозитории
         ns_from_repo = await namespace_repo.get(namespace_id)
-        
+
         if not provider_deleted and not ns_from_repo:
             raise HTTPException(status_code=404, detail="Namespace not found")
-        
+
         await namespace_repo.delete(namespace_id)
 
         logger.info(f"Удален namespace: {namespace_id} для компании {company_id}")

@@ -2,24 +2,26 @@
 Фабрика для создания Context.
 """
 
-from core.logging import get_logger
-from typing import Optional, List
+from typing import List, Optional
 
 from fastapi import HTTPException, Request
 
 from core.context import clear_context, set_context
+from core.logging import get_logger
 from core.models.context_models import Context
-from core.models.identity_models import User, Company, UserStatus, AuthProvider
 from core.models.i18n_models import Language
+from core.models.identity_models import AuthProvider, Company, User, UserStatus
 from core.utils.tokens import TokenData
 
 logger = get_logger(__name__)
+
+
 class ContextFactory:
     """Единая фабрика для создания Context"""
-    
+
     def __init__(self, container):
         self.container = container
-    
+
     async def create(
         self,
         request: Request,
@@ -33,7 +35,7 @@ class ContextFactory:
     ) -> Context:
         """
         Создает Context для запроса.
-        
+
         Args:
             request: FastAPI Request
             context_type: Тип контекста (frontend, api, webhook, anonymous)
@@ -46,7 +48,7 @@ class ContextFactory:
         """
         language = self._detect_language(request)
         host = request.headers.get("host", "")
-        
+
         # Если анонимный контекст, но пользователь есть - используем его
         if context_type == "anonymous" and not user:
             return await self._create_anonymous_context(request, company, language, trace_id)
@@ -83,7 +85,7 @@ class ContextFactory:
             )
 
         user_companies = await self._get_user_companies(user) if user else []
-        
+
         metadata = {
             "context_type": context_type,
             "authenticated": user is not None,
@@ -93,8 +95,18 @@ class ContextFactory:
             metadata["platform"] = platform
 
         active_namespace = await self._resolve_active_namespace(
-            request, company, user, user_companies, language, host, metadata, token_data,
-            auth_token, trace_id, platform, context_type,
+            request,
+            company,
+            user,
+            user_companies,
+            language,
+            host,
+            metadata,
+            token_data,
+            auth_token,
+            trace_id,
+            platform,
+            context_type,
         )
 
         return Context(
@@ -111,7 +123,7 @@ class ContextFactory:
             trace_id=trace_id,
             container=self.container,
         )
-    
+
     async def _create_anonymous_context(
         self,
         request: Request,
@@ -121,7 +133,7 @@ class ContextFactory:
     ) -> Context:
         """Создает анонимный контекст"""
         company_id = company.company_id if company else "system"
-        
+
         anonymous_user = User(
             user_id="anonymous",
             provider=AuthProvider.YANDEX,
@@ -133,7 +145,7 @@ class ContextFactory:
             companies={company_id: ["guest"]},
             active_company_id=company_id,
         )
-        
+
         active_namespace = await self._resolve_active_namespace(
             request,
             company,
@@ -224,31 +236,33 @@ class ContextFactory:
             if company:
                 companies.append(company)
         return companies
-    
+
     def _detect_language(self, request: Request) -> Language:
         """Определяет язык пользователя"""
         # 1. HTMX Accept-Language header (highest priority)
-        htmx_lang = (request.headers.get('Accept-Language') or '').lower()
+        htmx_lang = (request.headers.get("Accept-Language") or "").lower()
         if htmx_lang:
             for lang in Language:
                 if lang.value == htmx_lang:
                     return lang
-        
+
         # 2. Cookie language
-        language_cookie = (request.cookies.get('language') or '').lower()
+        language_cookie = (request.cookies.get("language") or "").lower()
         if language_cookie:
             for lang in Language:
                 if lang.value == language_cookie:
                     return lang
-        
+
         # 3. Browser Accept-Language header
-        accept_lang = (request.headers.get('accept-language') or '').lower()
+        accept_lang = (request.headers.get("accept-language") or "").lower()
         if accept_lang:
-            languages = [l.split(';')[0].split('-')[0].strip() for l in accept_lang.split(',')]
+            languages = [
+                lang_part.split(";")[0].split("-")[0].strip()
+                for lang_part in accept_lang.split(",")
+            ]
             for browser_lang in languages:
                 for lang in Language:
                     if lang.value == browser_lang:
                         return lang
-        
-        return Language.EN
 
+        return Language.EN

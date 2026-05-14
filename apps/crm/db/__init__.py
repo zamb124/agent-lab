@@ -7,15 +7,16 @@ CRM Database - модели и репозитории.
 - Агрегаций и сортировки
 """
 
+from apps.crm.db.base import BaseCRMRepository, CRMDatabase, get_crm_db
 from apps.crm.db.models import (
-    Base,
-    EntityType,
-    RelationshipType,
-    Relationship,
-    CompanyMapping,
     AccessRequest,
+    Base,
+    CompanyMapping,
+    CRMSuggest,
+    EntityType,
+    Relationship,
+    RelationshipType,
 )
-from apps.crm.db.base import CRMDatabase, BaseCRMRepository, get_crm_db
 
 __all__ = [
     # Models
@@ -25,6 +26,7 @@ __all__ = [
     "Relationship",
     "CompanyMapping",
     "AccessRequest",
+    "CRMSuggest",
     # Database
     "CRMDatabase",
     "BaseCRMRepository",

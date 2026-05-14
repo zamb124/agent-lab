@@ -18,15 +18,16 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
+from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.models import StrictBaseModel
 from core.urn import extract_id
-from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
+
 from .enums import MergeMode, TestTargetType
+from .flow_speech_settings import FlowSpeechSettings
 from .resource import ResourceReference
 from .trigger_config import TriggerConfig
-from .flow_speech_settings import FlowSpeechSettings
 
 # Тип для permission: строка или список строк
 Permission = Optional[Union[str, List[str]]]
@@ -121,7 +122,7 @@ class CheckType(str, Enum):
 class InputConfig(StrictBaseModel):
     """
     Конфигурация входа теста.
-    
+
     Примеры:
     - {"type": "text", "value": "Привет"}
     - {"type": "inline_code", "value": "def generate(): return 'test'"}
@@ -133,7 +134,7 @@ class InputConfig(StrictBaseModel):
     node: Optional[Dict[str, Any]] = Field(
         default=None, description="Inline нода как dict (будет преобразована в NodeConfig)"
     )
-    
+
     @field_validator("node", mode="before")
     @classmethod
     def convert_node_to_dict(cls, v):
@@ -152,7 +153,7 @@ class InputConfig(StrictBaseModel):
 class CheckConfig(StrictBaseModel):
     """
     Конфигурация проверки результата.
-    
+
     Примеры:
     - {"type": "string", "value": "contains:привет"}
     - {"type": "inline_code", "value": "def check(s,r): return 'ok' in r"}
@@ -164,7 +165,7 @@ class CheckConfig(StrictBaseModel):
     node: Optional[Dict[str, Any]] = Field(
         default=None, description="Inline нода-судья как dict (будет преобразована в NodeConfig)"
     )
-    
+
     @field_validator("node", mode="before")
     @classmethod
     def convert_node_to_dict(cls, v):
@@ -183,7 +184,7 @@ class CheckConfig(StrictBaseModel):
 class TestTurn(StrictBaseModel):
     """
     Один ход теста: input + check.
-    
+
     Примеры:
     - {"input": {"type": "text", "value": "Привет"}, "check": {"type": "string", "value": "contains:здравствуй"}}
     - {"input": {"type": "flow", "value": "tester_id"}, "check": {"type": "flow", "value": "judge_id"}}
@@ -198,7 +199,7 @@ class TestTurn(StrictBaseModel):
 class TestTarget(StrictBaseModel):
     """
     Цель тестирования -- что именно тестируем.
-    
+
     Примеры:
     - {"type": "flow", "flow_id": "my_flow", "branch_id": "default"}
     - {"type": "node", "node_config": {"type": "llm_node", "prompt": "..."}}
@@ -207,11 +208,11 @@ class TestTarget(StrictBaseModel):
     __test__: ClassVar[bool] = False
 
     type: TestTargetType = Field(..., description="Тип цели: flow, node")
-    
+
     # FLOW -- тестируем другой flow (если None, используется flow_id из контекста)
     flow_id: Optional[str] = Field(default=None, description="ID flow")
     branch_id: Optional[str] = Field(default="default", description="ID ветки графа (branch)")
-    
+
     # NODE -- только inline конфиг ноды
     node_config: Optional[Dict[str, Any]] = Field(
         default=None, description="Inline конфиг ноды для тестирования"
@@ -221,12 +222,12 @@ class TestTarget(StrictBaseModel):
 class TestCaseConfig(StrictBaseModel):
     """
     Унифицированный тест-кейс = список ходов (turns).
-    
+
     Любой тест это диалог из пар [input, check]:
     - Один ход: простой тест
     - Много ходов: многошаговый диалог
     - Flow-flow: автоматический диалог с max_turns
-    
+
     target определяет что тестируем:
     - None / {"type": "flow"} -- полный flow
     - {"type": "node", "node_config": {...}} -- отдельная нода
@@ -236,7 +237,7 @@ class TestCaseConfig(StrictBaseModel):
 
     name: str = Field(..., description="Название теста")
     description: str = Field(default="", description="Описание теста")
-    
+
     target: Optional[TestTarget] = Field(
         default=None,
         description="Цель тестирования. None = flow из контекста"
@@ -245,7 +246,7 @@ class TestCaseConfig(StrictBaseModel):
         default=None,
         description="Начальное состояние для теста (переменные, данные)"
     )
-    
+
     branch_ids: Union[Literal["*"], List[str]] = Field(
         default="*", description="ID веток для теста. '*' = все"
     )
@@ -270,7 +271,7 @@ class BranchConfig(StrictBaseModel):
         default_factory=list,
         description="Группы с доступом к ветке. Пустой список = доступ для всех",
     )
-    
+
     @field_validator("permission", mode="before")
     @classmethod
     def validate_permission(cls, v: Optional[Union[str, List[str]]]) -> List[str]:
@@ -303,13 +304,13 @@ class BranchConfig(StrictBaseModel):
     variables_mode: MergeMode = Field(
         default=MergeMode.MERGE, description="Режим применения variables: 'merge' или 'replace'"
     )
-    
+
     # Mock конфигурация
     mock: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Mock конфигурация для ветки. Переопределяет mock flow.",
     )
-    
+
     # Ресурсы skill
     resources: Dict[str, ResourceReference] = Field(
         default_factory=dict,
@@ -360,12 +361,12 @@ class BranchConfig(StrictBaseModel):
 class FlowConfig(StrictBaseModel):
     """
     СТРОГАЯ конфигурация агента.
-    
+
     Zero-Guess Architecture:
     - extra='forbid' - неизвестные поля = ошибка
     - НЕТ defaults для критичных полей
     - Все обязательные поля ДОЛЖНЫ быть указаны явно
-    
+
     Структура:
     {
         "flow_id": "my_flow",
@@ -384,21 +385,21 @@ class FlowConfig(StrictBaseModel):
     flow_id: str = Field(..., description="Уникальный идентификатор flow")
     name: str = Field(..., description="Название flow")
     type: FlowType = Field(default=FlowType.LOCAL, description="Тип flow (local/external)")
-    
+
     @field_validator("flow_id", mode="before")
     @classmethod
     def validate_flow_id(cls, v: str) -> str:
         """Принимает URN или plain ID, извлекает ID."""
         return extract_id(v)
-    
+
     description: str = Field(default="", description="Описание flow")
-    
+
     @field_validator("description", mode="before")
     @classmethod
     def validate_description(cls, v: Optional[str]) -> str:
         """Конвертирует None в пустую строку."""
         return v if v is not None else ""
-    
+
     # LOCAL FLOW ПОЛЯ - обязательны для LOCAL, опциональны для EXTERNAL
     entry: Optional[str] = Field(default=None, description="ID стартовой ноды - ОБЯЗАТЕЛЬНО для LOCAL")
     nodes: Optional[Dict[str, Dict[str, Any]]] = Field(
@@ -409,7 +410,7 @@ class FlowConfig(StrictBaseModel):
         default_factory=list,
         description="Связи между нодами",
     )
-    
+
     # EXTERNAL FLOW ПОЛЯ - обязательны для EXTERNAL, опциональны для LOCAL
     url: Optional[str] = Field(default=None, description="Base URL внешнего flow (A2A) - ОБЯЗАТЕЛЬНО для EXTERNAL")
     headers: Dict[str, str] = Field(default_factory=dict, description="HTTP-заголовки к внешнему агенту (A2A)")
@@ -424,7 +425,7 @@ class FlowConfig(StrictBaseModel):
         default_factory=list,
         description="Группы с доступом. Пустой список = доступ для всех",
     )
-    
+
     @field_validator("permission", mode="before")
     @classmethod
     def validate_permission(cls, v: Optional[Union[str, List[str]]]) -> List[str]:
@@ -447,7 +448,7 @@ class FlowConfig(StrictBaseModel):
         if iv > cap:
             raise ValueError(f"timeout: максимум {cap}с (flow_execution_wall_time_cap_seconds), получено {iv}")
         return iv
-    
+
     # Опциональные/технические поля
     version: str = Field(default="", description="Версия flow (timestamp)")
     tags: List[str] = Field(default_factory=list, description="Теги для группировки")
@@ -530,7 +531,7 @@ class FlowConfig(StrictBaseModel):
         default=None,
         description="Mock конфигурация (tools, flows, nodes, llm)"
     )
-    
+
     # Ресурсы flow
     resources: Dict[str, ResourceReference] = Field(
         default_factory=dict,
@@ -542,7 +543,7 @@ class FlowConfig(StrictBaseModel):
         default=None,
         description="Тест-кейсы для оценки flow {test_id: config}"
     )
-    
+
     speech: Optional[FlowSpeechSettings] = Field(
         default=None,
         description="Профиль речи (STT/TTS/VAD) без секретов; tier ниже explicit SpeechOverride, выше company",
@@ -553,7 +554,7 @@ class FlowConfig(StrictBaseModel):
         default_factory=dict,
         description="Триггеры flow {trigger_id: TriggerConfig}"
     )
-    
+
     # Контроль доступа для UI
     public_fields: Optional[List[str]] = Field(
         default=None,

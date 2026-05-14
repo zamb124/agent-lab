@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from core.db.repositories import CompanyRepository
     from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
+    from core.db.repositories import CompanyRepository
 
 
 def normalize_namespace_for_broadcast(namespace: Optional[str]) -> str:

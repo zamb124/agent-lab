@@ -43,6 +43,7 @@ def _build_service() -> EntityService:
         return_value=SimpleNamespace(
             namespace="default",
             required_fields={},
+            optional_fields={},
         )
     )
     namespace_repo = AsyncMock()
@@ -157,7 +158,9 @@ async def test_get_daily_summary_cached_empty_day_no_enqueue(monkeypatch):
     # которому нужен живой Company. В юнит-тесте сам факт публикации не
     # проверяем — изолируем broadcast через AsyncMock.
     broadcast_mock = AsyncMock()
-    monkeypatch.setattr(entity_service_module, "broadcast_crm_daily_summary_updated", broadcast_mock)
+    monkeypatch.setattr(
+        entity_service_module, "broadcast_crm_daily_summary_updated", broadcast_mock
+    )
 
     payload = await service.get_daily_summary_cached(date_str="2026-03-28", namespace=None)
 
@@ -206,9 +209,7 @@ async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss():
     _set_test_context()
     service = _build_service()
     ver = {"notes_count": 1, "max_updated_at": "2026-03-28T11:00:00+00:00"}
-    service._collect_notes_and_source_version = AsyncMock(
-        return_value=([_analyzed_note()], ver)
-    )
+    service._collect_notes_and_source_version = AsyncMock(return_value=([_analyzed_note()], ver))
     service._daily_summary_cache_service.get_state = AsyncMock(return_value=None)
     service._daily_summary_artifact_service.get_daily_payload = AsyncMock(
         return_value={

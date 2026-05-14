@@ -6,8 +6,6 @@ S3 клиент для работы с объектным хранилищем.
 """
 
 import asyncio
-
-from core.logging import get_logger
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
@@ -17,6 +15,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from core.config import get_settings
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class S3Client:
@@ -572,13 +571,13 @@ class S3Client:
     ) -> str:
         """
         Генерирует presigned URL с указанным методом.
-        
+
         Args:
             key: Ключ объекта в S3
             bucket: Имя bucket (если не указан, используется дефолтный)
             expiration: Время жизни URL в секундах
             method: HTTP метод ('get_object', 'put_object')
-            
+
         Returns:
             Временный URL
         """
@@ -737,14 +736,14 @@ async def close_default_s3_client():
 def build_s3_key_for_company(company_slug: str, relative_path: str) -> str:
     """
     Строит S3 ключ с префиксом компании.
-    
+
     Args:
         company_slug: Slug компании (subdomain или company_id)
         relative_path: Относительный путь (например "rag/namespace/file.pdf")
-        
+
     Returns:
         Полный ключ: "company_slug/relative_path"
-        
+
     Example:
         >>> build_s3_key_for_company("system", "rag/ns1/doc.pdf")
         "system/rag/ns1/doc.pdf"
@@ -754,18 +753,18 @@ def build_s3_key_for_company(company_slug: str, relative_path: str) -> str:
 def build_s3_key_from_context(relative_path: str) -> str:
     """
     Строит S3 ключ из текущего контекста запроса.
-    
+
     Автоматически определяет company_slug из активной компании в контексте.
-    
+
     Args:
         relative_path: Относительный путь
-        
+
     Returns:
         Полный ключ с префиксом компании из контекста
-        
+
     Raises:
         ValueError: Если контекст или компания не найдены
-        
+
     Example:
         >>> # При активной компании "system"
         >>> build_s3_key_from_context("rag/ns1/doc.pdf")

@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import pytest
 
-from core.integrations.models import IntegrationCredential, IntegrationProvider, OAuthProviderConfig
+from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
 from core.integrations.providers.amocrm import parse_amocrm_subdomain_from_referer
 from core.integrations.repository import IntegrationCredentialRepository

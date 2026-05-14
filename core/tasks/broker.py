@@ -9,25 +9,27 @@
 - apps/crm_worker/broker.py - для CRM задач
 """
 
-import asyncio
-import os
 from typing import Optional
-from taskiq_redis import RedisStreamBroker, RedisAsyncResultBackend, ListRedisScheduleSource
+
 from taskiq import TaskiqScheduler, TaskiqState
 from taskiq.events import TaskiqEvents
 from taskiq.middlewares.simple_retry_middleware import SimpleRetryMiddleware
+from taskiq_redis import ListRedisScheduleSource, RedisAsyncResultBackend, RedisStreamBroker
 
 try:
     import redis.asyncio as redis
+    from redis.exceptions import ResponseError as RedisResponseError
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
     redis = None
+    RedisResponseError = None  # type: ignore[misc, assignment]
 
 from core.config import get_settings
+from core.logging import get_logger, setup_logging
 from core.tasks.logging_middleware import build_logging_middleware
 from core.tasks.session_lock import session_lock_middleware
-from core.logging import get_logger, setup_logging
 
 logger = get_logger(__name__)
 
@@ -97,29 +99,29 @@ def create_broker(
 def create_scheduler(broker: RedisStreamBroker) -> TaskiqScheduler:
     """
     Создает scheduler для broker.
-    
+
     Args:
         broker: TaskIQ broker
-        
+
     Returns:
         TaskiqScheduler с Redis source
     """
     settings = get_settings()
     broker_url = settings.tasks.broker_url
-    
+
     schedule_source = ListRedisScheduleSource(url=broker_url, prefix="platform_schedules")
     scheduler = TaskiqScheduler(broker, sources=[schedule_source])
-    
+
     return scheduler
 
 
 def create_stale_tasks_recovery(queue_name: str = "taskiq"):
     """
     Возвращает функцию для восстановления зависших задач.
-    
+
     Args:
         queue_name: Имя очереди (Redis Stream) для recovery
-        
+
     Returns:
         Async функция для использования в @broker.on_event("startup")
     """
@@ -138,17 +140,29 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq"):
 
         logger.info("task.stale_recover_started", queue=queue_name)
 
+        r = redis.from_url(broker_url)
         try:
-            r = redis.from_url(broker_url)
+            try:
+                consumers = await r.xinfo_consumers(queue_name, queue_name)
+            except Exception as exc:
+                if (
+                    RedisResponseError is not None
+                    and isinstance(exc, RedisResponseError)
+                    and "NOGROUP" in str(exc).upper()
+                ):
+                    logger.info(
+                        "task.stale_recover_skipped",
+                        queue=queue_name,
+                        reason="no_consumer_group",
+                    )
+                    return
+                raise
 
-            consumers = await r.xinfo_consumers(queue_name, queue_name)
             if not consumers:
-                await r.aclose()
                 return
 
             active = sorted(consumers, key=lambda c: c["idle"])
             if not active:
-                await r.aclose()
                 return
 
             current_consumer = active[0]["name"]
@@ -172,15 +186,15 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq"):
             else:
                 logger.info("task.stale_recover_empty", queue=queue_name)
 
-            await r.aclose()
-            logger.info("task.stale_recover_finished", queue=queue_name)
-
         except Exception as exc:
             logger.exception(
                 "task.stale_recover_failed",
                 queue=queue_name,
                 **{"exception.type": type(exc).__name__},
             )
+        finally:
+            await r.aclose()
+            logger.info("task.stale_recover_finished", queue=queue_name)
 
     return recover_stale_pending_tasks
 

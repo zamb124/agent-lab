@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from a2a.types import Message, Part, Role, TextPart
 
-from apps.flows.src.runtime.a2a_messages import build_user_message
-from core.logging import get_logger
 from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.runtime.a2a_messages import build_user_message
+from core.logging import get_logger
 
 if TYPE_CHECKING:
     from core.state import ExecutionState

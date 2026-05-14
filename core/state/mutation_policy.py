@@ -9,7 +9,10 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
+
+if TYPE_CHECKING:
+    from core.state.execution_state import ExecutionState
 
 from core.errors import FrozenStateFieldError
 
@@ -54,13 +57,10 @@ FIELDS_COPY_FROM_USER_RETURNED_STATE: frozenset[str] = frozenset(
 
 # Поля из FROZEN_STATE_FIELDS, которые user/eval и платформенные reason-тулзы
 # могут присваивать (interrupt из code-node; reasoning из inline tool / субагента).
-USER_CODE_OVERRIDABLE_FROZEN_FIELDS: frozenset[str] = (
-    FIELDS_COPY_FROM_USER_RETURNED_STATE
-    | {
-        "reasoning_history",
-        "pending_reasoning",
-    }
-)
+USER_CODE_OVERRIDABLE_FROZEN_FIELDS: frozenset[str] = FIELDS_COPY_FROM_USER_RETURNED_STATE | {
+    "reasoning_history",
+    "pending_reasoning",
+}
 
 # Снимок после user/eval-кода: не сравниваем поля, которые inline-код и тулзы
 # вправе выставлять (interrupt), дополнять (reasoning_history) и т.д.

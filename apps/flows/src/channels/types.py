@@ -2,14 +2,14 @@
 Типы для каналов коммуникации.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from a2a.types import Message
 
 
 class PreparedTaskParams:
     """Подготовленные параметры для process_task."""
-    
+
     def __init__(
         self,
         task_id: str,

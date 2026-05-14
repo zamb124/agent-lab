@@ -10,16 +10,26 @@ import os
 import sys
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic import context
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from core.db.models.platform import (  # noqa: F401 — регистрируют таблицы в Base.metadata
-    Base, Storage, Users, Variables, Usage, Namespaces, PushSubscription,
-    CalendarEventRecord, CalendarIntegrationRecord, IntegrationCredentialRecord,
-    SchedulerTaskRecord, PlatformShortLink, ApiKeyRecord,
+    ApiKeyRecord,
+    Base,
+    CalendarEventRecord,
+    CalendarIntegrationRecord,
+    IntegrationCredentialRecord,
+    Namespaces,
+    PlatformShortLink,
+    PushSubscription,
+    SchedulerTaskRecord,
+    Storage,
+    Usage,
+    Users,
+    Variables,
 )
 
 config = context.config

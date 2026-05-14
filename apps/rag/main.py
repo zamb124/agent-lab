@@ -3,23 +3,24 @@
 """
 
 from pathlib import Path
-import uvicorn
 
+import uvicorn
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from core.app import create_service_app
 from core.logging import get_logger
+
+from .api import (
+    documents_router,
+    namespaces_router,
+    providers_router,
+    search_router,
+)
 from .config import RAGSettings, get_rag_settings
 from .container import get_rag_container
 from .dependencies import ContainerDep
-from .api import (
-    providers_router,
-    namespaces_router,
-    documents_router,
-    search_router,
-)
 
 logger = get_logger(__name__)
 
@@ -27,13 +28,13 @@ logger = get_logger(__name__)
 async def on_startup(app: FastAPI, container, settings: RAGSettings):
     """Кастомная логика при запуске сервиса RAG"""
     logger.info("RAG Service запускается...")
-    
+
     if not settings.rag.enabled:
         logger.warning("RAG отключен в конфигурации")
         return
-    
+
     logger.info(f"RAG провайдер по умолчанию: {settings.rag.default_provider}")
-    
+
     enabled_providers = [
         name for name, config in settings.rag.providers.items()
         if config.enabled

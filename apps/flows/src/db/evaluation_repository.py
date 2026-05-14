@@ -10,9 +10,10 @@ from typing import List, Optional
 
 from sqlalchemy import text
 
-from core.logging import get_logger
 from apps.flows.src.models import EvaluationResult
 from core.db import Storage
+from core.db.utils import get_rowcount
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -57,23 +58,26 @@ class EvaluationRepository:
                     error = EXCLUDED.error
                 RETURNING id
             """)
-            
-            result_proxy = await session.execute(query, {
-                "p1": result.flow_id,
-                "p2": result.branch_id,
-                "p3": result.run_date,
-                "p4": result.iteration,
-                "p5": result.test_case_id,
-                "p6": result.task_id,
-                "p7": result.status,
-                "p8": result.duration_ms,
-                "p9": result.turns_count,
-                "p10": json.dumps(result.dialog) if result.dialog else None,
-                "p11": json.dumps(result.scores) if result.scores else None,
-                "p12": result.judge_feedback,
-                "p13": result.error,
-                "p14": result.created_at or datetime.now(timezone.utc),
-            })
+
+            result_proxy = await session.execute(
+                query,
+                {
+                    "p1": result.flow_id,
+                    "p2": result.branch_id,
+                    "p3": result.run_date,
+                    "p4": result.iteration,
+                    "p5": result.test_case_id,
+                    "p6": result.task_id,
+                    "p7": result.status,
+                    "p8": result.duration_ms,
+                    "p9": result.turns_count,
+                    "p10": json.dumps(result.dialog) if result.dialog else None,
+                    "p11": json.dumps(result.scores) if result.scores else None,
+                    "p12": result.judge_feedback,
+                    "p13": result.error,
+                    "p14": result.created_at or datetime.now(timezone.utc),
+                },
+            )
             await session.commit()
             row = result_proxy.first()
             return row[0] if row else 0
@@ -105,24 +109,30 @@ class EvaluationRepository:
                           AND run_date = :run_date AND iteration = :iteration
                     ORDER BY test_case_id
                 """)
-                result = await session.execute(query, {
-                    "flow_id": flow_id,
-                    "branch_id": branch_id,
-                    "run_date": run_date,
-                    "iteration": iteration,
-                })
+                result = await session.execute(
+                    query,
+                    {
+                        "flow_id": flow_id,
+                        "branch_id": branch_id,
+                        "run_date": run_date,
+                        "iteration": iteration,
+                    },
+                )
             else:
                 query = text("""
                     SELECT * FROM evaluation_results
                     WHERE flow_id = :flow_id AND branch_id = :branch_id AND run_date = :run_date
                     ORDER BY iteration, test_case_id
                 """)
-                result = await session.execute(query, {
-                    "flow_id": flow_id,
-                    "branch_id": branch_id,
-                    "run_date": run_date,
-                })
-            
+                result = await session.execute(
+                    query,
+                    {
+                        "flow_id": flow_id,
+                        "branch_id": branch_id,
+                        "run_date": run_date,
+                    },
+                )
+
             rows = result.mappings().all()
             return [self._row_to_model(row) for row in rows]
 
@@ -153,11 +163,14 @@ class EvaluationRepository:
                 ORDER BY run_date DESC, iteration DESC, created_at DESC, id DESC
                 LIMIT :limit
             """)
-            result = await session.execute(query, {
-                "flow_id": flow_id,
-                "branch_id": branch_id,
-                "limit": limit,
-            })
+            result = await session.execute(
+                query,
+                {
+                    "flow_id": flow_id,
+                    "branch_id": branch_id,
+                    "limit": limit,
+                },
+            )
             rows = result.mappings().all()
             return [self._row_to_model(row) for row in rows]
 
@@ -179,11 +192,14 @@ class EvaluationRepository:
                 FROM evaluation_results
                 WHERE flow_id = :flow_id AND branch_id = :branch_id AND run_date = :run_date
             """)
-            result = await session.execute(query, {
-                "flow_id": flow_id,
-                "branch_id": branch_id,
-                "run_date": run_date,
-            })
+            result = await session.execute(
+                query,
+                {
+                    "flow_id": flow_id,
+                    "branch_id": branch_id,
+                    "run_date": run_date,
+                },
+            )
             row = result.first()
             return row[0] if row else 1
 
@@ -204,7 +220,7 @@ class EvaluationRepository:
             """)
             result = await session.execute(query, {"days": days_to_keep})
             await session.commit()
-            count = result.rowcount
+            count = get_rowcount(result)
             logger.info(f"Удалено {count} старых результатов оценки")
             return count
 

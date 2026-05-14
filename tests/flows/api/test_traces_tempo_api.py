@@ -8,7 +8,6 @@ import pytest
 
 from core.clients.tempo_client import TempoClientError
 
-
 _SAMPLE_SPANS = [
     {
         "span_id": "aaaa0001",

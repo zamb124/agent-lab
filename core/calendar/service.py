@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import re
-from enum import Enum
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from uuid import uuid4
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
@@ -33,7 +33,6 @@ from core.models import (
     CalendarProvider,
 )
 from core.websocket.publisher import Notification, NotificationType, notify_user
-
 
 SYNC_LINK_TOKEN_META = "sync_link_token"
 SYNC_CHANNEL_ID_META = "sync_channel_id"
@@ -1328,8 +1327,7 @@ class CalendarService:
         end_at: datetime,
         exclude_platform_event_ids: set[str],
     ) -> list[CalendarEvent]:
-        settings = get_settings()
-        public_base = settings.server.platform_public_base_url
+        get_settings()
         params: dict[str, str] = {
             "start_at": _iso_datetime(_ensure_utc(start_at)),
             "end_at": _iso_datetime(_ensure_utc(end_at)),

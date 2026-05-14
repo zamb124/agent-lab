@@ -11,12 +11,12 @@ import os
 def is_testing() -> bool:
     """
     Проверяет, запущен ли код в тестовом окружении.
-    
+
     Единый способ проверки вместо разнородных:
     - os.getenv("TESTING") == "true"
     - os.environ.get("TESTING", "").lower() in ("true", "1", "yes")
     - os.getenv("TESTING") != "true"
-    
+
     Returns:
         True если TESTING=true или PYTEST_CURRENT_TEST установлен
     """

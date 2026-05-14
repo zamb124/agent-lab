@@ -41,7 +41,7 @@ class TestStateManager:
     async def test_save_and_get_state(self, state_manager: StateManager):
         """Сохранение и получение state с A2A Message."""
         from core.state import ExecutionState
-        
+
         session_id = f"test_save_get_state_{uuid.uuid4().hex[:8]}"
 
         user_msg = _msg("Hello", Role.user)
@@ -74,7 +74,7 @@ class TestStateManager:
     async def test_delete_state(self, state_manager: StateManager):
         """Удаление state."""
         from core.state import ExecutionState
-        
+
         session_id = f"test_delete_state_{uuid.uuid4().hex[:8]}"
 
         state = ExecutionState(
@@ -94,7 +94,7 @@ class TestStateManager:
     def test_add_message(self, state_manager: StateManager):
         """Добавление A2A Message в state."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -116,7 +116,7 @@ class TestStateManager:
     def test_add_user_message(self, state_manager: StateManager):
         """add_user_message создаёт Message с role=user."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -133,7 +133,7 @@ class TestStateManager:
     def test_add_agent_message(self, state_manager: StateManager):
         """add_agent_message создаёт Message с role=agent."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -150,7 +150,7 @@ class TestStateManager:
     def test_add_message_creates_messages_list(self, state_manager: StateManager):
         """add_message создаёт messages если его нет."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -166,7 +166,7 @@ class TestStateManager:
     async def test_get_messages(self, state_manager: StateManager):
         """Получение списка A2A Message."""
         from core.state import ExecutionState
-        
+
         msg1 = _msg("Hello", Role.user)
         msg2 = _msg("Hi", Role.agent)
         state = ExecutionState(
@@ -187,7 +187,7 @@ class TestStateManager:
     async def test_get_messages_empty(self, state_manager: StateManager):
         """get_messages для пустого state."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -203,7 +203,7 @@ class TestStateManager:
     async def test_state_persistence(self, state_manager: StateManager):
         """State сохраняется между вызовами."""
         from core.state import ExecutionState
-        
+
         session_id = f"test_persistence_{uuid.uuid4().hex[:8]}"
 
         # Первый вызов - создаём state

@@ -2,7 +2,7 @@
 API для работы с вложениями (attachments).
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from apps.crm.dependencies import ContainerDep
 
@@ -17,13 +17,13 @@ async def upload_attachment(
 ):
     """Загрузить вложение для entity"""
     file_content = await file.read()
-    
+
     result = await container.attachment_service.add_attachment(
         entity_id=entity_id,
         file_data=file_content,
         filename=file.filename
     )
-    
+
     return result
 
 
@@ -50,8 +50,8 @@ async def delete_attachment(
         entity_id=entity_id,
         document_id=attachment_id
     )
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    
+
     return {"status": "deleted"}

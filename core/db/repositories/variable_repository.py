@@ -3,12 +3,13 @@
 Использует таблицу variables, is_global=False (изолирован по компаниям).
 """
 
-from core.logging import get_logger
-from typing import Optional, Dict, List
+from typing import List, Optional
+
 from pydantic import BaseModel
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class VariableData(BaseModel):
@@ -32,7 +33,7 @@ class VariableRepository(BaseRepository[VariableData]):
     is_global=False - переменные изолированы по компаниям.
     Хранит только данные (VariableData), ключ в storage key.
     """
-    
+
     is_global = False
 
     def __init__(self, storage: Storage):
@@ -49,17 +50,17 @@ class VariableRepository(BaseRepository[VariableData]):
 
     def _extract_entity_id(self, entity: VariableData) -> str:
         raise NotImplementedError("VariableRepository requires explicit key")
-    
+
     async def get(self, key: str) -> Optional[Variable]:
         """Получает переменную с ключом"""
         base_key = self._get_key(key)
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
-        
+
         data = await self._storage._get_with_session_and_table(final_key, table_name)
         if data is None:
             return None
-        
+
         var_data = VariableData.model_validate_json(data)
         return Variable(
             key=key,
@@ -68,7 +69,7 @@ class VariableRepository(BaseRepository[VariableData]):
             groups=var_data.groups,
             description=var_data.description
         )
-    
+
     async def set(self, entity: Variable) -> bool:
         """Сохраняет переменную (только данные, без ключа)"""
         var_data = VariableData(
@@ -77,22 +78,22 @@ class VariableRepository(BaseRepository[VariableData]):
             groups=entity.groups,
             description=entity.description
         )
-        
+
         base_key = self._get_key(entity.key)
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
-        
+
         data = var_data.model_dump_json()
         return await self._storage._set_with_table(final_key, data, table_name)
-    
+
     async def delete(self, key: str) -> bool:
         """Удаляет переменную по ключу"""
         base_key = self._get_key(key)
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
-        
+
         return await self._storage._delete_with_table(final_key, table_name)
-    
+
     async def list(self, *, limit: int, offset: int = 0) -> list[Variable]:
         """Возвращает страницу переменных с ключами."""
         base_prefix = self._get_prefix()

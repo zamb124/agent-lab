@@ -1,6 +1,5 @@
 """Переопределение session-фикстур: контрактные тесты без подготовки общей БД."""
 
-import pytest
 import pytest_asyncio
 
 

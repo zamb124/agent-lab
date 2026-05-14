@@ -2,9 +2,6 @@
 
 from typing import Any, Optional
 
-from core.context import get_context
-from core.models.identity_models import Namespace, NamespaceCRMSettings
-
 from apps.crm.constants_graph import (
     ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE,
     ENTITY_TYPES_EXCLUDED_FROM_NAMESPACE_EDITABILITY_COUNTS,
@@ -20,7 +17,9 @@ from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_CORE_NOTE_TASK,
     REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS,
 )
+from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
+from core.models.identity_models import Namespace, NamespaceCRMSettings
 
 
 class NamespaceTemplateService:

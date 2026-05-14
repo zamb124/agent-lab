@@ -1,6 +1,5 @@
 """Инвариант: prepare и process_task используют один и тот же stream task_id."""
 
-import pytest
 
 from apps.flows.src.channels.base import effective_stream_task_id_for_session
 from core.state.execution_state import ExecutionState

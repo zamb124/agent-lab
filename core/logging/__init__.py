@@ -21,13 +21,15 @@ from core.logging.context import (
     bind_log_context,
     clear_log_context,
     get_log_context,
-    restore_log_context,
     unbind_log_context,
 )
+from core.logging.context import (
+    restore_log_context as restore_log_context,
+)
 from core.logging.contract import (
+    REDACT_PLACEHOLDER,
     LoggingMisconfigured,
     LogRecordPayload,
-    REDACT_PLACEHOLDER,
 )
 from core.logging.scope import (
     LogContractViolation,
@@ -78,6 +80,7 @@ __all__ = [
     "get_log_scope_requires_user",
     "get_logger",
     "reset_logging_for_tests",
+    "restore_log_context",
     "setup_logging",
     "unbind_log_context",
 ]

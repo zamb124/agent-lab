@@ -43,8 +43,10 @@ from apps.browser.api.control import (
 )
 from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import ContextSignature
-from apps.browser.interaction.interaction_profiles import InteractionProfileName
-from apps.browser.interaction.interaction_profiles import get_interaction_profile
+from apps.browser.interaction.interaction_profiles import (
+    InteractionProfileName,
+    get_interaction_profile,
+)
 from core.tracing.operation_span import traced_operation
 
 router = APIRouter(prefix="/mcp", tags=["browser-mcp"])

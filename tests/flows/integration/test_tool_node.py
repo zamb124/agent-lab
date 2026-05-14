@@ -5,9 +5,10 @@
 """
 
 import pytest
-from apps.flows.src.runtime import Flow
-from apps.flows.src.runtime.nodes import create_node, CodeNode
+
 from apps.flows.src.models import Edge
+from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.nodes import CodeNode, create_node
 from core.state import ExecutionState
 
 
@@ -376,7 +377,7 @@ async def execute(args, state):
 class TestCodeNodeDynamicDataAgent:
     """
     Тесты динамической передачи данных между CodeNode.
-    
+
     Проверяет что @state:, @var: и константы корректно работают
     в цепочке CodeNode где каждый tool модифицирует state.
     """

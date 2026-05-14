@@ -8,10 +8,10 @@
 """
 
 import pytest
+
+from apps.flows.src.runtime.flow import Flow
 from core.errors import FlowPrematureCompletionError
 from core.state import ExecutionState
-from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.runtime.nodes import create_node
 
 
 def make_state(**kwargs) -> ExecutionState:
@@ -44,10 +44,10 @@ class TestLegacyStringConditions:
                 {"from": "start", "to": "order", "condition": "route == 'order'"}
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "order_node"
 
     @pytest.mark.asyncio
@@ -65,10 +65,10 @@ class TestLegacyStringConditions:
                 {"from": "start", "to": "five", "condition": "count == 5"}
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "five"
 
     @pytest.mark.asyncio
@@ -86,10 +86,10 @@ class TestLegacyStringConditions:
                 {"from": "start", "to": "proceed", "condition": "status != 'error'"}
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "proceeded"
 
     @pytest.mark.asyncio
@@ -107,10 +107,10 @@ class TestLegacyStringConditions:
                 {"from": "start", "to": "pass", "condition": "score > 80"}
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "passed"
 
     @pytest.mark.asyncio
@@ -128,10 +128,10 @@ class TestLegacyStringConditions:
                 {"from": "start", "to": "admin", "condition": "user.role == 'admin'"}
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "admin_access"
 
     @pytest.mark.asyncio
@@ -149,7 +149,7 @@ class TestLegacyStringConditions:
                 {"from": "start", "to": "order", "condition": "route == 'order'"}
             ]
         })
-        
+
         state = make_state()
         with pytest.raises(FlowPrematureCompletionError) as exc_info:
             await agent.run(state)
@@ -172,8 +172,8 @@ class TestSimpleObjectConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "complaint", 
+                    "from": "start",
+                    "to": "complaint",
                     "condition": {
                         "type": "simple",
                         "variable": "route",
@@ -183,10 +183,10 @@ class TestSimpleObjectConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "complaint_handler"
 
     @pytest.mark.asyncio
@@ -202,8 +202,8 @@ class TestSimpleObjectConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "proceed", 
+                    "from": "start",
+                    "to": "proceed",
                     "condition": {
                         "type": "simple",
                         "variable": "status",
@@ -213,10 +213,10 @@ class TestSimpleObjectConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "ok"
 
     @pytest.mark.asyncio
@@ -232,8 +232,8 @@ class TestSimpleObjectConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "high", 
+                    "from": "start",
+                    "to": "high",
                     "condition": {
                         "type": "simple",
                         "variable": "priority",
@@ -243,10 +243,10 @@ class TestSimpleObjectConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "high_priority"
 
     @pytest.mark.asyncio
@@ -262,8 +262,8 @@ class TestSimpleObjectConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "few", 
+                    "from": "start",
+                    "to": "few",
                     "condition": {
                         "type": "simple",
                         "variable": "count",
@@ -273,10 +273,10 @@ class TestSimpleObjectConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "few_items"
 
 
@@ -296,8 +296,8 @@ class TestPythonConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "urgent", 
+                    "from": "start",
+                    "to": "urgent",
                     "condition": {
                         "type": "python",
                         "code": "def check(state):\n    return state.get('category') == 'urgent'"
@@ -305,10 +305,10 @@ class TestPythonConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "urgent_handler"
 
     @pytest.mark.asyncio
@@ -324,8 +324,8 @@ class TestPythonConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "approved", 
+                    "from": "start",
+                    "to": "approved",
                     "condition": {
                         "type": "python",
                         "code": """def check(state):
@@ -337,10 +337,10 @@ class TestPythonConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "approved"
 
     @pytest.mark.asyncio
@@ -356,8 +356,8 @@ class TestPythonConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "vip", 
+                    "from": "start",
+                    "to": "vip",
                     "condition": {
                         "type": "python",
                         "code": "def check(state):\n    tags = state.get('tags', [])\n    return 'vip' in tags"
@@ -365,10 +365,10 @@ class TestPythonConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "vip_treatment"
 
     @pytest.mark.asyncio
@@ -384,8 +384,8 @@ class TestPythonConditions:
             },
             "edges": [
                 {
-                    "from": "start", 
-                    "to": "target", 
+                    "from": "start",
+                    "to": "target",
                     "condition": {
                         "type": "python",
                         "code": "def check(state):\n    return state.get('value', 0) > 100"
@@ -393,7 +393,7 @@ class TestPythonConditions:
                 }
             ]
         })
-        
+
         state = make_state()
         with pytest.raises(FlowPrematureCompletionError) as exc_info:
             await agent.run(state)
@@ -472,10 +472,10 @@ class TestUnconditionalEdges:
                 {"from": "start", "to": "next"}
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "next_executed"
 
     @pytest.mark.asyncio
@@ -493,10 +493,10 @@ class TestUnconditionalEdges:
                 {"from": "start", "to": "next", "condition": None}
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "executed"
 
 
@@ -520,10 +520,10 @@ class TestMultipleEdges:
                 {"from": "start", "to": "complaint", "condition": "route == 'complaint'"},
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         assert result.result == "order_handler"
 
     @pytest.mark.asyncio
@@ -543,9 +543,9 @@ class TestMultipleEdges:
                 {"from": "start", "to": "fallback"},
             ]
         })
-        
+
         state = make_state()
         result = await agent.run(state)
-        
+
         # Первое условие не сработало, но есть безусловный fallback
         assert result.result == "fallback"

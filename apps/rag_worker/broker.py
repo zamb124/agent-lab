@@ -7,13 +7,13 @@ RAG Worker broker для RAG задач.
 from taskiq import TaskiqState
 
 from core.billing import set_billing_service
+from core.logging import get_logger
 from core.tasks.broker import (
     create_broker,
     create_scheduler,
     create_stale_tasks_recovery,
     register_worker_events,
 )
-from core.logging import get_logger
 from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
 

@@ -4,10 +4,10 @@ DI-контейнер provider_litserve.
 
 from __future__ import annotations
 
-from core.logging import get_logger
 from typing import Optional
 
 from core.container import BaseContainer
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class ProviderLitserveContainer(BaseContainer):

@@ -13,10 +13,10 @@ import importlib
 import json
 import os
 import uuid
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pathlib import Path
 
 from tests.browser.e2e_step_metrics import e2e_lightpanda_cdp_url, e2e_lightpanda_enabled
 

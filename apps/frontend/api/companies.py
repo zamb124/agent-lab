@@ -2,21 +2,23 @@
 API для управления компаниями
 """
 
-from core.logging import get_logger
 import uuid
 from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from core.utils.subdomain import slugify, validate_slug
-from core.utils.tokens import TokenService, get_token_service
-from core.utils.domain import get_cookie_domain, build_url
-from core.models.identity_models import Company, User
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+
 from apps.frontend.dependencies import ContainerDep
-from core.config import get_settings
-from core.pagination import ListResponse
 from core.api.companies import build_my_companies_response
+from core.config import get_settings
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.logging import get_logger
+from core.models.identity_models import Company, User
+from core.pagination import ListResponse
+from core.utils.domain import build_url, get_cookie_domain
+from core.utils.subdomain import validate_slug
+from core.utils.tokens import TokenService, get_token_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/companies", tags=["public", "companies"])
@@ -56,23 +58,23 @@ def _ensure_user_is_system_member(user: User) -> None:
 async def check_slug(request: CheckSlugRequest, container: ContainerDep):
     """
     Проверка доступности slug для субдомена
-    
+
     Args:
         request: Запрос с slug
         container: DI контейнер
-    
+
     Returns:
         Информация о доступности slug
     """
     slug = request.slug.lower().strip()
-    
+
     is_valid, error = validate_slug(slug)
     if not is_valid:
         return CheckSlugResponse(available=False, slug=slug)
-    
+
     subdomain_repo = container.subdomain_repository
     company_id = await subdomain_repo.get_company_id(slug)
-    
+
     return CheckSlugResponse(
         available=company_id is None,
         slug=slug
@@ -86,39 +88,39 @@ async def create_company(
 ):
     """
     Создание новой компании
-    
+
     Args:
         request_data: Данные компании
         request: FastAPI request
         container: DI контейнер
-    
+
     Returns:
         Информация о созданной компании и URL для редиректа
     """
     settings = get_settings()
-    
+
     if not hasattr(request.state, 'user') or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    
+
     user = request.state.user
     name = request_data.name.strip()
     slug = request_data.slug.lower().strip()
-    
+
     if not name:
         raise HTTPException(status_code=400, detail="Название компании обязательно")
-    
+
     is_valid, error = validate_slug(slug)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error)
-    
+
     subdomain_repo = container.subdomain_repository
     company_repo = container.company_repository
     user_repo = container.user_repository
-    
+
     existing_company_id = await subdomain_repo.get_company_id(slug)
     if existing_company_id:
         raise HTTPException(status_code=400, detail="Этот адрес уже занят")
-    
+
     company_id = str(uuid.uuid4())
     logger.info(
         "frontend.company_create_started",
@@ -127,7 +129,7 @@ async def create_company(
         company_id=company_id,
         owner_user_id=user.user_id,
     )
-    
+
     company = Company(
         company_id=company_id,
         name=name,
@@ -143,14 +145,14 @@ async def create_company(
         company_id=company.company_id,
         company_subdomain=slug,
     )
-    
+
     await subdomain_repo.set_mapping(slug, company.company_id)
     logger.info(
         "frontend.subdomain_registered",
         company_subdomain=slug,
         company_id=company.company_id,
     )
-    
+
     # Проверяем что маппинг сохранился
     check_company_id = await subdomain_repo.get_company_id(slug)
     logger.info(
@@ -158,7 +160,7 @@ async def create_company(
         company_subdomain=slug,
         company_id=check_company_id,
     )
-    
+
     if company.company_id not in user.companies:
         user.companies[company.company_id] = ["owner"]  # Список ролей, а не строка!
         user.active_company_id = company.company_id
@@ -168,7 +170,7 @@ async def create_company(
             user_id=user.user_id,
             company_id=company.company_id,
         )
-    
+
     # Инициализировать агенты и тулы для новой компании
     try:
         service_client = container.service_client
@@ -181,7 +183,7 @@ async def create_company(
                 "subdomain": slug
             }
         )
-        
+
         logger.info(
             f"Инициализация агентов для {company_id} запущена: "
             f"task_id={init_response.get('task_id')}"
@@ -192,11 +194,11 @@ async def create_company(
             exc_info=True
         )
         # НЕ падаем - компания уже создана
-    
+
     # Создать пространство и канал в sync для новой компании
     try:
         service_client = container.service_client
-        
+
         # Создаем пространство с названием компании
         space_response = await service_client.post(
             "sync",
@@ -216,7 +218,7 @@ async def create_company(
             space_id=space_id,
             company_id=company_id,
         )
-        
+
         # Создаем канал с названием компании в этом пространстве
         channel_response = await service_client.post(
             "sync",
@@ -239,37 +241,37 @@ async def create_company(
             space_id=space_id,
             company_id=company_id,
         )
-        
+
     except Exception as e:
         logger.error(
             f"Не удалось создать пространство/канал в sync для {company_id}: {e}",
             exc_info=True
         )
         # НЕ падаем - компания уже создана
-    
+
     redirect_url = build_url(
         request.headers.get("host", ""),
         "/dashboard",
         slug
     )
     logger.info("frontend.company_create_redirect", redirect_url=redirect_url)
-    
+
     # Перевыпускаем токен с company_id
     token_service = get_token_service()
     new_token = token_service.create_token(user.user_id, company.company_id, email=user.email)
     logger.info("frontend.session_token_reissued", company_id=company.company_id)
-    
+
     # Обновляем cookie
     cookie_domain = get_cookie_domain(request.headers.get("host", ""))
     is_production = settings.server.env == "production"
-    
+
     response = JSONResponse(content={
         "company_id": company.company_id,
         "name": company.name,
         "subdomain": company.subdomain,
         "redirect_url": redirect_url
     })
-    
+
     response.set_cookie(
         key="auth_token",
         value=new_token,
@@ -279,29 +281,29 @@ async def create_company(
         samesite="lax",
         max_age=TokenService.SESSION_EXPIRES,
     )
-    
+
     return response
 
 @router.get("/me", response_model=ListResponse[dict])
 async def get_my_companies(request: Request, container: ContainerDep) -> ListResponse[dict]:
     """
     Получить список компаний текущего пользователя
-    
+
     Args:
         request: FastAPI request
         container: DI контейнер
-    
+
     Returns:
         Список компаний с их данными
     """
     token_data = getattr(request.state, "token_data", None)
     if token_data is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     user = await container.user_repository.get(token_data.user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return await build_my_companies_response(
         user=user,
         company_repository=container.company_repository,

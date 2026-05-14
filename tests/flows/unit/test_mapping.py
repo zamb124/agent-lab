@@ -22,9 +22,9 @@ class TestResolveValue:
     def test_resolve_simple_state_path(self):
         """@state:field -> state_dict["field"]"""
         state = {"content": "hello", "user": "John"}
-        
+
         result = MappingResolver.resolve_value("@state:content", state)
-        
+
         assert result == "hello"
 
     def test_resolve_nested_state_path(self):
@@ -38,7 +38,7 @@ class TestResolveValue:
                 }
             }
         }
-        
+
         assert MappingResolver.resolve_value("@state:user.name", state) == "John"
         assert MappingResolver.resolve_value("@state:user.profile.age", state) == 30
         assert MappingResolver.resolve_value("@state:user.profile.city", state) == "Moscow"
@@ -56,128 +56,128 @@ class TestResolveValue:
                 }
             }
         }
-        
+
         result = MappingResolver.resolve_value("@state:a.b.c.d.e", state)
-        
+
         assert result == "deep_value"
 
     def test_resolve_constant_string(self):
         """Строка без @state: -> константа"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value("fixed_value", state)
-        
+
         assert result == "fixed_value"
 
     def test_resolve_constant_with_special_chars(self):
         """Константа с @ в середине не является @state:"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value("email@example.com", state)
-        
+
         assert result == "email@example.com"
 
     def test_resolve_integer(self):
         """Число -> константа (не строка)"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value(42, state)
-        
+
         assert result == 42
 
     def test_resolve_boolean(self):
         """Boolean -> константа"""
         state = {"content": "hello"}
-        
+
         assert MappingResolver.resolve_value(True, state) is True
         assert MappingResolver.resolve_value(False, state) is False
 
     def test_resolve_none(self):
         """None -> константа"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value(None, state)
-        
+
         assert result is None
 
     def test_resolve_list(self):
         """List -> константа"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value([1, 2, 3], state)
-        
+
         assert result == [1, 2, 3]
 
     def test_resolve_dict(self):
         """Dict -> константа (не резолвится рекурсивно)"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value({"key": "value"}, state)
-        
+
         assert result == {"key": "value"}
 
     def test_resolve_missing_path_returns_none(self):
         """@state:missing_field -> None"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value("@state:missing_field", state)
-        
+
         assert result is None
 
     def test_resolve_missing_nested_path_returns_none(self):
         """@state:user.missing.path -> None"""
         state = {"user": {"name": "John"}}
-        
+
         result = MappingResolver.resolve_value("@state:user.missing.path", state)
-        
+
         assert result is None
 
     def test_resolve_partial_nested_path_returns_none(self):
         """@state:user.name.extra -> None (name - строка, не dict)"""
         state = {"user": {"name": "John"}}
-        
+
         result = MappingResolver.resolve_value("@state:user.name.extra", state)
-        
+
         assert result is None
 
     def test_resolve_empty_state(self):
         """Пустой state -> None для любого пути"""
         state = {}
-        
+
         result = MappingResolver.resolve_value("@state:any.path", state)
-        
+
         assert result is None
 
     def test_resolve_state_value_is_dict(self):
         """@state:user -> целый dict"""
         state = {"user": {"name": "John", "age": 30}}
-        
+
         result = MappingResolver.resolve_value("@state:user", state)
-        
+
         assert result == {"name": "John", "age": 30}
 
     def test_resolve_state_value_is_list(self):
         """@state:items -> list"""
         state = {"items": [1, 2, 3]}
-        
+
         result = MappingResolver.resolve_value("@state:items", state)
-        
+
         assert result == [1, 2, 3]
 
     def test_resolve_empty_string_source(self):
         """Пустая строка -> пустая строка (константа)"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value("", state)
-        
+
         assert result == ""
 
     def test_resolve_state_prefix_only(self):
         """@state: без пути -> пустой путь -> None"""
         state = {"content": "hello"}
-        
+
         result = MappingResolver.resolve_value("@state:", state)
-        
+
         assert result is None
 
 
@@ -190,9 +190,9 @@ class TestResolveValueWithVar:
             "content": "hello",
             "variables": {"company_name": "ACME Corp"}
         }
-        
+
         result = MappingResolver.resolve_value("@var:company_name", state)
-        
+
         assert result == "ACME Corp"
 
     def test_resolve_nested_var(self):
@@ -205,7 +205,7 @@ class TestResolveValueWithVar:
                 }
             }
         }
-        
+
         assert MappingResolver.resolve_value("@var:config.api_key", state) == "secret123"
         assert MappingResolver.resolve_value("@var:config.base_url", state) == "https://api.example.com"
 
@@ -222,9 +222,9 @@ class TestResolveValueWithVar:
                 }
             }
         }
-        
+
         result = MappingResolver.resolve_value("@var:a.b.c.d", state)
-        
+
         assert result == "deep_var_value"
 
     def test_resolve_missing_var_raises_error(self):
@@ -251,31 +251,31 @@ class TestResolveValueWithVar:
     def test_resolve_var_numeric_value(self):
         """@var:count -> числовое значение"""
         state = {"variables": {"count": 42, "price": 99.99}}
-        
+
         assert MappingResolver.resolve_value("@var:count", state) == 42
         assert MappingResolver.resolve_value("@var:price", state) == 99.99
 
     def test_resolve_var_boolean_value(self):
         """@var:flag -> boolean"""
         state = {"variables": {"enabled": True, "debug": False}}
-        
+
         assert MappingResolver.resolve_value("@var:enabled", state) is True
         assert MappingResolver.resolve_value("@var:debug", state) is False
 
     def test_resolve_var_dict_value(self):
         """@var:config -> dict"""
         state = {"variables": {"config": {"key": "value", "nested": {"a": 1}}}}
-        
+
         result = MappingResolver.resolve_value("@var:config", state)
-        
+
         assert result == {"key": "value", "nested": {"a": 1}}
 
     def test_resolve_var_list_value(self):
         """@var:items -> list"""
         state = {"variables": {"items": [1, 2, 3]}}
-        
+
         result = MappingResolver.resolve_value("@var:items", state)
-        
+
         assert result == [1, 2, 3]
 
     def test_resolve_var_prefix_only_raises_error(self):
@@ -295,11 +295,11 @@ class TestResolveValueWithVar:
                 "company": "ACME"
             }
         }
-        
+
         # @state: берёт из state
         assert MappingResolver.resolve_value("@state:content", state) == "from_state"
         assert MappingResolver.resolve_value("@state:user.name", state) == "John"
-        
+
         # @var: берёт из variables
         assert MappingResolver.resolve_value("@var:content", state) == "from_var"
         assert MappingResolver.resolve_value("@var:company", state) == "ACME"
@@ -311,93 +311,93 @@ class TestGetNestedValue:
     def test_simple_path(self):
         """Простой путь: field"""
         data = {"field": "value"}
-        
+
         result = MappingResolver.get_nested_value(data, "field")
-        
+
         assert result == "value"
 
     def test_two_level_path(self):
         """Двухуровневый путь: a.b"""
         data = {"a": {"b": "value"}}
-        
+
         result = MappingResolver.get_nested_value(data, "a.b")
-        
+
         assert result == "value"
 
     def test_multi_level_path(self):
         """Многоуровневый путь: a.b.c.d"""
         data = {"a": {"b": {"c": {"d": "deep"}}}}
-        
+
         result = MappingResolver.get_nested_value(data, "a.b.c.d")
-        
+
         assert result == "deep"
 
     def test_missing_key_returns_none(self):
         """Отсутствующий ключ -> None"""
         data = {"a": {"b": "value"}}
-        
+
         result = MappingResolver.get_nested_value(data, "a.c")
-        
+
         assert result is None
 
     def test_path_through_non_dict_returns_none(self):
         """Путь через не-dict -> None"""
         data = {"a": "string_value"}
-        
+
         result = MappingResolver.get_nested_value(data, "a.b")
-        
+
         assert result is None
 
     def test_empty_path_returns_none(self):
         """Пустой путь -> None"""
         data = {"a": "value"}
-        
+
         result = MappingResolver.get_nested_value(data, "")
-        
+
         assert result is None
 
     def test_empty_data(self):
         """Пустые данные -> None"""
         result = MappingResolver.get_nested_value({}, "any.path")
-        
+
         assert result is None
 
     def test_numeric_value(self):
         """Числовое значение"""
         data = {"count": 42, "nested": {"value": 3.14}}
-        
+
         assert MappingResolver.get_nested_value(data, "count") == 42
         assert MappingResolver.get_nested_value(data, "nested.value") == 3.14
 
     def test_boolean_value(self):
         """Boolean значение"""
         data = {"flag": True, "nested": {"active": False}}
-        
+
         assert MappingResolver.get_nested_value(data, "flag") is True
         assert MappingResolver.get_nested_value(data, "nested.active") is False
 
     def test_none_value(self):
         """None как значение (не отсутствие ключа)"""
         data = {"value": None}
-        
+
         result = MappingResolver.get_nested_value(data, "value")
-        
+
         assert result is None
 
     def test_list_value(self):
         """List как значение"""
         data = {"items": [1, 2, 3]}
-        
+
         result = MappingResolver.get_nested_value(data, "items")
-        
+
         assert result == [1, 2, 3]
 
     def test_dict_value(self):
         """Dict как значение"""
         data = {"config": {"key": "value"}}
-        
+
         result = MappingResolver.get_nested_value(data, "config")
-        
+
         assert result == {"key": "value"}
 
 
@@ -414,9 +414,9 @@ class TestBuildMappedState:
             "user_query": "Hello!",
             "user_name": "John"
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["content"] == "Hello!"
         assert result["name"] == "John"
 
@@ -432,9 +432,9 @@ class TestBuildMappedState:
                 "address": {"city": "Moscow"}
             }
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["name"] == "John"
         assert result["city"] == "Moscow"
 
@@ -446,9 +446,9 @@ class TestBuildMappedState:
             "number": 42
         }
         state = {"query": "Hello!"}
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["content"] == "Hello!"
         assert result["fixed_field"] == "constant_value"
         assert result["number"] == 42
@@ -460,9 +460,9 @@ class TestBuildMappedState:
             "query": "Hello!",
             "variables": {"x": 1}
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result == {}
 
     def test_missing_source_returns_none(self):
@@ -472,9 +472,9 @@ class TestBuildMappedState:
             "name": "@state:user.missing"
         }
         state = {"user": {"name": "John"}}
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["content"] is None
         assert result["name"] is None
 
@@ -492,9 +492,9 @@ class TestBuildMappedState:
             "user": {"profile": {"name": "Иван"}},
             "variables": {"api_key": "secret"}
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["content"] == "Привет!"
         assert result["user_name"] == "Иван"
         assert result["default_lang"] == "ru"
@@ -509,9 +509,9 @@ class TestBuildMappedState:
         state = {
             "variables": {"old_var": "old_value"}
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["variables"] == {"new_var": "new_value"}
 
     def test_complex_nested_state(self):
@@ -535,9 +535,9 @@ class TestBuildMappedState:
             },
             "variables": {}
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["order_id"] == "ORD-123"
         assert result["customer_name"] == "Иван Петров"
         assert result["delivery_city"] == "Москва"
@@ -559,9 +559,9 @@ class TestBuildMappedStateWithVar:
                 "api_key": "secret123"
             }
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["company"] == "ACME Corp"
         assert result["api_key"] == "secret123"
 
@@ -581,9 +581,9 @@ class TestBuildMappedStateWithVar:
                 }
             }
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["url"] == "https://api.example.com"
         assert result["timeout"] == 30
 
@@ -605,9 +605,9 @@ class TestBuildMappedStateWithVar:
                 "config": {"api_key": "secret"}
             }
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["content"] == "Привет!"
         assert result["user_name"] == "Иван"
         assert result["company"] == "ACME"
@@ -643,9 +643,9 @@ class TestBuildMappedStateWithVar:
                 }
             }
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["Authorization"] == "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
         assert result["X-API-Key"] == "pk_live_123456"
 
@@ -665,9 +665,9 @@ class TestBuildMappedStateWithVar:
                 "settings": {"units": "metric"}
             }
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["city"] == "Moscow"
         assert result["api_key"] == "abc123"
         assert result["units"] == "metric"
@@ -688,9 +688,9 @@ class TestBuildMappedStateWithVar:
                 }
             }
         }
-        
+
         result = MappingResolver.build_mapped_state(mapping, state)
-        
+
         assert result["base_url"] == "https://api.example.com"
         assert result["endpoint"] == "/users/123"
         assert result["version"] == "v2"
@@ -702,9 +702,9 @@ class TestResolveVarsInString:
     def test_simple_var_replacement(self):
         """Простая замена @var:name"""
         variables = {"token": "abc123"}
-        
+
         result = MappingResolver.resolve_vars_in_string("Bearer @var:token", variables)
-        
+
         assert result == "Bearer abc123"
 
     def test_nested_var_replacement(self):
@@ -715,11 +715,11 @@ class TestResolveVarsInString:
                 "base_url": "https://api.example.com"
             }
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "Key: @var:config.api_key", variables
         )
-        
+
         assert result == "Key: secret123"
 
     def test_deeply_nested_var(self):
@@ -733,11 +733,11 @@ class TestResolveVarsInString:
                 }
             }
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "Value: @var:a.b.c.d", variables
         )
-        
+
         assert result == "Value: deep_value"
 
     def test_multiple_vars_in_string(self):
@@ -746,11 +746,11 @@ class TestResolveVarsInString:
             "host": "api.example.com",
             "version": "v2"
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "https://@var:host/@var:version/users", variables
         )
-        
+
         assert result == "https://api.example.com/v2/users"
 
     def test_multiple_nested_vars(self):
@@ -761,21 +761,21 @@ class TestResolveVarsInString:
                 "token": "xyz789"
             }
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "@var:auth.type @var:auth.token", variables
         )
-        
+
         assert result == "Bearer xyz789"
 
     def test_no_vars_returns_unchanged(self):
         """Строка без @var: возвращается без изменений"""
         variables = {"key": "value"}
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "Just a regular string", variables
         )
-        
+
         assert result == "Just a regular string"
 
     def test_missing_var_raises_error(self):
@@ -799,23 +799,23 @@ class TestResolveVarsInString:
     def test_empty_string(self):
         """Пустая строка"""
         variables = {"key": "value"}
-        
+
         result = MappingResolver.resolve_vars_in_string("", variables)
-        
+
         assert result == ""
 
     def test_none_value(self):
         """None как входное значение"""
         variables = {"key": "value"}
-        
+
         result = MappingResolver.resolve_vars_in_string(None, variables)
-        
+
         assert result is None
 
     def test_non_string_value(self):
         """Не-строка возвращается без изменений"""
         variables = {"key": "value"}
-        
+
         assert MappingResolver.resolve_vars_in_string(42, variables) == 42
         assert MappingResolver.resolve_vars_in_string(True, variables) is True
         assert MappingResolver.resolve_vars_in_string([1, 2], variables) == [1, 2]
@@ -828,29 +828,29 @@ class TestResolveVarsInString:
     def test_var_only_string(self):
         """Строка состоящая только из @var:"""
         variables = {"token": "secret"}
-        
+
         result = MappingResolver.resolve_vars_in_string("@var:token", variables)
-        
+
         assert result == "secret"
 
     def test_numeric_var_value_converted_to_string(self):
         """Числовое значение конвертируется в строку"""
         variables = {"count": 42, "price": 99.99}
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "Count: @var:count, Price: @var:price", variables
         )
-        
+
         assert result == "Count: 42, Price: 99.99"
 
     def test_boolean_var_value_converted_to_string(self):
         """Boolean конвертируется в строку"""
         variables = {"enabled": True, "debug": False}
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "Enabled: @var:enabled, Debug: @var:debug", variables
         )
-        
+
         assert result == "Enabled: True, Debug: False"
 
     def test_auth_header_bearer_token(self):
@@ -860,11 +860,11 @@ class TestResolveVarsInString:
                 "bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxx"
             }
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "Bearer @var:auth.bearer_token", variables
         )
-        
+
         assert result == "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxx"
 
     def test_api_key_header(self):
@@ -876,11 +876,11 @@ class TestResolveVarsInString:
                 }
             }
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "@var:api.keys.production", variables
         )
-        
+
         assert result == "pk_live_ABC123"
 
     def test_url_with_vars(self):
@@ -891,11 +891,11 @@ class TestResolveVarsInString:
                 "version": "v3"
             }
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "https://@var:api.host/@var:api.version/forecast", variables
         )
-        
+
         assert result == "https://api.weather.com/v3/forecast"
 
     def test_special_chars_in_var_name(self):
@@ -904,11 +904,11 @@ class TestResolveVarsInString:
             "api_key_v2": "secret",
             "config_123": {"value": "test"}
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "@var:api_key_v2 @var:config_123.value", variables
         )
-        
+
         assert result == "secret test"
 
     def test_var_at_start_middle_end(self):
@@ -918,10 +918,10 @@ class TestResolveVarsInString:
             "middle": "MIDDLE",
             "end": "END"
         }
-        
+
         result = MappingResolver.resolve_vars_in_string(
             "@var:start text @var:middle text @var:end", variables
         )
-        
+
         assert result == "START text MIDDLE text END"
 

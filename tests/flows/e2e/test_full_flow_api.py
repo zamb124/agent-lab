@@ -646,7 +646,7 @@ async def run(state):
     async def test_order_path_with_interrupt(self, client, unique_id):
         """Order путь с interrupt."""
         session_id = f"e2e_complex_interrupt_flow:e2e-complex-order-{unique_id}"
-        
+
         # Первый запрос - попадаем в order_handler
         r1 = await client.post(
             "/flows/api/v1/tasks/submit",
@@ -679,7 +679,7 @@ async def run(state):
     async def test_support_path_with_interrupt(self, client, unique_id):
         """Support путь с interrupt."""
         session_id = f"e2e_complex_interrupt_flow:e2e-complex-support-{unique_id}"
-        
+
         r1 = await client.post(
             "/flows/api/v1/tasks/submit",
             json={
@@ -863,7 +863,7 @@ async def run(state):
 
         # 4. Выполняем flow
         session_id = f"e2e_full_scenario_flow:e2e-full-{unique_id}"
-        
+
         r1 = await client.post(
             "/flows/api/v1/tasks/submit",
             json={

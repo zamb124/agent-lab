@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from core.db.database import get_session_factory
 from core.db.models import DocumentProcessingStatus as DBDocumentStatus
 from core.db.models.rag import VectorDocument
+from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.rag.models import DocumentProcessingStatus as DocumentStatusModel
 
@@ -50,9 +51,7 @@ class DocumentStatusRepository:
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
             existing_result = await session.execute(
-                select(DBDocumentStatus).where(
-                    DBDocumentStatus.document_id == document_id
-                )
+                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
             )
             existing = existing_result.scalar_one_or_none()
             em = dict(extra_metadata or {})
@@ -91,9 +90,7 @@ class DocumentStatusRepository:
             await session.execute(stmt)
             await session.commit()
             result = await session.execute(
-                select(DBDocumentStatus).where(
-                    DBDocumentStatus.document_id == document_id
-                )
+                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
             )
             db_status = result.scalar_one()
             logger.info(
@@ -114,9 +111,7 @@ class DocumentStatusRepository:
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
             result = await session.execute(
-                select(DBDocumentStatus).where(
-                    DBDocumentStatus.document_id == document_id
-                )
+                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
             )
             row = result.scalar_one()
             row.task_id = task_id
@@ -210,9 +205,7 @@ class DocumentStatusRepository:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             result = await session.execute(
-                select(DBDocumentStatus).where(
-                    DBDocumentStatus.document_id == document_id
-                )
+                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
             )
             db_status = result.scalar_one_or_none()
 
@@ -273,9 +266,7 @@ class DocumentStatusRepository:
             await session.commit()
 
             result = await session.execute(
-                select(DBDocumentStatus).where(
-                    DBDocumentStatus.document_id == document_id
-                )
+                select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
             )
             db_status = result.scalar_one()
 
@@ -390,9 +381,7 @@ class DocumentStatusRepository:
     ) -> List[DocumentStatusModel]:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
-            q = select(DBDocumentStatus).where(
-                DBDocumentStatus.namespace_id == namespace_id
-            )
+            q = select(DBDocumentStatus).where(DBDocumentStatus.namespace_id == namespace_id)
             if status:
                 q = q.where(DBDocumentStatus.status.in_(status))
             q = q.order_by(DBDocumentStatus.updated_at.desc().nulls_last()).limit(limit)
@@ -427,12 +416,10 @@ class DocumentStatusRepository:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             result = await session.execute(
-                delete(DBDocumentStatus).where(
-                    DBDocumentStatus.document_id == document_id
-                )
+                delete(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
             )
             await session.commit()
-            n = int(result.rowcount or 0)
+            n = get_rowcount(result)
             if n:
                 logger.info(
                     "Удалена строка статуса документа document_id=%s",
@@ -455,8 +442,9 @@ class DocumentStatusRepository:
         if limit < 1:
             raise ValueError("limit должен быть >= 1")
 
-        expiry_status = DBDocumentStatus.completed_at + DBDocumentStatus.ttl_seconds * literal_column(
-            "interval '1 second'"
+        expiry_status = (
+            DBDocumentStatus.completed_at
+            + DBDocumentStatus.ttl_seconds * literal_column("interval '1 second'")
         )
 
         session_factory = await self._get_session_factory()

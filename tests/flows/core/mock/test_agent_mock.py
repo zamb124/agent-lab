@@ -4,10 +4,10 @@
 Mock через state.mock["agents"].
 """
 
-import pytest
-from typing import Any, Dict
 
-from apps.flows.src.models import NodeConfig, LLMConfig
+import pytest
+
+from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.state import ExecutionState
@@ -34,7 +34,7 @@ class TestNodeAsToolWrapperMock:
     async def test_mock_from_state_returns_string(self, simple_node_config):
         """Mock возвращает строку без вызова ноды."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -47,16 +47,16 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         result = await wrapper.run({"query": "test query"}, state)
-        
+
         assert result == "Mock response from node"
 
     @pytest.mark.asyncio
     async def test_mock_from_state_returns_dict(self, simple_node_config):
         """Mock возвращает словарь без вызова ноды."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -73,9 +73,9 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         result = await wrapper.run({"query": "analyze something"}, state)
-        
+
         assert result["result"] == "analysis complete"
         assert result["confidence"] == 0.95
         assert result["details"] == ["item1", "item2"]
@@ -84,7 +84,7 @@ class TestNodeAsToolWrapperMock:
     async def test_mock_disabled_calls_real_node(self, simple_node_config, mock_llm):
         """Mock выключен - вызывается реальная нода."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -97,10 +97,10 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         # mock_llm установлен в conftest, нода выполнится с mock LLM
         result = await wrapper.run({"query": "test"}, state)
-        
+
         # Должен быть результат от реальной ноды (с mock LLM)
         assert result != "should_not_be_used"
 
@@ -108,7 +108,7 @@ class TestNodeAsToolWrapperMock:
     async def test_no_mock_for_this_node_calls_real(self, simple_node_config, mock_llm):
         """Нет mock для этой ноды - вызывается реальная."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -121,17 +121,17 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         # Нет mock для test_node, вызовется реальная нода
         result = await wrapper.run({"query": "test"}, state)
-        
+
         assert result != "mock for other"
 
     @pytest.mark.asyncio
     async def test_mock_with_empty_string(self, simple_node_config):
         """Mock с пустой строкой - валидно."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -144,16 +144,16 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         result = await wrapper.run({"query": "test"}, state)
-        
+
         assert result == ""
 
     @pytest.mark.asyncio
     async def test_mock_with_list(self, simple_node_config):
         """Mock со списком - валидно."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -166,16 +166,16 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         result = await wrapper.run({"query": "test"}, state)
-        
+
         assert result == ["item1", "item2", "item3"]
 
     @pytest.mark.asyncio
     async def test_mock_with_nested_structure(self, simple_node_config):
         """Mock с вложенной структурой."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -199,9 +199,9 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         result = await wrapper.run({"query": "test"}, state)
-        
+
         assert result["response"] == "Main response"
         assert result["metadata"]["source"] == "database"
         assert len(result["items"]) == 2
@@ -225,10 +225,10 @@ class TestNodeAsToolWrapperMock:
             prompt="Prompt 2",
             tools=[],
         )
-        
+
         wrapper1 = NodeAsToolWrapper(node_config=node1_config)
         wrapper2 = NodeAsToolWrapper(node_config=node2_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -242,10 +242,10 @@ class TestNodeAsToolWrapperMock:
                 }
             }
         )
-        
+
         result1 = await wrapper1.run({"query": "test"}, state)
         result2 = await wrapper2.run({"query": "test"}, state)
-        
+
         assert result1 == "Response from node 1"
         assert result2 == "Response from node 2"
 
@@ -253,7 +253,7 @@ class TestNodeAsToolWrapperMock:
     async def test_mock_preserves_state(self, simple_node_config):
         """Mock не модифицирует state (кроме nested states)."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -267,9 +267,9 @@ class TestNodeAsToolWrapperMock:
             },
             existing_key="existing_value"
         )
-        
+
         await wrapper.run({"query": "test"}, state)
-        
+
         # State не должен быть модифицирован (mock не вызывает ноду)
         assert state.existing_key == "existing_value"
         assert not hasattr(state, "__nested_states__")  # Нода не вызывалась
@@ -278,14 +278,14 @@ class TestNodeAsToolWrapperMock:
     async def test_wrapper_name_matches_node_id(self, simple_node_config):
         """Имя wrapper соответствует node_id."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         assert wrapper.name == "test_node"
 
     @pytest.mark.asyncio
     async def test_wrapper_description(self, simple_node_config):
         """Description wrapper соответствует ноде."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         # Description берётся из node_config.description или генерируется
         # simple_node_config.description = "Test node for mocking"
         assert wrapper.description == "Test node for mocking"
@@ -298,7 +298,7 @@ class TestNodeMockIntegration:
     async def test_mock_node_in_tools_chain(self, simple_node_config):
         """Mock нода в цепочке tools."""
         wrapper = NodeAsToolWrapper(node_config=simple_node_config)
-        
+
         # Эмулируем вызов через ToolFactory (как это делает LlmNode)
         state = ExecutionState(
             task_id="test-task",
@@ -311,9 +311,9 @@ class TestNodeMockIntegration:
             },
             content="User input"
         )
-        
+
         # Прямой вызов wrapper как tool
         args = {"query": "process this"}
         result = await wrapper.run(args, state)
-        
+
         assert result == "Mock response"

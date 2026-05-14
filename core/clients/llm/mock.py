@@ -102,7 +102,7 @@ class MockLLM:
     """
     Mock LLM для тестов.
     Работает с A2A типами.
-    
+
     Поддерживает Redis для межпроцессного обмена mock ответами:
     - Тест записывает ответы в Redis
     - Worker читает ответы из Redis
@@ -223,7 +223,7 @@ class MockLLM:
             return self._process_response(response, messages)
 
         return self._generate_from_patterns(messages)
-    
+
     async def _get_response_async(self, messages: List[Message]) -> Dict[str, Any]:
         """Асинхронный метод получения ответа с Redis поддержкой."""
         # Локальная очередь приоритетнее Redis: в одном тесте uvicorn ест очередь
@@ -315,7 +315,7 @@ class MockLLM:
                     root = part.get("root", part)
                     if isinstance(root, dict) and "text" in root:
                         content_str += root["text"]
-        
+
         metadata = last_message.metadata if hasattr(last_message, "metadata") else last_message.get("metadata") or {}
         if metadata and metadata.get("tool_call_id"):
             for key, response in self._responses.items():
@@ -360,10 +360,10 @@ class MockLLM:
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream метод - 100% реалистичная симуляция OpenAI streaming.
-        
+
         Стримит по токенам (2-5 символов) как настоящая LLM.
         Tool calls тоже стримятся по частям: сначала id, потом name, потом arguments кусками.
-        
+
         Поддерживает Redis для межпроцессного обмена mock ответами.
         Поддерживает response_format для structured output.
         """
@@ -392,10 +392,10 @@ class MockLLM:
                 chunk_size = min(3, len(reasoning) - pos)
                 chunk = reasoning[pos : pos + chunk_size]
                 pos += chunk_size
-                
+
                 is_last_reasoning_chunk = pos >= len(reasoning)
                 is_last_reasoning_overall = is_last_reasoning_chunk and not content and not tool_calls
-                
+
                 yield TaskArtifactUpdateEvent(
                     contextId=context_id,
                     taskId=task_id,
@@ -417,10 +417,10 @@ class MockLLM:
                 chunk_size = min(3, len(content) - pos)
                 chunk = content[pos : pos + chunk_size]
                 pos += chunk_size
-                
+
                 is_last_content = pos >= len(content)
                 is_last = is_last_content and not tool_calls
-                
+
                 yield TaskArtifactUpdateEvent(
                     contextId=context_id,
                     taskId=task_id,
@@ -564,7 +564,7 @@ class MockLLM:
         """
         del seed, reasoning_effort, extra_body
         normalized = _normalize_messages(messages)
-        
+
         response_format = None
         if response_model:
             json_schema = response_model.model_json_schema()
@@ -576,7 +576,7 @@ class MockLLM:
                     "schema": json_schema,
                 },
             }
-        
+
         content_parts: List[str] = []
         tool_calls: List[Dict[str, Any]] = []
         last_status_text = ""
@@ -604,7 +604,7 @@ class MockLLM:
                     tc = event.status.message.metadata.get("tool_calls")
                     if tc:
                         tool_calls = tc
-        
+
         content = "".join(content_parts)
         if response_model:
             text_for_json = content if content.strip() else last_status_text
@@ -615,7 +615,7 @@ class MockLLM:
                 )
             data = json.loads(text_for_json)
             return response_model.model_validate(data)
-        
+
         return Message(
             messageId=str(uuid.uuid4()),
             role=Role.agent,
@@ -696,10 +696,10 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                 parts=[Part(root=TextPart(text=messages))],
             )
         ]
-    
+
     if isinstance(messages, Message):
         return [messages]
-    
+
     if isinstance(messages, dict):
         role = Role.user if messages.get("role", "user") == "user" else Role.agent
         content = messages.get("content", "")
@@ -710,13 +710,13 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                 parts=[Part(root=TextPart(text=content))],
             )
         ]
-    
+
     if isinstance(messages, list):
         if not messages:
             return []
-        
+
         first = messages[0]
-        
+
         if isinstance(first, str):
             result = []
             for i, text in enumerate(messages):
@@ -729,10 +729,10 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                     )
                 )
             return result
-        
+
         if isinstance(first, Message):
             return messages
-        
+
         if isinstance(first, dict):
             result = []
             for msg in messages:
@@ -746,7 +746,7 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                     )
                 )
             return result
-    
+
     raise ValueError(f"Unsupported messages type: {type(messages)}")
 
 

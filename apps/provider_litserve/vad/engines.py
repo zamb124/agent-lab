@@ -86,7 +86,7 @@ class LocalVADEngine:
         if entry.api_model_id in self._models:
             return self._models[entry.api_model_id]
         try:
-            from silero_vad import load_silero_vad, get_speech_timestamps
+            from silero_vad import get_speech_timestamps, load_silero_vad
         except ImportError as exc:
             raise RuntimeError(
                 "VAD: установите silero-vad (uv add silero-vad --group rag)"

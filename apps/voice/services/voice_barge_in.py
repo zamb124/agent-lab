@@ -11,7 +11,6 @@ from apps.voice.services.voice_transport_interrupt import (
     execute_voice_transport_interrupt,
 )
 
-
 if TYPE_CHECKING:
     from apps.voice.services.voice_client_channel import VoiceClientChannel
 

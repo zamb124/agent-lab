@@ -40,13 +40,13 @@ class TriggerReregisterDisabledError(Exception):
 class TriggerRegistry:
     """
     Реестр и менеджер триггеров.
-    
+
     Отвечает за:
     - Регистрацию handlers для разных типов триггеров
     - Синхронизацию триггеров при сохранении агента
     - Получение handler по типу триггера
     """
-    
+
     def __init__(self, base_url: str):
         """
         Args:
@@ -54,7 +54,7 @@ class TriggerRegistry:
         """
         self.base_url = base_url
         self._handlers: Dict[TriggerType, BaseTriggerHandler] = {}
-    
+
     def register_handler(
         self,
         trigger_type: TriggerType,
@@ -62,7 +62,7 @@ class TriggerRegistry:
     ) -> None:
         """
         Регистрирует handler для типа триггера.
-        
+
         Args:
             trigger_type: Тип триггера
             handler_class: Класс handler
@@ -70,19 +70,19 @@ class TriggerRegistry:
         handler = handler_class(self.base_url)
         self._handlers[trigger_type] = handler
         logger.info(f"Registered trigger handler: {trigger_type.value}")
-    
+
     def get_handler(self, trigger_type: TriggerType) -> Optional[BaseTriggerHandler]:
         """
         Получает handler по типу триггера.
-        
+
         Args:
             trigger_type: Тип триггера
-            
+
         Returns:
             Handler или None
         """
         return self._handlers.get(trigger_type)
-    
+
     async def sync_triggers(
         self,
         flow_id: str,
@@ -91,50 +91,50 @@ class TriggerRegistry:
     ) -> FlowConfig:
         """
         Синхронизирует триггеры при сохранении агента.
-        
+
         Находит diff между старыми и новыми триггерами и вызывает
         register/unregister для каждого изменения.
-        
+
         Args:
             flow_id: ID агента
             old_config: Предыдущий конфиг (None если новый агент)
             new_config: Новый конфиг
-            
+
         Returns:
             Обновленный new_config с runtime данными триггеров
         """
         old_triggers = old_config.triggers if old_config else {}
         new_triggers = new_config.triggers
-        
+
         old_ids = set(old_triggers.keys())
         new_ids = set(new_triggers.keys())
-        
+
         # Триггеры для удаления
         removed_ids = old_ids - new_ids
-        
+
         # Триггеры для добавления
         added_ids = new_ids - old_ids
-        
+
         # Триггеры которые могли измениться
         common_ids = old_ids & new_ids
-        
+
         # Unregister удаленных
         for trigger_id in removed_ids:
             trigger = old_triggers[trigger_id]
             await self._unregister_trigger(flow_id, trigger)
-        
+
         # Register новых
         for trigger_id in added_ids:
             trigger = new_triggers[trigger_id]
             if trigger.enabled:
                 updated_trigger = await self._register_trigger(flow_id, trigger)
                 new_triggers[trigger_id] = updated_trigger
-        
+
         # Проверяем изменения в существующих
         for trigger_id in common_ids:
             old_trigger = old_triggers[trigger_id]
             new_trigger = new_triggers[trigger_id]
-            
+
             if self._trigger_changed(old_trigger, new_trigger):
                 # Перерегистрируем
                 await self._unregister_trigger(flow_id, old_trigger)
@@ -145,21 +145,21 @@ class TriggerRegistry:
                     # Disabled - обновляем статус
                     new_trigger.status = TriggerStatus.INACTIVE
                     new_triggers[trigger_id] = new_trigger
-        
+
         # Обновляем конфиг
         new_config.triggers = new_triggers
         return new_config
-    
+
     async def register_all(self, flow_id: str, config: FlowConfig) -> FlowConfig:
         """
         Регистрирует все enabled триггеры агента.
-        
+
         Используется при старте сервиса для восстановления триггеров.
-        
+
         Args:
             flow_id: ID агента
             config: Конфигурация агента
-            
+
         Returns:
             Обновленный конфиг
         """
@@ -167,15 +167,15 @@ class TriggerRegistry:
             if trigger.enabled:
                 updated_trigger = await self._register_trigger(flow_id, trigger)
                 config.triggers[trigger_id] = updated_trigger
-        
+
         return config
-    
+
     async def unregister_all(self, flow_id: str, config: FlowConfig) -> None:
         """
         Снимает все триггеры агента.
-        
+
         Используется при удалении агента.
-        
+
         Args:
             flow_id: ID агента
             config: Конфигурация агента
@@ -201,7 +201,7 @@ class TriggerRegistry:
             raise TriggerReregisterUnsupportedError(trigger.type)
         await self._unregister_trigger(flow_id, trigger)
         return await self._register_trigger(flow_id, trigger)
-    
+
     async def _register_trigger(
         self,
         flow_id: str,
@@ -209,18 +209,18 @@ class TriggerRegistry:
     ) -> TriggerConfig:
         """
         Регистрирует один триггер.
-        
+
         Args:
             flow_id: ID агента
             trigger: Конфигурация триггера
-            
+
         Returns:
             Обновленный trigger с runtime данными
         """
         handler = self.get_handler(trigger.type)
-        
+
         trigger_type_str = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
-        
+
         if handler is None:
             logger.warning(
                 f"No handler for trigger type {trigger_type_str}, "
@@ -229,7 +229,7 @@ class TriggerRegistry:
             trigger.status = TriggerStatus.ERROR
             trigger.last_error = f"No handler for type {trigger_type_str}"
             return trigger
-        
+
         try:
             updated_trigger = await handler.register(flow_id, trigger)
             logger.info(
@@ -245,7 +245,7 @@ class TriggerRegistry:
             trigger.status = TriggerStatus.ERROR
             trigger.last_error = str(e)
             return trigger
-    
+
     async def _unregister_trigger(
         self,
         flow_id: str,
@@ -253,21 +253,21 @@ class TriggerRegistry:
     ) -> None:
         """
         Снимает один триггер.
-        
+
         Args:
             flow_id: ID агента
             trigger: Конфигурация триггера
         """
         handler = self.get_handler(trigger.type)
         trigger_type_str = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
-        
+
         if handler is None:
             logger.warning(
                 f"No handler for trigger type {trigger_type_str}, "
                 f"cannot unregister: flow_id={flow_id}, trigger={trigger.trigger_id}"
             )
             return
-        
+
         try:
             await handler.unregister(flow_id, trigger)
             logger.info(
@@ -279,7 +279,7 @@ class TriggerRegistry:
                 f"Failed to unregister trigger: flow_id={flow_id}, "
                 f"trigger={trigger.trigger_id}, error={e}"
             )
-    
+
     def _trigger_changed(
         self,
         old_trigger: TriggerConfig,
@@ -287,21 +287,21 @@ class TriggerRegistry:
     ) -> bool:
         """
         Проверяет изменился ли триггер.
-        
+
         Сравнивает ключевые поля, игнорируя runtime данные.
         """
         if old_trigger.enabled != new_trigger.enabled:
             return True
-        
+
         if old_trigger.type != new_trigger.type:
             return True
-        
+
         if old_trigger.config != new_trigger.config:
             return True
-        
+
         if old_trigger.input_mapping != new_trigger.input_mapping:
             return True
-        
+
         return False
 
 

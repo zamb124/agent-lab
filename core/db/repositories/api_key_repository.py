@@ -11,6 +11,7 @@ from sqlalchemy import select, update
 
 from core.db.database import get_session_factory
 from core.db.models.platform import ApiKeyRecord
+from core.db.utils import get_rowcount
 
 
 class ApiKeyRepository:
@@ -91,7 +92,7 @@ class ApiKeyRepository:
                 .values(name=name)
             )
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0
 
     async def revoke(self, key_id: str, company_id: str) -> bool:
         session_factory = await get_session_factory(self._db_url)
@@ -106,4 +107,4 @@ class ApiKeyRepository:
                 .values(revoked=True)
             )
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0

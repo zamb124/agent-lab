@@ -5,10 +5,11 @@ API для управления RAG провайдерами.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from apps.rag.config import get_rag_settings
 from core.logging import get_logger
 from core.pagination import ListResponse
 from core.rag.factory import get_rag_provider
-from apps.rag.config import get_rag_settings
+
 from ..dependencies import ContainerDep
 
 logger = get_logger(__name__)
@@ -47,15 +48,15 @@ async def list_providers(
 ) -> ProvidersView:
     """
     Возвращает список доступных RAG провайдеров.
-    
+
     Returns:
         Список провайдеров с их статусом и текущий активный провайдер
     """
     settings = get_rag_settings()
-    
+
     if not settings.rag.enabled:
         raise HTTPException(status_code=503, detail="RAG is disabled")
-    
+
     providers = []
     for name, config in settings.rag.providers.items():
         if config.enabled:
@@ -65,9 +66,9 @@ async def list_providers(
                 is_default=(name == settings.rag.default_provider),
                 type=name
             ))
-    
+
     logger.info(f"Список провайдеров запрошен: {[p.name for p in providers]}")
-    
+
     return ProvidersView(
         items=providers,
         current_provider=settings.rag.default_provider,
@@ -81,13 +82,13 @@ async def switch_provider(
 ):
     """
     Переключает активный RAG провайдер.
-    
+
     ВАЖНО: Это переключение действует только в рамках текущей сессии.
     Для постоянного изменения нужно обновить конфигурацию.
     """
     try:
         settings = get_rag_settings()
-        provider = get_rag_provider(request.provider_name, settings=settings)
+        get_rag_provider(request.provider_name, settings=settings)
         logger.info(f"Провайдер переключен на: {request.provider_name}")
         return {
             "success": True,

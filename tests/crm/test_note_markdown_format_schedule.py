@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -48,7 +48,14 @@ async def test_schedule_note_markdown_format_skips_without_context(monkeypatch: 
 
 @pytest.mark.asyncio
 async def test_enqueue_note_markdown_format_task_requires_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("apps.crm.services.note_markdown_format_schedule.get_context", lambda: None)
+    mock_container = MagicMock()
+    mock_container.task_service.start_note_markdown_format = AsyncMock(
+        side_effect=ValueError("Для старта форматирования заметки нужен контекст запроса"),
+    )
+    monkeypatch.setattr(
+        "apps.crm.services.note_markdown_format_schedule.get_crm_container",
+        lambda: mock_container,
+    )
     from apps.crm.services.note_markdown_format_schedule import enqueue_note_markdown_format_task
 
     with pytest.raises(ValueError, match="контекст"):

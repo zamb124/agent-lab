@@ -6,12 +6,10 @@ Idle worker для фоновых периодических задач.
 """
 
 import asyncio
-import os
-
-from core.config.testing import is_testing
 
 from taskiq import TaskiqState
 
+from core.config.testing import is_testing
 from core.logging import get_logger
 from core.tasks.broker import (
     create_broker,

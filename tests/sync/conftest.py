@@ -33,32 +33,36 @@ os.environ.setdefault("CALLS__LIVEKIT_PUBLIC_URL", "http://localhost:7890")
 os.environ.setdefault("CALLS__LIVEKIT_API_KEY", "devkey")
 os.environ.setdefault("CALLS__LIVEKIT_API_SECRET", "secret")
 
-import core.config.base as _sync_test_config_base
+import core.config.base as _sync_test_config_base  # noqa: E402
 
 _sync_test_config_base._settings_instance = None
-from core.config import set_settings
-from core.config.base import BaseSettings
-from core.config.loader import load_merged_config
+from core.config import set_settings  # noqa: E402
+from core.config.base import BaseSettings  # noqa: E402
+from core.config.loader import load_merged_config  # noqa: E402
 
 set_settings(BaseSettings(**load_merged_config(service_name="sync", silent=True)))
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator  # noqa: E402
 
-import pytest
-import pytest_asyncio
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
 
-from apps.sync.db.base import SyncDatabase
-import apps.sync.db.models  # noqa: F401 — регистрация моделей в Base.metadata
-from apps.sync.db.repositories.call_repository import CallRepository
-from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.db.repositories.file_repository import SyncFileRepository
-from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
-from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
-from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
-from apps.sync.db.repositories.thread_repository import ThreadRepository
-from core.models.identity_models import Company, Namespace, User
-from core.utils.tokens import get_token_service
+import apps.sync.db.models  # noqa: E402, F401 — регистрация моделей в Base.metadata
+from apps.sync.db.base import SyncDatabase  # noqa: E402
+from apps.sync.db.repositories.call_repository import CallRepository  # noqa: E402
+from apps.sync.db.repositories.call_speech_egress_repository import (  # noqa: E402
+    CallSpeechEgressTrackRepository,
+)
+from apps.sync.db.repositories.channel_repository import ChannelRepository  # noqa: E402
+from apps.sync.db.repositories.file_repository import SyncFileRepository  # noqa: E402
+from apps.sync.db.repositories.git_resource_ref_repository import (  # noqa: E402
+    GitResourceRefRepository,
+)
+from apps.sync.db.repositories.meeting_repository import CallRecordingRepository  # noqa: E402
+from apps.sync.db.repositories.message_repository import MessageRepository  # noqa: E402
+from apps.sync.db.repositories.thread_repository import ThreadRepository  # noqa: E402
+from core.models.identity_models import Company, Namespace, User  # noqa: E402
+from core.utils.tokens import get_token_service  # noqa: E402
 
 _SYNC_REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,10 +87,7 @@ def livekit_cli_test_container() -> None:
         timeout=120,
     )
     if r.returncode != 0:
-        raise RuntimeError(
-            "docker-compose up livekit-cli-test failed:\n"
-            f"{r.stdout}\n{r.stderr}"
-        )
+        raise RuntimeError(f"docker-compose up livekit-cli-test failed:\n{r.stdout}\n{r.stderr}")
     yield
 
 
@@ -194,7 +195,7 @@ async def sync_auth_token_user2(
 ) -> str:
     from apps.sync.container import get_sync_container
 
-    container = get_sync_container()
+    get_sync_container()
     token_service = get_token_service()
     return token_service.create_token(sync_user2_id, company_id=company_id)
 
@@ -334,8 +335,7 @@ async def livekit_demo_publisher(livekit_cli_test_container):
         )
         if cp.returncode != 0:
             raise RuntimeError(
-                "docker cp speech_demo.ogg в livekit-cli-test не удался:\n"
-                f"{cp.stdout}\n{cp.stderr}"
+                f"docker cp speech_demo.ogg в livekit-cli-test не удался:\n{cp.stdout}\n{cp.stderr}"
             )
         command = [
             "docker",
@@ -385,5 +385,3 @@ async def livekit_demo_publisher(livekit_cli_test_container):
         except asyncio.TimeoutError:
             process.kill()
             await process.wait()
-
-

@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-
 CallMode = Literal["p2p", "sfu"]
 
 SignalType = Literal["offer", "answer", "ice_candidate"]

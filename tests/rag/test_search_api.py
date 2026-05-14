@@ -6,8 +6,9 @@
 - POST /rag/api/v1/search - глобальный поиск по нескольким namespaces
 """
 
-import pytest
 from io import BytesIO
+
+import pytest
 
 # Несколько HTTP + эмбеддинг/поиск за один тест; глобальный timeout=5s ловит SIGALRM,
 # фикстура rag_client закрывает httpx-клиент при teardown — возможен RuntimeError на await post.
@@ -25,7 +26,7 @@ async def test_search_documents(rag_client, unique_namespace_name, auth_headers_
         headers=auth_headers_system
     )
     namespace_id = ns_response.json()["name"]
-    
+
     # Загружаем документ с контентом
     content = b"Python is a programming language. It is used for web development and data science."
     files = {"file": ("python.txt", BytesIO(content), "text/plain")}
@@ -36,12 +37,12 @@ async def test_search_documents(rag_client, unique_namespace_name, auth_headers_
     )
     assert doc_response.status_code == 202  # Async processing
     document_id = doc_response.json()["document_id"]
-    
+
     import asyncio
     max_wait = 90
     wait_interval = 0.25
     elapsed = 0
-    
+
     while elapsed < max_wait:
         status_response = await rag_client.get(
             f"/rag/api/v1/documents/{document_id}/status",
@@ -53,7 +54,7 @@ async def test_search_documents(rag_client, unique_namespace_name, auth_headers_
                 break
         await asyncio.sleep(wait_interval)
         elapsed += wait_interval
-    
+
     # Ищем по семантике
     response = await rag_client.post(
         f"/rag/api/v1/namespaces/{namespace_id}/search",
@@ -62,7 +63,7 @@ async def test_search_documents(rag_client, unique_namespace_name, auth_headers_
     )
     assert response.status_code == 200
     data = response.json()
-    
+
     assert len(data["results"]) > 0
     r0 = data["results"][0]
     assert {
@@ -90,7 +91,7 @@ async def test_search_documents_with_filters(rag_client, unique_namespace_name, 
         headers=auth_headers_system
     )
     namespace_id = ns_response.json()["name"]
-    
+
     # Загружаем документ
     content = b"FastAPI is a web framework for building APIs with Python."
     files = {"file": ("fastapi.txt", BytesIO(content), "text/plain")}
@@ -99,7 +100,7 @@ async def test_search_documents_with_filters(rag_client, unique_namespace_name, 
         files=files,
         headers=auth_headers_system
     )
-    
+
     # Поиск с фильтрами (пустой фильтр = без фильтрации)
     response = await rag_client.post(
         f"/rag/api/v1/namespaces/{namespace_id}/search",
@@ -131,7 +132,7 @@ async def test_search_empty_namespace(rag_client, unique_namespace_name, auth_he
         headers=auth_headers_system
     )
     namespace_id = ns_response.json()["name"]
-    
+
     # Поиск
     response = await rag_client.post(
         f"/rag/api/v1/namespaces/{namespace_id}/search",
@@ -154,7 +155,7 @@ async def test_search_with_limit(rag_client, unique_namespace_name, auth_headers
         headers=auth_headers_system
     )
     namespace_id = ns_response.json()["name"]
-    
+
     # Загружаем несколько документов
     for i in range(3):
         content = f"Document {i} about Python programming and web development.".encode()
@@ -164,7 +165,7 @@ async def test_search_with_limit(rag_client, unique_namespace_name, auth_headers
             files=files,
             headers=auth_headers_system
         )
-    
+
     # Поиск с лимитом
     response = await rag_client.post(
         f"/rag/api/v1/namespaces/{namespace_id}/search",
@@ -188,7 +189,7 @@ async def test_search_relevance_score(rag_client, unique_namespace_name, auth_he
         headers=auth_headers_system
     )
     namespace_id = ns_response.json()["name"]
-    
+
     # Загружаем документ
     content = b"Machine learning is a subset of artificial intelligence."
     files = {"file": ("ml.txt", BytesIO(content), "text/plain")}
@@ -197,7 +198,7 @@ async def test_search_relevance_score(rag_client, unique_namespace_name, auth_he
         files=files,
         headers=auth_headers_system
     )
-    
+
     # Поиск
     response = await rag_client.post(
         f"/rag/api/v1/namespaces/{namespace_id}/search",
@@ -206,7 +207,7 @@ async def test_search_relevance_score(rag_client, unique_namespace_name, auth_he
     )
     assert response.status_code == 200
     data = response.json()
-    
+
     if len(data["results"]) > 0:
         result = data["results"][0]
         assert {
@@ -223,21 +224,21 @@ async def test_global_search(rag_client, unique_id, auth_headers_system):
     # Создаем два namespace
     ns1_name = f"test_ns1_{unique_id}"
     ns2_name = f"test_ns2_{unique_id}"
-    
+
     ns1_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": ns1_name},
         headers=auth_headers_system
     )
     ns1_id = ns1_response.json()["name"]
-    
+
     ns2_response = await rag_client.post(
         "/rag/api/v1/namespaces",
         json={"name": ns2_name},
         headers=auth_headers_system
     )
     ns2_id = ns2_response.json()["name"]
-    
+
     # Загружаем документы в оба namespace
     files1 = {"file": ("doc1.txt", BytesIO(b"Python programming"), "text/plain")}
     await rag_client.post(
@@ -245,14 +246,14 @@ async def test_global_search(rag_client, unique_id, auth_headers_system):
         files=files1,
         headers=auth_headers_system
     )
-    
+
     files2 = {"file": ("doc2.txt", BytesIO(b"JavaScript programming"), "text/plain")}
     await rag_client.post(
         f"/rag/api/v1/namespaces/{ns2_id}/documents",
             files=files2,
         headers=auth_headers_system
     )
-    
+
     # Глобальный поиск
     response = await rag_client.post(
         "/rag/api/v1/search",
@@ -265,7 +266,7 @@ async def test_global_search(rag_client, unique_id, auth_headers_system):
     )
     assert response.status_code == 200
     data = response.json()
-    
+
     assert {
         "keys": sorted(data.keys()),
         "results_is_dict": isinstance(data["results"], dict),

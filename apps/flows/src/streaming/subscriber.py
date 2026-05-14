@@ -13,6 +13,7 @@ from a2a.types import (
 
 from core.clients import RedisClient
 from core.logging import get_logger
+
 from .base import BaseSubscriber, StreamEvent
 
 logger = get_logger(__name__)
@@ -37,11 +38,11 @@ TERMINAL_STATES = {"completed", "failed", "canceled", "input-required"}
 def is_final_event(event: StreamEvent) -> bool:
     """
     Проверяет является ли событие финальным.
-    
+
     Финальное событие - TaskStatusUpdateEvent с:
     1. final=True
     2. state в терминальном состоянии (completed, failed, canceled, input-required)
-    
+
     Промежуточные события с final=True (например tool_call) НЕ являются финальными!
     """
     if isinstance(event, TaskStatusUpdateEvent):
@@ -69,8 +70,8 @@ class EventSubscriber(BaseSubscriber):
         self.redis = redis_client
 
     async def subscribe(
-        self, 
-        task_id: str, 
+        self,
+        task_id: str,
         timeout: float = 300.0,
         ready_event: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[StreamEvent]:
@@ -104,12 +105,12 @@ class EventSubscriber(BaseSubscriber):
             except Exception as e:
                 logger.error(f"[Subscriber] Error parsing event on {channel}: {e}")
                 continue
-        
+
         logger.debug(f"[Subscriber] Subscription ended on {channel}, received {event_count} events")
 
     async def collect(
-        self, 
-        task_id: str, 
+        self,
+        task_id: str,
         timeout: float = 300.0,
         ready_event: Optional[asyncio.Event] = None,
     ) -> List[StreamEvent]:

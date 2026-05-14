@@ -3,9 +3,10 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict
 from enum import Enum
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, ConfigDict
 
 from core.fields import Field
 
@@ -31,11 +32,11 @@ class Transaction(BaseModel):
     Транзакция пополнения баланса компании.
     Хранится в Storage с ключом: transaction:{transaction_id}
     """
-    
+
     model_config = ConfigDict(
         json_schema_extra={"storage_prefix": "transaction"}
     )
-    
+
     transaction_id: str = Field(
         title="ID транзакции",
         description="Уникальный ID транзакции в нашей системе",
@@ -97,11 +98,11 @@ class PaymentNotification(BaseModel):
     Уведомление от платежного провайдера (webhook).
     Сохраняется для истории и защиты от дублирования.
     """
-    
+
     model_config = ConfigDict(
         json_schema_extra={"storage_prefix": "payment_notification"}
     )
-    
+
     notification_id: str = Field(
         title="ID уведомления",
         description="Уникальный ID уведомления"

@@ -21,9 +21,9 @@ import apps.scheduler.scheduler  # noqa: E402, F401
 
 if __name__ == "__main__":
     original_argv = sys.argv.copy()
-    
+
     sys.argv = ["taskiq", "scheduler", "apps.scheduler.scheduler:scheduler"]
-    
+
     try:
         import runpy
         runpy.run_module("taskiq", run_name="__main__", alter_sys=True)

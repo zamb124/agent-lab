@@ -19,14 +19,14 @@ from httpx import ASGITransport, AsyncClient
 
 from core.config import get_settings
 from core.models.identity_models import Company, User
+from core.short_links.kinds import SHORT_LINK_KIND_COMPANY_INVITE
+from core.short_links.repository import ShortLinkRepository
 from core.utils.invite_tokens import (
     INVITE_REDIS_KEY_PREFIX,
     INVITE_TOKEN_AUDIENCE,
     INVITE_TOKEN_TYPE,
     get_invite_token_service,
 )
-from core.short_links.kinds import SHORT_LINK_KIND_COMPANY_INVITE
-from core.short_links.repository import ShortLinkRepository
 from core.utils.tokens import get_token_service
 
 

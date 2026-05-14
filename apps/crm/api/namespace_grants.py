@@ -3,14 +3,17 @@ API для управления грантами доступа к namespaces.
 """
 
 import asyncio
-from typing import List
 
 from fastapi import APIRouter, HTTPException, Query
 
-from core.pagination import OffsetPage
-from apps.crm.models.grant_models import GrantToUserRequest, GrantToCompanyRequest, AccessGrantResponse
 from apps.crm.dependencies import ContainerDep
+from apps.crm.models.grant_models import (
+    AccessGrantResponse,
+    GrantToCompanyRequest,
+    GrantToUserRequest,
+)
 from core.context import get_context
+from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/namespaces/{namespace}/grants", tags=["Namespace Grants"])
 
@@ -24,13 +27,13 @@ async def make_namespace_public(
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     grant = await container.access_grant_service.grant_namespace_public(
         namespace=namespace,
         company_id=ctx.active_company.company_id,
         created_by=ctx.user.user_id
     )
-    
+
     return AccessGrantResponse.model_validate(grant)
 
 
@@ -44,7 +47,7 @@ async def grant_to_user(
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     grant = await container.access_grant_service.grant_namespace_to_user(
         namespace=namespace,
         company_id=ctx.active_company.company_id,
@@ -52,7 +55,7 @@ async def grant_to_user(
         role=request.role,
         created_by=ctx.user.user_id
     )
-    
+
     return AccessGrantResponse.model_validate(grant)
 
 
@@ -66,7 +69,7 @@ async def grant_to_company(
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     grant = await container.access_grant_service.grant_namespace_to_company(
         namespace=namespace,
         company_id=ctx.active_company.company_id,
@@ -74,7 +77,7 @@ async def grant_to_company(
         role=request.role,
         created_by=ctx.user.user_id
     )
-    
+
     return AccessGrantResponse.model_validate(grant)
 
 

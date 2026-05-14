@@ -6,13 +6,13 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException, Query
 
-from core.pagination import OffsetPage
 from apps.scheduler.dependencies import ContainerDep
 from core.context import get_context
+from core.pagination import OffsetPage
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
-    PlatformScheduledTask,
     PlatformScheduleCreateRequest,
+    PlatformScheduledTask,
     PlatformScheduleFilter,
     ScheduledTaskStatus,
 )

@@ -23,11 +23,11 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from apps.provider_litserve.main import ChatCompletionsLitAPI
 from apps.provider_litserve.openai_server_contracts import (
     build_provider_litserve_v1_models_response,
 )
 from apps.provider_litserve.provider_litserve_asgi import create_provider_litserve_asgi_app
-from apps.provider_litserve.main import ChatCompletionsLitAPI
 from apps.provider_litserve.provider_litserve_http_schemas import (
     OpenAIEmbeddingsResponseBody,
     RerankResponseBody,

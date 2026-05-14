@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from core.pagination import OffsetPage
 from apps.flows.src.clients.mcp_client import (
     MCPClientError,
     MCPHttpClient,
@@ -19,6 +18,7 @@ from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from core.logging import get_logger
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 
@@ -27,9 +27,9 @@ router = APIRouter(tags=["mcp"])
 
 class MCPServerCreateRequest(BaseModel):
     """Запрос на создание MCP сервера."""
-    
+
     server_id: str = Field(
-        ..., 
+        ...,
         description="Уникальный ID сервера",
         pattern=r"^[a-zA-Z][a-zA-Z0-9_-]*$",
         min_length=2,
@@ -47,7 +47,7 @@ class MCPServerCreateRequest(BaseModel):
 
 class MCPServerUpdateRequest(BaseModel):
     """Запрос на обновление MCP сервера."""
-    
+
     name: Optional[str] = None
     url: Optional[str] = None
     transport_type: Optional[str] = None
@@ -58,7 +58,7 @@ class MCPServerUpdateRequest(BaseModel):
 
 class MCPServerResponse(BaseModel):
     """Ответ с данными MCP сервера."""
-    
+
     server_id: str
     name: str
     url: str
@@ -72,7 +72,7 @@ class MCPServerResponse(BaseModel):
 
 class MCPToolResponse(BaseModel):
     """Информация о tool."""
-    
+
     name: str
     description: Optional[str]
     input_schema: Optional[dict]
@@ -80,7 +80,7 @@ class MCPToolResponse(BaseModel):
 
 class MCPSyncResponse(BaseModel):
     """Результат синхронизации."""
-    
+
     success: bool
     tools_count: int
     tools: List[MCPToolResponse]
@@ -88,7 +88,7 @@ class MCPSyncResponse(BaseModel):
 
 class MCPTestResponse(BaseModel):
     """Результат теста подключения."""
-    
+
     success: bool
     message: str
     tools_count: int
@@ -137,7 +137,7 @@ async def create_server(
             status_code=409,
             detail=f"Server {request.server_id} already exists"
         )
-    
+
     server = MCPServerConfig(
         server_id=request.server_id,
         name=request.name,
@@ -146,10 +146,10 @@ async def create_server(
         headers=request.headers,
         description=request.description,
     )
-    
+
     await container.mcp_server_repository.set(server)
     logger.info(f"MCP server created: {request.server_id}")
-    
+
     return _server_to_response(server)
 
 
@@ -162,7 +162,7 @@ async def get_server(
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
+
     return _server_to_response(server)
 
 
@@ -176,20 +176,20 @@ async def update_server(
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
+
     update_data = request.model_dump(exclude_unset=True)
-    
+
     # Конвертируем transport_type строку в enum
     if "transport_type" in update_data and update_data["transport_type"]:
         from apps.flows.src.models.mcp import MCPTransportType
         update_data["transport_type"] = MCPTransportType(update_data["transport_type"])
-    
+
     for field, value in update_data.items():
         setattr(server, field, value)
-    
+
     await container.mcp_server_repository.set(server)
     clear_mcp_client_cache(server_id)
-    
+
     logger.info(f"MCP server updated: {server_id}")
     return _server_to_response(server)
 
@@ -203,14 +203,14 @@ async def delete_server(
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
+
     # Удаляем связанные tools
     for tool_id in server.cached_tools:
         await container.tool_repository.delete(tool_id)
-    
+
     await container.mcp_server_repository.delete(server_id)
     clear_mcp_client_cache(server_id)
-    
+
     logger.info(f"MCP server deleted: {server_id}")
     return {"status": "deleted", "server_id": server_id}
 
@@ -263,15 +263,15 @@ async def test_server_connection(
     server = await container.mcp_server_repository.get(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
+
     # Переменные нужны только если в headers есть @var: ссылки
     variables: Dict[str, Any] = {}
     has_var_refs = any("@var:" in str(v) for v in server.headers.values())
     if has_var_refs:
         variables = await container.variables_service.get_all_resolved_vars()
-    
+
     client = MCPHttpClient(server, variables)
-    
+
     try:
         await client.initialize()
         tools = await client.list_tools()
@@ -279,7 +279,7 @@ async def test_server_connection(
         raise HTTPException(status_code=502, detail=f"MCP server error: {e}")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Connection error: {e}")
-    
+
     return MCPTestResponse(
         success=True,
         message="Connection successful",

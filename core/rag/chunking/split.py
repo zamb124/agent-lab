@@ -18,8 +18,8 @@ from chonkie import (
 )
 from chonkie.refinery import OverlapRefinery
 
-from core.rag_indexing_schema import IndexProfileSplitConfig
 from core.rag.parsed_document import ParsedDocument
+from core.rag_indexing_schema import IndexProfileSplitConfig
 
 _ENCODING_NAME = "cl100k_base"
 

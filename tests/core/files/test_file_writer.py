@@ -14,7 +14,6 @@ import pytest
 
 from core.files.writer import FileWriteError, FileWriter, classify_content
 from core.files.writer.models import ContentKind
-
 from tests.core.files.file_writer_artifacts import overwrite_artifact
 
 MIN_PNG = base64.b64decode(

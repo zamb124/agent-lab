@@ -6,11 +6,11 @@
 
 from __future__ import annotations
 
-from core.logging import get_logger
 import os
 import tempfile
 from pathlib import Path
 
+from core.logging import get_logger
 from core.rag.parsed_document import ParsedDocument
 
 logger = get_logger(__name__)

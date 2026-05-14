@@ -1,6 +1,5 @@
 import asyncio
 import os
-import time
 
 import httpx
 import pytest
@@ -50,7 +49,7 @@ async def test_observability_pipeline_e2e():
         loki_url = "http://loki-test:3100/loki/api/v1/query"
         # Экранируем кавычки для LogQL
         query = f'{{service="provider_litserve"}} | json | trace_id="{trace_id}"'
-        
+
         log_found = False
         for _ in range(15):  # ждем до 30 секунд
             await asyncio.sleep(2.0)
@@ -64,13 +63,13 @@ async def test_observability_pipeline_e2e():
                         break
             except Exception:
                 pass
-        
+
         assert log_found, f"Лог для trace_id={trace_id} не найден в Loki за 30 секунд. Alloy не перехватил stdout или не доставил."
 
         # 3. Polling Tempo: ждем появления трейса
         # OTel BatchSpanProcessor по умолчанию сбрасывает спаны раз в 5 секунд.
         tempo_url = f"http://tempo-test:3200/api/traces/{trace_id}"
-        
+
         trace_found = False
         for _ in range(15):  # ждем до 30 секунд
             await asyncio.sleep(2.0)
@@ -82,7 +81,7 @@ async def test_observability_pipeline_e2e():
                     break
             except Exception:
                 pass
-                
+
         assert trace_found, f"Трейс {trace_id} не найден в Tempo за 30 секунд. OTLP -> Alloy -> Tempo пайплайн не сработал."
 
         # 4. Проверяем что provisioned дашборды загрузились в Grafana

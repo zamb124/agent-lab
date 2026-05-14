@@ -7,7 +7,6 @@ import pathlib
 import re
 import sys
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY_PATH = ROOT / "apps" / "flows" / "src" / "streaming" / "speakable.py"
 JS_PATH = ROOT / "core" / "frontend" / "static" / "lib" / "voice" / "speakable.js"

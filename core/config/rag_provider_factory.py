@@ -81,9 +81,7 @@ def resolve_rag_provider_bundle(
                         "provider_litserve"
                         if resolved.provider == "provider_litserve"
                         else (
-                            "openrouter"
-                            if resolved.provider == "openrouter"
-                            else resolved.provider
+                            "openrouter" if resolved.provider == "openrouter" else resolved.provider
                         )
                     )
                     if resolved.base_url:
@@ -158,7 +156,6 @@ def reset_rag_provider_instances_cache() -> None:
 
 
 __all__ = [
-    "RAG_PROVIDERS",
     "ResolvedRagProvider",
     "get_rag_provider",
     "reset_rag_provider_instances_cache",

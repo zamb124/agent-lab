@@ -33,7 +33,6 @@ from urllib.parse import urlparse
 import asyncpg
 import redis.asyncio as redis_asyncio
 
-
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _MANIFEST_PATH = _REPO_ROOT / "migrations" / "services.json"
 
@@ -193,7 +192,7 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
         quoted = ", ".join(f'"{name}"' for name in tables)
         try:
             await conn.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
-        except asyncpg.QueryCanceledError as exc:
+        except asyncpg.QueryCanceledError:
             # Диагностика: кто держит lock'и в момент падения?
             print(f"  [{db_name}] TRUNCATE QueryCanceledError — диагностика lock'ов:")
             locks = await conn.fetch(

@@ -16,14 +16,14 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from pydantic import Field, create_model
 
-from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.runtime.nodes import create_node
-from core.logging import get_logger
 from apps.flows.src.mock import get_mock_for_flow
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import BaseTool, sanitize_tool_name
+from core.logging import get_logger
 from core.state import ExecutionState, InterruptPathItem
 
 if TYPE_CHECKING:
@@ -74,12 +74,12 @@ def _build_pydantic_schema(args_schema_dict: Optional[Dict[str, Any]]) -> type:
     """Строит Pydantic модель из args_schema для OpenAI tools."""
     if not args_schema_dict:
         return create_model("EmptyArgs")
-    
+
     fields = {}
     for name, schema in args_schema_dict.items():
         field_type = str
         type_str = schema.get("type", "string")
-        
+
         if type_str == "integer":
             field_type = int
         elif type_str == "number":
@@ -90,28 +90,28 @@ def _build_pydantic_schema(args_schema_dict: Optional[Dict[str, Any]]) -> type:
             field_type = list
         elif type_str == "object":
             field_type = dict
-        
+
         description = schema.get("description", "")
         default = schema.get("default", ...)
-        
+
         if default is ...:
             fields[name] = (field_type, Field(description=description))
         else:
             fields[name] = (field_type, Field(default=default, description=description))
-    
+
     return create_model("DynamicArgs", **fields)
 
 
 class NodeAsToolWrapper(BaseTool):
     """
     Обёртка над любой нодой для использования как tool.
-    
+
     Поддерживает все типы нод.
     Args записываются в state, нода берет их через input_mapping.
     """
 
     def __init__(
-        self, 
+        self,
         node_config: Union[NodeConfig, Dict[str, Any]],
         tool_registry: Optional[Any] = None
     ):
@@ -123,7 +123,7 @@ class NodeAsToolWrapper(BaseTool):
             node_id = node_config.get("tool_id") or node_config.get("node_id")
             if not node_id:
                 raise ValueError(f"Node config requires 'tool_id' or 'node_id' field: {node_config}")
-            
+
             self._args_schema_dict = node_config.get("args_schema")
             if self._args_schema_dict is None and str(node_type) == NodeType.LLM_NODE.value:
                 self._args_schema_dict = {
@@ -147,7 +147,7 @@ class NodeAsToolWrapper(BaseTool):
             self._raw_config = None
             self._args_schema_dict = None
             self.node_config = node_config
-        
+
         self.name = sanitize_tool_name(self.node_config.node_id)
         self.description = self.node_config.description or f"Вызов ноды {self.node_config.name}"
         self.tags = self.node_config.tags or [self.node_config.type]
@@ -209,7 +209,7 @@ class NodeAsToolWrapper(BaseTool):
                             tools.append(t)
                         else:
                             tools.append(t)
-                
+
                 node_dict = {
                     "type": self.node_config.type,
                     "prompt": self.node_config.prompt,
@@ -229,31 +229,31 @@ class NodeAsToolWrapper(BaseTool):
         """
         node_id = self.node_config.node_id
         node_type = self.node_config.type
-        
+
         mock_result = get_mock_for_flow(state, node_id)
         if mock_result is not None:
             logger.info(f"[wrapper:{node_id}] mock response")
             return mock_result
-        
+
         node = await self._get_node()
         logger.info(f"[wrapper:{node_id}] run with args: {list(args.keys())}")
-        
+
         # Для llm_node создаем изолированный state
         if node_type == NodeType.LLM_NODE.value:
             return await self._run_llm_node(node, node_id, args, state)
-        
+
         # Для остальных нод - простой вызов
         for key, value in args.items():
             setattr(state, key, value)
-        
+
         result = await node.run(state)
         return self._extract_response(result)
-    
+
     async def _run_llm_node(
-        self, 
-        node: "BaseNode", 
-        node_id: str, 
-        args: Dict[str, Any], 
+        self,
+        node: "BaseNode",
+        node_id: str,
+        args: Dict[str, Any],
         parent_state: ExecutionState
     ) -> Any:
         """
@@ -262,7 +262,7 @@ class NodeAsToolWrapper(BaseTool):
         """
         # Проверяем resume: если есть interrupt_path для этой ноды
         is_resume = InterruptManager.is_resume_for_nested(parent_state, node_id)
-        
+
         if is_resume:
             # Resume: загружаем сохраненный state субагента
             nested_state = InterruptManager.load_nested_state(parent_state, node_id)
@@ -274,18 +274,18 @@ class NodeAsToolWrapper(BaseTool):
         else:
             # Первый вызов: создаем новый state для субагента
             nested_state = self._create_nested_state(parent_state, args)
-        
+
         try:
             result = await node.run(nested_state)
-            
+
             # Успешное завершение - копируем результат в родительский state
             self._copy_result_to_parent(nested_state, parent_state)
-            
+
             # Сохраняем историю субагента
             InterruptManager.save_nested_state(parent_state, node_id, nested_state)
-            
+
             return self._extract_response(result)
-            
+
         except FlowInterrupt as e:
             # Сохраняем state субагента для resume
             logger.info(
@@ -293,10 +293,10 @@ class NodeAsToolWrapper(BaseTool):
                 f"messages={len(nested_state.messages)}"
             )
             InterruptManager.save_nested_state(parent_state, node_id, nested_state)
-            
+
             # Копируем interrupt_path из субагента в родительский state
             parent_state.interrupt_path = list(nested_state.interrupt_path)
-            
+
             # Добавляем себя в начало пути
             InterruptManager.push_interrupt_path(
                 parent_state,
@@ -306,10 +306,10 @@ class NodeAsToolWrapper(BaseTool):
                     tool_call=None
                 )
             )
-            
+
             logger.info(f"[wrapper:{node_id}] interrupt: {e.question[:50]}...")
             raise
-    
+
     def _create_nested_state(
         self, parent_state: ExecutionState, args: Dict[str, Any]
     ) -> ExecutionState:
@@ -336,28 +336,28 @@ class NodeAsToolWrapper(BaseTool):
             branch_id=parent_state.branch_id,
             flow_config_version=parent_state.flow_config_version,
         )
-        
+
         # Записываем args в nested_state
         for key, value in args.items():
             setattr(nested_state, key, value)
-        
+
         return nested_state
-    
+
     def _copy_result_to_parent(
         self, nested_state: ExecutionState, parent_state: ExecutionState
     ) -> None:
         """Копирует результат субагента в родительский state."""
         if nested_state.response:
             parent_state.response = nested_state.response
-        
+
         parent_state.tool_results.update(nested_state.tool_results)
-        
+
         # Копируем все extra поля которые субагент записал в state
         extra = nested_state.model_extra
         if extra:
             for key, value in extra.items():
                 setattr(parent_state, key, value)
-    
+
     def _extract_response(self, result: Any) -> Any:
         """Извлекает response из результата."""
         if isinstance(result, ExecutionState):

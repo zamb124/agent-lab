@@ -26,7 +26,6 @@ from openpyxl import load_workbook
 
 from core.files.writer import FileWriter
 from core.files.writer.models import WriteOptions
-
 from tests.core.files.file_writer_artifacts import overwrite_artifact
 
 # Стабильные публичные JPEG по фиксированным id (редирект → финальный URL, follow_redirects).

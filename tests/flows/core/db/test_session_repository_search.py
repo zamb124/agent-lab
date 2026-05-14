@@ -4,12 +4,12 @@
 Используют реальную БД без моков.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
+from typing import Any, Dict
+
+import pytest
 
 from apps.flows.src.container import get_container
-from apps.flows.src.models import SessionConfig, SessionStatus
 from apps.flows.src.state import create_initial_state
 
 
@@ -22,7 +22,7 @@ def create_test_state(
 ) -> Dict[str, Any]:
     """
     Создает тестовый state для сессии.
-    
+
     Args:
         session_id: ID сессии (формат 'flow_id:context_id')
         user_id: ID пользователя
@@ -39,7 +39,7 @@ def create_test_state(
         user_id=user_id,
         session_id=session_id,
     )
-    
+
     # Добавляем сообщения
     from a2a.types import Message, Part, Role, TextPart
     messages = []
@@ -50,7 +50,7 @@ def create_test_state(
             parts=[Part(root=TextPart(text=first_message))],
             taskId=task_id,
         ))
-    
+
     # Добавляем дополнительные сообщения для message_count
     for i in range(max(0, message_count - (1 if first_message else 0))):
         role = Role.agent if i % 2 == 0 else Role.user
@@ -60,9 +60,9 @@ def create_test_state(
             parts=[Part(root=TextPart(text=f"Message {i+2}"))],
             taskId=task_id,
         ))
-    
+
     state.messages = messages
-    
+
     return state.model_dump(exclude_none=False)
 
 
@@ -221,12 +221,13 @@ class TestStateRepositorySearchSessions:
 
         # Устанавливаем created_at через SQLAlchemy
         from sqlalchemy import update
+
         from apps.flows.src.db.models import States
-        
+
         key_old = repo._build_final_key(repo._get_key(session_old_id))
         key_in_range = repo._build_final_key(repo._get_key(session_in_range_id))
         key_new = repo._build_final_key(repo._get_key(session_new_id))
-        
+
         async with repo._storage._get_session() as session:
             await session.execute(
                 update(States)
@@ -267,7 +268,7 @@ class TestStateRepositorySearchSessions:
 
         target_user = f"target_user_{unique_id}"
         target_flow = f"target_flow_{unique_id}"
-        now = datetime.now(timezone.utc)
+        datetime.now(timezone.utc)
 
         session1_id = f"{target_flow}:session1_{unique_id}"
         session2_id = f"other_flow_{unique_id}:session2_{unique_id}"
@@ -395,12 +396,13 @@ class TestStateRepositorySearchSessions:
 
         # Устанавливаем created_at через SQLAlchemy для проверки сортировки
         from sqlalchemy import update
+
         from apps.flows.src.db.models import States
-        
+
         key1 = repo._build_final_key(repo._get_key(session1_id))
         key2 = repo._build_final_key(repo._get_key(session2_id))
         key3 = repo._build_final_key(repo._get_key(session3_id))
-        
+
         async with repo._storage._get_session() as session:
             date1 = (now - timedelta(hours=2)).replace(tzinfo=None)
             date2 = (now - timedelta(hours=1)).replace(tzinfo=None)

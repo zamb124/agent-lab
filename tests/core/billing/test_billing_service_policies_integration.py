@@ -6,14 +6,13 @@ BillingService: can_use_resource, stats, reset_monthly_billing, ошибки mer
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 
 import pytest
 
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.service import (
-    BillingService,
     STORAGE_SETTLEMENT_RULES_JSON,
+    BillingService,
     company_resource_prices_storage_key,
     company_settlement_rules_storage_key,
 )

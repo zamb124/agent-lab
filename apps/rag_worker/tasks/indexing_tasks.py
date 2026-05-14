@@ -10,8 +10,8 @@ from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.identity_models import User
-from core.rag.upload_profile_binding import UploadProfileBinding
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
+from core.rag.upload_profile_binding import UploadProfileBinding
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 

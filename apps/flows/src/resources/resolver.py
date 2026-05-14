@@ -12,9 +12,9 @@ from typing import Any, Dict, Optional
 
 from apps.flows.src.db import ResourceRepository
 from apps.flows.src.models import (
-    ResourceType,
     ResourceDefinition,
     ResourceReference,
+    ResourceType,
 )
 from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
@@ -23,8 +23,8 @@ from apps.flows.src.resources.merge import (
 from apps.flows.src.resources.providers import (
     BaseResourceProvider,
     CodeResourceProvider,
-    LLMResourceProvider,
     FilesResourceProvider,
+    LLMResourceProvider,
 )
 from core.logging import get_logger
 

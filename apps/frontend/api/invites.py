@@ -6,9 +6,7 @@ API для приглашений в компанию по ссылке.
 Принятие: POST /api/invites/accept   — любой авторизованный пользователь.
 """
 
-from core.logging import get_logger
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import jwt
 from fastapi import APIRouter, HTTPException, Request
@@ -16,6 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
+from core.logging import get_logger
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.invite_tokens import (
     INVITE_EXPIRES_SECONDS,
@@ -23,6 +22,7 @@ from core.utils.invite_tokens import (
     get_invite_token_service,
     invite_jti_already_used,
 )
+
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/invites", tags=["invites"])
 

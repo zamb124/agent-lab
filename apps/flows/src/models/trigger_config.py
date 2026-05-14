@@ -13,8 +13,9 @@ from typing import Any, Dict, List, Optional
 from pydantic import Field, field_validator, model_validator
 
 from core.models import StrictBaseModel
-from .enums import TriggerStatus, TriggerType
+
 from .channel_config import OutputAction
+from .enums import TriggerStatus, TriggerType
 from .trigger_mapping_validators import validate_trigger_state_mapping_keys
 
 _TRIGGER_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
@@ -23,10 +24,10 @@ _TRIGGER_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 class TriggerConfig(StrictBaseModel):
     """
     Конфигурация триггера агента.
-    
+
     Payload автоматически записывается в state.triggers.{trigger_id}.
     output_mapping определяет какие данные куда положить в state.
-    
+
     Пример:
     {
         "trigger_id": "tg_support",
@@ -41,34 +42,34 @@ class TriggerConfig(StrictBaseModel):
             "context.chat_id": "message.chat.id"
         }
     }
-    
+
     Формат output_mapping: слева только content и/или context.*; variables.* запрещены.
     """
-    
+
     trigger_id: str = Field(..., description="Уникальный ID триггера (без «.» в id)")
     name: str = Field(..., description="Название триггера")
     type: TriggerType = Field(..., description="Тип триггера")
     enabled: bool = Field(default=True, description="Активен ли триггер")
-    
+
     # Специфичные настройки по типу триггера
     config: Dict[str, Any] = Field(
         default_factory=dict,
         description="Конфигурация триггера (bot_token, cron, etc.)"
     )
-    
+
     # Маппинг данных payload в state
     # Формат: {"путь_в_state": "путь_в_payload"}
     output_mapping: Dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг payload path -> state path"
     )
-    
+
     # Deprecated: используйте output_mapping
     input_mapping: Dict[str, str] = Field(
         default_factory=dict,
         description="DEPRECATED: используйте output_mapping"
     )
-    
+
     # Output: действия после выполнения агента
     output_actions: List[OutputAction] = Field(
         default_factory=list,
@@ -78,7 +79,7 @@ class TriggerConfig(StrictBaseModel):
         default=True,
         description="Выполнять output_actions после завершения flow (без interrupt)",
     )
-    
+
     branch_id: str = Field(
         default="default",
         description="ID ветки из FlowConfig.branches: какой сценарий запускать при срабатывании триггера",
@@ -130,7 +131,7 @@ class TriggerConfig(StrictBaseModel):
 
 class TelegramTriggerConfig(StrictBaseModel):
     """Конфигурация Telegram триггера."""
-    
+
     bot_token: str = Field(..., description="Токен бота (@var:key для секрета)")
     allowed_users: List[int] = Field(
         default_factory=list,
@@ -155,7 +156,7 @@ class TelegramTriggerConfig(StrictBaseModel):
 
 class CronTriggerConfig(StrictBaseModel):
     """Конфигурация Cron триггера."""
-    
+
     cron: str = Field(..., description="Cron выражение (0 9 * * *)")
     timezone: str = Field(default="UTC", description="Timezone")
     initial_content: str = Field(
@@ -170,7 +171,7 @@ class CronTriggerConfig(StrictBaseModel):
 
 class WebhookTriggerConfig(StrictBaseModel):
     """Конфигурация HTTP Webhook триггера."""
-    
+
     secret_token: Optional[str] = Field(
         default=None,
         description="Секретный токен для верификации"
@@ -187,7 +188,7 @@ class WebhookTriggerConfig(StrictBaseModel):
 
 class EmailTriggerConfig(StrictBaseModel):
     """Конфигурация Email триггера."""
-    
+
     provider: str = Field(
         default="imap",
         description="Провайдер: imap, mailgun, sendgrid"
@@ -213,7 +214,7 @@ class EmailTriggerConfig(StrictBaseModel):
 
 class RedisTriggerConfig(StrictBaseModel):
     """Конфигурация Redis Pub/Sub триггера."""
-    
+
     channel: str = Field(..., description="Redis channel для подписки")
     pattern: bool = Field(
         default=False,

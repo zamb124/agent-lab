@@ -169,13 +169,13 @@ async def test_transcribe_call_aggregate_includes_guest_line(
 
     from apps.sync.container import get_sync_container
     from apps.sync.db.models import SyncCallParticipant
-    from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
     from apps.sync.models.messages import (
         AudioAttachmentContent,
         MessageContentModel,
         MessageContentType,
         MessageCreate,
     )
+    from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
     from core.models.identity_models import User
 
     guest_label = "ГостьАгрегат"

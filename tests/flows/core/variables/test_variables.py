@@ -2,12 +2,12 @@
 Тесты для VariablesService и VariableResolver.
 """
 
+
 import pytest
-from typing import Any, Dict
 
 from apps.flows.src.container import get_container
 from core.db.repositories import Variable
-from core.variables import VariablesService, VariableResolver, VariableResolutionError
+from core.variables import VariableResolutionError, VariableResolver
 
 
 class TestVariableResolver:
@@ -698,7 +698,7 @@ End"""
 
     def test_all_nesting_scenarios(self):
         """ВСЕ возможные сценарии вложенности."""
-        
+
         # 1. Условный блок внутри условного блока (оба true)
         # {?a|A {?b|B}} когда a=True, b=True
         # default содержит {?b|B}, поэтому это условный блок, обрабатываем рекурсивно
@@ -719,7 +719,7 @@ End"""
         result3 = VariableResolver.render_template(template1, local_vars={"a": False, "b": True})
         # a=False, default содержит { (условный блок), НЕ показываем (пустая строка)
         assert result3 == ""  # a=False, условный блок не показывается
-        
+
         # 4. Три уровня вложенности (все true)
         # {?a|A {?b|B {?c|C}}} когда a=True, b=True, c=True
         # default содержит {?b|B {?c|C}}, обрабатываем рекурсивно
@@ -728,20 +728,20 @@ End"""
         template4 = "{?a|A {?b|B {?c|C}}}"
         result4 = VariableResolver.render_template(template4, local_vars={"a": True, "b": True, "c": True})
         assert "A" in result4 and "B" in result4 and "True" in result4  # c=True возвращает "True"
-        
+
         # 5. Три уровня вложенности (средний false)
         # a=True, default содержит {?b|B {?c|C}} (условный блок), обрабатываем рекурсивно
         # b=False, default "B {?c|C}" содержит { (условный блок), НЕ показываем (пустая строка)
         result5 = VariableResolver.render_template(template4, local_vars={"a": True, "b": False, "c": True})
         assert "A" in result5 and "B" not in result5  # b=False, условный блок не показывается
-        
+
         # 6. Переменные внутри условных блоков
         # {?show|Name: {name}, Age: {age}} когда show=True
         # default содержит {name} и {age}, обрабатываем рекурсивно
         template6 = "{?show|Name: {name}, Age: {age}}"
         result6 = VariableResolver.render_template(template6, local_vars={"show": True, "name": "Ivan", "age": 30})
         assert "Name: Ivan" in result6 and "Age: 30" in result6
-        
+
         # 7. Переменные внутри вложенных условных блоков
         # {?outer|Outer {?inner|Inner: {value}}} когда outer=True, inner=True
         # default содержит {?inner|Inner: {value}}, обрабатываем рекурсивно
@@ -749,7 +749,7 @@ End"""
         template7 = "{?outer|Outer {?inner|Inner: {value}}}"
         result7 = VariableResolver.render_template(template7, local_vars={"outer": True, "inner": True, "value": "test"})
         assert "Outer" in result7 and "Inner: test" in result7
-        
+
         # 8. Default внутри условного блока
         # {?show|Status: {?status|unknown}} когда show=True, status="active"
         # default содержит {?status|unknown}, обрабатываем рекурсивно
@@ -757,18 +757,18 @@ End"""
         template8 = "{?show|Status: {?status|unknown}}"
         result8 = VariableResolver.render_template(template8, local_vars={"show": True, "status": "active"})
         assert "Status: active" in result8
-        
+
         # 9. Default внутри условного блока (переменная не найдена)
         # show=True, default содержит {?status|unknown}, обрабатываем рекурсивно
         # status не найдена, default "unknown" показывается
         result9 = VariableResolver.render_template(template8, local_vars={"show": True})
         assert "Status: unknown" in result9
-        
+
         # 10. Условный блок с экранированными скобками внутри
         template10 = "{?show|Text: \\{escaped\\} and {var}}"
         result10 = VariableResolver.render_template(template10, local_vars={"show": True, "var": "value"})
         assert "{escaped}" in result10 and "value" in result10
-        
+
         # 11. Вложенные блоки с экранированными скобками
         # {?a|A \\{escaped\\} {?b|B \\}escaped}} когда a=True, b=True
         # default содержит {?b|B \\}escaped}, обрабатываем рекурсивно
@@ -776,7 +776,7 @@ End"""
         template11 = "{?a|A \\{escaped\\} {?b|B \\}escaped}}"
         result11 = VariableResolver.render_template(template11, local_vars={"a": True, "b": True})
         assert "A" in result11 and "{escaped}" in result11 and "True" in result11  # b=True возвращает "True"
-        
+
         # 12. Многострочные вложенные блоки
         template12 = """{?a|
 Line A
@@ -789,14 +789,14 @@ Line C
 }"""
         result12 = VariableResolver.render_template(template12, local_vars={"a": True, "b": True, "c": True})
         assert "Line A" in result12 and "Line B" in result12 and "Line C" in result12
-        
+
         # 13. Смешанные форматы: {var}, {?var}, {?var|default} внутри блоков
         template13 = "{?show|Required: {req}, Optional: {?opt}, Default: {?def|default}}"
         result13 = VariableResolver.render_template(template13, local_vars={
             "show": True, "req": "R", "opt": "O"
         })
         assert "Required: R" in result13 and "Optional: O" in result13 and "Default: default" in result13
-        
+
         # 14. Короткий формат ?var|default внутри условного блока
         # {?show|Short: ?var|default, Value: {var}} когда show=True, var="value"
         # Короткий формат обрабатывается первым: ?var|default → value
@@ -805,7 +805,7 @@ Line C
         result14 = VariableResolver.render_template(template14, local_vars={"show": True, "var": "value"})
         assert "Short: value" in result14  # Короткий формат заменяется на value
         assert "value" in result14  # {var} тоже заменяется на value
-        
+
         # 15. Вложенные блоки с переменными и default
         # {?a|A: {a_val|default_a} {?b|B: {b_val|default_b}}} когда a=True, b=True, a_val="A1"
         # default содержит {a_val|default_a} и {?b|B: {b_val|default_b}}, обрабатываем рекурсивно
@@ -815,14 +815,14 @@ Line C
         template15 = "{?a|A: {a_val|default_a} {?b|B: {b_val|default_b}}}"
         result15 = VariableResolver.render_template(template15, local_vars={"a": True, "b": True, "a_val": "A1"})
         assert "A: A1" in result15 and "B: default_b" in result15
-        
+
         # 16. Глубокая вложенность с переменными на каждом уровне
         template16 = "{?l1|L1: {v1} {?l2|L2: {v2} {?l3|L3: {v3}}}}"
         result16 = VariableResolver.render_template(template16, local_vars={
             "l1": True, "l2": True, "l3": True, "v1": "V1", "v2": "V2", "v3": "V3"
         })
         assert "L1: V1" in result16 and "L2: V2" in result16 and "L3: V3" in result16
-        
+
         # 17. Условный блок с вложенным default (обрабатывается рекурсивно)
         # {?var|Default с {?nested|вложенным} блоком} когда var не найдена
         # Показываем default, default содержит {?nested|вложенным}, обрабатываем рекурсивно
@@ -834,14 +834,14 @@ Line C
         result17 = VariableResolver.render_template(template17, local_vars={})
         assert "Default с вложенным блоком" not in result17
         assert result17 == ""  # Условный блок не показывается
-        
+
         # 18. Экранированные обратные слэши в условных блоках
         # {?show|Path: C:\\\\Windows\\\\System32} когда show=True
         # default не содержит { и \n, это простой default, возвращаем значение переменной
         template18 = "{?show|Path: C:\\\\Windows\\\\System32}"
         result18 = VariableResolver.render_template(template18, local_vars={"show": True})
         assert result18 == "True"  # Простой default, возвращаем значение переменной
-        
+
         # 19. Вложенные блоки с обратными слэшами
         # {?a|A: \\\\server {?b|B: \\\\share}} когда a=True, b=True
         # default содержит {?b|B: \\\\share} (условный блок), обрабатываем рекурсивно
@@ -849,7 +849,7 @@ Line C
         template19 = "{?a|A: \\\\server {?b|B: \\\\share}}"
         result19 = VariableResolver.render_template(template19, local_vars={"a": True, "b": True})
         assert "A:" in result19 and "server" in result19 and "True" in result19  # b=True возвращает "True"
-        
+
         # 20. Все комбинации: переменные, default, условные блоки, экранирование
         template20 = """{?header|
 Header: {title|Untitled}

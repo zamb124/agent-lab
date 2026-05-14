@@ -3,12 +3,12 @@
 Использует service БД, is_global=False (изолирован по компаниям).
 """
 
-from core.logging import get_logger
 from typing import Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.files.models import FileRecord
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class FileRepository(BaseRepository[FileRecord]):
@@ -36,43 +36,43 @@ class FileRepository(BaseRepository[FileRecord]):
 
     def _extract_entity_id(self, entity: FileRecord) -> str:
         return entity.file_id
-    
+
     async def get_by_s3_key(self, provider: str, file_id: str) -> Optional[FileRecord]:
         """
         Получает файл по S3 ключу.
-        
+
         Args:
             provider: Провайдер S3
             file_id: ID файла
-            
+
         Returns:
             FileRecord или None
         """
         key = f"s3:{provider}:{file_id}"
         final_key = self._build_final_key(key)
         table_name = self._get_table_name()
-        
+
         data = await self._storage._get_with_session_and_table(final_key, table_name)
         if data is None:
             return None
-        
+
         return self.model_class.model_validate_json(data)
-    
+
     async def set_by_s3_key(self, provider: str, file_record: FileRecord) -> bool:
         """
         Сохраняет файл по S3 ключу.
-        
+
         Args:
             provider: Провайдер S3
             file_record: Запись о файле
-            
+
         Returns:
             True если сохранение успешно
         """
         key = f"s3:{provider}:{file_record.file_id}"
         final_key = self._build_final_key(key)
         table_name = self._get_table_name()
-        
+
         data = file_record.model_dump_json()
         return await self._storage._set_with_table(final_key, data, table_name)
 

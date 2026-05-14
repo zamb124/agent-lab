@@ -3,9 +3,10 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EmbedStatus(str, Enum):
@@ -21,14 +22,14 @@ class EmbedConfig(BaseModel):
     """
     Конфигурация встраиваемого виджета чата.
     Хранится с префиксом embed_config: в storage компании.
-    
+
     is_global=False - изоляция по компаниям через префикс company:{company_id}:
     """
-    
+
     model_config = ConfigDict(
         json_schema_extra={"storage_prefix": "embed_config"}
     )
-    
+
     embed_id: str = Field(
         title="ID виджета",
         description="Публичный идентификатор виджета",
@@ -58,7 +59,7 @@ class EmbedConfig(BaseModel):
         title="Статус",
         description="Статус виджета",
     )
-    
+
     # Настройки внешнего вида
     theme: str = Field(
         default="dark",
@@ -173,7 +174,7 @@ class EmbedConfig(BaseModel):
         description="Время последнего использования",
         json_schema_extra={"readonly": True},
     )
-    
+
     # Метаданные
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -198,14 +199,14 @@ class EmbedMapping(BaseModel):
     """
     Глобальный маппинг embed_id -> company_id.
     Хранится с префиксом embed_mapping: глобально (is_global=True).
-    
+
     Необходим для публичного API, который не знает company_id заранее.
     """
-    
+
     model_config = ConfigDict(
         json_schema_extra={"storage_prefix": "embed_mapping"}
     )
-    
+
     embed_id: str = Field(
         title="ID виджета",
         description="Публичный идентификатор виджета",

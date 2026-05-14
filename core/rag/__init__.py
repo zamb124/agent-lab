@@ -9,9 +9,6 @@ RAG система с поддержкой различных провайдер
 Парсинг файлов для индексации: core.files.reader.FileReader (единая схема FileReadResult).
 """
 
-from .base_provider import BaseRAGProvider
-from .chunking import split_parsed_document, split_plain_text_fixed_tokens
-from .factory import get_rag_provider
 from core.rag_indexing_schema import (
     IndexProfileConfig,
     IndexProfileLexicalConfig,
@@ -22,6 +19,11 @@ from core.rag_indexing_schema import (
     RerankerSearchDefaults,
     SearchChannelsDefaults,
 )
+
+from .base_provider import BaseRAGProvider
+from .chunking import split_parsed_document, split_plain_text_fixed_tokens
+from .constants import RAG_IN_PROCESS_PROVIDER_ID
+from .factory import get_rag_provider
 from .models import (
     FlowRAGConfig,
     RAGDocument,
@@ -30,7 +32,12 @@ from .models import (
 )
 from .parsed_document import BlockKind, ParsedBlock, ParsedDocument
 from .parsing import parse_document_bytes
-from .constants import RAG_IN_PROCESS_PROVIDER_ID
+from .post_retrieval_rerank import (
+    RerankerClientError,
+    apply_rerank_after_retrieve,
+    apply_rerank_after_retrieve_grouped,
+)
+from .providers import AgentsetRAGProvider, PgVectorProvider
 from .rag_http_namespace_search import (
     RAG_API_V1_PREFIX,
     SEARCH_REQUEST_OPTION_KEYS,
@@ -41,12 +48,6 @@ from .rag_http_namespace_search import (
 )
 from .rag_resource import RAGResource
 from .rag_resource_bind import RagResourceBindParams
-from .post_retrieval_rerank import (
-    RerankerClientError,
-    apply_rerank_after_retrieve,
-    apply_rerank_after_retrieve_grouped,
-)
-from .providers import AgentsetRAGProvider, PgVectorProvider
 from .repository import RAGRepository
 from .services import EmbeddingService
 

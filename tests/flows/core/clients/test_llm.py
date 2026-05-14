@@ -42,14 +42,14 @@ class TestMockLLMStreaming:
             events.append(event)
 
         artifact_events = [e for e in events if isinstance(e, TaskArtifactUpdateEvent)]
-        
+
         # Стримит по токенам (2-5 символов) - несколько чанков
         assert len(artifact_events) > 1
-        
+
         # Собираем полный текст из чанков
         full_text = "".join(e.artifact.parts[0].root.text for e in artifact_events)
         assert full_text == "Hello world!"
-        
+
         # Последний чанк помечен как last_chunk
         assert artifact_events[-1].last_chunk is True
         # Промежуточные чанки не last

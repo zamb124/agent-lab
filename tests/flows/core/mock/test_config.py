@@ -2,7 +2,6 @@
 Тесты MockConfig и MockLLMResponse моделей.
 """
 
-import pytest
 from apps.flows.src.mock.config import MockConfig, MockLLMResponse
 
 
@@ -12,7 +11,7 @@ class TestMockLLMResponse:
     def test_text_response(self):
         """Текстовый ответ LLM."""
         response = MockLLMResponse(type="text", content="Hello, world!")
-        
+
         assert response.type == "text"
         assert response.content == "Hello, world!"
         assert response.tool is None
@@ -25,7 +24,7 @@ class TestMockLLMResponse:
             tool="calculator",
             args={"expression": "2+2"}
         )
-        
+
         assert response.type == "tool_call"
         assert response.content is None
         assert response.tool == "calculator"
@@ -38,7 +37,7 @@ class TestMockLLMResponse:
             "content": "Test content"
         }
         response = MockLLMResponse(**data)
-        
+
         assert response.type == "text"
         assert response.content == "Test content"
 
@@ -49,7 +48,7 @@ class TestMockConfig:
     def test_default_values(self):
         """Значения по умолчанию."""
         config = MockConfig()
-        
+
         assert config.enabled is False
         assert config.llm is None
         assert config.tools == {}
@@ -60,7 +59,7 @@ class TestMockConfig:
     def test_enabled_mock(self):
         """Включенный mock режим."""
         config = MockConfig(enabled=True)
-        
+
         assert config.enabled is True
 
     def test_with_tools(self):
@@ -72,7 +71,7 @@ class TestMockConfig:
                 "search": ["result1", "result2"]
             }
         )
-        
+
         assert config.tools["calculator"] == 42
         assert config.tools["search"] == ["result1", "result2"]
 
@@ -85,7 +84,7 @@ class TestMockConfig:
                 "analyzer": {"result": "analysis"}
             }
         )
-        
+
         assert config.flows["consultant"] == "Mock консультация"
         assert config.flows["analyzer"] == {"result": "analysis"}
 
@@ -98,7 +97,7 @@ class TestMockConfig:
                 "formatter": {"response": "formatted"}
             }
         )
-        
+
         assert config.nodes["validator"] == {"valid": True}
         assert config.nodes["formatter"] == {"response": "formatted"}
 
@@ -110,7 +109,7 @@ class TestMockConfig:
             {"type": "text", "content": "Final response"}
         ]
         config = MockConfig(enabled=True, llm=llm_responses)
-        
+
         assert len(config.llm) == 3
         # Pydantic конвертирует dict в MockLLMResponse
         assert config.llm[0].type == "text"
@@ -122,7 +121,7 @@ class TestMockConfig:
             enabled=True,
             permission_groups=["testers", "qa"]
         )
-        
+
         assert config.permission_groups == ["testers", "qa"]
 
     def test_extra_fields_allowed(self):
@@ -131,7 +130,7 @@ class TestMockConfig:
             enabled=True,
             custom_field="custom_value"
         )
-        
+
         assert config.custom_field == "custom_value"
 
     def test_from_dict_full(self):
@@ -145,7 +144,7 @@ class TestMockConfig:
             "permission_groups": ["admin"]
         }
         config = MockConfig(**data)
-        
+
         assert config.enabled is True
         assert len(config.llm) == 1
         assert config.tools["tool1"] == "result1"
@@ -160,7 +159,7 @@ class TestMockConfig:
             tools={"calc": 42}
         )
         data = config.model_dump()
-        
+
         assert data["enabled"] is True
         assert data["tools"]["calc"] == 42
 

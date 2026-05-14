@@ -2,13 +2,12 @@
 Тесты для циклов {for...}...{endfor} в VariableResolver.
 """
 
-import pytest
 from core.variables.resolver import VariableResolver
 
 
 class TestForLoops:
     """Тесты для синтаксиса {for item in list}...{endfor}"""
-    
+
     def test_simple_for_loop(self):
         """Простой цикл по списку"""
         template = "{for item in items}{item}\n{endfor}"
@@ -18,7 +17,7 @@ class TestForLoops:
             include_system=False
         )
         assert result == "a\nb\nc\n"
-    
+
     def test_for_loop_with_dict_access(self):
         """Цикл с доступом к полям объектов"""
         template = "{for user in users}- {user.name}: {user.role}\n{endfor}"
@@ -33,7 +32,7 @@ class TestForLoops:
             include_system=False
         )
         assert result == "- Иван: admin\n- Петр: user\n"
-    
+
     def test_for_loop_empty_list(self):
         """Цикл по пустому списку"""
         template = "{for item in items}X{endfor}"
@@ -43,7 +42,7 @@ class TestForLoops:
             include_system=False
         )
         assert result == ""
-    
+
     def test_for_loop_with_text_before_after(self):
         """Цикл с текстом до и после"""
         template = "Start:\n{for item in items}- {item}\n{endfor}End"
@@ -53,7 +52,7 @@ class TestForLoops:
             include_system=False
         )
         assert result == "Start:\n- A\n- B\nEnd"
-    
+
     def test_nested_field_access(self):
         """Доступ к вложенным полям"""
         template = "{for entity in entities}Type: {entity.type}, Prompt: {entity.prompt}\n{endfor}"
@@ -69,7 +68,7 @@ class TestForLoops:
         )
         assert "Type: contact, Prompt: Extract contacts" in result
         assert "Type: task, Prompt: Extract tasks" in result
-    
+
     def test_for_loop_nonexistent_variable(self):
         """Цикл по несуществующей переменной"""
         template = "{for item in missing}X{endfor}"
@@ -80,7 +79,7 @@ class TestForLoops:
             safe=True
         )
         assert result == ""
-    
+
     def test_for_loop_not_a_list(self):
         """Цикл по не-списку"""
         template = "{for item in value}X{endfor}"
@@ -91,7 +90,7 @@ class TestForLoops:
             safe=True
         )
         assert result == ""
-    
+
     def test_crm_entity_types_loop(self):
         """Реальный пример для CRM - цикл по entity_types"""
         template = """## ТИПЫ ENTITIES
@@ -105,7 +104,7 @@ class TestForLoops:
 {for rel_type in relationship_types}
 - **{rel_type.type}**: {rel_type.prompt}
 {endfor}"""
-        
+
         result = VariableResolver.render_template(
             template,
             local_vars={
@@ -120,12 +119,12 @@ class TestForLoops:
             },
             include_system=False
         )
-        
+
         assert "- **contact**: Извлекай контакты" in result
         assert "- **organization**: Извлекай организации" in result
         assert "- **works_for**: Связь работает в" in result
         assert "- **knows**: Связь знаком с" in result
-    
+
     def test_for_loop_with_regular_variables(self):
         """Цикл в сочетании с обычными переменными"""
         template = "User: {user}\nItems:\n{for item in items}- {item}\n{endfor}Total: {total}"
@@ -142,7 +141,7 @@ class TestForLoops:
         assert "- A" in result
         assert "- B" in result
         assert "Total: 2" in result
-    
+
     def test_for_loop_multiline_body(self):
         """Цикл с многострочным телом"""
         template = """{for user in users}
@@ -168,7 +167,7 @@ Role: {user.role}
 
 class TestForLoopsEdgeCases:
     """Граничные случаи для циклов"""
-    
+
     def test_for_loop_with_special_characters(self):
         """Цикл с спецсимволами в данных"""
         template = "{for item in items}{item}\n{endfor}"
@@ -180,7 +179,7 @@ class TestForLoopsEdgeCases:
         assert "test@email.com" in result
         assert "path/to/file" in result
         assert "10%" in result
-    
+
     def test_for_loop_with_numbers(self):
         """Цикл со числовыми значениями"""
         template = "{for num in numbers}{num}, {endfor}"
@@ -190,7 +189,7 @@ class TestForLoopsEdgeCases:
             include_system=False
         )
         assert "1, 2, 3," in result
-    
+
     def test_for_loop_with_none_values(self):
         """Цикл с None значениями в полях"""
         template = "{for item in items}{item.name}\n{endfor}"

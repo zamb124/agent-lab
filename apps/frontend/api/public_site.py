@@ -9,8 +9,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from apps.frontend.dependencies import ContainerDep
 from apps.frontend.config import get_frontend_settings
+from apps.frontend.dependencies import ContainerDep
 
 router = APIRouter(prefix="/api/public", tags=["public-site"])
 

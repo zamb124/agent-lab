@@ -17,7 +17,6 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-
 revision: str = "sync_0015"
 down_revision: Union[str, None] = "sync_0014"
 branch_labels: Union[str, Sequence[str], None] = None

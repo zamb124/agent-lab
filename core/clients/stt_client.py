@@ -13,9 +13,8 @@ batch-клиенты под капотом.
   `core/clients/**` запрещён CI (`scripts/check_voice_resolver_usage.py`).
 """
 
-from abc import ABC, abstractmethod
 import json
-import os
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
@@ -24,15 +23,10 @@ from core.files.models import AudioTranscriptionStatus
 from core.http import get_httpx_client
 from core.logging import get_logger
 
-
 if TYPE_CHECKING:
-    from core.clients.speech_override import SpeechOverride
     from core.config.models import (
         CloudRuSTTConfig,
-        LitserveSpeechBackendConfig,
-        SberSTTBackendConfig,
         STTProvidersConfig,
-        YandexSTTBackendConfig,
     )
 
 

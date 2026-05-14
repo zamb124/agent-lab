@@ -45,10 +45,10 @@ from apps.provider_litserve.runtime_models import (
     resolve_hf_model_id,
     runtime_api_model_ids,
 )
+from apps.provider_litserve.shared import resolve_torch_device
 from apps.provider_litserve.stt.api import STTLitAPI
 from apps.provider_litserve.tts.api import TTSLitAPI
 from apps.provider_litserve.vad.api import VADLitAPI
-from apps.provider_litserve.shared import resolve_torch_device
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from core.utils.tokens import get_token_service

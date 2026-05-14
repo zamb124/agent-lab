@@ -9,15 +9,14 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
-from core.state.interrupt import interrupt_to_response_dict
-from apps.flows.src.container import get_container
+from apps.flows_worker.broker import broker
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
-
-from apps.flows_worker.broker import broker
+from core.state.interrupt import interrupt_to_response_dict
 
 logger = get_logger(__name__)
 

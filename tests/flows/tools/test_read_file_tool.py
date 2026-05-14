@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.tools.files import read_file, _read_file_mock
+from apps.flows.tools.files import _read_file_mock, read_file
 
 
 def test_read_file_tool_metadata() -> None:

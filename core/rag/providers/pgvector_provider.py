@@ -3,27 +3,31 @@ RAG провайдер на базе pgvector (PostgreSQL).
 Хранит векторные документы в таблице vector_documents через SQLAlchemy 2+.
 """
 
-from core.logging import get_logger
+import hashlib
+import math
 import os
+import re
 import uuid
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import tiktoken
-from core.config.testing import is_testing
 from sqlalchemy import and_, case, delete, func, or_, select, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from core.config import get_settings
+from core.config.testing import is_testing
 from core.db.models import VectorDocument
-from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
-from core.rag.embedding_runtime import RagEmbeddingRuntime
-from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
-from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
-from core.rag.rrf import reciprocal_rank_fusion
+from core.db.utils import get_rowcount
 from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
+from core.logging import get_logger
+from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
+from core.rag.embedding_runtime import RagEmbeddingRuntime
+from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
+from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
+from core.rag.rrf import reciprocal_rank_fusion
 from core.rag.services.embedding_service import EmbeddingService
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
-from core.config import get_settings
 
 logger = get_logger(__name__)
 # Значения из шаблонного conf.json — не отправлять в OpenRouter как ключ
@@ -34,6 +38,7 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
     }
 )
 
+
 def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if raw is None:
         return ""
@@ -41,6 +46,7 @@ def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if not s or s in _EMBEDDING_API_KEY_PLACEHOLDERS:
         return ""
     return s
+
 
 def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
     key = _normalize_embedding_api_key(config.get("embedding_api_key"))
@@ -80,6 +86,7 @@ def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
         "ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
     )
 
+
 class PgVectorProvider(BaseRAGProvider):
     """
     RAG провайдер на базе pgvector.
@@ -99,6 +106,7 @@ class PgVectorProvider(BaseRAGProvider):
         db_url = config.get("db_url")
         if not db_url:
             from core.config import get_settings
+
             settings = get_settings()
             if not settings.database.rag_url:
                 raise ValueError("DATABASE__RAG_URL не настроен")
@@ -173,9 +181,24 @@ class PgVectorProvider(BaseRAGProvider):
             async def fake_generate_embeddings(texts: List[str]) -> List[List[float]]:
                 dim = self._embedding_service.get_embedding_dimension()
                 embeddings = []
-                for t in texts:
-                    h = hash(t)
-                    embeddings.append([float((h + i) % 100) / 100.0 for i in range(dim)])
+                for text in texts:
+                    vector = [0.0] * dim
+                    tokens = re.findall(r"[\w]+", text.lower(), flags=re.UNICODE)
+                    if not tokens:
+                        tokens = ["__empty__"]
+
+                    def add_feature(feature: str, weight: float = 1.0) -> None:
+                        digest = hashlib.sha256(feature.encode("utf-8")).digest()
+                        idx = int.from_bytes(digest[:4], "big") % dim
+                        sign = 1.0 if digest[4] % 2 == 0 else -1.0
+                        vector[idx] += sign * weight
+
+                    for token in tokens:
+                        add_feature(token)
+                    norm = math.sqrt(sum(value * value for value in vector))
+                    if norm == 0.0:
+                        raise ValueError("Mock embedding norm is zero")
+                    embeddings.append([value / norm for value in vector])
                 return embeddings
 
             async def fake_generate_embedding(t: str) -> List[float]:
@@ -298,13 +321,10 @@ class PgVectorProvider(BaseRAGProvider):
 
     async def list_namespaces(self) -> List[RAGNamespace]:
         async with self._session_factory() as session:
-            stmt = (
-                select(
-                    VectorDocument.namespace_id,
-                    func.count().label("doc_count"),
-                )
-                .group_by(VectorDocument.namespace_id)
-            )
+            stmt = select(
+                VectorDocument.namespace_id,
+                func.count().label("doc_count"),
+            ).group_by(VectorDocument.namespace_id)
             result = await session.execute(stmt)
             rows = result.all()
 
@@ -322,7 +342,7 @@ class PgVectorProvider(BaseRAGProvider):
             stmt = delete(VectorDocument).where(VectorDocument.namespace_id == namespace_id)
             result = await session.execute(stmt)
             await session.commit()
-            deleted = result.rowcount or 0
+            deleted = get_rowcount(result)
 
         logger.info(f"Удален namespace {namespace_id}: {deleted} записей")
         return deleted > 0
@@ -444,8 +464,9 @@ class PgVectorProvider(BaseRAGProvider):
             )
             result = await session.execute(stmt)
             await session.commit()
-            if result.rowcount:
-                logger.info(f"Удалены старые чанки документа '{document_name}': {result.rowcount}")
+            count = get_rowcount(result)
+            if count:
+                logger.info(f"Удалены старые чанки документа '{document_name}': {count}")
 
         chunk_pairs = self._chunks_from_file_read_result(read_result)
         chunks = [pair[0] for pair in chunk_pairs]
@@ -460,7 +481,9 @@ class PgVectorProvider(BaseRAGProvider):
         # crm_reembed_stale_documents_tick / rag_reembed_stale_documents_tick подберут их
         # когда сервис восстановится (ищут embedding_model IS NULL).
         try:
-            embeddings: List[Optional[List[float]]] = await self._embedding_service.generate_embeddings(chunks)
+            embeddings: List[
+                Optional[List[float]]
+            ] = await self._embedding_service.generate_embeddings(chunks)
             embedding_tokens = self._embedding_service.count_tokens(chunks)
             embedding_model: Optional[str] = self.embedding_model_name()
             indexing_runtime["embedding"] = self._embedding_service.runtime_snapshot(
@@ -510,7 +533,11 @@ class PgVectorProvider(BaseRAGProvider):
             await session.commit()
 
         logger.info(f"Загружен документ '{document_name}' в {namespace_id}: {len(chunks)} chunks")
-        merged_doc_meta = {**metadata, "indexing_runtime": indexing_runtime, "total_chunks": len(chunks)}
+        merged_doc_meta = {
+            **metadata,
+            "indexing_runtime": indexing_runtime,
+            "total_chunks": len(chunks),
+        }
         return RAGDocument(
             document_id=document_id,
             name=document_name,
@@ -667,12 +694,7 @@ class PgVectorProvider(BaseRAGProvider):
             if len(vals) == 1:
                 v0 = vals[0]
                 return self._metadata_expr_for_scalar(key, v0) == v0
-            return or_(
-                *[
-                    self._metadata_expr_for_scalar(key, v) == v
-                    for v in vals
-                ]
-            )
+            return or_(*[self._metadata_expr_for_scalar(key, v) == v for v in vals])
         if operator == "$nin":
             if not isinstance(op_value, (list, tuple)) or len(op_value) == 0:
                 raise ValueError(
@@ -682,12 +704,7 @@ class PgVectorProvider(BaseRAGProvider):
             if len(vals) == 1:
                 v0 = vals[0]
                 return self._metadata_expr_for_scalar(key, v0) != v0
-            return and_(
-                *[
-                    self._metadata_expr_for_scalar(key, v) != v
-                    for v in vals
-                ]
-            )
+            return and_(*[self._metadata_expr_for_scalar(key, v) != v for v in vals])
 
         if isinstance(op_value, int) and not isinstance(op_value, bool):
             col_int = VectorDocument.metadata_[key].as_integer()
@@ -739,7 +756,7 @@ class PgVectorProvider(BaseRAGProvider):
             )
             result = await session.execute(stmt)
             await session.commit()
-            deleted = result.rowcount or 0
+            deleted = get_rowcount(result)
 
         if deleted:
             logger.info(f"Удален документ {document_id}: {deleted} chunks")
@@ -873,7 +890,7 @@ class PgVectorProvider(BaseRAGProvider):
                     )
                 )
                 upd_result = await session.execute(upd)
-                updated += upd_result.rowcount or 0
+                updated += get_rowcount(upd_result)
             await session.commit()
         return updated
 
@@ -905,7 +922,7 @@ class PgVectorProvider(BaseRAGProvider):
             del_stmt = delete(VectorDocument).where(VectorDocument.id.in_(ids))
             del_result = await session.execute(del_stmt)
             await session.commit()
-        return int(del_result.rowcount or 0)
+        return get_rowcount(del_result)
 
     # -- Search --
 

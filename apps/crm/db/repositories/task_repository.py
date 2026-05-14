@@ -9,9 +9,11 @@ from typing import Any, List, Optional
 
 from sqlalchemy import func, select, update
 
-from apps.crm.db.base import BaseCRMRepository, CRMDatabase
+from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import CRMTask
 from core.context import get_context
+
+CRM_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "rolled_back"})
 
 
 class TaskRepository(BaseCRMRepository[CRMTask]):
@@ -115,11 +117,38 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
                 )
             await session.commit()
 
-    async def reconcile_stale_active_tasks_older_than(self, *, cutoff: datetime) -> list[CRMTask]:
-        """Активные задачи без обновления status/progress дольше cutoff → failed или cancelled.
+    async def reconcile_cancel_requested_active_tasks(self) -> list[CRMTask]:
+        """``pending``/``running`` с ``cancel_requested`` → ``cancelled`` (воркер не подхватил отмену).
 
-        Вызывается при старте crm_worker после реверса зависших сообщений TaskIQ в Redis.
-        cancel_requested: статус cancelled; иначе failed с пояснением прерывания.
+        Без порога по ``updated_at``: после рестарта не ждём ``STALE_CRM_TASK_INACTIVITY``.
+        """
+        async with self._db.session() as session:
+            stmt = select(CRMTask).where(
+                CRMTask.status.in_(("pending", "running")),
+                CRMTask.cancel_requested.is_(True),
+            )
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+            now = datetime.now(timezone.utc)
+            for row in rows:
+                row.status = "cancelled"
+                row.stage = "cancelled"
+                row.completed_at = now
+                row.cancel_requested = False
+                row.error_message = None
+                row.updated_at = now
+            await session.commit()
+            for row in rows:
+                await session.refresh(row)
+        return rows
+
+    async def reconcile_stale_active_tasks_older_than(self, *, cutoff: datetime) -> list[CRMTask]:
+        """Активные задачи без обновления status/progress дольше cutoff → failed.
+
+        Запись с ``cancel_requested`` при старте воркера обрабатывается отдельно в
+        ``reconcile_cancel_requested_active_tasks`` (без порога по времени).
+
+        cancel_requested в этом методе — запасной путь для строк, попавших под cutoff.
         """
         async with self._db.session() as session:
             stmt = select(CRMTask).where(

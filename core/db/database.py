@@ -6,15 +6,20 @@
 """
 
 import asyncio
-
-from core.logging import get_logger
 import os
 import weakref
 from typing import AsyncGenerator, Optional
+
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from core.config import get_settings
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 def _require_shared_db_url() -> str:
@@ -35,7 +40,7 @@ def _get_loop_id() -> int:
 async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     """
     Лениво создает engine для текущего event loop и URL БД.
-    
+
     Args:
         db_url: URL БД (если не указан — shared_url)
     """
@@ -43,13 +48,13 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
 
     if db_url is None:
         db_url = _require_shared_db_url()
-    
+
     # Ключ кэша включает и loop_id и db_url
     cache_key = (loop_id, db_url)
-    
+
     if cache_key in _engines:
         return _engines[cache_key]
-    
+
     logger.debug(f"Создаем engine для event loop {loop_id}, db_url={db_url[:50]}...")
 
     is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
@@ -83,7 +88,7 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
 async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmaker:
     """
     Лениво создает session factory для текущего event loop и URL БД.
-    
+
     Args:
         db_url: URL БД (если не указан — shared_url)
     """
@@ -91,10 +96,10 @@ async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmake
 
     if db_url is None:
         db_url = _require_shared_db_url()
-    
+
     # Ключ кэша включает и loop_id и db_url
     cache_key = (loop_id, db_url)
-    
+
     if cache_key in _session_factories:
         return _session_factories[cache_key]
 
@@ -110,10 +115,10 @@ async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmake
 async def session(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Алиас для get_session_factory() - создает контекстный менеджер сессии.
-    
+
     Args:
         db_url: URL БД (если не указан — shared_url)
-    
+
     Usage:
         async for s in session():
             await s.execute(...)
@@ -126,7 +131,7 @@ async def session(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, 
 async def get_db(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency для получения сессии БД в FastAPI.
-    
+
     Args:
         db_url: URL БД (если не указан — shared_url)
     """
@@ -140,7 +145,7 @@ async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: Op
     """
     Ожидает готовности БД с повторными попытками.
     Если БД недоступна после всех попыток - бросает исключение.
-    
+
     Args:
         max_retries: Максимальное количество попыток
         retry_interval: Интервал между попытками

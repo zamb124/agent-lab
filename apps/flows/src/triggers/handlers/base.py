@@ -18,22 +18,22 @@ logger = get_logger(__name__)
 class BaseTriggerHandler(ABC):
     """
     Абстрактный базовый класс для обработчиков триггеров.
-    
+
     Lifecycle:
     1. register() - вызывается при сохранении агента с новым триггером
     2. handle() - вызывается при срабатывании триггера
     3. unregister() - вызывается при удалении триггера или агента
     """
-    
+
     trigger_type: TriggerType
-    
+
     def __init__(self, base_url: str):
         """
         Args:
             base_url: Базовый URL сервиса для формирования webhook URL
         """
         self.base_url = base_url
-    
+
     @abstractmethod
     async def register(
         self,
@@ -42,26 +42,26 @@ class BaseTriggerHandler(ABC):
     ) -> TriggerConfig:
         """
         Регистрирует триггер.
-        
+
         Выполняет специфичные действия:
         - Telegram: setWebhook API
         - Cron: schedule_by_cron в TaskIQ
         - Webhook: регистрация endpoint
         - Email: создание cron job для polling
-        
+
         Args:
             flow_id: ID агента
             trigger: Конфигурация триггера
-            
+
         Returns:
             Обновленный TriggerConfig с runtime данными
             (webhook_url, schedule_id, status)
-            
+
         Raises:
             TriggerRegistrationError: При ошибке регистрации
         """
         pass
-    
+
     @abstractmethod
     async def unregister(
         self,
@@ -70,19 +70,19 @@ class BaseTriggerHandler(ABC):
     ) -> None:
         """
         Снимает триггер с регистрации.
-        
+
         Выполняет специфичные действия:
         - Telegram: deleteWebhook API
         - Cron: удаление schedule из Redis
         - Webhook: удаление endpoint
         - Email: удаление cron job
-        
+
         Args:
             flow_id: ID агента
             trigger: Конфигурация триггера
         """
         pass
-    
+
     @abstractmethod
     async def handle(
         self,
@@ -92,43 +92,43 @@ class BaseTriggerHandler(ABC):
     ) -> Dict[str, Any]:
         """
         Обрабатывает входящее событие триггера.
-        
+
         1. Валидирует payload (secret_token, allowed_users, etc.)
         2. Применяет input_mapping для формирования initial state
         3. Запускает агента через TriggerExecutor
-        
+
         Args:
             flow_id: ID агента
             trigger_id: ID триггера
             payload: Входящие данные (Telegram Update, webhook body, etc.)
-            
+
         Returns:
             Результат выполнения агента
         """
         pass
-    
+
     def generate_webhook_url(self, flow_id: str, trigger_id: str) -> str:
         """
         Генерирует URL для webhook.
-        
+
         Args:
             flow_id: ID агента
             trigger_id: ID триггера
-            
+
         Returns:
             Полный URL webhook
         """
         trigger_type = self.trigger_type.value
         svc = get_settings().server.name
         return f"{self.base_url}/{svc}/api/v1/triggers/{trigger_type}/{flow_id}/{trigger_id}"
-    
+
     def _log_register(self, flow_id: str, trigger_id: str) -> None:
         """Логирует регистрацию триггера."""
         logger.info(
             f"Registering {self.trigger_type.value} trigger: "
             f"flow_id={flow_id}, trigger={trigger_id}"
         )
-    
+
     def _log_unregister(self, flow_id: str, trigger_id: str) -> None:
         """Логирует снятие триггера."""
         logger.info(
@@ -139,7 +139,7 @@ class BaseTriggerHandler(ABC):
 
 class TriggerRegistrationError(Exception):
     """Ошибка регистрации триггера."""
-    
+
     def __init__(self, trigger_type: str, flow_id: str, trigger_id: str, message: str):
         self.trigger_type = trigger_type
         self.flow_id = flow_id
@@ -152,7 +152,7 @@ class TriggerRegistrationError(Exception):
 
 class TriggerValidationError(Exception):
     """Ошибка валидации входящего запроса триггера."""
-    
+
     def __init__(self, message: str):
         super().__init__(message)
 

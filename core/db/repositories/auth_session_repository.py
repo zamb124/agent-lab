@@ -3,9 +3,9 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
-from core.logging import get_logger
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
+from core.logging import get_logger
 from core.models.identity_models import AuthSession
 
 logger = get_logger(__name__)
@@ -14,7 +14,7 @@ class AuthSessionRepository(BaseRepository[AuthSession]):
     Репозиторий для работы с сессиями аутентификации.
     is_global=True - сессии аутентификации не изолированы по компаниям.
     """
-    
+
     is_global = True
 
     def __init__(self, storage: Storage):

@@ -1,6 +1,5 @@
 """Чанкование аудио через ffmpeg и STT-транскрипция с автоматическим разбиением."""
 
-from core.logging import get_logger
 import subprocess
 import tempfile
 from pathlib import Path
@@ -13,6 +12,7 @@ from core.clients.stt_client import BaseSTTClient
 from core.clients.voice_resolver import get_stt_client
 from core.config import get_settings
 from core.files.models import AudioTranscriptionStatus
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 def _normalize_mime_type(raw_mime_type: str | None) -> str | None:

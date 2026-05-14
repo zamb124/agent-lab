@@ -18,7 +18,6 @@ from apps.provider_litserve.model_registry import (
 )
 from core.config.models import ProviderLitserveInfraConfig
 
-
 pytestmark = pytest.mark.timeout(15)
 
 

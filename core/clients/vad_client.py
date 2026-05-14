@@ -23,7 +23,6 @@ from pydantic import BaseModel, Field
 from core.http import get_httpx_client
 from core.logging import get_logger
 
-
 if TYPE_CHECKING:
     from core.config.models import (
         LocalSileroVADBackendConfig,
@@ -164,8 +163,8 @@ class LocalSileroVADClient(BaseVADClient):
             return
         try:
             from silero_vad import (  # pyright: ignore[reportMissingImports]
-                load_silero_vad,
                 get_speech_timestamps,
+                load_silero_vad,
             )
         except ImportError as exc:
             raise RuntimeError(

@@ -5,8 +5,10 @@ from typing import Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
+
 from core.db.database import get_session_factory
 from core.db.models.platform import PlatformShortLink
+from core.db.utils import get_rowcount
 from core.short_links.kinds import SHORT_LINK_KIND_SYNC_CALL_JOIN
 
 
@@ -16,7 +18,9 @@ class ShortLinkRepository:
     def __init__(self, db_url: Optional[str] = None) -> None:
         self._db_url = db_url
 
-    async def insert_try(self, code: str, kind: str, payload: dict[str, str], expires_at: datetime) -> bool:
+    async def insert_try(
+        self, code: str, kind: str, payload: dict[str, str], expires_at: datetime
+    ) -> bool:
         """Возвращает True если вставка прошла, False при дубликате code."""
         factory = await get_session_factory(self._db_url)
         async with factory() as session:
@@ -37,7 +41,9 @@ class ShortLinkRepository:
     async def get_by_code(self, code: str) -> Optional[PlatformShortLink]:
         factory = await get_session_factory(self._db_url)
         async with factory() as session:
-            res = await session.execute(select(PlatformShortLink).where(PlatformShortLink.code == code))
+            res = await session.execute(
+                select(PlatformShortLink).where(PlatformShortLink.code == code)
+            )
             return res.scalar_one_or_none()
 
     async def find_sync_by_link_token(self, link_token: str) -> Optional[PlatformShortLink]:
@@ -66,9 +72,11 @@ class ShortLinkRepository:
     async def delete_by_code(self, code: str) -> bool:
         factory = await get_session_factory(self._db_url)
         async with factory() as session:
-            res = await session.execute(delete(PlatformShortLink).where(PlatformShortLink.code == code))
+            res = await session.execute(
+                delete(PlatformShortLink).where(PlatformShortLink.code == code)
+            )
             await session.commit()
-            return (res.rowcount or 0) > 0
+            return get_rowcount(res) > 0
 
     async def delete_by_code_and_kind_returning(
         self, code: str, kind: str
@@ -95,4 +103,4 @@ class ShortLinkRepository:
             )
             res = await session.execute(stmt)
             await session.commit()
-            return res.rowcount or 0
+            return get_rowcount(res)

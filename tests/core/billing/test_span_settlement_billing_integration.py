@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+from core.billing.service import company_resource_prices_storage_key
 from core.billing.settlement_rules import (
     SettlementApplicationMode,
     SettlementRule,
@@ -15,7 +16,6 @@ from core.billing.settlement_rules import (
     SettlementRulesDocument,
 )
 from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
-from core.billing.service import company_resource_prices_storage_key
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan
 from core.models.identity_models import Company
 

@@ -8,15 +8,15 @@
 """
 
 import json
-import pytest
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core.clients.llm import setup_mock_responses
-from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.container import get_container
-from core.state import ExecutionState
+import pytest
 
+from apps.flows.src.container import get_container
+from apps.flows.src.runtime.flow import Flow
+from core.clients.llm import setup_mock_responses
+from core.state import ExecutionState
 
 # Базовая директория агентов
 AGENTS_DIR = Path(__file__).parent.parent.parent.parent / "apps" / "flows" / "bundles"
@@ -74,9 +74,9 @@ class TestAllFlowConfigs:
         """Agent создаётся из конфига в БД без ошибок."""
         container = get_container()
         config = await container.flow_repository.get(flow_id)
-        
+
         assert config is not None, f"Agent {flow_id} не загружен в БД"
-        
+
         # Конвертируем FlowConfig в dict для Flow.from_config
         config_dict = {
             "id": config.flow_id,
@@ -87,7 +87,7 @@ class TestAllFlowConfigs:
             "nodes": config.nodes,
             "edges": [{"from": e.from_node, "to": e.to_node, "condition": e.condition} for e in config.edges],
         }
-        
+
         flow = await Flow.from_config(config_dict)
         assert flow.flow_id == config.flow_id
         assert flow.name == config.name
@@ -98,9 +98,9 @@ class TestAllFlowConfigs:
         """Все ноды имеют валидный тип."""
         container = get_container()
         config = await container.flow_repository.get(flow_id)
-        
+
         assert config is not None, f"Agent {flow_id} не загружен в БД"
-        
+
         from apps.flows.src.models.enums import NodeType
         valid_types = {t.value for t in NodeType}
         for node_id, node_config in config.nodes.items():
@@ -117,7 +117,7 @@ class TestAllFlowsExecution:
         """Agent выполняется с mock LLM и возвращает ответ."""
         container = get_container()
         config = await container.flow_repository.get(flow_id)
-        
+
         assert config is not None, f"Agent {flow_id} не загружен в БД"
 
         # Настраиваем mock LLM

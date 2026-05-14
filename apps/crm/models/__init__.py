@@ -4,17 +4,17 @@ CRM Models.
 
 from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import (
+    AIAnalyzeRequest,
+    AIAnalyzeResponse,
     EntityCreate,
-    EntityUpdate,
     EntityResponse,
     EntityTypeCreate,
     EntityTypeResponse,
-    RelationshipTypeCreate,
-    RelationshipTypeResponse,
+    EntityUpdate,
     RelationshipCreate,
     RelationshipResponse,
-    AIAnalyzeRequest,
-    AIAnalyzeResponse,
+    RelationshipTypeCreate,
+    RelationshipTypeResponse,
 )
 
 __all__ = [

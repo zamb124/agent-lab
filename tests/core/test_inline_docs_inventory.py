@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-from core.docs.data.python.globals import GLOBALS
-from core.docs.data.python.modules import COMMON_MODULES, MODULE_METHODS
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from apps.flows.src.services.runtime_namespace_doc import (
     build_runtime_namespace_global_variables,
 )
+from core.docs.data.python.globals import GLOBALS
+from core.docs.data.python.modules import COMMON_MODULES, MODULE_METHODS
 
 
 def test_common_modules_have_documentation_entries():

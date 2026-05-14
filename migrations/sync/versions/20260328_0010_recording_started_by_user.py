@@ -1,7 +1,7 @@
 """Добавляет started_by_user_id в записи звонков."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "sync_0010"
 down_revision = "sync_0009"

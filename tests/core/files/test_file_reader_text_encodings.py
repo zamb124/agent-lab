@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.files.reader import FileReader, FileReadError
+from core.files.reader import FileReader
 from core.files.reader.models import FileReadKind
 from tests.core.files.corpus.manifest import CORPUS_DIR
 

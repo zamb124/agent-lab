@@ -13,11 +13,17 @@ export class GlassSpinner extends PlatformElement {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                flex-shrink: 0;
+                vertical-align: middle;
             }
             
             .spinner {
+                box-sizing: border-box;
+                flex-shrink: 0;
                 width: var(--spinner-size, 24px);
                 height: var(--spinner-size, 24px);
+                min-width: var(--spinner-size, 24px);
+                min-height: var(--spinner-size, 24px);
                 border: 2px solid var(--glass-border-medium);
                 border-top-color: var(--accent);
                 border-radius: 50%;

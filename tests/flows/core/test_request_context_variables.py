@@ -1,10 +1,9 @@
 """Переменные flow из Context (JWT → user / company)."""
 
-from core.models.context_models import Context
-from core.models.identity_models import Company, User, UserStatus
-from core.models.i18n_models import Language
-
 from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
+from core.models.context_models import Context
+from core.models.i18n_models import Language
+from core.models.identity_models import Company, User, UserStatus
 
 
 def test_none_context():

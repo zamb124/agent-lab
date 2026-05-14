@@ -32,7 +32,7 @@ class TestInterruptE2E:
     async def test_simple_ask_user_interrupt(self, agent_flow, mock_llm_with_queue):
         """
         Простой interrupt от ask_user tool.
-        
+
         Сценарий:
         1. LLM вызывает ask_user
         2. Агент возвращает state с interrupt
@@ -43,7 +43,7 @@ class TestInterruptE2E:
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "Как вас зовут?"}},
             "Приятно познакомиться, Иван!",
         ])
-        
+
         state = ExecutionState(
             task_id="e2e-test-1",
             context_id="e2e-context",
@@ -51,18 +51,18 @@ class TestInterruptE2E:
             session_id="e2e-agent:e2e-context",
             content="Привет"
         )
-        
+
         # Первый вызов - interrupt
         result = await agent_flow.run(state)
-        
+
         assert result.interrupt is not None, "Должен быть interrupt"
         assert "зовут" in result.interrupt.question.lower()
         assert len(result.interrupt_path) > 0, "interrupt_path не должен быть пустым"
-        
+
         # Resume с ответом
         result.content = "Иван"
         final_result = await agent_flow.run(result)
-        
+
         assert final_result.interrupt is None, "После resume interrupt должен быть None"
         assert final_result.response is not None, "Должен быть response"
         assert "иван" in final_result.response.lower()
@@ -71,7 +71,7 @@ class TestInterruptE2E:
     async def test_subagent_interrupt_and_resume(self, agent_flow, mock_llm_with_queue):
         """
         Interrupt в субагенте (llm_node как tool).
-        
+
         Сценарий:
         1. Главный агент вызывает example_subflow
         2. Субагент вызывает ask_user
@@ -90,7 +90,7 @@ class TestInterruptE2E:
             # Главный агент формирует ответ
             "Рекомендую магазин на Тверской!",
         ])
-        
+
         state = ExecutionState(
             task_id="e2e-test-2",
             context_id="e2e-context",
@@ -98,28 +98,28 @@ class TestInterruptE2E:
             session_id="e2e-agent:e2e-context",
             content="где купить цветы"
         )
-        
+
         # Первый вызов - interrupt от субагента
         result = await agent_flow.run(state)
-        
+
         assert result.interrupt is not None, "Должен быть interrupt от субагента"
         assert "город" in result.interrupt.question.lower()
-        
+
         # Проверяем что nested_states содержит субагента
         assert "example_subflow" in result.nested_states, \
             f"Субагент должен быть в nested_states: {list(result.nested_states.keys())}"
-        
+
         # Проверяем interrupt_path
         assert len(result.interrupt_path) >= 2, \
             f"interrupt_path должен содержать [subagent, ask_user]: {result.interrupt_path}"
-        
+
         # Resume с ответом
         result.content = "москва"
         final_result = await agent_flow.run(result)
-        
+
         assert final_result.interrupt is None, "После resume interrupt должен быть None"
         assert final_result.response is not None, "Должен быть response"
-        
+
         # Проверяем историю субагента
         subagent_state = final_result.nested_states.get("example_subflow")
         assert subagent_state is not None, "Субагент должен остаться в nested_states"
@@ -129,7 +129,7 @@ class TestInterruptE2E:
     async def test_multiple_interrupts_preserve_history(self, agent_flow, mock_llm_with_queue):
         """
         Множественные interrupts сохраняют историю.
-        
+
         Сценарий:
         1. Субагент спрашивает город
         2. Resume с "москва"
@@ -149,7 +149,7 @@ class TestInterruptE2E:
             # Главный: финал
             "Рекомендую магазин в Раменках!",
         ])
-        
+
         state = ExecutionState(
             task_id="e2e-test-3",
             context_id="e2e-context",
@@ -157,32 +157,32 @@ class TestInterruptE2E:
             session_id="e2e-agent:e2e-context",
             content="найти цветочный магазин"
         )
-        
+
         # 1. Первый interrupt (город)
         result1 = await agent_flow.run(state)
         assert result1.interrupt is not None
         assert "город" in result1.interrupt.question.lower()
-        
+
         # 2. Resume "москва" → второй interrupt (район)
         result1.content = "москва"
         result2 = await agent_flow.run(result1)
         assert result2.interrupt is not None
         assert "район" in result2.interrupt.question.lower()
-        
+
         # Проверяем что история накопилась
         subagent_state = result2.nested_states.get("example_subflow")
         assert subagent_state is not None
         # После первого resume должно быть 4 messages: user, assistant, tool(москва), assistant
         assert len(subagent_state.messages) >= 4, \
             f"Должно быть минимум 4 сообщения после первого resume: {len(subagent_state.messages)}"
-        
+
         # 3. Resume "раменки" → финальный ответ
         result2.content = "раменки"
         result3 = await agent_flow.run(result2)
-        
+
         assert result3.interrupt is None
         assert result3.response is not None
-        
+
         # Проверяем финальную историю
         final_subagent = result3.nested_states.get("example_subflow")
         assert final_subagent is not None
@@ -194,7 +194,7 @@ class TestInterruptE2E:
     async def test_interrupt_path_correctness(self, agent_flow, mock_llm_with_queue):
         """
         Проверка правильности interrupt_path.
-        
+
         При interrupt от субагента:
         - interrupt_path[0] = {type: "llm_node", id: "example_subflow"}
         - interrupt_path[1] = {type: "tool", id: "ask_user"}
@@ -203,7 +203,7 @@ class TestInterruptE2E:
             {"type": "tool_call", "tool": "example_subflow", "args": {"query": "test"}},
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "test?"}},
         ])
-        
+
         state = ExecutionState(
             task_id="e2e-test-4",
             context_id="e2e-context",
@@ -211,18 +211,18 @@ class TestInterruptE2E:
             session_id="e2e-agent:e2e-context",
             content="test"
         )
-        
+
         result = await agent_flow.run(state)
-        
+
         assert result.interrupt is not None
         assert len(result.interrupt_path) >= 2, \
             f"interrupt_path должен содержать минимум 2 элемента: {result.interrupt_path}"
-        
+
         # Первый элемент - субагент
         first = result.interrupt_path[0]
         assert first.type == "llm_node", f"Первый элемент должен быть llm_node: {first}"
         assert first.id == "example_subflow", f"ID должен быть example_subflow: {first.id}"
-        
+
         # Второй элемент - ask_user
         second = result.interrupt_path[1]
         assert second.type == "tool", f"Второй элемент должен быть tool: {second}"
@@ -239,7 +239,7 @@ class TestInterruptE2E:
             "Привет, Тест!",
             "Ответ готов!",
         ])
-        
+
         state = ExecutionState(
             task_id="e2e-test-5",
             context_id="e2e-context",
@@ -247,20 +247,20 @@ class TestInterruptE2E:
             session_id="e2e-agent:e2e-context",
             content="тест"
         )
-        
+
         # Interrupt
         result = await agent_flow.run(state)
         assert "example_subflow" in result.nested_states
-        
+
         initial_messages_count = len(result.nested_states["example_subflow"].messages)
-        
+
         # Resume
         result.content = "Тест"
         final_result = await agent_flow.run(result)
-        
+
         assert "example_subflow" in final_result.nested_states
         final_messages_count = len(final_result.nested_states["example_subflow"].messages)
-        
+
         # После resume должно быть больше сообщений
         assert final_messages_count > initial_messages_count, \
             f"Сообщений должно стать больше: {initial_messages_count} → {final_messages_count}"
@@ -270,7 +270,7 @@ class TestInterruptE2E:
 class TestSubflowInterruptE2E:
     """
     E2E тесты interrupt в subflow (FlowNode) с реальным worker.
-    
+
     Тестируют:
     1. Interrupt в CodeNode внутри subflow (FlowNode)
     2. Interrupt в LlmNode с ask_user внутри subflow
@@ -282,26 +282,26 @@ class TestSubflowInterruptE2E:
     async def child_agent_with_code_interrupt(self, app, container, unique_id):
         """
         Создает child агента с CodeNode, которая делает interrupt.
-        
+
         Логика CodeNode:
         - Если content == "start" -> бросить interrupt с вопросом
         - Иначе -> использовать content как ответ и записать его в state
         """
         from apps.flows.src.models import FlowConfig
-        
+
         flow_id = f"child_code_interrupt_{unique_id}"
-        
+
         # CodeNode логика: если content == "start" - спросить, иначе - использовать content как ответ
         code_with_interrupt = '''
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
 async def execute(args, state):
     content = state.get("content", "")
-    
+
     # Первый вызов - content == "start", нужно спросить имя
     if content == "start":
         raise FlowInterrupt(question="Как вас зовут?")
-    
+
     # Resume - content содержит ответ пользователя
     user_name = content
     state["received_answer"] = user_name  # Записываем полученный ответ для проверки
@@ -309,7 +309,7 @@ async def execute(args, state):
     state["response"] = f"Привет, {user_name}! Ответ получен в CodeNode."
     return {"response": state["response"], "user_name": user_name, "received_answer": user_name}
 '''
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Child Agent with Code Interrupt",
@@ -324,11 +324,11 @@ async def execute(args, state):
                 {"from": "ask_name_node", "to": None}
             ]
         )
-        
+
         await container.flow_repository.set(flow_config)
-        
+
         yield flow_id
-        
+
         await container.flow_repository.delete(flow_id)
 
     @pytest_asyncio.fixture
@@ -337,9 +337,9 @@ async def execute(args, state):
         Создает parent агента с FlowNode (subflow), которая вызывает child агента.
         """
         from apps.flows.src.models import FlowConfig
-        
+
         flow_id = f"parent_subflow_{unique_id}"
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Parent Agent with Subflow",
@@ -354,25 +354,25 @@ async def execute(args, state):
                 {"from": "call_child", "to": None}
             ]
         )
-        
+
         await container.flow_repository.set(flow_config)
-        
+
         yield flow_id
-        
+
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
     async def test_subflow_code_node_interrupt(self, app, container, parent_agent_with_subflow):
         """
         Interrupt в CodeNode внутри subflow (FlowNode).
-        
+
         Проверяем:
         1. CodeNode бросает FlowInterrupt
         2. Interrupt поднимается через FlowNode
         3. current_nodes указывает на subflow ноду для resume
         """
         flow = await container.flow_factory.get_flow(parent_agent_with_subflow)
-        
+
         state = ExecutionState(
             task_id="subflow-code-test-1",
             context_id="subflow-context",
@@ -380,9 +380,9 @@ async def execute(args, state):
             session_id=f"{parent_agent_with_subflow}:subflow-context",
             content="start"  # Это значение заставит CodeNode бросить interrupt
         )
-        
+
         result = await flow.run(state)
-        
+
         assert result.interrupt is not None, "Должен быть interrupt от CodeNode"
         assert "зовут" in result.interrupt.question.lower(), \
             f"Вопрос должен содержать 'зовут': {result.interrupt.question}"
@@ -393,7 +393,7 @@ async def execute(args, state):
     async def test_subflow_code_node_resume_answer_reaches_node(self, app, container, parent_agent_with_subflow):
         """
         ГЛАВНЫЙ ТЕСТ: Ответ пользователя попадает именно в CodeNode.
-        
+
         Проверяем:
         1. Interrupt от CodeNode
         2. Resume с ответом "Иван"
@@ -402,7 +402,7 @@ async def execute(args, state):
         5. Response содержит имя, доказывая что ответ достиг CodeNode
         """
         flow = await container.flow_factory.get_flow(parent_agent_with_subflow)
-        
+
         state = ExecutionState(
             task_id="subflow-code-test-2",
             context_id="subflow-context-2",
@@ -410,24 +410,24 @@ async def execute(args, state):
             session_id=f"{parent_agent_with_subflow}:subflow-context-2",
             content="start"
         )
-        
+
         # Шаг 1: Первый вызов - interrupt
         result = await flow.run(state)
         assert result.interrupt is not None, "Должен быть interrupt"
         assert result.interrupt.question == "Как вас зовут?"
-        
+
         # Шаг 2: Resume с ответом
         result.content = "Иван"
         final_result = await flow.run(result)
-        
+
         # Шаг 3: Проверяем что ответ попал в CodeNode
         assert final_result.interrupt is None, "После resume interrupt должен быть None"
         assert final_result.response is not None, "Должен быть response"
-        
+
         # КРИТИЧЕСКАЯ ПРОВЕРКА: CodeNode получила ответ и записала его
         assert hasattr(final_result, "received_answer") or getattr(final_result, "received_answer", None) == "Иван", \
-            f"CodeNode должна была записать received_answer='Иван'"
-        
+            "CodeNode должна была записать received_answer='Иван'"
+
         # Проверяем что response содержит имя (доказательство что CodeNode получила ответ)
         assert "иван" in final_result.response.lower(), \
             f"Response должен содержать 'Иван', получили: {final_result.response}"
@@ -438,14 +438,14 @@ async def execute(args, state):
     async def child_agent_with_react_ask_user(self, app, container, unique_id):
         """
         Создает child агента с LlmNode и ask_user tool.
-        
+
         child_agent:
             entry: "react_main" (LlmNode с ask_user tool)
         """
         from apps.flows.src.models import FlowConfig
-        
+
         flow_id = f"child_react_ask_{unique_id}"
-        
+
         ask_user_code = '''
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
@@ -453,7 +453,7 @@ async def execute(args, state):
     question = args.get("question", "")
     raise FlowInterrupt(question=question)
 '''
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Child Agent with React and ask_user",
@@ -479,11 +479,11 @@ async def execute(args, state):
                 {"from": "react_main", "to": None}
             ]
         )
-        
+
         await container.flow_repository.set(flow_config)
-        
+
         yield flow_id
-        
+
         await container.flow_repository.delete(flow_id)
 
     @pytest_asyncio.fixture
@@ -492,9 +492,9 @@ async def execute(args, state):
         Parent агент с LlmNode, который вызывает child агента как tool.
         """
         from apps.flows.src.models import FlowConfig
-        
+
         flow_id = f"parent_react_subflow_{unique_id}"
-        
+
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Parent Agent with React Subflow",
@@ -536,11 +536,11 @@ async def execute(args, state):
                 {"from": "main", "to": None}
             ]
         )
-        
+
         await container.flow_repository.set(flow_config)
-        
+
         yield flow_id
-        
+
         await container.flow_repository.delete(flow_id)
 
     @pytest.mark.asyncio
@@ -549,7 +549,7 @@ async def execute(args, state):
     ):
         """
         Interrupt от ask_user в LlmNode внутри subflow.
-        
+
         Проверяем:
         1. Путь interrupt_path содержит [child_agent, ask_user]
         2. nested_states содержит состояние child_agent
@@ -558,9 +558,9 @@ async def execute(args, state):
             {"type": "tool_call", "tool": "child_agent", "args": {"query": "приветствие"}},
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "Как вас зовут?"}},
         ])
-        
+
         flow = await container.flow_factory.get_flow(parent_agent_with_react_subflow)
-        
+
         state = ExecutionState(
             task_id="subflow-react-test-1",
             context_id="subflow-react-context",
@@ -568,22 +568,22 @@ async def execute(args, state):
             session_id=f"{parent_agent_with_react_subflow}:subflow-react-context",
             content="Привет"
         )
-        
+
         result = await flow.run(state)
-        
+
         assert result.interrupt is not None, "Должен быть interrupt от ask_user"
         assert "зовут" in result.interrupt.question.lower()
-        
+
         # Проверяем interrupt_path
         assert len(result.interrupt_path) >= 2, \
             f"interrupt_path должен содержать [child_agent, ask_user]: {result.interrupt_path}"
-        
+
         first = result.interrupt_path[0]
         assert first.id == "child_agent", f"Первый элемент: {first.id}"
-        
+
         second = result.interrupt_path[1]
         assert second.id == "ask_user", f"Второй элемент: {second.id}"
-        
+
         # Проверяем nested_states
         assert "child_agent" in result.nested_states, \
             f"child_agent должен быть в nested_states: {list(result.nested_states.keys())}"
@@ -594,14 +594,14 @@ async def execute(args, state):
     ):
         """
         ГЛАВНЫЙ ТЕСТ: Ответ пользователя появляется в messages child агента.
-        
+
         Проверяем:
         1. После resume ответ "Иван" появляется в messages child_agent
         2. Ответ добавлен как tool result для ask_user
         3. LLM child получает ответ и формирует response с именем
         """
         from a2a.utils.message import get_message_text
-        
+
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "child_agent", "args": {"query": "приветствие"}},
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "Как вас зовут?"}},
@@ -609,9 +609,9 @@ async def execute(args, state):
             "Привет, Иван! Ты написал свое имя и я его получил.",
             "Приветствие выполнено успешно!",
         ])
-        
+
         flow = await container.flow_factory.get_flow(parent_agent_with_react_subflow)
-        
+
         state = ExecutionState(
             task_id="subflow-react-test-2",
             context_id="subflow-react-context-2",
@@ -619,28 +619,28 @@ async def execute(args, state):
             session_id=f"{parent_agent_with_react_subflow}:subflow-react-context-2",
             content="Привет"
         )
-        
+
         # Шаг 1: interrupt
         result = await flow.run(state)
         assert result.interrupt is not None
-        
+
         child_before = result.nested_states["child_agent"]
         messages_count_before = len(child_before.messages)
-        
+
         # Шаг 2: resume с ответом
         result.content = "Иван"
         final_result = await flow.run(result)
-        
+
         assert final_result.interrupt is None
-        
+
         # КРИТИЧЕСКАЯ ПРОВЕРКА: ответ появился в messages child_agent
         child_after = final_result.nested_states.get("child_agent")
         assert child_after is not None, "child_agent должен быть в nested_states"
-        
+
         messages_count_after = len(child_after.messages)
         assert messages_count_after > messages_count_before, \
             f"После resume должно быть больше сообщений: {messages_count_before} -> {messages_count_after}"
-        
+
         # Ищем ответ "Иван" в messages child агента
         found_answer = False
         for msg in child_after.messages:
@@ -648,7 +648,7 @@ async def execute(args, state):
             if "Иван" in text or "иван" in text.lower():
                 found_answer = True
                 break
-        
+
         assert found_answer, \
             f"Ответ 'Иван' должен быть в messages child_agent. Messages: {[get_message_text(m) for m in child_after.messages]}"
 
@@ -658,14 +658,14 @@ async def execute(args, state):
     ):
         """
         Несколько interrupt: каждый ответ появляется в истории child агента.
-        
+
         Проверяем:
         1. После первого resume "Иван" появляется в messages
         2. После второго resume "Москва" тоже появляется в messages
         3. Оба ответа присутствуют в финальной истории child
         """
         from a2a.utils.message import get_message_text
-        
+
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "child_agent", "args": {"query": "регистрация"}},
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "Как вас зовут?"}},
@@ -673,9 +673,9 @@ async def execute(args, state):
             "Привет, Иван из Москвы! Оба ответа получены.",
             "Регистрация завершена.",
         ])
-        
+
         flow = await container.flow_factory.get_flow(parent_agent_with_react_subflow)
-        
+
         state = ExecutionState(
             task_id="subflow-multi-interrupt",
             context_id="subflow-multi-context",
@@ -683,38 +683,38 @@ async def execute(args, state):
             session_id=f"{parent_agent_with_react_subflow}:subflow-multi-context",
             content="Регистрация"
         )
-        
+
         # 1. Первый interrupt
         result1 = await flow.run(state)
         assert result1.interrupt is not None
-        
+
         # 2. Resume "Иван" -> второй interrupt
         result1.content = "Иван"
         result2 = await flow.run(result1)
         assert result2.interrupt is not None
-        
+
         # Проверяем что "Иван" уже в messages
         child_state_after_first = result2.nested_states.get("child_agent")
         assert child_state_after_first is not None
-        
+
         messages_texts_1 = [get_message_text(m) for m in child_state_after_first.messages]
         found_ivan = any("Иван" in t or "иван" in t.lower() for t in messages_texts_1)
         assert found_ivan, f"'Иван' должен быть в messages после первого resume: {messages_texts_1}"
-        
+
         # 3. Resume "Москва" -> финал
         result2.content = "Москва"
         result3 = await flow.run(result2)
-        
+
         assert result3.interrupt is None
-        
+
         # КРИТИЧЕСКАЯ ПРОВЕРКА: оба ответа в финальной истории
         final_child = result3.nested_states.get("child_agent")
         assert final_child is not None
-        
+
         messages_texts_final = [get_message_text(m) for m in final_child.messages]
-        
+
         found_ivan_final = any("Иван" in t or "иван" in t.lower() for t in messages_texts_final)
         found_moscow_final = any("Москва" in t or "москва" in t.lower() for t in messages_texts_final)
-        
+
         assert found_ivan_final, f"'Иван' должен быть в финальных messages: {messages_texts_final}"
         assert found_moscow_final, f"'Москва' должен быть в финальных messages: {messages_texts_final}"

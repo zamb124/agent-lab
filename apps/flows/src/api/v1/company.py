@@ -2,7 +2,6 @@
 API для управления ресурсами компаний.
 """
 
-from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -34,27 +33,27 @@ class InitCompanyResponse(BaseModel):
 async def init_company(container: ContainerDep, request: InitCompanyRequest) -> InitCompanyResponse:
     """
     Инициализирует агенты и тулы для новой компании.
-    
+
     Запускает TaskIQ задачу которая загружает:
     - Public агенты со всеми зависимостями (из кода)
     - Public тулы (из кода)
-    
+
     Args:
         request: company_id и company_name
-        
+
     Returns:
         task_id для отслеживания выполнения
     """
     _ = container
     logger.info(f"Запрос инициализации компании: {request.company_id}")
-    
+
     # Запрещаем инициализацию system через API
     if request.company_id == "system":
         raise HTTPException(
             status_code=400,
             detail="System namespace инициализируется автоматически при старте"
         )
-    
+
     try:
         # Запускаем TaskIQ задачу
         task = await init_company_resources.kiq(
@@ -62,15 +61,15 @@ async def init_company(container: ContainerDep, request: InitCompanyRequest) -> 
             company_name=request.company_name,
             subdomain=request.subdomain
         )
-        
+
         logger.info(f"Задача инициализации запущена: task_id={task.task_id}")
-        
+
         return InitCompanyResponse(
             task_id=task.task_id,
             status="scheduled",
             message=f"Инициализация компании {request.company_id} запланирована"
         )
-        
+
     except Exception as e:
         logger.error(f"Ошибка запуска инициализации: {e}", exc_info=True)
         raise HTTPException(

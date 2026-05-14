@@ -10,12 +10,11 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
-
-from tests.sync.api._helpers import seed_namespace_via_repo
 from httpx import ASGITransport, AsyncClient
 
 from apps.sync.db.models import SyncCall
 from apps.sync.db.repositories.call_repository import CallRepository
+from tests.sync.api._helpers import seed_namespace_via_repo
 
 
 @pytest.mark.asyncio

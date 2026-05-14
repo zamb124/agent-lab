@@ -5,11 +5,11 @@ Sync Service - FastAPI приложение для инженерного чат
 БД: sync_db (service) + shared_db
 """
 
-from core.logging import get_logger
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from apps.sync.api import get_api_router
 from apps.sync.config import SyncSettings
@@ -18,10 +18,9 @@ from apps.sync.dependencies import ContainerDep
 from apps.sync.realtime.command_router import register_sync_ws_commands
 from apps.sync.realtime.operations import ws_command_error_status
 from apps.sync.realtime.presence_hooks import register_presence_hooks
-from fastapi.staticfiles import StaticFiles
-
 from core.app import create_service_app
 from core.config import get_settings
+from core.logging import get_logger
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)

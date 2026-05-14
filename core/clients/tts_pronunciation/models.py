@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 PronunciationRuleKind = Literal["alias", "regex", "stress"]
 

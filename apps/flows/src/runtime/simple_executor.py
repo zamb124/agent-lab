@@ -8,16 +8,16 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils.message import get_message_text
 
-from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.models import NodeConfig, NodeLLMOverride
 from apps.flows.src.models.enums import NodeType
-from core.state import ExecutionState
+from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
+from core.state import ExecutionState
 
 
 class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
     """Метакласс, который автоматически добавляет __init__ и execute."""
-    
+
     def __new__(mcs, name, bases, namespace):
         tools = namespace.get("tools", [])
         prompt = namespace.get("prompt", "")
@@ -26,7 +26,7 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
         node_description = namespace.get("description", f"LLM агент {node_name}")
         model = namespace.get("model", "gpt-4o")
         agent_skills = namespace.get("agent_skills", [])
-        
+
         def __init__(self):
             config = NodeConfig(
                 node_id=node_id,
@@ -38,7 +38,7 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
             )
             self.runner = LlmNodeRunner(config, tools, None, prompt, llm_node=None)
             self.agent_skills = agent_skills
-        
+
         async def execute(self, context: RequestContext, event_queue: EventQueue):
             session_id = f"{node_id}:{context.context_id}"
             state = ExecutionState(
@@ -47,11 +47,11 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
                 session_id=session_id,
                 user_id="external",
             )
-            
+
             metadata = {}
             if hasattr(context, "metadata"):
                 metadata = getattr(context, "metadata", {}) or {}
-            
+
             if not metadata:
                 user_input = context.get_user_input()
                 if not isinstance(user_input, str):
@@ -59,42 +59,42 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
                         metadata = user_input.metadata or {}
                     elif isinstance(user_input, dict):
                         metadata = user_input.get("metadata") or {}
-            
+
             if metadata and "mock" in metadata:
                 state.mock = metadata["mock"]
-            
+
             user_input = context.get_user_input()
             if isinstance(user_input, str):
                 content = user_input
             else:
                 content = get_message_text(user_input)
-            
+
             emitter = InMemoryEmitter(state)
             async for event in self.runner.run({"content": content}, state, emitter=emitter):
                 await event_queue.enqueue_event(event)
-        
+
         async def cancel(self, context: RequestContext, event_queue: EventQueue):
             pass
-        
+
         namespace["__init__"] = __init__
         namespace["execute"] = execute
         namespace["cancel"] = cancel
-        
+
         return super().__new__(mcs, name, bases, namespace)
 
 
 class SimpleLlmNodeExecutor(AgentExecutor, metaclass=SimpleLlmNodeExecutorMeta):
     """
     Базовый класс для простых внешних агентов.
-    
+
     Просто задайте tools и prompt:
-    
+
     class MyAgent(SimpleLlmNodeExecutor):
         tools = [MyTool()]
         prompt = "Ты помощник..."
         agent_skills = [AgentSkill(id="default", name="Default", description="...", tags=[])]
     """
-    
+
     tools = []
     prompt = ""
     node_id = "llm_node"

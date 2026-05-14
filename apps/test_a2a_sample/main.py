@@ -4,17 +4,17 @@
 """
 
 import os
+
 import httpx
 import uvicorn
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-
-from a2a.server.apps import A2AStarletteApplication
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCard, AgentSkill, AgentCapabilities
 
 from apps.test_a2a_sample.simple_agent import SimpleTestAgent
 
@@ -23,10 +23,10 @@ API_KEY = os.getenv("API_KEY", "test-api-key-12345")
 
 class CatFactTool:
     """Простой tool для получения фактов о котах."""
-    
+
     name = "get_cat_fact"
     description = "Получает интересный факт о котах"
-    
+
     async def execute(self, args=None, state=None):
         """Получает факт с внешнего API."""
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -38,7 +38,7 @@ class CatFactTool:
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """Middleware для проверки API ключа."""
-    
+
     async def dispatch(self, request: Request, call_next):
         if request.url.path != "/health":
             api_key = request.headers.get("X-API-Key")
@@ -54,7 +54,7 @@ def create_app():
         tools=[CatFactTool()],
         prompt="Ты помощник про котов."
     )
-    
+
     skills = [
         AgentSkill(
             id="default",
@@ -63,7 +63,7 @@ def create_app():
             tags=["test", "cats"]
         )
     ]
-    
+
     card = AgentCard(
         name="Test Cat Agent",
         description="Тестовый агент для интеграционных тестов",
@@ -74,17 +74,17 @@ def create_app():
         defaultInputModes=["text/plain"],
         defaultOutputModes=["text/plain"],
     )
-    
+
     app = A2AStarletteApplication(
         card,
         DefaultRequestHandler(executor, InMemoryTaskStore())
     ).build()
-    
+
     app.add_middleware(APIKeyMiddleware)
     app.routes.append(
         Route("/health", lambda r: JSONResponse({"status": "healthy"}), methods=["GET"])
     )
-    
+
     return app
 
 

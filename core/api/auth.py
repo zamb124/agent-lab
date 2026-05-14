@@ -7,11 +7,12 @@ API эндпоинты для авторизации.
 
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
-from pydantic import BaseModel, Field as PydanticField
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 
 from core.config import get_settings
 from core.identity import AuthService
@@ -174,14 +175,14 @@ async def start_auth(
         request: FastAPI request для определения redirect_uri
         provider_name: Имя провайдера (yandex, google, etc.)
         redirect_uri: URI для возврата после авторизации (опционально)
-        
+
     Returns:
         JSON с auth_url для редиректа на стороне клиента
     """
-    from core.utils.domain import is_local, get_host_with_port
-    
-    settings = get_settings()
-    
+    from core.utils.domain import get_host_with_port, is_local
+
+    get_settings()
+
     try:
         provider = AuthProvider(provider_name)
     except ValueError:
@@ -197,7 +198,7 @@ async def start_auth(
 
     # Сохраняем оригинальный хост для редиректа после авторизации
     original_host = request.headers.get("host", "localhost:8002")
-    
+
     if redirect_uri is None:
         # Определяем протокол
         forwarded_proto = request.headers.get("x-forwarded-proto")
@@ -205,16 +206,16 @@ async def start_auth(
             protocol = forwarded_proto
         else:
             protocol = "http" if is_local(original_host) else "https"
-        
+
         # Используем базовый домен (без субдомена) для OAuth redirect_uri
         # Это позволяет зарегистрировать один callback URL в провайдере
         base_host = get_host_with_port(original_host)
-        
+
         # Единый OAuth callback на frontend gateway.
         callback_path = f"/auth/callback/{provider_name}"
-        
+
         redirect_uri = f"{protocol}://{base_host}{callback_path}"
-    
+
     logger.info(f"start_auth: original_host={original_host}, redirect_uri={redirect_uri}")
 
     try:
@@ -425,17 +426,17 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
     Возвращает полную информацию о текущем авторизованном пользователе.
     """
     token_data = getattr(request.state, "token_data", None)
-    
+
     if not token_data:
         logger.warning("Запрос к /api/auth/me без авторизации")
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     user_repo = auth_service._user_repository
     user = await user_repo.get(token_data.user_id)
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return {
         "user_id": user.user_id,
         "name": user.name,
@@ -513,16 +514,16 @@ async def update_current_user(
     Обновляет данные текущего пользователя.
     """
     token_data = getattr(request.state, "token_data", None)
-    
+
     if not token_data:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     user_repo = auth_service._user_repository
     user = await user_repo.get(token_data.user_id)
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     update_data = updates.model_dump(exclude_none=True)
 
     for field, value in update_data.items():
@@ -539,7 +540,7 @@ async def update_current_user(
 
     user.updated_at = datetime.now(timezone.utc)
     await user_repo.set(user)
-    
+
     return {"success": True, "message": "User updated"}
 
 @router.get("/me/attrs/{service}")
@@ -550,21 +551,21 @@ async def get_service_attrs(
 ):
     """
     Получает service-specific атрибуты для текущего пользователя.
-    
+
     Args:
         service: Имя сервиса (crm, agents, rag)
     """
     token_data = getattr(request.state, "token_data", None)
-    
+
     if not token_data:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     user_repo = auth_service._user_repository
     user = await user_repo.get(token_data.user_id)
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return user.attrs.get(service, {})
 
 @router.put("/me/attrs/{service}")
@@ -576,29 +577,29 @@ async def update_service_attrs(
 ):
     """
     Обновляет service-specific атрибуты для текущего пользователя (merge).
-    
+
     Args:
         service: Имя сервиса (crm, agents, rag)
         attrs: Атрибуты для обновления (merge с существующими)
     """
     token_data = getattr(request.state, "token_data", None)
-    
+
     if not token_data:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     user_repo = auth_service._user_repository
     user = await user_repo.get(token_data.user_id)
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if service not in user.attrs:
         user.attrs[service] = {}
-    
+
     user.attrs[service].update(attrs)
     user.updated_at = datetime.now(timezone.utc)
     await user_repo.set(user)
-    
+
     return {"success": True, "service": service, "attrs": user.attrs[service]}
 
 @router.get("/grafana-check")

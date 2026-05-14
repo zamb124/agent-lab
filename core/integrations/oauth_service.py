@@ -16,7 +16,6 @@ from uuid import uuid4
 
 from core.config import get_settings
 from core.http.client import get_httpx_client
-from core.utils.domain import is_allowed_integration_return_origin
 from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import (
     IntegrationCredential,
@@ -29,6 +28,7 @@ from core.integrations.providers.amocrm import (
     parse_amocrm_subdomain_from_referer,
 )
 from core.logging import get_logger
+from core.utils.domain import is_allowed_integration_return_origin
 
 if TYPE_CHECKING:
     from core.db.storage import Storage

@@ -5,9 +5,9 @@
 Автосоздает системные CRM-сущности (company, default namespace).
 """
 
-from typing import List
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
+from typing import List
 
 from sqlalchemy import select
 
@@ -18,7 +18,7 @@ from apps.crm.constants_graph import (
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_NAMESPACE_ATTR,
 )
-from apps.crm.db.models import CRMEntity, CompanyMapping, EntityType, Relationship, RelationshipType
+from apps.crm.db.models import CompanyMapping, CRMEntity, EntityType, Relationship, RelationshipType
 from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
@@ -42,13 +42,13 @@ RETIRED_NAMESPACE_TEMPLATE_IDS: frozenset[str] = frozenset({"amocrm"})
 class CompanyInitService:
     """
     Сервис для инициализации компании в CRM.
-    
+
     При первом входе компании:
     1. Копирует системные типы сущностей
     2. Копирует системные типы связей
     3. Создает системные CRM-сущности (company entity, default namespace entity)
     """
-    
+
     def __init__(
         self,
         entity_type_repo: EntityTypeRepository,
@@ -66,40 +66,40 @@ class CompanyInitService:
         self._company_repo = company_repo
         self._relationship_repo = relationship_repo
         self._company_mapping_repo = company_mapping_repo
-    
+
     async def initialize_company(self, company_id: str) -> dict:
         """
         Инициализирует компанию: копирует системные типы с company_id.
-        
+
         Args:
             company_id: ID компании для инициализации
-        
+
         Returns:
             Статистика: сколько типов создано
         """
         logger.info(f"Initializing company: {company_id}")
-        
+
         entity_types_created = await self._init_entity_types(company_id)
         relationship_types_created = await self._init_relationship_types(company_id)
         templates_created = await self._init_namespace_templates(company_id)
         await self._ensure_company_entity(company_id)
         await self._ensure_namespace_entity(company_id, "default")
         await self._ensure_default_organization_entity(company_id)
-        
+
         logger.info(
             f"Company {company_id} initialized: "
             f"{entity_types_created} entity types, "
             f"{relationship_types_created} relationship types, "
             f"{templates_created} namespace templates"
         )
-        
+
         return {
             "entity_types": entity_types_created,
             "relationship_types": relationship_types_created,
             "namespace_templates": templates_created,
             "already_initialized": entity_types_created == 0 and relationship_types_created == 0 and templates_created == 0
         }
-    
+
     async def _init_entity_types(self, company_id: str) -> int:
         """Создает или обновляет минимальное системное ядро типов в пространстве default."""
         created_count = 0
@@ -198,7 +198,7 @@ class CompanyInitService:
             existing.is_system = True
             existing.weight_default = template.get("weight_default", 1.0)
             await self._relationship_type_repo.update(existing)
-        
+
         return created_count
 
     async def _init_namespace_templates(self, company_id: str) -> int:
@@ -261,14 +261,14 @@ class CompanyInitService:
                 )
 
         return created_count
-    
+
     async def _check_existing_types(self, company_id: str) -> List[EntityType]:
         """
         Проверяет существующие типы для компании (прямой запрос к БД).
-        
+
         Args:
             company_id: ID компании
-        
+
         Returns:
             Список существующих типов компании
         """

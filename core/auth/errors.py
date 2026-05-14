@@ -18,17 +18,17 @@ def to_camel(string: str) -> str:
 class PermissionDeniedA2AError(BaseModel):
     """
     Ошибка отсутствия прав доступа для A2A протокола.
-    
+
     Используется для отказа в доступе к flow, branch или tool.
     Код -32008 - кастомный код для permission denied.
     """
-    
+
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
         ser_json_by_alias=True,
     )
-    
+
     code: Literal[-32008] = Field(default=-32008, description="Код ошибки")
     message: str = Field(default="Permission denied", description="Сообщение об ошибке")
     data: Optional[Dict[str, Any]] = Field(

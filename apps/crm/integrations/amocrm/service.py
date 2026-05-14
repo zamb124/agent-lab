@@ -25,9 +25,9 @@ from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
 from core.context import get_context
-from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.http.client import get_httpx_client
+from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
 
@@ -689,7 +689,7 @@ class AmoCRMIntegrationService:
         users_list_cached = (users_payload_prefetch.get("_embedded") or {}).get("users")
         if not isinstance(users_list_cached, list):
             users_list_cached = []
-        amo_users_by_id = self._amo_users_directory_from_api(users_list_cached)
+        self._amo_users_directory_from_api(users_list_cached)
 
         if on_progress is not None:
             await on_progress("contacts", 0)

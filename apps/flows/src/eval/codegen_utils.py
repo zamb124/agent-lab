@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import traceback
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, List, Literal, Union
 
 from apps.flows.src.services.runtime_namespace_doc import build_runtime_namespace_global_variables
 from core.docs import DocumentationQuery

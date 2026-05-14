@@ -12,7 +12,7 @@
 """
 
 # Экспортируем основные классы
-from tests.fixtures.workers import SessionWorkerManager, SessionServerManager
+from tests.fixtures.workers import SessionServerManager, SessionWorkerManager
 
 __all__ = [
     "SessionWorkerManager",

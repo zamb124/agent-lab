@@ -13,11 +13,12 @@ class AudioTranscodeError(RuntimeError):
     """Не удалось перекодировать аудио для совместимости с iOS (нет ffmpeg или сбой ffmpeg)."""
 
 
-import shutil
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Optional, Tuple
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Optional, Tuple  # noqa: E402
+
 
 def audio_needs_ios_compatible_transcode(content_type: str) -> bool:
     if not isinstance(content_type, str) or content_type.strip() == "":

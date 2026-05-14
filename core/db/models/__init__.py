@@ -6,23 +6,23 @@
 
 from core.db.models.base import Base
 from core.db.models.platform import (
-    Storage,
-    Users,
-    Variables,
-    Usage,
-    Namespaces,
-    PushSubscription,
     CalendarEventRecord,
     CalendarIntegrationRecord,
     IntegrationCredentialRecord,
-    SchedulerTaskRecord,
+    Namespaces,
     PlatformShortLink,
+    PushSubscription,
+    SchedulerTaskRecord,
+    Storage,
+    Usage,
+    Users,
+    Variables,
 )
-from core.db.models.tracing import Spans
 from core.db.models.rag import (
     DocumentProcessingStatus,
     VectorDocument,
 )
+from core.db.models.tracing import Spans
 
 __all__ = [
     "Base",

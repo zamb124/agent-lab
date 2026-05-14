@@ -5,18 +5,18 @@ User Story: Запрос доступа к чужим entities с указани
 """
 
 import asyncio
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from core.pagination import OffsetPage
+from apps.crm.dependencies import ContainerDep
 from apps.crm.models.access_request_models import (
     AccessRequestCreate,
+    AccessRequestResponse,
     AccessRequestUpdate,
-    AccessRequestResponse
 )
-from apps.crm.dependencies import ContainerDep
 from core.context import get_context
+from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/access-requests", tags=["Access Requests"])
 
@@ -30,7 +30,7 @@ async def request_access(
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         request = await container.access_request_service.create_request(
             entity_id=data.resource_id,
@@ -56,7 +56,7 @@ async def get_access_request(
     request = await container.access_request_service.get_request(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
-    
+
     return AccessRequestResponse.model_validate(request)
 
 
@@ -70,7 +70,7 @@ async def update_access_request(
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         if data.status == "approved":
             await container.access_request_service.approve_request(request_id, ctx.user.user_id)
@@ -78,7 +78,7 @@ async def update_access_request(
             await container.access_request_service.reject_request(request_id, ctx.user.user_id)
         else:
             raise HTTPException(status_code=400, detail="Invalid status")
-        
+
         request = await container.access_request_service.get_request(request_id)
         return AccessRequestResponse.model_validate(request)
     except ValueError as e:

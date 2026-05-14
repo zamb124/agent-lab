@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field, model_validator
 from apps.sync.models.common import UserBrief
 from core.files.models import (
     AudioAttachmentContent,
-    AudioTranscriptionStatus,
     VideoAttachmentContent,
 )
 

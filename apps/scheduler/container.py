@@ -35,8 +35,8 @@ class SchedulerContainer(BaseContainer):
 
     @lazy
     def scheduler_task_repository(self):
-        from core.scheduler import SchedulerTaskRepository
         from apps.scheduler.config import get_scheduler_settings
+        from core.scheduler import SchedulerTaskRepository
 
         settings = get_scheduler_settings()
         if not settings.database.shared_url:

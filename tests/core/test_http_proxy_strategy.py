@@ -1,7 +1,8 @@
 """Тесты для программируемой стратегии прокси в HTTP клиенте."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+
+import pytest
 
 from core.http.client import ProxyStrategy, get_httpx_client, request_with_strategy
 

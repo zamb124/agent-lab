@@ -51,7 +51,7 @@ def _parse_mode_for_plain_send(config: Dict[str, Any]) -> Optional[str]:
 def get_telegram_api_base(config: Dict[str, Any] = None) -> str:
     """
     Возвращает базовый URL для Telegram API.
-    
+
     Приоритет:
     1. config["api_base"] - для тестов
     2. TELEGRAM_API_BASE env - для тестов
@@ -66,13 +66,13 @@ def get_telegram_api_base(config: Dict[str, Any] = None) -> str:
 class TelegramChannelHandler(BaseChannelHandler):
     """
     Handler для отправки сообщений через Telegram Bot API.
-    
+
     Поддерживаемые действия:
     - send_message: текстовое сообщение
     - send_photo: фото с опциональной подписью
     - send_document: документ/файл
     - reply: ответ на сообщение
-    
+
     Конфигурация:
     {
         "bot_token": "@var:my_bot_token" или прямое значение,
@@ -81,9 +81,9 @@ class TelegramChannelHandler(BaseChannelHandler):
         "protect_content": false
     }
     """
-    
+
     channel_type = ChannelType.TELEGRAM
-    
+
     async def send_message(
         self,
         recipient: str,
@@ -104,13 +104,13 @@ class TelegramChannelHandler(BaseChannelHandler):
         pm = _parse_mode_for_plain_send(config)
         if pm is not None:
             payload["parse_mode"] = pm
-        
+
         if reply_to_message_id:
             payload["reply_to_message_id"] = reply_to_message_id
-        
+
         if config.get("disable_notification"):
             payload["disable_notification"] = True
-            
+
         if config.get("protect_content"):
             payload["protect_content"] = True
 
@@ -269,7 +269,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
         logger.info(f"Telegram photo sent to {recipient}")
         return result
-    
+
     async def send_document(
         self,
         recipient: str,
@@ -328,7 +328,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
         logger.info(f"Telegram document sent to {recipient}")
         return result
-    
+
     async def reply(
         self,
         recipient: str,
@@ -347,7 +347,7 @@ class TelegramChannelHandler(BaseChannelHandler):
             reply_to_message_id=message_id,
             **kwargs,
         )
-    
+
     def _get_bot_token(
         self,
         config: Dict[str, Any],
@@ -355,17 +355,17 @@ class TelegramChannelHandler(BaseChannelHandler):
     ) -> str:
         """Извлекает bot_token из конфига или variables."""
         bot_token = config.get("bot_token") or config.get("_bot_token_resolved")
-        
+
         if not bot_token:
             raise ValueError("bot_token is required for Telegram channel")
-        
+
         if bot_token.startswith("@var:"):
             var_key = bot_token[5:]
             resolved = variables.get(var_key)
             if not resolved:
                 raise ValueError(f"Variable not found: {var_key}")
             return str(resolved)
-        
+
         return bot_token
 
 

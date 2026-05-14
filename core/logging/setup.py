@@ -32,7 +32,6 @@ from core.logging.processors import (
     truncate_strings,
 )
 
-
 _INITIALIZED = False
 _INITIALIZED_FOR: tuple[str, str] | None = None
 

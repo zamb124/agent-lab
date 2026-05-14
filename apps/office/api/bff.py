@@ -5,20 +5,15 @@ BFF: привязки документов OnlyOffice, выдача JWT реда
 from __future__ import annotations
 
 import hashlib
-
-from core.logging import get_logger
 import re
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-import httpx
 import jwt
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 
-from core.pagination import OffsetPage
-from core.http import get_httpx_client
 from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import OfficeContainer
 from apps.office.dependencies import ContainerDep
@@ -28,13 +23,9 @@ from apps.office.models.api import (
     OfficeCatalogListItem,
     OfficeCatalogListResponse,
     OfficeCatalogMemberAddRequest,
-    OfficeCatalogMembersResponse,
     OfficeCatalogMemberItem,
+    OfficeCatalogMembersResponse,
     OfficeCatalogPatchRequest,
-    OfficeNamespaceCreateRequest,
-    OfficeNamespaceCreateResponse,
-    OfficeNamespaceItem,
-    OfficeNamespaceTemplateItem,
     OfficeDocumentCreateResponse,
     OfficeDocumentItem,
     OfficeDocumentListResponse,
@@ -43,6 +34,10 @@ from apps.office.models.api import (
     OfficeEditorConfigResponse,
     OfficeEmptyCreateRequest,
     OfficeIntegrationStatusResponse,
+    OfficeNamespaceCreateRequest,
+    OfficeNamespaceCreateResponse,
+    OfficeNamespaceItem,
+    OfficeNamespaceTemplateItem,
     OnlyOfficeCallbackResponse,
 )
 from apps.office.services.callback_dedupe import try_claim_onlyoffice_callback
@@ -65,9 +60,12 @@ from apps.office.services.onlyoffice_jwt import (
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import get_context
-from core.models.identity_models import User
 from core.files.s3_client import S3ClientFactory
+from core.http import get_httpx_client
+from core.logging import get_logger
 from core.models.i18n_models import Language
+from core.models.identity_models import User
+from core.pagination import OffsetPage
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)

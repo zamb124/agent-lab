@@ -16,7 +16,6 @@ import redis.asyncio as redis_async
 
 from core.config import get_settings
 
-
 UiEventsReceive = Callable[[str, str | None, float], Awaitable[list[dict[str, Any]]]]
 
 

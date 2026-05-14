@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import FrozenSet
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from core.clients.speech_provider_catalog import (
     catalog_sber_speech_models,

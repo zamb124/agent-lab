@@ -2,12 +2,12 @@
 
 import pytest
 
-from core.models.identity_models import BoardStage, NamespaceCRMSettings, TaskBoardPreset
 from apps.crm.services.task_board_presets import (
     default_task_board_stages,
     resolve_task_board_stages,
     task_board_key,
 )
+from core.models.identity_models import BoardStage, NamespaceCRMSettings, TaskBoardPreset
 
 
 def test_task_board_key() -> None:

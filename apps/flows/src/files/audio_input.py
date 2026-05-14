@@ -22,18 +22,18 @@ Zero-Guess: при отсутствии активной компании в req
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core.clients.speech_override import SpeechOverride
-from core.clients.voice_resolver import get_stt_client
-from core.context import get_context
 from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
     merge_explicit_over_flow_speech_layer,
 )
+from core.clients.speech_override import SpeechOverride
+from core.clients.voice_resolver import get_stt_client
+from core.context import get_context
 from core.files.types import FileCategory, ext_to_category, mime_to_category
 from core.logging import get_logger
-from pathlib import Path
 
 logger = get_logger(__name__)
 

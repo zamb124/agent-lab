@@ -2,20 +2,19 @@
 Документы OnlyOffice — BFF и Lit UI (процесс office, публичный путь /documents).
 """
 
-from core.logging import get_logger
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from apps.office.api.bff import router as bff_router
-from apps.office.config import OfficeSettings
+from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import get_office_container
 from apps.office.dependencies import ContainerDep
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
-from apps.office.config import get_office_settings
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 def _api_routers():

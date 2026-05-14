@@ -5,17 +5,16 @@ ResourceLoader - универсальный загрузчик ресурсов.
 Единая точка входа для всех ресурсов через Registry.
 """
 
-from typing import Optional
 
-from core.errors import ResourceNotFoundError
-from core.urn import AgentURN, NodeURN, ToolURN, extract_id
+from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig
+from apps.flows.src.registry.nodes import NodeRegistry
 from apps.flows.src.runtime.nodes import BaseNode
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
-from apps.flows.src.registry.nodes import NodeRegistry
 from apps.flows.src.tools.registry import ToolRegistry
+from core.errors import ResourceNotFoundError
 from core.logging import get_logger
+from core.urn import extract_id
 
 logger = get_logger(__name__)
 
@@ -23,14 +22,14 @@ logger = get_logger(__name__)
 class ResourceLoader:
     """
     Универсальный загрузчик ресурсов.
-    
+
     Принципы:
     1. Использует Registry для резолвинга типов
     2. Использует Repository для загрузки из БД
     3. Никаких угадываний - явные ошибки
     4. Поддержка URN и обычных ID
     """
-    
+
     def __init__(
         self,
         node_registry: NodeRegistry,
@@ -44,7 +43,7 @@ class ResourceLoader:
         self.flow_repository = flow_repository
         self.node_repository = node_repository
         self.tool_repository = tool_repository
-    
+
     async def load_flow(self, flow_id: str) -> FlowConfig:
         """
         Загружает FlowConfig из БД.
@@ -60,50 +59,50 @@ class ResourceLoader:
         """
         id_str = extract_id(flow_id)
         config = await self.flow_repository.get(id_str)
-        
+
         if not config:
             raise ResourceNotFoundError(
                 resource_type="Flow",
                 resource_id=flow_id,
             )
-        
+
         return config
-    
+
     async def load_node(self, node_id: str) -> BaseNode:
         """
         Загружает и инстанцирует ноду.
-        
+
         Args:
             node_id: ID ноды или URN
-        
+
         Returns:
             BaseNode экземпляр
-        
+
         Raises:
             ResourceNotFoundError: Если нода не найдена
         """
         id_str = extract_id(node_id)
         config = await self.node_repository.get(id_str)
-        
+
         if not config:
             raise ResourceNotFoundError(
                 resource_type="Node",
                 resource_id=node_id,
             )
-        
+
         node_class = self.node_registry.get(config.type)
         return await self._instantiate_node(node_class, config)
-    
+
     async def load_tool(self, tool_id: str) -> BaseTool:
         """
         Загружает tool.
-        
+
         Args:
             tool_id: ID tool или URN
-        
+
         Returns:
             BaseTool экземпляр
-        
+
         Raises:
             ResourceNotFoundError: Если tool не найден
         """
@@ -115,7 +114,7 @@ class ResourceLoader:
                 resource_type="Tool",
                 resource_id=tool_id,
             )
-        
+
         # Создаём inline tool из config
         return await self.tool_registry.create_tool({
             "tool_id": config.tool_id,
@@ -124,15 +123,15 @@ class ResourceLoader:
             "description": config.description,
             "args_schema": config.args_schema,
         })
-    
+
     async def _instantiate_node(self, node_class: type, config: NodeConfig) -> BaseNode:
         """
         Создаёт экземпляр ноды из класса и конфига.
-        
+
         Args:
             node_class: Класс ноды (из Registry)
             config: NodeConfig из БД
-        
+
         Returns:
             BaseNode экземпляр
         """

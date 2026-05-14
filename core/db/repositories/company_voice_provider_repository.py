@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from core.db.company_voice_provider_secrets import is_unset_sentinel, unset_secrets_sentinel
 from core.db.database import get_session_factory
 from core.db.models.platform import CompanyVoiceProvider
-
+from core.db.utils import get_rowcount
 
 VoiceKind = Literal["stt", "tts", "vad"]
 
@@ -29,9 +29,7 @@ class CompanyVoiceProviderRepository:
             raise ValueError("CompanyVoiceProviderRepository: db_url не может быть пустым.")
         self._db_url = db_url
 
-    async def get(
-        self, *, company_id: str, kind: VoiceKind
-    ) -> Optional[CompanyVoiceProvider]:
+    async def get(self, *, company_id: str, kind: VoiceKind) -> Optional[CompanyVoiceProvider]:
         if company_id == "":
             raise ValueError("company_id не может быть пустым.")
         session_factory = await get_session_factory(self._db_url)
@@ -44,9 +42,7 @@ class CompanyVoiceProviderRepository:
             )
             return result.scalar_one_or_none()
 
-    async def list_by_company(
-        self, *, company_id: str
-    ) -> list[CompanyVoiceProvider]:
+    async def list_by_company(self, *, company_id: str) -> list[CompanyVoiceProvider]:
         if company_id == "":
             raise ValueError("company_id не может быть пустым.")
         session_factory = await get_session_factory(self._db_url)
@@ -101,9 +97,7 @@ class CompanyVoiceProviderRepository:
                 secrets_value = None
             elif isinstance(secrets, dict):
                 secrets_value = {
-                    kk: vv
-                    for kk, vv in secrets.items()
-                    if isinstance(vv, str) and vv != ""
+                    kk: vv for kk, vv in secrets.items() if isinstance(vv, str) and vv != ""
                 }
                 if not secrets_value:
                     secrets_value = None
@@ -169,7 +163,7 @@ class CompanyVoiceProviderRepository:
                 )
             )
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0
 
 
 __all__ = ["CompanyVoiceProviderRepository", "VoiceKind"]

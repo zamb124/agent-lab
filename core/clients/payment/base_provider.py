@@ -3,7 +3,8 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -46,30 +47,30 @@ class BasePaymentProvider(ABC):
     Базовый класс для всех платежных провайдеров.
     Единый интерфейс для разных платежных систем.
     """
-    
+
     def __init__(self, config: PaymentProviderConfig):
         self.config = config
         self.provider_name = config.provider_type
-    
+
     @abstractmethod
     async def create_payment(self, request: PaymentRequest) -> PaymentResponse:
         """Создает платеж и возвращает URL для оплаты"""
         pass
-    
+
     @abstractmethod
     async def verify_webhook(self, webhook_data: Dict[str, Any]) -> WebhookVerificationResult:
         """Проверяет подпись webhook и извлекает данные"""
         pass
-    
+
     @abstractmethod
     async def check_payment_status(self, external_payment_id: str) -> str:
         """Проверяет статус платежа напрямую через API провайдера"""
         pass
-    
+
     async def refund_payment(self, external_payment_id: str, amount: float) -> bool:
         """Возврат платежа (опционально)"""
         return False
-    
+
     def is_enabled(self) -> bool:
         """Проверка что провайдер включен"""
         return self.config.enabled

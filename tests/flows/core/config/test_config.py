@@ -5,8 +5,6 @@
 import os
 from unittest.mock import patch
 
-import pytest
-
 from apps.flows.config import FlowSettings
 from core.config.loader import merge_configs, remove_env_overridden_values
 

@@ -1,7 +1,7 @@
 """Курсор S3 для speech-to-chat: не листать весь префикс на каждом тике."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "sync_0014"
 down_revision = "sync_0013"

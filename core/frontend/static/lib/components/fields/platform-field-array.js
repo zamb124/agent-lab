@@ -141,6 +141,7 @@ export class PlatformFieldArray extends PlatformElement {
     }
 
     _emitValue(next) {
+        this.value = Array.isArray(next) ? [...next] : [];
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value: next },
             bubbles: true,
@@ -149,11 +150,16 @@ export class PlatformFieldArray extends PlatformElement {
     }
 
     _onTagInputChange(e) {
-        const tags = e.detail && Array.isArray(e.detail.tags) ? e.detail.tags : [];
+        e.stopPropagation();
+        if (!e.detail || !Array.isArray(e.detail.tags)) {
+            return;
+        }
+        const tags = e.detail.tags;
         this._emitValue(tags);
     }
 
     _onSelectAdd(e) {
+        e.stopPropagation();
         const sel = e.target;
         if (!(sel instanceof HTMLSelectElement)) {
             throw new Error('platform-field-array: expected select change');

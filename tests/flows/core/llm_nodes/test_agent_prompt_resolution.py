@@ -10,14 +10,13 @@
 Примечание: В тестах переменные flow передаются в state["variables"].
 """
 
-import pytest
 from datetime import datetime
-from unittest.mock import Mock
 
-from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from core.context import Context, User, set_context, clear_context
+import pytest
+
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
-from core.variables import VariableResolver
+from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from core.context import Context, User, clear_context, set_context
 from core.state import ExecutionState
 
 
@@ -66,7 +65,7 @@ class TestSystemVariablesInPrompts:
         """Проверяет, что {current_date} резолвится в промпте."""
         flow_config.prompt = "Сегодня {current_date}. Ты помощник."
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -74,7 +73,7 @@ class TestSystemVariablesInPrompts:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         today = datetime.now().strftime("%Y-%m-%d")
         assert today in rendered
         assert "Ты помощник." in rendered
@@ -84,7 +83,7 @@ class TestSystemVariablesInPrompts:
         """Проверяет, что {current_time} резолвится в промпте."""
         flow_config.prompt = "Текущее время: {current_time}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -92,7 +91,7 @@ class TestSystemVariablesInPrompts:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         # Проверяем формат времени HH:MM
         assert ":" in rendered
         assert "Текущее время:" in rendered
@@ -102,7 +101,7 @@ class TestSystemVariablesInPrompts:
         """Проверяет, что {user_id} резолвится в промпте."""
         flow_config.prompt = "Пользователь: {user_id}. Ты помощник."
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -110,7 +109,7 @@ class TestSystemVariablesInPrompts:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "test_user_123" in rendered
         assert "Ты помощник." in rendered
 
@@ -119,7 +118,7 @@ class TestSystemVariablesInPrompts:
         """Проверяет, что {user_name} резолвится в промпте."""
         flow_config.prompt = "Привет, {user_name}! Ты помощник."
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -127,7 +126,7 @@ class TestSystemVariablesInPrompts:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "Test User" in rendered
         assert "Привет" in rendered
 
@@ -136,7 +135,7 @@ class TestSystemVariablesInPrompts:
         """Проверяет, что {user_email} резолвится в промпте."""
         flow_config.prompt = "Email пользователя: {user_email}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -144,20 +143,20 @@ class TestSystemVariablesInPrompts:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "test@example.com" in rendered
 
     @pytest.mark.asyncio
     async def test_all_system_variables_in_prompt(self, runner, flow_config):
         """Проверяет все системные переменные в одном промпте."""
         flow_config.prompt = """Привет, {user_name}!
-        
+
 Твой ID: {user_id}
 Email: {user_email}
 Сегодня: {current_date}
 Время: {current_time}"""
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -165,7 +164,7 @@ Email: {user_email}
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "Test User" in rendered
         assert "test_user_123" in rendered
         assert "test@example.com" in rendered
@@ -181,7 +180,7 @@ class TestFlowVariablesInPrompts:
         """Проверяет, что переменная flow резолвится в промпте."""
         flow_config.prompt = "Компания: {company_name}. Ты помощник."
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -190,7 +189,7 @@ class TestFlowVariablesInPrompts:
             variables={"company_name": "TestCorp"}
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "TestCorp" in rendered
         assert "Ты помощник." in rendered
 
@@ -199,7 +198,7 @@ class TestFlowVariablesInPrompts:
         """Проверяет несколько переменных flow в промпте."""
         flow_config.prompt = "Компания: {company_name}, Телефон: {phone}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -211,7 +210,7 @@ class TestFlowVariablesInPrompts:
             }
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "TestCorp" in rendered
         assert "+7-999-123-45-67" in rendered
 
@@ -220,7 +219,7 @@ class TestFlowVariablesInPrompts:
         """Проверяет переменную flow с default значением."""
         flow_config.prompt = "Город: {city|не указан}"
         runner.prompt = flow_config.prompt
-        
+
         # Переменная отсутствует - должен использоваться default
         state = ExecutionState(
             task_id="test-task",
@@ -230,7 +229,7 @@ class TestFlowVariablesInPrompts:
         )
         rendered = await runner._render_prompt(state)
         assert "не указан" in rendered
-        
+
         # Переменная есть - должно использоваться значение
         state = ExecutionState(
             task_id="test-task",
@@ -253,7 +252,7 @@ class TestLocalAgentVariablesInPrompts:
         flow_config.prompt = "Роль: {role}. Ты помощник."
         flow_config.local_variables = {"role": "консультант"}
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -261,7 +260,7 @@ class TestLocalAgentVariablesInPrompts:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "консультант" in rendered
         assert "Ты помощник." in rendered
 
@@ -271,7 +270,7 @@ class TestLocalAgentVariablesInPrompts:
         flow_config.prompt = "Роль: {role}"
         flow_config.local_variables = {"role": "локальная_роль"}
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -280,7 +279,7 @@ class TestLocalAgentVariablesInPrompts:
             variables={"role": "flow_роль"}
         )
         rendered = await runner._render_prompt(state)
-        
+
         # Локальная переменная должна иметь приоритет
         assert "локальная_роль" in rendered
         assert "flow_роль" not in rendered
@@ -293,11 +292,11 @@ class TestCombinedVariablesInPrompts:
     async def test_system_and_flow_variables(self, runner, flow_config):
         """Проверяет комбинацию системных и flow переменных."""
         flow_config.prompt = """Привет, {user_name}!
-        
+
 Компания: {company_name}
 Сегодня: {current_date}"""
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -306,7 +305,7 @@ class TestCombinedVariablesInPrompts:
             variables={"company_name": "TestCorp"}
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "Test User" in rendered
         assert "TestCorp" in rendered
         today = datetime.now().strftime("%Y-%m-%d")
@@ -316,13 +315,13 @@ class TestCombinedVariablesInPrompts:
     async def test_system_flow_and_local_variables(self, runner, flow_config):
         """Проверяет комбинацию всех типов переменных."""
         flow_config.prompt = """Привет, {user_name}!
-        
+
 Компания: {company_name}
 Роль: {role}
 Сегодня: {current_date}"""
         flow_config.local_variables = {"role": "консультант"}
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -331,7 +330,7 @@ class TestCombinedVariablesInPrompts:
             variables={"company_name": "TestCorp"}
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "Test User" in rendered
         assert "TestCorp" in rendered
         assert "консультант" in rendered
@@ -347,7 +346,7 @@ class TestPromptSyntaxInAgents:
         """Проверяет опциональную переменную с default в промпте агента."""
         flow_config.prompt = "Email: {?support_email|support@example.com}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -355,7 +354,7 @@ class TestPromptSyntaxInAgents:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "support@example.com" in rendered
 
     @pytest.mark.asyncio
@@ -369,7 +368,7 @@ class TestPromptSyntaxInAgents:
 - Инструкция 2
 }"""
         runner.prompt = flow_config.prompt
-        
+
         # Переменная есть и не пустая - блок должен показаться
         state = ExecutionState(
             task_id="test-task",
@@ -381,7 +380,7 @@ class TestPromptSyntaxInAgents:
         rendered = await runner._render_prompt(state)
         assert "Специальные инструкции" in rendered
         assert "Инструкция 1" in rendered
-        
+
         # Переменная отсутствует - блок не должен показаться
         state = ExecutionState(
             task_id="test-task",
@@ -397,7 +396,7 @@ class TestPromptSyntaxInAgents:
         """Проверяет вложенные переменные в промпте агента."""
         flow_config.prompt = "Город: {city.name|не указан}, Улица: {city.street|не указана}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -411,7 +410,7 @@ class TestPromptSyntaxInAgents:
             }
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "Москва" in rendered
         assert "Тверская" in rendered
 
@@ -433,7 +432,7 @@ VIP клиент: {client_name}
 Сегодня: {current_date}"""
         flow_config.local_variables = {"is_vip": True}
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -446,7 +445,7 @@ VIP клиент: {client_name}
             }
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert "Test User" in rendered
         assert "TestCorp" in rendered
         assert "Иван Иванов" in rendered
@@ -462,10 +461,10 @@ class TestPromptResolutionWithoutContext:
     async def test_system_variables_without_user_context(self, runner, flow_config):
         """Проверяет, что системные переменные работают без контекста пользователя."""
         clear_context()
-        
+
         flow_config.prompt = "Сегодня {current_date}, время {current_time}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -473,7 +472,7 @@ class TestPromptResolutionWithoutContext:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         today = datetime.now().strftime("%Y-%m-%d")
         assert today in rendered
         # user_id, user_name, user_email не должны быть в результате
@@ -485,10 +484,10 @@ class TestPromptResolutionWithoutContext:
     async def test_user_variables_without_context(self, runner, flow_config):
         """Проверяет, что переменные пользователя не резолвятся без контекста."""
         clear_context()
-        
+
         flow_config.prompt = "Пользователь: {user_name|неизвестен}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -496,7 +495,7 @@ class TestPromptResolutionWithoutContext:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         # Должен использоваться default, так как user_name нет в контексте
         assert "неизвестен" in rendered
 
@@ -509,7 +508,7 @@ class TestPromptResolutionEdgeCases:
         """Проверяет пустой промпт."""
         flow_config.prompt = ""
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -517,7 +516,7 @@ class TestPromptResolutionEdgeCases:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert rendered == ""
 
     @pytest.mark.asyncio
@@ -525,7 +524,7 @@ class TestPromptResolutionEdgeCases:
         """Проверяет промпт без переменных."""
         flow_config.prompt = "Ты помощник. Отвечай на вопросы."
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -533,7 +532,7 @@ class TestPromptResolutionEdgeCases:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         assert rendered == "Ты помощник. Отвечай на вопросы."
 
     @pytest.mark.asyncio
@@ -541,7 +540,7 @@ class TestPromptResolutionEdgeCases:
         """Проверяет промпт с неизвестной переменной в safe режиме."""
         flow_config.prompt = "Привет, {unknown_var}!"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -549,7 +548,7 @@ class TestPromptResolutionEdgeCases:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         # В safe режиме неизвестная переменная должна остаться как есть
         assert "{unknown_var}" in rendered
 
@@ -559,7 +558,7 @@ class TestPromptResolutionEdgeCases:
         # В Python строке \\{ становится \{ после обработки
         flow_config.prompt = "Путь: \\{config_path\\} или {config_path|C:\\\\Windows}"
         runner.prompt = flow_config.prompt
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -567,7 +566,7 @@ class TestPromptResolutionEdgeCases:
             session_id="test-agent:test-context",
         )
         rendered = await runner._render_prompt(state)
-        
+
         # Экранированные скобки должны остаться как {config_path} (без экранирования)
         # VariableResolver обрабатывает \{ и \} как экранированные символы
         assert "{config_path}" in rendered or "\\{config_path\\}" in rendered

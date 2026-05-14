@@ -3,7 +3,8 @@
 Работает полностью автономно в InMemory режиме.
 """
 
-from typing import Any, Dict, List
+from typing import Any, List
+
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils.message import get_message_text
@@ -11,11 +12,11 @@ from a2a.utils.message import get_message_text
 
 class SimpleTestAgent(AgentExecutor):
     """Простой тестовый агент без зависимостей."""
-    
+
     def __init__(self, tools: List[Any] = None, prompt: str = ""):
         self.tools = tools or []
         self.prompt = prompt
-    
+
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         """Выполняет агента и возвращает простой ответ."""
         # Получаем входное сообщение
@@ -24,7 +25,7 @@ class SimpleTestAgent(AgentExecutor):
             content = user_input
         else:
             content = get_message_text(user_input)
-        
+
         # Простая логика: вызываем первый tool если есть
         response = ""
         if self.tools:
@@ -36,28 +37,28 @@ class SimpleTestAgent(AgentExecutor):
                 response = f"Tool error: {e}"
         else:
             response = f"Echo: {content}"
-        
+
         # Отправляем событие с ответом
         from a2a.types import (
-            TaskStatusUpdateEvent,
-            TaskStatus,
-            TaskState,
             Artifact,
             Part,
-            TextPart,
             TaskArtifactUpdateEvent,
+            TaskState,
+            TaskStatus,
+            TaskStatusUpdateEvent,
+            TextPart,
         )
-        
+
         task_id = context.task_id
         context_id = context.context_id
-        
+
         # Создаем артифакт с ответом
         artifact = Artifact(
             artifactId="response",
             parts=[Part(root=TextPart(text=response))],
             name="response",
         )
-        
+
         # Отправляем артифакт
         await event_queue.enqueue_event(
             TaskArtifactUpdateEvent(
@@ -67,7 +68,7 @@ class SimpleTestAgent(AgentExecutor):
                 append=False
             )
         )
-        
+
         # Отправляем статус completed
         await event_queue.enqueue_event(
             TaskStatusUpdateEvent(
@@ -77,7 +78,7 @@ class SimpleTestAgent(AgentExecutor):
                 final=True
             )
         )
-    
+
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         """Отменяет выполнение."""
         pass

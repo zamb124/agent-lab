@@ -8,23 +8,21 @@ Batch-оптимизация: все операции загружают дан�
 или с prefetch (Dijkstra), сводя количество SQL-запросов к O(depth) вместо O(nodes).
 """
 
-from typing import List, Optional, Dict, Any, Tuple, Set
-from collections import deque
 import heapq
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from apps.crm.db.models import CRMEntity
-from apps.crm.models.graph import (
-    GraphNode,
-    GraphEdge,
-    InfluenceGraphResponse,
-    ShortestPathResponse,
-    RelatedEntitiesResponse
-)
+from apps.crm.db.models import CRMEntity, Relationship
+from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.models import Relationship, RelationshipType
+from apps.crm.models.graph import (
+    GraphEdge,
+    GraphNode,
+    InfluenceGraphResponse,
+    RelatedEntitiesResponse,
+    ShortestPathResponse,
+)
 from apps.crm.services.access_control_service import AccessControlService
 from core.context import get_context
 from core.logging import get_logger
@@ -69,13 +67,13 @@ class GraphEntityLimitExceededError(Exception):
 class GraphService:
     """
     Сервис для анализа графа связей.
-    
+
     Алгоритмы:
     - Wave-front BFS для influence/overview graph (batch per level)
     - Weighted Dijkstra с prefetch для shortest path
     - Учет направленности через is_directed + inverse_type_id
     """
-    
+
     def __init__(
         self,
         relationship_repo: RelationshipRepository,
@@ -125,7 +123,7 @@ class GraphService:
                 f"В выбранном периоде слишком много сущностей ({count}), "
                 f"максимум для графа — {MAX_NODES_IN_GRAPH}. Сузьте период на таймлайне."
             )
-    
+
     def _get_context_info(self) -> Tuple[Optional[str], Optional[str]]:
         ctx = get_context()
         user_id = ctx.user.user_id if ctx and ctx.user else None
@@ -193,7 +191,7 @@ class GraphService:
     ) -> InfluenceGraphResponse:
         """
         Строит граф влияния от entity (wave-front BFS).
-        
+
         Каждый уровень обхода — два SQL-запроса (ребра + сущности),
         вместо N+1 запросов на каждый узел.
 
@@ -208,7 +206,7 @@ class GraphService:
         await self._ensure_graph_entity_count_within_limit(
             namespace, timeline_from, timeline_to
         )
-        
+
         root_entity = await self._entity_repo.get(entity_id)
         if not root_entity:
             raise ValueError(f"Entity not found: {entity_id}")
@@ -219,16 +217,16 @@ class GraphService:
         )
         if not can_read:
             raise PermissionError(f"Access denied to root entity: {entity_id}")
-        
+
         direction_map = await self._build_direction_map()
-        
+
         visited: Set[str] = {entity_id}
         entity_levels: Dict[str, int] = {entity_id: 0}
         entities_dict: Dict[str, CRMEntity] = {entity_id: root_entity}
         edges_dict: Dict[str, Relationship] = {}
-        
+
         current_wave = [entity_id]
-        
+
         for level in range(max_depth):
             if not current_wave:
                 break
@@ -251,19 +249,19 @@ class GraphService:
                 for rel in batch_edges.get(current_id, []):
                     if relationship_types and rel.relationship_type not in relationship_types:
                         continue
-                    
+
                     can_traverse, neighbor_id = self._can_traverse_edge(
                         rel, current_id, direction_map, ignore_direction=False
                     )
                     if not can_traverse or not neighbor_id:
                         continue
-                    
+
                     if rel.relationship_id not in edges_dict:
                         edges_dict[rel.relationship_id] = rel
-                    
+
                     if neighbor_id not in visited:
                         candidate_ids.add(neighbor_id)
-            
+
             if not candidate_ids:
                 break
 
@@ -275,7 +273,7 @@ class GraphService:
 
             loaded_entities = await self._entity_repo.get_by_ids(list(candidate_ids))
             entities_by_id = {e.entity_id: e for e in loaded_entities}
-            
+
             next_wave: list[str] = []
             for neighbor_id in candidate_ids:
                 neighbor = entities_by_id.get(neighbor_id)
@@ -287,7 +285,7 @@ class GraphService:
                 entity_levels[neighbor_id] = level + 1
                 entities_dict[neighbor_id] = neighbor
                 next_wave.append(neighbor_id)
-            
+
             current_wave = next_wave
 
         nodes = await self._apply_access_control(
@@ -300,12 +298,12 @@ class GraphService:
         edges = self._build_edges(list(edges_dict.values()), direction_map)
         nodes, edges = self._finalize_graph_payload(nodes, edges, "influence graph")
         filtered_count = sum(1 for node in nodes if not node.access)
-        
+
         logger.info(
             f"Built influence graph: root={entity_id}, depth={max_depth}, "
             f"nodes={len(nodes)}, edges={len(edges)}, filtered={filtered_count}"
         )
-        
+
         return InfluenceGraphResponse(
             root_entity_id=entity_id,
             max_depth=max_depth,
@@ -314,7 +312,7 @@ class GraphService:
             total_nodes=len(nodes),
             filtered_count=filtered_count
         )
-    
+
     async def build_overview_graph(
         self,
         entity_ids: List[str],
@@ -489,12 +487,12 @@ class GraphService:
         await self._ensure_graph_entity_count_within_limit(
             namespace, timeline_from, timeline_to
         )
-        
+
         logger.info(f"Finding shortest path: from={from_entity_id}, to={to_entity_id}, user={user_id}, company={company_id}")
-        
+
         from_entity = await self._entity_repo.get(from_entity_id)
         to_entity = await self._entity_repo.get(to_entity_id)
-        
+
         if not from_entity:
             raise ValueError(f"Entity not found: {from_entity_id}")
         if not to_entity:
@@ -503,22 +501,22 @@ class GraphService:
             raise ValueError(f"From entity is out of created_at range: {from_entity_id}")
         if not self._is_entity_in_time_window(to_entity, timeline_from, timeline_to):
             raise ValueError(f"To entity is out of created_at range: {to_entity_id}")
-        
+
         can_read_from = await self._access_control.can_read_entity(
             from_entity, user_id, company_id
         )
         can_read_to = await self._access_control.can_read_entity(
             to_entity, user_id, company_id
         )
-        
+
         if not can_read_from or not can_read_to:
             raise PermissionError("Access denied to one or both entities")
-        
+
         direction_map = await self._build_direction_map()
 
         # Общий кэш ребер для обоих прогонов и _build_path_edges
         shared_edges_cache: Dict[str, List[Relationship]] = {}
-        
+
         directed_path, directed_total_distance = await self._dijkstra_shortest_path(
             from_entity_id, to_entity_id, max_depth, direction_map,
             ignore_direction=False,
@@ -562,7 +560,7 @@ class GraphService:
             undirected_total_distance=undirected_total_distance,
             undirected_exists=len(undirected_path) > 0,
         )
-    
+
     async def get_related_entities(
         self,
         entity_id: str,
@@ -588,7 +586,7 @@ class GraphService:
         await self._ensure_graph_entity_count_within_limit(
             namespace, timeline_from, timeline_to
         )
-        
+
         if (await self._entity_repo.get(entity_id)) is None:
             raise ValueError(f"Entity not found: {entity_id}")
 
@@ -598,33 +596,33 @@ class GraphService:
             cross_company=True,
             relationship_namespace=rel_namespace,
         )
-        
+
         if relationship_type:
             relationships = [r for r in relationships if r.relationship_type == relationship_type]
-        
+
         incoming_ids: Set[str] = set()
         outgoing_ids: Set[str] = set()
         undirected_ids: Set[str] = set()
-        
+
         for rel in relationships:
             rel_info = direction_map.get(rel.relationship_type)
             if not rel_info:
                 logger.warning(f"Unknown relationship_type in get_related_entities: {rel.relationship_type}")
                 continue
             is_directed = rel_info["is_directed"]
-            
+
             if rel.source_entity_id == entity_id:
                 if is_directed:
                     outgoing_ids.add(rel.target_entity_id)
                 else:
                     undirected_ids.add(rel.target_entity_id)
-            
+
             if rel.target_entity_id == entity_id:
                 if is_directed:
                     incoming_ids.add(rel.source_entity_id)
                 else:
                     undirected_ids.add(rel.source_entity_id)
-        
+
         all_neighbor_ids = incoming_ids | outgoing_ids | undirected_ids
 
         loaded_entities = await self._entity_repo.get_by_ids(list(all_neighbor_ids))
@@ -632,9 +630,9 @@ class GraphService:
         for neighbor in loaded_entities:
             if self._is_entity_in_time_window(neighbor, timeline_from, timeline_to):
                 neighbors_dict[neighbor.entity_id] = neighbor
-        
+
         entity_levels = {eid: 1 for eid in neighbors_dict}
-        
+
         all_nodes = await self._apply_access_control(
             neighbors_dict,
             entity_levels,
@@ -642,9 +640,9 @@ class GraphService:
             company_id,
             query_namespace=namespace,
         )
-        
+
         nodes_by_id = {node.entity_id: node for node in all_nodes}
-        
+
         if direction == "incoming":
             incoming_nodes = [nodes_by_id[eid] for eid in incoming_ids if eid in nodes_by_id]
             outgoing_nodes = []
@@ -654,20 +652,20 @@ class GraphService:
         else:
             incoming_nodes = [nodes_by_id[eid] for eid in incoming_ids if eid in nodes_by_id]
             outgoing_nodes = [nodes_by_id[eid] for eid in outgoing_ids if eid in nodes_by_id]
-        
+
         undirected_nodes = [nodes_by_id[eid] for eid in undirected_ids if eid in nodes_by_id]
-        
+
         return RelatedEntitiesResponse(
             entity_id=entity_id,
             incoming=incoming_nodes,
             outgoing=outgoing_nodes,
             undirected=undirected_nodes
         )
-    
+
     async def _build_direction_map(self) -> Dict[str, Dict[str, Any]]:
         """Строит карту направленности для быстрого доступа."""
         relationship_types = await self._relationship_type_repo.get_all_for_company(include_system=True)
-        
+
         direction_map = {}
         for rt in relationship_types:
             direction_map[rt.type_id] = {
@@ -675,9 +673,9 @@ class GraphService:
                 "inverse_type_id": rt.inverse_type_id,
                 "weight_default": rt.weight_default
             }
-        
+
         return direction_map
-    
+
     def _can_traverse_edge(
         self,
         relationship: Relationship,
@@ -690,13 +688,13 @@ class GraphService:
         if not rel_info:
             logger.warning(f"Unknown relationship_type: {relationship.relationship_type}")
             return False, None
-        
+
         is_directed = rel_info["is_directed"]
         inverse_type_id = rel_info.get("inverse_type_id")
-        
+
         if relationship.source_entity_id == from_entity_id:
             return True, relationship.target_entity_id
-        
+
         if relationship.target_entity_id == from_entity_id:
             if ignore_direction:
                 return True, relationship.source_entity_id
@@ -706,9 +704,9 @@ class GraphService:
                 return True, relationship.source_entity_id
             else:
                 return False, None
-        
+
         return False, None
-    
+
     async def _apply_access_control(
         self,
         entities_dict: Dict[str, CRMEntity],
@@ -753,7 +751,7 @@ class GraphService:
                 ))
 
         return nodes
-    
+
     def _build_edges(
         self,
         relationships: List[Relationship],
@@ -766,7 +764,7 @@ class GraphService:
             if not rel_info:
                 logger.warning(f"Unknown relationship_type in _build_edges: {rel.relationship_type}")
                 continue
-            
+
             edges.append(GraphEdge(
                 edge_id=rel.relationship_id,
                 source_id=rel.source_entity_id,
@@ -777,7 +775,7 @@ class GraphService:
                 is_directed=rel_info["is_directed"],
                 attributes=rel.attributes
             ))
-        
+
         return edges
 
     def _filter_edges_to_nodes(
@@ -856,29 +854,29 @@ class GraphService:
 
         if edges_cache is None:
             edges_cache = {}
-        
+
         distances = {from_id: 0.0}
         parent: Dict[str, str] = {}
         visited: Set[str] = set()
         entities_cache: Dict[str, Optional[CRMEntity]] = {}
-        
+
         heap: list[Tuple[float, str, int]] = [(0.0, from_id, 0)]
-        
+
         while heap:
             current_dist, current_id, current_depth = heapq.heappop(heap)
-            
+
             if current_id in visited:
                 continue
-            
+
             visited.add(current_id)
-            
+
             if current_id == to_id:
                 path = self._reconstruct_path(parent, from_id, to_id)
                 return path, current_dist
-            
+
             if current_depth >= max_depth:
                 continue
-            
+
             # Prefetch: загрузить ребра текущей вершины + ближайших из кучи
             if current_id not in edges_cache:
                 prefetch_ids = {current_id}
@@ -893,13 +891,13 @@ class GraphService:
                     relationship_namespace=relationship_namespace,
                 )
                 edges_cache.update(batch)
-            
+
             relationships = edges_cache.get(current_id, [])
-            
+
             # Batch-загрузка неизвестных соседей
             unknown_neighbors: Set[str] = set()
             traversable: list[Tuple[Relationship, str]] = []
-            
+
             for rel in relationships:
                 can_traverse, neighbor_id = self._can_traverse_edge(
                     rel, current_id, direction_map, ignore_direction=ignore_direction
@@ -909,7 +907,7 @@ class GraphService:
                 traversable.append((rel, neighbor_id))
                 if neighbor_id not in entities_cache:
                     unknown_neighbors.add(neighbor_id)
-            
+
             if unknown_neighbors:
                 loaded = await self._entity_repo.get_by_ids(list(unknown_neighbors))
                 for e in loaded:
@@ -917,23 +915,23 @@ class GraphService:
                 for nid in unknown_neighbors:
                     if nid not in entities_cache:
                         entities_cache[nid] = None
-            
+
             for rel, neighbor_id in traversable:
                 neighbor_entity = entities_cache.get(neighbor_id)
                 if not neighbor_entity:
                     continue
                 if not self._is_entity_in_time_window(neighbor_entity, created_at_from, created_at_to):
                     continue
-                
+
                 candidate_distance = current_dist + rel.weight
-                
+
                 if neighbor_id not in distances or candidate_distance < distances[neighbor_id]:
                     distances[neighbor_id] = candidate_distance
                     parent[neighbor_id] = current_id
                     heapq.heappush(heap, (candidate_distance, neighbor_id, current_depth + 1))
-        
+
         return [], 0.0
-    
+
     def _reconstruct_path(
         self,
         parent: Dict[str, str],
@@ -943,18 +941,18 @@ class GraphService:
         """Восстанавливает путь из parent map."""
         path = []
         current = to_id
-        
+
         while current != from_id:
             path.append(current)
             if current not in parent:
                 return []
             current = parent[current]
-        
+
         path.append(from_id)
         path.reverse()
-        
+
         return path
-    
+
     def _build_path_edges_from_cache(
         self,
         path: List[str],
@@ -964,16 +962,16 @@ class GraphService:
     ) -> List[GraphEdge]:
         """Строит edges вдоль пути из кэша ребер (без дополнительных SQL-запросов)."""
         edges = []
-        
+
         for i in range(len(path) - 1):
             source_id = path[i]
             target_id = path[i + 1]
-            
+
             for rel in edges_cache.get(source_id, []):
                 can_traverse, neighbor_id = self._can_traverse_edge(
                     rel, source_id, direction_map, ignore_direction=ignore_direction
                 )
-                
+
                 if can_traverse and neighbor_id == target_id:
                     rel_info = direction_map.get(rel.relationship_type, {})
                     edges.append(GraphEdge(
@@ -987,5 +985,5 @@ class GraphService:
                         attributes=rel.attributes
                     ))
                     break
-        
+
         return edges

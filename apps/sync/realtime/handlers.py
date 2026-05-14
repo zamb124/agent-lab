@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Literal, Optional
+from typing import Optional
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -27,17 +27,15 @@ from apps.sync.db.models import (
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
-from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
+from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
+from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.messages import (
-    AudioAttachmentContent,
-    AudioTranscriptionStatus,
-    CallBoundaryContent,
     MessageContentModel,
     MessageContentType,
     MessageCreate,
@@ -45,7 +43,6 @@ from apps.sync.models.messages import (
     MessageStatus,
     TextPlainContent,
 )
-from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.models.threads import ThreadRead
 from apps.sync.realtime.notification_tasks import (
     deliver_channel_message_notification,
@@ -57,7 +54,7 @@ from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.db.repositories.user_repository import UserRepository
-from core.files.models import VideoAttachmentContent
+from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus, VideoAttachmentContent
 from core.logging import get_logger
 from core.models.identity_models import Namespace
 

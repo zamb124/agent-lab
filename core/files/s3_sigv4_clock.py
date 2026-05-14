@@ -14,13 +14,13 @@
 from __future__ import annotations
 
 import datetime
-
-from core.logging import get_logger
 import ssl
 from email.utils import parsedate_to_datetime
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 _clock_patch_applied: bool = False

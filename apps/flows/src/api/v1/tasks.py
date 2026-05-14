@@ -20,9 +20,9 @@ from pydantic import BaseModel
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
-from core.logging import get_logger
 from apps.flows.src.tasks.flow_tasks import process_flow_task
-from core.context import Context, User, get_context
+from core.context import get_context
+from core.logging import get_logger
 from core.state import ExecutionState
 
 logger = get_logger(__name__)
@@ -44,7 +44,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Di
     """Отправляет задачу на выполнение. Возвращает A2A Task."""
     task_id = str(uuid.uuid4())
     user_id = request.user_id or task_id
-    
+
     # session_id должен быть в формате flow_id:context_id
     if request.session_id:
         session_id = request.session_id
@@ -111,7 +111,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Di
     # Breakpoint или interrupt - оба используют input_required
     breakpoint_hit = task_result.get("breakpoint_hit")
     interrupt_data = task_result.get("interrupt")
-    
+
     if breakpoint_hit:
         response_text = f"Breakpoint at node '{breakpoint_hit}'"
         task_state = TaskState.input_required
@@ -166,17 +166,17 @@ async def get_state(
 ) -> Dict[str, Any]:
     """
     Получает state по session_id или context_id+flow_id.
-    
+
     Args:
         session_id: ID сессии (альтернатива context_id+flow_id)
         context_id: ID контекста A2A
         flow_id: ID агента
-    
+
     Returns:
         Снимок ExecutionState или, если записи нет, минимальный объект для UI чата:
         ``{"messages": [], "task_id": None}``.
     """
-    
+
     if session_id:
         state = await container.state_manager.get_state(session_id)
     elif context_id and flow_id:
@@ -187,7 +187,7 @@ async def get_state(
             status_code=400,
             detail="Need session_id or context_id+flow_id"
         )
-    
+
     if state is None:
         return {"messages": [], "task_id": None}
 
@@ -204,17 +204,17 @@ async def update_state(
 ) -> Dict[str, Any]:
     """
     Сохраняет изменения state.
-    
+
     Args:
         request: Тело запроса с обновленным state
         session_id: ID сессии (альтернатива context_id+flow_id)
         context_id: ID контекста A2A
         flow_id: ID агента
-    
+
     Returns:
         Обновленный state
     """
-    
+
     if session_id:
         pass
     elif context_id and flow_id:
@@ -224,12 +224,12 @@ async def update_state(
             status_code=400,
             detail="Need session_id or context_id+flow_id"
         )
-    
+
     state_obj = ExecutionState.model_validate(request.state)
     await container.state_manager.save_state(session_id, state_obj)
     updated_state = await container.state_manager.get_state(session_id)
-    
+
     if updated_state is None:
         raise HTTPException(status_code=500, detail="Failed to save state")
-    
+
     return updated_state.model_dump()

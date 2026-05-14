@@ -190,8 +190,8 @@ async def test_sync_upload_creates_file_record_in_shared_db(
     assert r.status_code == 200, r.text
     file_id = r.json()["file_id"]
 
-    from core.context import set_context, clear_context
     from apps.sync.container import get_sync_container
+    from core.context import clear_context, set_context
     set_context(mock_context)
     try:
         container = get_sync_container()
@@ -256,6 +256,7 @@ async def test_cross_service_download_via_agents(
 def test_avatar_url_pydantic_rejects_external_url():
     """ChannelUpdate отвергает прямые S3 URL на уровне Pydantic."""
     from pydantic import ValidationError
+
     from apps.sync.models.channels import ChannelUpdate
 
     with pytest.raises(ValidationError) as exc_info:
@@ -288,7 +289,7 @@ async def test_rag_upload_includes_file_response(rag_client, auth_headers_system
 
     ns = await rag_client.post(
         "/rag/api/v1/namespaces",
-        json={"name": f"test-ns-unified"},
+        json={"name": "test-ns-unified"},
         headers=auth_headers_system,
     )
     assert ns.status_code in (200, 201), f"Создание namespace: {ns.status_code} {ns.text}"
@@ -339,8 +340,8 @@ async def test_rag_upload_creates_file_record_in_shared_db(
     assert r.status_code == 202, r.text
     document_id = r.json()["document_id"]
 
-    from core.context import set_context, clear_context
     from apps.rag.container import get_rag_container
+    from core.context import clear_context, set_context
     set_context(mock_context)
     try:
         container = get_rag_container()
@@ -409,8 +410,9 @@ async def test_upload_without_s3_returns_503(auth_headers_system, monkeypatch):
     import core.config.base as config_base
     config_base._settings_instance = None
 
-    from apps.sync.main import app
     from httpx import ASGITransport, AsyncClient
+
+    from apps.sync.main import app
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         r = await client.post(

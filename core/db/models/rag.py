@@ -8,8 +8,8 @@
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    Boolean,
     Computed,
     DateTime,
     Index,
@@ -18,9 +18,8 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
-from pgvector.sqlalchemy import Vector
+from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models.base import Base
 

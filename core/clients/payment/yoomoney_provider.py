@@ -12,11 +12,9 @@ Quickpay для приема, OAuth API для сверки транзакций
 
 import hashlib
 import json
-
-from core.logging import get_logger
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urlencode
-from typing import Dict, Any, Optional, Literal, List
 
 from pydantic import Field
 
@@ -25,9 +23,10 @@ from core.clients.payment.base_provider import (
     PaymentProviderConfig,
     PaymentRequest,
     PaymentResponse,
-    WebhookVerificationResult
+    WebhookVerificationResult,
 )
 from core.http import get_httpx_client
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 YOOMONEY_TOKEN_LIFETIME_YEARS = 3

@@ -8,8 +8,8 @@ from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
 from core.logging import get_logger
-from core.payments.sync_service import PaymentSyncService
 from core.payments.service import PaymentService
+from core.payments.sync_service import PaymentSyncService
 
 logger = get_logger(__name__)
 

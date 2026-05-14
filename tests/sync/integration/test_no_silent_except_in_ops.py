@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _TARGET_FILES = [
     _REPO_ROOT / "apps" / "sync" / "realtime" / "operations.py",

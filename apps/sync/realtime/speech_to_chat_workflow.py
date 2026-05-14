@@ -19,17 +19,14 @@ from livekit.api import ListParticipantsRequest, LiveKitAPI, TrackSource, TrackT
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 
 from apps.sync.container import get_sync_container
-from apps.sync.db.repositories.call_repository import CallNotFoundError
 from apps.sync.db.models import SyncCallSpeechEgressTrack
+from apps.sync.db.repositories.call_repository import CallNotFoundError
 from apps.sync.models.messages import (
-    AudioAttachmentContent,
-    AudioTranscriptionStatus,
     MessageContentModel,
     MessageContentType,
     MessageCreate,
 )
 from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
-from core.models.identity_models import User
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from core.config import get_settings
@@ -39,10 +36,12 @@ from core.files.audio_silence import (
     volumedetect_max_volume_db_from_bytes,
 )
 from core.files.audio_transcode import transcode_audio_bytes_to_m4a_aac
+from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus
 from core.files.processors import FileProcessor
 from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models.identity_models import User
 
 logger = get_logger(__name__)
 

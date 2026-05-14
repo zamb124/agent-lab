@@ -7,8 +7,8 @@ Create Date: 2026-02-07 12:00:00.000000+00:00
 """
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = 'a1b2c3d4e5f6'
@@ -50,8 +50,8 @@ def upgrade() -> None:
 
     # HNSW индекс для vector similarity search
     op.execute("""
-        CREATE INDEX ix_vd_embedding_hnsw 
-        ON vector_documents 
+        CREATE INDEX ix_vd_embedding_hnsw
+        ON vector_documents
         USING hnsw (embedding vector_cosine_ops)
         WITH (m = 16, ef_construction = 64)
     """)
@@ -90,8 +90,8 @@ def upgrade() -> None:
     op.create_index("ix_crm_entities_due_date", "crm_entities", ["due_date"])
     op.create_index("ix_crm_entities_note_date", "crm_entities", ["note_date"])
     op.execute("""
-        CREATE INDEX ix_crm_entities_tags 
-        ON crm_entities 
+        CREATE INDEX ix_crm_entities_tags
+        ON crm_entities
         USING gin (tags)
     """)
 

@@ -41,7 +41,6 @@ from core.logging.attributes import (
     EVENT_BACKGROUND_TASK_STARTED,
 )
 
-
 _logger = get_logger("platform.background")
 
 

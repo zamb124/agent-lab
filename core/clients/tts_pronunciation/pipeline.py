@@ -29,7 +29,6 @@ from core.clients.tts_pronunciation.models import (
 from core.logging import get_logger
 from core.utils.text_normalizers.normalizer import get_text_normalizer
 
-
 logger = get_logger(__name__)
 
 _WORD_BOUNDARY_LEFT = re.compile(r"(?<!\w)")

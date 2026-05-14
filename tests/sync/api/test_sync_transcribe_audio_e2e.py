@@ -19,7 +19,6 @@ from typing import Any
 import pytest
 
 from core.utils.tokens import get_token_service
-
 from tests.fixtures.audio_bytes import minimal_wav_silence
 from tests.sync.api._helpers import create_topic_channel_via_http
 from tests.sync.api._realtime_helpers import (

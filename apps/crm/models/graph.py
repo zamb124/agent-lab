@@ -4,14 +4,15 @@
 Используются для построения и представления графов связей между entities.
 """
 
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
 
 
 class GraphNode(BaseModel):
     """
     Узел в графе связей.
-    
+
     Представляет entity с информацией о доступе и глубине в графе.
     """
     entity_id: str = Field(description="ID entity")
@@ -32,7 +33,7 @@ class GraphNode(BaseModel):
 class GraphEdge(BaseModel):
     """
     Ребро в графе связей.
-    
+
     Представляет relationship между двумя entities.
     """
     edge_id: str = Field(description="ID relationship")
@@ -51,7 +52,7 @@ class GraphEdge(BaseModel):
 class InfluenceGraphResponse(BaseModel):
     """
     Граф влияния от корневой entity.
-    
+
     Содержит все узлы и ребра в пределах max_depth.
     """
     root_entity_id: str = Field(description="ID корневой entity")
@@ -65,7 +66,7 @@ class InfluenceGraphResponse(BaseModel):
 class ShortestPathResponse(BaseModel):
     """
     Кратчайший путь между двумя entities.
-    
+
     Использует weighted алгоритм Dijkstra.
     """
     from_entity_id: str = Field(description="Начальная entity")
@@ -83,7 +84,7 @@ class ShortestPathResponse(BaseModel):
 class RelatedEntitiesResponse(BaseModel):
     """
     Прямо связанные entities (1 уровень).
-    
+
     Разделяет по направлению: incoming, outgoing, undirected.
     """
     entity_id: str = Field(description="ID центральной entity")

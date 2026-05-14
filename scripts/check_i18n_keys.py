@@ -37,6 +37,7 @@ Unused считается отдельно по каждой локали (по 
   uv run python scripts/check_i18n_keys.py --strict   # exit 1 при находках
   uv run python scripts/check_i18n_keys.py --app frontend
 """
+
 from __future__ import annotations
 
 import argparse
@@ -110,20 +111,18 @@ CALL_RE = re.compile(
 CLASS_NS_RE = re.compile(
     r"static\s+i18nNamespace\s*=\s*(?:I18nNs\.([A-Z_]+)|['\"]([a-z][a-z0-9_]*)['\"])\s*;?"
 )
-NS_FROM_ARG_RE = re.compile(
-    r"I18nNs\.([A-Z_]+)|['\"]([a-z][a-z0-9_]*)['\"]"
-)
+NS_FROM_ARG_RE = re.compile(r"I18nNs\.([A-Z_]+)|['\"]([a-z][a-z0-9_]*)['\"]")
 DYNAMIC_KEY_RE = re.compile(r"\$\{|\+|\\")  # $-интерполяция, конкатенация, \
 
 
 @dataclass
 class Usage:
-    file: Path        # относительный путь от ROOT
+    file: Path  # относительный путь от ROOT
     line: int
     raw_key: str
     namespace: str | None  # резолвленный итоговый namespace (или None)
     explicit_ns: str | None  # из 3-го аргумента
-    class_ns: str | None     # из static i18nNamespace класса
+    class_ns: str | None  # из static i18nNamespace класса
 
 
 @dataclass
@@ -137,6 +136,7 @@ class Stats:
 @dataclass
 class BundleIndex:
     """Индекс бандлов одной локали."""
+
     bundles: dict[str, dict] = field(default_factory=dict)  # ns -> json
 
     def lookup(self, key: str, namespace: str | None) -> bool:
@@ -240,7 +240,9 @@ def list_js_files(only_app: str | None) -> list[Path]:
             raise SystemExit(f"check_i18n_keys: нет {ui}")
         files.extend(sorted(ui.rglob("*.js")))
     # отсекаем мок-файлы и debug-*
-    return [p for p in files if p.name != "build-mock-config.js" and not p.name.startswith("debug-")]
+    return [
+        p for p in files if p.name != "build-mock-config.js" and not p.name.startswith("debug-")
+    ]
 
 
 def file_default_namespace(path: Path, available: set[str]) -> str | None:
@@ -397,16 +399,20 @@ def collect_scan(only_app: str | None) -> tuple[dict[str, BundleIndex], list[Usa
     return indexes, all_usages, stats
 
 
-def common_unused_terminal_keys(all_usages: list[Usage], indexes: dict[str, BundleIndex]) -> set[str]:
+def common_unused_terminal_keys(
+    all_usages: list[Usage], indexes: dict[str, BundleIndex]
+) -> set[str]:
     used = used_terminal_keys(all_usages)
     unused_per_locale = find_unused(used, indexes)
     if not LOCALES:
         return set()
-    return set.intersection(*(unused_per_locale[l] for l in LOCALES))
+    return set.intersection(*(unused_per_locale[loc] for loc in LOCALES))
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--mode", choices=("missing", "unused", "all"), default="all")
     parser.add_argument("--app", default="all", help="apps/<name>/ui (или all)")
     parser.add_argument("--strict", action="store_true", help="exit 1 при наличии находок")
@@ -416,8 +422,10 @@ def main() -> int:
     only = None if args.app == "all" else args.app
     indexes, all_usages, stats = collect_scan(only)
 
-    print(f"check_i18n_keys: файлов отсканировано {stats.files_scanned}, "
-          f"вызовов t(): {stats.calls_total} (статических {stats.calls_static}, динамических {stats.calls_dynamic})")
+    print(
+        f"check_i18n_keys: файлов отсканировано {stats.files_scanned}, "
+        f"вызовов t(): {stats.calls_total} (статических {stats.calls_static}, динамических {stats.calls_dynamic})"
+    )
 
     exit_code = 0
 

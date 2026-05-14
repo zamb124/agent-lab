@@ -12,7 +12,7 @@ import json
 import random
 import sys
 import zlib
-from typing import Any, Callable
+from typing import Callable
 
 import structlog
 from structlog.types import EventDict, WrappedLogger

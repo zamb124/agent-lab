@@ -14,8 +14,8 @@ from typing import Any, Dict
 
 import httpx
 
-from core.context import get_context
 from core.config import get_settings
+from core.context import get_context
 from core.http import get_httpx_client
 from core.logging import get_log_context, get_logger
 
@@ -36,16 +36,16 @@ class ServiceClientError(Exception):
 class ServiceClient:
     """
     Простой клиент для межсервисного взаимодействия.
-    
+
     Автоматически добавляет заголовки из контекста (trace_id, auth, company, user).
     Управляется через DI контейнер.
     """
-    
+
     def _get_service_url(self, service: str) -> str:
         """Получает URL сервиса из конфигурации"""
         settings = get_settings()
         return settings.server.get_service_url(service)
-    
+
     def _build_headers(self, include_content_type: bool = True) -> Dict[str, str]:
         """
         Собирает заголовки из текущего контекста.
@@ -86,7 +86,7 @@ class ServiceClient:
             headers[REQUEST_ID_HEADER] = request_id
 
         return headers
-    
+
     async def request(
         self,
         service: str,
@@ -97,59 +97,59 @@ class ServiceClient:
     ) -> Any:
         """
         Выполняет HTTP запрос к сервису.
-        
+
         Args:
             service: Имя сервиса (flows, crm, frontend)
             method: HTTP метод (GET, POST, PUT, DELETE)
             path: Путь запроса (без базового URL)
             timeout: Таймаут запроса
             **kwargs: Дополнительные параметры для httpx
-            
+
         Returns:
             Ответ сервиса (JSON)
-            
+
         Raises:
             ServiceClientError: если запрос не удался
         """
-        
+
         base_url = self._get_service_url(service)
         url = f"{base_url}{path}"
-        
+
         # Не устанавливаем Content-Type: application/json если передаются files
         # (httpx сам установит multipart/form-data)
         include_content_type = "files" not in kwargs
         headers = self._build_headers(include_content_type=include_content_type)
         if "headers" in kwargs:
             headers.update(kwargs.pop("headers"))
-        
+
         try:
             async with get_httpx_client(timeout=timeout) as client:
                 response = await client.request(method, url, headers=headers, **kwargs)
                 response.raise_for_status()
-                
+
                 if response.content:
                     return response.json()
                 return None
-                
+
         except httpx.HTTPStatusError as e:
             raise ServiceClientError(
                 f"HTTP {e.response.status_code} при запросе к {service}: {e.response.text}"
             )
         except Exception as e:
             raise ServiceClientError(f"Ошибка запроса к {service}: {e}")
-    
+
     async def get(self, service: str, path: str, **kwargs) -> Any:
         """GET запрос к сервису"""
         return await self.request(service, "GET", path, **kwargs)
-    
+
     async def post(self, service: str, path: str, **kwargs) -> Any:
         """POST запрос к сервису"""
         return await self.request(service, "POST", path, **kwargs)
-    
+
     async def put(self, service: str, path: str, **kwargs) -> Any:
         """PUT запрос к сервису"""
         return await self.request(service, "PUT", path, **kwargs)
-    
+
     async def patch(self, service: str, path: str, **kwargs) -> Any:
         """PATCH запрос к сервису"""
         return await self.request(service, "PATCH", path, **kwargs)

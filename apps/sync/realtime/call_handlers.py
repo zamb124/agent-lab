@@ -33,7 +33,6 @@ from apps.sync.realtime.events import (
     event_call_participant_joined,
     event_call_participant_left,
 )
-
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
@@ -289,7 +288,9 @@ async def handle_call_hangup(
     if active_count == 0:
         await calls.update_call_status(payload.call_id, "ended", ended_at=now)
         if call.mode == "sfu" and call.livekit_room_name:
-            from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
+            from apps.sync.realtime.speech_to_chat_workflow import (
+                stop_speech_egresses_for_call_room,
+            )
 
             await stop_speech_egresses_for_call_room(
                 call_id=payload.call_id,

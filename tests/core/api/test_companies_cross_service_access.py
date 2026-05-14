@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import pytest
+
 from core.api.companies import build_my_companies_response
 from core.models.identity_models import Company, User
 

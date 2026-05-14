@@ -14,7 +14,6 @@ from __future__ import annotations
 from core.company_ai.schema import AICapability
 from core.config import get_settings
 
-
 # Дефолтная модель на capability при отсутствии provider-специфической записи.
 # Если ключа capability нет — резолвер возьмёт settings.llm.default_model (LLM_CHAT/CODEGEN)
 # либо упадёт ValueError для строгих capability (LLM_VISION, IMAGE_GEN, LLM_FORMAT_MARKDOWN).

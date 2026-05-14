@@ -32,23 +32,20 @@ from a2a.types import (
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
 
+from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
-from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
-from core.context import set_current_channel
-from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, settings
-from apps.flows.src.evaluation.service import EvaluationService
 from apps.flows.src.files import (
     extract_incoming_a2a_files,
     format_a2a_files_content,
     transcribe_incoming_audio_files,
 )
-from core.logging import get_logger
 from apps.flows.src.services.push_notifications import dict_to_config
+from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from apps.flows.src.streaming import Emitter
-from core.state import ExecutionState
 from apps.flows.src.streaming.subscriber import EventSubscriber, StreamEvent
+from apps.flows.src.utils import extract_json_from_response
 from apps.idle_worker.tasks.push_notification_tasks import (
     delete_config,
     get_config,
@@ -56,7 +53,9 @@ from apps.idle_worker.tasks.push_notification_tasks import (
     send_task_update,
     set_config,
 )
-from apps.flows.src.utils import extract_json_from_response
+from core.context import set_current_channel
+from core.logging import get_logger
+from core.state import ExecutionState
 
 logger = get_logger(__name__)
 
@@ -659,9 +658,9 @@ class A2AChannel(BaseChannel):
 
         collect_task = asyncio.create_task(collect_events())
 
-        logger.info(f"[on_message_stream] Waiting for Redis subscription to be ready...")
+        logger.info("[on_message_stream] Waiting for Redis subscription to be ready...")
         await ready_event.wait()
-        logger.info(f"[on_message_stream] Redis subscription ready, creating task...")
+        logger.info("[on_message_stream] Redis subscription ready, creating task...")
 
         await self.create_task(prepared)
 

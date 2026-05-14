@@ -5,7 +5,7 @@
 import ipaddress
 import time
 from collections import deque
-from typing import Any, Deque, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, Tuple
 
 _webhook_hits: Dict[Tuple[str, str, str], Deque[float]] = {}
 

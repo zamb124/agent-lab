@@ -5,49 +5,45 @@ API для работы с entities.
 """
 
 from typing import Any, Dict, List, Optional
-from datetime import datetime
-from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
-from core.pagination import CursorPage
+
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from starlette.responses import Response
+
+from apps.crm.api.tasks import _active_task_conflict
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
+from apps.crm.db.models import CRMEntity
+from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
-    EntityCreate,
-    EntityUpdate,
-    EntityResponse,
-    EntityTimelineBoundsResponse,
-    EntityMergeRequest,
-    EntityMergeResponse,
-    AIAnalyzeResponse,
-    AIAnalysisDraftApplyResult,
     AIAnalysisDraftPatchRequest,
     AIAnalysisDraftStored,
-    NoteMarkdownFormatQueuedResponse,
-    NoteProcessingConfig,
-    NoteProcessingResult,
-    SearchMentionsRequest,
-    EntitySearchQueryRequest,
+    BulkCardsRequest,
     BulkCreateRequest,
     BulkCreateResponse,
-    BulkUpdateRequest,
-    BulkUpdateResponse,
     BulkDeleteRequest,
     BulkDeleteResponse,
     BulkErrorItem,
-    BulkCardsRequest,
+    BulkUpdateRequest,
+    BulkUpdateResponse,
+    EntityCreate,
+    EntityMergeRequest,
+    EntityMergeResponse,
+    EntityResponse,
+    EntitySearchQueryRequest,
+    EntityTimelineBoundsResponse,
+    EntityUpdate,
+    NoteAnalysisDraftRepairQueuedResponse,
+    NoteMarkdownFormatQueuedResponse,
+    SearchMentionsRequest,
 )
-from apps.crm.db.models import CRMEntity
-from apps.crm.config import get_crm_settings
-from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.taskiq_analyze_errors import (
-    parse_mentioned_entity_short_description_from_task_message,
-    parse_validation_from_task_message,
-)
-from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
+from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
-from apps.crm.dependencies import ContainerDep
+from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
+from apps.crm.services.task_service import ActiveTaskExistsError
 from core.clients import ServiceClient
 from core.context import get_context
 from core.i18n.service import t
-from core.websocket.publisher import notify_user, Notification, NotificationType
-from taskiq.exceptions import TaskiqResultTimeoutError
+from core.pagination import CursorPage
+from core.websocket.publisher import Notification, NotificationType, notify_user
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
 
@@ -367,6 +363,7 @@ async def export_entities(
     import csv
     import io
     import json as json_lib
+
     from fastapi.responses import StreamingResponse
 
     filters_arg = None
@@ -516,6 +513,110 @@ async def patch_note_analysis_draft(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.delete("/notes/{note_id}/analysis-draft", status_code=204)
+async def delete_note_analysis_draft(
+    note_id: str,
+    container: ContainerDep,
+) -> Response:
+    """Удалить черновик AI-анализа и связанные поля ошибки из заметки."""
+    note = await container.entity_service.get_entity(note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    try:
+        await container.entity_service.discard_note_analysis_draft(note_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+@router.delete("/notes/{note_id}/analysis-error", status_code=204)
+async def delete_note_analysis_error(
+    note_id: str,
+    container: ContainerDep,
+) -> Response:
+    """Сбросить последнее сообщение об ошибке применения черновика (черновик не удаляется)."""
+    note = await container.entity_service.get_entity(note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    await container.entity_service.clear_note_analysis_error(note_id)
+    return Response(status_code=204)
+
+
+@router.post(
+    "/notes/{note_id}/analysis-draft-repair",
+    status_code=202,
+    response_model=NoteAnalysisDraftRepairQueuedResponse,
+)
+async def queue_note_analysis_draft_repair(
+    note_id: str,
+    container: ContainerDep,
+) -> NoteAnalysisDraftRepairQueuedResponse:
+    """Поставить в очередь AI-починку черновика (ветка CRM flow draft_repair, TaskIQ)."""
+    note = await container.entity_service.get_entity(note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    raw_attrs = note.attributes or {}
+    if not isinstance(raw_attrs.get("ai_analysis_draft"), dict):
+        raise HTTPException(status_code=422, detail="У заметки нет черновика ai_analysis_draft")
+    summary_raw = raw_attrs.get("ai_analysis_last_error")
+    summary_ok = isinstance(summary_raw, str) and summary_raw.strip() != ""
+    failures_raw = raw_attrs.get("ai_analysis_apply_failures")
+    failures_ok = isinstance(failures_raw, list) and len(failures_raw) > 0
+    if not summary_ok and not failures_ok:
+        raise HTTPException(
+            status_code=422,
+            detail="Нет сохранённой ошибки применения черновика",
+        )
+
+    auth_token = ctx.auth_token if ctx else None
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Authorization required")
+
+    namespace = note.namespace or "default"
+
+    note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
+    await broadcast_crm_note_event(
+        company_id=company_id,
+        namespace=namespace,
+        note_id=note_id,
+        note_date_iso=note_date_iso,
+        action="updated",
+        company_repository=container.company_repository,
+        access_grant_repository=container.access_grant_repository,
+        skip_notification_center=True,
+        draft_repair={"phase": "started"},
+    )
+
+    try:
+        row = await container.task_service.start_note_analysis_draft_repair(note_id=note_id)
+    except ActiveTaskExistsError as exc:
+        raise _active_task_conflict(exc) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return NoteAnalysisDraftRepairQueuedResponse(
+        note_id=note_id,
+        task_id=row.task_id,
+        queued=True,
+    )
+
+
 @router.post(
     "/notes/{note_id}/format-markdown",
     status_code=202,
@@ -526,16 +627,29 @@ async def request_note_markdown_format(
     container: ContainerDep,
 ) -> NoteMarkdownFormatQueuedResponse:
     """Поставить в очередь преобразование текста заметки в Markdown (TaskIQ + LitServe)."""
+    note = await container.entity_service.get_entity(note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    ctx = get_context()
+    user_id = ctx.user.user_id if ctx and ctx.user else None
+    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
     try:
-        queued_id = await container.entity_service.request_note_markdown_format(note_id)
+        row = await container.task_service.start_note_markdown_format(
+            note_id=note_id,
+            expected_updated_at_iso=note.updated_at.isoformat(),
+        )
+    except ActiveTaskExistsError as exc:
+        raise _active_task_conflict(exc) from exc
     except ValueError as exc:
         detail = str(exc)
         if detail == "Заметка не найдена":
             raise HTTPException(status_code=404, detail=detail) from exc
         raise HTTPException(status_code=400, detail=detail) from exc
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    return NoteMarkdownFormatQueuedResponse(note_id=queued_id)
+
+    return NoteMarkdownFormatQueuedResponse(note_id=note_id, task_id=row.task_id)
 
 
 
@@ -772,7 +886,7 @@ async def search_mentions(
     text = request.text
     if not text or len(text) < 3:
         return {"entities": []}
-    
+
     entities = await container.entity_service.search_mentions(text, namespace=request.namespace, limit=20)
     return {
         "entities": [
@@ -833,15 +947,15 @@ async def get_exclusive_related_entities(
     entity = await container.entity_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-    
+
     if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
         raise HTTPException(status_code=400, detail="Only notes have exclusive related entities")
-    
+
     ctx = get_context()
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
     if not await container.access_control_service.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     exclusive_entities = await container.entity_service.get_exclusive_related_entities_for_note(entity_id)
     return {"entities": exclusive_entities}

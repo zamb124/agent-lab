@@ -22,7 +22,6 @@ from core.clients.vad_client import (
 
 from .conftest import FakeSpeechServer
 
-
 pytestmark = pytest.mark.timeout(15)
 
 

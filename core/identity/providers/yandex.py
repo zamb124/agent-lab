@@ -4,14 +4,14 @@ Yandex OAuth провайдер авторизации.
 АДАПТИРОВАНО: убраны локальные импорты, try-except блоки
 """
 
-from core.logging import get_logger
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 from urllib.parse import urlencode
 
-from core.identity.base_provider import BaseAuthProvider
-from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.config.models import AuthProviderConfig
 from core.http import request_public_oauth
+from core.identity.base_provider import BaseAuthProvider
+from core.logging import get_logger
+from core.models.identity_models import AuthProvider, ProviderUserInfo
 
 logger = get_logger(__name__)
 class YandexProvider(BaseAuthProvider):
@@ -35,7 +35,7 @@ class YandexProvider(BaseAuthProvider):
     ) -> Tuple[str, Optional[str]]:
         """Обменивает код на токены Yandex"""
         data = self._build_token_data(code, redirect_uri)
-        
+
         response = await request_public_oauth(
             "POST",
             self.token_url,

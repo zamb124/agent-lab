@@ -9,14 +9,13 @@ Reason tool добавляется при сборке агента (FlowsLoader
 """
 
 import pytest
-from a2a.types import TaskArtifactUpdateEvent
 
-from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from apps.flows.src.models import NodeConfig, LLMConfig
-from apps.flows.src.models.node_config import NodeLLMOverride
-from core.state import ExecutionState
+from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.tools import calculator, reason
+from core.state import ExecutionState
 
 
 async def run_agent_to_completion(runner, input_data, state):

@@ -18,28 +18,40 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 
+from apps.flows.src.container import get_container
+from apps.flows.src.models import ReactLoopMode
+from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.runtime.a2a_messages import (
     build_assistant_message as new_assistant_message,
+)
+from apps.flows.src.runtime.a2a_messages import (
     build_system_message as new_system_message,
+)
+from apps.flows.src.runtime.a2a_messages import (
     build_tool_result_message as new_tool_result_message,
+)
+from apps.flows.src.runtime.a2a_messages import (
     build_user_message as new_user_message,
 )
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.state.cancellation import (
-    FlowCancelled,
-    check_cancellation,
-    get_cancellation_token,
-)
 from apps.flows.src.runtime.llm_byok import is_llm_byok_override
 from apps.flows.src.runtime.llm_override_params import (
     resolve_override_stream_kwargs,
     split_llm_override_for_client,
 )
+from apps.flows.src.state.cancellation import (
+    FlowCancelled,
+    check_cancellation,
+    get_cancellation_token,
+)
+from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.streaming import BaseEmitter, Emitter
+from apps.flows.src.streaming.ui_events import emit_pending_ui_events
+from apps.flows.src.tools.base import sanitize_tool_name
+from apps.flows.src.variables import VariableResolver
 from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
-from core.config import get_settings
-from core.context import get_context
 from core.clients.llm import (
     LLMClient,
     LLMStreamIdleTimeoutError,
@@ -48,23 +60,21 @@ from core.clients.llm import (
     StreamEvent,
     get_llm_for_state,
 )
-from apps.flows.src.container import get_container
+from core.config import get_settings
+from core.context import get_context
+from core.errors import ToolExecutionError
 from core.logging import get_logger
-from apps.flows.src.models import ReactLoopMode
-from apps.flows.src.models.enums import NodeType
-from apps.flows.src.state.interrupt_manager import InterruptManager
-from core.state import ExecutionExceptionRecord, ExecutionState, InterruptPathItem, PromptHistoryItem
+from core.state import (
+    ExecutionExceptionRecord,
+    ExecutionState,
+    InterruptPathItem,
+    PromptHistoryItem,
+)
 from core.state.mutation_policy import FROZEN_STATE_FIELDS, USER_TOOL_PARALLEL_STATE_MERGE_FIELDS
-from apps.flows.src.streaming import Emitter, BaseEmitter
-from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from core.tracing import TraceContext, get_tracer
 from core.tracing.context import get_current_trace_context
-from apps.flows.src.variables import VariableResolver
-from core.errors import ToolExecutionError
-from apps.flows.src.tools.base import sanitize_tool_name
 
 from .base_runner import BaseLlmNodeRunner
-from apps.flows.src.models.enums import ReactToolRole
 
 logger = get_logger(__name__)
 
@@ -291,7 +301,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             # NodeAsToolWrapper сам обрабатывает resume через interrupt_path
             # Передаем ответ пользователя в state.content
             state.content = user_answer
-            
+
             try:
                 tool_results = await self._execute_tools_parallel(
                     [{"name": call_id, "id": tool_call_id, "arguments": {"query": user_answer}}],
@@ -385,7 +395,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         # Определяем режим: structured_output или tools
         structured_output = self.node_config.structured_output if self.node_config else False
         output_schema = self.node_config.output_schema if self.node_config else None
-        
+
         if structured_output and output_schema:
             tools_schema = None
             response_format = {
@@ -541,17 +551,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             logger.info(f"[llm_node:{llm_node_label}] Вызов tools: {tool_names}")
 
                             exit_call = self._find_exit_tool_call(tool_calls, exit_tool_name)
-                            
+
                             if exit_call and loop_mode == ReactLoopMode.EXPLICIT:
                                 exit_args = exit_call.get("arguments", {})
                                 exit_tool = next(t for t in self.tools if t.name == exit_tool_name)
                                 result = await exit_tool.run(exit_args, state)
                                 final_response = str(result) if not isinstance(result, str) else result
-                                
+
                                 logger.info(
                                     f"[llm_node:{llm_node_label}] Exit tool '{exit_tool_name}' вызван, завершение"
                                 )
-                                
+
                                 state.messages.append(
                                     new_assistant_message(
                                         content,
@@ -564,7 +574,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                                 exit_call_id = exit_call.get("id", exit_tool_name)
                                 await emitter.emit_tool_call(exit_tool_name, exit_args, exit_call_id)
-                                
+
                                 state.messages.append(
                                     new_tool_result_message(
                                         exit_call_id,
@@ -576,7 +586,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 )
                                 await emitter.emit_tool_result(exit_tool_name, final_response, exit_call_id)
                                 await self._emit_pending_ui_events(emitter, state)
-                                
+
                                 state.response = final_response
                                 InterruptManager.clear_interrupt_path(state)
                                 break
@@ -595,7 +605,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 tool_call_id = tc.get("id", tc.get("name", "unknown"))
                                 tool_name = tc.get("name", "unknown")
                                 tool_args = tc.get("arguments", {})
-                                
+
                                 tool_obj = self._resolve_tool_by_call_name(tool_name)
                                 react_role = (
                                     tool_obj.react_role.value
@@ -663,7 +673,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                                 tool_call=interrupted_tc,
                                             ),
                                         )
-                                    
+
                                     InterruptManager.apply_interrupt(
                                         state,
                                         e.body,
@@ -684,7 +694,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 except json.JSONDecodeError as e:
                                     logger.error(f"[llm_node:{llm_node_label}] Ошибка парсинга structured output: {e}")
                                     final_response = content
-                                
+
                                 state.messages.append(
                                     new_assistant_message(
                                         final_response, sid, None, context_id=context_id, task_id=task_id
@@ -692,7 +702,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 )
                                 InterruptManager.clear_interrupt_path(state)
                                 break
-                            
+
                             if loop_mode == ReactLoopMode.AUTO:
                                 final_response = content
                                 logger.info(
@@ -718,7 +728,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                     InterruptManager.clear_interrupt_path(state)
                                     break
-                                
+
                                 logger.warning(
                                     f"[llm_node:{llm_node_label}] EXPLICIT strict: LLM вернул текст без "
                                     f"exit_tool '{exit_tool_name}', добавляем reminder"
@@ -726,7 +736,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 state.messages.append(
                                     new_assistant_message(content, sid, None, context_id=context_id, task_id=task_id)
                                 )
-                                
+
                                 if reason_tool_name:
                                     default_reminder = (
                                         f"Ты не вызвал tool '{exit_tool_name}' для завершения. "
@@ -800,7 +810,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 return False
             return await token.is_cancelled()
 
-        last_error: Optional[LLMStreamIdleTimeoutError] = None
 
         for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 original + N retries
             try:
@@ -821,7 +830,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 tok = get_cancellation_token()
                 raise FlowCancelled(tok.task_id if tok is not None else task_id)
             except LLMStreamIdleTimeoutError as e:
-                last_error = e
                 if attempt <= self.MAX_STREAM_IDLE_RETRIES:
                     logger.warning(
                         "LLM stream idle timeout (attempt %d/%d), retrying: "
@@ -848,37 +856,37 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     ) -> List[Dict[str, str]]:
         """
         Выполняет tools ПАРАЛЛЕЛЬНО через asyncio.gather.
-        
+
         Каждый tool получает копию state.
         Результаты мержатся: messages extend, остальное - кто последний.
         """
         if len(tool_calls) == 1:
             # Один tool - выполняем напрямую без копирования
             return await self._execute_single_tool(tool_calls[0], state, trace_ctx)
-        
+
         # Несколько tools - параллельное выполнение
         original_msg_count = len(state.messages)
-        
+
         # Создаем копии state для каждого tool
         state_copies = [
             ExecutionState.model_validate(state.model_dump(exclude_none=False))
             for _ in tool_calls
         ]
-        
+
         # Запускаем все tools параллельно
         tasks = [
             self._execute_single_tool(tc, state_copy, trace_ctx)
             for tc, state_copy in zip(tool_calls, state_copies)
         ]
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Собираем результаты и мержим state
         tool_results = []
         for i, (tc, result, state_copy) in enumerate(zip(tool_calls, results, state_copies)):
             tool_name = tc["name"]
             tool_call_id = tc.get("id", tool_name)
-            
+
             if isinstance(result, Exception):
                 if isinstance(result, FlowInterrupt):
                     raise result
@@ -902,11 +910,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     continue
                 logger.error(f"Tool {tool_name} failed: {result}")
                 raise ToolExecutionError(tool_name, result)
-            
+
             # Мержим state: messages extend, остальное перезаписываем
             new_messages = state_copy.messages[original_msg_count:]
             state.messages.extend(new_messages)
-            
+
             # tool_results - мержим (не перезаписываем!)
             state.tool_results.update(state_copy.tool_results)
 
@@ -928,7 +936,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     setattr(state, ek, ev)
 
             tool_results.extend(result)
-        
+
         return tool_results
 
     async def _execute_single_tool(
@@ -942,7 +950,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         tool_name = tc["name"]
         tool_args = tc.get("arguments", {})
         tool_call_id = tc.get("id", tool_name)
-        
+
         tool = self._resolve_tool_by_call_name(tool_name)
         if not tool:
             not_found = RuntimeError(
@@ -965,23 +973,23 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 ]
             raise ToolExecutionError(tool_name, not_found)
         tool_name = tool.name
-        
+
         nested_flow_tool = hasattr(tool, "flow_id")
-        
+
         async with tracer.tool_call_span(
             tool_name, tool_call_id, tool_args, nested_flow_tool, trace_ctx=trace_ctx
         ) as tool_span:
             tool_start = time.time()
-            
+
             logger.info(f"Выполняю tool: {tool_name}")
             try:
                 result = await tool.run(tool_args, state)
                 state.tool_results[tool_name] = result
-                
+
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, result, tool_duration)
                 tracer.record_state_snapshot(tool_span, state)
-                
+
                 return [
                     {
                         "tool_call_id": tool_call_id,
@@ -1021,11 +1029,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             )
 
         resolved_vars = VariableResolver.resolve_all(local_vars=variables)
-        
+
         tracer = get_tracer()
         trace_ctx = _get_trace_ctx_from_state()
         node_id = self.node_config.node_id if self.node_config else "unknown"
-        
+
         async with tracer.prompt_build_span(
             node_id=node_id,
             template=prompt_template,
@@ -1033,15 +1041,15 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             trace_ctx=trace_ctx,
         ) as span:
             rendered_prompt = VariableResolver.render_template(prompt_template, local_vars=variables)
-            
+
             if self.llm_node:
                 rendered_prompt = await self.llm_node.after_prompt_render(rendered_prompt, state)
-            
+
             tracer.record_prompt_result(span, rendered_prompt, resolved_vars)
             self._save_prompt_to_history(state, prompt_template, rendered_prompt, resolved_vars, node_id)
 
         return rendered_prompt
-    
+
     def _save_prompt_to_history(
         self,
         state: ExecutionState,
@@ -1052,17 +1060,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     ) -> None:
         """Сохраняет промпт в историю если он изменился."""
         prompt_hash = hashlib.md5(rendered.encode()).hexdigest()
-        
+
         if state.prompt_history:
             last = state.prompt_history[-1]
             if last.prompt_hash == prompt_hash:
                 return
-        
+
         safe_vars = {
             k: v for k, v in variables.items()
             if isinstance(v, (str, int, float, bool)) or v is None
         }
-        
+
         item = PromptHistoryItem(
             prompt_hash=prompt_hash,
             prompt=rendered,

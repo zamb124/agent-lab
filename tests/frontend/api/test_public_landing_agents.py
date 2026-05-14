@@ -6,18 +6,18 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-from core.context import clear_context, set_context
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
-from core.models.context_models import Context
+from apps.flows.src.container import get_container
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.frontend.services.landing_demo_seed import (
     ensure_system_landing_demo_embeds,
     landing_demo_embed_ids,
 )
+from core.context import clear_context, set_context
+from core.identity.embed_guest_turns import EMBED_GUEST_USER_TURNS_REDIS_PREFIX
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.models.context_models import Context
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.models.identity_models import User
-from apps.flows.src.container import get_container
-from apps.flows.src.models.flow_config import FlowConfig
-from core.identity.embed_guest_turns import EMBED_GUEST_USER_TURNS_REDIS_PREFIX
 
 
 @pytest_asyncio.fixture

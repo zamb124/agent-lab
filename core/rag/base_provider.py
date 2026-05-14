@@ -3,7 +3,6 @@
 Определяет единый интерфейс работы с векторными хранилищами.
 """
 
-from core.logging import get_logger
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -11,7 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from core.files.s3_client import S3ClientFactory
 from core.files.types import ext_to_mime
-from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
+from core.logging import get_logger
+from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
 
 logger = get_logger(__name__)
 _LOGICAL_OPERATORS: frozenset[str] = frozenset({"$and", "$or"})
@@ -121,15 +121,15 @@ class BaseRAGProvider(ABC):
     Базовый абстрактный класс для всех RAG провайдеров.
     Определяет единый интерфейс для работы с RAG хранилищем.
     """
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-    
+
     def _get_content_type(self, file_path: str) -> str:
         """Определяет content type по расширению файла."""
         suffix = Path(file_path).suffix.lower()
         return ext_to_mime(suffix)
-    
+
     async def _upload_file_to_s3(
         self,
         file_path: str,
@@ -242,13 +242,13 @@ class BaseRAGProvider(ABC):
         logger.info(f"Текст загружен в S3: {s3_key}")
         return s3_key, bucket_name
 
-    
+
     @property
     @abstractmethod
     def provider_name(self) -> str:
         """Имя провайдера (agentset, pinecone, qdrant)"""
         pass
-    
+
     @abstractmethod
     async def create_namespace(
         self,
@@ -258,22 +258,22 @@ class BaseRAGProvider(ABC):
     ) -> RAGNamespace:
         """Создает новый namespace для изоляции документов"""
         pass
-    
+
     @abstractmethod
     async def get_namespace(self, namespace_id: str) -> Optional[RAGNamespace]:
         """Получает информацию о namespace"""
         pass
-    
+
     @abstractmethod
     async def list_namespaces(self) -> List[RAGNamespace]:
         """Список всех namespaces"""
         pass
-    
+
     @abstractmethod
     async def delete_namespace(self, namespace_id: str) -> bool:
         """Удаляет namespace и все его документы"""
         pass
-    
+
     @abstractmethod
     async def upload_document_from_file(
         self,
@@ -288,7 +288,7 @@ class BaseRAGProvider(ABC):
         Провайдер сам обрабатывает парсинг, chunking, embedding.
         """
         pass
-    
+
     @abstractmethod
     async def upload_document_from_s3(
         self,
@@ -303,7 +303,7 @@ class BaseRAGProvider(ABC):
         Провайдер скачивает из S3 и обрабатывает.
         """
         pass
-    
+
     @abstractmethod
     async def upload_document_from_text(
         self,
@@ -317,7 +317,7 @@ class BaseRAGProvider(ABC):
         Загружает текст напрямую в RAG хранилище.
         """
         pass
-    
+
     @abstractmethod
     async def get_document(
         self,
@@ -326,7 +326,7 @@ class BaseRAGProvider(ABC):
     ) -> Optional[RAGDocument]:
         """Получает информацию о документе"""
         pass
-    
+
     @abstractmethod
     async def list_documents(
         self,
@@ -335,7 +335,7 @@ class BaseRAGProvider(ABC):
     ) -> List[RAGDocument]:
         """Список документов в namespace"""
         pass
-    
+
     @abstractmethod
     async def list_documents_with_filters(
         self,
@@ -345,7 +345,7 @@ class BaseRAGProvider(ABC):
     ) -> List[RAGDocument]:
         """Список документов с фильтрацией по metadata через where clause"""
         pass
-    
+
     @abstractmethod
     async def delete_document(
         self,
@@ -354,7 +354,7 @@ class BaseRAGProvider(ABC):
     ) -> bool:
         """Удаляет документ из namespace"""
         pass
-    
+
     @abstractmethod
     async def search(
         self,
@@ -368,7 +368,7 @@ class BaseRAGProvider(ABC):
         Семантический поиск по документам в namespace.
         """
         pass
-    
+
     async def search_multiple_namespaces(
         self,
         namespace_ids: List[str],
@@ -385,16 +385,16 @@ class BaseRAGProvider(ABC):
             ns_results = await self.search(ns_id, query, limit, **kwargs)
             results[ns_id] = ns_results
             logger.debug(f"Поиск в {ns_id}: найдено {len(ns_results)} результатов")
-        
+
         return results
-    
+
     async def close(self):
         """Закрывает соединения"""
         pass
-    
+
     async def __aenter__(self):
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 

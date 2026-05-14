@@ -298,7 +298,7 @@ def _collect_fastapi_routes(svc_dir: Path) -> set[tuple[str, str]]:
     # раскладка) или в `apps/<svc>/src/api/**` (flows — исторический
     # src-layout). Сканируем оба, если существуют.
     api_roots = [p for p in (svc_dir / "api", svc_dir / "src" / "api") if p.exists()]
-    api_root = api_roots[0] if api_roots else (svc_dir / "api")
+    api_roots[0] if api_roots else (svc_dir / "api")
     main_py = svc_dir / "main.py"
 
     svc_name = svc_dir.name
@@ -583,7 +583,7 @@ def main() -> int:
 
         routes = _collect_fastapi_routes(svc_dir)
         routes_total += len(routes)
-        push_types = _collect_publish_ui_event_types(svc_dir)
+        _collect_publish_ui_event_types(svc_dir)
 
         for path in sorted(ui_resources.rglob("*.js")):
             for rec in _parse_factories(path):

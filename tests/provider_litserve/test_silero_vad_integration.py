@@ -19,7 +19,6 @@ import struct
 
 import pytest
 
-
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.slow,

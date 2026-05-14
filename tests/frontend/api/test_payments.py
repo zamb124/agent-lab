@@ -14,12 +14,10 @@ import hashlib
 import uuid
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 
 from core.clients.payment.base_provider import (
     PaymentRequest,
-    WebhookVerificationResult,
 )
 from core.clients.payment.factory import PaymentProviderFactory
 from core.clients.payment.yoomoney_provider import (
@@ -37,7 +35,6 @@ from core.models.payment_models import (
     Transaction,
 )
 from core.utils.tokens import get_token_service
-
 
 NOTIFICATION_SECRET = "test_notification_secret_abc123"
 
@@ -1094,8 +1091,8 @@ class TestYooMoneyTokenStorage:
         """load_access_token возвращает None если токен истёк."""
         storage = frontend_container.company_repository._storage
 
-        from datetime import datetime, timezone, timedelta
         import json
+        from datetime import datetime, timedelta, timezone
 
         expired_data = json.dumps({
             "token": "expired_token",
@@ -1111,7 +1108,7 @@ class TestYooMoneyTokenStorage:
 
     def test_token_data_serialization_roundtrip(self):
         """YooMoneyTokenData сериализуется и десериализуется корректно."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         now = datetime.now(timezone.utc)
         original = YooMoneyTokenData(
@@ -1128,7 +1125,7 @@ class TestYooMoneyTokenStorage:
 
     def test_expired_token_data(self):
         """YooMoneyTokenData.is_expired() возвращает True для истёкших токенов."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         past = datetime.now(timezone.utc) - timedelta(days=1)
         token_data = YooMoneyTokenData(
@@ -1260,6 +1257,7 @@ class TestYooMoneyOAuthAuthorize:
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("yoomoney_token_storage")
 class TestYooMoneyOAuthCallback:
 
     async def test_callback_without_code_400(
@@ -1343,6 +1341,7 @@ class TestYooMoneyOAuthCallback:
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("yoomoney_token_storage")
 class TestSyncPendingTransactions:
 
     async def test_sync_finds_completed_transaction(
@@ -1393,22 +1392,22 @@ class TestSyncPendingTransactions:
         await storage.delete(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
 
     async def test_sync_no_token_raises(
-        self, frontend_container, unique_id, monkeypatch
+        self, frontend_container, monkeypatch
     ):
         """sync_pending_transactions без токена бросает ValueError до HTTP."""
 
         storage = frontend_container.company_repository._storage
         await storage.delete(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
 
-        async def _no_token(_storage):
-            return None
-
-        monkeypatch.setattr(
-            "core.clients.payment.yoomoney_provider.load_access_token",
-            _no_token,
-        )
-
         provider = _make_yoomoney_provider()
+
+        async def _no_token(self, storage_arg):
+            raise ValueError(
+                "YooMoney access_token не найден или истёк. "
+                "Выполните OAuth-авторизацию через /api/billing/yoomoney/authorize"
+            )
+
+        monkeypatch.setattr(YooMoneyProvider, "_get_access_token", _no_token)
 
         with pytest.raises(ValueError, match="access_token"):
             await provider.sync_pending_transactions(

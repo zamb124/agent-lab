@@ -6,8 +6,9 @@
 """
 
 import pytest
-from core.clients import RedisClient
+
 from apps.flows.config import get_settings
+from core.clients import RedisClient
 
 
 class TestRedisClient:

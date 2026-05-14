@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from core.config.models import ProviderLitserveInfraConfig
 from apps.provider_litserve import shared as pl_shared
+from core.config.models import ProviderLitserveInfraConfig
 
 
 def test_resolve_explicit_cuda():

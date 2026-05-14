@@ -26,7 +26,6 @@ from core.files.models import AudioTranscriptionStatus
 
 from .conftest import FakeSpeechServer
 
-
 pytestmark = pytest.mark.timeout(15)
 
 

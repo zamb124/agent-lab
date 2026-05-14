@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import os
 import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Type, Union
@@ -26,29 +25,29 @@ from apps.flows.src.tools.json_schema_parameters import validate_tool_args_again
 def sanitize_tool_name(name: str) -> str:
     """
     Санитизирует имя tool для совместимости с OpenAI API.
-    
+
     OpenAI требует pattern: ^[a-zA-Z0-9_-]+$
     """
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-    sanitized = re.sub(r'_+', '_', sanitized)
-    sanitized = sanitized.strip('_-')
-    
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+    sanitized = re.sub(r"_+", "_", sanitized)
+    sanitized = sanitized.strip("_-")
+
     if not sanitized:
         sanitized = f"tool_{hashlib.md5(name.encode()).hexdigest()[:8]}"
-    
+
     return sanitized
+
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
-    from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-from apps.flows.src.clients.external_api_client import ExternalAPIClient
-from apps.flows.config import get_settings
-from apps.flows.src.container import get_container
-from core.auth import permission_checker
-from core.logging import get_logger
-from apps.flows.src.mock import get_mock_for_tool
-from apps.flows.src.models.external_api import ExternalAPIConfig
+from apps.flows.config import get_settings  # noqa: E402
+from apps.flows.src.clients.external_api_client import ExternalAPIClient  # noqa: E402
+from apps.flows.src.container import get_container  # noqa: E402
+from apps.flows.src.mock import get_mock_for_tool  # noqa: E402
+from apps.flows.src.models.external_api import ExternalAPIConfig  # noqa: E402
+from core.auth import permission_checker  # noqa: E402
+from core.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -90,6 +89,7 @@ def _external_api_flat_args_schema_to_model(schema: Dict[str, Any]) -> type[Base
 def is_test_mode() -> bool:
     """Проверяет запущены ли тесты."""
     from core.config.testing import is_testing
+
     return is_testing()
 
 
@@ -105,7 +105,7 @@ class BaseTool(ABC):
         - Определить mock_response для простых случаев
         - Или переопределить execute_mock() для сложной логики
         - В тестах (TESTING=true) вызывается execute_mock()
-    
+
     Permissions:
         - permission: группы с доступом к tool
         - При отсутствии прав возвращается строка агенту
@@ -147,52 +147,52 @@ class BaseTool(ABC):
     def _get_user_groups_from_state(self, state: "ExecutionState") -> List[str]:
         """
         Извлекает группы пользователя из state.
-        
+
         Args:
             state: ExecutionState агента
-            
+
         Returns:
             Список групп пользователя
         """
         if state.user_groups:
             return state.user_groups
-        
+
         user = getattr(state, "user", None)
         if isinstance(user, dict) and "grps" in user:
             return user["grps"]
-        
+
         return []
 
     def _check_permission(self, state: "ExecutionState") -> Optional[str]:
         """
         Проверяет permission на tool.
-        
+
         Args:
             state: ExecutionState агента с информацией о пользователе
-            
+
         Returns:
             None если есть доступ, иначе сообщение об ошибке для агента
         """
         config = get_settings()
-        
+
         if not config.auth.permissions_enabled:
             return None
-        
+
         user_groups = self._get_user_groups_from_state(state)
-        
+
         if not permission_checker.check_tool_permission(user_groups, self.permission):
             required = permission_checker.normalize(self.permission)
             return (
                 f"У пользователя нет прав на использование инструмента '{self.name}'. "
                 f"Требуется одна из групп: {', '.join(required)}"
             )
-        
+
         return None
 
     async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
         Единственная точка входа для выполнения tool.
-        
+
         Наследники переопределяют этот метод.
         Для стандартных проверок (permissions, mock) вызывайте _check_before_run().
 
@@ -206,7 +206,7 @@ class BaseTool(ABC):
         check_result = await self._check_before_run(args, state)
         if check_result is not None:
             return check_result
-        
+
         return await self._run_impl(args, state)
 
     async def _check_before_run(
@@ -214,7 +214,7 @@ class BaseTool(ABC):
     ) -> Optional[Any]:
         """
         Проверки перед выполнением: permissions, mock.
-        
+
         Returns:
             Результат если нужно вернуть (permission error, mock), None если продолжить
         """
@@ -222,12 +222,12 @@ class BaseTool(ABC):
         if permission_error:
             logger.warning(f"Tool {self.name}: permission denied")
             return permission_error
-        
+
         mock_result = get_mock_for_tool(state, self.name)
         if mock_result is not None:
             logger.debug(f"Tool {self.name}: using mock from state")
             return mock_result
-        
+
         if is_test_mode() and self._has_custom_mock():
             logger.debug(f"Tool {self.name}: mock mode (TESTING env)")
             return await self.execute_mock(args, state)
@@ -250,9 +250,7 @@ class BaseTool(ABC):
         """
         pass
 
-    async def execute_mock(
-        self, args: Dict[str, Any], state: "ExecutionState"
-    ) -> Any:
+    async def execute_mock(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
         Mock выполнение для тестов.
 
@@ -321,9 +319,7 @@ class CodeTool(BaseTool):
             if not isinstance(parameters_schema, dict):
                 raise ValueError(f"CodeTool '{tool_id}': parameters_schema must be a dict")
             if parameters_schema.get("type") != "object":
-                raise ValueError(
-                    f"CodeTool '{tool_id}': parameters_schema must have type: object"
-                )
+                raise ValueError(f"CodeTool '{tool_id}': parameters_schema must have type: object")
             props = parameters_schema.get("properties")
             if not isinstance(props, dict):
                 raise ValueError(
@@ -368,51 +364,51 @@ class CodeTool(BaseTool):
             validate_tool_args_against_parameters_schema(schema=schema, arguments=dict(full_args))
 
         variables = state.variables
-        
+
         # Резолвим resources из конфига tool
         resources = await self._resolve_resources(state)
-        
+
         SafeEval = get_container().safe_eval_class
         evaluator = SafeEval(variables=variables, resources=resources)
-        
+
         result = await evaluator.execute_tool(self._code, full_args, state)
-        
+
         return result
-    
+
     def _apply_defaults(self, args: Dict[str, Any]) -> Dict[str, Any]:
         """Применяет default значения из args_schema к args."""
         if not self._parameters:
             return args
-        
+
         result = dict(args)
         properties = self._parameters.get("properties", {})
-        
+
         for prop_name, prop_schema in properties.items():
             if prop_name not in result and "default" in prop_schema:
                 result[prop_name] = prop_schema["default"]
-        
+
         return result
 
     async def _resolve_resources(self, state: "ExecutionState") -> Dict[str, Any]:
         """
         Резолвит resources для tool.
-        
+
         Единообразно с нодами — иерархия flow > skill > tool.
         """
         container = get_container()
-        
+
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
             state.flow_config_version,
         )
-        
+
         # Ресурсы tool
         tool_resources = self._resources_config
-        
+
         if not flow_resources and not skill_resources and not tool_resources:
             return {}
-        
+
         return await container.resource_resolver.resolve_for_node(
             flow_resources=flow_resources,
             skill_resources=skill_resources,

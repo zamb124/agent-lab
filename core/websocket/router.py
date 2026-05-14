@@ -51,6 +51,7 @@ from core.logging.attributes import (
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import User
+from core.observability.error_payload import try_merge_platform_error_into_dict
 from core.websocket.auth import get_user_from_websocket
 from core.websocket.command_router import (
     WsCommandError,
@@ -58,7 +59,6 @@ from core.websocket.command_router import (
     dispatch_ws_command,
 )
 from core.websocket.manager import notification_manager
-from core.observability.error_payload import try_merge_platform_error_into_dict
 
 logger = get_logger(__name__)
 

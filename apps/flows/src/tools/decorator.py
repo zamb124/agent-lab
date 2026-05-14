@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Typ
 
 from pydantic import BaseModel
 
-from apps.flows.src.models.enums import ReactToolRole
-from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.mock import get_mock_for_tool
+from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.tool_reference import CallParameter
+from apps.flows.src.tools.base import BaseTool
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -35,10 +35,10 @@ def is_test_mode() -> bool:
 class FunctionTool(BaseTool):
     """
     Tool созданный из функции через декоратор @tool.
-    
+
     Хранит ссылку на оригинальную функцию для извлечения кода.
     """
-    
+
     def __init__(
         self,
         func: Callable,
@@ -63,29 +63,29 @@ class FunctionTool(BaseTool):
         self.react_role = react_role
         self.args_schema = args_schema
         self._parameters = {} if args_schema is not None else self._extract_parameters(func)
-        
+
         self.cost = cost
         self.billing_name = billing_name or name
         self.free_for_plans = free_for_plans or []
         self.tariff_limits = tariff_limits or {}
-    
+
     def _extract_parameters(self, func: Callable) -> Dict[str, CallParameter]:
         """Извлекает параметры из type hints функции."""
         try:
             hints = get_type_hints(func)
         except Exception:
             hints = {}
-        
+
         sig = inspect.signature(func)
         params = {}
-        
+
         for param_name, param in sig.parameters.items():
             # Пропускаем state - это служебный параметр
             if param_name == "state":
                 continue
-            
+
             param_type = hints.get(param_name, str)
-            
+
             # Определяем тип для JSON schema
             type_mapping = {
                 str: "string",
@@ -96,20 +96,20 @@ class FunctionTool(BaseTool):
                 list: "array",
             }
             type_name = type_mapping.get(param_type, "string")
-            
+
             description = f"Параметр {param_name}"
-            
+
             # Проверяем обязательность параметра
             required = param.default is inspect.Parameter.empty
-            
+
             params[param_name] = CallParameter(
                 type=type_name,
                 description=description,
                 required=required,
             )
-        
+
         return params
-    
+
     @property
     def parameters(self) -> Dict[str, Any]:
         """JSON схема параметров для LLM."""
@@ -130,11 +130,11 @@ class FunctionTool(BaseTool):
                 required.append(name)
 
         return {"type": "object", "properties": properties, "required": required}
-    
+
     async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
         Единственная точка входа для выполнения tool.
-        
+
         Проверяет mock в порядке:
         1. state mock - из metadata агента
         2. mock_response из декоратора + TESTING=true
@@ -143,7 +143,7 @@ class FunctionTool(BaseTool):
         if mock_result is not None:
             logger.debug(f"Tool {self.name}: using mock from state")
             return mock_result
-        
+
         if is_test_mode() and self._mock_response is not None:
             logger.debug(f"Tool {self.name}: using mock from decorator")
             if callable(self._mock_response):
@@ -156,10 +156,10 @@ class FunctionTool(BaseTool):
                     return await result
                 return result
             return self._mock_response
-        
+
         logger.debug(f"Tool {self.name}: real mode")
         return await self._run_impl(args, state)
-    
+
     async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """Выполняет функцию. State передается как ExecutionState."""
         sig = inspect.signature(self._func)
@@ -179,7 +179,7 @@ class FunctionTool(BaseTool):
         if inspect.iscoroutinefunction(self._func):
             return await self._func(**call_kw)
         return self._func(**call_kw)
-    
+
     def get_source_code(self) -> str:
         """Возвращает исходный код функции."""
         return inspect.getsource(self._func)
@@ -201,7 +201,7 @@ def tool(
 ) -> Callable[[F], FunctionTool]:
     """
     Декоратор для создания tool из функции.
-    
+
     Args:
         name: Имя tool (обязательный)
         description: Описание для LLM (обязательный)

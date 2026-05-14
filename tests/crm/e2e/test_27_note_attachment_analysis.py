@@ -17,12 +17,11 @@ LLM (или пропускает нужный), следующий вызов п
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time as _time
 
 import pytest
-
-import asyncio
-import time as _time
 
 
 async def _analyze_note_task(crm_client, headers, note_id, *, fail_on_failed=True, **kwargs):

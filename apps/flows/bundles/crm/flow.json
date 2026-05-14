@@ -187,6 +187,26 @@
         }
       },
       "edges": []
+    },
+    "draft_repair": {
+      "name": "Draft Repair",
+      "description": "Исправление черновика AI-анализа при ошибках схемы атрибутов",
+      "nodes": {
+        "main": {
+          "type": "llm_node",
+          "prompt": "prompts/draft_repair.md",
+          "llm": {
+            "model": "qwen/qwen3.5-397b-a17b",
+            "temperature": 0.1,
+            "provider": "openrouter"
+          },
+          "tools": [],
+          "structured_output": true,
+          "output_schema_file": "schemas/draft_repair.output_schema.json",
+          "output_key": "response"
+        }
+      },
+      "edges": []
     }
   }
 }

@@ -3,8 +3,8 @@
 import pytest
 
 from apps.flows.src.eval.compiler import PythonCompiler
-from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from core.errors import SafeEvalError
 from core.state import ExecutionState

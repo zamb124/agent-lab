@@ -20,7 +20,6 @@ from core.config.models import (
     ProviderLitserveVADModelEntry,
 )
 
-
 pytestmark = pytest.mark.timeout(15)
 
 

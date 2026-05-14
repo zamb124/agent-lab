@@ -11,12 +11,24 @@ SQLAlchemy модели для CRM Service.
 - access_requests: Запросы на доступ
 """
 
-from datetime import datetime, date, timezone
-from typing import Optional, Dict, Any, List
+from datetime import date, datetime, timezone
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint, ForeignKey, Integer, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TSVECTOR
 
 from core.db.models import Base
 
@@ -105,10 +117,10 @@ class CRMEntity(Base):
 class EntityType(Base):
     """
     Типы сущностей CRM с иерархией и промптами.
-    
+
     ВСЕ типы с company_id (ОБЯЗАТЕЛЬНО)!
     Системные типы копируются из шаблонов при создании компании.
-    
+
     Иерархия:
     - note (parent=None)
       - meeting (parent="note")
@@ -118,49 +130,41 @@ class EntityType(Base):
     - contact (бизнес-тип, parent=None)
     - organization (бизнес-тип, parent=None)
     """
-    
+
     __tablename__ = "entity_types"
 
     company_id: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
     namespace: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
     type_id: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
 
-    parent_type_id: Mapped[Optional[str]] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True
-    )
-    
+    parent_type_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+
     prompt: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        comment="Промпт для AI извлечения этого типа"
+        Text, nullable=True, comment="Промпт для AI извлечения этого типа"
     )
-    
+
     required_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
     optional_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
-    
+
     icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    
+
     is_system: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
-        comment="Создан из системного шаблона (но с company_id!)"
+        Boolean, default=False, comment="Создан из системного шаблона (но с company_id!)"
     )
     is_event: Mapped[bool] = mapped_column(Boolean, default=False)
     check_duplicates: Mapped[bool] = mapped_column(Boolean, default=True)
     weight_coefficient: Mapped[float] = mapped_column(Float, default=1.0)
-    
+
     # Публичные поля для этого типа
     public_fields: Mapped[List[str]] = mapped_column(
         JSONB,
         default=["name", "entity_type", "tags"],
         nullable=False,
-        comment="Какие поля показывать при публичном доступе"
+        comment="Какие поля показывать при публичном доступе",
     )
     is_context_anchor: Mapped[bool] = mapped_column(
         Boolean,
@@ -182,12 +186,18 @@ class EntityType(Base):
         server_default="false",
         comment="Сущности этого типа допустимы как голос (автор) заметки",
     )
+    auto_resolve_suggests: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="false",
+        comment="Автоматически разрешать (сливать/создавать) саджесты для этого типа",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    
+
     __table_args__ = (
         Index("idx_entity_types_parent", "parent_type_id"),
         Index("idx_entity_types_system", "is_system"),
@@ -204,64 +214,52 @@ class EntityType(Base):
 class RelationshipType(Base):
     """
     Типы связей между entities с промптами.
-    
+
     ВСЕ типы с company_id (ОБЯЗАТЕЛЬНО)!
     Системные типы (mentions, linked) копируются при создании компании.
-    
+
     Примеры:
     - mentions: AI извлекает упоминания (prompt)
     - linked: явная ссылка через @ (БЕЗ prompt, парсер)
     - works_for: кастомная связь (prompt)
     - manages: кастомная связь с обратной (inverse_type_id)
     """
-    
+
     __tablename__ = "relationship_types"
-    
+
     type_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(
-        String(100),
-        primary_key=True,
-        nullable=False,
-        index=True
+        String(100), primary_key=True, nullable=False, index=True
     )
-    
+
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+
     prompt: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        comment="Промпт для AI извлечения этой связи"
+        Text, nullable=True, comment="Промпт для AI извлечения этой связи"
     )
-    
+
     is_directed: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        comment="Направленная (A→B) или симметричная (A↔B)"
+        Boolean, default=True, comment="Направленная (A→B) или симметричная (A↔B)"
     )
     inverse_type_id: Mapped[Optional[str]] = mapped_column(
-        String(100),
-        nullable=True,
-        comment="ID обратной связи (manages ↔ reports_to)"
+        String(100), nullable=True, comment="ID обратной связи (manages ↔ reports_to)"
     )
-    
+
     icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    
+
     is_system: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
-        comment="Создан из системного шаблона"
+        Boolean, default=False, comment="Создан из системного шаблона"
     )
     weight_default: Mapped[float] = mapped_column(Float, default=1.0)
-    
+
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    
+
     __table_args__ = (Index("idx_relationship_types_system", "is_system"),)
-    
+
     def __repr__(self) -> str:
         return f"<RelationshipType(type_id='{self.type_id}', name='{self.name}', company='{self.company_id}')>"
 
@@ -269,29 +267,33 @@ class RelationshipType(Base):
 class Relationship(Base):
     """
     Граф связей между entities.
-    
+
     ВСЕ связи ТОЛЬКО здесь (нет linked_entity_ids в CRMEntity)!
-    
+
     source_entity_id и target_entity_id - ID сущностей в crm_entities.
     relationship_type - ID типа связи из RelationshipType.
     namespace - изоляция связей по пространствам.
     """
-    
+
     __tablename__ = "relationships"
-    
+
     relationship_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False)
     namespace: Mapped[str] = mapped_column(String(100), nullable=False, default="default")
 
     source_entity_id: Mapped[str] = mapped_column(
-        String(100), ForeignKey("crm_entities.entity_id", ondelete="CASCADE"), nullable=False,
+        String(100),
+        ForeignKey("crm_entities.entity_id", ondelete="CASCADE"),
+        nullable=False,
     )
     target_entity_id: Mapped[str] = mapped_column(
-        String(100), ForeignKey("crm_entities.entity_id", ondelete="CASCADE"), nullable=False,
+        String(100),
+        ForeignKey("crm_entities.entity_id", ondelete="CASCADE"),
+        nullable=False,
     )
 
     relationship_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    
+
     weight: Mapped[float] = mapped_column(Float, default=1.0)
     confidence: Mapped[float] = mapped_column(
         Float,
@@ -300,20 +302,23 @@ class Relationship(Base):
         server_default=text("1.0"),
     )
     attributes: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
-    
+
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc)
+        onupdate=lambda: datetime.now(timezone.utc),
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
-            "company_id", "namespace", "source_entity_id", "target_entity_id", "relationship_type",
+            "company_id",
+            "namespace",
+            "source_entity_id",
+            "target_entity_id",
+            "relationship_type",
             name="uq_relationships_unique_edge",
         ),
         Index("idx_relationships_source", "source_entity_id"),
@@ -321,7 +326,7 @@ class Relationship(Base):
         Index("idx_relationships_source_target", "source_entity_id", "target_entity_id"),
         Index("idx_relationships_namespace", "company_id", "namespace"),
     )
-    
+
     def __repr__(self) -> str:
         return f"<Relationship(id='{self.relationship_id}', type='{self.relationship_type}')>"
 
@@ -329,22 +334,20 @@ class Relationship(Base):
 class CompanyMapping(Base):
     """
     Связь между tenant (company из shared_db) и entity в crm_entities.
-    
+
     При первом входе в CRM автоматически создается entity типа 'organization'
     для компании пользователя с is_owner=True.
     """
-    
+
     __tablename__ = "company_mapping"
-    
+
     company_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     entity_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     is_owner: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
-    
+
     def __repr__(self) -> str:
         return f"<CompanyMapping(company_id='{self.company_id}', entity_id='{self.entity_id}')>"
 
@@ -352,96 +355,74 @@ class CompanyMapping(Base):
 class AccessGrant(Base):
     """
     Универсальные гранты доступа.
-    
+
     Позволяет шарить:
     - Конкретную entity
     - Весь namespace
-    
+
     Кому:
     - public (весь интернет, анонимы)
     - user (конкретный user_id из любой компании)
     - company (вся компания)
     """
-    
+
     __tablename__ = "access_grants"
-    
+
     grant_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    
+
     # Владелец
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     created_by: Mapped[str] = mapped_column(String(100), nullable=False)
-    
+
     # ЧТО шарим
     resource_type: Mapped[str] = mapped_column(
-        String(50), 
-        nullable=False,
-        comment="entity | namespace"
+        String(50), nullable=False, comment="entity | namespace"
     )
     resource_id: Mapped[str] = mapped_column(
-        String(200), 
-        nullable=False, 
-        index=True,
-        comment="entity_id или namespace name"
+        String(200), nullable=False, index=True, comment="entity_id или namespace name"
     )
-    
+
     # КОМУ шарим
     grant_type: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        comment="public | user | company"
+        String(50), nullable=False, comment="public | user | company"
     )
-    
+
     # Для grant_type="user"
     target_user_id: Mapped[Optional[str]] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-        comment="User ID (может быть из любой компании)"
+        String(100), nullable=True, index=True, comment="User ID (может быть из любой компании)"
     )
-    
+
     # Для grant_type="company"
     target_company_id: Mapped[Optional[str]] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-        comment="Company ID"
+        String(100), nullable=True, index=True, comment="Company ID"
     )
-    
+
     # Права
     role: Mapped[str] = mapped_column(
-        String(50),
-        default="viewer",
-        nullable=False,
-        comment="viewer | editor | admin"
+        String(50), default="viewer", nullable=False, comment="viewer | editor | admin"
     )
-    
+
     # Опционально: временный доступ
     expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        comment="Срок действия (опционально)"
+        DateTime(timezone=True), nullable=True, comment="Срок действия (опционально)"
     )
-    
+
     # Опционально: токен для анонимного доступа
     access_token: Mapped[Optional[str]] = mapped_column(
-        String(100),
-        nullable=True,
-        unique=True,
-        comment="Токен для шаринга по ссылке"
+        String(100), nullable=True, unique=True, comment="Токен для шаринга по ссылке"
     )
-    
+
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    
+
     __table_args__ = (
         Index("idx_grants_resource", "resource_type", "resource_id", "company_id"),
         Index("idx_grants_target_user", "target_user_id"),
         Index("idx_grants_target_company", "target_company_id"),
         Index("idx_grants_token", "access_token"),
     )
-    
+
     def __repr__(self) -> str:
         return f"<AccessGrant(grant_id='{self.grant_id}', type='{self.grant_type}', resource='{self.resource_type}:{self.resource_id}')>"
 
@@ -449,12 +430,12 @@ class AccessGrant(Base):
 class AccessRequest(Base):
     """
     Запросы на доступ к скрытым заметкам/сущностям.
-    
+
     Статусы: pending, approved, rejected
     """
-    
+
     __tablename__ = "access_requests"
-    
+
     request_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     requester_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -464,30 +445,28 @@ class AccessRequest(Base):
     resource_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
-    
+
     # Deep copy опции
     include_dependencies: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     max_depth: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    
+
     # Результат
     created_entity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False
+        nullable=False,
     )
-    
+
     __table_args__ = (
         Index("idx_access_requests_owner_status", "owner_id", "status"),
         Index("idx_access_requests_resource", "resource_type", "resource_id"),
     )
-    
+
     def __repr__(self) -> str:
         return f"<AccessRequest(request_id='{self.request_id}', status='{self.status}')>"
 
@@ -587,7 +566,9 @@ class NamespaceTemplateType(Base):
         return list(raw)
 
     def __repr__(self) -> str:
-        return f"<NamespaceTemplateType(template_key='{self.template_key}', type_id='{self.type_id}')>"
+        return (
+            f"<NamespaceTemplateType(template_key='{self.template_key}', type_id='{self.type_id}')>"
+        )
 
 
 class CRMTask(Base):
@@ -595,8 +576,11 @@ class CRMTask(Base):
     Единый журнал фоновых задач CRM: импорт знаний, анализ заметок, AmoCRM и др.
 
     Типо-специфичные поля хранятся в data JSONB.
-    task_type: 'knowledge_import' | 'note_analyze' | 'daily_summary' | 'period_summary'
-      | 'namespace_integration_job'
+    task_type: 'knowledge_import' | 'note_analyze' | 'note_analysis_draft_repair'
+      | 'note_markdown_format' | 'daily_summary' | 'period_summary'
+      | 'namespace_integration_job' | 'namespace_suggests_tick'
+      | 'scheduled_namespace_integration_sync' | 'reconcile_daily_summary_tick'
+      | 'reembed_stale_documents_tick'
     """
 
     __tablename__ = "crm_tasks"
@@ -632,9 +616,63 @@ class CRMTask(Base):
         nullable=False,
     )
 
-    __table_args__ = (
-        Index("ix_crm_tasks_company_ns_status", "company_id", "namespace", "status"),
-    )
+    __table_args__ = (Index("ix_crm_tasks_company_ns_status", "company_id", "namespace", "status"),)
 
     def __repr__(self) -> str:
         return f"<CRMTask(task_id='{self.task_id}', task_type='{self.task_type}', status='{self.status}')>"
+
+
+class CRMSuggest(Base):
+    """
+    Предложение (suggest) для пользователя: найден дубликат или пропущенная сущность.
+    Создается фоновыми процессами.
+    """
+
+    __tablename__ = "crm_suggests"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    namespace: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    suggest_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, comment="'duplicate' или 'missed_entity'"
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="pending",
+        index=True,
+        comment="'pending', 'resolved', 'dismissed', 'auto_resolved'",
+    )
+
+    target_entity_ids: Mapped[List[str]] = mapped_column(
+        JSONB,
+        default=list,
+        nullable=False,
+        comment="ID связанных сущностей: дубли или исходная заметка",
+    )
+    payload: Mapped[Dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        nullable=False,
+        comment="Данные для разрешения: EntityMergeRequest или AIAnalysisDraft",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_crm_suggests_company_ns_status", "company_id", "namespace", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CRMSuggest(id='{self.id}', type='{self.suggest_type}', status='{self.status}')>"

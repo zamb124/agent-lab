@@ -6,7 +6,6 @@ import json
 import uuid
 
 import pytest
-from pydantic import BaseModel, ConfigDict, Field
 from a2a.types import (
     Artifact,
     Message,
@@ -19,6 +18,7 @@ from a2a.types import (
     TextPart,
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
+from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.channels.a2a import _build_task_from_events
 from core.clients.llm import MockLLM, setup_mock_responses

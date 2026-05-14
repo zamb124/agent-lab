@@ -4,8 +4,9 @@
 User Story: AI автоматически анализирует текст, выделяет проекты, людей, задачи и суммаризирует.
 """
 
-import pytest
 import json
+
+import pytest
 
 
 async def _analyze_note(
@@ -18,7 +19,8 @@ async def _analyze_note(
 
     Возвращает (task_row, ai_analysis_draft).
     """
-    import asyncio, time
+    import asyncio
+    import time
     body = {
         "note_id": note_id,
         "check_duplicates": False,
@@ -60,7 +62,7 @@ _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 @pytest.mark.real_taskiq
 class TestAIAnalysis:
     """AI извлечение entities, relationships и задач"""
-    
+
     @pytest.mark.asyncio
     async def test_ai_extract_note_with_entities(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI извлекает note + entities + relationships из текста"""
@@ -116,7 +118,7 @@ class TestAIAnalysis:
                 "attachment_summaries": [],
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "Анализ встречи",
@@ -124,20 +126,20 @@ class TestAIAnalysis:
             "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
-        
+
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         assert result["note"] is not None
         assert result["note"]["entity_type"] == "note"
         assert result["note"]["entity_subtype"] is None
-        
+
         assert len(result["entities"]) == 2
         entity_types = [e["entity_type"] for e in result["entities"]]
         assert "task" in entity_types
-        
+
         assert len(result["relationships"]) >= 2
         for rel in result["relationships"]:
             assert rel.get("draft_relationship_id")
@@ -193,7 +195,7 @@ class TestAIAnalysis:
                 "attachment_summaries": [],
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "План задач",
@@ -201,30 +203,30 @@ class TestAIAnalysis:
             "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
-        
+
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         tasks = [e for e in result["entities"] if e["entity_type"] == "task"]
         assert len(tasks) == 3
-        
+
         urgent_task = next((t for t in tasks if t["priority"] == "urgent"), None)
         assert urgent_task is not None
         assert urgent_task["due_date"] == "2024-01-10"
         assert "ivan" in urgent_task["assignees"]
-    
+
     @pytest.mark.asyncio
     async def test_ai_summarize_text(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI суммаризирует длинный текст"""
-        long_text = """Сегодня была продуктивная встреча с командой. 
+        long_text = """Сегодня была продуктивная встреча с командой.
         Мы обсудили текущий прогресс по проекту X, который находится на 75% готовности.
         Иван предложил нанять дополнительного разработчика для ускорения работы.
         Петр согласился помочь с backend частью. Анна возьмет на себя тестирование.
         Следующая встреча назначена на следующую неделю.
         Основные договоренности: начать разработку новой фичи, провести код-ревью, подготовить документацию."""
-        
+
         await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
@@ -246,7 +248,7 @@ class TestAIAnalysis:
                 "attachment_summaries": [],
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "Встреча команды (исходный)",
@@ -254,18 +256,18 @@ class TestAIAnalysis:
             "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
-        
+
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id)
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         note = result["note"]
         assert note is not None
         assert len(note["description"]) < len(long_text)
         description_lower = note["description"].lower()
         assert "проект x" in description_lower or "проекта x" in description_lower
-    
+
     @pytest.mark.asyncio
     async def test_ai_extract_with_mentioned_entities(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI учитывает явно упомянутые entities через @"""
@@ -305,7 +307,7 @@ class TestAIAnalysis:
                 "attachment_summaries": [],
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "Звонок",
@@ -313,12 +315,12 @@ class TestAIAnalysis:
             "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
-        
+
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id, mentioned_entity_ids=[existing_id])
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         relationships = result["relationships"]
         if relationships:
             rel0 = relationships[0]
@@ -327,7 +329,7 @@ class TestAIAnalysis:
         else:
             known_map = result.get("known_entity_id_map") or {}
             assert existing_id in known_map.values(), f"Expected mentioned entity mapping, got: {result}"
-    
+
     @pytest.mark.asyncio
     async def test_ai_extract_specific_entity_types(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI извлекает только указанные типы entities"""
@@ -350,7 +352,7 @@ class TestAIAnalysis:
                 "attachment_summaries": [],
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "Встреча (типы)",
@@ -358,15 +360,15 @@ class TestAIAnalysis:
             "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
-        
+
         _, response = await _analyze_note(crm_client, auth_headers_system, note_id, extract_entity_types=["task"])
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         all_tasks = all(e["entity_type"] == "task" for e in result["entities"])
         assert all_tasks
-    
+
     @pytest.mark.asyncio
     async def test_ai_extract_custom_relationship_types(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """AI извлекает кастомные типы связей"""
@@ -376,7 +378,7 @@ class TestAIAnalysis:
             "prompt": "Ищи кто над чем работает",
             "is_directed": True
         }, headers=auth_headers_system)
-        
+
         await mock_llm_redis([{
             "type": "text",
             "content": json.dumps({
@@ -406,7 +408,7 @@ class TestAIAnalysis:
                 "attachment_summaries": [],
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": "Распределение",
@@ -414,13 +416,13 @@ class TestAIAnalysis:
             "namespace": "default",
         }, headers=auth_headers_system)
         note_id = note_resp.json()["entity_id"]
-        
+
         _, response = await _analyze_note(
             crm_client, auth_headers_system, note_id,
             extract_relationship_types=[f"works_on_{unique_id}"],
         )
         result = response.json()
-        
+
         custom_rel = next(
             (r for r in result["relationships"] if r["relationship_type"] == f"works_on_{unique_id}"),
             None

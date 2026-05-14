@@ -2,12 +2,12 @@
 Репозиторий для работы с конфигурациями встраиваемых виджетов.
 """
 
-from core.logging import get_logger
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import List, Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
+from core.logging import get_logger
 from core.models.embed_models import EmbedConfig
 
 logger = get_logger(__name__)
@@ -15,10 +15,10 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
     """
     Репозиторий для работы с конфигурациями встраиваемых виджетов.
     is_global=False - виджеты изолированы по компаниям.
-    
+
     Ключи: company:{company_id}:embed_config:{embed_id}
     """
-    
+
     is_global = False
 
     def __init__(self, storage: Storage):
@@ -71,7 +71,7 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
                 logger.error(f"Ошибка парсинга {key}: {e}")
                 continue
         return entities
-    
+
     async def increment_usage(self, embed_id: str) -> None:
         """Увеличение счетчика использований виджета"""
         config = await self.get(embed_id)

@@ -5,18 +5,18 @@ FlowFactory - создание flow из БД.
 import copy
 from typing import Any, Dict, List, Optional
 
-from apps.flows.src.runtime import Flow
 from apps.flows.src.container import get_container
 from apps.flows.src.db import FlowRepository
 from apps.flows.src.models import BranchConfig, FlowConfig
-from apps.flows.src.models.flow_config import Edge, FlowVariableConfig
 from apps.flows.src.models.enums import MergeMode
+from apps.flows.src.models.flow_config import Edge, FlowVariableConfig
+from apps.flows.src.runtime import Flow
+from apps.flows.src.services.bundle_node_repair import repair_effective_nodes_from_bundle
 from apps.flows.src.utils.merge import deep_merge
 from apps.flows.src.variables import VariablesService
-from core.variables import VarResolver
 from core.compiler import GraphCompiler
 from core.logging import get_logger
-from apps.flows.src.services.bundle_node_repair import repair_effective_nodes_from_bundle
+from core.variables import VarResolver
 
 logger = get_logger(__name__)
 
@@ -223,7 +223,7 @@ class FlowFactory:
                 variables_dict[key] = value.value
             else:
                 variables_dict[key] = value
-        
+
         result = {
             "entry": config.entry,
             "nodes": copy.deepcopy(config.nodes),
@@ -266,7 +266,7 @@ class FlowFactory:
                     branch_vars[key] = value.value
                 else:
                     branch_vars[key] = value
-            
+
             if branch.variables_mode == MergeMode.MERGE:
                 result["variables"].update(branch_vars)
             else:
@@ -317,14 +317,14 @@ class FlowFactory:
             value=variables,
             company_variables=company_variables,
         )
-        
+
         result = {}
         for key, value in resolved.items():
             if isinstance(value, dict) and "value" in value:
                 result[key] = value["value"]
             else:
                 result[key] = value
-        
+
         return result
 
     def _resolve_flow_variables(

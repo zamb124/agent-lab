@@ -20,7 +20,6 @@ import asyncio
 import pytest
 
 from core.utils.tokens import get_token_service
-
 from tests.sync.api._helpers import (
     create_topic_channel_via_http,
     seed_namespace_via_repo,

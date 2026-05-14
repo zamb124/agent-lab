@@ -8,7 +8,7 @@ import asyncio
 from typing import Any, Optional
 
 from apps.browser.engine.types import ContextSignature
-from apps.browser.stealth.playwright_stealth import apply_stealth_to_context, build_stealth_plan
+from apps.browser.stealth.playwright_stealth import apply_stealth_to_context
 
 
 def _playwright_transport_gone(exc: BaseException) -> bool:

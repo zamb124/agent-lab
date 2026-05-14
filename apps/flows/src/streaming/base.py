@@ -11,12 +11,12 @@ from a2a.types import (
     DataPart,
     Message,
     Part,
+    Role,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
-    Role,
 )
 
 from core.state import ExecutionState
@@ -31,16 +31,16 @@ StreamEvent = Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent]
 class BaseEmitter(ABC):
     """
     Базовый класс для публикации событий.
-    
+
     Реализации:
     - RedisEmitter: публикация в Redis Pub/Sub
     - InMemoryEmitter: хранение в памяти (для внешних агентов)
     """
-    
+
     def __init__(self, state: ExecutionState):
         self.state = state
         self._span_context = None
-    
+
     def _create_message(
         self, text: str, metadata: Optional[Dict[str, Any]] = None
     ) -> Message:
@@ -51,7 +51,7 @@ class BaseEmitter(ABC):
             parts=[Part(root=TextPart(text=text))],
             metadata=metadata,
         )
-    
+
     async def emit_text(
         self,
         text: str,
@@ -66,7 +66,7 @@ class BaseEmitter(ABC):
             name=artifact_name,
             parts=[TextPart(text=text)],
         )
-        
+
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
@@ -74,7 +74,7 @@ class BaseEmitter(ABC):
             append=append,
             last_chunk=last_chunk,
         )
-        
+
         await self._publish(event)
 
     async def emit_reasoning(self, text: str) -> None:
@@ -98,15 +98,15 @@ class BaseEmitter(ABC):
                 "tool_call_id": tool_call_id,
             })],
         )
-        
+
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
         )
-        
+
         await self._publish(event)
-    
+
     async def emit_tool_result(
         self,
         tool_name: str,
@@ -123,13 +123,13 @@ class BaseEmitter(ABC):
                 "tool_call_id": tool_call_id,
             })],
         )
-        
+
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
         )
-        
+
         await self._publish(event)
 
     async def emit_complete(
@@ -148,9 +148,9 @@ class BaseEmitter(ABC):
             ),
             final=True,
         )
-        
+
         await self._publish(event)
-    
+
     async def emit_interrupt(
         self,
         interrupt: "InterruptData",
@@ -178,7 +178,7 @@ class BaseEmitter(ABC):
         )
 
         await self._publish(event)
-    
+
     async def emit_cancelled(self) -> None:
         """Публикует событие отмены выполнения."""
         event = TaskStatusUpdateEvent(
@@ -207,9 +207,9 @@ class BaseEmitter(ABC):
             ),
             final=True,
         )
-        
+
         await self._publish(event)
-    
+
     async def emit(self, event: Any) -> None:
         """Публикует произвольное событие (StreamEvent от runner)."""
         await self._publish(event)
@@ -229,13 +229,13 @@ class BaseEmitter(ABC):
                 "node_type": node_type,
             })],
         )
-        
+
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
         )
-        
+
         await self._publish(event)
 
     async def emit_node_complete(
@@ -253,13 +253,13 @@ class BaseEmitter(ABC):
                 "result_preview": result_preview[:200],
             })],
         )
-        
+
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
         )
-        
+
         await self._publish(event)
 
     async def emit_node_error(
@@ -277,13 +277,13 @@ class BaseEmitter(ABC):
                 "error": error[:500],
             })],
         )
-        
+
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
         )
-        
+
         await self._publish(event)
 
     async def emit_edge_executed(
@@ -373,13 +373,13 @@ class BaseEmitter(ABC):
             name=name,
             parts=[DataPart(data={"content": data})],
         )
-        
+
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
             context_id=self.state.context_id,
             artifact=artifact,
         )
-        
+
         await self._publish(event)
 
     async def emit_ui_event(
@@ -429,7 +429,7 @@ class BaseEmitter(ABC):
     ) -> None:
         """
         Публикует событие срабатывания breakpoint.
-        
+
         Использует TaskState.input_required (ждём "Continue" от пользователя).
         Breakpoint отличается от interrupt по metadata.breakpoint=true.
         """
@@ -459,24 +459,24 @@ class BaseEmitter(ABC):
 class BaseSubscriber(ABC):
     """
     Базовый класс для подписки на события.
-    
+
     Реализации:
     - RedisSubscriber: подписка на Redis Pub/Sub
     - InMemorySubscriber: чтение из памяти
     """
-    
+
     @abstractmethod
     async def subscribe(
-        self, 
-        task_id: str, 
+        self,
+        task_id: str,
         timeout: float = 300.0,
     ) -> AsyncIterator[StreamEvent]:
         """Подписывается на события задачи."""
         pass
-    
+
     async def collect(
-        self, 
-        task_id: str, 
+        self,
+        task_id: str,
         timeout: float = 300.0,
     ) -> List[StreamEvent]:
         """Собирает все события до финального."""

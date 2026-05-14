@@ -12,15 +12,14 @@
 4. auth_token_company2_user2 / auth_headers_company2_user2 — company2, member
 """
 
+import uuid
 from contextlib import contextmanager
 
-import pytest
 import pytest_asyncio
-import uuid
 
 from core.context import clear_context, set_context
 from core.models.context_models import Context
-from core.models.identity_models import User, Company
+from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 
 
@@ -28,12 +27,12 @@ from core.utils.tokens import get_token_service
 async def auth_token_system(frontend_container):
     """
     Создает основного пользователя с компанией "system" для всей сессии тестов.
-    
+
     scope="session" - токен создается один раз на все тесты.
     """
     user_id = f"test_user_system_{uuid.uuid4().hex[:8]}"
     company_id = "system"
-    
+
     # Создаем или получаем компанию system
     existing_company = await frontend_container.company_repository.get(company_id)
     if not existing_company:
@@ -48,7 +47,7 @@ async def auth_token_system(frontend_container):
         if user_id not in existing_company.members:
             existing_company.members[user_id] = ["owner", "admin"]
             await frontend_container.company_repository.set(existing_company)
-    
+
     # Создаем пользователя
     user = User(
         user_id=user_id,
@@ -58,10 +57,10 @@ async def auth_token_system(frontend_container):
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
-    
+
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
-    
+
     yield token
 
 
@@ -81,7 +80,7 @@ async def system_user_id(auth_token_system):
 async def auth_headers_system(auth_token_system):
     """
     Заголовки для основного пользователя системной компании.
-    
+
     Usage:
         async def test_something(crm_client, auth_headers_system):
             response = await crm_client.get("/crm/api/v1/entities/", headers=auth_headers_system)
@@ -93,7 +92,7 @@ async def auth_headers_system(auth_token_system):
 async def ws_cookie_system(auth_token_system, system_user_id):
     """
     Cookie для WebSocket подключения системного пользователя.
-    
+
     Usage:
         async with websockets.connect(ws_url, additional_headers=ws_cookie_system) as ws:
             ...
@@ -111,7 +110,7 @@ async def auth_token_system_user2(frontend_container):
     """
     user_id = f"test_user_system2_{uuid.uuid4().hex[:8]}"
     company_id = "system"
-    
+
     # Компания system уже должна существовать (создана в auth_token_system)
     existing_company = await frontend_container.company_repository.get(company_id)
     if existing_company:
@@ -127,7 +126,7 @@ async def auth_token_system_user2(frontend_container):
             members={user_id: ["member"]},
         )
         await frontend_container.company_repository.set(company)
-    
+
     # Создаем второго пользователя
     user = User(
         user_id=user_id,
@@ -137,10 +136,10 @@ async def auth_token_system_user2(frontend_container):
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
-    
+
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
-    
+
     yield token
 
 
@@ -148,13 +147,13 @@ async def auth_token_system_user2(frontend_container):
 async def auth_headers_system_user2(auth_token_system_user2):
     """
     Заголовки для второго пользователя системной компании.
-    
+
     Usage:
         async def test_same_company_access(crm_client, auth_headers_system, auth_headers_system_user2):
             # Создаем entity как user1
             resp1 = await crm_client.post("/crm/api/v1/entities/", json={...}, headers=auth_headers_system)
             entity_id = resp1.json()["entity_id"]
-            
+
             # Проверяем доступ как user2 из той же компании
             resp2 = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system_user2)
     """
@@ -183,7 +182,7 @@ async def auth_token_company2(frontend_container):
     """
     user_id = f"test_user_company2_{uuid.uuid4().hex[:8]}"
     company_id = "company2"
-    
+
     # Создаем компанию company2
     existing_company = await frontend_container.company_repository.get(company_id)
     if not existing_company:
@@ -198,7 +197,7 @@ async def auth_token_company2(frontend_container):
         if user_id not in existing_company.members:
             existing_company.members[user_id] = ["owner", "admin"]
             await frontend_container.company_repository.set(existing_company)
-    
+
     # Создаем пользователя
     user = User(
         user_id=user_id,
@@ -208,10 +207,10 @@ async def auth_token_company2(frontend_container):
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
-    
+
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
-    
+
     yield token
 
 
@@ -219,16 +218,16 @@ async def auth_token_company2(frontend_container):
 async def auth_headers_company2(auth_token_company2):
     """
     Заголовки для пользователя из другой компании (company2).
-    
+
     Usage:
         async def test_cross_company_access(crm_client, auth_headers_system, auth_headers_company2):
             # Создаем public entity как system user
             resp1 = await crm_client.post("/crm/api/v1/entities/", json={...}, headers=auth_headers_system)
             entity_id = resp1.json()["entity_id"]
-            
+
             # Делаем public
             await crm_client.post(f"/crm/api/v1/entity-grants/{entity_id}/public", headers=auth_headers_system)
-            
+
             # Проверяем доступ как user из company2
             resp2 = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_company2)
     """
@@ -243,7 +242,7 @@ async def auth_token_company2_user2(frontend_container):
     """
     user_id = f"test_user_company2_u2_{uuid.uuid4().hex[:8]}"
     company_id = "company2"
-    
+
     # Компания company2 уже должна существовать (создана в auth_token_company2)
     existing_company = await frontend_container.company_repository.get(company_id)
     if existing_company:
@@ -259,7 +258,7 @@ async def auth_token_company2_user2(frontend_container):
             members={user_id: ["member"]},
         )
         await frontend_container.company_repository.set(company)
-    
+
     # Создаем второго пользователя
     user = User(
         user_id=user_id,
@@ -269,10 +268,10 @@ async def auth_token_company2_user2(frontend_container):
         active_company_id=company_id
     )
     await frontend_container.user_repository.set(user)
-    
+
     token_service = get_token_service()
     token = token_service.create_token(user_id, company_id=company_id)
-    
+
     yield token
 
 
@@ -280,13 +279,13 @@ async def auth_token_company2_user2(frontend_container):
 async def auth_headers_company2_user2(auth_token_company2_user2):
     """
     Заголовки для второго пользователя из компании company2.
-    
+
     Usage:
         async def test_company2_internal_access(crm_client, auth_headers_company2, auth_headers_company2_user2):
             # Создаем entity как company2 user1
             resp1 = await crm_client.post("/crm/api/v1/entities/", json={...}, headers=auth_headers_company2)
             entity_id = resp1.json()["entity_id"]
-            
+
             # Проверяем доступ как company2 user2
             resp2 = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_company2_user2)
     """

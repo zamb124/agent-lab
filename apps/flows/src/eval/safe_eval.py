@@ -7,7 +7,7 @@ Legacy wrapper для обратной совместимости.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
@@ -16,32 +16,6 @@ from apps.flows.src.runners.python import PythonCodeRunner
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-from apps.flows.src.eval.constants import (
-    ALLOWED_BUILTINS,
-    ALLOWED_IMPORT_ROOTS,
-    FORBIDDEN_IMPORT_ROOTS,
-    FUTURE_IMPORT_NAMES,
-)
-from apps.flows.src.eval.state_utils import (
-    add_agent_message,
-    add_user_message,
-    ask_user,
-    deep_copy_state,
-    extract_json,
-    get_files,
-    get_messages,
-    get_nested,
-    get_tool_result,
-    get_user,
-    merge_state,
-    set_nested,
-)
-from apps.flows.src.eval.wrappers import (
-    HttpxModule,
-    SafeChannel,
-    SafeContext,
-    SafeLLMClient,
-)
 
 
 class SafeEval:

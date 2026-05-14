@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from typing import Any, Mapping
 
+from apps.flows.src.eval.shim_registry import strict_shim_import_roots
 from core.errors import SafeEvalError
 from core.inline_python_eval_policy import (
     ALLOWED_IMPORT_ROOTS,
@@ -12,7 +13,6 @@ from core.inline_python_eval_policy import (
     FUTURE_IMPORT_NAMES,
     import_module_top_level,
 )
-from apps.flows.src.eval.shim_registry import strict_shim_import_roots
 
 _MSG_IMPORT_PLATFORM_FORBIDDEN = (
     "В коде ноды нельзя подключать внутренние модули платформы через import. "

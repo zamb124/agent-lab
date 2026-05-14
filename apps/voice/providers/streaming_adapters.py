@@ -27,7 +27,6 @@ from core.clients.vad_client import BaseVADClient
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 

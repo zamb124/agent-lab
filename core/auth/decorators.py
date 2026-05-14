@@ -3,7 +3,6 @@
 """
 
 from functools import wraps
-from hmac import compare_digest
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -24,9 +23,9 @@ def require_admin(handler):
 
     @wraps(handler)
     async def wrapper(request: Request, *args, **kwargs):
-        
+
         settings = get_settings()
-        
+
         # Проверяем, что пользователь авторизован
         if not hasattr(request.state, "user") or request.state.user is None:
             logger.warning("require_admin: no user in request.state")

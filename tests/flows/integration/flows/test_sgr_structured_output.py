@@ -5,7 +5,7 @@ SGR: LlmNode с Structured Output управляет flow через edges по 
 
 Flow:
     AgentSO -> (state.next_action == "tool1") -> CodeNode
-           -> (state.next_action == "tool2") -> CodeNode  
+           -> (state.next_action == "tool2") -> CodeNode
            -> (state.next_action == "tool3") -> RemoteFlowNode
            -> (state.next_action == "done") -> ExitNode
 
@@ -16,14 +16,13 @@ Flow:
 
 import pytest
 
+from apps.flows.src.models import Edge
 from apps.flows.src.runtime import Flow
 from apps.flows.src.runtime.nodes import (
+    CodeNode,
     LlmNode,
-    CodeNode,
-    CodeNode,
     RemoteFlowNode,
 )
-from apps.flows.src.models import Edge
 from core.state import ExecutionState
 
 
@@ -44,7 +43,7 @@ def make_state(**kwargs) -> ExecutionState:
 class TestSGRWithStructuredOutput:
     """
     Тесты SGR паттерна: LlmNode с SO управляет routing через state.
-    
+
     AgentSO определяет next_action через Structured Output.
     Edges проверяют state.next_action и направляют к нужной ноде.
     После каждого action управление возвращается к AgentSO.
@@ -54,7 +53,7 @@ class TestSGRWithStructuredOutput:
     async def test_sgr_full_flow_tool_function_exit(self, mock_llm_with_queue):
         """
         Полный SGR flow: AgentSO -> tool1 -> AgentSO -> tool2(function) -> AgentSO -> done(exit).
-        
+
         Проверяет:
         1. AgentSO с SO корректно устанавливает next_action
         2. Conditional edges работают по state.next_action
@@ -70,7 +69,7 @@ class TestSGRWithStructuredOutput:
             {"type": "structured_output", "data": {"next_action": "tool2", "reason": "Need to process data"}},
             {"type": "structured_output", "data": {"next_action": "done", "reason": "All done", "final_result": "Success"}},
         ])
-        
+
         # AgentSO - LlmNode с Structured Output
         agent_so = LlmNode(
             node_id="agent_so",
@@ -91,7 +90,7 @@ Return JSON with next_action and reason.""",
                 }
             }
         )
-        
+
         # Tool1 - CodeNode (CodeTool)
         tool1_node = CodeNode(
             node_id="tool1",
@@ -103,7 +102,7 @@ async def execute(args, state):
                 "input_mapping": {},
             },
         )
-        
+
         # Tool2 - CodeNode: доступ строго через state.field
         tool2_code = """
 async def run(state):
@@ -115,7 +114,7 @@ async def run(state):
             node_id="tool2",
             config={"code": tool2_code},
         )
-        
+
         # Done - CodeNode (exit type): строгий доступ к полям
         done_code = """
 async def run(state):
@@ -128,7 +127,7 @@ async def run(state):
             node_id="done",
             config={"code": done_code, "type": "exit"}
         )
-        
+
         # Создаем Agent с conditional edges
         flow = Flow(
             flow_id="sgr_test",
@@ -153,11 +152,11 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         # Запускаем flow
         state = make_state(content="Start the workflow")
         result = await flow.run(state)
-        
+
         # Проверяем что все шаги выполнились
         assert result.tool1_result == "Data fetched successfully"
         assert result.data == [1, 2, 3]
@@ -171,9 +170,9 @@ async def run(state):
     async def test_sgr_with_remote_flow(self, mock_llm_with_queue, test_a2a_sample):
         """
         SGR flow с RemoteFlowNode.
-        
+
         AgentSO -> tool1 -> AgentSO -> remote_flow -> AgentSO -> done
-        
+
         RemoteAgent - реальный test-a2a-agent из docker-compose-test.yaml.
         """
         # Настраиваем MockLLM
@@ -182,7 +181,7 @@ async def run(state):
             {"type": "structured_output", "data": {"next_action": "remote", "reason": "Process remotely"}},
             {"type": "structured_output", "data": {"next_action": "done", "reason": "Complete", "summary": "All OK"}},
         ])
-        
+
         # AgentSO
         agent_so = LlmNode(
             node_id="agent_so",
@@ -200,7 +199,7 @@ async def run(state):
                 }
             }
         )
-        
+
         # Tool1
         tool1_node = CodeNode(
             node_id="tool1",
@@ -209,7 +208,7 @@ async def run(state):
                 "input_mapping": {},
             },
         )
-        
+
         # RemoteAgent - реальный сервер из docker-compose
         remote_node = RemoteFlowNode(
             node_id="remote",
@@ -219,7 +218,7 @@ async def run(state):
                 "headers": {"X-API-Key": "test-api-key-12345"},
             }
         )
-        
+
         # Done - строгий доступ к полям
         done_node = CodeNode(
             node_id="done",
@@ -231,7 +230,7 @@ async def run(state):
                 "type": "exit"
             }
         )
-        
+
         flow = Flow(
             flow_id="sgr_remote_test",
             name="SGR Remote Test",
@@ -252,10 +251,10 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         state = make_state(content="Start remote flow")
         result = await flow.run(state)
-        
+
         # Проверки
         assert result.tool1_done is True
         assert result.payload == "data123"
@@ -269,7 +268,7 @@ async def run(state):
     async def test_sgr_loop_with_counter(self, mock_llm_with_queue):
         """
         SGR с циклом: AgentSO вызывает action несколько раз пока не достигнет условия.
-        
+
         AgentSO проверяет counter и решает: increment или done.
         """
         # MockLLM: 3 раза increment, потом done
@@ -279,7 +278,7 @@ async def run(state):
             {"type": "structured_output", "data": {"next_action": "increment", "reason": "Counter=2, need 3"}},
             {"type": "structured_output", "data": {"next_action": "done", "reason": "Counter=3, done!"}},
         ])
-        
+
         agent_so = LlmNode(
             node_id="agent_so",
             config={
@@ -295,7 +294,7 @@ async def run(state):
                 }
             }
         )
-        
+
         # Increment: инициализируем counter и history в начальном state
         increment_node = CodeNode(
             node_id="increment",
@@ -308,7 +307,7 @@ async def run(state):
 """
             }
         )
-        
+
         # Done: строгий доступ
         done_node = CodeNode(
             node_id="done",
@@ -320,7 +319,7 @@ async def run(state):
                 "type": "exit"
             }
         )
-        
+
         flow = Flow(
             flow_id="sgr_loop",
             name="SGR Loop Test",
@@ -338,11 +337,11 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         # Начальный state с counter и history
         state = make_state(counter=0, history=[])
         result = await flow.run(state)
-        
+
         # Проверяем что цикл выполнился 3 раза
         assert result.counter == 3
         assert result.history == ["inc_0", "inc_1", "inc_2"]
@@ -352,7 +351,7 @@ async def run(state):
     async def test_sgr_conditional_branching(self, mock_llm_with_queue):
         """
         SGR с условным ветвлением: AgentSO выбирает путь на основе данных.
-        
+
         Сценарий:
         - AgentSO анализирует input
         - Если "urgent" -> fast_track
@@ -364,7 +363,7 @@ async def run(state):
             {"type": "structured_output", "data": {"next_action": "fast_track", "priority": "HIGH"}},
             {"type": "structured_output", "data": {"next_action": "done", "result": "Fast processed"}},
         ])
-        
+
         agent_so = LlmNode(
             node_id="agent_so",
             config={
@@ -381,7 +380,7 @@ async def run(state):
                 }
             }
         )
-        
+
         # fast_track: строгий доступ к state.priority
         fast_track = CodeNode(
             node_id="fast_track",
@@ -392,7 +391,7 @@ async def run(state):
 """
             }
         )
-        
+
         standard_track = CodeNode(
             node_id="standard_track",
             config={
@@ -402,7 +401,7 @@ async def run(state):
 """
             }
         )
-        
+
         # done: строгий доступ к state.processed_by и state.result
         done_node = CodeNode(
             node_id="done",
@@ -414,7 +413,7 @@ async def run(state):
                 "type": "exit"
             }
         )
-        
+
         flow = Flow(
             flow_id="sgr_branch",
             name="SGR Branching",
@@ -435,10 +434,10 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         state = make_state(content="URGENT: Fix critical bug")
         result = await flow.run(state)
-        
+
         assert result.processed_by == "FAST"
         assert result.priority == "HIGH"
         assert "Fast processed" in result.result
@@ -453,7 +452,7 @@ async def run(state):
         3. CodeNode (tool2) - Python функция
         4. RemoteFlowNode (tool3) - удалённый агент из docker-compose
         5. CodeNode (done) - exit node
-        
+
         Flow: agent_so -> tool1 -> agent_so -> tool2 -> agent_so -> tool3 -> agent_so -> done
         """
         mock_llm_with_queue([
@@ -462,7 +461,7 @@ async def run(state):
             {"type": "structured_output", "data": {"next_action": "tool3", "step": 3}},
             {"type": "structured_output", "data": {"next_action": "done", "step": 4, "summary": "All 4 steps completed"}},
         ])
-        
+
         # 1. AgentSO - LlmNode с Structured Output
         agent_so = LlmNode(
             node_id="agent_so",
@@ -480,7 +479,7 @@ async def run(state):
                 }
             }
         )
-        
+
         # 2. CodeNode - CodeTool
         tool1_node = CodeNode(
             node_id="tool1",
@@ -492,7 +491,7 @@ async def execute(args, state):
                 "input_mapping": {},
             },
         )
-        
+
         # 3. CodeNode: строгий доступ к state.tool1_data
         tool2_node = CodeNode(
             node_id="tool2",
@@ -504,7 +503,7 @@ async def run(state):
 """
             }
         )
-        
+
         # 4. RemoteFlowNode (реальный test-a2a-agent из docker-compose)
         tool3_node = RemoteFlowNode(
             node_id="tool3",
@@ -514,7 +513,7 @@ async def run(state):
                 "headers": {"X-API-Key": "test-api-key-12345"},
             }
         )
-        
+
         # 5. Exit CodeNode: строгий доступ ко всем полям
         done_node = CodeNode(
             node_id="done",
@@ -533,7 +532,7 @@ async def run(state):
                 "type": "exit"
             }
         )
-        
+
         flow = Flow(
             flow_id="sgr_all_types",
             name="SGR All Types Test",
@@ -560,27 +559,27 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         state = make_state(content="Execute all steps")
         result = await flow.run(state)
-        
+
         # === Assertions ===
-        
+
         # Tool1 (CodeNode) executed
         assert result.tool1_executed is True, "Tool1 should be executed"
         assert result.tool1_data == "from_inline_tool", "Tool1 should set tool1_data"
-        
+
         # Tool2 (CodeNode) executed
         assert result.tool2_executed is True, "Tool2 should be executed"
         assert result.tool2_data == "processed_from_inline_tool", "Tool2 should process tool1 data"
-        
+
         # Tool3 (RemoteFlowNode) executed - проверяем что response есть
         assert result.response is not None, "Tool3 RemoteAgent should return response"
         assert len(result.response) > 0, "Tool3 response should not be empty"
-        
+
         # Summary from last SO call
         assert result.summary == "All 4 steps completed", "Summary should be set from final SO"
-        
+
         # Final response
         assert "SGR completed" in result.final_response, "Final response should contain completion message"
         assert result.steps_executed["tool1"] is True
@@ -591,9 +590,9 @@ async def run(state):
     async def test_sgr_error_recovery(self, mock_llm_with_queue):
         """
         SGR с восстановлением после ошибки.
-        
+
         AgentSO -> risky_action (fails) -> AgentSO -> recovery -> AgentSO -> done
-        
+
         Тестирует что SGR может обработать ошибку и перейти к recovery.
         """
         mock_llm_with_queue([
@@ -602,7 +601,7 @@ async def run(state):
             {"type": "structured_output", "data": {"next_action": "recovery", "reason": "Error detected, recovering"}},
             {"type": "structured_output", "data": {"next_action": "done", "reason": "Recovery complete", "final_status": "recovered"}},
         ])
-        
+
         agent_so = LlmNode(
             node_id="agent_so",
             config={
@@ -619,7 +618,7 @@ async def run(state):
                 }
             }
         )
-        
+
         risky_node = CodeNode(
             node_id="risky",
             config={
@@ -629,7 +628,7 @@ async def run(state):
 """
             }
         )
-        
+
         # recovery: строгий доступ к state.error_message
         recovery_node = CodeNode(
             node_id="recovery",
@@ -640,7 +639,7 @@ async def run(state):
 """
             }
         )
-        
+
         # done: строгий доступ ко всем полям
         done_node = CodeNode(
             node_id="done",
@@ -656,7 +655,7 @@ async def run(state):
                 "type": "exit"
             }
         )
-        
+
         flow = Flow(
             flow_id="sgr_recovery",
             name="SGR Recovery Test",
@@ -677,10 +676,10 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         state = make_state(content="Start risky flow")
         result = await flow.run(state)
-        
+
         # Проверки
         assert result.error_occurred is True, "Error should have occurred"
         assert result.recovered is True, "Recovery should have happened"

@@ -9,13 +9,14 @@ user/company/session/namespace при успешной авторизации; �
 """
 
 import hashlib
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import Request, HTTPException
-from fastapi.responses import RedirectResponse, JSONResponse
+
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from core.context import set_context, clear_context
+from core.context import clear_context, set_context
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import (
     LOG_COMPANY_ID,
@@ -25,8 +26,13 @@ from core.logging.attributes import (
     LOG_USER_ID,
 )
 from core.models.identity_models import User
-from core.utils.tokens import get_token_service, TokenData, TokenType
+from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
+from core.utils.domain import extract_subdomain
+from core.utils.tokens import TokenData, TokenType, get_token_service
 
+from .company_resolver import CompanyResolver
+from .context_factory import ContextFactory
+from .platform_handlers import get_platform_handler
 from .route_config import (
     RouteMatcher,
     RouteRule,
@@ -34,15 +40,10 @@ from .route_config import (
     browser_request_allows_spa_fallback,
     path_allows_spa_fallback,
 )
-from .company_resolver import CompanyResolver
 from .tenant_access_error_page import (
     build_tenant_access_error_response,
     http_exception_detail_to_str,
 )
-from .context_factory import ContextFactory
-from .platform_handlers import get_platform_handler
-from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
-from core.utils.domain import extract_subdomain
 
 logger = get_logger(__name__)
 
@@ -56,11 +57,11 @@ class CompanyCreationRequired(Exception):
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware для создания контекста запроса"""
-    
+
     def __init__(self, app):
         super().__init__(app)
         self.route_matcher = RouteMatcher()
-    
+
     def _get_container(self, request: Request):
         return request.app.state.container
 
@@ -116,7 +117,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             context = await self._create_context(
                 request, rule, container, company_resolver, context_factory, trace_id
             )
-            
+
             # Сохраняем token_data для эндпоинтов типа /auth/me
             token_data, _ = await self._extract_token(request, container)
             session_td = getattr(request.state, "session_token_data", None)
@@ -156,13 +157,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         status_code=403,
                         detail="Интерфейс LitServe доступен только при активной компании system.",
                     )
-            
+
             response = await call_next(request)
             reissue = getattr(request.state, "reissue_auth_token", None)
             if reissue is not None:
                 attach_session_auth_cookie(response, request, reissue)
             return response
-            
+
         except CompanyCreationRequired:
             return RedirectResponse(url="/select-company", status_code=307)
         except HTTPException as e:
@@ -178,7 +179,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
         finally:
             clear_context()
-    
+
     async def _create_context(
         self,
         request: Request,
@@ -189,11 +190,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         trace_id: str,
     ):
         """Создает контекст на основе правила маршрутизации"""
-        
+
         # Webhook обработка
         if rule.context_type == "webhook" and rule.channel:
             return await self._handle_webhook(request, rule, container, context_factory, trace_id)
-        
+
         # Анонимный контекст (но пробуем загрузить пользователя если токен есть)
         if rule.context_type == "anonymous":
             # Для anonymous контекста компания НЕ требуется (публичные страницы)
@@ -208,20 +209,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 request, "anonymous", company, user, token_data,
                 auth_token=auth_token, trace_id=trace_id
             )
-        
+
         # Авторизованный контекст
         token_data, auth_token = await self._extract_token(request, container)
-        
+
         if rule.auth_required and not token_data:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        
+
         user = await self._get_user(container, token_data) if token_data else None
-        
+
         token_type = token_data.token_type if token_data else None
         is_embed_session = token_type == TokenType.EMBED_SESSION
         if rule.auth_required and not user and not is_embed_session:
             raise HTTPException(status_code=401, detail="User not found")
-        
+
         company = await company_resolver.resolve(request, token_data, rule.context_type)
 
         logger.info(
@@ -240,7 +241,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 raise CompanyCreationRequired()
             logger.info("auth.frontend_no_subdomain_allowed", path=request.url.path)
-        
+
         # Проверка доступа к удаляемой компании
         if company and company.status == "deleting":
             if not self.route_matcher.allows_deleting_company(request.url.path):
@@ -248,7 +249,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     detail="Компания удаляется. Пожалуйста, выберите другую компанию."
                 )
-        
+
         # Проверка доступа пользователя к компании (для frontend)
         if user and company and rule.context_type == "frontend":
             if company.company_id not in user.companies:
@@ -283,14 +284,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Синхронизация активной компании (для всех типов контекста)
         if user and company:
                 await self._sync_active_company(container, user, company)
-        
+
         return await context_factory.create(
             request, rule.context_type, company, user, token_data,
             platform=rule.channel,  # channel используется как platform для webhook
-            auth_token=auth_token, 
+            auth_token=auth_token,
             trace_id=trace_id
         )
-    
+
     async def _handle_webhook(
         self,
         request: Request,
@@ -303,27 +304,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
         handler = get_platform_handler(rule.channel, container)
         if not handler:
             raise HTTPException(status_code=400, detail=f"Unknown platform: {rule.channel}")
-        
+
         company = await handler.extract_company_from_webhook_path(request.url.path, rule.channel)
-        
+
         # GET для WhatsApp верификации - анонимный контекст
         if rule.channel == "whatsapp" and request.method == "GET":
             return await context_factory.create(request, "anonymous", company, trace_id=trace_id)
-        
+
         user, metadata = await handler.create_user_from_request(request, company)
-        
+
         context = await context_factory.create(
             request, "webhook", company, user, platform=rule.channel, trace_id=trace_id
         )
         context.metadata.update(metadata)
-        
+
         logger.info(
             "auth.webhook_context_resolved",
             platform=rule.channel,
             company_id=company.company_id if company else None,
         )
         return context
-    
+
     async def _extract_token(
         self,
         request: Request,
@@ -331,7 +332,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     ) -> tuple[Optional[TokenData], Optional[str]]:
         """
         Извлекает и валидирует токен из запроса.
-        
+
         Returns:
             tuple: (token_data, raw_token) - данные токена и сам токен для межсервисных запросов
         """
@@ -428,7 +429,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 "api_key_scopes": api_key_record.scopes,
             },
         )
-    
+
     async def _get_user(self, container, token_data: TokenData) -> Optional[User]:
         """Получает пользователя по данным токена"""
         user = await container.user_repository.get(token_data.user_id)

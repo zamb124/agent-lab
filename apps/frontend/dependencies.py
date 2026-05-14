@@ -2,9 +2,10 @@
 FastAPI Dependencies для Frontend сервиса
 """
 from typing import Annotated
+
 from fastapi import Depends
 
-from apps.frontend.container import get_frontend_container, FrontendContainer
+from apps.frontend.container import FrontendContainer, get_frontend_container
 
 
 def get_container() -> FrontendContainer:

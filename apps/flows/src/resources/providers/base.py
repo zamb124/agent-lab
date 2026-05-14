@@ -12,10 +12,10 @@ from core.variables import VarResolver
 class BaseResourceProvider(ABC):
     """
     Базовый класс провайдера ресурсов.
-    
+
     Провайдер создаёт wrapper для использования в namespace.
     """
-    
+
     @abstractmethod
     async def resolve(
         self,
@@ -24,16 +24,16 @@ class BaseResourceProvider(ABC):
     ) -> Any:
         """
         Резолвит ресурс и создаёт wrapper.
-        
+
         Args:
             definition: Определение ресурса
             variables: Переменные агента для резолвинга @var:
-            
+
         Returns:
             Wrapper объект для добавления в namespace
         """
         pass
-    
+
     def _resolve_variable_refs(
         self,
         config: Dict[str, Any],
@@ -41,11 +41,11 @@ class BaseResourceProvider(ABC):
     ) -> Dict[str, Any]:
         """
         Резолвит @var: ссылки в конфиге.
-        
+
         Args:
             config: Конфиг с возможными @var: ссылками
             variables: Переменные для резолвинга
-            
+
         Returns:
             Конфиг с резолвнутыми значениями
         """

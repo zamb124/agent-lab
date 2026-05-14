@@ -21,18 +21,16 @@ from pydantic import BaseModel, ConfigDict, computed_field
 from core.company_ai.crypto import decrypt_secret
 from core.company_ai.platform_defaults import (
     platform_default_model,
-    platform_default_provider_for_capability,
 )
 from core.company_ai.schema import (
+    CUSTOM_PROVIDER_REF_PREFIX,
+    CUSTOM_PROVIDER_SLUG,
     AICapability,
     CompanyAIProviders,
     CompanyCustomOpenAICompatibleProvider,
-    CompanyEmbeddingOverride,
     CompanyLLMOverride,
     CompanyRerankOverride,
     CompanyVoiceOverride,
-    CUSTOM_PROVIDER_REF_PREFIX,
-    CUSTOM_PROVIDER_SLUG,
 )
 from core.context import get_context
 from core.logging import get_logger

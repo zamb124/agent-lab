@@ -9,7 +9,7 @@ import copy
 import pathlib
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -36,7 +36,7 @@ def deep_copy_state(state: 'ExecutionState | dict') -> 'ExecutionState | dict':
         Копия state
     """
     from core.state import ExecutionState
-    
+
     if isinstance(state, ExecutionState):
         return ExecutionState.model_validate(state.model_dump(exclude_none=False))
     elif isinstance(state, dict):
@@ -57,7 +57,7 @@ def merge_state(base: 'ExecutionState | dict', updates: dict) -> 'ExecutionState
         Объединенный state
     """
     from core.state import ExecutionState
-    
+
     if isinstance(base, ExecutionState):
         if not isinstance(updates, dict):
             raise SafeEvalError("updates must be a dict")
@@ -96,7 +96,7 @@ def get_nested(data: 'ExecutionState | dict', path: str, default: Any = None) ->
         Значение по пути или default
     """
     from core.state import ExecutionState
-    
+
     keys = path.split(".")
     result = data
 
@@ -107,7 +107,7 @@ def get_nested(data: 'ExecutionState | dict', path: str, default: Any = None) ->
             result = result.get(key)
         else:
             return default
-        
+
         if result is None:
             return default
 
@@ -127,9 +127,9 @@ def set_nested(data: 'ExecutionState | dict', path: str, value: Any) -> 'Executi
         Модифицированный data
     """
     from core.state import ExecutionState
-    
+
     keys = path.split(".")
-    
+
     if isinstance(data, ExecutionState):
         forbid_frozen_update_key(keys[0], reason="merge")
         if len(keys) == 1:
@@ -170,7 +170,7 @@ def get_files(state: 'ExecutionState | dict') -> List[Dict[str, Any]]:
         Список файлов [{name, path, mime_type, size}, ...]
     """
     from core.state import ExecutionState
-    
+
     if isinstance(state, ExecutionState):
         return state.files or []
     elif isinstance(state, dict):
@@ -224,7 +224,7 @@ def read_path_bytes(file_path: str, mode: str = "rb") -> bytes:
     path = pathlib.Path(file_path)
     if not path.exists():
         raise SafeEvalError(f"File not found: {file_path}")
-    
+
     if mode == "rb":
         return path.read_bytes()
     else:

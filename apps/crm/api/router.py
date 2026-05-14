@@ -6,19 +6,20 @@ Main router для CRM API.
 
 from fastapi import APIRouter
 
-from apps.crm.api.entities import router as entities_router
-from apps.crm.api.entity_types import router as entity_types_router
-from apps.crm.api.relationships import router as relationships_router
-from apps.crm.api.attachments import router as attachments_router
 from apps.crm.api.access_requests import router as access_requests_router
-from apps.crm.api.namespaces import router as namespaces_router
+from apps.crm.api.attachments import router as attachments_router
+from apps.crm.api.entities import router as entities_router
 from apps.crm.api.entity_grants import router as entity_grants_router
-from apps.crm.api.namespace_grants import router as namespace_grants_router
+from apps.crm.api.entity_types import router as entity_types_router
 from apps.crm.api.grants import router as grants_router
 from apps.crm.api.graph import router as graph_router
+from apps.crm.api.namespace_grants import router as namespace_grants_router
+from apps.crm.api.namespace_integrations import router as namespace_integrations_router
+from apps.crm.api.namespaces import router as namespaces_router
+from apps.crm.api.relationships import router as relationships_router
+from apps.crm.api.suggests import router as suggests_router
 from apps.crm.api.tasks import router as tasks_router
 from apps.crm.api.workspace import router as workspace_router
-from apps.crm.api.namespace_integrations import router as namespace_integrations_router
 
 router = APIRouter()
 
@@ -35,4 +36,4 @@ router.include_router(graph_router)
 router.include_router(tasks_router)
 router.include_router(workspace_router)
 router.include_router(namespace_integrations_router)
-
+router.include_router(suggests_router)

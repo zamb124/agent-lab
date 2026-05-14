@@ -1,15 +1,16 @@
 """FastAPI entrypoint для scheduler control-plane."""
 
-import os
-
-from core.config.testing import is_testing
-
 from fastapi import FastAPI
 
+from apps.crm.scheduled_task_constants import (
+    CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
+    CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
+)
 from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
 from apps.scheduler.container import get_scheduler_container
 from core.app import create_service_app
+from core.config.testing import is_testing
 from core.identity.system_bootstrap import ensure_system_company_exists
 from core.logging import get_logger
 from core.scheduler.models import (
@@ -28,7 +29,7 @@ PAYMENT_SYNC_TASK_NAME = "payment_sync_tick"
 RAG_CLEANUP_EXPIRED_DOCUMENTS_TASK_NAME = "rag_cleanup_expired_documents_tick"
 RAG_REEMBED_STALE_DOCUMENTS_TASK_NAME = "rag_reembed_stale_documents_tick"
 RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TASK_NAME = "rag_cleanup_orphan_company_chunks_tick"
-CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME = "crm_reembed_stale_documents_tick"
+CRM_RECONCILE_DAILY_SUMMARY_CRON = "0 * * * *"
 SYSTEM_SCHEDULER_COMPANY_ID = "system"
 
 
@@ -61,7 +62,12 @@ async def _ensure_calendar_schedule(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=paused_tasks[0].id,
         )
-        logger.info("%s schedule resumed: task_id=%s schedule_id=%s", log_label, resumed.id, resumed.schedule_id)
+        logger.info(
+            "%s schedule resumed: task_id=%s schedule_id=%s",
+            log_label,
+            resumed.id,
+            resumed.schedule_id,
+        )
         return
     request = PlatformScheduleCreateRequest(
         target_service="flows",
@@ -77,7 +83,9 @@ async def _ensure_calendar_schedule(
         user_id=None,
         request=request,
     )
-    logger.info("%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id)
+    logger.info(
+        "%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id
+    )
 
 
 async def _ensure_rag_ttl_cleanup_schedule(
@@ -109,7 +117,12 @@ async def _ensure_rag_ttl_cleanup_schedule(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=paused_tasks[0].id,
         )
-        logger.info("%s schedule resumed: task_id=%s schedule_id=%s", log_label, resumed.id, resumed.schedule_id)
+        logger.info(
+            "%s schedule resumed: task_id=%s schedule_id=%s",
+            log_label,
+            resumed.id,
+            resumed.schedule_id,
+        )
         return
     request = PlatformScheduleCreateRequest(
         target_service="rag",
@@ -125,10 +138,12 @@ async def _ensure_rag_ttl_cleanup_schedule(
         user_id=None,
         request=request,
     )
-    logger.info("%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id)
+    logger.info(
+        "%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id
+    )
 
 
-async def _ensure_crm_reembed_schedule(
+async def _ensure_crm_cron_schedule(
     *,
     container,
     config_enabled: bool,
@@ -157,7 +172,12 @@ async def _ensure_crm_reembed_schedule(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=paused_tasks[0].id,
         )
-        logger.info("%s schedule resumed: task_id=%s schedule_id=%s", log_label, resumed.id, resumed.schedule_id)
+        logger.info(
+            "%s schedule resumed: task_id=%s schedule_id=%s",
+            log_label,
+            resumed.id,
+            resumed.schedule_id,
+        )
         return
     request = PlatformScheduleCreateRequest(
         target_service="crm",
@@ -173,7 +193,9 @@ async def _ensure_crm_reembed_schedule(
         user_id=None,
         request=request,
     )
-    logger.info("%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id)
+    logger.info(
+        "%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id
+    )
 
 
 async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> None:
@@ -232,12 +254,19 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
         cron=cfg.orphan_cleanup_cron,
         log_label="RAG orphan company chunks cleanup",
     )
-    await _ensure_crm_reembed_schedule(
+    await _ensure_crm_cron_schedule(
         container=container,
         config_enabled=cfg.reembed_enabled,
         task_name=CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME,
         cron=cfg.reembed_cron,
         log_label="CRM reembed stale",
+    )
+    await _ensure_crm_cron_schedule(
+        container=container,
+        config_enabled=True,
+        task_name=CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME,
+        cron=CRM_RECONCILE_DAILY_SUMMARY_CRON,
+        log_label="CRM daily summary reconcile",
     )
 
 

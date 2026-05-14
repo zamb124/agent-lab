@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from core.calendar.service import CalendarService
 from core.context import get_context
@@ -22,8 +22,8 @@ from core.models import (
     CalendarIntegration,
     CalendarProvider,
 )
-from core.utils.domain import get_host_with_port, is_local
 from core.pagination import ListResponse
+from core.utils.domain import get_host_with_port, is_local
 
 router = APIRouter(tags=["calendar"])
 

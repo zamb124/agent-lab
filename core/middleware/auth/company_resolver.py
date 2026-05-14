@@ -2,12 +2,12 @@
 Определение компании из запроса.
 """
 
-from core.logging import get_logger
 from typing import Optional
 
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 
 from core.config import settings
+from core.logging import get_logger
 from core.models.identity_models import Company
 from core.utils.domain import extract_subdomain, extract_tenant_subdomain
 from core.utils.tokens import TokenData

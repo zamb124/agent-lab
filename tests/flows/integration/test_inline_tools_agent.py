@@ -5,6 +5,7 @@
 """
 
 import pytest
+
 from apps.flows.src.tools.base import CodeTool
 from core.state import ExecutionState
 
@@ -70,7 +71,7 @@ class TestToolRegistryInlineConfig:
 
         with pytest.raises(ValueError, match="passed as string"):
             await container.tool_registry.create_tools(tools_config)
-    
+
     @pytest.mark.asyncio
     async def test_create_tools_inline_list(self, container):
         """ToolRegistry обрабатывает список inline dict конфигов."""
@@ -173,14 +174,14 @@ class TestCodeToolsExecution:
             code="""async def execute(args, state):
     items = args.get('items', [])
     multiplier = args.get('multiplier', 1)
-    
+
     processed = []
     for item in items:
         if isinstance(item, (int, float)):
             processed.append(item * multiplier)
         else:
             processed.append(item)
-    
+
     return {
         'processed': processed,
         'count': len(processed),

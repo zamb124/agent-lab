@@ -32,14 +32,10 @@ from core.http import get_httpx_client
 from core.logging import get_logger
 from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
-
 if TYPE_CHECKING:
     from core.clients.tts_pronunciation.models import CompiledPronunciation
     from core.config.models import (
-        CloudRuTTSBackendConfig,
-        SberTTSBackendConfig,
         TTSProvidersConfig,
-        YandexTTSBackendConfig,
     )
 
 

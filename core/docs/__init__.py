@@ -4,13 +4,13 @@
 """
 
 from core.docs.models import (
+    CodeTemplate,
     DocumentationQuery,
     DocumentationResponse,
     GlobalVariable,
-    StateField,
-    CodeTemplate,
     ModuleMethod,
     PlatformToolDoc,
+    StateField,
 )
 from core.docs.service import DocumentationService
 

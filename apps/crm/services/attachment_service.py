@@ -4,20 +4,23 @@
 Работает для ВСЕХ entities (любого типа).
 """
 
-from typing import Dict, Any, List, TYPE_CHECKING
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Dict, List
+
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
+from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
+from apps.crm.services.file_text_reader import load_text_from_bytes
+from apps.crm.services.note_attachment_description import (
+    merge_attachment_extracted_into_description,
+)
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.logging import get_logger
-from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
-from apps.crm.services.file_text_reader import load_text_from_bytes
-from apps.crm.services.note_attachment_description import merge_attachment_extracted_into_description
 
 if TYPE_CHECKING:
-    from apps.crm.db.repositories.entity_repository import EntityRepository
     from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
+    from apps.crm.db.repositories.entity_repository import EntityRepository
     from core.db.repositories import CompanyRepository
     from core.files.file_repository import FileRepository
 
@@ -27,10 +30,10 @@ logger = get_logger(__name__)
 class AttachmentService:
     """
     Универсальный сервис для вложений.
-    
+
     Работает через entity_id (независимо от типа).
     """
-    
+
     def __init__(
         self,
         entity_repository: "EntityRepository",
@@ -43,32 +46,32 @@ class AttachmentService:
         self._access_grant_repo = access_grant_repository
         self._company_repo = company_repository
         self._file_repo = file_repository
-    
+
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
             raise ValueError("Нет активной компании")
         return context.active_company.company_id
-    
+
     async def add_attachment(
         self,
         entity_id: str,
         file_data: bytes,
         filename: str,
-        
+
     ) -> Dict[str, Any]:
         """Загружает attachment для entity"""
         context = get_context()
         company_id = self._get_company_id()
         namespace_name = context.active_namespace
-        
+
         entity = await self._entity_repo.get(entity_id)
-        
+
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
-        
+
         namespace = namespace_name
-        
+
         metadata = {
             "entity_id": entity_id,
             "entity_type": entity.entity_type,
@@ -77,16 +80,16 @@ class AttachmentService:
             "filename": filename,
             "ttl_seconds": 0,
         }
-        
+
         response = await self._rag.upload_namespace_document(
             namespace,
             filename=filename,
             file_bytes=file_data,
             metadata=metadata,
         )
-        
+
         document_id = response["document_id"]
-        
+
         if document_id not in entity.attachment_ids:
             entity.attachment_ids.append(document_id)
 
@@ -128,7 +131,9 @@ class AttachmentService:
             entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
             and attachment_had_extractable_text
         ):
-            from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
+            from apps.crm.services.note_markdown_format_schedule import (
+                schedule_note_markdown_format,
+            )
 
             markdown_format_queued = await schedule_note_markdown_format(
                 note_id=entity_id,
@@ -136,12 +141,12 @@ class AttachmentService:
                 namespace=namespace,
                 expected_updated_at_iso=merged.updated_at.isoformat(),
             )
-        
+
         logger.info(
             f"Attachment added: {filename} -> {entity_id} "
             f"(type={entity.full_type}), doc_id={document_id}"
         )
-        
+
         return {
             "document_id": document_id,
             "filename": filename,
@@ -149,25 +154,25 @@ class AttachmentService:
             "task_id": response.get("task_id"),
             "markdown_format_queued": markdown_format_queued,
         }
-    
+
     async def remove_attachment(
         self,
         entity_id: str,
         document_id: str,
-        
+
     ) -> bool:
         """Удаляет attachment entity"""
         context = get_context()
         namespace_name = context.active_namespace
-        
+
         entity = await self._entity_repo.get(entity_id)
-        
+
         if not entity or document_id not in entity.attachment_ids:
             logger.warning(f"Attachment not found: {document_id} for {entity_id}")
             return False
-        
+
         await self._rag.delete_namespace_document(namespace_name, document_id)
-        
+
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(timezone.utc)
         await self._entity_repo.update(entity)
@@ -182,24 +187,24 @@ class AttachmentService:
                 company_repository=self._company_repo,
                 access_grant_repository=self._access_grant_repo,
             )
-        
+
         logger.info(f"Attachment removed: {document_id} from {entity_id}")
         return True
-    
+
     async def get_attachments(
         self,
         entity_id: str,
-        
+
     ) -> List[Dict[str, Any]]:
         """Получает список attachments entity"""
         entity = await self._entity_repo.get(entity_id)
-        
+
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
-        
+
         if not entity.attachment_ids:
             return []
-        
+
         attachments = []
         for doc_id in entity.attachment_ids:
             file_record = await self._file_repo.get(doc_id)
@@ -264,21 +269,21 @@ class AttachmentService:
                 "content_type": content_type if isinstance(content_type, str) else "",
                 "download_url": RagClient.files_download_url_path(doc_id),
             })
-        
+
         return attachments
-    
+
     async def delete_all_attachments(
         self,
         entity_id: str
     ) -> int:
         """Удаляет все attachments entity (для каскадного удаления)"""
         entity = await self._entity_repo.get(entity_id)
-        
+
         if not entity or not entity.attachment_ids:
             return 0
-        
+
         deleted_count = 0
-        
+
         for doc_id in list(entity.attachment_ids):
             try:
                 success = await self.remove_attachment(entity_id, doc_id)
@@ -291,6 +296,6 @@ class AttachmentService:
                     document_id=doc_id,
                     error=str(e),
                 )
-        
+
         logger.info(f"Deleted {deleted_count} attachments for {entity_id}")
         return deleted_count

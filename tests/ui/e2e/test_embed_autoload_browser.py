@@ -23,7 +23,6 @@ from httpx import AsyncClient, Timeout
 from playwright.async_api import Page, expect
 
 from core.logging import get_logger
-
 from tests.ui.harness import AppUI
 
 _HTTP_TIMEOUT = Timeout(20.0)

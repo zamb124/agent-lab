@@ -7,8 +7,7 @@ TaskIQ tasks infrastructure.
 НЕ из core.tasks (чтобы избежать circular import).
 """
 
-from core.tasks.session_lock import session_lock_middleware, SessionLockMiddleware
-
+from core.tasks.session_lock import SessionLockMiddleware, session_lock_middleware
 
 __all__ = [
     "session_lock_middleware",

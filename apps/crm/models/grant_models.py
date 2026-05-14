@@ -2,9 +2,10 @@
 API модели для AccessGrants.
 """
 
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GrantToUserRequest(BaseModel):
@@ -34,6 +35,6 @@ class AccessGrantResponse(BaseModel):
     role: str
     expires_at: Optional[datetime] = None
     created_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 

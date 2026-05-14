@@ -6,13 +6,12 @@ CodeNode позволяет использовать BaseTool как ноду г
 Поддерживает функции с именованными аргументами и дефолтами.
 """
 
-import pytest
 from typing import Any, Dict
 
+import pytest
+
 from apps.flows.src.runtime.nodes import CodeNode, create_node
-from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.src.models.tool_reference import CallParameter
 
 
 class SimpleTool(BaseTool):

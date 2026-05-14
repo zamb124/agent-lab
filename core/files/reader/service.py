@@ -174,8 +174,9 @@ def _extract_text_from_ole_word_stream(raw: bytes) -> Optional[str]:
     а вытаскивает читаемые ASCII/UTF-16 строки длиной >= 4 символов.
     Используется когда antiword не справляется (формат Word 95 / минимальные .doc).
     """
-    import olefile
     import re
+
+    import olefile
 
     if not olefile.isOleFile(BytesIO(raw)):
         return None
@@ -849,8 +850,9 @@ def _read_odt_sync(
 ) -> FileReadResult:
     """OpenDocument Text .odt через odfpy (ZIP+XML)."""
     del opts
+    from odf import teletype
+    from odf import text as odf_text
     from odf.opendocument import load
-    from odf import teletype, text as odf_text
 
     try:
         doc = load(BytesIO(raw))
@@ -889,7 +891,7 @@ def _read_epub_sync(
     import tempfile
 
     from bs4 import BeautifulSoup
-    from ebooklib import epub, ITEM_DOCUMENT
+    from ebooklib import ITEM_DOCUMENT, epub
 
     # ebooklib читает только с диска, поэтому пишем во временный файл
     with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:

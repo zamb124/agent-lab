@@ -5,19 +5,19 @@
 import asyncio
 
 import pytest
+
 from apps.flows.src.eval import (
-    safe_eval,
-    SafeEvalError,
-    deep_copy_state,
-    merge_state,
-    get_nested,
-    set_nested,
     SafeContext,
+    SafeEvalError,
     compile_function,
-    PythonCompiler,
+    deep_copy_state,
+    get_nested,
+    merge_state,
+    safe_eval,
+    set_nested,
 )
-from core.state import ExecutionState
 from core.context import Context, User
+from core.state import ExecutionState
 
 
 class TestCompileFunction:
@@ -642,11 +642,11 @@ class TestStateUtilities:
         """Глубокое копирование state."""
         original = {"a": 1, "nested": {"b": 2, "list": [1, 2, 3]}}
         copied = deep_copy_state(original)
-        
+
         copied["a"] = 100
         copied["nested"]["b"] = 200
         copied["nested"]["list"].append(4)
-        
+
         assert original["a"] == 1
         assert original["nested"]["b"] == 2
         assert len(original["nested"]["list"]) == 3
@@ -661,7 +661,7 @@ class TestStateUtilities:
         base = {"a": 1, "b": 2}
         updates = {"b": 3, "c": 4}
         result = merge_state(base, updates)
-        
+
         assert result == {"a": 1, "b": 3, "c": 4}
         assert base == {"a": 1, "b": 2}
 
@@ -670,7 +670,7 @@ class TestStateUtilities:
         base = {"config": {"x": 1, "y": 2}}
         updates = {"config": {"y": 3, "z": 4}}
         result = merge_state(base, updates)
-        
+
         assert result == {"config": {"x": 1, "y": 3, "z": 4}}
 
     def test_merge_state_invalid_base(self):
@@ -742,7 +742,7 @@ class TestSafeContext:
             metadata={"key": "value"}
         )
         ctx = SafeContext(context)
-        
+
         assert ctx.channel == "telegram"
         assert ctx.user_id == "user123"
         assert ctx.session_id == "session456"
@@ -758,10 +758,10 @@ class TestSafeContext:
             metadata={"key": "value"}
         )
         ctx = SafeContext(context)
-        
+
         metadata = ctx.metadata
         metadata["new_key"] = "new_value"
-        
+
         assert "new_key" not in ctx.metadata
 
 
@@ -834,12 +834,12 @@ async def run(state):
         code = """
 async def run(state):
     backup = deep_copy_state(state)
-    
+
     set_nested(state, 'result.value', 42)
-    
+
     name = get_nested(state, 'user.name', 'Unknown')
     state['name'] = name
-    
+
     return state
 """
         state = ExecutionState(
@@ -850,7 +850,7 @@ async def run(state):
             user={"name": "John"}
         )
         result = await safe_eval(code, state)
-        
+
         assert result["result"]["value"] == 42
         assert result["name"] == "John"
 
@@ -891,7 +891,7 @@ async def run(state):
             parts=[Part(root=TextPart(text=state.question))]
         )
     ]
-    
+
     result = await llm.chat(messages)
     state.answer = get_message_text(result)
     return state

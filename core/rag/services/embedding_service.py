@@ -6,14 +6,15 @@
 Биллинг: span'ы с billing_pending_settlement — фоновая джоба settlement.
 """
 
-from core.logging import get_logger
-import tiktoken
 from typing import Any, Dict, List, Optional
+
+import tiktoken
 
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_EMBEDDING
 from core.context import get_context
 from core.http import ProxyStrategy, get_httpx_client
+from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
@@ -51,16 +52,16 @@ MODEL_DIMENSIONS = {
 class EmbeddingService:
     """
     Сервис для генерации embeddings.
-    
+
     Поддерживает:
     - OpenRouter API (по умолчанию)
     - Любой OpenAI-совместимый API
     - Fallback между моделями одной размерности
     """
-    
+
     OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings"
     BATCH_SIZE = 50  # Максимум текстов в одном запросе
-    
+
     def __init__(
         self,
         api_key: str,
@@ -73,39 +74,39 @@ class EmbeddingService:
     ):
         if not api_key:
             raise ValueError("API key обязателен для EmbeddingService")
-        
+
         self.api_key = api_key
         self.timeout = timeout
         self.dimension = dimension
         self.mrl_output_dimension = mrl_output_dimension
-        
+
         if mrl_output_dimension is not None and dimension is not None:
             if mrl_output_dimension > dimension:
                 raise ValueError(
                     f"mrl_output_dimension ({mrl_output_dimension}) "
                     f"не может быть больше полной размерности ({dimension})"
                 )
-        
+
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
         self._extra_headers: Dict[str, str] = dict(extra_headers) if extra_headers else {}
-        
+
         # Список моделей для fallback
         if models:
             self.models = models
         else:
             self.models = ["openai/text-embedding-3-small"]
-        
+
         # Текущая активная модель (будет определена при первом запросе)
         self._active_model: Optional[str] = None
         self._active_dimension: Optional[int] = None
-        
+
         if base_url:
             self.api_url = base_url.rstrip("/")
             if not self.api_url.endswith("/embeddings"):
                 self.api_url = f"{self.api_url}/embeddings"
         else:
             self.api_url = self.OPENROUTER_URL
-        
+
         logger.info(f"EmbeddingService: models={self.models}, url={self.api_url}")
 
     def _embedding_lengths_ok(self, model: str, actual_dim: int) -> bool:
@@ -140,17 +141,17 @@ class EmbeddingService:
     def model(self) -> str:
         """Текущая активная модель"""
         return self._active_model or self.models[0]
-    
+
     def count_tokens(self, texts: List[str]) -> int:
         total = 0
         for text in texts:
             total += len(self._tokenizer.encode(text))
         return total
-    
+
     async def _try_model(self, model: str, texts: List[str]) -> Optional[List[List[float]]]:
         """
         Пробует сгенерировать embeddings с указанной моделью.
-        
+
         Returns:
             Список embeddings или None если модель недоступна
         """
@@ -162,7 +163,7 @@ class EmbeddingService:
         }
         if self._extra_headers:
             headers = {**headers, **self._extra_headers}
-        
+
         try:
             async with get_httpx_client(
                 timeout=self.timeout,
@@ -176,29 +177,29 @@ class EmbeddingService:
                         "input": texts,
                     },
                 )
-                
+
                 if response.status_code != 200:
                     error_text = response.text[:200]
                     logger.warning(f"Model {model} returned {response.status_code}: {error_text}")
                     return None
-                
+
                 data = response.json()
-                
+
                 if "data" not in data:
                     logger.warning(f"Model {model} returned unexpected response: {str(data)[:200]}")
                     return None
-                
+
                 embeddings = [item["embedding"] for item in data["data"]]
 
                 if embeddings and not self._embedding_lengths_ok(model, len(embeddings[0])):
                     return None
 
                 return embeddings
-                
+
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
             return None
-    
+
     async def _generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """
         Генерирует embeddings для одного батча текстов с fallback.
@@ -211,7 +212,7 @@ class EmbeddingService:
             # Активная модель перестала работать
             logger.warning(f"Active model {self._active_model} failed, trying fallback")
             self._active_model = None
-        
+
         # Пробуем модели по порядку
         for model in self.models:
             result = await self._try_model(model, texts)
@@ -221,35 +222,35 @@ class EmbeddingService:
                     self._active_model = model
                     self._active_dimension = len(result[0]) if result else None
                 return result
-        
+
         # Все модели недоступны (endpoint тот же OpenAI-совместимый формат: OpenRouter или LitServe).
         raise ValueError(
             f"All embedding models failed: {self.models}. "
             f"Embeddings URL: {self.api_url}. "
             "Проверьте доступность сервиса, модель и ключ (если провайдер его требует)."
         )
-    
+
     async def generate_embedding(self, text: str) -> List[float]:
         """
         Генерирует embedding для одного текста.
-        
+
         Args:
             text: Текст для embedding
-            
+
         Returns:
             Вектор embedding
         """
         embeddings = await self.generate_embeddings([text])
         return embeddings[0]
-    
+
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         Генерирует embeddings для списка текстов (batch).
         Автоматически разбивает на батчи если текстов много.
-        
+
         Args:
             texts: Список текстов
-            
+
         Returns:
             Список векторов embedding
         """
@@ -370,7 +371,7 @@ class EmbeddingService:
         raise ValueError(
             "Не задана размерность embedding: укажите dimension в конфиге или используйте модель из MODEL_DIMENSIONS"
         )
-    
+
     def get_active_model(self) -> Optional[str]:
         """Возвращает текущую активную модель (или None если ещё не определена)"""
         return self._active_model

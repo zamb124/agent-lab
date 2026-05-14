@@ -8,21 +8,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from core.context import set_context
-
-from apps.flows_worker.broker import broker
-from apps.flows.src.tasks.flow_tasks import process_flow_task
-from apps.flows.src.tasks.eval_task import execute_inline_code
-from apps.flows.src.tasks.tool_tasks import execute_tool
 import apps.idle_worker.tasks.calendar_sync_tasks as calendar_sync_tasks
+from apps.flows.src.tasks.eval_task import execute_inline_code
+from apps.flows.src.tasks.flow_tasks import process_flow_task
+from apps.flows.src.tasks.tool_tasks import execute_tool
+from apps.flows_worker.broker import broker
+from core.context import set_context
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-from core.models import (
-    CalendarEventSource,
-    CalendarIntegration,
-    CalendarIntegrationCredentials,
-    CalendarIntegrationSettings,
-    CalendarProvider,
-)
 
 
 class TestBroker:
@@ -248,8 +240,8 @@ class TestProcessAgentTaskResume:
     @pytest.fixture
     async def setup_flow_with_state(self, app, container, unique_id):
         """Создает flow и state для тестов resume."""
-        from apps.flows.src.models import FlowConfig
         from apps.flows.src.container import get_container
+        from apps.flows.src.models import FlowConfig
 
         flow_config = FlowConfig(
             flow_id="interrupt_test_flow",
@@ -393,7 +385,7 @@ class TestExecuteInlineCode:
     async def test_execute_inline_code_simple(self):
         """execute_inline_code выполняет простой код."""
         from core.state import ExecutionState
-        
+
         code = """
 async def run(state):
     state.result = state.x * 2
@@ -413,7 +405,7 @@ async def run(state):
     async def test_execute_inline_code_async(self):
         """execute_inline_code выполняет async код."""
         from core.state import ExecutionState
-        
+
         code = """
 async def run(state):
     state.async_done = True
@@ -432,7 +424,7 @@ async def run(state):
     async def test_execute_inline_code_with_json(self):
         """execute_inline_code с json модулем."""
         from core.state import ExecutionState
-        
+
         code = """
 import json
 
@@ -455,7 +447,7 @@ async def run(state):
     async def test_execute_inline_code_preserves_state(self):
         """execute_inline_code сохраняет state."""
         from core.state import ExecutionState
-        
+
         code = """
 async def run(state):
     state.new_key = 'added'
@@ -485,15 +477,15 @@ class TestExecuteTool:
             "code": """
 async def execute(args, state):
     import re
-    
+
     expr = args.get("expression", "0")
-    
+
     # Простой калькулятор без eval/ast
     # Поддерживает +, -, *, / с учётом приоритета
     def parse_expr(s):
         s = s.replace(" ", "")
         return parse_add_sub(s, 0)[0]
-    
+
     def parse_add_sub(s, i):
         left, i = parse_mul_div(s, i)
         while i < len(s) and s[i] in "+-":
@@ -501,7 +493,7 @@ async def execute(args, state):
             right, i = parse_mul_div(s, i + 1)
             left = left + right if op == "+" else left - right
         return left, i
-    
+
     def parse_mul_div(s, i):
         left, i = parse_atom(s, i)
         while i < len(s) and s[i] in "*/":
@@ -509,7 +501,7 @@ async def execute(args, state):
             right, i = parse_atom(s, i + 1)
             left = left * right if op == "*" else left / right
         return left, i
-    
+
     def parse_atom(s, i):
         if s[i] == "(":
             val, i = parse_add_sub(s, i + 1)
@@ -519,7 +511,7 @@ async def execute(args, state):
         while j < len(s) and (s[j].isdigit() or s[j] == "."):
             j += 1
         return float(s[i:j]), j
-    
+
     result = parse_expr(expr)
     return str(int(result) if result == int(result) else result)
 """,
@@ -529,20 +521,20 @@ async def execute(args, state):
     async def test_execute_tool_calculator(self, app, calculator_config):
         """execute_tool выполняет calculator tool."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test",
             context_id="test",
             user_id="test",
             session_id="test:test"
         )
-        
+
         result = await execute_tool(
             calculator_config,
             {"expression": "2 + 2"},
             state.model_dump(exclude_none=False)
         )
-        
+
         assert result["tool_id"] == "test_calculator"
         assert "4" in result["result"]
 
@@ -550,20 +542,20 @@ async def execute(args, state):
     async def test_execute_tool_returns_result_structure(self, app, calculator_config):
         """execute_tool возвращает структуру с tool_id и result."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test",
             context_id="test",
             user_id="test",
             session_id="test:test"
         )
-        
+
         result = await execute_tool(
             calculator_config,
             {"expression": "10 * 5"},
             state.model_dump(exclude_none=False)
         )
-        
+
         assert "tool_id" in result
         assert "result" in result
         assert result["tool_id"] == "test_calculator"
@@ -573,7 +565,7 @@ async def execute(args, state):
     async def test_execute_tool_with_state(self, app, calculator_config):
         """execute_tool получает state."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test",
             context_id="test",
@@ -581,27 +573,27 @@ async def execute(args, state):
             session_id="test:test",
             some_context="value"
         )
-        
+
         result = await execute_tool(
             calculator_config,
             {"expression": "7 - 3"},
             state.model_dump(exclude_none=False)
         )
-        
+
         assert "4" in result["result"]
 
     @pytest.mark.asyncio
     async def test_execute_tool_raises_on_unknown_tool(self, app):
         """execute_tool выбрасывает ошибку для tool без code."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test",
             context_id="test",
             user_id="test",
             session_id="test:test"
         )
-        
+
         with pytest.raises(ValueError, match="code"):
             await execute_tool(
                 {"tool_id": "no_code_tool"},
@@ -613,14 +605,14 @@ async def execute(args, state):
     async def test_execute_tool_handles_interrupt(self, app):
         """execute_tool обрабатывает FlowInterrupt."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test",
             context_id="test",
             user_id="test",
             session_id="test:test"
         )
-        
+
         ask_user_config = {
             "tool_id": "test_ask_user",
             "description": "Ask user question",
@@ -635,7 +627,7 @@ async def execute(args, state):
             {"question": "What is your name?"},
             state.model_dump(exclude_none=False)
         )
-        
+
         assert result["tool_id"] == "test_ask_user"
         assert result["result"] is None
         assert "interrupt" in result
@@ -645,19 +637,19 @@ async def execute(args, state):
     async def test_execute_tool_complex_expression(self, app, calculator_config):
         """execute_tool с комплексным выражением."""
         from core.state import ExecutionState
-        
+
         state = ExecutionState(
             task_id="test",
             context_id="test",
             user_id="test",
             session_id="test:test"
         )
-        
+
         result = await execute_tool(
             calculator_config,
             {"expression": "(10 + 5) * 2 - 8 / 4"},
             state.model_dump(exclude_none=False)
         )
-        
+
         assert result["tool_id"] == "test_calculator"
         assert "28" in result["result"]

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
+from core.app.file_types_route import register_platform_file_types_route
 from core.files.types import (
     ALL_CATEGORIES,
     FILE_TYPE_REGISTRY,
@@ -18,7 +19,6 @@ from core.files.types import (
     mime_to_category,
     mimes_for,
 )
-from core.app.file_types_route import register_platform_file_types_route
 
 
 class TestRegistryInvariants:

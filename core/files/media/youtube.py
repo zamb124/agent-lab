@@ -1,11 +1,11 @@
 """Скачивание аудио с YouTube и других видеоплатформ через yt-dlp."""
 
 import asyncio
-
-from core.logging import get_logger
 import re
 import tempfile
 from pathlib import Path
+
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 _YOUTUBE_URL_PATTERN = re.compile(

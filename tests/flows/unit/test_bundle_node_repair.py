@@ -1,10 +1,10 @@
 import pytest
 
 from apps.flows.src.services.bundle_node_repair import (
-    repair_node_map_with_canonical_top_level,
-    repair_effective_nodes_from_bundle,
-    _registry_flow_to_bundle,
     _bundle_top_level_nodes,
+    _registry_flow_to_bundle,
+    repair_effective_nodes_from_bundle,
+    repair_node_map_with_canonical_top_level,
 )
 
 

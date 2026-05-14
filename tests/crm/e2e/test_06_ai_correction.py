@@ -4,8 +4,9 @@
 User Story: Возможность править результаты AI и дополнять данные по entities.
 """
 
-import pytest
 import json
+
+import pytest
 
 
 async def _analyze_note(
@@ -18,7 +19,8 @@ async def _analyze_note(
 
     Возвращает (task_row, ai_analysis_draft).
     """
-    import asyncio, time
+    import asyncio
+    import time
     body = {"note_id": note_id, **extra}
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
@@ -55,7 +57,7 @@ _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 @pytest.mark.real_taskiq
 class TestAICorrection:
     """Корректировка извлеченных AI данных"""
-    
+
     @pytest.mark.asyncio
     async def test_correct_extracted_entity(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """Пользователь правит entity после AI анализа"""
@@ -79,7 +81,7 @@ class TestAICorrection:
                 "metadata": _META,
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
@@ -100,7 +102,7 @@ class TestAICorrection:
             "attributes": extracted_entity.get("attributes", {})
         }, headers=auth_headers_system)
         entity_id = create_resp.json()["entity_id"]
-        
+
         # Теперь корректируем созданную entity
         update_resp = await crm_client.put(f"/crm/api/v1/entities/{entity_id}", json={
             "name": "Иван Иванов",
@@ -111,13 +113,13 @@ class TestAICorrection:
             }
         }, headers=auth_headers_system)
         assert update_resp.status_code == 200
-        
+
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity_id}", headers=auth_headers_system)
         corrected = get_resp.json()
         assert corrected["name"] == "Иван Иванов"
         assert corrected["attributes"]["role"] == "старший менеджер"
         assert "email" in corrected["attributes"]
-    
+
     @pytest.mark.asyncio
     async def test_add_missing_relationship(self, crm_client, unique_id, auth_headers_system):
         """Добавление связи, которую AI не нашел"""
@@ -126,24 +128,24 @@ class TestAICorrection:
             "name": f"Контакт 1 {unique_id}"
         }, headers=auth_headers_system)
         entity1_id = entity1_resp.json()["entity_id"]
-        
+
         entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "project",
             "name": f"Проект {unique_id}"
         }, headers=auth_headers_system)
         entity2_id = entity2_resp.json()["entity_id"]
-        
+
         rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
             "relationship_type": "related_to"
         }, headers=auth_headers_system)
         assert rel_resp.status_code == 200, rel_resp.text
-        
+
         relationship = rel_resp.json()
         assert relationship["source_entity_id"] == entity1_id
         assert relationship["target_entity_id"] == entity2_id
-    
+
     @pytest.mark.asyncio
     async def test_delete_incorrect_entity(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """Удаление ошибочно извлеченной entity"""
@@ -171,7 +173,7 @@ class TestAICorrection:
                 "metadata": _META,
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
@@ -186,7 +188,7 @@ class TestAICorrection:
             crm_client, auth_headers_system, note_id, check_duplicates=False
         )
         entities = analyze_resp.json()["entities"]
-        
+
         incorrect_entity_id = None
         for entity_data in entities:
             create_resp = await crm_client.post("/crm/api/v1/entities/", json={
@@ -201,10 +203,10 @@ class TestAICorrection:
             raise ValueError("Ошибочный контакт не найден")
         delete_resp = await crm_client.delete(f"/crm/api/v1/entities/{incorrect_entity_id}", headers=auth_headers_system)
         assert delete_resp.status_code == 200
-        
+
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{incorrect_entity_id}", headers=auth_headers_system)
         assert get_resp.status_code == 404
-    
+
     @pytest.mark.asyncio
     async def test_merge_duplicate_entities(self, crm_client, unique_id, auth_headers_system):
         """Объединение дублирующихся entities"""
@@ -214,14 +216,14 @@ class TestAICorrection:
             "attributes": {"email": "ivan1@example.com"}
         }, headers=auth_headers_system)
         entity1_id = entity1_resp.json()["entity_id"]
-        
+
         entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "contact",
             "name": f"Иван Иванов {unique_id}",
             "attributes": {"phone": "+79991234567"}
         }, headers=auth_headers_system)
         entity2_id = entity2_resp.json()["entity_id"]
-        
+
         update_resp = await crm_client.put(f"/crm/api/v1/entities/{entity1_id}", json={
             "attributes": {
                 "email": "ivan1@example.com",
@@ -229,14 +231,14 @@ class TestAICorrection:
             }
         }, headers=auth_headers_system)
         assert update_resp.status_code == 200
-        
+
         await crm_client.delete(f"/crm/api/v1/entities/{entity2_id}", headers=auth_headers_system)
-        
+
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{entity1_id}", headers=auth_headers_system)
         merged = get_resp.json()
         assert "email" in merged["attributes"]
         assert "phone" in merged["attributes"]
-    
+
     @pytest.mark.asyncio
     async def test_update_note_after_ai_analysis(self, crm_client, mock_llm_redis, unique_id, auth_headers_system):
         """Корректировка самой заметки после AI анализа"""
@@ -254,7 +256,7 @@ class TestAICorrection:
                 "metadata": _META,
             })
         }])
-        
+
         note_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
@@ -264,7 +266,7 @@ class TestAICorrection:
 
         _, analyze_resp = await _analyze_note(crm_client, auth_headers_system, note_id)
         note_data = analyze_resp.json()["note"]
-        
+
         # Создаём note на основе AI анализа
         create_resp = await crm_client.post("/crm/api/v1/entities/", json={
             "entity_type": note_data["entity_type"],
@@ -273,7 +275,7 @@ class TestAICorrection:
             "description": note_data.get("description")
         }, headers=auth_headers_system)
         note_id = create_resp.json()["entity_id"]
-        
+
         # Теперь корректируем созданную note
         update_resp = await crm_client.put(f"/crm/api/v1/entities/{note_id}", json={
             "name": "Встреча команды по проекту X",
@@ -281,7 +283,7 @@ class TestAICorrection:
             "tags": ["важно", "проект-x"]
         }, headers=auth_headers_system)
         assert update_resp.status_code == 200
-        
+
         get_resp = await crm_client.get(f"/crm/api/v1/entities/{note_id}", headers=auth_headers_system)
         updated_note = get_resp.json()
         assert "проекту X" in updated_note["name"]

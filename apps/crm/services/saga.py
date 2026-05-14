@@ -4,8 +4,8 @@ Saga Pattern для каскадных операций через PostgreSQL (c
 Обеспечивает транзакционность при работе с несколькими таблицами.
 """
 
-from typing import List, Callable, Any, Optional, Awaitable
 from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, List, Optional
 
 from core.logging import get_logger
 
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 class SagaStep:
     """
     Шаг Saga с компенсацией.
-    
+
     Attributes:
         name: Название шага
         execute_fn: Функция выполнения (опционально, если уже выполнено)
@@ -34,26 +34,26 @@ class SagaStep:
 class EntityDeletionSaga:
     """
     Saga для каскадного удаления entity.
-    
+
     Шаги:
     1. Удалить relationships (PostgreSQL)
     2. Удалить attachments (S3 + vector_documents)
     3. Удалить entity (crm_entities + vector_documents)
-    
+
     При ошибке - откат в обратном порядке.
     """
-    
+
     def __init__(self):
         self._steps: List[SagaStep] = []
-    
+
     def add_step(self, step: SagaStep):
         """Добавляет шаг в Saga"""
         self._steps.append(step)
-    
+
     async def execute(self) -> bool:
         """
         Выполняет все шаги Saga.
-        
+
         Returns:
             True если все успешно, Exception при ошибке
         """
@@ -62,17 +62,17 @@ class EntityDeletionSaga:
                 if step.execute_fn:
                     logger.info(f"Executing saga step: {step.name}")
                     await step.execute_fn()
-                
+
                 step.executed = True
-            
+
             logger.info(f"Saga completed successfully ({len(self._steps)} steps)")
             return True
-            
+
         except Exception as e:
             logger.error(f"Saga failed at step, compensating: {e}")
             await self._compensate()
             raise EntityDeletionError(f"Cascade delete failed: {e}") from e
-    
+
     async def _compensate(self):
         """Откатывает выполненные шаги в обратном порядке"""
         for step in reversed(self._steps):

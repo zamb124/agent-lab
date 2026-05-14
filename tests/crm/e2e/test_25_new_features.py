@@ -12,7 +12,6 @@ import json
 import pytest
 
 
-
 class TestSchemaValidation:
     """Проверка required_fields / типов при создании и обновлении сущностей."""
 
@@ -107,6 +106,53 @@ class TestSchemaValidation:
         entity = resp.json()
         assert entity["attributes"]["email"] == "a@b.com"
         assert entity["attributes"]["age"] == 30
+
+    @pytest.mark.asyncio
+    async def test_create_entity_coerces_numeric_strings(
+        self, crm_client, unique_id, auth_headers_system
+    ):
+        """Строки с числом для integer/number принимаются и сохраняются как числа."""
+        type_id = await self._create_type_with_required_fields(
+            crm_client, unique_id, auth_headers_system
+        )
+        resp = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": type_id,
+                "name": f"Строковые числа {unique_id}",
+                "attributes": {"email": "n@n.ru", "age": "31"},
+            },
+            headers=auth_headers_system,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["attributes"]["age"] == 31
+
+        type_amt = f"deal_amt_{unique_id}"
+        amt_resp = await crm_client.post(
+            "/crm/api/v1/entity-types/",
+            json={
+                "type_id": type_amt,
+                "name": "Deal amount",
+                "required_fields": {"amount": {"type": "number", "label": "Amount"}},
+                "optional_fields": {},
+                "namespace": "default",
+            },
+            headers=auth_headers_system,
+        )
+        assert amt_resp.status_code == 200, amt_resp.text
+
+        resp2 = await crm_client.post(
+            "/crm/api/v1/entities/",
+            json={
+                "entity_type": type_amt,
+                "name": f"Сделка {unique_id}",
+                "attributes": {"amount": "1500000"},
+            },
+            headers=auth_headers_system,
+        )
+        assert resp2.status_code == 200, resp2.text
+        amt = resp2.json()["attributes"]["amount"]
+        assert amt == 1500000 or amt == 1500000.0
 
     @pytest.mark.asyncio
     async def test_update_entity_schema_violation(

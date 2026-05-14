@@ -28,9 +28,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Any, Iterator, Literal
-
-import structlog
+from typing import Any, Literal
 
 from core.logging.attributes import (
     LOG_COMPANY_ID,
@@ -39,8 +37,12 @@ from core.logging.attributes import (
     LOG_TRACE_ID,
     LOG_USER_ID,
 )
-from core.logging.context import bind_log_context, clear_log_context, get_log_context, restore_log_context
-
+from core.logging.context import (
+    bind_log_context,
+    clear_log_context,
+    get_log_context,
+    restore_log_context,
+)
 
 LogScope = Literal["system", "request"]
 

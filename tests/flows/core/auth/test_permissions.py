@@ -11,15 +11,10 @@
 БЕЗ МОКОВ кроме LLM.
 """
 
-import uuid
-from typing import Any, Dict, List
 
-import pytest
 
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
-from core.auth.permissions import PermissionChecker
-
 
 # =============================================================================
 # Тесты PermissionChecker

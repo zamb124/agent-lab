@@ -7,7 +7,7 @@ LLM resource island: нода type=resource с единственной прив
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, Set, Tuple
 
 from apps.flows.src.models.enums import ResourceType
 from apps.flows.src.models.flow_config import Edge

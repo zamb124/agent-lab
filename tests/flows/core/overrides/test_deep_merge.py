@@ -4,7 +4,6 @@
 Проверяем все сценарии переопределений на уровне данных.
 """
 
-import pytest
 from apps.flows.src.utils.merge import deep_merge
 
 

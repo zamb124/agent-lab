@@ -8,17 +8,16 @@
 4. User отвечает → управление возвращается в support_agent → завершение
 """
 
-import pytest
 from typing import Any, Dict
 
-from apps.flows.src.runtime.exceptions import FlowInterrupt
-from core.clients.llm import setup_mock_responses
+import pytest
+
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.models import NodeConfig, LLMConfig, ToolReference
 from apps.flows.src.tools import BaseTool
 from apps.flows.src.tools.base import CodeTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
+from core.clients.llm import setup_mock_responses
 from core.state import ExecutionState
 
 
@@ -60,7 +59,7 @@ class TestNodeAsToolWrapper:
 class TestFlowWithSubagentInterrupt:
     """
     Интеграционный тест: Agent с субагентом который делает interrupt.
-    
+
     Архитектура INLINE: все tools и субагенты определены inline в конфиге.
 
     main_flow (LlmNode)
@@ -178,7 +177,7 @@ async def execute(args, state):
 class TestSubagentMessagesIntegrity:
     """
     СТРОГИЙ ТЕСТ: проверяем целостность messages при вложенных агентах.
-    
+
     Архитектура INLINE: все tools определены inline в конфиге.
     """
 
@@ -233,23 +232,23 @@ async def execute(args, state):
         """
         from apps.flows.src.runtime.runners.llm_runner import new_tool_result_message
         from core.clients.llm.factory import _message_to_openai
-        
+
         tool_result = new_tool_result_message(
             "call_test_123",
             "Test result",
             "test_node",
             context_id="ctx_test",
         )
-        
+
         openai_msg = _message_to_openai(tool_result)
-        
+
         assert openai_msg["role"] == "tool", \
             f"tool result должен иметь role='tool', получен: {openai_msg['role']}"
-        
+
         assert openai_msg.get("tool_call_id") == "call_test_123", \
             f"tool_call_id должен быть 'call_test_123', получен: {openai_msg.get('tool_call_id')}"
 
-    @pytest.mark.asyncio  
+    @pytest.mark.asyncio
     async def test_full_resume_cycle(
         self,
         main_flow_with_subagent: Dict[str, Any],
@@ -267,7 +266,7 @@ async def execute(args, state):
         ])
 
         flow = await Flow.from_config(main_flow_with_subagent)
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -276,15 +275,15 @@ async def execute(args, state):
             content="Начни сбор"
         )
         result1 = await flow.run(state)
-        
+
         assert result1.interrupt is not None
         assert len(result1.interrupt_path) > 0
-        
+
         result1.content = "test@test.com"
         result1.interrupt = None
-        
+
         result2 = await flow.run(result1)
-        
+
         assert result2.interrupt is None, \
             f"Agent должен завершиться без interrupt, получен: {result2.interrupt}"
         assert result2.response, \
@@ -364,7 +363,7 @@ async def execute(args: dict, state: dict = None):
 
         with pytest.raises(ValueError, match="passed as string"):
             await container.tool_registry.create_tool("ask_user")
-    
+
     @pytest.mark.asyncio
     async def test_builtin_tools_in_repository(self, app):
         """Встроенные tools загружены в БД с inline code."""
@@ -453,8 +452,8 @@ async def execute(args, state):
                 }
             ]
         )
-        
+
         result = await flow.run(state)
-        
+
         assert result.response, f"Должен быть ответ, state: {result}"
         assert result.interrupt is None, "Не должно быть interrupt"

@@ -276,8 +276,7 @@ class TestIncomingA2aFilesUnit:
 
     def test_extract_incoming_bytes_in_memory(self):
         """FileWithBytes декодируется в память, без записи файла."""
-        from a2a.types import FilePart, Message, Part, Role, TextPart
-        from a2a.types import FileWithBytes
+        from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
 
         from apps.flows.src.files.handler import extract_incoming_a2a_files
 

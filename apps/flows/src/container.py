@@ -2,8 +2,8 @@
 
 from typing import Optional
 
-from core.container import BaseContainer, lazy
 from core.config.testing import is_testing
+from core.container import BaseContainer, lazy
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 class FlowContainer(BaseContainer):
     """DI контейнер сервиса flows."""
 
-    # Флаг выполнения через воркер. 
+    # Флаг выполнения через воркер.
     # True = kiq() отправляет в воркер
     # False = kiq() выполняет локально (внутри воркера)
     use_worker: bool = True
@@ -44,8 +44,8 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def redis_client(self):
-        from core.clients import RedisClient
         from apps.flows.config import get_settings
+        from core.clients import RedisClient
         settings = get_settings()
         redis_url = settings.database.redis_url
         client = RedisClient(redis_url)
@@ -196,7 +196,7 @@ class FlowContainer(BaseContainer):
         """Возвращает runner для указанного языка."""
         from core.context import get_context
         context = get_context()
-        
+
         if language == "python":
             from apps.flows.src.runners.python import PythonCodeRunner
             return PythonCodeRunner(
@@ -254,24 +254,24 @@ class FlowContainer(BaseContainer):
             variables_service=self.variables_service,
             graph_compiler=self.graph_compiler,
         )
-    
+
     @lazy
     def trigger_registry(self):
         from apps.flows.config import get_settings
+        from apps.flows.src.models import TriggerType
         from apps.flows.src.triggers import TriggerRegistry
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
-        from apps.flows.src.models import TriggerType
-        
+
         settings = get_settings()
         base_url = settings.server.get_flows_webhook_public_base_url()
-        
+
         registry = TriggerRegistry(base_url=base_url)
-        
+
         # Регистрируем handlers
         registry.register_handler(TriggerType.TELEGRAM, TelegramTriggerHandler)
-        
+
         return registry
-    
+
     @lazy
     def channel_registry(self):
         from apps.flows.src.channels import create_default_channel_registry
@@ -282,7 +282,7 @@ class FlowContainer(BaseContainer):
         """Репозиторий для глобального маппинга embed_id -> company_id"""
         from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
         return EmbedMappingRepository(storage=self.shared_storage)
-    
+
     @lazy
     def embed_config_repository(self):
         """Репозиторий для конфигураций встраиваемых виджетов"""
@@ -299,7 +299,6 @@ _container: Optional[FlowContainer] = None
 
 def get_container() -> FlowContainer:
     """Получает контейнер (создает при первом вызове)"""
-    import os
     global _container
     if _container is None:
         from apps.flows.config import get_settings

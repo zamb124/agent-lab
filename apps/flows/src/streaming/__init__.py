@@ -16,7 +16,7 @@ from .speakable import (
     is_speakable_artifact,
     iter_speakable_text_parts,
 )
-from .subscriber import EventSubscriber, RedisSubscriber, parse_event, is_final_event
+from .subscriber import EventSubscriber, RedisSubscriber, is_final_event, parse_event
 
 __all__ = [
     "BaseEmitter",

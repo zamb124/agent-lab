@@ -11,15 +11,23 @@ import os
 import sys
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic import context
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.crm.db.models import (  # noqa: F401
-    Base, CRMEntity, CRMTask, EntityType, RelationshipType,
-    Relationship, CompanyMapping, AccessGrant, AccessRequest,
+    AccessGrant,
+    AccessRequest,
+    Base,
+    CompanyMapping,
+    CRMEntity,
+    CRMSuggest,
+    CRMTask,
+    EntityType,
+    Relationship,
+    RelationshipType,
 )
 
 config = context.config
@@ -31,8 +39,15 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 MANAGED_TABLES = {
-    "crm_entities", "crm_tasks", "entity_types", "relationship_types",
-    "relationships", "company_mapping", "access_grants", "access_requests",
+    "crm_entities",
+    "crm_tasks",
+    "entity_types",
+    "relationship_types",
+    "relationships",
+    "company_mapping",
+    "access_grants",
+    "access_requests",
+    "crm_suggests",
 }
 
 
@@ -47,6 +62,7 @@ def _get_url() -> str:
     if url:
         return url
     from core.config import get_settings
+
     settings = get_settings()
     if not settings.database.crm_url:
         raise ValueError("DATABASE__CRM_URL не настроен")

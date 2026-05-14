@@ -10,10 +10,9 @@ from apps.rag_worker.config import get_settings
 get_settings()
 
 # Импортируем worker app
-from apps.rag_worker.broker import broker as worker_app
-
 # Регистрируем startup/shutdown события
-import apps.rag_worker.worker  # noqa: F401
+import apps.rag_worker.worker  # noqa: F401, E402
+from apps.rag_worker.broker import broker as worker_app  # noqa: E402
 
 # Экспортируем объекты для taskiq CLI
 __all__ = ["worker_app"]

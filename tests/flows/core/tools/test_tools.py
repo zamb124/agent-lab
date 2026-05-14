@@ -5,13 +5,13 @@ TESTING=true установлен в conftest.py - tools работают в moc
 """
 
 import os
-import pytest
-from typing import Any, Dict, Optional
 
-from apps.flows.src.tools.base import BaseTool, is_test_mode
+import pytest
+
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.tools.base import BaseTool, is_test_mode
+from apps.flows.tools import ask_user, calculator, finish
 from core.state import ExecutionState
-from apps.flows.tools import calculator, finish, ask_user
 
 
 class TestIsTestMode:

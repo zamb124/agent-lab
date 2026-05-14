@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import ValidationError
@@ -28,12 +28,12 @@ from apps.frontend.models import (
     PlatformTracingFacetItem,
     PlatformTracingFacetItemsResponse,
 )
-from core.models.identity_models import Company
-from core.billing.service import company_resource_prices_storage_key
 from core.billing.default_settlement_rules import default_settlement_rules_document
+from core.billing.service import company_resource_prices_storage_key
 from core.billing.settlement_rules import parse_settlement_rules_json
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.models.billing_models import UsageType
+from core.models.identity_models import Company
 from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _facet_query_fragment
 
 router = APIRouter(prefix="/api/platform-billing", tags=["platform-billing"])

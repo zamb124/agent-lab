@@ -21,7 +21,8 @@ from core.models.identity_models import Company, User
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
 
-_NOW = lambda: datetime.now(timezone.utc)
+def _NOW():
+    return datetime.now(timezone.utc)
 
 
 def _make_task(
@@ -819,6 +820,40 @@ class TestStaleTasksAndWorkerGuards:
         assert row.status == "failed"
         assert row.error_message is not None
         assert "воркер" in (row.error_message or "").lower() or "worker" in (row.error_message or "").lower()
+
+    @pytest.mark.asyncio
+    async def test_reconcile_cancel_requested_closes_even_when_recently_updated(
+        self,
+        crm_container,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
+        ns = f"g_{unique_id}"
+        tid = f"cancel-fresh-{unique_id}"
+        fresh = _NOW()
+        task = CRMTask(
+            task_id=tid,
+            task_type="note_analysis_draft_repair",
+            status="running",
+            stage="draft_repair",
+            progress_pct=50,
+            company_id="system",
+            namespace=ns,
+            user_id=system_user_id,
+            data={"note_id": f"n-{unique_id}"},
+            cancel_requested=True,
+            started_at=fresh,
+            created_at=fresh,
+            updated_at=fresh,
+        )
+        await _insert_task(crm_container, task, "system", ns, system_user_id)
+
+        n = await crm_container.task_service.reconcile_stale_worker_tasks()
+        assert n == 1
+        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        assert row is not None
+        assert row.status == "cancelled"
+        assert row.cancel_requested is False
 
     @pytest.mark.asyncio
     async def test_reconcile_stale_cancel_requested_becomes_cancelled(

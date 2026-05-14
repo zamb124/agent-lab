@@ -23,7 +23,6 @@ from core.billing.cbr_rate_provider import (
     refresh_rate_once,
 )
 
-
 # --- Хелпер сброса модульного кэша ---
 
 @pytest.fixture(autouse=True)

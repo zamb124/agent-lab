@@ -13,8 +13,7 @@ from __future__ import annotations
 import pytest
 
 from core.files.checksum import compute_content_checksum_sha256
-from core.files.reader import FileReader, FileReadError
-from core.files.reader.models import FileReadKind
+from core.files.reader import FileReader
 from tests.core.files.corpus.helpers import corpus_stt_company_id
 from tests.core.files.corpus.manifest import CORPUS, CorpusFile
 

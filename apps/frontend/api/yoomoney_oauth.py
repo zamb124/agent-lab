@@ -5,7 +5,6 @@ GET /api/billing/yoomoney/authorize — формирует URL авториза�
 GET /api/billing/yoomoney/callback — обменивает code на access_token
 """
 
-from core.logging import get_logger
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
@@ -20,6 +19,7 @@ from core.clients.payment.yoomoney_provider import (
     save_access_token,
 )
 from core.http import request_public_oauth
+from core.logging import get_logger
 from core.utils.domain import PRIMARY_DOMAIN
 
 logger = get_logger(__name__)

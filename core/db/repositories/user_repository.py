@@ -4,16 +4,15 @@
 """
 
 import json
-
-from core.logging import get_logger
 from typing import Optional
 
-from sqlalchemy import select, cast, text
+from sqlalchemy import cast, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from core.db.base_repository import BaseRepository
 from core.db.models import Users as UsersModel
 from core.db.storage import Storage
+from core.logging import get_logger
 from core.models.identity_models import User
 
 logger = get_logger(__name__)
@@ -22,7 +21,7 @@ class UserRepository(BaseRepository[User]):
     Репозиторий для работы с пользователями.
     is_global=True - пользователи не изолированы по компаниям.
     """
-    
+
     is_global = True
 
     def __init__(self, storage: Storage):

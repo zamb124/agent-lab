@@ -9,21 +9,31 @@ Storage - key-value storage для всех сущностей платформ�
 Маршрутизация определяется через TABLE_ROUTING.
 """
 
-from core.logging import get_logger
 import json
-from typing import Optional, List
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, delete, Table, MetaData, text, Column, String, DateTime
-from sqlalchemy.dialects.postgresql import insert, JSONB
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+
+from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select, text
+from sqlalchemy.dialects.postgresql import JSONB, insert
 
 from core.db.database import get_session_factory
 from core.db.models import (
-    Storage as StorageModel,
-    Users as UsersModel,
-    Variables as VariablesModel,
-    Usage as UsageModel,
     Namespaces as NamespacesModel,
 )
+from core.db.models import (
+    Storage as StorageModel,
+)
+from core.db.models import (
+    Usage as UsageModel,
+)
+from core.db.models import (
+    Users as UsersModel,
+)
+from core.db.models import (
+    Variables as VariablesModel,
+)
+from core.db.utils import get_rowcount
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 TABLE_MODELS = {
@@ -42,8 +52,9 @@ TABLE_ROUTING = {
     "var:": {"table": "variables", "company_specific": False},
     "usage:": {"table": "usage", "company_specific": False},
     "namespace:": {"table": "namespaces", "company_specific": False},
-    "_default": {"table": "storage", "company_specific": False}
+    "_default": {"table": "storage", "company_specific": False},
 }
+
 
 class _SessionContextManager:
     """Асинхронный контекстный менеджер для сессий БД"""
@@ -64,14 +75,16 @@ class _SessionContextManager:
         if self._session:
             return await self._session.__aexit__(exc_type, exc_val, exc_tb)
 
+
 class Storage:
     """
     Key-value storage с поддержкой маршрутизации по таблицам.
-    
+
     Args:
         db_url: URL базы данных (опционально, по умолчанию из settings)
         get_context_func: Функция для получения контекста (опционально)
     """
+
     def __init__(self, db_url: Optional[str] = None, get_context_func=None):
         self.session_factory = None
         self.db_url = db_url
@@ -133,7 +146,7 @@ class Storage:
             Column("created_at", DateTime(timezone=True)),
             Column("updated_at", DateTime(timezone=True)),
             extend_existing=True,
-            autoload_with=None
+            autoload_with=None,
         )
         self._table_cache[table_name] = table
         return table
@@ -149,9 +162,12 @@ class Storage:
             return key, None
 
         global_prefixes = [
-            'company:', 'subdomain:',
-            'auth_session:', 'auth_state:',
-            'web_notification:', 'media_group:',
+            "company:",
+            "subdomain:",
+            "auth_session:",
+            "auth_state:",
+            "web_notification:",
+            "media_group:",
         ]
 
         if any(key.startswith(prefix) for prefix in global_prefixes):
@@ -189,18 +205,16 @@ class Storage:
     async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
         """Получает значение с использованием переданной сессии"""
         model = self._get_table_model(table_name)
-        
+
         if model in TABLE_MODELS.values():
-            result = await session.execute(
-                select(model.value).where(model.key == key)
-            )
+            result = await session.execute(select(model.value).where(model.key == key))
         else:
             query = text(f"SELECT value FROM {table_name} WHERE key = :key")
             result = await session.execute(query, {"key": key})
 
         row = result.first()
         if row:
-            value = row.value if hasattr(row, 'value') else row[0]
+            value = row.value if hasattr(row, "value") else row[0]
             if isinstance(value, dict):
                 return json.dumps(value)
             elif isinstance(value, str):
@@ -210,7 +224,12 @@ class Storage:
         return None
 
     async def set(
-        self, key: str, value: str, ttl: Optional[int] = None, db_session=None, force_global: bool = False
+        self,
+        key: str,
+        value: str,
+        ttl: Optional[int] = None,
+        db_session=None,
+        force_global: bool = False,
     ) -> bool:
         """
         Сохраняет значение по ключу с опциональным TTL.
@@ -227,7 +246,7 @@ class Storage:
         """
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
-        
+
         if db_session:
             return await self._set_with_session(final_key, value, ttl, table_name, db_session)
 
@@ -248,8 +267,12 @@ class Storage:
             expired_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
         else:
             permanent_prefixes = [
-                'company:', 'subdomain:', 'user:',
-                'auth_session:', 'auth_state:', 'token:'
+                "company:",
+                "subdomain:",
+                "user:",
+                "auth_session:",
+                "auth_state:",
+                "token:",
             ]
 
             if any(key.startswith(prefix) for prefix in permanent_prefixes):
@@ -258,7 +281,7 @@ class Storage:
                 expired_at = datetime.now(timezone.utc) + timedelta(days=5)
 
         model = self._get_table_model(table_name)
-        
+
         if model in TABLE_MODELS.values():
             # Используем правильный синтаксис для ON CONFLICT с primary key
             now = datetime.now(timezone.utc)
@@ -285,13 +308,16 @@ class Storage:
                     expired_at = EXCLUDED.expired_at
             """)
             now = datetime.now(timezone.utc)
-            await session.execute(query, {
-                "key": key,
-                "value": json.dumps(json_value),
-                "expired_at": expired_at,
-                "created_at": now,
-                "updated_at": now
-            })
+            await session.execute(
+                query,
+                {
+                    "key": key,
+                    "value": json.dumps(json_value),
+                    "expired_at": expired_at,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
 
         return True
 
@@ -322,21 +348,21 @@ class Storage:
     async def _delete_with_session(self, key: str, table_name: str, session) -> bool:
         """Удаляет значение с использованием переданной сессии"""
         model = self._get_table_model(table_name)
-        
+
         if model in TABLE_MODELS.values():
-            result = await session.execute(
-                delete(model).where(model.key == key)
-            )
+            result = await session.execute(delete(model).where(model.key == key))
         else:
             query = text(f"DELETE FROM {table_name} WHERE key = :key")
             result = await session.execute(query, {"key": key})
 
-        deleted = result.rowcount > 0
+        deleted = get_rowcount(result) > 0
         if deleted:
             logger.debug(f"Удалено: {key} из таблицы {table_name}")
         return deleted
 
-    async def list_by_prefix(self, prefix: str, limit: int = 100, force_global: bool = False) -> List[str]:
+    async def list_by_prefix(
+        self, prefix: str, limit: int = 100, force_global: bool = False
+    ) -> List[str]:
         """
         Получает список ключей по префиксу.
 
@@ -353,20 +379,22 @@ class Storage:
 
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
-            
+
             if model in TABLE_MODELS.values():
                 result = await session.execute(
-                    select(model.key)
-                    .where(model.key.like(f"{final_prefix}%"))
-                    .limit(limit)
+                    select(model.key).where(model.key.like(f"{final_prefix}%")).limit(limit)
                 )
                 return [row.key for row in result]
             else:
                 query = text(f"SELECT key FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
-                result = await session.execute(query, {"prefix": f"{final_prefix}%", "limit": limit})
+                result = await session.execute(
+                    query, {"prefix": f"{final_prefix}%", "limit": limit}
+                )
                 return [row[0] for row in result]
 
-    async def get_all_by_prefix(self, prefix: str, limit: int = 1000, force_global: bool = False) -> dict[str, str]:
+    async def get_all_by_prefix(
+        self, prefix: str, limit: int = 1000, force_global: bool = False
+    ) -> dict[str, str]:
         """
         Получает все данные по префиксу за один запрос (оптимизация N+1).
 
@@ -384,7 +412,7 @@ class Storage:
 
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
-            
+
             if model in TABLE_MODELS.values():
                 result = await session.execute(
                     select(model.key, model.value)
@@ -392,13 +420,17 @@ class Storage:
                     .limit(limit)
                 )
             else:
-                query = text(f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
-                result = await session.execute(query, {"prefix": f"{final_prefix}%", "limit": limit})
+                query = text(
+                    f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix LIMIT :limit"
+                )
+                result = await session.execute(
+                    query, {"prefix": f"{final_prefix}%", "limit": limit}
+                )
 
             data = {}
             for row in result:
-                key = row.key if hasattr(row, 'key') else row[0]
-                value = row.value if hasattr(row, 'value') else row[1]
+                key = row.key if hasattr(row, "key") else row[0]
+                value = row.value if hasattr(row, "value") else row[1]
 
                 if isinstance(value, dict):
                     data[key] = json.dumps(value)
@@ -434,22 +466,21 @@ class Storage:
 
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
-            
+
             if model in TABLE_MODELS.values():
                 result = await session.execute(
-                    select(model.key, model.value)
-                    .where(model.key.in_(final_keys))
+                    select(model.key, model.value).where(model.key.in_(final_keys))
                 )
             else:
-                placeholders = ','.join([f':key{i}' for i in range(len(final_keys))])
+                placeholders = ",".join([f":key{i}" for i in range(len(final_keys))])
                 query = text(f"SELECT key, value FROM {table_name} WHERE key IN ({placeholders})")
-                params = {f'key{i}': k for i, k in enumerate(final_keys)}
+                params = {f"key{i}": k for i, k in enumerate(final_keys)}
                 result = await session.execute(query, params)
 
             data = {}
             for row in result:
-                final_key = row.key if hasattr(row, 'key') else row[0]
-                value = row.value if hasattr(row, 'value') else row[1]
+                final_key = row.key if hasattr(row, "key") else row[0]
+                value = row.value if hasattr(row, "value") else row[1]
 
                 original_key = key_mapping.get(final_key, final_key)
 
@@ -466,28 +497,30 @@ class Storage:
         """
         Низкоуровневый метод для получения значения из конкретной таблицы.
         Используется BaseRepository.
-        
+
         Args:
             key: Финальный ключ (с префиксом компании если нужно)
             table_name: Имя таблицы
-            
+
         Returns:
             JSON строка или None
         """
         async with self._get_session() as session:
             return await self._get_with_session(key, table_name, session)
 
-    async def _set_with_table(self, key: str, value: str, table_name: str, ttl: Optional[int] = None) -> bool:
+    async def _set_with_table(
+        self, key: str, value: str, table_name: str, ttl: Optional[int] = None
+    ) -> bool:
         """
         Низкоуровневый метод для сохранения значения в конкретную таблицу.
         Используется BaseRepository.
-        
+
         Args:
             key: Финальный ключ (с префиксом компании если нужно)
             value: JSON строка
             table_name: Имя таблицы
             ttl: Время жизни в секундах
-            
+
         Returns:
             True если сохранение успешно
         """
@@ -501,11 +534,11 @@ class Storage:
         """
         Низкоуровневый метод для удаления значения из конкретной таблицы.
         Используется BaseRepository.
-        
+
         Args:
             key: Финальный ключ (с префиксом компании если нужно)
             table_name: Имя таблицы
-            
+
         Returns:
             True если удаление успешно
         """
@@ -521,7 +554,7 @@ class Storage:
         """
         Низкоуровневый метод для получения всех значений по префиксу из конкретной таблицы.
         Используется BaseRepository.
-        
+
         Args:
             prefix: Финальный префикс (с префиксом компании если нужно)
             table_name: Имя таблицы
@@ -535,7 +568,7 @@ class Storage:
             raise ValueError("offset должен быть >= 0")
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
-            
+
             if model in TABLE_MODELS.values():
                 result = await session.execute(
                     select(model.key, model.value)
@@ -555,8 +588,8 @@ class Storage:
 
             data = {}
             for row in result:
-                key = row.key if hasattr(row, 'key') else row[0]
-                value = row.value if hasattr(row, 'value') else row[1]
+                key = row.key if hasattr(row, "key") else row[0]
+                value = row.value if hasattr(row, "value") else row[1]
 
                 if isinstance(value, dict):
                     data[key] = json.dumps(value)
@@ -573,6 +606,7 @@ class Storage:
             model = self._get_table_model(table_name)
             if model in TABLE_MODELS.values():
                 from sqlalchemy import func as sa_func
+
                 result = await session.execute(
                     select(sa_func.count()).where(model.key.like(f"{prefix}%"))
                 )
@@ -587,11 +621,11 @@ class Storage:
         """
         Низкоуровневый метод для получения нескольких значений из конкретной таблицы.
         Используется BaseRepository.
-        
+
         Args:
             keys: Список финальных ключей (с префиксом компании если нужно)
             table_name: Имя таблицы
-            
+
         Returns:
             Словарь {key: value_json}
         """
@@ -600,22 +634,21 @@ class Storage:
 
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
-            
+
             if model in TABLE_MODELS.values():
                 result = await session.execute(
-                    select(model.key, model.value)
-                    .where(model.key.in_(keys))
+                    select(model.key, model.value).where(model.key.in_(keys))
                 )
             else:
-                placeholders = ','.join([f':key{i}' for i in range(len(keys))])
+                placeholders = ",".join([f":key{i}" for i in range(len(keys))])
                 query = text(f"SELECT key, value FROM {table_name} WHERE key IN ({placeholders})")
-                params = {f'key{i}': k for i, k in enumerate(keys)}
+                params = {f"key{i}": k for i, k in enumerate(keys)}
                 result = await session.execute(query, params)
 
             data = {}
             for row in result:
-                key = row.key if hasattr(row, 'key') else row[0]
-                value = row.value if hasattr(row, 'value') else row[1]
+                key = row.key if hasattr(row, "key") else row[0]
+                value = row.value if hasattr(row, "value") else row[1]
 
                 if isinstance(value, dict):
                     data[key] = json.dumps(value)
@@ -632,23 +665,21 @@ class Storage:
         """
         Низкоуровневый метод для получения списка ключей по префиксу из конкретной таблицы.
         Используется для массового удаления данных компании.
-        
+
         Args:
             prefix: Префикс ключей (например, "company:acme:agent:")
             table_name: Имя таблицы
             limit: Максимальное количество результатов
-            
+
         Returns:
             Список ключей
         """
         async with self._get_session() as session:
             model = self._get_table_model(table_name)
-            
+
             if model in TABLE_MODELS.values():
                 result = await session.execute(
-                    select(model.key)
-                    .where(model.key.like(f"{prefix}%"))
-                    .limit(limit)
+                    select(model.key).where(model.key.like(f"{prefix}%")).limit(limit)
                 )
                 return [row.key for row in result]
             else:

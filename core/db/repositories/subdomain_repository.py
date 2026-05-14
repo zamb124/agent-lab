@@ -3,12 +3,13 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
-from core.logging import get_logger
 from typing import Optional
+
 from pydantic import BaseModel
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class SubdomainMapping(BaseModel):
@@ -21,7 +22,7 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
     Репозиторий для маппинга subdomain → company_id.
     is_global=True - маппинги не изолированы по компаниям.
     """
-    
+
     is_global = True
 
     def __init__(self, storage: Storage):
@@ -42,10 +43,10 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
     async def get_company_id(self, subdomain: str) -> Optional[str]:
         """
         Получает company_id по subdomain.
-        
+
         Args:
             subdomain: Поддомен
-            
+
         Returns:
             company_id или None
         """
@@ -55,11 +56,11 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
     async def set_mapping(self, subdomain: str, company_id: str) -> bool:
         """
         Устанавливает маппинг subdomain → company_id.
-        
+
         Args:
             subdomain: Поддомен
             company_id: ID компании
-            
+
         Returns:
             True если сохранение успешно
         """

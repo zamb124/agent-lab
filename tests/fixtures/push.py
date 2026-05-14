@@ -87,7 +87,7 @@ def web_push_service(vapid_keys):
     WebPushService с тестовыми VAPID ключами.
     """
     from core.push.service import WebPushService
-    
+
     return WebPushService(
         vapid_private_key=vapid_keys["private_key"],
         vapid_public_key=vapid_keys["public_key"],
@@ -103,7 +103,7 @@ async def test_push_subscription(push_repository, push_subscription_data, unique
     """
     user_id = f"test_user_{unique_id}"
     endpoint = f"{push_subscription_data['endpoint']}_{unique_id}"
-    
+
     subscription = await push_repository.upsert_subscription(
         user_id=user_id,
         endpoint=endpoint,
@@ -111,9 +111,9 @@ async def test_push_subscription(push_repository, push_subscription_data, unique
         platform=push_subscription_data["platform"],
         user_agent=push_subscription_data["user_agent"]
     )
-    
+
     yield subscription
-    
+
     # Cleanup
     try:
         await push_repository.delete_subscription(user_id, endpoint)
@@ -127,16 +127,16 @@ async def test_push_subscriptions_multi_device(push_repository, unique_id):
     Создает подписки для 3 устройств одного пользователя.
     """
     user_id = f"test_user_multi_{unique_id}"
-    
+
     devices = [
         ("desktop", f"https://fcm.googleapis.com/desktop-{unique_id}"),
         ("ios", f"https://web.push.apple.com/ios-{unique_id}"),
         ("android", f"https://fcm.googleapis.com/android-{unique_id}"),
     ]
-    
+
     subscriptions = []
     endpoints = []
-    
+
     for platform, endpoint in devices:
         endpoints.append(endpoint)
         sub = await push_repository.upsert_subscription(
@@ -146,9 +146,9 @@ async def test_push_subscriptions_multi_device(push_repository, unique_id):
             platform=platform
         )
         subscriptions.append(sub)
-    
+
     yield user_id, subscriptions
-    
+
     # Cleanup
     for endpoint in endpoints:
         try:

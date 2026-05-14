@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.context import clear_context, set_context
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID

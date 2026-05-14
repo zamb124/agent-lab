@@ -1,10 +1,10 @@
 """Репозиторий для работы с файлами (SQLAlchemy)."""
 
-from core.logging import get_logger
 from typing import Type
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncFile
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class SyncFileRepository(BaseSyncRepository[SyncFile]):

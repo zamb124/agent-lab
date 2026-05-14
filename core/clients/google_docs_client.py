@@ -13,8 +13,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import httpx
-
 from google.oauth2 import service_account as sa
 
 from core.http import get_httpx_client

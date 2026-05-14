@@ -12,7 +12,6 @@ import re
 
 from num2words import num2words
 
-
 _INTEGER_RE = re.compile(r"\b(\d{1,3}(?:\s\d{3})*|\d+)\b")
 _DECIMAL_RE = re.compile(r"\b(\d+)[.,](\d+)\b")
 _PERCENT_RE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*%")

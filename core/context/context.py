@@ -4,7 +4,7 @@
 """
 
 import contextvars
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from core.models.context_models import Context
@@ -22,7 +22,7 @@ _current_channel: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar
 def set_context(context: "Context") -> None:
     """
     Устанавливает контекст.
-    
+
     Args:
         context: Контекст для установки
     """
@@ -32,7 +32,7 @@ def set_context(context: "Context") -> None:
 def get_context() -> Optional["Context"]:
     """
     Получает текущий контекст.
-    
+
     Returns:
         Текущий контекст или None
     """
@@ -47,7 +47,7 @@ def clear_context() -> None:
 def set_current_channel(channel: Any) -> None:
     """
     Устанавливает текущий канал коммуникации.
-    
+
     Args:
         channel: Канал для установки (BaseChannel)
     """
@@ -57,7 +57,7 @@ def set_current_channel(channel: Any) -> None:
 def get_current_channel() -> Optional[Any]:
     """
     Получает текущий канал коммуникации.
-    
+
     Returns:
         Текущий канал или None
     """

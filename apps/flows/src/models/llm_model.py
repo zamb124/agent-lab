@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class LLMModel(BaseModel):
     """Модель LLM от провайдера."""
-    
+
     model_id: str = Field(..., description="ID модели")
     provider: str = Field(..., description="Провайдер (bothub, openrouter, openai, provider_litserve)")
 

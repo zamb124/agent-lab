@@ -14,38 +14,26 @@ import os
 import sys
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic import context
 
 # Добавляем корень проекта в path для импортов
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Импортируем Base и core модели
-from core.db.models import Base
+# CRM models
 
 # Импорт моделей - они автоматически регистрируются в Base.metadata и service_registry
 # Flows service models
-from apps.flows.src.db.models import (
-    Flows, FlowsVersions, Nodes, Tools, States,
-    EvaluationResults, ScheduledTasks
-)
-# Push models (core)
-from core.push.models import PushSubscription
-# CRM models
-from apps.crm.db.models import (
-    EntityType, RelationshipType, Relationship,
-    CompanyMapping, AccessGrant, AccessRequest
-)
+
 # Sync models
-from apps.sync.db.models import (
-     SyncChannel, SyncChannelMember,
-    SyncThread, SyncMessage, SyncMessageContent,
-    SyncMessageFile, SyncFile, SyncGitResourceRef,
-)
+from core.db.models import Base
 
 # Теперь импортируем реестр после регистрации всех сервисов
 from core.db.service_registry import get_unique_db_urls
+
+# Push models (core)
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -76,9 +64,9 @@ def run_migrations_offline() -> None:
     db_urls = get_unique_db_urls()
     if not db_urls:
         raise RuntimeError("No database URLs registered")
-    
+
     url = list(db_urls.keys())[0]
-    
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -93,13 +81,13 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """
     Run migrations in 'online' mode.
-    
+
     Если connection передан через cfg.attributes["connection"] -
     используем его (для вызова из async контекста через run_migrations_async).
     Иначе итерируемся по всем уникальным БД через asyncio.run().
     """
     connectable = config.attributes.get("connection", None)
-    
+
     if connectable is not None:
         # Connection уже передан - используем напрямую
         do_run_migrations(connectable)
@@ -111,26 +99,26 @@ def run_migrations_online() -> None:
 async def run_async_migrations() -> None:
     """
     Применяет миграции ко всем уникальным БД.
-    
+
     Итерируется по URL из service_registry и применяет
     одни и те же миграции к каждой уникальной БД.
     """
     db_urls = get_unique_db_urls()
-    
+
     if not db_urls:
         logger.warning("No database URLs registered, skipping migrations")
         return
-    
+
     for db_url, services in db_urls.items():
         logger.info(f"Migrating DB for services: {services}")
-        
+
         engine = create_async_engine(db_url, poolclass=pool.NullPool)
-        
+
         async with engine.connect() as connection:
             await connection.run_sync(do_run_migrations)
-        
+
         await engine.dispose()
-        
+
         logger.info(f"Migrations completed for: {services}")
 
 

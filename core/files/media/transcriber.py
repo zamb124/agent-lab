@@ -11,7 +11,6 @@ from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
 from core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 

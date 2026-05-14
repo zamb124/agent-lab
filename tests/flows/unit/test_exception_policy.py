@@ -4,12 +4,12 @@ import asyncio
 
 import pytest
 
-from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from apps.flows.src.runtime.exception_policy import (
-    normalize_allow_types,
     node_exception_policy,
+    normalize_allow_types,
     should_absorb_exception,
 )
+from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 
 
 def test_should_absorb_disabled() -> None:

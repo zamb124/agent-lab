@@ -20,9 +20,12 @@ from apps.voice.services.voice_chunker import VoiceChunker
 from apps.voice.services.voice_session import VoiceSession
 from apps.voice.workers.stt_worker import run_stt_worker
 
-SPEECH_FRAME = b"\x01\x00" * 320   # ненулевые байты → VAD=True
+# run_tts_worker удалён; используется только в @pytest.mark.skip тестах
+run_tts_worker = None  # noqa: F841
+
+SPEECH_FRAME = b"\x01\x00" * 320  # ненулевые байты → VAD=True
 SILENCE_FRAME = b"\x00\x00" * 320  # нулевые байты → VAD=False
-SILENCE_THRESHOLD = 10              # количество тихих фреймов для flush
+SILENCE_THRESHOLD = 10  # количество тихих фреймов для flush
 
 
 async def _feed_utterance(session: VoiceSession, *, speech_count: int = 3) -> None:
@@ -136,7 +139,9 @@ async def test_stt_worker_multiple_utterances(unique_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="tts_worker удалён; озвучивание в run_speak_worker + VoiceClientChannel — тесты нужно переписать")
+@pytest.mark.skip(
+    reason="tts_worker удалён; озвучивание в run_speak_worker + VoiceClientChannel — тесты нужно переписать"
+)
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_tts_worker_synthesizes_text(unique_id: str) -> None:

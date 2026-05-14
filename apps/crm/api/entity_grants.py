@@ -3,14 +3,17 @@ API для управления грантами доступа к entities.
 """
 
 import asyncio
-from typing import List
 
 from fastapi import APIRouter, HTTPException, Query
 
-from core.pagination import OffsetPage
-from apps.crm.models.grant_models import GrantToUserRequest, GrantToCompanyRequest, AccessGrantResponse
 from apps.crm.dependencies import ContainerDep
+from apps.crm.models.grant_models import (
+    AccessGrantResponse,
+    GrantToCompanyRequest,
+    GrantToUserRequest,
+)
 from core.context import get_context
+from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/entities/{entity_id}/grants", tags=["Entity Grants"])
 
@@ -24,7 +27,7 @@ async def make_entity_public(
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         grant = await container.access_grant_service.grant_entity_public(
             entity_id=entity_id,
@@ -47,7 +50,7 @@ async def grant_to_user(
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         grant = await container.access_grant_service.grant_entity_to_user(
             entity_id=entity_id,
@@ -72,7 +75,7 @@ async def grant_to_company(
     ctx = get_context()
     if not ctx or not ctx.user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         grant = await container.access_grant_service.grant_entity_to_company(
             entity_id=entity_id,

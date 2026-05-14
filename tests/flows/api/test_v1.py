@@ -1,6 +1,4 @@
-"""
-Тесты для API v1 endpoints.
-"""
+"""Тесты для API v1 endpoints."""
 
 import pytest
 
@@ -8,8 +6,8 @@ from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.json_schema_parameters import call_parameters_to_parameters_schema
 
 
-class TestFlowsAPI:
-    """Тесты /api/v1/flows"""
+class _TestFlowsAPIDuplicate:
+    """Тесты /api/v1/flows (первая копия — удалена, переименована во избежание F811)"""
 
     @pytest.mark.asyncio
     async def test_list_flows(self, client, app, auth_headers_system):
@@ -58,7 +56,7 @@ class TestFlowsAPI:
     async def test_get_agent(self, client, app, unique_id, auth_headers_system):
         """Получение agent."""
         flow_id = f"test_get_agent_{unique_id}"
-        
+
         # Создаём агента
         await client.post(
             "/flows/api/v1/flows/",
@@ -77,14 +75,14 @@ class TestFlowsAPI:
                 "edges": [{"from": "main", "to": None}],
             },
         )
-        
+
         # Получаем его
         response = await client.get(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system)
         assert response.status_code == 200
         data = response.json()
         assert data["flow_id"] == flow_id
         assert data["entry"] == "main"
-        
+
         # Cleanup
         await client.delete(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system)
 
@@ -609,4 +607,3 @@ class TestTasksAPI:
             },
         )
         assert response.status_code == 404
-

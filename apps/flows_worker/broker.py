@@ -7,13 +7,11 @@ Flows worker для задач сервиса flows.
 """
 
 import asyncio
-import os
-
-from core.config.testing import is_testing
 
 from taskiq import TaskiqState
 
 from core.billing import set_billing_service
+from core.config.testing import is_testing
 from core.logging import get_logger
 from core.tasks.broker import (
     create_broker,
@@ -50,8 +48,8 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
     logger.info("worker.billing_initialized", service=service_name)
 
     # Курс USD/RUB от ЦБ РФ: один запрос при старте, затем фоновое обновление.
-    from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
     from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
+    from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
     from core.utils.background import run_with_log_context
 
     _cbr_fallback = settings.billing.usd_to_rub_rate

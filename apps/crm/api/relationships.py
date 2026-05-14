@@ -4,13 +4,14 @@ API для работы со связями (relationships).
 
 import asyncio
 import uuid
-from typing import List, Optional
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 
-from core.pagination import CursorPage, OffsetPage
+from apps.crm.db.models import Relationship, RelationshipType
+from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     RelationshipCreate,
     RelationshipResponse,
@@ -19,10 +20,9 @@ from apps.crm.models.api import (
 )
 from apps.crm.models.graph import ShortestPathResponse
 from apps.crm.services.graph_service import GraphEntityLimitExceededError
-from apps.crm.dependencies import ContainerDep
-from apps.crm.db.models import Relationship, RelationshipType
 from core.context import get_context
 from core.logging import get_logger
+from core.pagination import CursorPage, OffsetPage
 
 logger = get_logger(__name__)
 
@@ -106,7 +106,7 @@ async def create_relationship(
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)
     )
-    
+
     try:
         await container.relationship_repository.create(relationship)
     except IntegrityError as exc:

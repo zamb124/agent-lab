@@ -9,11 +9,11 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.flows.src.dependencies import ContainerDep
-from core.logging import get_logger
-from core.pagination import OffsetPage
-from apps.flows.src.models import ToolReference, CallParameter
+from apps.flows.src.models import CallParameter, ToolReference
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.tools.json_schema_parameters import call_parameters_to_parameters_schema
+from core.logging import get_logger
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 
@@ -227,7 +227,7 @@ async def create_tool(
                     description=param_def.get("description", ""),
                     required=param_def.get("required", True),
                 )
-    
+
     react_role = (
         ReactToolRole(request.react_role)
         if request.react_role

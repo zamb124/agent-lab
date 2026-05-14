@@ -17,9 +17,9 @@
 """
 
 import pytest
+
 from tests.fixtures.test_database_env import TEST_DATABASE_ENV
 from tests.fixtures.workers import SessionServerManager
-
 
 # Константы для lock файлов
 _FLOWS_SERVER_LOCK = "/tmp/platform_test_flows_server.lock"
@@ -84,12 +84,12 @@ def _with_mock_llm_lane(base_env: dict[str, str], lane: str) -> dict[str, str]:
 def flows_service():
     """
     Сервис flows как реальный HTTP на порту 9001.
-    
+
     Используется для:
     - flows и графы
     - Обработка задач через TaskIQ
     - WebSocket connections
-    
+
     Зависимости:
     - PostgreSQL (порт 54322)
     - Redis (порт 63792)
@@ -104,7 +104,7 @@ def flows_service():
         startup_wait=120.0,
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "flows"),
     )
-    
+
     with manager.start():
         yield
 
@@ -113,12 +113,12 @@ def flows_service():
 def rag_service():
     """
     RAG сервис как реальный HTTP сервер на порту 9002.
-    
+
     Используется для:
     - Semantic search через pgvector
     - Document processing
     - Namespace management
-    
+
     Зависимости:
     - PostgreSQL (порт 54322) - для document_processing_status, namespaces, pgvector embeddings
     - MinIO (порт 19002) - для хранения файлов
@@ -133,7 +133,7 @@ def rag_service():
         startup_wait=18.0,
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "rag"),
     )
-    
+
     with manager.start():
         yield
 
@@ -162,13 +162,13 @@ def voice_service():
 def crm_service(flows_service, rag_service, voice_service):
     """
     CRM сервис как реальный HTTP сервер на порту 9003.
-    
+
     Используется для:
     - Entity management (contacts, notes, tasks)
     - Relationship management
     - Entity types и schemas
     - Attachments (через RAG service)
-    
+
     Зависимости:
     - PostgreSQL (порт 54322) - для entity_types, relationships, relationship_types, entities через pgvector
     - RAG service (порт 9002) - для attachments
@@ -185,7 +185,7 @@ def crm_service(flows_service, rag_service, voice_service):
         err_file="/tmp/crm_server_err.log",
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "crm"),
     )
-    
+
     with manager.start():
         yield
 
@@ -194,12 +194,12 @@ def crm_service(flows_service, rag_service, voice_service):
 def frontend_service():
     """
     Frontend сервис как реальный HTTP сервер на порту 9004.
-    
+
     Используется для:
     - Web UI
     - Static файлы
     - Frontend API endpoints
-    
+
     Зависимости:
     - Agents service (порт 9001) - для backend API
     """
@@ -212,7 +212,7 @@ def frontend_service():
         startup_wait=20.0,
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "flows"),
     )
-    
+
     with manager.start():
         yield
 
@@ -238,7 +238,7 @@ def sync_service():
         pid_file=_SYNC_SERVER_PID,
         app_path="apps.sync.main:app",
         port=9005,
-        startup_wait=10.0,
+        startup_wait=45.0,
         env=_with_mock_llm_lane(_COMMON_TEST_ENV, "sync"),
     )
 
@@ -250,9 +250,9 @@ def sync_service():
 def all_services(flows_service, rag_service, crm_service, frontend_service, sync_service):
     """
     Запускает все сервисы платформы.
-    
+
     Используется для полных E2E тестов всей платформы.
-    
+
     Сервисы запускаются в следующем порядке:
     1. Agents (9001) - базовый сервис
     2. RAG (9002) - зависит от PostgreSQL с pgvector

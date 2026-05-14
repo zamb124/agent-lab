@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, Dict, Any, List
 
 from core.fields import Field
-from core.models.identity_models import User, Company
 from core.models.i18n_models import Language
+from core.models.identity_models import Company, User
 
 
 class Context(BaseModel):
@@ -97,7 +98,7 @@ class Context(BaseModel):
     def to_dict(self) -> Dict[str, Any]:
         """
         Сериализует Context в dict для передачи через TaskIQ.
-        
+
         Returns:
             Dict с данными контекста
         """
@@ -122,17 +123,17 @@ class Context(BaseModel):
     def from_dict(cls, data: Dict[str, Any]) -> "Context":
         """
         Восстанавливает Context из dict (после передачи через TaskIQ).
-        
+
         Args:
             data: Dict с данными контекста
-            
+
         Returns:
             Восстановленный Context
         """
         user_data = data.get("user")
         active_company_data = data.get("active_company")
         user_companies_data = data.get("user_companies", [])
-        
+
         return cls(
             user=User.model_validate(user_data) if user_data else None,
             active_company=Company.model_validate(active_company_data) if active_company_data else None,

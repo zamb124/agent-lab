@@ -20,7 +20,6 @@ from apps.flows.src.container import get_container
 from core.state import ExecutionState
 from tests.fixtures.auth import service_client_asgi_auth_context
 
-
 FLOW_ID = "universal_agent"
 
 

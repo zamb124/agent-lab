@@ -15,7 +15,7 @@ class NamespaceRepository(BaseRepository[Namespace]):
     Репозиторий для работы с namespace.
     is_global=False - ключи автоматически получают префикс company:{subdomain}:
     """
-    
+
     is_global = False
 
     def __init__(self, storage: Storage):
@@ -36,7 +36,7 @@ class NamespaceRepository(BaseRepository[Namespace]):
     def _extract_entity_id(self, entity: Namespace) -> str:
         """ID = name"""
         return entity.name
-    
+
     async def list(self, *, limit: int, offset: int = 0) -> List[Namespace]:
         """
         Возвращает страницу namespace компании.
@@ -56,16 +56,16 @@ class NamespaceRepository(BaseRepository[Namespace]):
     async def _create_default(self) -> Namespace:
         """Создает default namespace для текущей компании"""
         from core.context import get_context
-        
+
         context = get_context()
         company_id = context.active_company.company_id
-        
+
         namespace = Namespace(
             name="default",
             company_id=company_id,
             description="Основное пространство",
             is_default=True,
         )
-        
+
         await self.set(namespace)
         return namespace

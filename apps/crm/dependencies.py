@@ -6,8 +6,8 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from core.context import get_context
 from apps.crm.container import CRMContainer, get_crm_container
+from core.context import get_context
 
 _initialized_companies: set = set()
 

@@ -12,15 +12,15 @@ import uuid
 
 import pytest
 from a2a.types import TaskState, TaskStatusUpdateEvent
+from a2a.utils.message import get_message_text
 from httpx import ASGITransport, AsyncClient
 
 from apps.flows.main import app as flows_app
 from apps.flows.src.models.flow_config import Edge, FlowConfig
-from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.streaming.subscriber import EventSubscriber
+from apps.flows.src.tasks.flow_tasks import process_flow_task
 from core.context import Context, clear_context, set_context
 from core.files.models import FileRecord, FileStatus
-from a2a.utils.message import get_message_text
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind
 

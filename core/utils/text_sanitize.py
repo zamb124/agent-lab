@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unicodedata
 
+
 def sanitize_text_for_speech_backend(text: str) -> str:
     """Приводит текст к безопасному для FFI бэкендов речи UTF-8 (в т.ч. Silero, облачные API).
 

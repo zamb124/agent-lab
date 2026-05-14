@@ -5,14 +5,11 @@
 Тестирует реальную работу маппинга в нодах.
 """
 
-import pytest
-
 from apps.flows.src.runtime.nodes import (
-    LlmNode,
-    FlowNode,
-    RemoteFlowNode,
-    ExternalAPINode,
     CodeNode,
+    FlowNode,
+    LlmNode,
+    RemoteFlowNode,
 )
 from core.state import ExecutionState
 
@@ -23,11 +20,7 @@ class TestBaseNodeInputMapping:
     def test_no_mapping_returns_empty_dict(self):
         """Без input_mapping возвращается пустой dict"""
         node = LlmNode(
-            node_id="test_agent",
-            config={
-                "prompt": "Test prompt",
-                "input_mapping": None
-            }
+            node_id="test_agent", config={"prompt": "Test prompt", "input_mapping": None}
         )
         state = ExecutionState(
             task_id="test-task",
@@ -36,11 +29,11 @@ class TestBaseNodeInputMapping:
             session_id="test-agent:test-context",
             content="Hello",
             messages=[],
-            variables={"x": 1}
+            variables={"x": 1},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs == {}
 
     def test_simple_state_mapping(self):
@@ -49,11 +42,8 @@ class TestBaseNodeInputMapping:
             node_id="test_agent",
             config={
                 "prompt": "Test prompt",
-                "input_mapping": {
-                    "content": "@state:user_query",
-                    "name": "@state:user_name"
-                }
-            }
+                "input_mapping": {"content": "@state:user_query", "name": "@state:user_name"},
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -63,11 +53,11 @@ class TestBaseNodeInputMapping:
             user_query="Привет!",
             user_name="Иван",
             other_field="should_not_be_in_inputs",
-            variables={"company": "ACME"}
+            variables={"company": "ACME"},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["content"] == "Привет!"
         assert inputs["name"] == "Иван"
         assert "other_field" not in inputs
@@ -81,9 +71,9 @@ class TestBaseNodeInputMapping:
                 "prompt": "Test prompt",
                 "input_mapping": {
                     "user_name": "@state:user.profile.name",
-                    "user_city": "@state:user.address.city"
-                }
-            }
+                    "user_city": "@state:user.address.city",
+                },
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -92,13 +82,13 @@ class TestBaseNodeInputMapping:
             session_id="test-agent:test-context",
             user={
                 "profile": {"name": "Иван", "age": 30},
-                "address": {"city": "Москва", "street": "Ленина"}
+                "address": {"city": "Москва", "street": "Ленина"},
             },
-            variables={}
+            variables={},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["user_name"] == "Иван"
         assert inputs["user_city"] == "Москва"
 
@@ -111,9 +101,9 @@ class TestBaseNodeInputMapping:
                 "input_mapping": {
                     "content": "@state:query",
                     "company": "@var:company_name",
-                    "api_key": "@var:config.api_key"
-                }
-            }
+                    "api_key": "@var:config.api_key",
+                },
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -121,14 +111,11 @@ class TestBaseNodeInputMapping:
             user_id="test-user",
             session_id="test-agent:test-context",
             query="Hello!",
-            variables={
-                "company_name": "ACME Corp",
-                "config": {"api_key": "secret123"}
-            }
+            variables={"company_name": "ACME Corp", "config": {"api_key": "secret123"}},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["content"] == "Hello!"
         assert inputs["company"] == "ACME Corp"
         assert inputs["api_key"] == "secret123"
@@ -143,9 +130,9 @@ class TestBaseNodeInputMapping:
                     "content": "@state:query",
                     "fixed_value": "constant",
                     "number": 42,
-                    "flag": True
-                }
-            }
+                    "flag": True,
+                },
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -153,11 +140,11 @@ class TestBaseNodeInputMapping:
             user_id="test-user",
             session_id="test-agent:test-context",
             query="Hello!",
-            variables={}
+            variables={},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["content"] == "Hello!"
         assert inputs["fixed_value"] == "constant"
         assert inputs["number"] == 42
@@ -169,11 +156,8 @@ class TestBaseNodeInputMapping:
             node_id="test_agent",
             config={
                 "prompt": "Test prompt",
-                "input_mapping": {
-                    "existing": "@state:existing",
-                    "missing": "@state:missing.path"
-                }
-            }
+                "input_mapping": {"existing": "@state:existing", "missing": "@state:missing.path"},
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -181,11 +165,11 @@ class TestBaseNodeInputMapping:
             user_id="test-user",
             session_id="test-agent:test-context",
             existing="value",
-            variables={}
+            variables={},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["existing"] == "value"
         assert inputs["missing"] is None
 
@@ -197,10 +181,7 @@ class TestPrepareState:
         """_prepare_state применяет inputs к state"""
         node = LlmNode(
             node_id="test_agent",
-            config={
-                "prompt": "Test prompt",
-                "input_mapping": {"content": "@state:query"}
-            }
+            config={"prompt": "Test prompt", "input_mapping": {"content": "@state:query"}},
         )
         state = ExecutionState(
             task_id="test-task",
@@ -209,12 +190,12 @@ class TestPrepareState:
             query="Hello!",
             variables={"x": 1},
             session_id="test-agent:test-context",
-            mock={"enabled": True}
+            mock={"enabled": True},
         )
-        
+
         inputs = node._resolve_inputs(state)
         result = node._prepare_state(state, inputs)
-        
+
         assert result.content == "Hello!"
         assert result.variables == {"x": 1}
         assert result.user_id == "123"
@@ -228,11 +209,7 @@ class TestAgentNodeInputMapping:
     def test_no_mapping_returns_empty_inputs(self):
         """Без input_mapping inputs пустой"""
         node = FlowNode(
-            node_id="test_subflow",
-            config={
-                "flow_id": "inner_flow",
-                "input_mapping": None
-            }
+            node_id="test_subflow", config={"flow_id": "inner_flow", "input_mapping": None}
         )
         state = ExecutionState(
             task_id="test-task",
@@ -240,12 +217,12 @@ class TestAgentNodeInputMapping:
             user_id="test-user",
             session_id="test-agent:test-context",
             content="Hello",
-            variables={"x": 1}
+            variables={"x": 1},
         )
-        
+
         inputs = node._resolve_inputs(state)
         result = node._prepare_state(state, inputs)
-        
+
         assert result.model_dump() == state.model_dump()
         assert result is not state
 
@@ -255,11 +232,8 @@ class TestAgentNodeInputMapping:
             node_id="test_subflow",
             config={
                 "flow_id": "inner_flow",
-                "input_mapping": {
-                    "content": "@state:user_query",
-                    "context": "@state:ctx"
-                }
-            }
+                "input_mapping": {"content": "@state:user_query", "context": "@state:ctx"},
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -269,12 +243,12 @@ class TestAgentNodeInputMapping:
             user_query="Привет!",
             ctx={"key": "value"},
             other="not_mapped",
-            variables={"company": "ACME"}
+            variables={"company": "ACME"},
         )
-        
+
         inputs = node._resolve_inputs(state)
         result = node._prepare_state(state, inputs)
-        
+
         assert result.content == "Привет!"
         assert result.context == {"key": "value"}
         assert result.variables == {"company": "ACME"}
@@ -287,9 +261,9 @@ class TestAgentNodeInputMapping:
                 "flow_id": "inner_flow",
                 "input_mapping": {
                     "name": "@state:user.profile.name",
-                    "city": "@state:delivery.address.city"
-                }
-            }
+                    "city": "@state:delivery.address.city",
+                },
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -298,12 +272,12 @@ class TestAgentNodeInputMapping:
             session_id="test-agent:test-context",
             user={"profile": {"name": "Иван"}},
             delivery={"address": {"city": "Москва"}},
-            variables={}
+            variables={},
         )
-        
+
         inputs = node._resolve_inputs(state)
         result = node._prepare_state(state, inputs)
-        
+
         assert result.name == "Иван"
         assert result.city == "Москва"
 
@@ -313,11 +287,8 @@ class TestAgentNodeInputMapping:
             node_id="test_subflow",
             config={
                 "flow_id": "inner_flow",
-                "input_mapping": {
-                    "content": "@state:query",
-                    "api_url": "@var:config.api_url"
-                }
-            }
+                "input_mapping": {"content": "@state:query", "api_url": "@var:config.api_url"},
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -325,14 +296,12 @@ class TestAgentNodeInputMapping:
             user_id="test-user",
             session_id="test-agent:test-context",
             query="Hello!",
-            variables={
-                "config": {"api_url": "https://api.example.com"}
-            }
+            variables={"config": {"api_url": "https://api.example.com"}},
         )
-        
+
         inputs = node._resolve_inputs(state)
         result = node._prepare_state(state, inputs)
-        
+
         assert result.content == "Hello!"
         assert result.api_url == "https://api.example.com"
 
@@ -344,10 +313,7 @@ class TestRemoteFlowNodeInputMapping:
         """input_mapping: {"content": "@state:field"}"""
         node = RemoteFlowNode(
             node_id="test_remote",
-            config={
-                "url": "http://agent:8080",
-                "input_mapping": {"content": "@state:user_query"}
-            }
+            config={"url": "http://agent:8080", "input_mapping": {"content": "@state:user_query"}},
         )
         state = ExecutionState(
             task_id="test-task",
@@ -355,11 +321,11 @@ class TestRemoteFlowNodeInputMapping:
             user_id="test-user",
             session_id="test-agent:test-context",
             user_query="Привет, агент!",
-            variables={}
+            variables={},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["content"] == "Привет, агент!"
 
     def test_input_mapping_nested_path(self):
@@ -368,8 +334,8 @@ class TestRemoteFlowNodeInputMapping:
             node_id="test_remote",
             config={
                 "url": "http://agent:8080",
-                "input_mapping": {"content": "@state:request.body.text"}
-            }
+                "input_mapping": {"content": "@state:request.body.text"},
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -377,11 +343,11 @@ class TestRemoteFlowNodeInputMapping:
             user_id="test-user",
             session_id="test-agent:test-context",
             request={"body": {"text": "Nested query"}},
-            variables={}
+            variables={},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["content"] == "Nested query"
 
     def test_input_mapping_with_var(self):
@@ -390,39 +356,37 @@ class TestRemoteFlowNodeInputMapping:
             node_id="test_remote",
             config={
                 "url": "http://agent:8080",
-                "input_mapping": {"content": "@var:default_prompt"}
-            }
+                "input_mapping": {"content": "@var:default_prompt"},
+            },
         )
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            variables={"default_prompt": "Default message"}
+            variables={"default_prompt": "Default message"},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["content"] == "Default message"
 
     def test_no_mapping_uses_state_content(self):
         """Без input_mapping используется state.content"""
-        node = RemoteFlowNode(
-            node_id="test_remote",
-            config={"url": "http://agent:8080"}
-        )
+        node = RemoteFlowNode(node_id="test_remote", config={"url": "http://agent:8080"})
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
             content="Default content",
-            variables={}
+            variables={},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs == {}
+
 
 class TestHeadersWithNestedVars:
     """Тесты для headers/URL с вложенными @var: путями."""
@@ -456,11 +420,7 @@ class TestHeadersWithNestedVars:
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            variables={
-                "auth": {
-                    "bearer": "eyJhbGciOiJIUzI1NiJ9.test"
-                }
-            },
+            variables={"auth": {"bearer": "eyJhbGciOiJIUzI1NiJ9.test"}},
         )
 
         result = MappingResolver.resolve_http_header_value(
@@ -508,11 +468,7 @@ class TestHeadersWithNestedVars:
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            variables={
-                "config": {
-                    "api": {"host": "api.example.com"}
-                }
-            },
+            variables={"config": {"api": {"host": "api.example.com"}}},
         )
 
         result = MappingResolver.resolve_http_header_value(
@@ -677,9 +633,9 @@ class TestRealWorldScenarios:
                     "customer_name": "@state:order.customer.name",
                     "items": "@state:order.items",
                     "total": "@state:order.total",
-                    "company": "@var:company_name"
-                }
-            }
+                    "company": "@var:company_name",
+                },
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -690,14 +646,14 @@ class TestRealWorldScenarios:
                 "id": "ORD-12345",
                 "customer": {"name": "Иван Петров", "email": "ivan@example.com"},
                 "items": [{"name": "Item 1", "qty": 2}],
-                "total": 999.99
+                "total": 999.99,
             },
-            variables={"company_name": "ACME Corp"}
+            variables={"company_name": "ACME Corp"},
         )
-        
+
         inputs = node._resolve_inputs(state)
         result = node._prepare_state(state, inputs)
-        
+
         assert result.order_id == "ORD-12345"
         assert result.customer_name == "Иван Петров"
         assert result.items == [{"name": "Item 1", "qty": 2}]
@@ -707,28 +663,18 @@ class TestRealWorldScenarios:
     def test_api_call_with_auth(self):
         """API вызов с авторизацией из переменных"""
         from apps.flows.src.mapping import MappingResolver
-        
-        auth_mapping = {
-            "Authorization": "@var:auth.bearer_token",
-            "X-API-Key": "@var:auth.api_key"
-        }
+
+        auth_mapping = {"Authorization": "@var:auth.bearer_token", "X-API-Key": "@var:auth.api_key"}
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            variables={
-                "auth": {
-                    "bearer_token": "Bearer eyJ...",
-                    "api_key": "pk_live_abc123"
-                }
-            }
+            variables={"auth": {"bearer_token": "Bearer eyJ...", "api_key": "pk_live_abc123"}},
         )
-        
-        headers = MappingResolver.build_mapped_state(
-            auth_mapping, state.model_dump()
-        )
-        
+
+        headers = MappingResolver.build_mapped_state(auth_mapping, state.model_dump())
+
         assert headers["Authorization"] == "Bearer eyJ..."
         assert headers["X-API-Key"] == "pk_live_abc123"
 
@@ -741,9 +687,9 @@ class TestRealWorldScenarios:
                 "input_mapping": {
                     "content": "@state:document.text",
                     "metadata": "@state:document.meta",
-                    "analysis_type": "@var:settings.analysis_type"
-                }
-            }
+                    "analysis_type": "@var:settings.analysis_type",
+                },
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -754,17 +700,15 @@ class TestRealWorldScenarios:
                 "id": "doc-123",
                 "text": "Document content here",
                 "meta": {"author": "John", "date": "2024-01-01"},
-                "binary_data": b"huge binary content"
+                "binary_data": b"huge binary content",
             },
             other_data="not needed",
-            variables={
-                "settings": {"analysis_type": "sentiment"}
-            }
+            variables={"settings": {"analysis_type": "sentiment"}},
         )
-        
+
         inputs = node._resolve_inputs(state)
         result = node._prepare_state(state, inputs)
-        
+
         assert result.content == "Document content here"
         assert result.metadata == {"author": "John", "date": "2024-01-01"}
         assert result.analysis_type == "sentiment"
@@ -778,9 +722,9 @@ class TestRealWorldScenarios:
                 "input_mapping": {
                     "content": "@state:user_message",
                     "system_context": "@var:agent.system_prompt",
-                    "user_info": "@state:session.user"
-                }
-            }
+                    "user_info": "@state:session.user",
+                },
+            },
         )
         state = ExecutionState(
             task_id="test-task",
@@ -788,18 +732,12 @@ class TestRealWorldScenarios:
             user_id="test-user",
             session_id="test-agent:test-context",
             user_message="Какая погода в Москве?",
-            session={
-                "user": {"name": "Иван", "lang": "ru"}
-            },
-            variables={
-                "agent": {
-                    "system_prompt": "Ты помощник по погоде"
-                }
-            }
+            session={"user": {"name": "Иван", "lang": "ru"}},
+            variables={"agent": {"system_prompt": "Ты помощник по погоде"}},
         )
-        
+
         inputs = node._resolve_inputs(state)
-        
+
         assert inputs["content"] == "Какая погода в Москве?"
         assert inputs["system_context"] == "Ты помощник по погоде"
         assert inputs["user_info"] == {"name": "Иван", "lang": "ru"}
@@ -810,130 +748,150 @@ class TestMessagesFilter:
 
     def test_filter_all_returns_all_messages(self):
         """messages_filter='all' возвращает все сообщения"""
-        from a2a.types import Message, Role, Part, TextPart
-        
-        node = LlmNode(
-            node_id="test_node",
-            config={
-                "prompt": "Test",
-                "messages_filter": "all"
-            }
-        )
+        from a2a.types import Message, Part, Role, TextPart
+
+        node = LlmNode(node_id="test_node", config={"prompt": "Test", "messages_filter": "all"})
         messages = [
             Message(
-                messageId="1", role=Role.user,
+                messageId="1",
+                role=Role.user,
                 parts=[Part(root=TextPart(text="User msg"))],
-                taskId="test", metadata={"node_id": "other_node"}
+                taskId="test",
+                metadata={"node_id": "other_node"},
             ),
             Message(
-                messageId="2", role=Role.agent,
+                messageId="2",
+                role=Role.agent,
                 parts=[Part(root=TextPart(text="Agent msg"))],
-                taskId="test", metadata={"node_id": "test_node"}
+                taskId="test",
+                metadata={"node_id": "test_node"},
             ),
             Message(
-                messageId="3", role=Role.agent,
+                messageId="3",
+                role=Role.agent,
                 parts=[Part(root=TextPart(text="Another agent"))],
-                taskId="test", metadata={"node_id": "another_node"}
+                taskId="test",
+                metadata={"node_id": "another_node"},
             ),
         ]
         state = ExecutionState(
-            task_id="test", context_id="ctx", user_id="u",
-            session_id="test:ctx", messages=messages, variables={}
+            task_id="test",
+            context_id="ctx",
+            user_id="u",
+            session_id="test:ctx",
+            messages=messages,
+            variables={},
         )
-        
+
         result = node._get_filtered_messages(state)
-        
+
         assert len(result) == 3
 
     def test_filter_own_returns_only_messages_tagged_with_node_id(self):
         """messages_filter='own' — только сообщения с metadata.node_id == эта нода"""
-        from a2a.types import Message, Role, Part, TextPart
-        
-        node = LlmNode(
-            node_id="test_node",
-            config={
-                "prompt": "Test",
-                "messages_filter": "own"
-            }
-        )
+        from a2a.types import Message, Part, Role, TextPart
+
+        node = LlmNode(node_id="test_node", config={"prompt": "Test", "messages_filter": "own"})
         messages = [
             Message(
-                messageId="1", role=Role.user,
+                messageId="1",
+                role=Role.user,
                 parts=[Part(root=TextPart(text="User msg"))],
-                taskId="test", metadata={"node_id": "test_node"}
+                taskId="test",
+                metadata={"node_id": "test_node"},
             ),
             Message(
-                messageId="2", role=Role.agent,
+                messageId="2",
+                role=Role.agent,
                 parts=[Part(root=TextPart(text="My msg"))],
-                taskId="test", metadata={"node_id": "test_node"}
+                taskId="test",
+                metadata={"node_id": "test_node"},
             ),
             Message(
-                messageId="3", role=Role.agent,
+                messageId="3",
+                role=Role.agent,
                 parts=[Part(root=TextPart(text="Other msg"))],
-                taskId="test", metadata={"node_id": "other_node"}
+                taskId="test",
+                metadata={"node_id": "other_node"},
             ),
             Message(
-                messageId="4", role=Role.user,
+                messageId="4",
+                role=Role.user,
                 parts=[Part(root=TextPart(text="Other user"))],
-                taskId="test", metadata={"node_id": "other_node"}
+                taskId="test",
+                metadata={"node_id": "other_node"},
             ),
         ]
         state = ExecutionState(
-            task_id="test", context_id="ctx", user_id="u",
-            session_id="test:ctx", messages=messages, variables={}
+            task_id="test",
+            context_id="ctx",
+            user_id="u",
+            session_id="test:ctx",
+            messages=messages,
+            variables={},
         )
-        
+
         result = node._get_filtered_messages(state)
-        
+
         assert len(result) == 2
         assert result[0].message_id == "1"
         assert result[1].message_id == "2"
 
     def test_filter_list_returns_specified_nodes(self):
         """messages_filter=['node1', 'node2'] — только сообщения с node_id из списка"""
-        from a2a.types import Message, Role, Part, TextPart
-        
+        from a2a.types import Message, Part, Role, TextPart
+
         node = LlmNode(
-            node_id="test_node",
-            config={
-                "prompt": "Test",
-                "messages_filter": ["node1", "node2"]
-            }
+            node_id="test_node", config={"prompt": "Test", "messages_filter": ["node1", "node2"]}
         )
         messages = [
             Message(
-                messageId="1", role=Role.user,
+                messageId="1",
+                role=Role.user,
                 parts=[Part(root=TextPart(text="User"))],
-                taskId="test", metadata={"node_id": "node1"}
+                taskId="test",
+                metadata={"node_id": "node1"},
             ),
             Message(
-                messageId="2", role=Role.agent,
+                messageId="2",
+                role=Role.agent,
                 parts=[Part(root=TextPart(text="From node1"))],
-                taskId="test", metadata={"node_id": "node1"}
+                taskId="test",
+                metadata={"node_id": "node1"},
             ),
             Message(
-                messageId="3", role=Role.agent,
+                messageId="3",
+                role=Role.agent,
                 parts=[Part(root=TextPart(text="From node3"))],
-                taskId="test", metadata={"node_id": "node3"}
+                taskId="test",
+                metadata={"node_id": "node3"},
             ),
             Message(
-                messageId="4", role=Role.agent,
+                messageId="4",
+                role=Role.agent,
                 parts=[Part(root=TextPart(text="From node2"))],
-                taskId="test", metadata={"node_id": "node2"}
+                taskId="test",
+                metadata={"node_id": "node2"},
             ),
             Message(
-                messageId="5", role=Role.user,
+                messageId="5",
+                role=Role.user,
                 parts=[Part(root=TextPart(text="node3 user"))],
-                taskId="test", metadata={"node_id": "node3"}
+                taskId="test",
+                metadata={"node_id": "node3"},
             ),
         ]
         state = ExecutionState(
-            task_id="test", context_id="ctx", user_id="u",
-            session_id="test:ctx", messages=messages, variables={}
+            task_id="test",
+            context_id="ctx",
+            user_id="u",
+            session_id="test:ctx",
+            messages=messages,
+            variables={},
         )
-        
+
         result = node._get_filtered_messages(state)
-        
+
         assert len(result) == 3
         ids = [m.message_id for m in result]
         assert "1" in ids
@@ -993,9 +951,7 @@ class TestMessagesFilter:
 
         u = new_user_message("hi", "n1", "ctx", "tid")
         assert u.metadata["node_id"] == "n1"
-        a = new_assistant_message(
-            "a", "n1", [{"name": "t", "id": "1"}], "ctx", "tid"
-        )
+        a = new_assistant_message("a", "n1", [{"name": "t", "id": "1"}], "ctx", "tid")
         assert a.metadata["node_id"] == "n1"
         assert a.metadata.get("tool_calls")
         tr = new_tool_result_message("1", "ok", "n1", "ctx", "tid")
@@ -1007,20 +963,18 @@ class TestSaveToMessages:
 
     def test_append_to_messages_adds_message_with_node_id(self):
         """_append_to_messages добавляет сообщение с node_id в metadata"""
-        node = LlmNode(
-            node_id="my_node",
-            config={
-                "prompt": "Test",
-                "save_to_messages": True
-            }
-        )
+        node = LlmNode(node_id="my_node", config={"prompt": "Test", "save_to_messages": True})
         state = ExecutionState(
-            task_id="test-task", context_id="ctx", user_id="u",
-            session_id="test:ctx", messages=[], variables={}
+            task_id="test-task",
+            context_id="ctx",
+            user_id="u",
+            session_id="test:ctx",
+            messages=[],
+            variables={},
         )
-        
+
         node._append_to_messages(state, "Result text")
-        
+
         assert len(state.messages) == 1
         msg = state.messages[0]
         assert msg.metadata["node_id"] == "my_node"
@@ -1030,42 +984,10 @@ class TestSaveToMessages:
         """output_mapping можно задать в config"""
         node = LlmNode(
             node_id="my_agent",
-            config={
-                "prompt": "Test",
-                "output_mapping": {"response": "agent_response"}
-            }
+            config={"prompt": "Test", "output_mapping": {"response": "agent_response"}},
         )
-        
+
         assert node.output_mapping == {"response": "agent_response"}
-
-
-class TestCodeNodeInputMapping:
-    """Тесты для CodeNode с input_mapping."""
-
-    def test_tool_node_resolves_inputs(self):
-        """CodeNode использует input_mapping для аргументов"""
-        from apps.flows.src.tools.base import BaseTool
-        
-        class MockTool(BaseTool):
-            name = "mock_tool"
-            description = "Test tool"
-            
-            async def _run_impl(self, args, state):
-                return f"Got: {args.get('query')}"
-        
-        node = CodeNode(
-            node_id="test_tool",
-            config={"input_mapping": {"query": "@state:user_input"}}
-        )
-        node.tool = MockTool()
-        state = ExecutionState(
-            task_id="test", context_id="ctx", user_id="u",
-            session_id="test:ctx", user_input="Hello", variables={}
-        )
-        
-        inputs = node._resolve_inputs(state)
-        
-        assert inputs["query"] == "Hello"
 
 
 class TestCodeNodeInputMapping:
@@ -1073,23 +995,24 @@ class TestCodeNodeInputMapping:
 
     def test_function_node_resolves_inputs(self):
         """CodeNode использует input_mapping для kwargs"""
+
         # Lambda не поддерживается напрямую в config, используем callable в code
         def test_func(state, name=""):
             return state
-        
+
         node = CodeNode(
             node_id="test_func",
-            config={
-                "code": test_func,
-                "input_mapping": {"name": "@state:user_name"}
-            }
+            config={"code": test_func, "input_mapping": {"name": "@state:user_name"}},
         )
         state = ExecutionState(
-            task_id="test", context_id="ctx", user_id="u",
-            session_id="test:ctx", user_name="Иван", variables={}
+            task_id="test",
+            context_id="ctx",
+            user_id="u",
+            session_id="test:ctx",
+            user_name="Иван",
+            variables={},
         )
-        
-        inputs = node._resolve_inputs(state)
-        
-        assert inputs["name"] == "Иван"
 
+        inputs = node._resolve_inputs(state)
+
+        assert inputs["name"] == "Иван"

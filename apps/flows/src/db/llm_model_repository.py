@@ -5,14 +5,12 @@
 from typing import List
 
 from apps.flows.src.models import LLMModel
-
-from core.db import BaseRepository
-from core.db import Storage
+from core.db import BaseRepository, Storage
 
 
 class LLMModelRepository(BaseRepository[LLMModel]):
     """Репозиторий для работы с LLM моделями."""
-    
+
     is_global = True  # Глобальные модели (не изолированы по компаниям)
     owner_service = "flows"
 
@@ -21,7 +19,7 @@ class LLMModelRepository(BaseRepository[LLMModel]):
 
     def _get_key(self, entity_id: str) -> str:
         return f"llm_model:{entity_id}"
-    
+
     def _get_prefix(self) -> str:
         return "llm_model:"
 

@@ -14,16 +14,15 @@ from aiohttp import web
 from core.clients.tts_client import (
     CloudRuTTSClient,
     LitserveTTSClient,
-    TTSLitserveHttpError,
     MockTTSClient,
     SberTTSClient,
+    TTSLitserveHttpError,
     TTSResult,
     YandexTTSClient,
 )
 from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 from .conftest import FakeSpeechServer
-
 
 pytestmark = pytest.mark.timeout(15)
 

@@ -16,8 +16,6 @@ import openpyxl
 import pytest
 from docx import Document
 
-from tests.fixtures.crm_test_setup import ensure_entity_type_in_namespace
-
 from tests.crm.knowledge_import_helpers import (
     combined_entity_blob,
     crm_upload_bytes,
@@ -25,6 +23,7 @@ from tests.crm.knowledge_import_helpers import (
     rollback_task,
     wait_task_terminal,
 )
+from tests.fixtures.crm_test_setup import ensure_entity_type_in_namespace
 
 _META = {"dates_mentioned": [], "places_mentioned": [], "key_topics": []}
 

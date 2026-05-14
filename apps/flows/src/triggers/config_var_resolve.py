@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from core.variables.resolver import VarResolver, VariableResolutionError
+from core.variables.resolver import VariableResolutionError, VarResolver
 
 
 async def resolve_at_var_for_flow(

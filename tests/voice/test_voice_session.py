@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from apps.voice.services.voice_chunker import VoiceChunker
 from apps.voice.services.voice_session import VoiceSession
-
 
 # === VoiceSession ===
 

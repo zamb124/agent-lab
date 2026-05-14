@@ -14,7 +14,8 @@ def _validate_avatar_url(v: str | None) -> str | None:
         raise ValueError("avatar_url должен быть относительным URL платформы (начинается с /)")
     return v
 
-from apps.sync.models.common import UserBrief
+
+from apps.sync.models.common import UserBrief  # noqa: E402
 
 
 class ChannelType(str, Enum):

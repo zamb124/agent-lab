@@ -3,9 +3,10 @@
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List, Literal
-from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 from enum import Enum
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from core.fields import Field
 from core.models.billing_models import TariffPlan
@@ -35,9 +36,7 @@ class User(BaseModel):
     Содержит только общие данные, без привязки к провайдерам.
     """
 
-    model_config = ConfigDict(
-        json_schema_extra={"storage_prefix": "user"}
-    )
+    model_config = ConfigDict(json_schema_extra={"storage_prefix": "user"})
 
     user_id: str = Field(
         title="ID пользователя",
@@ -87,9 +86,7 @@ class User(BaseModel):
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
     emails: List[str] = Field(
-        default_factory=list,
-        title="Email адреса",
-        description="Список email адресов пользователя"
+        default_factory=list, title="Email адреса", description="Список email адресов пользователя"
     )
 
     @property
@@ -100,19 +97,15 @@ class User(BaseModel):
         return self.emails[0]
 
     phones: List[str] = Field(
-        default_factory=list,
-        title="Телефоны",
-        description="Список телефонных номеров"
+        default_factory=list, title="Телефоны", description="Список телефонных номеров"
     )
     messengers: Dict[str, str] = Field(
         default_factory=dict,
         title="Мессенджеры",
-        description="Контакты в мессенджерах: {telegram: @username, whatsapp: +123, slack: U12345}"
+        description="Контакты в мессенджерах: {telegram: @username, whatsapp: +123, slack: U12345}",
     )
     avatar_url: Optional[str] = Field(
-        default=None,
-        title="Аватар",
-        description="URL аватара пользователя"
+        default=None, title="Аватар", description="URL аватара пользователя"
     )
     bio: Optional[str] = Field(
         default=None,
@@ -121,14 +114,10 @@ class User(BaseModel):
         max_length=4000,
     )
     ui_preferences: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="UI настройки",
-        description="Настройки интерфейса пользователя"
+        default_factory=dict, title="UI настройки", description="Настройки интерфейса пользователя"
     )
     attrs: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Атрибуты",
-        description="Дополнительные service-specific данные"
+        default_factory=dict, title="Атрибуты", description="Дополнительные service-specific данные"
     )
     password_hash: Optional[str] = Field(
         default=None,
@@ -156,9 +145,7 @@ class Company(BaseModel):
     Компания содержит свою собственную изолированную конфигурацию.
     """
 
-    model_config = ConfigDict(
-        json_schema_extra={"storage_prefix": "company"}
-    )
+    model_config = ConfigDict(json_schema_extra={"storage_prefix": "company"})
 
     company_id: str = Field(
         title="ID компании",
@@ -227,7 +214,9 @@ class Company(BaseModel):
         ge=0.0,
     )
     billing_period_start: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+        default_factory=lambda: datetime.now(timezone.utc).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        ),
         title="Начало расчетного периода",
         description="Начало текущего расчетного периода",
         readonly=True,
@@ -250,19 +239,13 @@ class AuthSession(BaseModel):
     """Модель сессии авторизации"""
 
     session_id: str = Field(
-        title="ID сессии", 
-        description="Уникальный ID сессии авторизации", 
-        readonly=True
+        title="ID сессии", description="Уникальный ID сессии авторизации", readonly=True
     )
     user_id: str = Field(
-        title="ID пользователя", 
-        description="Ссылка на пользователя", 
-        readonly=True
+        title="ID пользователя", description="Ссылка на пользователя", readonly=True
     )
     provider: AuthProvider = Field(
-        title="Провайдер", 
-        description="Провайдер авторизации", 
-        readonly=True
+        title="Провайдер", description="Провайдер авторизации", readonly=True
     )
     access_token: Optional[str] = Field(
         default=None,
@@ -314,7 +297,7 @@ class ProviderUserInfo(BaseModel):
 
 class AuthRequest(BaseModel):
     """Запрос на завершение авторизации"""
-    
+
     provider: AuthProvider = Field(description="Провайдер авторизации")
     code: str = Field(description="Код авторизации от провайдера")
     state: str = Field(description="State для проверки CSRF")
@@ -397,6 +380,16 @@ class NamespaceAutomationRule(BaseModel):
     flow_id: Optional[str] = Field(default=None)
 
 
+class SuggestsSettings(BaseModel):
+    """Настройки фоновой генерации саджестов (дубли/пропущенные)."""
+
+    enabled: bool = Field(default=False, title="Включить фоновый поиск саджестов")
+    cron: str = Field(default="0 2 * * *", title="Cron-расписание для генерации")
+    schedule_task_id: Optional[str] = Field(
+        default=None, description="ID платформенной задачи расписания"
+    )
+
+
 class NamespaceCRMSettings(BaseModel):
     """Настройки CRM для namespace (заметки: голос, контекст, метаданные интеграций)."""
 
@@ -432,6 +425,10 @@ class NamespaceCRMSettings(BaseModel):
         default_factory=dict,
         title="Пресеты колонок доски задач",
         description="Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор.",
+    )
+    suggests: SuggestsSettings = Field(
+        default_factory=SuggestsSettings,
+        title="Настройки саджестов",
     )
 
     @field_validator("pipeline_stage_presets", mode="before")
@@ -496,27 +493,18 @@ class Namespace(BaseModel):
     Namespace (изолированная область данных).
     Используется всеми сервисами для организации данных внутри компании.
     """
-    model_config = ConfigDict(
-        json_schema_extra={"storage_prefix": "namespace"}
-    )
-    
-    name: str = Field(
-        title="Название",
-        description="Имя namespace (например 'default', 'sales')"
-    )
-    company_id: str = Field(
-        title="ID компании",
-        description="ID компании-владельца"
-    )
+
+    model_config = ConfigDict(json_schema_extra={"storage_prefix": "namespace"})
+
+    name: str = Field(title="Название", description="Имя namespace (например 'default', 'sales')")
+    company_id: str = Field(title="ID компании", description="ID компании-владельца")
     description: Optional[str] = Field(
-        default=None,
-        title="Описание",
-        description="Описание namespace"
+        default=None, title="Описание", description="Описание namespace"
     )
     is_default: bool = Field(
         default=False,
         title="По умолчанию",
-        description="Является ли namespace дефолтным для компании"
+        description="Является ли namespace дефолтным для компании",
     )
     crm_settings: Optional[NamespaceCRMSettings] = Field(
         default=None,
@@ -531,12 +519,12 @@ class Namespace(BaseModel):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Создан",
-        description="Время создания namespace"
+        description="Время создания namespace",
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Обновлен",
-        description="Время последнего обновления namespace"
+        description="Время последнего обновления namespace",
     )
 
 
@@ -552,4 +540,3 @@ class AuthResult(BaseModel):
 
 
 SidebarNavEntry.model_rebuild()
-

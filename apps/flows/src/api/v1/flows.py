@@ -9,35 +9,44 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
-import yaml
 
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
-from core.context import get_context
-from core.logging import get_logger
-from core.pagination import OffsetPage, ListResponse
-from core.ui_events import publish_ui_event_to_user
-from apps.flows.src.models import Edge, FlowConfig, BranchConfig, NodeConfig, FlowType, ExternalAgentStatus, TriggerConfig, MergeMode
+from apps.flows.src.models import (
+    BranchConfig,
+    Edge,
+    ExternalAgentStatus,
+    FlowConfig,
+    FlowType,
+    MergeMode,
+    NodeConfig,
+    TriggerConfig,
+)
+from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
 from apps.flows.src.services.bundle_node_repair import (
     get_bundle_base_nodes_for_flow,
     repair_node_map_with_canonical_top_level,
 )
 from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
-from apps.flows.src.services.flow_validator import FlowValidator
-from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
 from apps.flows.src.services.flow_speech_resolve import (
     effective_flow_speech_settings,
     flow_speech_to_triple_override,
     triple_to_voice_ws_query_dict,
 )
+from apps.flows.src.services.flow_validator import FlowValidator
+from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from core.clients.voice_resolver import resolve_effective_tts_voice_for_ws
+from core.context import get_context
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
+from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
+from core.pagination import ListResponse, OffsetPage
 from core.short_links.service import require_platform_public_base_url
+from core.ui_events import publish_ui_event_to_user
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -238,19 +247,19 @@ def _generate_flow_url(flow_id: str, flow_kind: Optional[FlowType] = None, exter
     """Публичный URL flow (или внешний base URL для EXTERNAL)."""
     if flow_kind == FlowType.EXTERNAL and external_url:
         return external_url
-    
+
     from core.config import get_settings
     settings = get_settings()
     return f"https://{settings.server.host}:{settings.server.port}/flows/{flow_id}"
 
 
 async def _inline_tools_in_nodes(
-    nodes: Dict[str, Dict[str, Any]], 
+    nodes: Dict[str, Dict[str, Any]],
     container: FlowContainer
 ) -> Dict[str, Dict[str, Any]]:
     """
     Инлайнит tools в nodes flow.
-    
+
     Для каждой ноды:
     - Инлайнит tools (поле tools в llm_node)
     - Инлайнит code для нод типа tool с tool_id
@@ -260,7 +269,7 @@ async def _inline_tools_in_nodes(
         tools = node_config.get("tools", [])
         if tools:
             node_config["tools"] = await _inline_tools_list(tools, container)
-        
+
         # Инлайним code для code-нод с tool_id без кода
         if node_config.get("type") == "code" and node_config.get("tool_id") and not node_config.get("code"):
             tool_id = node_config["tool_id"]
@@ -280,7 +289,7 @@ async def _inline_tools_in_nodes(
 
 
 async def _inline_tools_list(
-    tools: List[Any], 
+    tools: List[Any],
     container: FlowContainer
 ) -> List[Dict[str, Any]]:
     """Инлайнит список tools."""
@@ -293,7 +302,7 @@ async def _inline_tools_list(
 
 
 async def _inline_single_tool(
-    tool: Any, 
+    tool: Any,
     container: FlowContainer
 ) -> Dict[str, Any] | None:
     """Инлайнит один tool."""
@@ -302,28 +311,28 @@ async def _inline_single_tool(
         tool_ref = await container.tool_repository.get(tool)
         if tool_ref:
             return tool_ref.model_dump()
-        
+
         # Может быть node (llm_node as tool)
         node = await container.node_repository.get(tool)
         if node:
             return await _node_to_inline_tool(node, container)
-        
+
         # Может быть flow из репозитория (как tool по flow_id)
         flow_cfg = await container.flow_repository.get(tool)
         if flow_cfg:
             return _flow_config_to_inline_tool(flow_cfg)
-        
+
         raise HTTPException(status_code=400, detail=f"Tool '{tool}' not found in library")
-    
+
     elif isinstance(tool, dict):
         tool_id = tool.get("tool_id")
-        
+
         # Если это llm_node - рекурсивно инлайним его tools
         if tool.get("type") == "llm_node" or tool.get("prompt"):
             if "tools" in tool:
                 tool["tools"] = await _inline_tools_list(tool["tools"], container)
             return tool
-        
+
         # Если нет code - дополняем из библиотеки
         if tool_id and not tool.get("code"):
             tool_ref = await container.tool_repository.get(tool_id)
@@ -331,9 +340,9 @@ async def _inline_single_tool(
                 merged = tool_ref.model_dump()
                 merged.update(tool)  # Переопределения из запроса приоритетнее
                 return merged
-        
+
         return tool
-    
+
     return None
 
 
@@ -545,7 +554,7 @@ class FlowResponse(BaseModel):
     name: str
     description: Optional[str]
     type: Optional[FlowType] = FlowType.LOCAL
-    
+
     # LOCAL flow
     entry: Optional[str] = None
     nodes: Optional[Dict[str, Any]] = None
@@ -556,23 +565,23 @@ class FlowResponse(BaseModel):
     evaluation: Optional[Dict[str, Any]] = None
     hidden: bool = False
     has_bundle_update: bool = False
-    
+
     # EXTERNAL flow (A2A)
     url: Optional[str] = None
     headers: Optional[Dict[str, str]] = None
     status: Optional[str] = None
     last_health_check: Optional[str] = None
     agent_card: Optional[Dict[str, Any]] = None
-    
+
     # A2A capabilities
     capabilities: Dict[str, Any] = {
         "streaming": True,
         "pushNotifications": True,
     }
-    
+
     # Триггеры агента
     triggers: Dict[str, Any] = {}
-    
+
     # Ресурсы агента
     resources: Dict[str, Any] = {}
 
@@ -644,7 +653,7 @@ async def validate_flow(
 ) -> FlowValidateResponse:
     """
     Валидирует конфигурацию агента без сохранения.
-    
+
     Проверяет:
     - Структуру графа (entry, edges, достижимость нод)
     - Ссылки на агенты, tools, subflows
@@ -657,7 +666,7 @@ async def validate_flow(
         tool_repository=container.tool_repository,
         node_repository=container.node_repository,
     )
-    
+
     result = await validator.validate(
         nodes=request.nodes,
         edges=request.edges,
@@ -665,7 +674,7 @@ async def validate_flow(
         variables=request.variables,
         flow_id=request.flow_id,
     )
-    
+
     return FlowValidateResponse(
         valid=result.valid,
         errors=[
@@ -713,7 +722,7 @@ async def list_flows(
         if f.evaluation:
             evaluation_dict = {k: v.model_dump() if hasattr(v, 'model_dump') else v for k, v in f.evaluation.items()}
         hidden = getattr(f, 'hidden', False)
-        
+
         response_data = {
             "flow_id": f.flow_id,
             "version": f.version,
@@ -726,7 +735,7 @@ async def list_flows(
             "has_bundle_update": bundle_update_flags.get(f.flow_id, False),
             "store_card_image_url": getattr(f, "store_card_image_url", None),
         }
-        
+
         # LOCAL flow
         if f.type == FlowType.LOCAL:
             response_data.update({
@@ -750,7 +759,7 @@ async def list_flows(
                 "last_health_check": f.last_health_check.isoformat() if f.last_health_check else None,
                 "agent_card": f.agent_card,
             })
-        
+
         result.append(FlowResponse(**response_data))
     return OffsetPage[FlowResponse](items=result, total=total, limit=limit, offset=offset)
 
@@ -838,7 +847,7 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
 
 
 async def _validate_tool_nodes(
-    nodes: Dict[str, Dict[str, Any]], 
+    nodes: Dict[str, Dict[str, Any]],
     container: FlowContainer
 ) -> None:
     """Валидирует tool_id в code-нодах при отсутствии inline code."""
@@ -846,7 +855,7 @@ async def _validate_tool_nodes(
         if node_config.get("type") == "code":
             tool_id = node_config.get("tool_id")
             has_code = "code" in node_config and node_config.get("code")
-            
+
             if tool_id and not has_code:
                 tool = await container.tool_repository.get(tool_id)
                 if tool is None:
@@ -855,7 +864,7 @@ async def _validate_tool_nodes(
                         flow_cfg = await container.flow_repository.get(tool_id)
                         if flow_cfg is None:
                             raise HTTPException(
-                                status_code=400, 
+                                status_code=400,
                                 detail=f"Tool '{tool_id}' not found in library"
                             )
 
@@ -868,10 +877,10 @@ async def create_flow(
     """Создаёт flow."""
     # Валидируем tool_id в tool нодах
     await _validate_tool_nodes(dict(request.nodes), container)
-    
+
     # Инлайним tools - заменяем tool_id на полные конфиги с кодом ПЕРЕД валидацией
     nodes = await _inline_tools_in_nodes(dict(request.nodes), container)
-    
+
     # Валидируем ссылки (node_id, tool_id, flow_id) после инлайна
     validator = FlowValidator(
         flow_repository=container.flow_repository,
@@ -884,7 +893,7 @@ async def create_flow(
         entry=request.entry,
         variables=request.variables or {},
     )
-    
+
     if not validation_result.valid:
         errors = [e.message for e in validation_result.errors]
         raise HTTPException(
@@ -1003,14 +1012,14 @@ async def get_flow(
         flow_cfg = await container.flow_repository.get(flow_id)
         if flow_cfg is None:
             raise HTTPException(status_code=404, detail="Flow not found")
-        
+
         evaluation_dict = None
         if flow_cfg.evaluation:
             if hasattr(flow_cfg.evaluation, "model_dump"):
                 evaluation_dict = flow_cfg.evaluation.model_dump()
             else:
                 evaluation_dict = flow_cfg.evaluation
-        
+
         branches_response = {}
         if flow_cfg.branches:
             for branch_id, branch_cfg in flow_cfg.branches.items():
@@ -1022,7 +1031,7 @@ async def get_flow(
                         status_code=500,
                         detail=f"Ошибка обработки ветки '{branch_id}': {str(e)}"
                     )
-        
+
         edges_list = []
         if flow_cfg.edges:
             for e in flow_cfg.edges:
@@ -1033,12 +1042,12 @@ async def get_flow(
                     "to": e.to_node,
                     "condition": e.condition
                 })
-        
+
         triggers_response = {}
         if flow_cfg.triggers:
             for trigger_id, trigger in flow_cfg.triggers.items():
                 triggers_response[trigger_id] = trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
-        
+
         source_value = getattr(flow_cfg, "source", None) or "manual"
         bundle_update = False
         if source_value == "file":
@@ -1530,17 +1539,17 @@ async def get_version(
     version_cfg = await container.flow_repository.get_version(flow_id, version)
     if version_cfg is None:
         raise HTTPException(status_code=404, detail="Version not found")
-    
+
     branches_response = {
         branch_id: _branch_config_to_response(branch_cfg)
         for branch_id, branch_cfg in (version_cfg.branches or {}).items()
     }
-    
+
     edges_list = [
         {"from": e.from_node, "to": e.to_node, "condition": e.condition}
         for e in (version_cfg.edges or []) if e
     ]
-    
+
     triggers_response = {}
     if version_cfg.triggers:
         for trigger_id, trigger in version_cfg.triggers.items():
@@ -1582,13 +1591,13 @@ async def rollback_version(
 ) -> Dict[str, Any]:
     """
     Откатывает flow к указанной версии.
-    
+
     Делает указанную версию latest (не удаляет новые версии).
     """
     success = await container.flow_repository.rollback_to_version(flow_id, version)
     if not success:
         raise HTTPException(status_code=404, detail="Version not found")
-    
+
     return {
         "status": "success",
         "message": f"Flow '{flow_id}' rolled back to version {version}",

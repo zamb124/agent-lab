@@ -9,9 +9,8 @@ WebhookChannelHandler - отправка сообщений через HTTP call
 
 from typing import Any, Dict, Optional, Union
 
-from core.http import get_httpx_client
-
 from apps.flows.src.models.enums import ChannelType
+from core.http import get_httpx_client
 from core.logging import get_logger
 
 from .base import BaseChannelHandler
@@ -22,12 +21,12 @@ logger = get_logger(__name__)
 class WebhookChannelHandler(BaseChannelHandler):
     """
     Handler для отправки через HTTP webhook/callback.
-    
+
     Поддерживаемые действия:
     - send_message: POST с текстовым сообщением
     - send_payload: POST с произвольным JSON payload
     - send_notification: POST в формате A2A нотификации
-    
+
     Конфигурация:
     {
         "url": "https://example.com/callback" или "@var:callback_url",
@@ -39,9 +38,9 @@ class WebhookChannelHandler(BaseChannelHandler):
         "timeout": 30
     }
     """
-    
+
     channel_type = ChannelType.WEBHOOK
-    
+
     async def send_message(
         self,
         recipient: str,
@@ -52,7 +51,7 @@ class WebhookChannelHandler(BaseChannelHandler):
     ) -> Dict[str, Any]:
         """
         Отправляет текстовое сообщение через HTTP.
-        
+
         Args:
             recipient: URL для отправки (или берется из config.url)
             text: Текст сообщения
@@ -61,15 +60,15 @@ class WebhookChannelHandler(BaseChannelHandler):
         """
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
-        
+
         payload = {
             "type": "message",
             "text": text,
             **kwargs,
         }
-        
+
         return await self._send_request(url, payload, headers, config)
-    
+
     async def send_photo(
         self,
         recipient: str,
@@ -82,18 +81,18 @@ class WebhookChannelHandler(BaseChannelHandler):
         """Отправляет фото через HTTP (как URL или base64)."""
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
-        
+
         photo_data = photo if isinstance(photo, str) else None
-        
+
         payload = {
             "type": "photo",
             "photo_url": photo_data,
             "caption": caption,
             **kwargs,
         }
-        
+
         return await self._send_request(url, payload, headers, config)
-    
+
     async def send_document(
         self,
         recipient: str,
@@ -107,9 +106,9 @@ class WebhookChannelHandler(BaseChannelHandler):
         """Отправляет документ через HTTP (как URL)."""
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
-        
+
         doc_data = document if isinstance(document, str) else None
-        
+
         payload = {
             "type": "document",
             "document_url": doc_data,
@@ -117,9 +116,9 @@ class WebhookChannelHandler(BaseChannelHandler):
             "caption": caption,
             **kwargs,
         }
-        
+
         return await self._send_request(url, payload, headers, config)
-    
+
     async def send_payload(
         self,
         recipient: str,
@@ -130,14 +129,14 @@ class WebhookChannelHandler(BaseChannelHandler):
     ) -> Dict[str, Any]:
         """
         Отправляет произвольный JSON payload.
-        
+
         Используется для гибких интеграций.
         """
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
-        
+
         return await self._send_request(url, payload, headers, config)
-    
+
     async def send_notification(
         self,
         recipient: str,
@@ -151,7 +150,7 @@ class WebhookChannelHandler(BaseChannelHandler):
     ) -> Dict[str, Any]:
         """
         Отправляет нотификацию в A2A формате.
-        
+
         Args:
             recipient: URL callback
             event_type: Тип события (complete, error, artifact, etc)
@@ -161,7 +160,7 @@ class WebhookChannelHandler(BaseChannelHandler):
         """
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
-        
+
         payload = {
             "jsonrpc": "2.0",
             "method": "tasks/pushNotification",
@@ -174,9 +173,9 @@ class WebhookChannelHandler(BaseChannelHandler):
                 },
             },
         }
-        
+
         return await self._send_request(url, payload, headers, config)
-    
+
     async def _send_request(
         self,
         url: str,
@@ -187,7 +186,7 @@ class WebhookChannelHandler(BaseChannelHandler):
         """Выполняет HTTP запрос."""
         method = config.get("method", "POST").upper()
         timeout = config.get("timeout", 30.0)
-        
+
         async with get_httpx_client(timeout=timeout) as client:
             if method == "POST":
                 response = await client.post(url, json=payload, headers=headers)
@@ -195,7 +194,7 @@ class WebhookChannelHandler(BaseChannelHandler):
                 response = await client.put(url, json=payload, headers=headers)
             else:
                 response = await client.post(url, json=payload, headers=headers)
-            
+
             if response.status_code >= 400:
                 logger.error(
                     f"Webhook request failed: {response.status_code} - {response.text}"
@@ -203,14 +202,14 @@ class WebhookChannelHandler(BaseChannelHandler):
                 raise RuntimeError(
                     f"Webhook error: {response.status_code} - {response.text}"
                 )
-            
+
             logger.info(f"Webhook sent to {url}: {response.status_code}")
-            
+
             try:
                 return response.json()
             except Exception:
                 return {"status": "ok", "status_code": response.status_code}
-    
+
     def _get_url(
         self,
         recipient: str,
@@ -219,12 +218,12 @@ class WebhookChannelHandler(BaseChannelHandler):
     ) -> str:
         """Определяет URL для отправки."""
         url = recipient or config.get("url")
-        
+
         if not url:
             raise ValueError("URL is required for webhook channel")
-        
+
         return self._resolve_value(url, variables)
-    
+
     def _build_headers(
         self,
         config: Dict[str, Any],
@@ -232,7 +231,7 @@ class WebhookChannelHandler(BaseChannelHandler):
     ) -> Dict[str, str]:
         """Строит заголовки с резолвингом переменных."""
         headers = {"Content-Type": "application/json"}
-        
+
         config_headers = config.get("headers")
         if not isinstance(config_headers, dict):
             config_headers = {}
@@ -243,7 +242,7 @@ class WebhookChannelHandler(BaseChannelHandler):
             merged_h = dict(config_headers)
         for key, value in merged_h.items():
             headers[key] = self._resolve_value(value, variables)
-        
+
         return headers
 
 

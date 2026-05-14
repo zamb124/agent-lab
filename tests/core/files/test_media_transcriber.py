@@ -121,8 +121,8 @@ class TestSplitAudioForSttChunks:
 
 class TestValidateSttResultText:
     def test_valid_result(self) -> None:
-        from core.files.models import AudioTranscriptionStatus
         from core.clients.stt_client import STTTranscriptionResult
+        from core.files.models import AudioTranscriptionStatus
 
         result = STTTranscriptionResult(
             provider="mock",
@@ -135,8 +135,8 @@ class TestValidateSttResultText:
         assert text == "Привет мир"
 
     def test_raises_on_failed_status(self) -> None:
-        from core.files.models import AudioTranscriptionStatus
         from core.clients.stt_client import STTTranscriptionResult
+        from core.files.models import AudioTranscriptionStatus
 
         result = STTTranscriptionResult(
             provider="mock",

@@ -6,16 +6,16 @@ TaskIQ tasks для LLM вызовов.
 
 from typing import Any, Dict, List, Optional
 
+from apps.flows_worker.broker import broker
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import get_llm
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
-from core.models.context_models import Context
 from core.models.billing_models import UsageType
+from core.models.context_models import Context
 from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
-from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 
@@ -30,14 +30,14 @@ async def invoke_llm(
 ) -> Dict[str, Any]:
     """
     Вызывает LLM и возвращает результат.
-    
+
     Args:
         messages: Список сообщений в OpenAI формате [{"role": "...", "content": "..."}]
         tools: Опциональный список tools
         task_id: ID задачи для трейсинга
         context_id: ID контекста
         context_data: Сериализованный Context (как у process_flow_task); в worker обязателен, если нет уже выставленного контекста
-        
+
     Returns:
         {"content": "...", "reasoning": "...", "tool_calls": [...]}
     """

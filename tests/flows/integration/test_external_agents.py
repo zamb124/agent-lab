@@ -145,7 +145,8 @@ class TestFlowDiscoveryService:
         agent = await container.flow_repository.get("health_test_agent")
         agent.status = ExternalAgentStatus.UNHEALTHY
         agent.agent_card = {"name": "Updated Card"}
-        from datetime import datetime, timezone as tz
+        from datetime import datetime
+        from datetime import timezone as tz
         agent.last_health_check = datetime.now(tz.utc)
         await container.flow_repository.set(agent)
 

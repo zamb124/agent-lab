@@ -1,12 +1,13 @@
 """Контракт RAGResource: search через HTTP RAG API; add_document через pgvector."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from apps.flows.src.container import FlowContainer
-from core.rag.rag_resource import RAGResource
 from core.clients.service_client import ServiceClient
 from core.rag.providers.pgvector_provider import PgVectorProvider
+from core.rag.rag_resource import RAGResource
 
 
 @pytest.fixture

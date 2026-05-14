@@ -4,7 +4,7 @@
 
 import fnmatch
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
 
 from starlette.requests import Request
 
@@ -75,7 +75,7 @@ def browser_request_accepts_tenant_error_html(request: Request) -> bool:
 @dataclass
 class RouteRule:
     """Правило маршрутизации"""
-    
+
     pattern: str
     skip: bool = False
     auth_required: bool = True
@@ -103,7 +103,7 @@ ROUTE_RULES: List[RouteRule] = [
     # ============================================================================
     # ПУБЛИЧНЫЕ ENDPOINTS (без авторизации)
     # ============================================================================
-    
+
     # Главная страница
     RouteRule("/", auth_required=False, context_type="anonymous"),
     RouteRule("/policy", auth_required=False, context_type="anonymous"),
@@ -120,7 +120,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/flow-preview/", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/flow-preview", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/flow-preview/", auth_required=False, context_type="anonymous"),
-    
+
     # Страницы продуктов (публичный доступ)
     RouteRule("/products/*", auth_required=False, context_type="anonymous"),
     RouteRule("/demo/*", auth_required=False, context_type="anonymous"),
@@ -128,19 +128,19 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/blog/*", auth_required=False, context_type="anonymous"),
     RouteRule("/about", auth_required=False, context_type="anonymous"),
     RouteRule("/roadmap", auth_required=False, context_type="anonymous"),
-    
+
     # Статические файлы
     RouteRule("/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/assets/*", auth_required=False, context_type="anonymous"),
     RouteRule("/src/*", auth_required=False, context_type="anonymous"),
     RouteRule("/media/*", auth_required=False, context_type="anonymous"),
     RouteRule("/favicon.ico", auth_required=False, context_type="anonymous"),
-    
+
     # PWA файлы (должны быть доступны публично)
     RouteRule("/manifest.json", auth_required=False, context_type="anonymous"),
     RouteRule("/sw.js", auth_required=False, context_type="anonymous"),
     RouteRule("/offline.html", auth_required=False, context_type="anonymous"),
-    
+
     # Эндпоинты OAuth (с префиксами сервисов и без)
     RouteRule("/api/auth/login/*", auth_required=False, context_type="anonymous"),
     RouteRule("/api/auth/callback", auth_required=False, context_type="anonymous"),
@@ -155,7 +155,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/auth/demo/status", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/auth/demo/status", auth_required=False, context_type="anonymous"),
     RouteRule("/*/api/auth/demo/status", auth_required=False, context_type="anonymous"),
-    
+
     # Публичные API
     RouteRule("/api/leads", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/leads", auth_required=False, context_type="anonymous"),
@@ -184,7 +184,7 @@ ROUTE_RULES: List[RouteRule] = [
     # Browser Runtime control-plane (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
     RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),
     RouteRule("/browser/api/v1/mcp*", auth_required=False, context_type="anonymous"),
-    
+
     # Документация
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),
     RouteRule("/documentation*", auth_required=False, context_type="anonymous"),
@@ -202,11 +202,11 @@ ROUTE_RULES: List[RouteRule] = [
     # YooMoney OAuth callback (redirect из браузера после авторизации на yoomoney.ru)
     RouteRule("/api/billing/yoomoney/callback", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/billing/yoomoney/callback", auth_required=False, context_type="anonymous"),
-    
+
     # ============================================================================
     # АВТОРИЗАЦИЯ ТРЕБУЕТСЯ, НО СУБДОМЕН НЕ ОБЯЗАТЕЛЕН
     # ============================================================================
-    
+
     # Страница принятия инвайта — публичная (JS сам проверяет авторизацию)
     RouteRule("/join", auth_required=False, context_type="anonymous"),
 
@@ -238,11 +238,11 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/*/api/companies/*/pronunciation-rules/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform/pronunciation-rules", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform/pronunciation-rules/*", context_type="api", auth_required=True),
-    
+
     # API фронтенда для управления конфигурациями виджетов
     RouteRule("/frontend/api/embed/configs/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/embed/configs", context_type="api", auth_required=True),
-    
+
     # Принятие инвайта (auth, но без субдомена — пользователь ещё может не иметь компании)
     RouteRule("/api/invites/accept", context_type="frontend", auth_required=True),
     RouteRule("/frontend/api/invites/accept", context_type="frontend", auth_required=True),
@@ -255,17 +255,17 @@ ROUTE_RULES: List[RouteRule] = [
     # Core team API на всех сервисах
     RouteRule("/api/team/*", context_type="api", auth_required=True),
     RouteRule("/*/api/team/*", context_type="api", auth_required=True),
-    
+
     # API фронтенда для управления API ключами
     RouteRule("/api/api-keys/*", context_type="api", auth_required=True),
     RouteRule("/api/api-keys", context_type="api", auth_required=True),
     RouteRule("/frontend/api/api-keys/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/api-keys", context_type="api", auth_required=True),
-    
+
     # API фронтенда для биллинга
     RouteRule("/api/billing/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/billing/*", context_type="api", auth_required=True),
-    
+
     # API фронтенда для настроек
     RouteRule("/api/settings/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/settings/*", context_type="api", auth_required=True),
@@ -285,7 +285,7 @@ ROUTE_RULES: List[RouteRule] = [
     # Админ тарифы и usage (доступ system проверяется в обработчике)
     RouteRule("/api/platform-billing/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/platform-billing/*", context_type="api", auth_required=True),
-    
+
     # Push Notifications API (публичный ключ без авторизации, подписка с авторизацией)
     RouteRule("/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
     RouteRule("/frontend/api/push/vapid-public-key", context_type="anonymous", auth_required=False),
@@ -293,7 +293,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/push/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/push/*", context_type="api", auth_required=True),
     RouteRule("/*/api/push/*", context_type="api", auth_required=True),
-    
+
     # API фронтенда для статуса сервисов (публичный доступ для мониторинга)
     RouteRule("/api/services/status", context_type="anonymous", auth_required=False),
     RouteRule("/frontend/api/services/status", context_type="anonymous", auth_required=False),
@@ -301,7 +301,7 @@ ROUTE_RULES: List[RouteRule] = [
     # Core calendar API на всех сервисах
     RouteRule("/api/calendar/*", context_type="api", auth_required=True),
     RouteRule("/*/api/calendar/*", context_type="api", auth_required=True),
-    
+
     # Универсальный эндпоинт информации о пользователе (доступен на всех сервисах)
     RouteRule("/api/auth/me", context_type="api", auth_required=True),
     RouteRule("/api/auth/me/*", context_type="api", auth_required=True),
@@ -313,14 +313,14 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/*/api/auth/me/*", context_type="api", auth_required=True),
     # Остальные core auth endpoints (/providers, /attrs/..., switch-company) на всех сервисах
     RouteRule("/*/api/auth/*", context_type="api", auth_required=True),
-    
+
     # ============================================================================
     # ТРЕБУЕТСЯ АВТОРИЗАЦИЯ И СУБДОМЕН (компания)
     # ============================================================================
-    
+
     # Панель управления - главная страница после авторизации
     RouteRule("/dashboard", context_type="frontend", auth_required=True),
-    
+
     # Страницы консоли фронтенда
     RouteRule("/team", context_type="frontend", auth_required=True),
     RouteRule("/api-keys", context_type="frontend", auth_required=True),
@@ -349,13 +349,13 @@ ROUTE_RULES: List[RouteRule] = [
 
     # Scheduler service API
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),
-    
+
     # UI агентов — публичные превью лендинга (статика под /flows/demo_cards на сервисе flows)
     RouteRule("/flows/demo_cards/*", auth_required=False, context_type="anonymous"),
     # UI агентов - статика без авторизации (должна быть перед /flows/ui/*)
     RouteRule("/flows/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/ui/static/*", auth_required=False, context_type="anonymous"),
-    
+
     # UI агентов - страницы (требуют авторизацию)
     RouteRule("/flows/ui/*", context_type="frontend", auth_required=True),
     RouteRule("/flows/ui", context_type="frontend", auth_required=True),
@@ -363,7 +363,7 @@ ROUTE_RULES: List[RouteRule] = [
     # Прямой доступ на порт сервиса (без nginx-префикса /agents)
     RouteRule("/ui/*", context_type="frontend", auth_required=True),
     RouteRule("/ui", context_type="frontend", auth_required=True),
-    
+
     # Скачивание файлов — публичный доступ для всех сервисов;
     # приватные файлы проверяются самим хендлером по company_id
     RouteRule("*/api/v1/files/download/*", context_type="api", auth_required=False),
@@ -384,15 +384,15 @@ ROUTE_RULES: List[RouteRule] = [
     # API агентов (устаревший путь /api/v1)
     RouteRule("/flows/api/v1/auth/me", context_type="api", auth_required=True),
     RouteRule("/flows/api/v1/*", context_type="api", auth_required=True),
-    
+
     # Эндпоинты протокола A2A (выполнение агента без префикса /api/)
     RouteRule("/flows/*", context_type="a2a", auth_required=True),
-    
+
     # CRM (если используется)
     RouteRule("/crm/api/v1/*", context_type="api", auth_required=True),
     RouteRule("/crm/*", context_type="frontend", auth_required=True),
     RouteRule("/crm", context_type="frontend", auth_required=True),
-    
+
     # RAG Service - требует авторизацию для tenant isolation
     RouteRule("/rag/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/rag/api/v1/*", context_type="session", auth_required=True),
@@ -493,26 +493,26 @@ DELETING_COMPANY_ALLOWED_PATHS = [
 
 class RouteMatcher:
     """Матчер маршрутов"""
-    
+
     def __init__(self, rules: List[RouteRule] = None, skip_paths: List[str] = None):
         self.rules = rules or ROUTE_RULES
         self.skip_paths = skip_paths or SKIP_PATHS
-    
+
     def should_skip(self, path: str) -> bool:
         """Проверяет, нужно ли пропустить middleware для пути"""
         return any(fnmatch.fnmatch(path, pattern) for pattern in self.skip_paths)
-    
+
     def match(self, path: str) -> Optional[RouteRule]:
         """Находит подходящее правило для пути"""
         for rule in self.rules:
             if fnmatch.fnmatch(path, rule.pattern):
                 return rule
         return None
-    
+
     def allows_no_subdomain(self, path: str) -> bool:
         """Проверяет, разрешен ли доступ без субдомена"""
         return any(fnmatch.fnmatch(path, pattern) for pattern in NO_SUBDOMAIN_ALLOWED_PATHS)
-    
+
     def allows_deleting_company(self, path: str) -> bool:
         """Проверяет, разрешен ли доступ для удаляемой компании"""
         return any(fnmatch.fnmatch(path, pattern) for pattern in DELETING_COMPANY_ALLOWED_PATHS)

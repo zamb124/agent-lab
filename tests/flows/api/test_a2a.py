@@ -12,7 +12,6 @@ import uuid
 from typing import Any, Dict, List
 
 import pytest
-from a2a.types import Role, TaskState
 
 
 def _msg(text: str, task_id: str = None, context_id: str = None) -> Dict[str, Any]:
@@ -692,10 +691,10 @@ class TestA2AInterrupt:
     ):
         """
         СТРОГАЯ ПРОВЕРКА: при resume клиент получает ответ.
-        
+
         Проверяем что:
         1. Первый запрос возвращает input-required с task_id
-        2. При resume используется тот же task_id 
+        2. При resume используется тот же task_id
         3. Клиент получает финальный ответ (completed)
         4. Ответ содержит текст от LLM
         """
@@ -719,18 +718,18 @@ class TestA2AInterrupt:
 
         data1 = r1.json()
         _validate_jsonrpc_response(data1)
-        
+
         task1 = data1["result"]
         _validate_task(task1)
-        
+
         # ПРОВЕРКА 1: Статус MUST быть input-required
         assert task1["status"]["state"] == "input-required", \
             f"First request MUST return input-required, got: {task1['status']['state']}"
-        
+
         # ПРОВЕРКА 2: Должен быть task_id
         first_task_id = task1["id"]
         assert first_task_id, "Task MUST have id"
-        
+
         # ПРОВЕРКА 3: Вопрос должен быть в message
         assert task1["status"]["message"] is not None, "input-required MUST have message"
         question_parts = task1["status"]["message"]["parts"]
@@ -753,18 +752,18 @@ class TestA2AInterrupt:
 
         data2 = r2.json()
         _validate_jsonrpc_response(data2)
-        
+
         task2 = data2["result"]
         _validate_task(task2)
-        
+
         # ПРОВЕРКА 4: После resume статус MUST быть completed
         assert task2["status"]["state"] == "completed", \
             f"Resume MUST return completed, got: {task2['status']['state']}"
-        
+
         # ПРОВЕРКА 5: task_id должен быть тот же самый
         assert task2["id"] == first_task_id, \
             f"Task ID MUST be preserved across interrupt/resume. First: {first_task_id}, Resume: {task2['id']}"
-        
+
         # ПРОВЕРКА 6: Ответ должен содержать текст от LLM
         assert task2["status"]["message"] is not None, "completed MUST have message"
         response_parts = task2["status"]["message"]["parts"]
@@ -782,7 +781,7 @@ class TestA2AInterrupt:
     ):
         """
         СТРОГАЯ ПРОВЕРКА: при resume через stream клиент получает события.
-        
+
         Проверяем что:
         1. Первый stream возвращает input-required
         2. При resume stream возвращает completed событие
@@ -806,7 +805,7 @@ class TestA2AInterrupt:
         )
 
         events1 = _parse_sse(r1.text)
-        
+
         # ПРОВЕРКА 1: Должно быть input-required событие
         input_required_events = [
             e for e in events1
@@ -827,7 +826,7 @@ class TestA2AInterrupt:
         )
 
         events2 = _parse_sse(r2.text)
-        
+
         # ПРОВЕРКА 2: Должно быть completed событие
         completed_events = [
             e for e in events2
@@ -835,7 +834,7 @@ class TestA2AInterrupt:
         ]
         assert len(completed_events) > 0, \
             f"Resume stream MUST contain completed event. Got events: {[e.get('result', {}).get('status', {}).get('state') for e in events2]}"
-        
+
         # ПРОВЕРКА 3: Ответ должен содержать "Moscow"
         completed = completed_events[-1]
         msg = completed.get("result", {}).get("status", {}).get("message", {})
@@ -1107,14 +1106,14 @@ class TestA2ASkills:
         assert resp.status_code == 200
 
         items = resp.json()
-        
+
         # Проверяем что возвращаются items (nodes, edges, и возможно function tools)
         assert len(items) > 0, "MUST have items"
-        
+
         # Должны быть все ноды графа
         nodes = [item for item in items if item["type"] == "node"]
         assert len(nodes) > 0, "MUST have nodes"
-        
+
         # Проверяем что есть edges
         edges = [item for item in items if item["type"] == "edge"]
         assert len(edges) > 0, "MUST have edges"
@@ -1141,23 +1140,23 @@ class TestA2ASkills:
         assert resp.status_code == 200
 
         schema = resp.json()
-        
+
         # Проверяем все обязательные поля ISchema
         assert "type" in schema, "Schema MUST have 'type' field"
         assert schema["type"] == "object", "Schema type MUST be 'object'"
-        
+
         assert "title" in schema, "Schema MUST have 'title' field"
         assert isinstance(schema["title"], str), "Schema title MUST be string"
-        
+
         assert "$schema" in schema, "Schema MUST have '$schema' field"
         assert isinstance(schema["$schema"], str), "Schema $schema MUST be string"
-        
+
         assert "properties" in schema, "Schema MUST have 'properties' field"
         assert isinstance(schema["properties"], dict), "Schema properties MUST be dict"
-        
+
         assert "required" in schema, "Schema MUST have 'required' field"
         assert isinstance(schema["required"], list), "Schema required MUST be list"
-        
+
         assert "additionalProperties" in schema, "Schema MUST have 'additionalProperties' field"
         assert isinstance(schema["additionalProperties"], bool), "Schema additionalProperties MUST be boolean"
 
@@ -1171,7 +1170,7 @@ class TestA2ASkills:
     async def test_create_skill_valid(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills создаёт новый skill."""
         branch_id = f"test_skill_{unique_id}"
-        
+
         resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
@@ -1185,25 +1184,25 @@ class TestA2ASkills:
                 },
             },
         )
-        
+
         assert resp.status_code == 201
         data = resp.json()
         assert data["status"] == "success"
         assert data["branch_id"] == branch_id
-        
+
         get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
         assert get_resp.status_code == 200
         skill = get_resp.json()
         assert skill["id"] == branch_id
         assert skill["name"] == "Test Skill"
-        
+
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
     @pytest.mark.asyncio
     async def test_create_skill_duplicate(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills возвращает 409 для существующего skill."""
         branch_id = f"test_skill_dup_{unique_id}"
-        
+
         resp1 = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
@@ -1212,7 +1211,7 @@ class TestA2ASkills:
             },
         )
         assert resp1.status_code == 201
-        
+
         resp2 = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
@@ -1221,7 +1220,7 @@ class TestA2ASkills:
             },
         )
         assert resp2.status_code == 409
-        
+
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
     @pytest.mark.asyncio
@@ -1251,7 +1250,7 @@ class TestA2ASkills:
     async def test_update_skill_valid(self, client, mutable_flow_id, unique_id):
         """PUT /flows/{id}/branches/{branch_id} обновляет существующий skill."""
         branch_id = f"test_skill_update_{unique_id}"
-        
+
         create_resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
@@ -1261,7 +1260,7 @@ class TestA2ASkills:
             },
         )
         assert create_resp.status_code == 201
-        
+
         update_resp = await client.put(
             f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}",
             json={
@@ -1278,14 +1277,14 @@ class TestA2ASkills:
         data = update_resp.json()
         assert data["status"] == "success"
         assert data["branch_id"] == branch_id
-        
+
         get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
         assert get_resp.status_code == 200
         skill = get_resp.json()
         assert skill["name"] == "Updated Name"
         assert skill["description"] == "Updated description"
         assert "updated" in skill["tags"]
-        
+
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
     @pytest.mark.asyncio
@@ -1316,7 +1315,7 @@ class TestA2ASkills:
     async def test_delete_skill_valid(self, client, mutable_flow_id, unique_id):
         """DELETE /flows/{id}/branches/{branch_id} удаляет skill."""
         branch_id = f"test_skill_delete_{unique_id}"
-        
+
         create_resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
@@ -1325,13 +1324,13 @@ class TestA2ASkills:
             },
         )
         assert create_resp.status_code == 201
-        
+
         delete_resp = await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
         assert delete_resp.status_code == 200
         data = delete_resp.json()
         assert data["status"] == "success"
         assert data["branch_id"] == branch_id
-        
+
         get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
         assert get_resp.status_code == 404
 
@@ -1367,7 +1366,7 @@ class TestA2ASkills:
     async def test_create_skill_with_edges(self, client, mutable_flow_id, unique_id):
         """POST /flows/{id}/skills создаёт skill с edges."""
         branch_id = f"test_skill_edges_{unique_id}"
-        
+
         resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
@@ -1386,14 +1385,14 @@ class TestA2ASkills:
                 },
             },
         )
-        
+
         assert resp.status_code == 201
         data = resp.json()
         assert data["status"] == "success"
-        
+
         get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
         assert get_resp.status_code == 200
-        
+
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
 
@@ -1557,7 +1556,7 @@ class TestA2AEdgeCases:
 class TestA2ARealisticStreaming:
     """
     Реалистичные тесты стриминга.
-    
+
     Проверяем что MockLLM стримит по токенам как настоящая LLM:
     - Контент приходит по частям (не одним куском)
     - Tool calls корректно обрабатываются
@@ -1618,7 +1617,7 @@ class TestA2ARealisticStreaming:
     async def test_stream_chunks_same_artifact_id(self, client, flow_id, mock_llm_with_queue, sync_tools):
         """Все чанки одного ответа имеют одинаковый artifactId."""
         mock_llm_with_queue(["Multiple chunks with same artifact ID test."])
-        
+
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -1692,7 +1691,7 @@ class TestA2ARealisticStreaming:
     async def test_stream_status_events(self, client, flow_id, mock_llm_with_queue, sync_tools):
         """Stream содержит status-update события с финальным final=True."""
         mock_llm_with_queue(["Test response"])
-        
+
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -1717,7 +1716,7 @@ class TestA2ARealisticStreaming:
     async def test_stream_events_order(self, client, flow_id, mock_llm_with_queue, sync_tools):
         """События приходят в правильном порядке: artifact chunks, затем final status."""
         mock_llm_with_queue(["Testing event order in stream"])
-        
+
         resp = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -1734,7 +1733,7 @@ class TestA2ARealisticStreaming:
         # Последнее событие должно быть status-update с final=True или task
         last_result = events[-1].get("result", {})
         last_kind = last_result.get("kind")
-        
+
         # Может быть task или status-update
         if last_kind == "status-update":
             assert last_result.get("final") is True, "Last status-update should be final"
@@ -1750,12 +1749,12 @@ class TestA2ARealisticStreaming:
     async def test_stream_multi_turn_preserves_streaming(self, client, flow_id, mock_llm_with_queue, sync_tools):
         """Multi-turn: каждый ответ стримится по частям."""
         context_id = str(uuid.uuid4())
-        
+
         mock_llm_with_queue([
             "First response with multiple tokens",
             "Second response also streams properly",
         ])
-        
+
         resp1 = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -1816,7 +1815,7 @@ class TestA2ARealisticStreaming:
         # Все taskId должны быть одинаковыми
         if task_ids:
             assert len(task_ids) == 1, f"All events should have same taskId, got: {task_ids}"
-        
+
         # contextId должен соответствовать запросу
         if context_ids:
             assert context_id in context_ids, f"Events should have requested contextId {context_id}"

@@ -11,7 +11,7 @@ from core.config.loader import load_merged_config
 class RAGSettings(BaseSettings):
     """
     Настройки RAG сервиса.
-    
+
     Наследуется от BaseSettings, добавляя специфичные для RAG поля.
     Все базовые поля (database, auth, logging, rag, s3) доступны из родителя.
     """
@@ -24,7 +24,7 @@ _rag_settings: Optional[RAGSettings] = None
 def get_rag_settings() -> RAGSettings:
     """
     Получает настройки RAG сервиса.
-    
+
     Создает RAGSettings из конфигурации, загружая базовые настройки
     и добавляя специфичные для RAG.
     """
@@ -32,7 +32,7 @@ def get_rag_settings() -> RAGSettings:
     if _rag_settings is None:
         merged_config = load_merged_config(service_name="rag", silent=True)
         _rag_settings = RAGSettings(**merged_config)
-    
+
     return _rag_settings
 
 

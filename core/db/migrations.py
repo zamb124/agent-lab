@@ -9,13 +9,11 @@
 
 import asyncio
 
-from core.logging import get_logger
-from pathlib import Path
-
 from alembic import command
 from alembic.config import Config
 
 from core.config.loader import get_project_root
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 def _make_alembic_config(script_location: str, db_url: str) -> Config | None:
@@ -48,7 +46,6 @@ def _assert_full_registry() -> None:
         )
 
 def run_migrations() -> None:
-    import asyncio
 
     asyncio.run(run_migrations_async())
 
@@ -61,6 +58,7 @@ async def run_migrations_async(service: str | None = None) -> None:
     """
     from sqlalchemy import pool
     from sqlalchemy.ext.asyncio import create_async_engine
+
     from core.db.service_registry import get_all_services
 
     _assert_full_registry()
@@ -96,6 +94,7 @@ def _run_upgrade(sync_conn, cfg: Config) -> None:
 async def run_downgrade_async(service: str, revision: str) -> None:
     from sqlalchemy import pool
     from sqlalchemy.ext.asyncio import create_async_engine
+
     from core.db.service_registry import get_service_by_name
 
     _assert_full_registry()
@@ -117,6 +116,7 @@ def _run_downgrade(sync_conn: object, cfg: Config, revision: str) -> None:
 async def run_current_async(service: str) -> None:
     from sqlalchemy import pool
     from sqlalchemy.ext.asyncio import create_async_engine
+
     from core.db.service_registry import get_service_by_name
 
     _assert_full_registry()

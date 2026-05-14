@@ -4,37 +4,37 @@
 
 from core.config.base import BaseSettings, get_settings, set_settings, settings
 from core.config.loader import load_merged_config
-from core.config.testing import is_testing
 from core.config.models import (
     AuthConfig,
     AuthProviderConfig,
-    DemoAuthConfig,
+    BothubProviderConfig,
     CallsConfig,
+    CloudRuSTTConfig,
+    CloudRuTTSBackendConfig,
     DatabaseConfig,
+    DemoAuthConfig,
+    LitserveSpeechBackendConfig,
+    LLMConfig,
+    LocalSileroVADBackendConfig,
     LoggingConfig,
-    ServerConfig,
-    ProxyConfig,
+    ModelConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
-    BothubProviderConfig,
-    YandexLLMProviderConfig,
-    ModelConfig,
-    LLMConfig,
+    ProxyConfig,
     S3BucketConfig,
     S3Config,
+    SberSTTBackendConfig,
+    SberTTSBackendConfig,
+    ServerConfig,
     SpeechProvidersConfig,
     STTProvidersConfig,
     TTSProvidersConfig,
     VADProvidersConfig,
-    LitserveSpeechBackendConfig,
-    CloudRuSTTConfig,
-    CloudRuTTSBackendConfig,
+    YandexLLMProviderConfig,
     YandexSTTBackendConfig,
     YandexTTSBackendConfig,
-    SberSTTBackendConfig,
-    SberTTSBackendConfig,
-    LocalSileroVADBackendConfig,
 )
+from core.config.testing import is_testing
 
 __all__ = [
     "BaseSettings",

@@ -9,14 +9,14 @@ priority, action_url, created_at, service, kind}}`.
 БЕЗ МОКОВ — реальные WebSocket + Redis.
 """
 
-import pytest
 import asyncio
 import json
 import time
 
+import pytest
 import websockets
 
-from core.websocket.publisher import notify_user, Notification, NotificationType
+from core.websocket.publisher import Notification, NotificationType, notify_user
 
 
 def _expected_event_type(service: str, notification_type: NotificationType) -> str:

@@ -1,7 +1,5 @@
 """Сид реестра LitServe: без дублей по api и каноничному HF."""
 
-from core.config.models import ProviderLitserveInfraConfig
-
 from apps.provider_litserve.model_registry import (
     build_embedding_api_pairs,
     build_rerank_api_pairs,
@@ -10,6 +8,7 @@ from apps.provider_litserve.model_registry import (
     list_models,
     sync_defaults_from_config,
 )
+from core.config.models import ProviderLitserveInfraConfig
 
 
 def test_embedding_pairs_no_duplicate_hf_row_when_openai_alias_present() -> None:

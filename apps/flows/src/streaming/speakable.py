@@ -68,7 +68,6 @@ from typing import Iterable, Optional
 
 from a2a.types import Artifact, TaskArtifactUpdateEvent, TextPart
 
-
 SPEAKABLE_ARTIFACT_NAMES: frozenset[str] = frozenset(
     {
         "response",

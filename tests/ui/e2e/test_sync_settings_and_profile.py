@@ -16,6 +16,7 @@ from tests.ui.e2e.sync_e2e_helpers import (
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
 
+
 @pytest.mark.scenario(
     service="sync",
     tag="settings",

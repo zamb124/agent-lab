@@ -18,18 +18,18 @@ from apps.flows.src.models.channel_config import (
     default_output_actions_for_trigger,
 )
 from apps.flows.src.triggers import TriggerValidationError
+from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.trigger_type_contract import (
     default_post_flow_output_enabled,
     effective_output_actions_for_trigger,
 )
-from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
-from core.variables.resolver import VariableResolutionError
 from core.context import get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context, Language
 from core.models.identity_models import Company, User
+from core.variables.resolver import VariableResolutionError
 
 logger = get_logger(__name__)
 
@@ -521,7 +521,7 @@ async def telegram_webhook(
 ) -> Dict[str, str]:
     """
     Webhook endpoint для Telegram Bot API.
-    
+
     Telegram посылает Update сюда после setWebhook.
     """
     ctx = get_context()
@@ -702,7 +702,7 @@ async def test_trigger(
 ) -> Dict[str, Any]:
     """
     Тестирует триггер с заданным payload.
-    
+
     Полезно для отладки input_mapping.
     """
     flow_config = await container.flow_repository.get(flow_id)

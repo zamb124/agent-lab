@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from apps.crm.container import get_crm_container
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.taskiq_analyze_errors import format_validation_for_taskiq
 from apps.crm_worker.broker import broker
@@ -168,6 +169,43 @@ async def process_note_task(
                 rel_count = len(result_data.get("created_relationship_ids") or [])
             else:
                 raise ValueError(f"Unknown mode: {mode}")
+    except ApplyAnalysisDraftEntityFailuresError as exc:
+        failures_payload = [
+            {
+                "draft_entity_id": did,
+                "entity_name": name if name is not None else "",
+                "entity_type": etype if etype is not None else "",
+                "message": msg,
+            }
+            for did, name, etype, msg in exc.failures
+        ]
+        err_msg = str(exc)
+        await repo.patch_progress(
+            task_id,
+            company_id,
+            status="failed",
+            stage="failed",
+            progress_pct=100,
+            error_message=err_msg,
+            completed_at=datetime.now(timezone.utc),
+        )
+        await container.entity_service.record_note_analysis_failure(
+            note_id,
+            err_msg,
+            apply_failures=failures_payload,
+        )
+        await _notify_analyze_stage(
+            user_id,
+            repo,
+            company_id,
+            task_id=task_id,
+            namespace=namespace,
+            status="failed",
+            stage="failed",
+            progress_pct=100,
+            message=err_msg[:200],
+        )
+        raise ValueError(err_msg) from exc
     except ValidationError as exc:
         err_msg = format_validation_for_taskiq(exc.errors())
         await repo.patch_progress(

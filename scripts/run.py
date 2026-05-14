@@ -33,8 +33,8 @@
 import os
 import shutil
 import signal
-import sys
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -95,13 +95,13 @@ SERVICES = {
         "module": "apps.provider_litserve.main",
         "port": "8014",
     },
-    
+
     "voice": {
         "type": "uvicorn",
         "app": "apps.app_runtime_targets:voice_app",
         "port": "8015",
     },
-    
+
     # TaskIQ workers
     "flows_worker": {
         "type": "taskiq-worker",
@@ -128,7 +128,7 @@ SERVICES = {
         "worker_app": "apps.app_runtime_targets:idle_taskiq_worker_app",
         "workers": "1",
     },
-    
+
     # TaskIQ scheduler
     "scheduler": {
         "type": "taskiq-scheduler",

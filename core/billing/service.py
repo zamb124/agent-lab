@@ -6,18 +6,15 @@
 import copy
 import json
 import uuid
-
-from core.logging import get_logger
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from core.context import get_context
 from core.i18n import t
+from core.logging import get_logger
+from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan, UsageRecord, UsageType
 from core.models.i18n_models import Language
-from core.models.identity_models import User, Company
-from core.models.billing_models import UsageRecord, UsageType, TariffPlan, DEFAULT_TARIFF_PRICES
+from core.models.identity_models import Company, User
 from core.tracing import attributes as trace_attr
 
 if TYPE_CHECKING:
@@ -26,11 +23,8 @@ if TYPE_CHECKING:
     from core.db.repositories.user_repository import UserRepository
     from core.db.storage import Storage
 
-from core.billing.exceptions import BillingBalanceBlockedError
-from core.websocket.publisher import Notification, NotificationType, notify_user
 from core.billing.default_settlement_rules import default_settlement_rules_document
-from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
-from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
+from core.billing.exceptions import BillingBalanceBlockedError
 from core.billing.settlement_rules import (
     SettlementRule,
     SettlementRulesDocument,
@@ -38,6 +32,9 @@ from core.billing.settlement_rules import (
     quantity_from_span,
     resolve_matched_rules,
 )
+from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
+from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
 STORAGE_SETTLEMENT_RULES_JSON = "billing:settlement_rules_json"
@@ -70,9 +67,9 @@ def _settlement_rules_document_to_storage_json(doc: SettlementRulesDocument) -> 
 
 class BillingService:
     """Сервис биллинга и контроля лимитов"""
-    
+
     def __init__(
-        self, 
+        self,
         company_repository: "CompanyRepository",
         user_repository: "UserRepository",
         usage_repository: "UsageRepository",
@@ -88,15 +85,15 @@ class BillingService:
             raise ValueError("user_repository обязателен для BillingService")
         if not usage_repository:
             raise ValueError("usage_repository обязателен для BillingService")
-        
+
         self._company_repository = company_repository
         self._user_repository = user_repository
         self._usage_repository = usage_repository
         self._shared_storage = shared_storage
-        
+
         # Тарифные цены (множители к базовой цене)
         self._tariff_prices = tariff_prices or DEFAULT_TARIFF_PRICES
-        
+
         if resource_base_prices is None:
             raise ValueError("resource_base_prices обязателен (передавайте из settings.billing.resource_base_prices)")
         self._resource_base_prices_static = copy.deepcopy(resource_base_prices)
@@ -109,7 +106,7 @@ class BillingService:
             else [SYSTEM_COMPANY_ID]
         )
         self._balance_enforcement_exempt_company_ids = frozenset(exempt)
-    
+
     async def require_balance_for_billable_operation(
         self,
         company_id: str,
@@ -244,7 +241,7 @@ class BillingService:
                 return False, f"Превышен месячный лимит расходов: {actual_company.current_month_spent + resource_cost:.2f}₽/{actual_company.monthly_budget}₽"
 
         return True, ""
-    
+
     async def get_effective_resource_base_prices(self) -> Dict[str, Dict[str, float]]:
         merged = copy.deepcopy(self._resource_base_prices_static)
         if self._shared_storage is None:
@@ -355,10 +352,10 @@ class BillingService:
         )
 
     async def record_usage(
-        self, 
-        user: User, 
-        company: Company, 
-        resource_name: str, 
+        self,
+        user: User,
+        company: Company,
+        resource_name: str,
         cost: float,
         usage_type: UsageType = UsageType.TOOL_CALL,
         quantity: int = 1,
@@ -670,26 +667,26 @@ class BillingService:
         unit = await self._unit_cost_for_company(company, resource_name)
         logger.debug("Цена %s для %s: %s₽", resource_name, company.company_id, unit)
         return unit
-    
+
     async def get_company_usage_stats(self, company_id: str) -> Dict[str, Any]:
         """Получает статистику использования компании за месяц (оптимизировано)"""
-        
+
         current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
+
         if not self._usage_repository:
             raise RuntimeError("UsageRepository не настроен. Невозможно получить статистику.")
-        
+
         all_usage_records = await self._usage_repository.list(limit=10000)
-        
+
         stats = {
             "total_cost": 0.0,
             "total_calls": 0,
             "by_resource": {},
             "by_user": {}
         }
-        
+
         user_ids = set()
-        
+
         for record in all_usage_records:
             if record.timestamp < current_month:
                 continue
@@ -698,20 +695,20 @@ class BillingService:
 
             stats["total_cost"] += record.cost
             stats["total_calls"] += record.quantity
-            
+
             # По ресурсам
             if record.resource_name not in stats["by_resource"]:
                 stats["by_resource"][record.resource_name] = {"cost": 0.0, "calls": 0}
             stats["by_resource"][record.resource_name]["cost"] += record.cost
             stats["by_resource"][record.resource_name]["calls"] += record.quantity
-            
+
             # По пользователям
             if record.user_id not in stats["by_user"]:
                 stats["by_user"][record.user_id] = {"cost": 0.0, "calls": 0, "user_name": None}
             stats["by_user"][record.user_id]["cost"] += record.cost
             stats["by_user"][record.user_id]["calls"] += record.quantity
             user_ids.add(record.user_id)
-        
+
         if user_ids:
             users_dict = await self._user_repository.get_many(list(user_ids))
             for user_id in user_ids:
@@ -719,18 +716,18 @@ class BillingService:
                     stats["by_user"][user_id]["user_name"] = users_dict[user_id].name
                 else:
                     stats["by_user"][user_id]["user_name"] = user_id
-        
+
         return stats
-    
+
     async def reset_monthly_billing(self, company_id: str):
         """Сбрасывает месячный биллинг компании (вызывается в начале месяца)"""
-        
+
         company = await self._company_repository.get(company_id)
         if not company:
             raise ValueError(f"Компания {company_id} не найдена")
         company.current_month_spent = 0.0
         company.billing_period_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
+
         await self._company_repository.set(company)
         logger.info(f"Сброшен месячный биллинг для компании {company_id}")
 

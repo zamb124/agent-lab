@@ -29,10 +29,11 @@ def require_taskiq_worker(taskiq_worker, container):
     yield
     container.use_worker = False
 
-from apps.flows.src.tasks.flow_tasks import process_flow_task
-from apps.flows.src.tasks.eval_task import execute_inline_code
-from apps.flows.src.tasks.tool_tasks import execute_tool
-from core.state import ExecutionState
+
+from apps.flows.src.tasks.eval_task import execute_inline_code  # noqa: E402
+from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
+from apps.flows.src.tasks.tool_tasks import execute_tool  # noqa: E402
+from core.state import ExecutionState  # noqa: E402
 
 
 def get_task_state(data: Dict[str, Any]) -> str:
@@ -77,12 +78,12 @@ async def execute(args, state):
         self, app, container, calculator_tool_config, mock_context
     ):
         """Tool выполняется через TaskIQ .kiq() + wait_result()."""
-        import pytest
         import asyncio
+
         from taskiq.exceptions import TaskiqResultTimeoutError
-        
+
         await asyncio.sleep(0.15)
-        
+
         # Создаем валидный state для tool
         state_dict = {
             "task_id": "test-task",
@@ -90,7 +91,7 @@ async def execute(args, state):
             "user_id": "test-user",
             "session_id": "test:test-context",
         }
-        
+
         task = await execute_tool.kiq(
             calculator_tool_config,
             {"a": 10, "b": 5, "op": "add"},
@@ -121,7 +122,7 @@ async def execute(args, state):
             "user_id": "test-user",
             "session_id": "test:test-context",
         }
-        
+
         tasks = []
         for i in range(5):
             task = await execute_tool.kiq(
@@ -165,7 +166,7 @@ async def execute(args, state):
             "session_id": "test:test-context",
             "prefix": "STATE",
         }
-        
+
         task = await execute_tool.kiq(
             tool_config,
             {"value": "test"},
@@ -180,10 +181,12 @@ async def execute(args, state):
         assert result.return_value["result"] == "STATE:test"
 
     @pytest.mark.asyncio
-    async def test_tools_results_merged_to_state(self, app, container, calculator_tool_config, unique_id):
+    async def test_tools_results_merged_to_state(
+        self, app, container, calculator_tool_config, unique_id
+    ):
         """Результаты tools мержатся в state.tool_results."""
-        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
         from apps.flows.src.models import NodeConfig
+        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 
         # Inline конфиг второго tool
         tool2_id = f"taskiq_multiplier_{unique_id}"
@@ -217,7 +220,11 @@ async def execute(args, state):
 
         # Симулируем tool calls от LLM - два разных tools
         tool_calls = [
-            {"name": "taskiq_test_calculator", "arguments": {"a": 5, "b": 3, "op": "add"}, "id": "call_1"},
+            {
+                "name": "taskiq_test_calculator",
+                "arguments": {"a": 5, "b": 3, "op": "add"},
+                "id": "call_1",
+            },
             {"name": tool2_id, "arguments": {"x": 10}, "id": "call_2"},
         ]
 
@@ -226,7 +233,7 @@ async def execute(args, state):
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            content="test"
+            content="test",
         )
 
         # Выполняем tools параллельно
@@ -365,14 +372,17 @@ async def run(state):
         result = await task.wait_result()
 
         if result.is_err:
-            print(f"\n❌ Task failed!")
+            print("\n❌ Task failed!")
             print(f"Error type: {type(result.error)}")
             print(f"Error: {result.error}")
-            if hasattr(result.error, '__traceback__'):
+            if hasattr(result.error, "__traceback__"):
                 import traceback
+
                 print("Traceback:")
-                traceback.print_exception(type(result.error), result.error, result.error.__traceback__)
-        
+                traceback.print_exception(
+                    type(result.error), result.error, result.error.__traceback__
+                )
+
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["status"] == "input-required"
         assert result.return_value["interrupt"]["question"] == "What is your name?"
@@ -396,11 +406,11 @@ async def run(state):
             context_data=mock_context.model_dump(),
         )
         result1 = await task1.wait_result()
-        
+
         if result1.is_err:
-            print(f"\n❌ Task1 failed!")
+            print("\n❌ Task1 failed!")
             print(f"Error: {result1.error}")
-        
+
         assert not result1.is_err, f"Task1 failed: {result1.error}"
         assert result1.return_value["status"] == "input-required"
 
@@ -439,7 +449,7 @@ async def run(state):
             "session_id": "test:test-context",
             "x": 7,
         }
-        
+
         task = await execute_inline_code.kiq(code, state_dict)
 
         result = await task.wait_result()
@@ -526,4 +536,3 @@ class TestTaskIQAPIIntegration:
         data = response.json()
         assert "result" in data
         assert data["result"]["status"]["state"] == "completed"
-

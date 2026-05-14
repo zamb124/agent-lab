@@ -6,8 +6,8 @@ Resource Providers - резолвинг ресурсов.
 
 from apps.flows.src.resources.providers.base import BaseResourceProvider
 from apps.flows.src.resources.providers.code import CodeResourceProvider
-from apps.flows.src.resources.providers.llm import LLMResourceProvider
 from apps.flows.src.resources.providers.files import FilesResourceProvider
+from apps.flows.src.resources.providers.llm import LLMResourceProvider
 
 __all__ = [
     "BaseResourceProvider",

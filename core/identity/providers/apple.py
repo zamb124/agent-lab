@@ -3,8 +3,6 @@ Apple (Sign in with Apple) OAuth провайдер — веб-флоу authoriz
 """
 
 import json
-
-from core.logging import get_logger
 import time
 from typing import Any, Optional, Tuple
 from urllib.parse import urlencode
@@ -12,10 +10,11 @@ from urllib.parse import urlencode
 import jwt
 from jwt import PyJWKClient
 
-from core.identity.base_provider import BaseAuthProvider
-from core.models.identity_models import AuthProvider, ProviderUserInfo
 from core.config.models import AuthProviderConfig
 from core.http import request_public_oauth
+from core.identity.base_provider import BaseAuthProvider
+from core.logging import get_logger
+from core.models.identity_models import AuthProvider, ProviderUserInfo
 
 logger = get_logger(__name__)
 APPLE_ISSUER = "https://appleid.apple.com"

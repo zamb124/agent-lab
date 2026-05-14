@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import pytest
 
+from core.utils.tokens import get_token_service
 from tests.sync.api._helpers import create_topic_channel_via_http
 from tests.sync.api._realtime_helpers import (
     add_member_via_http,
     http_owner,
     send_text_message,
 )
-from core.utils.tokens import get_token_service
 
 
 def _user_id_from_token(token: str) -> str:

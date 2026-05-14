@@ -28,11 +28,11 @@ class SessionStatus(str, Enum):
 class NodeType(str, Enum):
     """
     Типы нод - синхронизировано с реализацией.
-    
+
     Каждый тип ноды имеет соответствующий класс в apps.flows.src.runtime.nodes
     Zero-Guess: нет magic strings, только Enum значения.
     """
-    
+
     LLM_NODE = "llm_node"          # LLM с ReAct-циклом и tools
     CODE = "code"                   # Выполнение кода (Python, JavaScript, Go)
     FLOW = "flow"                   # Вложенный flow (subflow)
@@ -59,23 +59,23 @@ class ReactToolRole(str, Enum):
 class EventType(str, Enum):
     """
     Типы событий streaming - синхронизировано с a2a-sdk.
-    
+
     События публикуются через EventEmitter в Redis Pub/Sub.
     Zero-Guess: строго соответствуют a2a-sdk спецификации.
     """
-    
+
     # Streaming события
     TEXT_CHUNK = "text_chunk"           # Чанк текста от LLM
     TOOL_CALL = "tool_call"             # Вызов инструмента
     TOOL_RESULT = "tool_result"         # Результат инструмента
     ARTIFACT = "artifact"               # Артефакт (файлы, данные)
     REASONING = "reasoning"             # Reasoning данные (chain-of-thought)
-    
+
     # Lifecycle события
     INTERRUPT = "interrupt"             # Запрос ввода от пользователя (ask_user)
     COMPLETE = "complete"               # Завершение выполнения
     ERROR = "error"                     # Ошибка выполнения
-    
+
     # Status события
     STATUS_UPDATE = "status_update"     # Обновление статуса задачи
 
@@ -83,10 +83,10 @@ class EventType(str, Enum):
 class ReasoningType(str, Enum):
     """
     Типы reasoning данных.
-    
+
     Используется для структурирования chain-of-thought.
     """
-    
+
     THOUGHT = "thought"                 # Размышление агента
     OBSERVATION = "observation"         # Наблюдение/результат
     PLAN = "plan"                       # План действий
@@ -96,10 +96,10 @@ class ReasoningType(str, Enum):
 class MergeMode(str, Enum):
     """
     Режимы применения skill к базовой конфигурации агента.
-    
+
     Zero-Guess: явно указываем как мержить - merge или replace.
     """
-    
+
     MERGE = "merge"         # Слияние с базовой конфигурацией
     REPLACE = "replace"     # Полная замена базовой конфигурации
 
@@ -107,11 +107,11 @@ class MergeMode(str, Enum):
 class TriggerType(str, Enum):
     """
     Типы триггеров для запуска агента.
-    
+
     Push-based: telegram, webhook - внешний источник делает POST
     Pull-based: cron, email - polling по расписанию
     """
-    
+
     TELEGRAM = "telegram"   # Telegram Bot webhook
     CRON = "cron"           # Cron расписание (TaskIQ scheduler)
     WEBHOOK = "webhook"     # Внешний HTTP webhook
@@ -121,7 +121,7 @@ class TriggerType(str, Enum):
 
 class TriggerStatus(str, Enum):
     """Статус триггера."""
-    
+
     INACTIVE = "inactive"   # Не зарегистрирован
     ACTIVE = "active"       # Работает
     ERROR = "error"         # Ошибка регистрации
@@ -130,10 +130,10 @@ class TriggerStatus(str, Enum):
 class ChannelType(str, Enum):
     """
     Типы каналов для отправки сообщений.
-    
+
     Используется в ChannelNode и output_actions триггеров.
     """
-    
+
     TELEGRAM = "telegram"   # Telegram Bot API
     EMAIL = "email"         # Email (SMTP, Mailgun, SendGrid)
     WHATSAPP = "whatsapp"   # WhatsApp Business API
@@ -144,10 +144,10 @@ class ChannelType(str, Enum):
 class TestTargetType(str, Enum):
     """
     Тип цели тестирования в evaluation.
-    
+
     FLOW - тестируем полный flow
     NODE - тестируем отдельную ноду (BaseNode.run)
     """
-    
+
     FLOW = "flow"
     NODE = "node"

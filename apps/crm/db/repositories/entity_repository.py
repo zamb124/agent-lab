@@ -7,8 +7,6 @@
 
 import base64
 import json
-
-from core.logging import get_logger
 from datetime import date, datetime, timezone
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
 
@@ -31,8 +29,10 @@ from sqlalchemy import (
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import SemanticTextIndexStatus
-from core.context import get_context
 from core.config import get_settings
+from core.context import get_context
+from core.db.utils import get_rowcount
+from core.logging import get_logger
 from core.rag import RAGRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
@@ -71,11 +71,13 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             raise ValueError("Нет активной компании в контексте")
         return context.active_company.company_id
 
-    _SKIP_SEARCH_ATTRIBUTE_KEYS: ClassVar[frozenset[str]] = frozenset({
-        "ai_analysis_draft",  # большой JSON-блок, шум в векторном индексе
-        "ai_analysis_last_error",
-        "ai_analysis_last_error_at",
-    })
+    _SKIP_SEARCH_ATTRIBUTE_KEYS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "ai_analysis_draft",  # большой JSON-блок, шум в векторном индексе
+            "ai_analysis_last_error",
+            "ai_analysis_last_error_at",
+        }
+    )
 
     def _build_search_text(self, entity: CRMEntity) -> str:
         """Формирует текст для семантического поиска."""
@@ -306,7 +308,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             stmt = delete(CRMEntity).where(CRMEntity.entity_id == entity_id)
             result = await session.execute(stmt)
             await session.commit()
-            deleted = result.rowcount > 0
+            deleted = get_rowcount(result) > 0
 
         if deleted:
             await self._rag.delete_document(rag_namespace, entity_id)
@@ -333,7 +335,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 .values(source_entity_id=new_entity_id)
             )
             await session.commit()
-            return int(result.rowcount or 0)
+            return get_rowcount(result)
 
     # -- List / Filter --
 
@@ -472,6 +474,30 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 raise ValueError("Notes draft analysis count returned empty value")
             return int(value)
 
+    async def list_notes_with_analysis_draft_not_applied(
+        self,
+        namespace: str,
+        *,
+        limit: int,
+        company_id: Optional[str] = None,
+    ) -> list[CRMEntity]:
+        cid = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = (
+                select(CRMEntity)
+                .where(
+                    CRMEntity.company_id == cid,
+                    CRMEntity.namespace == namespace,
+                    CRMEntity.entity_type == "note",
+                    CRMEntity.attributes["ai_analysis_draft"].is_not(None),
+                    CRMEntity.attributes["ai_analysis_applied_at"].is_(None),
+                )
+                .order_by(CRMEntity.updated_at.desc(), CRMEntity.entity_id.desc())
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     async def get_created_at_bounds(
         self,
         entity_type: Optional[str] = None,
@@ -482,14 +508,11 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         """Возвращает min/max created_at и количество сущностей."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = (
-                select(
-                    func.min(CRMEntity.created_at),
-                    func.max(CRMEntity.created_at),
-                    func.count(CRMEntity.entity_id),
-                )
-                .where(CRMEntity.company_id == cid)
-            )
+            stmt = select(
+                func.min(CRMEntity.created_at),
+                func.max(CRMEntity.created_at),
+                func.count(CRMEntity.entity_id),
+            ).where(CRMEntity.company_id == cid)
             if entity_type:
                 stmt = stmt.where(CRMEntity.entity_type == entity_type)
             if entity_subtype:
@@ -678,7 +701,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if exclude_entity_types:
                 stmt = stmt.where(CRMEntity.entity_type.notin_(exclude_entity_types))
             result = await session.execute(stmt)
-            type_ids = [item for item in result.scalars().all() if isinstance(item, str) and item.strip()]
+            type_ids = [
+                item for item in result.scalars().all() if isinstance(item, str) and item.strip()
+            ]
             return sorted(type_ids)
 
     # -- Semantic Search --
@@ -783,7 +808,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                     break
 
             search_span.set_attribute("platform.crm.search_results_count", len(scored_entities))
-            logger.info(f"search_with_similarity('{query[:50]}...') -> {len(scored_entities)} entities")
+            logger.info(
+                f"search_with_similarity('{query[:50]}...') -> {len(scored_entities)} entities"
+            )
             return scored_entities
 
     async def hybrid_search(
@@ -915,27 +942,24 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if namespace:
                 base = base.where(CRMEntity.namespace == namespace)
 
-            by_type_stmt = (
-                select(CRMEntity.entity_type, func.count().label("cnt"))
-                .where(CRMEntity.company_id == cid)
+            by_type_stmt = select(CRMEntity.entity_type, func.count().label("cnt")).where(
+                CRMEntity.company_id == cid
             )
             if namespace:
                 by_type_stmt = by_type_stmt.where(CRMEntity.namespace == namespace)
             by_type_stmt = by_type_stmt.group_by(CRMEntity.entity_type)
             type_rows = (await session.execute(by_type_stmt)).all()
 
-            by_status_stmt = (
-                select(CRMEntity.status, func.count().label("cnt"))
-                .where(CRMEntity.company_id == cid)
+            by_status_stmt = select(CRMEntity.status, func.count().label("cnt")).where(
+                CRMEntity.company_id == cid
             )
             if namespace:
                 by_status_stmt = by_status_stmt.where(CRMEntity.namespace == namespace)
             by_status_stmt = by_status_stmt.group_by(CRMEntity.status)
             status_rows = (await session.execute(by_status_stmt)).all()
 
-            by_month_stmt = (
-                select(month_expr, func.count().label("cnt"))
-                .where(CRMEntity.company_id == cid)
+            by_month_stmt = select(month_expr, func.count().label("cnt")).where(
+                CRMEntity.company_id == cid
             )
             if namespace:
                 by_month_stmt = by_month_stmt.where(CRMEntity.namespace == namespace)
@@ -947,4 +971,3 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             "by_status": {row[0]: row[1] for row in status_rows},
             "by_month": {row[0]: row[1] for row in month_rows},
         }
-

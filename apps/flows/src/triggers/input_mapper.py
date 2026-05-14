@@ -11,6 +11,7 @@ import copy
 import re
 from typing import Any, Dict
 
+
 class InputMapper:
     """
     Маппер данных триггера в state.

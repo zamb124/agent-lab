@@ -14,14 +14,13 @@
 - Все остальное реальное: state, flow, nodes, tools
 """
 
-from typing import Any, Dict, List
 
 import pytest
 import pytest_asyncio
 
-from apps.flows.src.runtime import Flow
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
+from apps.flows.src.runtime import Flow
 from core.state import ExecutionState
 
 
@@ -46,7 +45,7 @@ class TestBreakpointsReactAgent:
     async def test_breakpoint_stops_at_entry_node(self, flow, mock_llm_with_queue):
         """
         Breakpoint на entry ноде останавливает выполнение ПЕРЕД её запуском.
-        
+
         Сценарий:
         1. Устанавливаем breakpoint на "main" (entry)
         2. Запускаем агента
@@ -58,7 +57,7 @@ class TestBreakpointsReactAgent:
             # Этот ответ НЕ должен быть использован - breakpoint срабатывает ДО ноды
             "Это не должно появиться"
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -67,23 +66,23 @@ class TestBreakpointsReactAgent:
             content="Привет!",
             breakpoints={"main": True},  # Breakpoint на entry ноде
         )
-        
+
         result = await flow.run(state)
-        
+
         # Breakpoint сработал
         assert result.breakpoint_hit == "main", \
             f"Breakpoint должен сработать на 'main', но breakpoint_hit={result.breakpoint_hit}"
-        
+
         # Snapshot state сохранён
         assert result.breakpoint_state is not None, \
             "breakpoint_state должен содержать snapshot"
         assert result.breakpoint_state.get("content") == "Привет!", \
             "Snapshot должен содержать исходный content"
-        
+
         # current_nodes указывает на ноду breakpoint
         assert result.current_nodes == ["main"], \
             f"current_nodes должен быть ['main'], но {result.current_nodes}"
-        
+
         # LLM НЕ был вызван (response пуст)
         assert result.response is None, \
             "Response должен быть None - LLM не вызывался"
@@ -92,11 +91,11 @@ class TestBreakpointsReactAgent:
     async def test_breakpoint_preserves_state_for_inspection(self, flow, mock_llm_with_queue):
         """
         Breakpoint сохраняет полный snapshot state для инспекции.
-        
+
         Проверяем что все поля доступны в breakpoint_state.
         """
         mock_llm_with_queue([])
-        
+
         state = ExecutionState(
             task_id="task-bp-1",
             context_id="context-bp-1",
@@ -106,19 +105,19 @@ class TestBreakpointsReactAgent:
             variables={"custom_var": "custom_value"},
             breakpoints={"main": True},
         )
-        
+
         result = await flow.run(state)
-        
+
         snapshot = result.breakpoint_state
         assert snapshot is not None
-        
+
         # Проверяем ключевые поля в snapshot
         assert snapshot["task_id"] == "task-bp-1"
         assert snapshot["context_id"] == "context-bp-1"
         assert snapshot["user_id"] == "user-bp-1"
         assert snapshot["content"] == "Тестовое сообщение"
         assert snapshot["variables"]["custom_var"] == "custom_value"
-        
+
         # Breakpoints сами тоже в snapshot
         assert snapshot["breakpoints"]["main"] is True
 
@@ -126,13 +125,13 @@ class TestBreakpointsReactAgent:
     async def test_continue_after_breakpoint_resumes_execution(self, flow, mock_llm_with_queue):
         """
         После breakpoint можно продолжить выполнение.
-        
+
         Сценарий:
         1. Breakpoint на "main"
         2. Выполняем - останавливаемся
         3. Продолжаем - breakpoint_hit сбрасывается автоматически при повторном выполнении
         4. Агент выполняется и возвращает ответ
-        
+
         ВАЖНО: breakpoint_hit НЕ очищается вручную.
         Логика _check_breakpoint видит что breakpoint_hit == node_id,
         значит мы продолжаем после breakpoint и пропускает проверку.
@@ -140,7 +139,7 @@ class TestBreakpointsReactAgent:
         mock_llm_with_queue([
             "Привет! Я ваш ассистент."
         ])
-        
+
         # Шаг 1: Запуск с breakpoint
         state = ExecutionState(
             task_id="test-task",
@@ -150,24 +149,24 @@ class TestBreakpointsReactAgent:
             content="Привет!",
             breakpoints={"main": True},
         )
-        
+
         result = await flow.run(state)
         assert result.breakpoint_hit == "main"
-        
+
         # Шаг 2: Continue - НЕ очищаем breakpoint_hit!
         # breakpoint_hit остаётся == "main", это сигнал что мы продолжаем с этой ноды
         # breakpoint_state можно очистить для экономии памяти
         result.breakpoint_state = None
-        
+
         # Шаг 3: Продолжаем выполнение
         final_result = await flow.run(result)
-        
+
         # Агент завершился с ответом
         assert final_result.response is not None, \
             "После continue агент должен вернуть response"
         assert "ассистент" in final_result.response.lower() or "привет" in final_result.response.lower(), \
             f"Response должен содержать ответ агента: {final_result.response}"
-        
+
         # breakpoint_hit очищен самой логикой _check_breakpoint
         assert final_result.breakpoint_hit is None
 
@@ -175,7 +174,7 @@ class TestBreakpointsReactAgent:
     async def test_breakpoint_with_tool_call(self, flow, mock_llm_with_queue):
         """
         Breakpoint работает вместе с tool calls.
-        
+
         Сценарий:
         1. Агент вызывает calculator
         2. Возвращает финальный ответ
@@ -185,7 +184,7 @@ class TestBreakpointsReactAgent:
             {"type": "tool_call", "tool": "calculator", "args": {"expression": "10 + 5"}},
             "Результат: 15"
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -194,9 +193,9 @@ class TestBreakpointsReactAgent:
             content="Сколько будет 10 + 5?",
             breakpoints={"main": True},
         )
-        
+
         result = await flow.run(state)
-        
+
         # Breakpoint сработал ДО выполнения
         assert result.breakpoint_hit == "main"
         assert result.response is None
@@ -206,7 +205,7 @@ class TestBreakpointsReactAgent:
     async def test_breakpoint_and_interrupt_are_independent(self, flow, mock_llm_with_queue, sync_tools):
         """
         Breakpoint и interrupt (ask_user) - независимые механизмы.
-        
+
         Сценарий:
         1. Breakpoint на main
         2. Continue (breakpoint_hit остаётся для сигнала continue)
@@ -216,7 +215,7 @@ class TestBreakpointsReactAgent:
         mock_llm_with_queue([
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "Как вас зовут?"}},
         ])
-        
+
         # Шаг 1: Breakpoint
         state = ExecutionState(
             task_id="test-task",
@@ -226,17 +225,17 @@ class TestBreakpointsReactAgent:
             content="Начать",
             breakpoints={"main": True},
         )
-        
+
         result = await flow.run(state)
         assert result.breakpoint_hit == "main"
         assert result.interrupt is None, "Interrupt не должен быть до continue"
-        
+
         # Шаг 2: Continue - НЕ очищаем breakpoint_hit!
         # breakpoint_hit остаётся == "main" как сигнал для продолжения
         result.breakpoint_state = None
-        
+
         result = await flow.run(result)
-        
+
         # Шаг 3: Interrupt от ask_user
         assert result.interrupt is not None, "Должен быть interrupt от ask_user"
         assert "зовут" in result.interrupt.question.lower()
@@ -265,11 +264,11 @@ class TestBreakpointsGraphAgent:
     async def test_breakpoint_on_classifier_function_node(self, flow, mock_llm_with_queue):
         """
         Breakpoint на function ноде (classifier) останавливает выполнение.
-        
+
         classifier - function нода которая определяет route.
         """
         mock_llm_with_queue([])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -278,13 +277,13 @@ class TestBreakpointsGraphAgent:
             content="Хочу узнать про мой заказ",
             breakpoints={"classifier": True},
         )
-        
+
         result = await flow.run(state)
-        
+
         # Breakpoint сработал на classifier
         assert result.breakpoint_hit == "classifier"
         assert result.current_nodes == ["classifier"]
-        
+
         # route ещё не установлен (classifier не выполнился)
         assert result.get("route") is None
 
@@ -292,7 +291,7 @@ class TestBreakpointsGraphAgent:
     async def test_breakpoint_after_classifier_on_processor(self, flow, mock_llm_with_queue):
         """
         Breakpoint на order_processor после classifier.
-        
+
         Сценарий:
         1. classifier выполняется, устанавливает route='order'
         2. breakpoint на order_processor останавливает выполнение
@@ -302,7 +301,7 @@ class TestBreakpointsGraphAgent:
             # Этот ответ НЕ должен быть использован
             "Не должно появиться"
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -311,17 +310,17 @@ class TestBreakpointsGraphAgent:
             content="Хочу узнать про мой заказ",
             breakpoints={"order_processor": True},
         )
-        
+
         result = await flow.run(state)
-        
+
         # classifier выполнился
         assert result.get("route") == "order", \
             f"route должен быть 'order', но {result.get('route')}"
-        
+
         # breakpoint на order_processor
         assert result.breakpoint_hit == "order_processor"
         assert result.current_nodes == ["order_processor"]
-        
+
         # LLM не вызван (response пуст)
         assert result.response is None
 
@@ -329,7 +328,7 @@ class TestBreakpointsGraphAgent:
     async def test_breakpoint_on_formatter_after_processor(self, flow, mock_llm_with_queue):
         """
         Breakpoint на formatter после order_processor.
-        
+
         Сценарий:
         1. classifier -> order -> order_total -> breakpoint на formatter
         2. Проверяем что order_processor выполнился, но formatter нет
@@ -337,7 +336,7 @@ class TestBreakpointsGraphAgent:
         mock_llm_with_queue([
             "Ваш заказ ORD-12345 в обработке."
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -346,16 +345,16 @@ class TestBreakpointsGraphAgent:
             content="Где мой заказ?",
             breakpoints={"formatter": True},
         )
-        
+
         result = await flow.run(state)
-        
+
         # classifier и order_processor выполнились
         assert result.get("route") == "order"
         assert result.response is not None, "order_processor должен вернуть response"
-        
+
         # breakpoint на formatter
         assert result.breakpoint_hit == "formatter"
-        
+
         # processed ещё не установлен (formatter не выполнился)
         assert result.get("processed") is None
 
@@ -363,7 +362,7 @@ class TestBreakpointsGraphAgent:
     async def test_continue_graph_after_breakpoint(self, flow, mock_llm_with_queue):
         """
         После breakpoint граф продолжает выполнение.
-        
+
         Сценарий:
         1. Breakpoint на formatter
         2. Continue (breakpoint_hit остаётся как сигнал)
@@ -372,7 +371,7 @@ class TestBreakpointsGraphAgent:
         mock_llm_with_queue([
             "Ваш заказ ORD-12345 в обработке."
         ])
-        
+
         # Шаг 1: Breakpoint на formatter
         state = ExecutionState(
             task_id="test-task",
@@ -382,17 +381,17 @@ class TestBreakpointsGraphAgent:
             content="Где мой заказ?",
             breakpoints={"formatter": True},
         )
-        
+
         result = await flow.run(state)
         assert result.breakpoint_hit == "formatter"
         assert result.get("processed") is None
-        
+
         # Шаг 2: Continue - НЕ очищаем breakpoint_hit!
         # breakpoint_hit остаётся == "formatter" как сигнал для продолжения
         result.breakpoint_state = None
-        
+
         final_result = await flow.run(result)
-        
+
         # formatter выполнился
         assert final_result.get("processed") is True
         assert "[ORDER]" in final_result.get("response", ""), \
@@ -402,13 +401,13 @@ class TestBreakpointsGraphAgent:
     async def test_multiple_breakpoints_sequential(self, flow, mock_llm_with_queue):
         """
         Несколько breakpoints срабатывают последовательно.
-        
+
         Сценарий:
         1. Breakpoint на classifier
         2. Continue -> classifier выполняется -> breakpoint на order_processor
-        3. Continue -> order_processor выполняется -> breakpoint на formatter  
+        3. Continue -> order_processor выполняется -> breakpoint на formatter
         4. Continue -> formatter выполняется -> завершение
-        
+
         ВАЖНО: breakpoint_hit НЕ очищается вручную!
         При продолжении логика видит breakpoint_hit == текущая нода,
         пропускает проверку, выполняет ноду, и переходит к следующей.
@@ -416,7 +415,7 @@ class TestBreakpointsGraphAgent:
         mock_llm_with_queue([
             "Ваш заказ обрабатывается."
         ])
-        
+
         # Шаг 1: Все breakpoints активны
         state = ExecutionState(
             task_id="test-task",
@@ -430,11 +429,11 @@ class TestBreakpointsGraphAgent:
                 "formatter": True,
             },
         )
-        
+
         # Breakpoint 1: classifier
         result = await flow.run(state)
         assert result.breakpoint_hit == "classifier"
-        
+
         # Continue -> classifier выполняется -> Breakpoint 2: order_processor
         # НЕ очищаем breakpoint_hit! Он остаётся как сигнал продолжения.
         result.breakpoint_state = None
@@ -442,18 +441,18 @@ class TestBreakpointsGraphAgent:
         assert result.breakpoint_hit == "order_processor", \
             f"После continue с classifier должен быть breakpoint на order_processor, но {result.breakpoint_hit}"
         assert result.get("route") == "order"
-        
+
         # Continue -> order_processor выполняется -> Breakpoint 3: formatter
         result.breakpoint_state = None
         result = await flow.run(result)
         assert result.breakpoint_hit == "formatter", \
             f"После continue с order_processor должен быть breakpoint на formatter, но {result.breakpoint_hit}"
         assert result.response is not None
-        
+
         # Continue -> formatter выполняется -> Завершение
         result.breakpoint_state = None
         final_result = await flow.run(result)
-        
+
         assert final_result.breakpoint_hit is None
         assert final_result.get("processed") is True
 
@@ -465,7 +464,7 @@ class TestBreakpointsGraphAgent:
         mock_llm_with_queue([
             "Ваша жалоба CMP-67890 зарегистрирована."
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -474,12 +473,12 @@ class TestBreakpointsGraphAgent:
             content="У меня жалоба на сервис",
             breakpoints={"complaint_processor": True},
         )
-        
+
         result = await flow.run(state)
-        
+
         # classifier определил route = complaint
         assert result.get("route") == "complaint"
-        
+
         # breakpoint на complaint_processor
         assert result.breakpoint_hit == "complaint_processor"
         assert result.response is None
@@ -502,7 +501,7 @@ class TestBreakpointsStateManagement:
         mock_llm_with_queue([
             "Ответ агента"
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -511,16 +510,16 @@ class TestBreakpointsStateManagement:
             content="Оригинальный контент",
             breakpoints={"main": True},
         )
-        
+
         result = await flow.run(state)
-        
+
         # Сохраняем snapshot
         snapshot_content = result.breakpoint_state["content"]
         assert snapshot_content == "Оригинальный контент"
-        
+
         # Меняем state после breakpoint
         result.content = "Изменённый контент"
-        
+
         # Snapshot остался неизменным
         assert result.breakpoint_state["content"] == "Оригинальный контент"
 
@@ -532,7 +531,7 @@ class TestBreakpointsStateManagement:
         mock_llm_with_queue([
             "Нормальный ответ"
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -541,13 +540,13 @@ class TestBreakpointsStateManagement:
             content="Привет",
             breakpoints={"main": False},  # Отключён
         )
-        
+
         result = await flow.run(state)
-        
+
         # Breakpoint не сработал
         assert result.breakpoint_hit is None
         assert result.breakpoint_state is None
-        
+
         # Агент выполнился
         assert result.response is not None
 
@@ -559,7 +558,7 @@ class TestBreakpointsStateManagement:
         mock_llm_with_queue([
             "Обычный ответ"
         ])
-        
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -568,9 +567,9 @@ class TestBreakpointsStateManagement:
             content="Тест",
             breakpoints={},  # Пустой
         )
-        
+
         result = await flow.run(state)
-        
+
         assert result.breakpoint_hit is None
         assert result.response is not None
 
@@ -579,7 +578,7 @@ class TestBreakpointsStateManagement:
 class TestBreakpointsAPIIntegration:
     """
     Тесты breakpoints через API.
-    
+
     Проверяют полный путь: API -> A2AChannel -> TaskIQ -> Agent.
     Используют реальный TaskIQ worker.
     """
@@ -594,7 +593,7 @@ class TestBreakpointsAPIIntegration:
         """Создает простой flow для тестов breakpoints."""
         from apps.flows.src.models import FlowConfig
         from core.context import set_context
-        
+
         # Устанавливаем контекст с tenant перед созданием агента
         set_context(mock_context)
 
@@ -627,7 +626,7 @@ class TestBreakpointsAPIIntegration:
     ):
         """
         Breakpoint через TaskIQ останавливает выполнение.
-        
+
         Проверяет что breakpoints из metadata передаются через весь путь:
         API -> process_flow_task -> process_task -> ExecutionState -> Agent
         """
@@ -639,7 +638,7 @@ class TestBreakpointsAPIIntegration:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        
+
         # Кикаем задачу с breakpoint на step2
         task = await process_flow_task.kiq(
             flow_id=flow_id,
@@ -694,7 +693,7 @@ class TestBreakpointsAPIIntegration:
         assert response.status_code == 200
         data = response.json()
         assert "result" in data, f"Expected result in response: {data}"
-        
+
         # Проверяем что breakpoint сработал (статус input-required с metadata.breakpoint=true)
         task_status = data["result"]["status"]
         assert task_status["state"] == "input-required", \
@@ -715,7 +714,7 @@ class TestBreakpointsAPIIntegration:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        
+
         # Шаг 1: Останавливаемся на breakpoint
         task1 = await process_flow_task.kiq(
             flow_id=flow_id,
@@ -776,7 +775,7 @@ class TestBreakpointsAPIIntegration:
 
         assert response.status_code == 200
         data = response.json()
-        
+
         # Проверяем что breakpoint сработал на entry ноде (input-required)
         assert data["status"]["state"] == "input-required", \
             f"Expected input-required for breakpoint, got: {data['status']}"
@@ -796,7 +795,7 @@ class TestBreakpointsAPIIntegration:
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-        
+
         # Кикаем задачу БЕЗ breakpoints
         task = await process_flow_task.kiq(
             flow_id=flow_id,

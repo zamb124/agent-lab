@@ -6,9 +6,8 @@ from __future__ import annotations
 
 import time
 
-from core.state import ExecutionState
-
 from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
+from core.state import ExecutionState
 
 
 def apply_flow_wall_clock_deadline(state: ExecutionState, timeout_seconds: int) -> None:

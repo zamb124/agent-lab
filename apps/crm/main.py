@@ -5,7 +5,6 @@ CRM Service - FastAPI приложение для управления CRM.
 БД: crm_db (service) + shared_db
 """
 
-from core.logging import get_logger
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -18,6 +17,7 @@ from apps.crm.container import get_crm_container
 from core.app import create_service_app
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
+from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 
@@ -59,6 +59,14 @@ async def on_startup(app: FastAPI, container, settings):
                 clear_context()
 
     set_oauth_credential_saved_hook(_on_oauth_credential_saved)
+
+    reconciled = await container.task_service.reconcile_stale_worker_tasks()
+    if reconciled:
+        logger.warning(
+            "crm.reconcile_stale_crm_tasks_on_api_startup",
+            service="crm",
+            reconciled=reconciled,
+        )
 
 def create_app() -> FastAPI:
     """Создает FastAPI приложение"""

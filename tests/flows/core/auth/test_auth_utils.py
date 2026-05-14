@@ -5,7 +5,6 @@
 Без моков - все реальные функции.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
 
 from core.auth.utils import (

@@ -30,7 +30,6 @@ from typing import Any, Optional
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from apps.voice.services.speak_worker import (
-    _END_OF_UTTERANCE,
     enqueue_end_of_utterance,
     enqueue_speak,
 )
@@ -43,7 +42,6 @@ from apps.voice.services.voice_transport_interrupt import (
 from core.config import get_settings
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
-
 
 logger = get_logger(__name__)
 

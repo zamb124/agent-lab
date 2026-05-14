@@ -32,7 +32,6 @@ from apps.crm.system_templates import (
     SYSTEM_RELATIONSHIP_TYPE_TEMPLATES,
 )
 
-
 _PROBE_SEED_IDS = ("sales", "marketing", "support", "hr", "education")
 
 

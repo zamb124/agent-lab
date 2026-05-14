@@ -2,15 +2,16 @@
 Модели для системы интернационализации.
 """
 
-from enum import Enum
-from typing import Dict, Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from enum import Enum
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Language(str, Enum):
     """Поддерживаемые языки"""
-    
+
     RU = "ru"
     EN = "en"
 
@@ -22,7 +23,7 @@ class TranslationKey(BaseModel):
     source_file: Optional[str] = Field(default=None, description="Исходный файл где найден ключ")
     default_value: str = Field(description="Значение по умолчанию (обычно на русском)")
     category: str = Field(default="common", description="Категория ключа (models, common, errors, etc)")
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -43,12 +44,12 @@ class Translation(BaseModel):
     value: str = Field(description="Переведенное значение")
     last_updated: datetime = Field(default_factory=datetime.now, description="Время последнего обновления")
     is_auto_generated: bool = Field(default=True, description="Сгенерировано автоматически или переведено вручную")
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "language": "en",
-                "key": "models.user.fields.name", 
+                "key": "models.user.fields.name",
                 "value": "User Name",
                 "is_auto_generated": False
             }
@@ -61,7 +62,7 @@ class TranslationSet(BaseModel):
     key: str = Field(description="Ключ перевода")
     translations: Dict[Language, str] = Field(default_factory=dict, description="Переводы на разные языки")
     context: Optional[str] = Field(default=None, description="Контекст использования")
-    
+
     def get_translation(self, language: Language, fallback_language: Language = Language.RU) -> str:
         """Получить перевод с fallback"""
         return self.translations.get(language) or self.translations.get(fallback_language) or self.key
@@ -75,7 +76,7 @@ class TranslationFile(BaseModel):
     completeness: float = Field(default=0.0, description="Процент завершенности переводов (0-100)")
     total_keys: int = Field(default=0, description="Общее количество ключей")
     translated_keys: int = Field(default=0, description="Количество переведенных ключей")
-    
+
     def calculate_completeness(self) -> float:
         """Вычислить процент завершенности"""
         if self.total_keys == 0:
@@ -88,12 +89,12 @@ class TranslationStats(BaseModel):
     total_languages: int = Field(description="Общее количество языков")
     total_keys: int = Field(description="Общее количество ключей")
     languages_stats: Dict[Language, TranslationFile] = Field(default_factory=dict, description="Статистика по языкам")
-    
+
     def get_overall_completeness(self) -> float:
         """Общий процент завершенности всех переводов"""
         if not self.languages_stats:
             return 0.0
-        
+
         total_completeness = sum(stats.calculate_completeness() for stats in self.languages_stats.values())
         return total_completeness / len(self.languages_stats)
 
@@ -105,7 +106,7 @@ class I18nConfig(BaseModel):
     auto_generate_missing: bool = Field(default=True, description="Автоматически генерировать отсутствующие ключи")
     auto_generate_on_startup: bool = Field(default=True, description="Генерировать переводы при запуске приложения")
     scan_directories: List[str] = Field(
-        default_factory=lambda: ["apps/flows/models", "apps/frontend"], 
+        default_factory=lambda: ["apps/flows/models", "apps/frontend"],
         description="Директории для сканирования ключей"
     )
     translations_directory: str = Field(default="core/i18n", description="Директория с файлами переводов")

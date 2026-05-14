@@ -35,7 +35,6 @@ from core.clients.tts_streaming import BaseTTSStreamer
 from core.clients.voice_chunker import VoiceChunker
 from core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 _END_OF_UTTERANCE: str = "__EOU__"

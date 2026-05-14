@@ -23,7 +23,7 @@ async def test_create_namespace(rag_client, unique_namespace_name, auth_headers_
     )
     assert response.status_code == 201
     data = response.json()
-    
+
     assert data["name"] == unique_namespace_name
     assert "name" in data
     assert data["description"] == "Test namespace"
@@ -39,7 +39,7 @@ async def test_create_namespace_minimal(rag_client, unique_namespace_name, auth_
     )
     assert response.status_code == 201
     data = response.json()
-    
+
     assert data["name"] == unique_namespace_name
     assert "name" in data
 
@@ -53,12 +53,12 @@ async def test_list_namespaces(rag_client, unique_namespace_name, auth_headers_s
         json={"name": unique_namespace_name},
         headers=auth_headers_system
     )
-    
+
     # Получаем список
     response = await rag_client.get("/rag/api/v1/namespaces", headers=auth_headers_system)
     assert response.status_code == 200
     data = response.json()
-    
+
     assert "items" in data
     assert len(data["items"]) > 0, f"Namespaces list is empty: {data}"
     assert any(ns["name"] == unique_namespace_name for ns in data["items"]), f"Namespace {unique_namespace_name} not found in {[ns['name'] for ns in data['items']]}"
@@ -73,12 +73,12 @@ async def test_list_namespaces_with_provider_param(rag_client, unique_namespace_
         json={"name": unique_namespace_name},
         headers=auth_headers_system
     )
-    
+
     # Получаем список с параметром провайдера
     response = await rag_client.get("/rag/api/v1/namespaces?provider=pgvector", headers=auth_headers_system)
     assert response.status_code == 200
     data = response.json()
-    
+
     assert any(ns["name"] == unique_namespace_name for ns in data["items"])
 
 
@@ -136,7 +136,7 @@ async def test_create_namespace_duplicate_name(rag_client, unique_namespace_name
         headers=auth_headers_system
     )
     assert response1.status_code == 201
-    
+
     # Пытаемся создать второй с тем же именем
     response2 = await rag_client.post(
         "/rag/api/v1/namespaces",

@@ -4,35 +4,35 @@ In-memory реализации Emitter и Subscriber.
 Используются для внешних агентов, которые не требуют Redis.
 """
 
-import asyncio
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, List
+
+from core.state import ExecutionState
 
 from .base import BaseEmitter, BaseSubscriber, StreamEvent
-from core.state import ExecutionState
 
 
 class InMemoryEmitter(BaseEmitter):
     """
     In-memory Emitter - хранит события в списке.
-    
+
     Используется для внешних агентов, которые не требуют Redis Pub/Sub.
     События можно получить через свойство `events`.
-    
+
     Examples:
         >>> emitter = InMemoryEmitter(state)
         >>> await emitter.emit_text("Hello")
         >>> print(emitter.events)  # [TaskArtifactUpdateEvent(...)]
     """
-    
+
     def __init__(self, state: ExecutionState):
         super().__init__(state)
         self._events: List[Any] = []
-    
+
     @property
     def events(self) -> List[Any]:
         """Возвращает все опубликованные события."""
         return self._events
-    
+
     def clear(self) -> None:
         """Очищает список событий."""
         self._events.clear()
@@ -45,16 +45,16 @@ class InMemoryEmitter(BaseEmitter):
 class InMemorySubscriber(BaseSubscriber):
     """
     In-memory Subscriber - читает события из InMemoryEmitter.
-    
+
     Используется для тестов и внешних агентов.
     """
-    
+
     def __init__(self, emitter: InMemoryEmitter):
         self._emitter = emitter
-    
+
     async def subscribe(
-        self, 
-        task_id: str, 
+        self,
+        task_id: str,
         timeout: float = 300.0,
     ) -> AsyncIterator[StreamEvent]:
         """Возвращает события из emitter."""

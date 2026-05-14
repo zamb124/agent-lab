@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 from core.clients.tts_client import BaseTTSClient
 from core.utils.text_sanitize import sanitize_text_for_speech_backend

@@ -6,7 +6,7 @@ Sync Database - SQLAlchemy модели и репозитории.
 - Files, Git Resource References
 """
 
-from apps.sync.db.base import SyncDatabase, BaseSyncRepository, get_sync_db
+from apps.sync.db.base import BaseSyncRepository, SyncDatabase, get_sync_db
 
 __all__ = [
     "SyncDatabase",

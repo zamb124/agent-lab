@@ -6,7 +6,6 @@ import pytest
 
 from core.clients.pravo import PravoCatalogHit, PravoClient, PravoClientError
 
-
 H64 = "007c57b8a5c11e0eb8e77ae8e75586909c5a0e5fb9ab0d295b8acc3344ac4ccf"
 
 

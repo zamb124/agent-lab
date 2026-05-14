@@ -67,7 +67,9 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 ### Журнал `crm_tasks` — realtime для UI
 
-- Воркеры `note_analyze` и `knowledge_import` после изменения строки в БД вызывают `apps/crm/services/crm_task_ws_broadcast.py`: доменное событие `crm/task/updated` с `payload: { task: TaskResponse }` на `user_id` инициатора (параллельно `notify_user` с `CRM_TASK_UPDATED` для notification-center). Фронт: slice `crm/tasks` мержит событие в `extraReducer`, без периодического `GET /tasks` для прогресса.
+- Каждая CRM-задача TaskIQ отражается в `crm_tasks`: пользовательские запуски через `TaskService.start_*` (строка до `kiq`), крон-тики и координаторы — создание строки в соответствующем `@broker.task` (например `namespace_suggests_tick`, `scheduled_namespace_integration_sync`, `reconcile_daily_summary_tick`, `reembed_stale_documents_tick`). Типы `task_type` перечислены в docstring `CRMTask` (`apps/crm/db/models.py`).
+- После изменения строки воркеры по возможности вызывают `apps/crm/services/crm_task_ws_broadcast.py`: `crm/task/updated` с `payload: { task: TaskResponse }` на `user_id` инициатора (для `user_id="system"` событие может не доходить до живых сессий — список доступен через `GET /tasks`). Фронт: slice `crm/tasks` мержит событие в `extraReducer`.
+- **Reconcile зависших строк:** `TaskService.reconcile_stale_worker_tasks` — сначала все ``pending``/``running`` с ``cancel_requested`` → ``cancelled`` (без порога по времени; воркер не успел обработать отмену). Затем строки с ``updated_at`` старше ``STALE_CRM_TASK_INACTIVITY`` (``task_service.py``, сейчас 10 мин) → ``failed`` или ``cancelled`` (запасной путь по времени для записей без флага отмены). Запуск при старте **HTTP `crm`** (`main.py`) и при старте **`crm_worker`** (`broker.py`): reconcile выполняется **до** Redis ``XAUTOCLAIM`` восстановления очереди, чтобы сообщение не успело снова выставить ``running`` до закрытия журнала; хендлеры summary/draft_repair при терминальной строке журнала завершаются без работы. Пока без отмены прошло меньше 10 мин с последнего ``patch_progress``, «тихий» завис без отмены reconcile не тронет.
 
 ### `RelationshipType` — системные
 
@@ -117,6 +119,13 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 6. `sync_note_mentions_from_applied_entities(note_id, sync_entity_ids)` → `mentions` от заметки ко всем найденным.
 7. `enrich_note_description_with_mention_tokens(note_id)`.
 
+**draft_repair (AI-починка черновика после ошибки apply):**
+
+1. Условие UI/API: у заметки есть `ai_analysis_draft` и сохранённые `ai_analysis_last_error` и/или `ai_analysis_apply_failures`.
+2. `POST /entities/notes/{note_id}/analysis-draft-repair` (202, `task_id` в теле) → `TaskService.start_note_analysis_draft_repair` → TaskIQ `repair_note_analysis_draft_task` (`apps/crm_worker/tasks/draft_repair_tasks.py`, опциональный `task_id` для журнала).
+3. WS `crm/note/updated`: из API — `draft_repair.phase=started` (без notification-center); из воркера — `complete` или `failed` после попытки починки (failed сопровождается `record_note_analysis_failure`).
+4. `EntityService.repair_analysis_draft_via_flow`: каталог типов сущностей пространства (`required_fields`/`optional_fields`), все типы связей компании, `parent_type_map`, черновик и текст ошибок → `metadata.variables` → A2A bundle `crm`, ветка `draft_repair`, таймаут `CRMSettings.analysis_draft_repair_a2a_timeout_seconds`, опционально `timeout` в `A2AClient.send_task` → structured `patch_entities` → `_validate_draft_repair_patch_list` (разрешённые `draft_entity_id`: строки `draft.entities` и `draft.note` при наличии) + `_validate_entity_attributes` по смёрженным атрибутам → `patch_analysis_draft` (патчи с `draft_entity_id` строки заметки применяются к `draft.note`) → `clear_note_analysis_error`.
+
 `AIExtractedEntity` имеет `draft_entity_id` (UUID, стабильный), `dedup_action`, `dedup_existing_id`. `ValidationError` в воркере → `ValueError` с префиксом `TASKIQ_ANALYZE_*` → 422.
 
 **@-токены в тексте заметки:** `[@Имя](entity:UUID)`; UI рендер — `<span class="note-entity-mention" contenteditable=false>@Имя</span>`. `enrich_note_description_with_mention_tokens` смотрит `linked`/`mentions`/`note_voice` от заметки → собирает `attributes.aliases` (для всех типов) + `first_name`/`last_name` (для `member`) → exact match (case-insensitive) → вставка токена в plain-текст.
@@ -135,7 +144,18 @@ Redis hot cache + locks + S3 долговечные снимки.
 - **Period summary** (`POST /entities/period-summary` или `daily-summary` с `date_from`/`date_to`): merge готовых дневных. Лимит `period_summary_max_days` — усечение с начала; `period_truncated` в ответе.
 - **Push:** rebuild → `crm_daily_summary_updated`; create/update/delete note → `crm_note_updated` (`event`/`note_id`/`note_date`/`action`); смена `note_date` → push для обеих дат.
 - Redis ключи: `crm:daily_summary:v1:{company}:{namespace_or_all}:{date}:state` (`:lock`, `:revalidating`).
-- TaskIQ: `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`.
+- TaskIQ: `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`. Reconcile — только через platform scheduler (`apps/scheduler`), не локальный `schedule_by_cron` в `crm_worker`.
+
+## Suggests
+
+`CRMSuggest` (`crm_suggests`) — фоновые предложения по namespace. Типы: `duplicate` (слияние двух CRMEntity) и `missed_entity` (у заметки есть `attributes.ai_analysis_draft`, но нет `ai_analysis_applied_at`). Статусы: `pending`, `resolved`, `dismissed`, `auto_resolved`.
+
+- API: `GET /namespaces/{name}/suggests`, `POST /namespaces/{name}/suggests/{id}/resolve`, `POST /namespaces/{name}/suggests/{id}/dismiss`. Все операции фильтруются по `company_id` из контекста и namespace из URL.
+- UI: маршрут `suggests` (`/crm/suggests`) доступен только для конкретно выбранного namespace; фабрики `crm/suggests_list`, `crm/suggest_resolve`, `crm/suggest_dismiss` в `apps/crm/ui/events/resources/suggests.resource.js`, страница lazy-подгружает карточки целей через `crm/entities`.
+- TaskIQ: `crm_generate_namespace_suggests_tick` (queue `crm`) вызывается scheduler control-plane. Логика живёт в `SuggestService.generate_namespace_suggests`, worker — тонкая обёртка.
+- Дубли ищутся по semantic search CRM/RAG внутри namespace и только для не-note сущностей. При `EntityType.auto_resolve_suggests=true` слияние выполняется сразу и пишется audit-строка `auto_resolved`; иначе создаётся `pending` suggest с payload `EntityMergeRequest`.
+- `missed_entity` создаётся для заметок с сохранённым AI draft. Resolve вызывает `NoteProcessingService.apply(note_id)`, поэтому применяются создание сущностей/связей, синхронизация mentions и обогащение `@`-токенов.
+- Dismissed duplicate/missed suggestions не пересоздаются следующим tick для той же пары/заметки.
 
 ## Graph
 
@@ -210,8 +230,13 @@ Redis hot cache + locks + S3 долговечные снимки.
 Очередь `crm` (`apps.crm_worker`). Задачи:
 - `process_note_task` (mode: `analyze`|`apply`|`process`) — из `POST /tasks/note-analyze`, `wait_result` (timeout `CRMSettings.taskiq_sync_timeout_seconds`, default 300с).
 - `run_knowledge_import_task` — из `POST /tasks/knowledge-import`.
-- `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary`.
+- `repair_note_analysis_draft_task` — из `TaskService.start_note_analysis_draft_repair` / `POST .../notes/{id}/analysis-draft-repair`.
+- `format_note_description_markdown_task` — из `TaskService.start_note_markdown_format` / расписание вложений / `POST .../format-markdown`.
+- `crm_rebuild_daily_summary`, `crm_rebuild_period_summary`, `crm_reconcile_daily_summary` (`crm_reconcile_daily_summary` регистрируется в `apps/scheduler`, worker только исполняет).
+- `crm_reembed_stale_documents_tick` — перевекторизация stale chunks (`execute_reembed_tick`), строки `crm_tasks` по затронутым компаниям.
 - `run_namespace_integration_job`.
+- `scheduled_namespace_integration_unified_sync` — cron unified sync интеграции namespace.
+- `crm_generate_namespace_suggests_tick` — scheduler-triggered генерация `CRMSuggest` по namespace.
 
 Контекст в воркере — `await _set_crm_context(company_id, namespace, auth_token?, user_id?, interface_language?)` (`apps/crm_worker/tasks/daily_summary_tasks.py`): загружает `Company` из `company_repository`, в том числе `metadata` (AI-переопределения с `/settings` frontend). При старте: `set_billing_service(container.billing_service)` + `initialize_default_processors(container.file_repository)` (без них — RAG и файловый импорт упадут). Язык ответов LLM: `EntityService` мержит `interface_language_*` в `metadata.variables`; фоновые задачи без языка → RU.
 
@@ -223,7 +248,7 @@ Redis hot cache + locks + S3 долговечные снимки.
 
 Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Все доменные операции — фабрики `apps/crm/ui/events/resources/*.resource.js` через helpers `PlatformElement`. Запрещены: `services/`, `store/`, `features/`, `*.{service,store}.js`, `BaseStore`, `CRMStore`, `ServiceRegistry`, прямые `fetch`/`httpRequest`, прямой `dispatch(CoreEvents.UI_*|AUTH_*|...)`.
 
-Маршруты `/crm/...`: `notes` (`daily-notes-page`), `entities`, `graph` (`?view=3d|mindmap`), `tasks`, `settings` (`settings-hub-page`), `templates`, `spaces`, `namespace_imports`, `relationship_types`.
+Маршруты `/crm/...`: `notes` (`daily-notes-page`), `entities`, `graph` (`?view=3d|mindmap`), `tasks`, `suggests`, `settings` (`settings-hub-page`), `templates`, `spaces`, `namespace_imports`, `relationship_types`.
 
 **Особенности:**
 - `body.platform-shell` (`apps/crm/ui/index.html`) задаёт `--platform-btn-primary-*` из `--crm-button-primary-*` (модалки портятся в `document.body` и иначе берут зелёный fallback).

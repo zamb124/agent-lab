@@ -342,7 +342,7 @@ class VariableResolver:
                 if text[i] == '\\' and i + 1 < len(text):
                     i += 2
                     continue
-                
+
                 if text[i] == '{':
                     depth += 1
                 elif text[i] == '}':
@@ -350,12 +350,12 @@ class VariableResolver:
                     if depth < 0:
                         raise UnmatchedBracesError(f"Непарная закрывающая скобка '}}' на позиции {i}")
                 i += 1
-            
+
             if depth > 0:
                 raise UnmatchedBracesError(f"Непарная открывающая скобка '{{' - не закрыто {depth} скобок")
             elif depth < 0:
                 raise UnmatchedBracesError(f"Непарная закрывающая скобка '}}' - лишних {abs(depth)} скобок")
-        
+
         validate_braces(template)
 
         variables = VariableResolver.resolve_all(
@@ -366,56 +366,56 @@ class VariableResolver:
             """Обрабатывает {for...}...{endfor} циклы."""
             if loop_vars is None:
                 loop_vars = {}
-            
+
             result = []
             i = 0
-            
+
             while i < len(text):
                 if text[i:i+5] == '{for ' or text[i:i+4] == '{for':
                     start = i
                     i += 1
-                    
+
                     while i < len(text) and text[i] != ' ':
                         i += 1
-                    
+
                     if i >= len(text):
                         result.append(text[start])
                         i = start + 1
                         continue
-                    
+
                     i += 1
                     var_name_start = i
                     while i < len(text) and text[i] not in ' \n\t':
                         i += 1
                     var_name = text[var_name_start:i]
-                    
+
                     while i < len(text) and text[i] in ' \n\t':
                         i += 1
-                    
+
                     if not text[i:i+3] == 'in ':
                         result.append(text[start:i])
                         continue
-                    
+
                     i += 3
-                    
+
                     while i < len(text) and text[i] in ' \n\t':
                         i += 1
-                    
+
                     list_name_start = i
                     while i < len(text) and text[i] not in '}\n\t ':
                         i += 1
                     list_name = text[list_name_start:i]
-                    
+
                     while i < len(text) and text[i] != '}':
                         i += 1
-                    
+
                     if i >= len(text):
                         result.append(text[start])
                         i = start + 1
                         continue
-                    
+
                     i += 1
-                    
+
                     body_start = i
                     depth = 1
                     while i < len(text) and depth > 0:
@@ -429,77 +429,77 @@ class VariableResolver:
                             i += 8
                         else:
                             i += 1
-                    
+
                     if i >= len(text):
                         result.append(text[start])
                         i = start + 1
                         continue
-                    
+
                     body = text[body_start:i]
-                    
+
                     i += 8
-                    
+
                     merged_vars = {**variables, **loop_vars}
                     list_value, found = VariableResolver._resolve_variable_value(list_name, merged_vars)
-                    
+
                     if found and isinstance(list_value, list):
                         for item in list_value:
                             item_vars = {**loop_vars, var_name: item}
                             rendered_body = process_for_loops(body, item_vars)
                             rendered_body = process_blocks_recursive(rendered_body, item_vars)
                             result.append(rendered_body)
-                    
+
                     continue
-                
+
                 result.append(text[i])
                 i += 1
-            
+
             return ''.join(result)
 
         def process_blocks_recursive(text: str, extra_vars: Optional[Dict[str, Any]] = None) -> str:
             """Рекурсивно обрабатывает все блоки {}."""
             if extra_vars is None:
                 extra_vars = {}
-            
+
             merged_vars = {**variables, **extra_vars}
-            
+
             result = []
             i = 0
-            
+
             while i < len(text):
                 if text[i] == '{':
                     start = i
                     i += 1
-                    
+
                     optional = False
                     if i < len(text) and text[i] == '?':
                         optional = True
                         i += 1
-                    
+
                     expr_start = i
                     while i < len(text) and (text[i].isalnum() or text[i] == '_' or text[i] == '.'):
                         i += 1
-                    
+
                     if i == expr_start:
                         result.append(text[start])
                         i = start + 1
                         continue
-                    
+
                     expr = text[expr_start:i]
                     default = None
                     has_default = False
-                    
+
                     if i < len(text) and text[i] == '|':
                         has_default = True
                         i += 1
                         default_start = i
-                        
+
                         depth = 1
                         while i < len(text):
                             if text[i] == '\\' and i + 1 < len(text):
                                 i += 2
                                 continue
-                            
+
                             if text[i] == '{':
                                 depth += 1
                             elif text[i] == '}':
@@ -507,20 +507,20 @@ class VariableResolver:
                                 if depth == 0:
                                     break
                             i += 1
-                        
+
                         if i >= len(text):
                             default = text[default_start:].rstrip()
                         else:
                             default = text[default_start:i].rstrip()
-                    
+
                     if i < len(text) and text[i] == '}':
                         i += 1
                     else:
                         result.append(text[start:i])
                         continue
-                    
+
                     value, found = VariableResolver._resolve_variable_value(expr, merged_vars)
-                    
+
                     if optional:
                         if found and not VariableResolver._is_empty_value(value):
                             if has_default:
@@ -534,7 +534,7 @@ class VariableResolver:
                                         break
                                     else:
                                         i_check += 1
-                                
+
                                 if has_nested_blocks or '\n' in default:
                                     processed_default = process_blocks_recursive(default, extra_vars)
                                     processed_default = processed_default.replace('\\\\', '\x00')
@@ -557,7 +557,7 @@ class VariableResolver:
                                         break
                                     else:
                                         i_check += 1
-                                
+
                                 if has_nested_blocks or '\n' in default:
                                     result.append("")
                                 else:
@@ -595,14 +595,14 @@ class VariableResolver:
                 else:
                     result.append(text[i])
                     i += 1
-            
+
             return ''.join(result)
-        
+
         def process_short_format(text: str, extra_vars: Optional[Dict[str, Any]] = None) -> str:
             """Обрабатывает короткий формат ?variable и ?variable|default"""
             if extra_vars is None:
                 extra_vars = {}
-            
+
             result = []
             i = 0
             while i < len(text):
@@ -610,12 +610,12 @@ class VariableResolver:
                     j = i + 1
                     while j < len(text) and (text[j].isalnum() or text[j] == '_' or text[j] == '.'):
                         j += 1
-                    
+
                     if j > i + 1:
                         expr = text[i+1:j]
                         default = None
                         has_default = False
-                        
+
                         if j < len(text) and text[j] == '|':
                             has_default = True
                             j += 1
@@ -633,25 +633,25 @@ class VariableResolver:
                                         break
                                 j += 1
                             default = text[default_start:j].rstrip()
-                        
+
                         merged_vars = {**variables, **extra_vars}
                         value, found = VariableResolver._resolve_variable_value(expr, merged_vars)
-                        
+
                         if found and not VariableResolver._is_empty_value(value):
                             result.append(str(value))
                         elif has_default:
                             result.append(default or "")
                         else:
                             result.append("")
-                        
+
                         i = j
                         continue
-                
+
                 result.append(text[i])
                 i += 1
-            
+
             return ''.join(result)
-        
+
         result = process_short_format(template)
         result = process_for_loops(result)
         result = process_blocks_recursive(result)
@@ -663,7 +663,7 @@ def get_state() -> Optional[Dict[str, Any]]:
     """
     Получает state агента из контекста.
     Используется в тулах для доступа к store и другим данным state.
-    
+
     Returns:
         State агента или None если не доступен
     """
@@ -677,7 +677,7 @@ def set_state_in_context(state: Dict[str, Any]) -> None:
     """
     Устанавливает state в контекст.
     Вызывается автоматически при входе в агента.
-    
+
     Args:
         state: State агента для установки в контекст
     """

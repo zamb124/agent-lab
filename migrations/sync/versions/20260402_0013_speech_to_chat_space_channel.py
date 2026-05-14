@@ -1,7 +1,7 @@
 """Речь в ленту: флаги space/channel, трекинг egress по микрофону LiveKit."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "sync_0013"
 down_revision = "sync_0012"

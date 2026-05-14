@@ -8,11 +8,11 @@ DEPRECATED: ExecutionState перенесен в core.state.
 # Реэкспорт из core.state БЕЗ warning - это нормально для compatibility слоя
 from core.state import (
     ExecutionState,
-    State,
     InterruptData,
     InterruptPathItem,
-    NodeCallInfo,
     NestedStateData,
+    NodeCallInfo,
+    State,
 )
 
 __all__ = [

@@ -52,7 +52,7 @@ class ToolReference(BaseModel):
         default_factory=list,
         description="Группы с доступом к tool. Пустой список = доступ для всех",
     )
-    
+
     @field_validator("permission", mode="before")
     @classmethod
     def convert_none_to_list(cls, v):
@@ -71,7 +71,7 @@ class ToolReference(BaseModel):
             raise ValueError("tool_id must be non-empty for display name")
         object.__setattr__(self, "name", label)
         return self
-    
+
     tags: List[str] = Field(
         default_factory=list,
         description="Группы/категории тула: misc, math, docs, api, validation",
@@ -84,7 +84,7 @@ class ToolReference(BaseModel):
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
-    
+
     # MCP-специфичные поля
     code_mode: CodeMode = Field(
         default=CodeMode.INLINE_CODE,

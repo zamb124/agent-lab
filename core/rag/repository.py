@@ -7,11 +7,11 @@ RAG Repository: in-process ``BaseRAGProvider`` и опционально HTTP-п
 
 from __future__ import annotations
 
-from core.logging import get_logger
 from typing import Any, Dict, List, Optional
 
 from core.clients.service_client import ServiceClient
 from core.context import get_context
+from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider
 from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
 from core.rag.rag_http_namespace_search import (

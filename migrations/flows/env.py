@@ -12,16 +12,27 @@ import os
 import sys
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic import context
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.flows.src.db.models import (  # noqa: F401
-    Base, Flows, FlowsVersions, Nodes, Tools, States,
-    EvaluationResults, ScheduledTasks, Resources, Stores, FlowStates,
-    OperatorQueues, OperatorQueueMembers, OperatorTasks,
+    Base,
+    EvaluationResults,
+    Flows,
+    FlowStates,
+    FlowsVersions,
+    Nodes,
+    OperatorQueueMembers,
+    OperatorQueues,
+    OperatorTasks,
+    Resources,
+    ScheduledTasks,
+    States,
+    Stores,
+    Tools,
 )
 
 config = context.config

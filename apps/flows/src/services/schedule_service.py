@@ -10,9 +10,9 @@ from core.logging import get_logger
 from core.scheduler.models import (
     ContentType,
     PlatformScheduleCreateRequest,
+    PlatformScheduledTask,
     PlatformScheduleFilter,
     PlatformScheduleType,
-    PlatformScheduledTask,
     ScheduledTaskInfo,
     ScheduledTaskStatus,
     ScheduleType,
@@ -146,7 +146,7 @@ class ScheduleService:
     ) -> ScheduledTaskInfo:
         """
         Создает периодическую задачу по cron расписанию.
-        
+
         Args:
             flow_id: ID агента
             session_id: ID сессии
@@ -156,7 +156,7 @@ class ScheduleService:
             content: Сообщение или имя tool
             tool_args: Аргументы для tool_call
             description: Описание задачи
-            
+
         Returns:
             ScheduledTaskInfo
         """
@@ -186,7 +186,7 @@ class ScheduleService:
     ) -> ScheduledTaskInfo:
         """
         Создает периодическую задачу с интервалом.
-        
+
         Args:
             flow_id: ID агента
             session_id: ID сессии
@@ -196,7 +196,7 @@ class ScheduleService:
             content: Сообщение или имя tool
             tool_args: Аргументы для tool_call
             description: Описание задачи
-            
+
         Returns:
             ScheduledTaskInfo
         """
@@ -226,7 +226,7 @@ class ScheduleService:
     ) -> ScheduledTaskInfo:
         """
         Создает одноразовую задачу на конкретное время.
-        
+
         Args:
             flow_id: ID агента
             session_id: ID сессии
@@ -236,7 +236,7 @@ class ScheduleService:
             content: Сообщение или имя tool
             tool_args: Аргументы для tool_call
             description: Описание задачи
-            
+
         Returns:
             ScheduledTaskInfo
         """
@@ -260,11 +260,11 @@ class ScheduleService:
     ) -> List[ScheduledTaskInfo]:
         """
         Получает список задач для сессии.
-        
+
         Args:
             session_id: ID сессии
             status: Фильтр по статусу
-            
+
         Returns:
             Список ScheduledTaskInfo
         """
@@ -302,10 +302,10 @@ class ScheduleService:
     async def cancel_task(self, task_id: str) -> bool:
         """
         Отменяет задачу.
-        
+
         Args:
             task_id: ID задачи
-            
+
         Returns:
             True если задача отменена
         """

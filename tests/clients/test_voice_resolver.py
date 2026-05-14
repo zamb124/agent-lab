@@ -18,8 +18,8 @@ import pytest
 
 from core.clients.speech_override import SpeechOverride
 from core.clients.voice_resolver import (
-    _CompanyOverrideRow,
     _company_cache,
+    _CompanyOverrideRow,
     get_stt_client,
     get_vad_client,
     reset_voice_resolver_for_tests,
@@ -27,7 +27,6 @@ from core.clients.voice_resolver import (
 )
 from core.config import get_settings
 from core.logging.scope import SystemLogScope
-
 
 pytestmark = pytest.mark.timeout(15)
 

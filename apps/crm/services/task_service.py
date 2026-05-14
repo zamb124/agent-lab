@@ -1,40 +1,38 @@
 """
 Единый сервис задач CRM: создание, получение, обновление статусов.
 
-Типы задач: knowledge_import, note_analyze, daily_summary, period_summary,
-namespace_integration_job.
+Типы задач: knowledge_import, note_analyze, note_analysis_draft_repair,
+note_markdown_format, daily_summary, period_summary, namespace_integration_job.
 """
 
 from __future__ import annotations
 
 import hashlib
-
-from core.logging import get_logger
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, List, Literal, Optional
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
-from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import (
-    KnowledgeImportCreatedEntitiesResponse,
     KnowledgeImportCreatedEntityItem,
     NoteProcessingConfig,
     TaskCreatedEntitiesResponse,
-    TaskResponse,
 )
 from apps.crm.services.crm_task_ws_broadcast import broadcast_crm_task_updated_for_user
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     store_pending_import_text,
 )
 from core.context import clear_context, get_context, set_context
+from core.logging import get_logger
 from core.models.context_models import Context
-from core.models.identity_models import User
 from core.models.i18n_models import Language
+from core.models.identity_models import User
 from core.utils.knowledge_text_split import validate_chunk_max_chars
 
 logger = get_logger(__name__)
@@ -439,6 +437,158 @@ class TaskService:
         row.taskiq_task_id = taskiq_id
         return row
 
+    async def start_note_analysis_draft_repair(self, *, note_id: str) -> CRMTask:
+        note = await self._entity_service.get_entity(note_id)
+        if note is None:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
+            raise ValueError("Ожидалась заметка (entity_type=note)")
+        namespace = note.namespace or "default"
+        await self._assert_no_active_task(
+            "note_analysis_draft_repair",
+            {"note_id": note_id},
+            namespace,
+        )
+        task_id = str(uuid.uuid4())
+        row = CRMTask(
+            task_id=task_id,
+            task_type="note_analysis_draft_repair",
+            status="pending",
+            stage="pending",
+            progress_pct=0,
+            company_id=self._get_company_id(),
+            namespace=namespace,
+            user_id=self._get_user_id(),
+            data={
+                "note_id": note_id,
+                "note_name": note.name or "",
+            },
+        )
+        await self._task_repo.create(row)
+
+        from apps.crm_worker.tasks.draft_repair_tasks import repair_note_analysis_draft_task
+
+        ctx = get_context()
+        if ctx is None:
+            raise ValueError("Для старта починки черновика нужен контекст запроса")
+        try:
+            task = await repair_note_analysis_draft_task.kiq(
+                note_id=note_id,
+                company_id=row.company_id,
+                namespace=namespace,
+                auth_token=ctx.auth_token,
+                user_id=row.user_id,
+                interface_language=ctx.language.value,
+                task_id=task_id,
+            )
+            taskiq_id = str(task.task_id)
+        except Exception as exc:
+            await self._task_repo.patch_progress(
+                task_id,
+                row.company_id,
+                status="failed",
+                stage="failed",
+                error_message=str(exc),
+                completed_at=datetime.now(timezone.utc),
+            )
+            raise
+
+        await self._task_repo.patch_progress(
+            task_id,
+            row.company_id,
+            status="running",
+            stage="draft_repair",
+            started_at=datetime.now(timezone.utc),
+            taskiq_task_id=taskiq_id,
+        )
+        row.status = "running"
+        row.stage = "draft_repair"
+        row.started_at = datetime.now(timezone.utc)
+        row.taskiq_task_id = taskiq_id
+        return row
+
+    async def start_note_markdown_format(
+        self,
+        *,
+        note_id: str,
+        expected_updated_at_iso: str,
+    ) -> CRMTask:
+        note = await self._entity_service.get_entity(note_id)
+        if note is None:
+            raise ValueError("Заметка не найдена")
+        if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
+            raise ValueError("Ожидалась заметка (entity_type=note)")
+        desc = note.description
+        if desc is None or not str(desc).strip():
+            raise ValueError("Текст заметки пуст")
+        ns = note.namespace or "default"
+        await self._assert_no_active_task(
+            "note_markdown_format",
+            {"note_id": note_id},
+            ns,
+        )
+        task_id = str(uuid.uuid4())
+        row = CRMTask(
+            task_id=task_id,
+            task_type="note_markdown_format",
+            status="pending",
+            stage="pending",
+            progress_pct=0,
+            company_id=self._get_company_id(),
+            namespace=ns,
+            user_id=self._get_user_id(),
+            data={
+                "note_id": note_id,
+                "note_name": note.name or "",
+                "expected_updated_at_iso": expected_updated_at_iso,
+            },
+        )
+        await self._task_repo.create(row)
+
+        from apps.crm_worker.tasks.note_markdown_tasks import (
+            format_note_description_markdown_task,
+        )
+
+        ctx = get_context()
+        if ctx is None:
+            raise ValueError("Для старта форматирования заметки нужен контекст запроса")
+        try:
+            task = await format_note_description_markdown_task.kiq(
+                note_id=note_id,
+                company_id=row.company_id,
+                namespace=ns,
+                auth_token=ctx.auth_token,
+                user_id=row.user_id,
+                interface_language=ctx.language.value,
+                expected_updated_at_iso=expected_updated_at_iso,
+                task_id=task_id,
+            )
+            taskiq_id = str(task.task_id)
+        except Exception as exc:
+            await self._task_repo.patch_progress(
+                task_id,
+                row.company_id,
+                status="failed",
+                stage="failed",
+                error_message=str(exc),
+                completed_at=datetime.now(timezone.utc),
+            )
+            raise
+
+        await self._task_repo.patch_progress(
+            task_id,
+            row.company_id,
+            status="running",
+            stage="format_markdown",
+            started_at=datetime.now(timezone.utc),
+            taskiq_task_id=taskiq_id,
+        )
+        row.status = "running"
+        row.stage = "format_markdown"
+        row.started_at = datetime.now(timezone.utc)
+        row.taskiq_task_id = taskiq_id
+        return row
+
     # ── Common ────────────────────────────────────────────────────────────────
 
     async def get_task(self, task_id: str) -> Optional[CRMTask]:
@@ -502,14 +652,23 @@ class TaskService:
         return row
 
     async def reconcile_stale_worker_tasks(self) -> int:
-        """Закрывает «потерянные» active-задачи после рестарта crm_worker (нет обновлений в БД)."""
+        """Закрывает зависшие active-задачи и отмены, которые воркер не обработал.
+
+        Порядок: сначала все ``pending``/``running`` с ``cancel_requested`` → ``cancelled`` (без
+        ожидания ``STALE_CRM_TASK_INACTIVITY``), затем строки без активности дольше порога →
+        ``failed`` или ``cancelled``.
+
+        Вызывается при старте процесса ``crm_worker`` (до reclaim Redis) и HTTP-сервиса ``crm``.
+        """
         cutoff = datetime.now(timezone.utc) - STALE_CRM_TASK_INACTIVITY
-        rows = await self._task_repo.reconcile_stale_active_tasks_older_than(cutoff=cutoff)
+        cancel_rows = await self._task_repo.reconcile_cancel_requested_active_tasks()
+        stale_rows = await self._task_repo.reconcile_stale_active_tasks_older_than(cutoff=cutoff)
+        rows = cancel_rows + stale_rows
         if not rows:
             return 0
         container = get_crm_container()
         for row in rows:
-            if row.task_type == "note_analyze" and row.status == "failed":
+            if row.task_type in ("note_analyze", "note_analysis_draft_repair") and row.status == "failed":
                 note_payload = row.data if isinstance(row.data, dict) else {}
                 raw_note = note_payload.get("note_id")
                 note_id = raw_note if isinstance(raw_note, str) and raw_note else None
@@ -786,6 +945,10 @@ class TaskService:
                 return await self._retry_knowledge_import(old)
             case "note_analyze":
                 return await self._retry_note_analyze(old)
+            case "note_analysis_draft_repair":
+                return await self._retry_note_analysis_draft_repair(old)
+            case "note_markdown_format":
+                return await self._retry_note_markdown_format(old)
             case "daily_summary":
                 return await self._retry_daily_summary(old)
             case "period_summary":
@@ -824,6 +987,26 @@ class TaskService:
             namespace=old.namespace,
             mode=data.get("mode", "analyze"),
             config=config,
+        )
+
+    async def _retry_note_analysis_draft_repair(self, old: CRMTask) -> CRMTask:
+        data = old.data
+        note_id = data.get("note_id")
+        if not note_id:
+            raise ValueError("Нет note_id в данных задачи для перезапуска")
+        return await self.start_note_analysis_draft_repair(note_id=note_id)
+
+    async def _retry_note_markdown_format(self, old: CRMTask) -> CRMTask:
+        data = old.data
+        note_id = data.get("note_id")
+        if not note_id:
+            raise ValueError("Нет note_id в данных задачи для перезапуска")
+        note = await self._entity_service.get_entity(note_id)
+        if note is None:
+            raise ValueError(f"Заметка не найдена: {note_id}")
+        return await self.start_note_markdown_format(
+            note_id=note_id,
+            expected_updated_at_iso=note.updated_at.isoformat(),
         )
 
     async def _retry_daily_summary(self, old: CRMTask) -> CRMTask:

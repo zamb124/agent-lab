@@ -2,7 +2,8 @@
 Модели данных для Frontend сервиса
 """
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any, Literal
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 

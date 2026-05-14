@@ -12,14 +12,12 @@
 """
 
 import pytest
+
+from apps.flows.src.models import Edge
 from apps.flows.src.runtime import Flow
 from apps.flows.src.runtime.nodes import (
     CodeNode,
-    CodeNode,
-    FlowNode,
-    create_node,
 )
-from apps.flows.src.models import Edge
 from apps.flows.src.tools.base import CodeTool
 from core.state import ExecutionState
 
@@ -48,10 +46,10 @@ async def run(state):
     return {"response": "function_result", "status": "ok"}
 """
         node = CodeNode(node_id="my_function", config={"code": code})
-        
+
         state = make_state()
         result = await node.run(state)
-        
+
         assert result.response == "function_result"
         assert result.status == "ok"
 
@@ -63,13 +61,13 @@ async def run(state):
     return {"value": 42, "name": "test"}
 """
         node = CodeNode(
-            node_id="my_function", 
+            node_id="my_function",
             config={"code": code, "output_mapping": {"value": "custom_value", "name": "custom_name"}}
         )
-        
+
         state = make_state()
         result = await node.run(state)
-        
+
         assert result.custom_value == 42
         assert result.custom_name == "test"
 
@@ -83,10 +81,10 @@ async def run(state):
                 "input_mapping": {"x": 10},
             },
         )
-        
+
         state = make_state()
         result = await node.run(state)
-        
+
         assert result.doubled == 20
 
     @pytest.mark.asyncio
@@ -100,10 +98,10 @@ async def run(state):
                 "output_mapping": {"value": "tripled_value"},
             },
         )
-        
+
         state = make_state()
         result = await node.run(state)
-        
+
         assert result.tripled_value == 30
 
 
@@ -122,10 +120,10 @@ async def run(state):
             node_id="no_messages",
             config={"code": code, "save_to_messages": False}
         )
-        
+
         state = make_state(messages=[])
         result = await node.run(state)
-        
+
         assert len(result.messages) == 0
 
     @pytest.mark.asyncio
@@ -141,14 +139,14 @@ async def run(state):
             node_id="with_messages",
             config={"code": code, "save_to_messages": True}
         )
-        
+
         state = make_state(messages=[])
         result = await node.run(state)
-        
+
         # Должен быть 1 message с diff стейта
         assert len(result.messages) == 1
         message = result.messages[0]
-        
+
         # Message содержит diff (новые поля)
         assert "new_field" in str(message) or "new_value" in str(message)
 
@@ -163,10 +161,10 @@ async def run(state):
                 "save_to_messages": False,
             },
         )
-        
+
         state = make_state(messages=[])
         result = await node.run(state)
-        
+
         assert len(result.messages) == 0
 
     @pytest.mark.asyncio
@@ -180,10 +178,10 @@ async def run(state):
                 "save_to_messages": True,
             },
         )
-        
+
         state = make_state(messages=[])
         result = await node.run(state)
-        
+
         assert len(result.messages) == 1
 
 
@@ -202,13 +200,13 @@ class TestMessageField:
                 "message_field": "answer",
             },
         )
-        
+
         state = make_state(messages=[])
         result = await node.run(state)
-        
+
         assert len(result.messages) == 1
         message = result.messages[0]
-        
+
         # Должен содержать только answer, не debug
         content = str(message.content) if hasattr(message, 'content') else str(message)
         assert "42" in content
@@ -232,10 +230,10 @@ async def run(state):
                 "message_field": "result"
             }
         )
-        
+
         state = make_state(messages=[])
         result = await node.run(state)
-        
+
         assert len(result.messages) == 1
         message = result.messages[0]
         content = str(message.content) if hasattr(message, 'content') else str(message)
@@ -258,17 +256,17 @@ async def run(state):
             node_id="diff_test",
             config={"code": code, "save_to_messages": True}
         )
-        
+
         state = make_state(
             messages=[],
             existing_field="should_not_appear"
         )
         result = await node.run(state)
-        
+
         assert len(result.messages) == 1
         message = result.messages[0]
         content = str(message.content) if hasattr(message, 'content') else str(message)
-        
+
         # Новые поля должны быть в diff
         assert "new_field1" in content or "value1" in content
         # Существующие поля не должны быть в diff
@@ -286,17 +284,17 @@ async def run(state):
             node_id="change_test",
             config={"code": code, "save_to_messages": True}
         )
-        
+
         state = make_state(
             messages=[],
             mutable_field="original_value"
         )
         result = await node.run(state)
-        
+
         assert len(result.messages) == 1
         message = result.messages[0]
         content = str(message.content) if hasattr(message, 'content') else str(message)
-        
+
         # Измененное значение должно быть в diff
         assert "changed_value" in content
 
@@ -314,7 +312,7 @@ async def run(state):
     return state
 """
         func_node = CodeNode(node_id="prepare", config={"code": func_code})
-        
+
         tool_node = CodeNode(
             node_id="multiply",
             config={
@@ -325,7 +323,7 @@ async def run(state):
                 }
             },
         )
-        
+
         flow = Flow(
             flow_id="func_to_tool",
             name="Function to Tool Agent",
@@ -337,10 +335,10 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         state = make_state()
         result = await flow.run(state)
-        
+
         assert result.calculated_value == 100
         assert result.factor == 5
         assert result.result == 500
@@ -355,7 +353,7 @@ async def run(state):
                 "input_mapping": {},
             },
         )
-        
+
         func_code = """
 async def run(state):
     item = state.generated_item
@@ -363,7 +361,7 @@ async def run(state):
     return state
 """
         func_node = CodeNode(node_id="format", config={"code": func_code})
-        
+
         flow = Flow(
             flow_id="tool_to_func",
             name="Tool to Function Agent",
@@ -375,10 +373,10 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         state = make_state()
         result = await flow.run(state)
-        
+
         assert result.generated_item == {'id': 12345, 'name': 'Test Item'}
         assert result.formatted == "Item #12345: Test Item"
 
@@ -406,7 +404,7 @@ async def run(state):
                 "input_mapping": {"x": "@state:after_double"},
             },
         )
-        
+
         flow = Flow(
             flow_id="tool_chain",
             name="Tool Chain Agent",
@@ -423,11 +421,11 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         # initial=5 -> +10=15 -> *2=30 -> -5=25
         state = make_state(initial=5)
         result = await flow.run(state)
-        
+
         assert result.after_add == 15
         assert result.after_double == 30
         assert result.final == 25
@@ -457,7 +455,7 @@ async def run(state):
         node1 = CodeNode(node_id="step1", config={"code": code1})
         node2 = CodeNode(node_id="step2", config={"code": code2})
         node3 = CodeNode(node_id="step3", config={"code": code3})
-        
+
         flow = Flow(
             flow_id="func_chain",
             name="Function Chain Agent",
@@ -470,10 +468,10 @@ async def run(state):
             ],
             variables={},
         )
-        
+
         state = make_state()
         result = await flow.run(state)
-        
+
         assert result.step1_done is True
         assert result.step2_done is True
         assert result.step3_done is True
@@ -492,7 +490,7 @@ async def run(state):
             node_id="init",
             config={"code": func_code, "save_to_messages": True}
         )
-        
+
         tool_node = CodeNode(
             node_id="add_bonus",
             config={
@@ -504,7 +502,7 @@ async def run(state):
                 "save_to_messages": True
             }
         )
-        
+
         flow = Flow(
             flow_id="mixed_messages",
             name="Mixed with Messages Agent",
@@ -516,10 +514,10 @@ async def run(state):
             ],
             variables={"bonus_amount": 50},
         )
-        
+
         state = make_state(messages=[])
         result = await flow.run(state)
-        
+
         assert result.user_data == {"name": "Alice", "score": 100}
         assert result.final_score == 150
         # Оба узла должны добавить messages
@@ -556,11 +554,11 @@ async def run(state):
                 {"from": "step2", "to": None},
             ],
         }
-        
+
         flow = await Flow.from_config(flow_config)
         state = make_state()
         result = await flow.run(state)
-        
+
         assert result.first_result == "step1_result"
         assert result.combined == "Got: step1_result"
 
@@ -582,11 +580,11 @@ async def run(state):
                 {"from": "process", "to": None},
             ],
         }
-        
+
         flow = await Flow.from_config(flow_config)
         state = make_state(messages=[])
         result = await flow.run(state)
-        
+
         assert result.status == "ok"
         assert result.data == 123
         assert len(result.messages) == 1
@@ -610,11 +608,11 @@ async def run(state):
                 {"from": "process", "to": None},
             ],
         }
-        
+
         flow = await Flow.from_config(flow_config)
         state = make_state(messages=[])
         result = await flow.run(state)
-        
+
         assert len(result.messages) == 1
         message = result.messages[0]
         content = str(message.content) if hasattr(message, 'content') else str(message)
@@ -629,12 +627,12 @@ class TestComplexPipeline:
     async def test_etl_pipeline(self):
         """
         ETL Pipeline: Extract -> Transform -> Load.
-        
+
         1. Extract (CodeNode): извлекает данные
         2. Transform (CodeNode): трансформирует
         3. Load (CodeNode): сохраняет с save_to_messages
         """
-        extract_tool = CodeTool(
+        CodeTool(
             tool_id="extract",
             code="""
 async def execute(args, state):
@@ -649,8 +647,8 @@ async def execute(args, state):
     }
 """,
         )
-        
-        load_tool = CodeTool(
+
+        CodeTool(
             tool_id="load",
             code="""
 async def execute(args, state):
@@ -662,7 +660,7 @@ async def execute(args, state):
     }
 """,
         )
-        
+
         transform_code = """
 async def run(state):
     items = state.extracted['items']
@@ -675,7 +673,7 @@ async def run(state):
     state.total_price = sum(item['price'] for item in transformed)
     return state
 """
-        
+
         extract_node = CodeNode(
             node_id="extract",
             config={
@@ -694,12 +692,12 @@ async def execute(args, state):
                 "input_mapping": {},
             },
         )
-        
+
         transform_node = CodeNode(
             node_id="transform",
             config={"code": transform_code, "save_to_messages": True}
         )
-        
+
         load_node = CodeNode(
             node_id="load",
             config={
@@ -719,7 +717,7 @@ async def execute(args, state):
                 "save_to_messages": True
             }
         )
-        
+
         flow = Flow(
             flow_id="etl_pipeline",
             name="ETL Pipeline Agent",
@@ -736,23 +734,23 @@ async def execute(args, state):
             ],
             variables={},
         )
-        
+
         state = make_state(messages=[])
         result = await flow.run(state)
-        
+
         # Extract results
         assert result.extracted['total'] == 2
-        
+
         # Transform results (10% increase: 100->110, 200->220)
         assert len(result.transformed_items) == 2
         assert result.transformed_items[0]['price'] == 110
         assert result.transformed_items[1]['price'] == 220
         assert result.total_price == 330
-        
+
         # Load results
         assert result.load_result['saved'] == 2
         assert result.load_result['total_value'] == 330
-        
+
         # Messages (transform и load)
         assert len(result.messages) == 2
 
@@ -760,7 +758,7 @@ async def execute(args, state):
     async def test_conditional_pipeline_with_all_features(self):
         """
         Условный pipeline со всеми фичами.
-        
+
         1. Classify (CodeNode): определяет тип запроса
         2. Route (conditional): к process_a или process_b
         3. Process (CodeNode): обрабатывает с save_to_messages
@@ -773,8 +771,8 @@ async def run(state):
     state.request_type = "urgent" if state.is_urgent else "normal"
     return state
 """
-        
-        urgent_tool = CodeTool(
+
+        CodeTool(
             tool_id="urgent_handler",
             code="""
 async def execute(args, state):
@@ -787,8 +785,8 @@ async def execute(args, state):
     }
 """,
         )
-        
-        normal_tool = CodeTool(
+
+        CodeTool(
             tool_id="normal_handler",
             code="""
 async def execute(args, state):
@@ -801,19 +799,19 @@ async def execute(args, state):
     }
 """,
         )
-        
+
         finalize_code = """
 async def run(state):
     result = state.process_result
     state.response = f"Processed by {result['handler']}: {result['message']}"
     return state
 """
-        
+
         classify_node = CodeNode(
             node_id="classify",
             config={"code": classify_code, "save_to_messages": True}
         )
-        
+
         urgent_node = CodeNode(
             node_id="urgent_process",
             config={
@@ -832,7 +830,7 @@ async def execute(args, state):
                 "message_field": "priority"
             }
         )
-        
+
         normal_node = CodeNode(
             node_id="normal_process",
             config={
@@ -851,12 +849,12 @@ async def execute(args, state):
                 "message_field": "priority"
             }
         )
-        
+
         finalize_node = CodeNode(
             node_id="finalize",
             config={"code": finalize_code, "save_to_messages": True, "message_field": "response"}
         )
-        
+
         flow = Flow(
             flow_id="conditional_pipeline",
             name="Conditional Pipeline Agent",
@@ -876,20 +874,20 @@ async def execute(args, state):
             ],
             variables={},
         )
-        
+
         # Тест urgent
         state1 = make_state(content="URGENT: Fix critical bug", messages=[])
         result1 = await flow.run(state1)
-        
+
         assert result1.is_urgent is True
         assert result1.request_type == "urgent"
         assert result1.process_result['priority'] == "HIGH"
         assert "urgent_team" in result1.response
-        
+
         # Тест normal
         state2 = make_state(content="Please help with configuration", messages=[])
         result2 = await flow.run(state2)
-        
+
         assert result2.is_urgent is False
         assert result2.request_type == "normal"
         assert result2.process_result['priority'] == "NORMAL"

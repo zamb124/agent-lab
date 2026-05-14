@@ -56,7 +56,10 @@ import {
 } from '../events/resources/entities.resource.js';
 import {
     notesListResource,
+    noteAnalysisDraftDiscardOp,
+    noteAnalysisDraftRepairOp,
     noteAnalysisDraftSaveOp,
+    noteAnalysisErrorDismissOp,
     noteAnalyzeStartOp,
     noteMarkdownFormatOp,
     noteVoiceInputOp,
@@ -84,6 +87,11 @@ import {
     taskRollbackOp,
     taskRetryOp,
 } from '../events/resources/tasks.resource.js';
+import {
+    suggestsListOp,
+    suggestResolveOp,
+    suggestDismissOp,
+} from '../events/resources/suggests.resource.js';
 import {
     entityGrantsListOp,
     entityGrantCreateOp,
@@ -118,6 +126,7 @@ import '../pages/daily-notes-page.js';
 import '../pages/entities-page.js';
 import '../pages/graph-page.js';
 import '../pages/tasks-page.js';
+import '../pages/suggests-page.js';
 import '../pages/templates-page.js';
 import '../pages/namespace-tasks-page.js';
 import '../pages/relationship-types-page.js';
@@ -165,6 +174,7 @@ const CRM_ROUTES = [
     { key: 'entity',              path: 'entities/:itemId', parent: 'entities', titleKey: 'routes.entity' },
     { key: 'graph',               path: 'graph',            titleKey: 'routes.graph' },
     { key: 'tasks',               path: 'tasks',            titleKey: 'routes.tasks' },
+    { key: 'suggests',            path: 'suggests',         titleKey: 'routes.suggests' },
     { key: 'access_requests',     path: 'access-requests',  titleKey: 'routes.access_requests' },
     { key: 'spaces',              path: 'spaces',           parent: 'settings', titleKey: 'routes.spaces' },
     { key: 'space',               path: 'spaces/:itemId',   parent: 'spaces', titleKey: 'routes.space' },
@@ -274,6 +284,9 @@ export class CRMApp extends PlatformApp {
         entityEditForm,
         notesListResource,
         noteAnalysisDraftSaveOp,
+        noteAnalysisDraftDiscardOp,
+        noteAnalysisErrorDismissOp,
+        noteAnalysisDraftRepairOp,
         noteAnalyzeStartOp,
         noteMarkdownFormatOp,
         noteVoiceInputOp,
@@ -294,6 +307,9 @@ export class CRMApp extends PlatformApp {
         taskCancelOp,
         taskRollbackOp,
         taskRetryOp,
+        suggestsListOp,
+        suggestResolveOp,
+        suggestDismissOp,
         entityGrantsListOp,
         entityGrantCreateOp,
         namespaceGrantsListOp,
@@ -421,6 +437,7 @@ export class CRMApp extends PlatformApp {
             case 'entity':              content = html`<crm-entity-detail-page .itemId=${params.itemId}></crm-entity-detail-page>`; break;
             case 'graph':               content = html`<crm-graph-page></crm-graph-page>`; break;
             case 'tasks':               content = html`<crm-tasks-page></crm-tasks-page>`; break;
+            case 'suggests':            content = html`<crm-suggests-page></crm-suggests-page>`; break;
             case 'access_requests':     content = html`<crm-access-requests-page></crm-access-requests-page>`; break;
             case 'spaces':              content = html`<crm-spaces-page></crm-spaces-page>`; break;
             case 'space':               content = html`<crm-space-detail-page .itemId=${params.itemId}></crm-space-detail-page>`; break;

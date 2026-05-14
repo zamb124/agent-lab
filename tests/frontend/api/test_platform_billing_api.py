@@ -10,7 +10,10 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from core.billing.service import company_resource_prices_storage_key, company_settlement_rules_storage_key
+from core.billing.service import (
+    company_resource_prices_storage_key,
+    company_settlement_rules_storage_key,
+)
 from core.models.identity_models import Company
 from core.models.payment_models import PaymentProviderType
 

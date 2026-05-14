@@ -10,7 +10,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from core.db.database import get_session_factory
-from core.db.models import IntegrationCredentialRecord
+from core.db.models.platform import IntegrationCredentialRecord
+from core.db.utils import get_rowcount
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 
 
@@ -152,7 +153,7 @@ class IntegrationCredentialRepository:
                 )
             )
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0
 
     async def delete_by_user_provider_service(
         self,
@@ -172,4 +173,4 @@ class IntegrationCredentialRepository:
                 )
             )
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0

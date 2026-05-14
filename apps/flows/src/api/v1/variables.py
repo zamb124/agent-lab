@@ -3,17 +3,16 @@ API endpoints для переменных.
 """
 
 from datetime import datetime
-from typing import Any, List
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from core.pagination import OffsetPage
 from apps.flows.src.dependencies import ContainerDep
 from core.context import get_context
 from core.db.repositories.variable_repository import Variable
 from core.logging import get_logger
-from core.variables import VariableResolver
+from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 
@@ -79,7 +78,7 @@ async def get_variable(
     unmask: bool = False,
 ) -> VariableResponse:
     """Получает переменную по ключу (включая системные)
-    
+
     Args:
         key: Ключ переменной
         unmask: Если True, возвращает реальное значение даже для secret переменных
@@ -94,12 +93,12 @@ async def get_variable(
         "current_month": now.month,
         "current_day": now.day,
     }
-    
+
     if key in system_variables:
         return VariableResponse(
             key=key, value=system_variables[key], secret=False, system=True
         )
-    
+
     # Проверяем переменные пользователя (из контекста)
     context = get_context()
     if context and context.user:
@@ -109,16 +108,16 @@ async def get_variable(
             return VariableResponse(key=key, value=context.user.name, secret=False, system=True)
         if key == "user_email" and context.metadata.get("email"):
             return VariableResponse(key=key, value=context.metadata["email"], secret=False, system=True)
-    
+
     # Ищем в БД
     variable = await container.variable_repository.get(key)
     if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
-    
+
     value = variable.value
     if variable.secret and not unmask:
         value = "***"
-    
+
     return VariableResponse(
         key=variable.key, value=value, secret=variable.secret, system=False
     )
@@ -129,7 +128,7 @@ async def create_variable(
     request: VariableCreateRequest, container: ContainerDep
 ) -> VariableResponse:
     """Создает переменную
-    
+
     Нельзя создать системную переменную (current_date, current_time, etc.)
     """
     # Проверяем, не пытаются ли создать системную переменную
@@ -139,10 +138,10 @@ async def create_variable(
     }
     if request.key in system_keys:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Variable '{request.key}' is a system variable and cannot be created or modified"
         )
-    
+
     variable = Variable(key=request.key, value=request.value, secret=request.secret)
 
     await container.variable_repository.set(variable)
@@ -157,7 +156,7 @@ async def delete_variable(
     key: str, container: ContainerDep
 ) -> dict:
     """Удаляет переменную
-    
+
     Нельзя удалить системную переменную (current_date, current_time, etc.)
     """
     # Проверяем, не пытаются ли удалить системную переменную
@@ -167,10 +166,10 @@ async def delete_variable(
     }
     if key in system_keys:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Variable '{key}' is a system variable and cannot be deleted"
         )
-    
+
     deleted = await container.variable_repository.delete(key)
     if not deleted:
         raise HTTPException(status_code=404, detail="Variable not found")

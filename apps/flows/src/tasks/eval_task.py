@@ -6,13 +6,12 @@ TaskIQ task для выполнения inline кода.
 
 from __future__ import annotations
 
-from typing import Any, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
-from core.context import get_context
 from apps.flows.src.eval import safe_eval
-from core.logging import get_logger
-
 from apps.flows_worker.broker import broker
+from core.context import get_context
+from core.logging import get_logger
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -36,9 +35,9 @@ async def execute_inline_code(code: str, state_dict: Dict[str, Any]) -> Dict[str
         SafeEvalError: При ошибке выполнения
     """
     from core.state import ExecutionState
-    
+
     state = ExecutionState.model_validate(state_dict)
-    logger.debug(f"Executing inline code")
+    logger.debug("Executing inline code")
 
     context = get_context()
     result = await safe_eval(code, state, context=context)
@@ -65,7 +64,7 @@ async def run_inline_code(code: str, state: 'ExecutionState') -> 'ExecutionState
         ExecutionState (результат выполнения)
     """
 
-    
+
     context = get_context()
     result = await safe_eval(code, state, context=context)
     return result

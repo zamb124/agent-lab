@@ -23,15 +23,15 @@ from a2a.types import (
 )
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from core.auth.utils import get_token_info
+from apps.flows.config import get_settings
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.websocket import WebSocketChannel
-from apps.flows.config import get_settings
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.models import FlowConfig
+from core.auth.utils import get_token_info
 from core.context import Context, User, set_context
 from core.logging import get_logger
-from apps.flows.src.models import FlowConfig
 
 logger = get_logger(__name__)
 
@@ -120,7 +120,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
         )
         if token_info:
             user_id = str(token_info.get("id", user_id))
-    
+
     context = Context(
         user=User(user_id=user_id, name="WebSocket User"),
         channel="websocket",

@@ -9,6 +9,8 @@
   5. Resume flow (state.content="oauth_completed:google:docs")
   6. MockLLM снова вызывает tool -> credential найден -> GoogleDocsClient мокнут
   7. MockLLM возвращает финальный текст
+
+Глобальный MockLLM — один на процесс; pytest-xdist группа исключает гонки за очередь ответов.
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ from apps.flows.src.models import FlowConfig
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.repository import IntegrationCredentialRepository
 from core.state import ExecutionState, InterruptKind
+
+pytestmark = pytest.mark.xdist_group("flows_mock_llm_singleton")
 
 
 @pytest.fixture()

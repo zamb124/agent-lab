@@ -10,11 +10,11 @@ from .merge import deep_merge
 def extract_json_from_response(text: str) -> Any:
     """
     Извлекает JSON из текста.
-    
+
     Поддерживает:
     - JSON в markdown блоке ```json ... ```
     - Прямой JSON объект или массив
-    
+
     Returns:
         Распарсенный JSON или None если JSON не найден.
     """
@@ -36,7 +36,7 @@ def extract_json_from_response(text: str) -> Any:
             return json.loads(stripped)
         except json.JSONDecodeError:
             pass
-    
+
     return None
 
 

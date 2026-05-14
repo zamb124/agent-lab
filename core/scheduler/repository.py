@@ -9,7 +9,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from core.db.database import get_session_factory
-from core.db.models import SchedulerTaskRecord
+from core.db.models.platform import SchedulerTaskRecord
+from core.db.utils import get_rowcount
 from core.scheduler.models import (
     PlatformScheduledTask,
     PlatformScheduleFilter,
@@ -57,7 +58,9 @@ class SchedulerTaskRepository:
             "target_service": task.target_service,
             "task_name": task.task_name,
             "queue_name": task.queue_name,
-            "schedule_type": task.schedule_type.value if hasattr(task.schedule_type, "value") else str(task.schedule_type),
+            "schedule_type": task.schedule_type.value
+            if hasattr(task.schedule_type, "value")
+            else str(task.schedule_type),
             "cron": task.cron,
             "interval_seconds": task.interval_seconds,
             "run_at": task.run_at,
@@ -111,17 +114,25 @@ class SchedulerTaskRepository:
                 return None
             return _to_model(record)
 
-    async def list(self, company_id: str, filters: PlatformScheduleFilter) -> list[PlatformScheduledTask]:
+    async def list(
+        self, company_id: str, filters: PlatformScheduleFilter
+    ) -> list[PlatformScheduledTask]:
         session_factory = await get_session_factory(self._db_url)
         stmt = select(SchedulerTaskRecord).where(SchedulerTaskRecord.company_id == company_id)
         if filters.status is not None:
-            status_value = filters.status.value if hasattr(filters.status, "value") else str(filters.status)
+            status_value = (
+                filters.status.value if hasattr(filters.status, "value") else str(filters.status)
+            )
             stmt = stmt.where(SchedulerTaskRecord.status == status_value)
         if filters.target_service:
             stmt = stmt.where(SchedulerTaskRecord.target_service == filters.target_service)
         if filters.task_name:
             stmt = stmt.where(SchedulerTaskRecord.task_name == filters.task_name)
-        stmt = stmt.order_by(SchedulerTaskRecord.created_at.desc()).limit(filters.limit).offset(filters.offset)
+        stmt = (
+            stmt.order_by(SchedulerTaskRecord.created_at.desc())
+            .limit(filters.limit)
+            .offset(filters.offset)
+        )
 
         async with session_factory() as session:
             result = await session.execute(stmt)
@@ -130,9 +141,15 @@ class SchedulerTaskRepository:
 
     async def count(self, company_id: str, filters: PlatformScheduleFilter) -> int:
         session_factory = await get_session_factory(self._db_url)
-        stmt = select(func.count()).select_from(SchedulerTaskRecord).where(SchedulerTaskRecord.company_id == company_id)
+        stmt = (
+            select(func.count())
+            .select_from(SchedulerTaskRecord)
+            .where(SchedulerTaskRecord.company_id == company_id)
+        )
         if filters.status is not None:
-            status_value = filters.status.value if hasattr(filters.status, "value") else str(filters.status)
+            status_value = (
+                filters.status.value if hasattr(filters.status, "value") else str(filters.status)
+            )
             stmt = stmt.where(SchedulerTaskRecord.status == status_value)
         if filters.target_service:
             stmt = stmt.where(SchedulerTaskRecord.target_service == filters.target_service)
@@ -178,4 +195,4 @@ class SchedulerTaskRepository:
                 .values(**values)
             )
             await session.commit()
-            return result.rowcount > 0
+            return get_rowcount(result) > 0

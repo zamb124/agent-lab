@@ -7,6 +7,9 @@
  *
  * Backend:
  *   PATCH /crm/api/v1/entities/notes/{note_id}/analysis-draft → AIAnalysisDraftStored
+ *   DELETE /crm/api/v1/entities/notes/{note_id}/analysis-draft → сброс черновика
+ *   DELETE /crm/api/v1/entities/notes/{note_id}/analysis-error → сброс только ошибки apply
+ *   POST  /crm/api/v1/entities/notes/{note_id}/analysis-draft-repair → 202 TaskIQ (AI-починка черновика)
  *   POST  /crm/api/v1/tasks/note-analyze                       → TaskResponse (start_note_analyze)
  *   POST  /crm/api/v1/entities/voice-input                     → { text, stt }
  *   GET   /crm/api/v1/entities/search?q=&entity_type=note&search_mode= → CursorPage[Entity]
@@ -60,6 +63,7 @@ export const notesListResource = createCursorList({
     errorToastKey: 'crm:toast.notes_list.failed',
 });
 
+/** PATCH body: expected_version, remove_*, patch_entities, patch_relationships?, add_entities?, add_relationships?. */
 export const noteAnalysisDraftSaveOp = createAsyncOp({
     name: 'crm/note_analysis_draft_save',
     silent: true,
@@ -73,6 +77,84 @@ export const noteAnalysisDraftSaveOp = createAsyncOp({
             url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-draft`,
             body: payload.draft,
         });
+    },
+});
+
+export const noteAnalysisDraftDiscardOp = createAsyncOp({
+    name: 'crm/note_analysis_draft_discard',
+    silent: true,
+    restMirror: {
+        method: 'DELETE',
+        path: '/crm/api/v1/entities/notes/:note_id/analysis-draft',
+    },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.note_id !== 'string') {
+            throw new Error('noteAnalysisDraftDiscardOp: note_id required');
+        }
+        return await httpRequest({
+            method: 'DELETE',
+            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-draft`,
+        });
+    },
+});
+
+export const noteAnalysisErrorDismissOp = createAsyncOp({
+    name: 'crm/note_analysis_error_dismiss',
+    silent: true,
+    restMirror: {
+        method: 'DELETE',
+        path: '/crm/api/v1/entities/notes/:note_id/analysis-error',
+    },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.note_id !== 'string') {
+            throw new Error('noteAnalysisErrorDismissOp: note_id required');
+        }
+        return await httpRequest({
+            method: 'DELETE',
+            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-error`,
+        });
+    },
+});
+
+export const noteAnalysisDraftRepairOp = createAsyncOp({
+    name: 'crm/note_analysis_draft_repair',
+    silent: true,
+    restMirror: {
+        method: 'POST',
+        path: '/crm/api/v1/entities/notes/:note_id/analysis-draft-repair',
+    },
+    request: async ({ payload }) => {
+        if (!payload || typeof payload.note_id !== 'string') {
+            throw new Error('noteAnalysisDraftRepairOp: note_id required');
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: `/crm/api/v1/entities/notes/${encodeURIComponent(payload.note_id)}/analysis-draft-repair`,
+            body: {},
+        });
+    },
+    onSuccess: (ctx, _result, event) => {
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'success', i18n_key: 'crm:toast.note.draft_repair_queued' },
+            { causation_id: event.id },
+        );
+    },
+    onFailure: (ctx, err, event) => {
+        const code = err && err.body && err.body.detail && err.body.detail.code;
+        if (err && err.status === 409 && code === 'active_task_exists') {
+            ctx.dispatch(
+                CoreEvents.UI_TOAST_SHOW,
+                { type: 'warning', i18n_key: 'crm:toast.note.draft_repair_already_running' },
+                { causation_id: event.id },
+            );
+            return;
+        }
+        ctx.dispatch(
+            CoreEvents.UI_TOAST_SHOW,
+            { type: 'error', i18n_key: 'crm:toast.note.draft_repair_queue_failed' },
+            { causation_id: event.id },
+        );
     },
 });
 

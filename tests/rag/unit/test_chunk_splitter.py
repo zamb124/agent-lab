@@ -4,8 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from core.rag.chunking import fixed_token_chunks_match_legacy, split_parsed_document
-from core.rag_indexing_schema import IndexProfileSplitConfig
 from core.rag.parsed_document import ParsedBlock, ParsedDocument
+from core.rag_indexing_schema import IndexProfileSplitConfig
 
 # Первый импорт chonkie/tree-sitter + session autouse в unit/conftest может превысить дефолтный timeout.
 pytestmark = pytest.mark.timeout(120)

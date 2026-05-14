@@ -11,16 +11,17 @@ from typing import Any, Dict, List, Optional
 from pydantic import Field
 
 from core.models import StrictBaseModel
+
 from .enums import ChannelType, TriggerType
 
 
 class OutputAction(StrictBaseModel):
     """
     Действие отправки сообщения в канал.
-    
+
     Используется в trigger.output_actions для автоматической отправки
     после выполнения агента.
-    
+
     Пример (ответ в тот же чат, chat_id из триггера):
     {
         "channel": "telegram",
@@ -35,20 +36,20 @@ class OutputAction(StrictBaseModel):
         "condition": "@state:should_reply == true"
     }
     """
-    
+
     channel: ChannelType = Field(..., description="Тип канала (telegram, email, etc)")
     action: str = Field(..., description="Действие: send_message, send_photo, send_document")
-    
+
     mapping: Dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг параметров: param_name -> @state:field.path"
     )
-    
+
     config: Dict[str, Any] = Field(
         default_factory=dict,
         description="Статические параметры (parse_mode, etc)"
     )
-    
+
     condition: Optional[str] = Field(
         default=None,
         description="Условие выполнения: @state:field == value"
@@ -58,7 +59,7 @@ class OutputAction(StrictBaseModel):
 class ChannelNodeConfig(StrictBaseModel):
     """
     Конфигурация ChannelNode в графе агента.
-    
+
     Пример ноды:
     {
         "type": "channel",
@@ -74,10 +75,10 @@ class ChannelNodeConfig(StrictBaseModel):
         }
     }
     """
-    
+
     channel: ChannelType = Field(..., description="Тип канала")
     action: str = Field(default="send_message", description="Действие")
-    
+
     channel_config: Dict[str, Any] = Field(
         default_factory=dict,
         description="Параметры канала (bot_token для Telegram, smtp для Email)"

@@ -47,6 +47,7 @@ const PRIMARY_NAV = [
 ];
 
 const ORG_NAV = [
+    { route: 'suggests', icon: 'sparkle', label_key: 'sidebar.nav.suggests' },
     { route: 'access_requests', icon: 'lock', label_key: 'sidebar.nav.access_requests' },
     { route: 'namespace_imports', icon: 'ai', label_key: 'sidebar.nav.ai_analysis' },
     { route: 'settings', icon: 'settings', label_key: 'sidebar.nav.settings' },

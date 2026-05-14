@@ -7,11 +7,10 @@ from typing import Any, Dict, List, Optional
 
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
+from apps.flows_worker.broker import broker
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.tracing.context import set_current_trace_context
-
-from apps.flows_worker.broker import broker
 
 logger = get_logger(__name__)
 
@@ -34,9 +33,9 @@ async def process_flow_task(
 ):
     """
     Обрабатывает запрос через агента.
-    
+
     Делегирует выполнение в соответствующий канал (BaseChannel.process_task).
-    
+
     Args:
         flow_id: ID агента
         session_id: ID сессии
@@ -57,16 +56,16 @@ async def process_flow_task(
     """
     if context_data is None:
         raise ValueError("Context is required. Context must be created in middleware.")
-    
+
     if trace_context:
         set_current_trace_context(trace_context)
-    
+
     context = Context.from_dict(context_data)
     context.session_id = session_id
     set_context(context)
-    
+
     channel_instance = get_container().get_channel(channel, flow_id)
-    
+
     params = PreparedTaskParams(
         task_id=task_id or "",
         context_id=context_id or session_id,
@@ -79,5 +78,5 @@ async def process_flow_task(
         metadata=metadata,
         user_id=user_id,
     )
-    
+
     return await channel_instance.process_task(params)

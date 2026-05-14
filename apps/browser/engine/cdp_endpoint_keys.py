@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-
 LIGHTPANDA_COMPAT_ENDPOINT_KEYS: set[str] = {
     "lightpanda",
     "chromium",

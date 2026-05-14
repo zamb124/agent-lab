@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Tuple
 
 if TYPE_CHECKING:
     from apps.flows.src.eval.namespace import PythonNamespaceBuilder

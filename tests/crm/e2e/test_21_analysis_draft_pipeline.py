@@ -15,10 +15,10 @@ from apps.crm.models.api import AIAnalysisDraftStored, AIExtractedEntity
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError, EntityService
 
 
-
 async def _apply_note(crm_client, headers: dict, note_id: str):
     """Применяет черновик анализа заметки через /tasks/note-analyze с mode=apply."""
-    import asyncio, time
+    import asyncio
+    import time
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
         json={"note_id": note_id, "mode": "apply"},
@@ -48,7 +48,8 @@ async def _analyze_note(
 
     Возвращает (task_row, ai_analysis_draft).
     """
-    import asyncio, time
+    import asyncio
+    import time
     body = {"note_id": note_id, "check_duplicates": False, **extra}
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",

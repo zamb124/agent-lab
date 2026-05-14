@@ -6,15 +6,15 @@ State модуль - управление состоянием агентов.
 """
 
 # Основные модели из core.state (без warning, это нормальный реэкспорт)
-from core.state import ExecutionState, State, InterruptData, InterruptPathItem
+from core.state import ExecutionState, InterruptData, InterruptPathItem, State
 
 # Локальные компоненты
 from .interrupt_manager import InterruptManager
+from .node_files import collect_flow_node_files, validate_node_files_list
 from .persistence import (
     StateManager,
     create_initial_state,
 )
-from .node_files import collect_flow_node_files, validate_node_files_list
 
 __all__ = [
     # Модели (из core.state)

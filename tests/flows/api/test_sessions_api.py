@@ -4,9 +4,10 @@
 Используют реальную БД и HTTP клиент без моков.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
+from typing import Any, Dict
+
+import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.state import create_initial_state
@@ -22,7 +23,7 @@ def create_test_state(
 ) -> Dict[str, Any]:
     """
     Создает тестовый state для сессии.
-    
+
     Args:
         session_id: ID сессии (формат 'flow_id:context_id')
         user_id: ID пользователя
@@ -40,7 +41,7 @@ def create_test_state(
         session_id=session_id,
         branch_id=branch_id,
     )
-    
+
     # Добавляем сообщения
     from a2a.types import Message, Part, Role, TextPart
     messages = []
@@ -51,7 +52,7 @@ def create_test_state(
             parts=[Part(root=TextPart(text=first_message))],
             taskId=task_id,
         ))
-    
+
     # Добавляем дополнительные сообщения для message_count
     for i in range(max(0, message_count - (1 if first_message else 0))):
         role = Role.agent if i % 2 == 0 else Role.user
@@ -61,9 +62,9 @@ def create_test_state(
             parts=[Part(root=TextPart(text=f"Message {i+2}"))],
             taskId=task_id,
         ))
-    
+
     state.messages = messages
-    
+
     return state.model_dump()
 
 
@@ -79,7 +80,7 @@ class TestSessionsAPI:
         flow_id = f"flow_{unique_id}"
         user_id = f"user_{unique_id}"
         session_id = f"{flow_id}:context_{unique_id}"
-        
+
         state = create_test_state(
             session_id=session_id,
             user_id=user_id,
@@ -126,7 +127,7 @@ class TestSessionsAPI:
             user_id=target_user,
             flow_id=f"flow1_{unique_id}",
         )
-        
+
         state2 = create_test_state(
             session_id=session2_id,
             user_id=other_user,
@@ -165,7 +166,7 @@ class TestSessionsAPI:
             user_id=f"user1_{unique_id}",
             flow_id=target_flow,
         )
-        
+
         state2 = create_test_state(
             session_id=session2_id,
             user_id=f"user2_{unique_id}",
@@ -246,13 +247,13 @@ class TestSessionsAPI:
             user_id=base_user,
             flow_id=f"flow1_{unique_id}",
         )
-        
+
         state_in_range = create_test_state(
             session_id=session_in_range_id,
             user_id=base_user,
             flow_id=f"flow2_{unique_id}",
         )
-        
+
         state_new = create_test_state(
             session_id=session_new_id,
             user_id=base_user,
@@ -262,19 +263,20 @@ class TestSessionsAPI:
         await repo.set(session_old_id, state_old)
         await repo.set(session_in_range_id, state_in_range)
         await repo.set(session_new_id, state_new)
-        
+
         # Обновляем created_at напрямую в БД для тестирования фильтров по дате
         from sqlalchemy import update
+
         from apps.flows.src.db.models import States
-        
+
         key_old = repo._build_final_key(repo._get_key(session_old_id))
         key_in_range = repo._build_final_key(repo._get_key(session_in_range_id))
         key_new = repo._build_final_key(repo._get_key(session_new_id))
-        
+
         date_old = (now - timedelta(days=3)).replace(tzinfo=None)
         date_in_range = (now - timedelta(days=1, hours=12)).replace(tzinfo=None)
         date_new = now.replace(tzinfo=None)
-        
+
         async with container.storage._get_session() as session:
             await session.execute(
                 update(States)
@@ -323,7 +325,7 @@ class TestSessionsAPI:
             user_id=target_user,
             flow_id=target_flow,
         )
-        
+
         state2 = create_test_state(
             session_id=session2_id,
             user_id=target_user,
