@@ -15,12 +15,5 @@
         }
       }
     }
-  },
-  "s3": {
-    "buckets": {
-      "test-bucket": {
-        "enabled": false
-      }
-    }
   }
 }

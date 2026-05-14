@@ -7,17 +7,17 @@ from typing import Any
 
 import numpy as np
 import torch
-from core.logging import get_logger
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from core.config.models import ProviderLitserveInfraConfig
 from apps.provider_litserve.openai_server_contracts import (
     OpenAIEmbeddingsRequest,
     build_openai_embeddings_response,
     normalize_embedding_inputs,
 )
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
+from core.config.models import ProviderLitserveInfraConfig
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -40,6 +40,7 @@ def parse_embedding_body(raw: Any) -> dict[str, Any]:
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
     return {"model": b.model, "input": b.input}
+
 
 class LocalEmbeddingEngine:
     """SentenceTransformer; ответ совпадает с тем, что парсит ``EmbeddingService``."""
@@ -64,9 +65,22 @@ class LocalEmbeddingEngine:
                 "Локальный эмбеддер: установите зависимости (uv sync --group reranker-model)"
             ) from e
         _require_cuda_when_selected(self._device)
-        logger.info("Loading SentenceTransformer model '%s' on '%s'", hf_model_id, self._device)
+        use_bf16 = (
+            self._cfg.embedding_use_bf16
+            and self._device.startswith("cuda")
+            and torch.cuda.is_bf16_supported()
+        )
+        model_kwargs = {"torch_dtype": torch.bfloat16} if use_bf16 else {}
+        logger.info(
+            "Loading SentenceTransformer model '%s' on '%s' (bf16=%s)",
+            hf_model_id,
+            self._device,
+            use_bf16,
+        )
         started_at = time.monotonic()
-        model = SentenceTransformer(hf_model_id, device=self._device)
+        model = SentenceTransformer(
+            hf_model_id, device=self._device, model_kwargs=model_kwargs or None
+        )
         logger.info("Model '%s' loaded in %.2fs", hf_model_id, time.monotonic() - started_at)
         self._models[hf_model_id] = model
         return model

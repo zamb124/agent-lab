@@ -6,30 +6,22 @@ alwaysApply: false
 
 ## Окружения и провайдеры
 
-| Окружение | Провайдер | Endpoint | Bucket |
+| Окружение | Провайдер | Endpoint | Default bucket |
 |---|---|---|---|
-| Dev | MinIO | `http://localhost:19001` | `test-bucket` |
-| Test | MinIO | `http://minio-test:9000` (внутри контейнера) / `localhost:19002` (хост) | `test-bucket` |
-| Prod | VK Cloud | `https://hb.ru-msk.vkcloud-storage.ru` | `vkbucket` |
+| Dev | MinIO (docker-compose-dev) | `http://localhost:19001` | `files` |
+| Test | MinIO (docker-compose-test) | `http://minio-test:9000` (внутри контейнера) / `localhost:19002` (хост) | `test-bucket` |
+| Prod | Selectel S3 | `https://s3.ru-3.storage.selcloud.ru` | `shvedzilla` |
 
 Compose-конфиги MinIO — `docker-compose-{dev,test}.yaml`. Подробности — `docs/minio-setup.md`, `infrastructure.mdc`.
 
 ## Конфигурация
 
-`conf.json`:
+### Разделение ответственности конфигов
 
-```json
-{"s3": {
-  "enabled": true,
-  "default_bucket": "vkbucket",
-  "buckets": {
-    "test-bucket": {"provider":"minio", "access_key_id":"minioadmin", "secret_access_key":"minioadmin", "region_name":"us-east-1", "endpoint_url":"http://localhost:19001", "enabled":true},
-    "vkbucket":    {"provider":"vkcloud", "access_key_id":"...", "secret_access_key":"...", "region_name":"ru-msk", "endpoint_url":"https://hb.ru-msk.vkcloud-storage.ru", "enabled":true}
-  }
-}}
-```
-
-Локальный override — `conf.local.json` (мердж поверх базы): `s3.default_bucket` равен ключу из `s3.buckets` с MinIO-endpoint. ENV: `S3__DEFAULT_BUCKET`, `S3__BUCKETS__<KEY>__ENDPOINT_URL`, `S3__BUCKETS__<KEY>__{ACCESS_KEY_ID,SECRET_ACCESS_KEY}`.
+- **`conf.json`** — прод-конфиг (канон): `default_bucket: shvedzilla`, прод-бакет Selectel описан полностью (без секретов — ключи `SELECTEL_ACCESS_KEY` / `SELECTEL_SECRET_KEY` приходят через K8s Secret → ENV). `test-bucket` присутствует как заглушка с `enabled: false`.
+- **`conf.local.json`** — dev-override: `default_bucket: files`, оба dev-бакета (`files`, `test-bucket`) включены с `endpoint_url: http://127.0.0.1:19001`.
+- **K8s ENV** (`_helpers.tpl`): только секреты — `S3__BUCKETS__SHVEDZILLA__ACCESS_KEY_ID` / `S3__BUCKETS__SHVEDZILLA__SECRET_ACCESS_KEY`. Структура бакетов и `default_bucket` — только из `conf.json` через ConfigMap.
+- **Тесты** (`docker-compose-test.yaml`, `tests/fixtures/`): `S3__DEFAULT_BUCKET=test-bucket`, `S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL=http://minio-test:9000` (внутри контейнера) или `localhost:19002` (локальный запуск pytest).
 
 **`flows` и `flows_worker`** оба грузят `load_merged_config(service_name="flows")` и одинаковые `S3__…`. Разный эффективный endpoint/bucket между HTTP и worker → запись в одном MinIO, чтение в другом → в БД `file_id`, в S3 `NoSuchKey`. Тестовый MinIO на хосте задаётся только в `tests/fixtures/workers.py` для субпроцессов.
 

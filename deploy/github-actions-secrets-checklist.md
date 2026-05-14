@@ -52,6 +52,8 @@ bash deploy/scripts/kubeconfig-for-github-actions.sh
 
 ## 3. Опциональные (workflow допускает пустые)
 
+> **Примечание:** некоторые имена используют `__` (исторически, нотация pydantic), другие — `_`. Это разные реальные имена секретов в GitHub Settings — не переименовывать без синхронного обновления `deploy.yml` и `helm_platform_secrets_json.sh`.
+
 | Имя в GitHub |
 |---|
 | `HF_TOKEN` |

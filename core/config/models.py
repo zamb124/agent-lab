@@ -490,9 +490,7 @@ class STTProvidersConfig(BaseModel):
             "запускать batch-распознавание для partial."
         ),
     )
-    litserve: LitserveSpeechBackendConfig = Field(
-        default_factory=LitserveSpeechBackendConfig
-    )
+    litserve: LitserveSpeechBackendConfig = Field(default_factory=LitserveSpeechBackendConfig)
     cloud_ru: CloudRuSTTConfig = Field(default_factory=CloudRuSTTConfig)
     yandex: YandexSTTBackendConfig = Field(default_factory=YandexSTTBackendConfig)
     sber: SberSTTBackendConfig = Field(default_factory=SberSTTBackendConfig)
@@ -513,9 +511,7 @@ class TTSProvidersConfig(BaseModel):
     default_sample_rate: int = Field(default=24000, gt=0)
     chunk_max_chars: int = Field(default=100, ge=1)
     lookahead_tokens: int = Field(default=20, ge=0)
-    litserve: LitserveSpeechBackendConfig = Field(
-        default_factory=LitserveSpeechBackendConfig
-    )
+    litserve: LitserveSpeechBackendConfig = Field(default_factory=LitserveSpeechBackendConfig)
     cloud_ru: CloudRuTTSBackendConfig = Field(default_factory=CloudRuTTSBackendConfig)
     yandex: YandexTTSBackendConfig = Field(default_factory=YandexTTSBackendConfig)
     sber: SberTTSBackendConfig = Field(default_factory=SberTTSBackendConfig)
@@ -583,12 +579,8 @@ class VADProvidersConfig(BaseModel):
         ),
     )
 
-    litserve: LitserveSpeechBackendConfig = Field(
-        default_factory=LitserveSpeechBackendConfig
-    )
-    silero_local: LocalSileroVADBackendConfig = Field(
-        default_factory=LocalSileroVADBackendConfig
-    )
+    litserve: LitserveSpeechBackendConfig = Field(default_factory=LitserveSpeechBackendConfig)
+    silero_local: LocalSileroVADBackendConfig = Field(default_factory=LocalSileroVADBackendConfig)
 
 
 class VoiceDiagnosticsConfig(BaseModel):
@@ -613,10 +605,7 @@ class VoiceDiagnosticsConfig(BaseModel):
     uplink_dump_max_mb: int = Field(
         default=50,
         ge=1,
-        description=(
-            "Жёсткий лимит размера одного дампа (MB); записи поверх лимита "
-            "обрезаются."
-        ),
+        description=("Жёсткий лимит размера одного дампа (MB); записи поверх лимита обрезаются."),
     )
 
 
@@ -713,6 +702,7 @@ class ProxyConfig(BaseModel):
 
 class PaymentProviderConfigEntry(BaseModel):
     """Конфигурация одного платежного провайдера (для env-override через Pydantic)"""
+
     model_config = ConfigDict(extra="allow")
 
     provider_type: str = "yoomoney"
@@ -728,8 +718,12 @@ class PaymentProvidersConfig(BaseModel):
     """Конфигурация платежных провайдеров"""
 
     default_provider: Optional[str] = None
-    sync_enabled: bool = Field(default=False, description="Включена ли периодическая сверка транзакций")
-    sync_cron: str = Field(default="*/30 * * * *", description="Cron-расписание для сверки транзакций")
+    sync_enabled: bool = Field(
+        default=False, description="Включена ли периодическая сверка транзакций"
+    )
+    sync_cron: str = Field(
+        default="*/30 * * * *", description="Cron-расписание для сверки транзакций"
+    )
     providers: Dict[str, PaymentProviderConfigEntry] = Field(
         default_factory=dict, description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
     )
@@ -749,7 +743,7 @@ class EmbeddingApiConfig(BaseModel):
         default=None,
         gt=0,
         description="MRL-усечение: если задано, вектор обрезается до первых N измерений "
-                    "и L2-нормализуется перед сохранением. Совпадение с dimension — плотный вектор без паддинга.",
+        "и L2-нормализуется перед сохранением. Совпадение с dimension — плотный вектор без паддинга.",
     )
 
 
@@ -985,9 +979,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
             raise ValueError("TTS silero_bundle: не может быть пустым")
         if s not in SILERO_TTS_RU_V5_BUNDLES:
             allowed = ", ".join(sorted(SILERO_TTS_RU_V5_BUNDLES))
-            raise ValueError(
-                f"TTS silero_bundle={v!r} не из поддерживаемых русских v5: {allowed}"
-            )
+            raise ValueError(f"TTS silero_bundle={v!r} не из поддерживаемых русских v5: {allowed}")
         return s
 
     @field_validator("synthesis_locale", mode="before")
@@ -996,7 +988,9 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         if v is None:
             return None
         if not isinstance(v, str):
-            raise ValueError(f"TTS synthesis_locale: ожидалась str или None, получено {type(v).__name__}")
+            raise ValueError(
+                f"TTS synthesis_locale: ожидалась str или None, получено {type(v).__name__}"
+            )
         s = v.strip().lower()
         if s == "":
             return None
@@ -1162,6 +1156,15 @@ class ProviderLitserveInfraConfig(BaseModel):
     use_fp16: bool = True
     use_bf16: bool = False
     normalize_scores: bool = True
+
+    embedding_use_bf16: bool = Field(
+        default=True,
+        description=(
+            "Загружать SentenceTransformer (embedding) в bfloat16 вместо fp32. "
+            "Экономит ~50%% VRAM (2.3 GB → ~1.2 GB) при незначительном изменении точности. "
+            "Требует CUDA и поддержки bf16 картой (Ampere+). При cpu-девайсе игнорируется."
+        ),
+    )
 
     embedding_model_id: str = "Qwen/Qwen3-Embedding-0.6B"
     embedding_openai_model_id: str = "qwen/qwen3-embedding-0.6b"

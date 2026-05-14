@@ -87,6 +87,8 @@ spec:
               value: {{ .Values.litserve.ttsDefaultApiModelId | quote }}
             - name: PROVIDER_LITSERVE__INFRA__VAD_DEFAULT_API_MODEL_ID
               value: {{ .Values.litserve.vadDefaultApiModelId | quote }}
+            - name: PROVIDER_LITSERVE__INFRA__EMBEDDING_USE_BF16
+              value: {{ .Values.litserve.embeddingUseBf16 | default "true" | quote }}
             - name: HF_HOME
               value: /root/.cache/huggingface
             - name: HF_TOKEN
