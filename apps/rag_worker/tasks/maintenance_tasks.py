@@ -219,7 +219,11 @@ async def rag_cleanup_expired_documents_tick(
     retry_on_error=True,
     max_retries=2,
 )
-async def rag_reembed_stale_documents_tick(scheduler_task_id: str) -> Dict[str, Any]:
+async def rag_reembed_stale_documents_tick(
+    scheduler_task_id: str,
+    company_id: str | None = None,
+) -> Dict[str, Any]:
+    _ = company_id
     return await execute_reembed_tick(
         container=get_rag_container(),
         channel="rag_worker",
@@ -233,13 +237,17 @@ async def rag_reembed_stale_documents_tick(scheduler_task_id: str) -> Dict[str, 
     retry_on_error=True,
     max_retries=2,
 )
-async def rag_cleanup_orphan_company_chunks_tick(scheduler_task_id: str) -> Dict[str, Any]:
+async def rag_cleanup_orphan_company_chunks_tick(
+    scheduler_task_id: str,
+    company_id: str | None = None,
+) -> Dict[str, Any]:
     """
     Батчево удаляет ``vector_documents`` без ``company_id`` (NULL/'').
 
     Такие строки осиротевшие — биллинг и поиск по тенанту невозможны; они появляются
     исторически (legacy) и подлежат удалению. reembed-тик их не обрабатывает.
     """
+    _ = company_id
     if not scheduler_task_id or not scheduler_task_id.strip():
         raise ValueError("rag_cleanup_orphan_company_chunks_tick: scheduler_task_id обязателен")
     settings = get_settings()

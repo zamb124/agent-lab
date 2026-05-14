@@ -150,6 +150,26 @@
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
       key: selectel-secret-key
+- name: S3__BUCKETS__FILES__ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: selectel-access-key
+- name: S3__BUCKETS__FILES__SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.platformSecretName }}
+      key: selectel-secret-key
+- name: S3__BUCKETS__FILES__PROVIDER
+  value: aws
+- name: S3__BUCKETS__FILES__REGION_NAME
+  value: ru-3
+- name: S3__BUCKETS__FILES__ENDPOINT_URL
+  value: https://s3.ru-3.storage.selcloud.ru
+- name: S3__BUCKETS__FILES__BUCKET_NAME
+  value: shvedzilla
+- name: S3__BUCKETS__FILES__ENABLED
+  value: "true"
 - name: PUSH__ENABLED
   value: "true"
 - name: PUSH__VAPID_PUBLIC_KEY
