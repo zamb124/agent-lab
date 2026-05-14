@@ -2,7 +2,7 @@
 Полное имя образа.
 */}}
 {{- define "agentlab.image" -}}
-{{- printf "%s:%s" .Values.image.repository (required "agent-lab Helm: задайте image.tag (не используйте подстановку из Chart.AppVersion)" .Values.image.tag) -}}
+{{- printf "%s:%s" .Values.image.repository ((required "agent-lab Helm: задайте image.tag (не используйте подстановку из Chart.AppVersion)" .Values.image.tag) | toString) -}}
 {{- end -}}
 
 {{/*
