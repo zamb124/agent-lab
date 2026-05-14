@@ -56,6 +56,7 @@ import {
 } from '../events/resources/entities.resource.js';
 import {
     notesListResource,
+    noteLatestRangeOp,
     noteAnalysisDraftDiscardOp,
     noteAnalysisDraftRepairOp,
     noteAnalysisDraftSaveOp,
@@ -283,6 +284,7 @@ export class CRMApp extends PlatformApp {
         entityCreateForm,
         entityEditForm,
         notesListResource,
+        noteLatestRangeOp,
         noteAnalysisDraftSaveOp,
         noteAnalysisDraftDiscardOp,
         noteAnalysisErrorDismissOp,

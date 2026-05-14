@@ -548,15 +548,33 @@ export const fieldPillStyles = css`
 
     .field-pill-enum-chevron {
         position: absolute;
-        pointer-events: none;
+        pointer-events: auto;
         top: 50%;
         transform: translateY(-50%);
         right: var(--space-2);
         width: 12px;
         height: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background-color: transparent;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2371717a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-position: center;
+        cursor: pointer;
+    }
+
+    .field-pill-enum-chevron:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    .field-pill-enum-chevron:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
     }
 
     :host-context([data-theme='light']) .field-pill-enum-chevron {

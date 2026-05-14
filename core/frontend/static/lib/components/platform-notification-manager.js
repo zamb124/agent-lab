@@ -17,6 +17,7 @@ import { html, css, render as litRender } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
+import { translate } from '../events/effects/i18n.effect.js';
 import './platform-icon.js';
 
 const PANEL_WIDTH = 360;
@@ -72,10 +73,40 @@ function _ensurePanelStyles() {
             font-size: var(--text-sm);
             font-weight: var(--font-semibold);
             color: var(--text-primary);
+            overflow-wrap: anywhere;
         }
         .platform-notif-portal__item-message {
             font-size: var(--text-xs);
             color: var(--text-secondary);
+            overflow-wrap: anywhere;
+        }
+        .platform-notif-portal__item-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            margin-top: var(--space-2);
+        }
+        .platform-notif-portal__item-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 28px;
+            max-width: 100%;
+            padding: 0 var(--space-3);
+            border-radius: var(--radius-full);
+            border: 1px solid var(--glass-border-medium);
+            background: var(--glass-solid-medium);
+            color: var(--accent);
+            font-size: var(--text-xs);
+            font-weight: var(--font-medium);
+            text-decoration: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .platform-notif-portal__item-link:hover {
+            border-color: var(--accent);
+            background: var(--glass-tint-medium);
         }
         .platform-notif-portal__item-meta {
             font-size: 10px;
@@ -231,13 +262,98 @@ export class PlatformNotificationManager extends PlatformElement {
 
     _onItemClick(item) {
         this.dispatch(NOTIFICATIONS_EVENTS.READ, { id: item.id });
-        if (item.action_url) {
-            window.location.href = item.action_url;
+        const href = this._safeHref(item.action_url);
+        if (href) {
+            window.location.href = href;
         }
+    }
+
+    _onActionClick(event, item) {
+        event.stopPropagation();
+        this.dispatch(NOTIFICATIONS_EVENTS.READ, { id: item.id });
+        this._panelOpen = false;
     }
 
     _dismissAll() {
         this.dispatch(NOTIFICATIONS_EVENTS.DISMISS_ALL, null);
+    }
+
+    _splitQualifiedKey(raw) {
+        if (typeof raw !== 'string' || raw.length === 0) return null;
+        const [nsOrKey, ...rest] = raw.split(':');
+        if (rest.length === 0) return { key: raw, namespace: undefined };
+        return { key: rest.join(':'), namespace: nsOrKey };
+    }
+
+    _translateKey(raw, vars) {
+        const parsed = this._splitQualifiedKey(raw);
+        if (!parsed) return '';
+        const state = this.bus.getState().i18n;
+        return translate(state, parsed.key, vars || undefined, parsed.namespace);
+    }
+
+    _looksLikeI18nKey(value) {
+        return typeof value === 'string'
+            && /^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+|\.[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/i.test(value);
+    }
+
+    _resolveNotifText(item, field) {
+        const text = typeof item[field] === 'string' ? item[field] : '';
+        const key = typeof item[`${field}_i18n_key`] === 'string' ? item[`${field}_i18n_key`] : '';
+        const vars = item[`${field}_i18n_vars`] || item.data || undefined;
+        if (key.length > 0) {
+            const resolved = this._translateKey(key, vars);
+            if (resolved.length > 0 && resolved !== key) return resolved;
+            return text || resolved;
+        }
+        if (this._looksLikeI18nKey(text)) {
+            const resolved = this._translateKey(text, vars);
+            if (resolved !== text) return resolved;
+        }
+        return text;
+    }
+
+    _safeHref(raw) {
+        if (typeof raw !== 'string') return '';
+        const href = raw.trim();
+        if (href.length === 0) return '';
+        if (href.startsWith('/') || href.startsWith('#')) return href;
+        if (/^https?:\/\//i.test(href)) return href;
+        return '';
+    }
+
+    _resolveActionLabel(action) {
+        const key = typeof action.label_i18n_key === 'string' ? action.label_i18n_key : '';
+        const vars = action.label_i18n_vars || action.data || undefined;
+        if (key.length > 0) {
+            const resolved = this._translateKey(key, vars);
+            if (resolved.length > 0 && resolved !== key) return resolved;
+        }
+        if (typeof action.label === 'string' && action.label.trim().length > 0) {
+            return action.label.trim();
+        }
+        return this.t('notifications.open');
+    }
+
+    _notificationActions(item) {
+        const out = [];
+        const seen = new Set();
+        const add = (raw) => {
+            if (!raw || typeof raw !== 'object') return;
+            const href = this._safeHref(raw.url || raw.href || raw.action_url);
+            if (!href || seen.has(href)) return;
+            seen.add(href);
+            out.push({ ...raw, href, label: this._resolveActionLabel(raw) });
+        };
+        if (Array.isArray(item.actions)) {
+            for (const action of item.actions) add(action);
+        }
+        add({
+            url: item.action_url,
+            label: item.action_label,
+            label_i18n_key: item.action_label_i18n_key,
+        });
+        return out;
     }
 
     _renderPortal() {
@@ -258,14 +374,30 @@ export class PlatformNotificationManager extends PlatformElement {
             </div>
             ${list.length === 0
                 ? html`<div class="platform-notif-portal__empty">${empty}</div>`
-                : list.map((n) => html`
-                    <div class="platform-notif-portal__item"
-                         @click=${() => this._onItemClick(n)}>
-                        ${n.title ? html`<div class="platform-notif-portal__item-title">${n.title}</div>` : ''}
-                        ${n.message ? html`<div class="platform-notif-portal__item-message">${n.message}</div>` : ''}
-                        <div class="platform-notif-portal__item-meta">${n.scope}/${n.kind}</div>
-                    </div>
-                `)}
+                : list.map((n) => {
+                    const titleText = this._resolveNotifText(n, 'title');
+                    const messageText = this._resolveNotifText(n, 'message');
+                    const actions = this._notificationActions(n);
+                    return html`
+                        <div class="platform-notif-portal__item"
+                             @click=${() => this._onItemClick(n)}>
+                            ${titleText ? html`<div class="platform-notif-portal__item-title">${titleText}</div>` : ''}
+                            ${messageText ? html`<div class="platform-notif-portal__item-message">${messageText}</div>` : ''}
+                            ${actions.length > 0 ? html`
+                                <div class="platform-notif-portal__item-actions">
+                                    ${actions.map((action) => html`
+                                        <a class="platform-notif-portal__item-link"
+                                           href=${action.href}
+                                           @click=${(event) => this._onActionClick(event, n)}>
+                                            ${action.label}
+                                        </a>
+                                    `)}
+                                </div>
+                            ` : ''}
+                            <div class="platform-notif-portal__item-meta">${n.scope}/${n.kind}</div>
+                        </div>
+                    `;
+                })}
         `;
         litRender(tpl, this._portal);
     }

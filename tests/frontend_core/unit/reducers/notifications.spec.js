@@ -10,15 +10,26 @@ describe('notificationsReducer', () => {
     });
 
     it('любое notify/* добавляется в inbox', () => {
-        const next = notificationsReducer(initialNotificationsState, ev('notify/sync/sync_new_message_received', { title: 'Hi', message: 'hello', action_url: '/sync', data: { x: 1 } }, 555));
+        const next = notificationsReducer(initialNotificationsState, ev('notify/sync/sync_new_message_received', {
+            title: 'Hi',
+            message: 'hello',
+            title_i18n_key: 'sync:notifications.message_title',
+            message_i18n_key: 'sync:notifications.message_body',
+            action_url: '/sync',
+            actions: [{ label: 'Open channel', url: '/sync?channel=c1' }],
+            data: { x: 1 },
+        }, 555));
         expect(next.list).toHaveLength(1);
         expect(next.list[0]).toMatchObject({
             scope: 'sync',
             kind: 'sync_new_message',
             title: 'Hi',
             message: 'hello',
+            title_i18n_key: 'sync:notifications.message_title',
+            message_i18n_key: 'sync:notifications.message_body',
             ts: 555,
             action_url: '/sync',
+            actions: [{ label: 'Open channel', url: '/sync?channel=c1' }],
             read: false,
         });
         expect(next.unread).toBe(1);

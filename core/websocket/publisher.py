@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -46,16 +46,33 @@ class NotificationType(StrEnum):
     FLOWS_OPERATOR_TASKS_UPDATED = "flows_operator_tasks_updated"
 
 
+class NotificationAction(BaseModel):
+    """Структурированная ссылка/действие внутри уведомления."""
+
+    label: str = ""
+    url: str
+    label_i18n_key: Optional[str] = None
+    label_i18n_vars: Dict[str, Any] = Field(default_factory=dict)
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
 class Notification(BaseModel):
     """Уведомление для пользователя — превращается в UIEvent + опционально push."""
 
     type: NotificationType
     title: str
     message: str
+    title_i18n_key: Optional[str] = None
+    title_i18n_vars: Dict[str, Any] = Field(default_factory=dict)
+    message_i18n_key: Optional[str] = None
+    message_i18n_vars: Dict[str, Any] = Field(default_factory=dict)
     data: Dict[str, Any] = Field(default_factory=dict)
     service: str
     priority: str = "normal"
     action_url: Optional[str] = None
+    action_label: Optional[str] = None
+    action_label_i18n_key: Optional[str] = None
+    actions: List[NotificationAction] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -77,9 +94,16 @@ async def notify_user(user_id: str, notification: Notification) -> None:
     payload = {
         "title": notification.title,
         "message": notification.message,
+        "title_i18n_key": notification.title_i18n_key,
+        "title_i18n_vars": notification.title_i18n_vars,
+        "message_i18n_key": notification.message_i18n_key,
+        "message_i18n_vars": notification.message_i18n_vars,
         "data": notification.data,
         "priority": notification.priority,
         "action_url": notification.action_url,
+        "action_label": notification.action_label,
+        "action_label_i18n_key": notification.action_label_i18n_key,
+        "actions": [action.model_dump() for action in notification.actions],
         "created_at": notification.created_at.isoformat(),
         "service": notification.service,
         "kind": notification.type.value,

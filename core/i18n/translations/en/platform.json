@@ -2,7 +2,8 @@
     "notifications": {
         "title": "Notifications",
         "dismiss_all": "Clear all",
-        "empty": "No notifications yet"
+        "empty": "No notifications yet",
+        "open": "Open"
     },
     "audio_player": {
         "transcribe_aria": "Transcribe",

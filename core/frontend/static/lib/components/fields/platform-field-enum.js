@@ -199,6 +199,25 @@ export class PlatformFieldEnum extends PlatformElement {
         this._deferOptionFilter = true;
     }
 
+    /** @param {MouseEvent} e */
+    _onChevronMouseDown(e) {
+        e.preventDefault();
+    }
+
+    /** @param {MouseEvent} e */
+    _onChevronClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.disabled) return;
+        this._listOpen = true;
+        this._deferOptionFilter = true;
+        const input = this.renderRoot.querySelector('input.field-pill-enum-input');
+        if (input instanceof HTMLInputElement) {
+            input.focus();
+        }
+        this.requestUpdate();
+    }
+
     /** @param {FocusEvent & { relatedTarget?: EventTarget | null }} e */
     _onBlur() {
         window.setTimeout(() => {
@@ -325,7 +344,16 @@ export class PlatformFieldEnum extends PlatformElement {
                     @blur=${this._onBlur}
                     @keydown=${this._onFilterKeydown}
                 />
-                <span class="field-pill-enum-chevron" aria-hidden="true"></span>
+                <button
+                    class="field-pill-enum-chevron"
+                    type="button"
+                    aria-label=${ariaList}
+                    aria-controls=${this._listDomId}
+                    aria-expanded=${this._listOpen && !this.disabled ? 'true' : 'false'}
+                    ?disabled=${this.disabled}
+                    @mousedown=${this._onChevronMouseDown}
+                    @click=${this._onChevronClick}
+                ></button>
                 ${this._listOpen && !this.disabled
                     ? html`
                           <ul

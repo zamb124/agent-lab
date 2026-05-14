@@ -54,6 +54,13 @@
         "title": "Workspace",
         "all": "All workspaces"
     },
+    "notifications": {
+        "period_summary_range_clamped_title": "Summary period was shortened",
+        "period_summary_range_clamped_message": "The requested {requested_days}-day period exceeds the {max_days}-day limit; the summary was built for the available range.",
+        "daily_summary_updated_title": "Daily Summary updated",
+        "daily_summary_updated_message": "Summary updated for {date}",
+        "open_crm": "Open CRM"
+    },
     "entity_modal": {
         "header_create": "New entity",
         "header_create_with_type": "New entity · {type}",
@@ -893,6 +900,14 @@
         "drag_hint": "Drag task",
         "collapse_column": "Collapse column",
         "expand_column": "Expand column",
+        "view_mode": "Task view mode",
+        "view_board": "Board",
+        "view_table": "Table",
+        "table_name": "Name",
+        "table_description": "Description",
+        "table_status": "Status",
+        "table_priority": "Priority",
+        "table_date": "Date",
         "board_syncing": "Saving task status",
         "board_blocked": "Board is not available in this mode",
         "board_stages_failed": "Failed to load board stages",
@@ -908,6 +923,13 @@
         "delete_entity_confirm": "Delete \"{{name}}\"? Relationships and attachments will be removed permanently.",
         "delete_entity_tooltip": "Delete entity",
         "drag_merge_handle": "Drag onto another card to merge",
+        "view_mode": "Entity view mode",
+        "view_cards": "Cards",
+        "view_table": "Table",
+        "table_name": "Name",
+        "table_description": "Description",
+        "table_type": "Object type",
+        "table_created_at": "Created",
         "status_active": "Active",
         "status_archived": "Archived"
     },

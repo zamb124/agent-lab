@@ -3,6 +3,7 @@
  *
  * Источники данных (только helpers, никаких прямых импортов resource-объектов):
  *   - useCursorList('crm/notes_list')   — лента заметок за выбранный диапазон дат
+ *   - useOp('crm/note_latest_range')    — стартовый диапазон по последним 50 заметкам
  *   - useOp('crm/note_search')          — текстовый/семантический поиск по заметкам
  *   - useOp('crm/daily_summary')        — AI-сводка одного дня
  *   - useOp('crm/period_summary')       — AI-сводка диапазона
@@ -60,6 +61,12 @@ function _formatIsoDate(d) {
 
 function _today() {
     return _formatIsoDate(new Date());
+}
+
+function _tomorrow() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return _formatIsoDate(d);
 }
 
 function _formatHHMM(date) {
@@ -121,6 +128,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 flex: 1;
                 min-height: 0;
                 overflow: hidden;
+                --crm-list-card-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+                --crm-list-card-bg-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
             }
 
             .main-column {
@@ -198,31 +207,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 outline: none;
             }
 
-            .search-voice-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 28px;
-                height: 28px;
-                border: none;
-                background: transparent;
-                color: var(--text-tertiary);
-                cursor: pointer;
-                border-radius: var(--radius-full);
-                flex-shrink: 0;
-            }
-            .search-voice-btn:hover { background: var(--glass-tint-medium); color: var(--text-primary); }
-            .search-voice-btn.recording {
-                background: var(--color-danger, #ef4444);
-                color: white;
-                animation: searchVoicePulse 1.4s ease-in-out infinite;
-            }
-            .search-voice-btn:disabled { opacity: 0.5; cursor: wait; }
-            @keyframes searchVoicePulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.55; }
-            }
-
             .date-input {
                 min-width: 180px;
                 --platform-date-picker-labeled-bg: var(--crm-surface-muted);
@@ -298,8 +282,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             }
 
             .note-card {
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface);
+                border: none;
+                background: var(--crm-list-card-bg);
                 border-radius: 16px;
                 padding: 20px;
                 display: flex;
@@ -310,11 +294,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 box-sizing: border-box;
                 overflow: hidden;
                 cursor: pointer;
-                transition: border-color var(--duration-fast), background var(--duration-fast);
+                transition: background var(--duration-fast);
             }
             .note-card:hover {
-                border-color: var(--crm-stroke-strong);
-                background: var(--crm-surface-elevated);
+                background: var(--crm-list-card-bg-hover);
             }
 
             .note-tags {
@@ -574,6 +557,12 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 flex-wrap: wrap;
                 gap: var(--space-2);
                 margin-top: var(--space-3);
+                max-height: 176px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding-right: var(--space-1);
+                flex: 0 0 auto;
+                overscroll-behavior: contain;
             }
             .summary-chip {
                 display: inline-flex;
@@ -586,6 +575,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 color: var(--text-primary);
                 border: none;
                 font-weight: var(--font-medium);
+                max-width: 100%;
             }
             .summary-chip.cyan { background: var(--crm-summary-chip-cyan-bg); }
             .summary-chip.orange { background: var(--crm-summary-chip-orange-bg); }
@@ -729,6 +719,12 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                     border: 1px solid var(--crm-stroke);
                     border-radius: var(--radius-xl);
                 }
+                .summary-tags {
+                    max-height: 156px;
+                }
+                .summary-chip {
+                    padding: 6px 12px;
+                }
             }
 
             .search-mode-toggle {
@@ -800,6 +796,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._isMobile = typeof window !== 'undefined' && window.innerWidth <= 767;
 
         this._notes = this.useCursorList('crm/notes_list');
+        this._latestRange = this.useOp('crm/note_latest_range');
         this._search = this.useOp('crm/note_search');
         this._dailySummary = this.useOp('crm/daily_summary');
         this._periodSummary = this.useOp('crm/period_summary');
@@ -818,6 +815,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._debounceTimer = null;
         this._mediaRecorder = null;
         this._audioChunks = [];
+        this._latestRangeBootstrapped = false;
     }
 
     connectedCallback() {
@@ -835,9 +833,9 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         }
 
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
+            this._latestRangeBootstrapped = false;
             this._loadEntityTypesCatalog();
-            this._reloadNotes();
-            this._reloadSummary();
+            this._bootstrapLatestNotesRange();
         });
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => {
             if (this._routeKeySel.value !== 'notes') {
@@ -899,10 +897,10 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 this._loadCardsForVisibleNotes(items);
             }
         });
+        this.useEvent('crm/note_latest_range/succeeded', (event) => this._onLatestRangeLoaded(event));
 
         this._loadEntityTypesCatalog();
-        this._reloadNotes();
-        this._reloadSummary();
+        this._bootstrapLatestNotesRange();
         this._loadAnalyzeTasks();
     }
 
@@ -942,6 +940,42 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     }
 
     _isPeriod() { return this._dailyNotesUi.value.range.from !== this._dailyNotesUi.value.range.to; }
+
+    _bootstrapLatestNotesRange() {
+        const payload = {};
+        const ns = this._currentNamespace();
+        if (typeof ns === 'string' && ns.length > 0) payload.namespace = ns;
+        const sub = this._noteSubtypeFromLocationSearch();
+        if (sub.length > 0) {
+            payload.entity_subtype = sub;
+        }
+        this._latestRange.run(payload);
+    }
+
+    _onLatestRangeLoaded(event) {
+        if (this._latestRangeBootstrapped) return;
+        const causationId = event.meta && typeof event.meta.causation_id === 'string' ? event.meta.causation_id : null;
+        if (causationId === null || causationId.length === 0) {
+            throw new Error('crm/note_latest_range/succeeded: causation_id required');
+        }
+        const expectedId = this._latestRange.op.selectors.lastRequestId(this.bus.getState());
+        if (typeof expectedId !== 'string' || expectedId.length === 0) {
+            throw new Error('crm/note_latest_range/succeeded: slice lastRequestId missing');
+        }
+        if (causationId !== expectedId) return;
+        const result = event.payload && event.payload.result;
+        const items = result && Array.isArray(result.items) ? result.items : [];
+        const noteDates = items
+            .map((item) => (item && typeof item.note_date === 'string' ? item.note_date : ''))
+            .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
+        const from = noteDates.length > 0
+            ? noteDates.reduce((earliest, value) => (value < earliest ? value : earliest), noteDates[0])
+            : _today();
+        this._latestRangeBootstrapped = true;
+        this._dailyNotesUi.setRange({ from, to: _tomorrow() });
+        this._reloadNotes();
+        this._reloadSummary();
+    }
 
     _reloadNotes() {
         const filters = {
@@ -1619,20 +1653,6 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 .value=${this._query}
                 @input=${this._onSearchInput}
             />
-            <button
-                type="button"
-                class="search-voice-btn ${this._voiceMode === 'search' && this._voiceState === 'recording' ? 'recording' : ''}"
-                title=${this._voiceMode === 'search' && this._voiceState === 'recording'
-                    ? this.t('daily_notes_page.voice_search_stop')
-                    : this.t('daily_notes_page.voice_search_start')}
-                ?disabled=${this._voiceState === 'processing'}
-                @click=${(e) => { e.preventDefault(); this._onVoiceSearchToggle(); }}
-            >
-                <platform-icon
-                    name=${this._voiceMode === 'search' && this._voiceState === 'recording' ? 'square' : 'microphone'}
-                    size="14"
-                ></platform-icon>
-            </button>
             ${includeSearchModeToggle && this._query.trim().length > 0 ? html`
                 <div class="search-mode-toggle">
                     ${SEARCH_MODES.map((mode) => html`

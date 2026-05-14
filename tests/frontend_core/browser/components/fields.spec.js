@@ -374,6 +374,34 @@ describe('platform-field-enum', () => {
         const ev = await p;
         expect(ev.detail.value).to.equal('b');
     });
+
+    it('edit: chevron после выбора открывает полный список без очистки текста', async () => {
+        const el = await fixture(html`
+            <platform-field-enum
+                mode="edit"
+                value="a"
+                .config=${{ values: [{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }] }}
+            ></platform-field-enum>
+        `);
+        const inp = el.shadowRoot.querySelector('input.field-pill-enum-input');
+        inp.focus();
+        await elementUpdated(el);
+        inp.value = 'Bet';
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        await elementUpdated(el);
+        const change = oneEvent(el, 'change');
+        el.shadowRoot.querySelector('[data-enum-value="b"]').click();
+        await change;
+        await elementUpdated(el);
+
+        const chevron = el.shadowRoot.querySelector('.field-pill-enum-chevron');
+        chevron.click();
+        await elementUpdated(el);
+
+        const values = Array.from(el.shadowRoot.querySelectorAll('[data-enum-value]'))
+            .map((li) => li.getAttribute('data-enum-value'));
+        expect(values).to.deep.equal(['', 'a', 'b']);
+    });
 });
 
 describe('platform-field-boolean / date / array / object: smoke', () => {

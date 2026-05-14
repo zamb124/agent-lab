@@ -4,7 +4,7 @@
  * добавляется в inbox.
  *
  * state.notifications:
- *   list:   Array<{ id, type, scope, kind, title, message, ts, action_url, data }>
+ *   list:   Array<{ id, type, scope, kind, title, message, ts, action_url, actions, data }>
  *   unread: number
  */
 
@@ -38,8 +38,15 @@ export function notificationsReducer(state = initialNotificationsState, event) {
             kind,
             title: p.title || '',
             message: p.message || '',
+            title_i18n_key: p.title_i18n_key || null,
+            title_i18n_vars: p.title_i18n_vars || null,
+            message_i18n_key: p.message_i18n_key || null,
+            message_i18n_vars: p.message_i18n_vars || null,
             ts: event.meta.ts,
             action_url: p.action_url || null,
+            action_label: p.action_label || '',
+            action_label_i18n_key: p.action_label_i18n_key || null,
+            actions: Array.isArray(p.actions) ? p.actions : [],
             data: p.data || {},
             read: false,
         };

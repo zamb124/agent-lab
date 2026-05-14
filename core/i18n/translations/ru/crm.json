@@ -54,6 +54,13 @@
         "title": "Пространство",
         "all": "Все пространства"
     },
+    "notifications": {
+        "period_summary_range_clamped_title": "Период сводки сокращён",
+        "period_summary_range_clamped_message": "Запрошенный период {requested_days} дн. превышает лимит {max_days} дн.; сводка построена по доступному диапазону.",
+        "daily_summary_updated_title": "Daily Summary обновлён",
+        "daily_summary_updated_message": "Обновлена сводка за {date}",
+        "open_crm": "Открыть CRM"
+    },
     "entity_modal": {
         "header_create": "Новая сущность",
         "header_create_with_type": "Новая сущность · {type}",
@@ -893,6 +900,14 @@
         "drag_hint": "Перетащить задачу",
         "collapse_column": "Свернуть колонку",
         "expand_column": "Развернуть колонку",
+        "view_mode": "Режим отображения задач",
+        "view_board": "Доска",
+        "view_table": "Таблица",
+        "table_name": "Название",
+        "table_description": "Описание",
+        "table_status": "Статус",
+        "table_priority": "Приоритет",
+        "table_date": "Дата",
         "board_syncing": "Сохранение статуса задачи",
         "board_blocked": "Доска недоступна в этом режиме",
         "board_stages_failed": "Не удалось загрузить стадии доски",
@@ -908,6 +923,13 @@
         "delete_entity_confirm": "Удалить «{{name}}»? Связи и вложения будут удалены безвозвратно.",
         "delete_entity_tooltip": "Удалить сущность",
         "drag_merge_handle": "Перетащите на другую карточку для слияния",
+        "view_mode": "Режим отображения сущностей",
+        "view_cards": "Карточки",
+        "view_table": "Таблица",
+        "table_name": "Название",
+        "table_description": "Описание",
+        "table_type": "Тип объекта",
+        "table_created_at": "Дата создания",
         "status_active": "Активные",
         "status_archived": "Архивные"
     },

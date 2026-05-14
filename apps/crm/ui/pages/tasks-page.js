@@ -18,7 +18,9 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/layout/page-header.js';
+import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
+import { readCrmListViewMode, writeCrmListViewMode } from '../utils/crm-list-view-mode-preference.js';
 
 const TASK_DND_MIME = 'application/x-crm-task-id';
 
@@ -40,6 +42,7 @@ export class CRMTasksPage extends CRMNamespacePage {
         _boardStages: { state: true },
         _boardKey: { state: true },
         _collapsedStatusIds: { state: true },
+        _viewMode: { state: true },
     };
 
     static styles = [
@@ -102,6 +105,42 @@ export class CRMTasksPage extends CRMNamespacePage {
                 align-items: center;
                 gap: var(--space-2);
                 flex-shrink: 0;
+            }
+
+            .view-toggle {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 2px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-full);
+                background: var(--crm-surface-muted);
+                flex-shrink: 0;
+            }
+
+            .view-toggle-btn {
+                width: 34px;
+                height: 34px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: none;
+                border-radius: var(--radius-full);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                padding: 0;
+                transition: background var(--duration-fast), color var(--duration-fast);
+            }
+
+            .view-toggle-btn:hover {
+                color: var(--text-primary);
+                background: var(--crm-surface);
+            }
+
+            .view-toggle-btn.active {
+                color: var(--crm-selected-text);
+                background: var(--crm-selected-bg);
             }
 
             .icon-btn-toolbar {
@@ -203,6 +242,12 @@ export class CRMTasksPage extends CRMNamespacePage {
             .board-shell.busy .board {
                 filter: saturate(0.92);
                 opacity: 0.92;
+            }
+
+            .board-shell.busy .tasks-table-scroll {
+                filter: saturate(0.92);
+                opacity: 0.6;
+                pointer-events: none;
             }
 
             .board-overlay {
@@ -454,6 +499,104 @@ export class CRMTasksPage extends CRMNamespacePage {
                 color: var(--text-inverse);
             }
 
+            .tasks-table-scroll {
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
+                overflow: auto;
+                transition: filter 0.2s ease, opacity 0.2s ease;
+            }
+
+            .tasks-table-wrap {
+                min-width: 820px;
+                width: 100%;
+            }
+
+            .tasks-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+            }
+
+            .tasks-table thead {
+                background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+            }
+
+            .tasks-table th {
+                height: 48px;
+                padding: 0 16px;
+                text-align: left;
+                color: var(--text-primary);
+                font-weight: 700;
+                white-space: nowrap;
+            }
+
+            .tasks-table th.table-col-title { width: 34%; }
+            .tasks-table th.table-col-desc { width: 34%; }
+            .tasks-table th.table-col-status { width: 14%; }
+            .tasks-table th.table-col-priority { width: 9%; }
+            .tasks-table th.table-col-date { width: 9%; }
+
+            .tasks-table tbody tr {
+                border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+                cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .tasks-table tbody tr:hover {
+                background: rgba(153, 166, 249, 0.08);
+            }
+
+            .tasks-table td {
+                height: 62px;
+                padding: 8px 16px;
+                vertical-align: middle;
+                min-width: 0;
+            }
+
+            .task-table-title {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: 0;
+            }
+
+            .task-table-name,
+            .task-table-desc {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                min-width: 0;
+            }
+
+            .task-table-name {
+                color: var(--crm-selected-text);
+                font-weight: 500;
+            }
+
+            .task-table-desc {
+                color: var(--text-secondary);
+            }
+
+            .task-status-select {
+                max-width: 100%;
+                min-height: 30px;
+                border-radius: var(--radius-full);
+                border: 1px solid var(--crm-stroke);
+                background: var(--crm-surface);
+                color: var(--text-primary);
+                padding: 0 10px;
+                font: inherit;
+                cursor: pointer;
+            }
+
+            .task-table-date {
+                color: var(--text-secondary);
+                white-space: nowrap;
+            }
+
             .empty {
                 display: flex;
                 align-items: center;
@@ -548,6 +691,13 @@ export class CRMTasksPage extends CRMNamespacePage {
                     gap: 0;
                 }
 
+                .tasks-table-scroll {
+                    padding: 0 max(var(--space-2), env(safe-area-inset-right, 0px)) 0 max(var(--space-2), env(safe-area-inset-left, 0px));
+                    box-sizing: border-box;
+                }
+
+                .tasks-table-wrap { min-width: 760px; }
+
                 .board .column {
                     display: none;
                     background: transparent;
@@ -588,6 +738,7 @@ export class CRMTasksPage extends CRMNamespacePage {
         this._boardStages = null;
         this._boardKey = '';
         this._collapsedStatusIds = [];
+        this._viewMode = readCrmListViewMode('tasks', 'board');
 
         this._lookupOp = this.useOp('crm/entities_lookup');
         this._updateOp = this.useOp('crm/entity_update');
@@ -604,6 +755,13 @@ export class CRMTasksPage extends CRMNamespacePage {
         this._routerSearchSel = this.select((s) => {
             const raw = s.router.search;
             return typeof raw === 'string' ? raw : '';
+        });
+        this._localeSel = this.select((s) => {
+            const loc = s.i18n && typeof s.i18n.locale === 'string' ? s.i18n.locale.trim() : '';
+            if (loc.length > 0) {
+                return loc;
+            }
+            return 'en';
         });
     }
 
@@ -1105,6 +1263,116 @@ export class CRMTasksPage extends CRMNamespacePage {
         this._mobileHeaderSearch = false;
     }
 
+    _setViewMode(mode) {
+        if (mode !== 'board' && mode !== 'table') {
+            throw new Error('CRMTasksPage._setViewMode: mode must be board|table');
+        }
+        this._viewMode = mode;
+        writeCrmListViewMode('tasks', mode);
+    }
+
+    _formatDate(dateString) {
+        if (!dateString) return '';
+        const raw = this._localeSel.value;
+        const locale = typeof raw === 'string' && raw.length > 0 ? raw : 'en';
+        return formatPlatformDate(dateString, locale, { day: 'numeric', month: 'short' });
+    }
+
+    _taskStatusLabel(statusId, taskStatuses) {
+        const list = Array.isArray(taskStatuses) ? taskStatuses : [];
+        const row = list.find((s) => s.id === statusId);
+        if (row) return row.label;
+        return typeof statusId === 'string' && statusId.length > 0 ? statusId : this.t('entity_filters.view_status_empty');
+    }
+
+    _taskPriority(task) {
+        if (task && typeof task.priority === 'string' && task.priority.length > 0) {
+            return task.priority;
+        }
+        const attrs = task && task.attributes;
+        if (attrs && typeof attrs.priority === 'string' && attrs.priority.length > 0) {
+            return attrs.priority;
+        }
+        return 'medium';
+    }
+
+    _taskDueDate(task) {
+        const attrs = task && task.attributes;
+        if (attrs && typeof attrs.due_date === 'string' && attrs.due_date.length > 0) {
+            return attrs.due_date;
+        }
+        return task && typeof task.due_date === 'string' && task.due_date.length > 0 ? task.due_date : task.created_at;
+    }
+
+    _onTaskTableStatusChange(event, task) {
+        event.stopPropagation();
+        const next = event.target.value;
+        if (next === this._taskStatus(task)) return;
+        this._moveTask(task, next);
+    }
+
+    _renderTasksTable(tasks, taskStatuses) {
+        if (this._loading) {
+            return html`<div class="board" style="grid-template-columns:minmax(0, 1fr)"><div class="empty">${this.t('loading', {}, 'common')}</div></div>`;
+        }
+        if (tasks.length === 0) {
+            return html`<div class="board" style="grid-template-columns:minmax(0, 1fr)"><div class="empty">${this.t('tasks.empty')}</div></div>`;
+        }
+        const canChangeStatus = Array.isArray(taskStatuses) && taskStatuses.length > 0;
+        return html`
+            <div class="tasks-table-scroll">
+                <div class="tasks-table-wrap">
+                    <table class="tasks-table">
+                        <thead>
+                            <tr>
+                                <th class="table-col-title">${this.t('tasks_page.table_name')}</th>
+                                <th class="table-col-desc">${this.t('tasks_page.table_description')}</th>
+                                <th class="table-col-status">${this.t('tasks_page.table_status')}</th>
+                                <th class="table-col-priority">${this.t('tasks_page.table_priority')}</th>
+                                <th class="table-col-date">${this.t('tasks_page.table_date')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tasks.map((task) => {
+                                const statusId = this._taskStatus(task);
+                                return html`
+                                    <tr @click=${() => this._openTask(task.entity_id)}>
+                                        <td>
+                                            <div class="task-table-title">
+                                                <div class="task-icon">
+                                                    <platform-icon name="checklist" size="18"></platform-icon>
+                                                </div>
+                                                <span class="task-table-name">${task.name}</span>
+                                            </div>
+                                        </td>
+                                        <td><div class="task-table-desc">${task.description ? task.description : ''}</div></td>
+                                        <td>
+                                            ${canChangeStatus
+                                                ? html`
+                                                    <select
+                                                        class="task-status-select"
+                                                        data-canon="combobox"
+                                                        .value=${statusId}
+                                                        @click=${(e) => e.stopPropagation()}
+                                                        @change=${(e) => this._onTaskTableStatusChange(e, task)}
+                                                    >
+                                                        ${taskStatuses.map((s) => html`<option value=${s.id}>${s.label}</option>`)}
+                                                    </select>
+                                                `
+                                                : html`<span class="task-priority">${this._taskStatusLabel(statusId, taskStatuses)}</span>`}
+                                        </td>
+                                        <td><span class="task-priority">${this._taskPriority(task)}</span></td>
+                                        <td><span class="task-table-date">${this._formatDate(this._taskDueDate(task))}</span></td>
+                                    </tr>
+                                `;
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
     _renderMobileTasksHeader() {
         return html`
             <div class="tasks-mobile-header-wrap">
@@ -1155,6 +1423,15 @@ export class CRMTasksPage extends CRMNamespacePage {
                             title=${this.t('refresh', {}, 'common')}
                         >
                             <platform-icon name="refresh" size="18"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
+                            class="mobile-header-icon-btn ${this._viewMode === 'table' ? 'active' : ''}"
+                            title=${this.t('tasks_page.view_table')}
+                            aria-label=${this.t('tasks_page.view_mode')}
+                            @click=${() => { this._setViewMode(this._viewMode === 'table' ? 'board' : 'table'); }}
+                        >
+                            <platform-icon name="${this._viewMode === 'table' ? 'layers' : 'list'}" size="18"></platform-icon>
                         </button>
                         <button
                             type="button"
@@ -1212,10 +1489,30 @@ export class CRMTasksPage extends CRMNamespacePage {
                         <button class="icon-btn-toolbar" type="button" @click=${() => this._reloadTasksPage()} title=${this.t('refresh', {}, 'common')}>
                             <platform-icon name="refresh" size="16"></platform-icon>
                         </button>
+                        <div class="view-toggle" role="group" aria-label=${this.t('tasks_page.view_mode')}>
+                            <button
+                                class="view-toggle-btn ${this._viewMode === 'board' ? 'active' : ''}"
+                                type="button"
+                                title=${this.t('tasks_page.view_board')}
+                                aria-label=${this.t('tasks_page.view_board')}
+                                @click=${() => { this._setViewMode('board'); }}
+                            >
+                                <platform-icon name="layers" size="16"></platform-icon>
+                            </button>
+                            <button
+                                class="view-toggle-btn ${this._viewMode === 'table' ? 'active' : ''}"
+                                type="button"
+                                title=${this.t('tasks_page.view_table')}
+                                aria-label=${this.t('tasks_page.view_table')}
+                                @click=${() => { this._setViewMode('table'); }}
+                            >
+                                <platform-icon name="list" size="16"></platform-icon>
+                            </button>
+                        </div>
                         <button class="cta-btn" type="button" @click=${this._createTask}>${this.t('create', {}, 'common')}</button>
                     </div>
                 </div>
-                ${boardBlocked ? html`
+                ${this._viewMode === 'table' ? nothing : boardBlocked ? html`
                     <div class="empty" style="padding:var(--space-3) 0;">${this.t('tasks_page.board_blocked')}</div>
                 ` : html`
                 <div class="status-tabs">
@@ -1234,7 +1531,9 @@ export class CRMTasksPage extends CRMNamespacePage {
             </div>
 
             <div class="board-shell ${this._boardBusy ? 'busy' : ''}">
-                ${this._boardStages === null ? html`
+                ${this._viewMode === 'table'
+                    ? this._renderTasksTable(tasks, taskStatuses)
+                    : this._boardStages === null ? html`
                     <div class="board" style=${boardGridPlaceholderStr}>
                         <div class="empty">${this.t('loading', {}, 'common')}</div>
                     </div>

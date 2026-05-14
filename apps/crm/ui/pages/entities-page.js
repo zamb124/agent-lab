@@ -38,6 +38,7 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/layout/page-header.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
+import { readCrmListViewMode, writeCrmListViewMode } from '../utils/crm-list-view-mode-preference.js';
 import '../pages/entity-detail-page.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';
@@ -107,6 +108,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         _mobileTab: { state: true },
         _currentEntityId: { state: true },
         _selectedIds: { state: true },
+        _viewMode: { state: true },
         _showBulkStatusMenu: { state: true },
         _mergeDragSourceId: { state: true },
         _mergeDropHoverId: { state: true },
@@ -120,11 +122,14 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             :host {
                 display: flex;
                 flex-direction: column;
+                position: relative;
                 width: 100%;
                 height: 100%;
                 min-height: 0;
                 min-width: 0;
                 overflow: hidden;
+                --crm-list-card-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+                --crm-list-card-bg-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
             }
 
             .page-toolbar {
@@ -258,6 +263,42 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 height: 20px;
                 background: var(--crm-stroke);
                 flex-shrink: 0;
+            }
+
+            .view-toggle {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 2px;
+                border: 1px solid var(--crm-stroke);
+                border-radius: var(--radius-full);
+                background: var(--crm-surface-muted);
+                flex-shrink: 0;
+            }
+
+            .view-toggle-btn {
+                width: 34px;
+                height: 34px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: none;
+                border-radius: var(--radius-full);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                padding: 0;
+                transition: background var(--duration-fast), color var(--duration-fast);
+            }
+
+            .view-toggle-btn:hover {
+                color: var(--text-primary);
+                background: var(--crm-surface);
+            }
+
+            .view-toggle-btn.active {
+                color: var(--crm-selected-text);
+                background: var(--crm-selected-bg);
             }
 
             .clear-filters-btn {
@@ -564,7 +605,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             .cards-scroll {
                 flex: 1;
                 overflow-y: auto;
-                overflow-x: hidden;
+                overflow-x: auto;
                 min-height: 0;
                 min-width: 0;
                 padding: var(--space-1);
@@ -580,6 +621,134 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 width: 100%;
                 min-width: 0;
                 box-sizing: border-box;
+            }
+
+            .entities-table-wrap {
+                min-width: 860px;
+                width: 100%;
+            }
+
+            .entities-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                color: var(--text-primary);
+                font-size: var(--text-sm);
+            }
+
+            .entities-table thead {
+                background: var(--crm-list-card-bg);
+            }
+
+            .entities-table th {
+                height: 48px;
+                padding: 0 16px;
+                text-align: left;
+                color: var(--text-primary);
+                font-weight: 700;
+                white-space: nowrap;
+            }
+
+            .entities-table th.table-col-grip,
+            .entities-table td.table-col-grip {
+                width: 40px;
+                padding-left: 16px;
+                padding-right: 0;
+            }
+
+            .entities-table th.table-col-name { width: 32%; }
+            .entities-table th.table-col-desc { width: 38%; }
+            .entities-table th.table-col-type { width: 16%; }
+            .entities-table th.table-col-date { width: 14%; }
+
+            .entities-table tbody tr {
+                border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+                cursor: pointer;
+                transition: background var(--duration-fast);
+            }
+
+            .entities-table tbody tr:hover,
+            .entities-table tbody tr.active {
+                background: rgba(153, 166, 249, 0.08);
+            }
+
+            .entities-table tbody tr.selected {
+                background: rgba(59, 130, 246, 0.08);
+            }
+
+            .entities-table tbody tr.merge-drop-hover {
+                box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.35);
+            }
+
+            .entities-table td {
+                height: 64px;
+                padding: 8px 16px;
+                vertical-align: middle;
+                min-width: 0;
+            }
+
+            .table-grip {
+                width: 22px;
+                height: 22px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                color: rgba(34, 34, 34, 0.2);
+                cursor: grab;
+            }
+            .table-grip:active { cursor: grabbing; }
+
+            .table-name-cell {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: 0;
+            }
+
+            .table-type-icon {
+                width: 44px;
+                height: 44px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: var(--radius-full);
+                flex-shrink: 0;
+            }
+
+            .table-name {
+                color: var(--crm-selected-text);
+                font-weight: 500;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                min-width: 0;
+            }
+
+            .table-description {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                color: var(--text-secondary);
+            }
+
+            .table-type-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 26px;
+                max-width: 100%;
+                padding: 0 12px;
+                border-radius: var(--radius-full);
+                font-size: 12px;
+                font-weight: 500;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .table-date {
+                color: var(--text-secondary);
+                white-space: nowrap;
             }
 
             .loading-more {
@@ -630,8 +799,8 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             }
 
             .entity-card-item {
-                border: 1px solid var(--crm-stroke);
-                background: var(--crm-surface);
+                border: 1px solid transparent;
+                background: var(--crm-list-card-bg);
                 border-radius: 16px;
                 padding: 16px;
                 display: flex;
@@ -645,12 +814,11 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 transition: border-color var(--duration-fast), background var(--duration-fast);
             }
             .entity-card-item:hover {
-                border-color: var(--crm-stroke-strong);
-                background: var(--crm-surface-elevated);
+                background: var(--crm-list-card-bg-hover);
             }
             .entity-card-item.active {
                 border-color: var(--crm-selected-stroke);
-                background: var(--crm-selected-bg);
+                background: color-mix(in srgb, var(--crm-selected-bg) 82%, var(--crm-list-card-bg));
             }
             .entity-card-item.selected {
                 border-color: var(--accent, #3b82f6);
@@ -972,6 +1140,47 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 }
             }
 
+            .detail-backdrop {
+                position: absolute;
+                inset: 0;
+                z-index: 30;
+                display: block;
+                width: 100%;
+                height: 100%;
+                border: 0;
+                padding: 0;
+                margin: 0;
+                appearance: none;
+                font: inherit;
+                background: color-mix(in srgb, var(--crm-surface) 34%, transparent);
+                backdrop-filter: blur(2px);
+                -webkit-backdrop-filter: blur(2px);
+                cursor: default;
+            }
+
+            .detail-backdrop:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: -4px;
+            }
+
+            .detail-panel.detail-panel--overlay {
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 31;
+                width: min(42vw, 520px);
+                max-width: calc(100% - var(--space-8));
+                min-width: 360px;
+                height: 100%;
+                margin-left: 0;
+                background: var(--crm-surface);
+                border: 1px solid var(--crm-stroke);
+                border-right: none;
+                border-radius: var(--radius-xl, 20px) 0 0 var(--radius-xl, 20px);
+                box-shadow: -10px 0 36px color-mix(in srgb, var(--text-primary) 10%, transparent);
+            }
+
             @media (max-width: 767px) {
                 :host {
                     padding: 0;
@@ -1046,8 +1255,12 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     padding-left: env(safe-area-inset-left, 0px);
                     padding-right: env(safe-area-inset-right, 0px);
                 }
+                .detail-backdrop {
+                    display: none;
+                }
                 .cards-scroll { padding: var(--space-2) 0; }
                 .cards-grid { grid-template-columns: 1fr; gap: var(--space-2); }
+                .entities-table-wrap { min-width: 760px; }
                 .entity-card-item { padding: 14px; min-height: 0; gap: 8px; border-radius: 12px; }
             }
         `,
@@ -1069,6 +1282,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         this._mobileTab = 'list';
         this._currentEntityId = null;
         this._selectedIds = new Set();
+        this._viewMode = readCrmListViewMode('entities', 'cards');
         this._showBulkStatusMenu = false;
         this._mergeDragSourceId = '';
         this._mergeDropHoverId = '';
@@ -1386,18 +1600,30 @@ export class CRMEntitiesPage extends CRMNamespacePage {
 
     _onMobileTab(tab) { this._mobileTab = tab; }
 
+    _setViewMode(mode) {
+        if (mode !== 'cards' && mode !== 'table') {
+            throw new Error('CRMEntitiesPage._setViewMode: mode must be cards|table');
+        }
+        this._viewMode = mode;
+        writeCrmListViewMode('entities', mode);
+    }
+
     _onEmbeddedEntityRemoved() {
+        this._closeEntityDetail();
+    }
+
+    _closeEntityDetail() {
+        if (!this._currentEntityId) return;
         this._currentEntityId = null;
+        if (this._isMobile && this._mobileTab === 'card') {
+            this._mobileTab = 'list';
+        }
         this._onEmbeddedDetailLeftGraphTab();
     }
 
     _onSelectEntity(entityId) {
         if (this._currentEntityId === entityId) {
-            this._currentEntityId = null;
-            if (this._isMobile && this._mobileTab === 'card') {
-                this._mobileTab = 'list';
-            }
-            this._onEmbeddedDetailLeftGraphTab();
+            this._closeEntityDetail();
             return;
         }
         this._currentEntityId = entityId;
@@ -1680,6 +1906,15 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                         </button>
                         <button
                             type="button"
+                            class="mobile-header-icon-btn ${this._viewMode === 'table' ? 'active' : ''}"
+                            title=${this.t('entities_page.view_table')}
+                            aria-label=${this.t('entities_page.view_mode')}
+                            @click=${() => { this._setViewMode(this._viewMode === 'table' ? 'cards' : 'table'); }}
+                        >
+                            <platform-icon name="${this._viewMode === 'table' ? 'apps' : 'list'}" size="18"></platform-icon>
+                        </button>
+                        <button
+                            type="button"
                             class="mobile-header-icon-btn"
                             @click=${this._onCreateEntity}
                             title=${this.t('create', {}, 'common')}
@@ -1754,6 +1989,26 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     >
                         <platform-icon name="adjustment" size="16"></platform-icon>
                     </button>
+                    <div class="view-toggle" role="group" aria-label=${this.t('entities_page.view_mode')}>
+                        <button
+                            class="view-toggle-btn ${this._viewMode === 'cards' ? 'active' : ''}"
+                            type="button"
+                            title=${this.t('entities_page.view_cards')}
+                            aria-label=${this.t('entities_page.view_cards')}
+                            @click=${() => { this._setViewMode('cards'); }}
+                        >
+                            <platform-icon name="apps" size="16"></platform-icon>
+                        </button>
+                        <button
+                            class="view-toggle-btn ${this._viewMode === 'table' ? 'active' : ''}"
+                            type="button"
+                            title=${this.t('entities_page.view_table')}
+                            aria-label=${this.t('entities_page.view_table')}
+                            @click=${() => { this._setViewMode('table'); }}
+                        >
+                            <platform-icon name="list" size="16"></platform-icon>
+                        </button>
+                    </div>
                     <button class="cta-btn" type="button" @click=${this._onCreateEntity}>
                         ${this.t('create', {}, 'common')}
                     </button>
@@ -2051,6 +2306,86 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         `;
     }
 
+    _renderEntityTableRow(entity) {
+        const typeConfig = this._entityTypeConfig(entity);
+        const bgColor = this._hexToRgba(typeConfig.color, 0.15);
+        const eid = entity.entity_id;
+        const isActive = eid === this._currentEntityId;
+        const isSelected = this._selectedIds.has(eid);
+        const mergeHover = !this._isMobile
+            && this._mergeDropHoverId === eid
+            && this._mergeDragSourceId
+            && this._mergeDragSourceId !== eid;
+        return html`
+            <tr
+                class="${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${mergeHover ? 'merge-drop-hover' : ''}"
+                @dragover=${(e) => this._onMergeCardDragOver(e, eid)}
+                @dragleave=${(e) => this._onMergeCardDragLeave(e, eid)}
+                @drop=${(e) => this._onMergeCardDrop(e, eid)}
+                @click=${(e) => this._onEntityListClick(eid, e)}
+            >
+                <td class="table-col-grip">
+                    ${!this._isMobile
+                        ? html`
+                            <span
+                                class="table-grip"
+                                draggable="true"
+                                title=${this.t('entities_page.drag_merge_handle')}
+                                role="button"
+                                tabindex="0"
+                                aria-label=${this.t('entities_page.drag_merge_handle')}
+                                @dragstart=${(e) => this._onMergeCardDragStart(e, eid)}
+                                @dragend=${() => this._onMergeCardDragEnd()}
+                                @click=${(e) => e.stopPropagation()}
+                            >
+                                <platform-icon name="drag-handle" size="16" ?filled=${true}></platform-icon>
+                            </span>
+                        `
+                        : nothing}
+                </td>
+                <td>
+                    <div class="table-name-cell">
+                        <span class="table-type-icon" style="background: ${bgColor}; color: ${typeConfig.color};">
+                            <platform-icon name="${typeConfig.icon}" size="20"></platform-icon>
+                        </span>
+                        <span class="table-name">${entity.name}</span>
+                        ${this._semanticIndexListIcon(entity)}
+                    </div>
+                </td>
+                <td>
+                    <div class="table-description">${entity.description ? this._getLimitedText(entity.description, 120) : ''}</div>
+                </td>
+                <td>
+                    <span class="table-type-badge" style="background: ${bgColor}; color: ${typeConfig.color};">
+                        ${typeConfig.label}
+                    </span>
+                </td>
+                <td><span class="table-date">${this._formatDate(entity.created_at)}</span></td>
+            </tr>
+        `;
+    }
+
+    _renderEntitiesTable(items) {
+        return html`
+            <div class="entities-table-wrap">
+                <table class="entities-table">
+                    <thead>
+                        <tr>
+                            <th class="table-col-grip"></th>
+                            <th class="table-col-name">${this.t('entities_page.table_name')}</th>
+                            <th class="table-col-desc">${this.t('entities_page.table_description')}</th>
+                            <th class="table-col-type">${this.t('entities_page.table_type')}</th>
+                            <th class="table-col-date">${this.t('entities_page.table_created_at')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${items.map((entity) => this._renderEntityTableRow(entity))}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
     _renderEmpty() {
         if (this._hasActiveFilters()) {
             return html`
@@ -2078,6 +2413,8 @@ export class CRMEntitiesPage extends CRMNamespacePage {
         const loadingMore = this._entities.loadingMore;
         const listActive = !this._isMobile || this._mobileTab === 'list';
         const cardActive = !this._isMobile || this._mobileTab === 'card';
+        const desktopDetailOpen = !this._isMobile && Boolean(this._currentEntityId);
+        const mobileDetailOpen = this._isMobile && Boolean(this._currentEntityId);
 
         return html`
             ${this._isMobile ? this._renderMobileEntitiesHeader() : nothing}
@@ -2115,7 +2452,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
             ${listActive ? this._renderToolbar() : nothing}
 
             <div
-                class="layout ${this._isWideDesktopSplit ? 'layout--wide-split' : ''} ${this._isWideDesktopSplit && this._currentEntityId ? 'layout--detail-open' : ''} ${this._isMobile && cardActive ? 'layout--mobile-entity-detail' : ''}"
+                class="layout ${this._isWideDesktopSplit ? 'layout--wide-split' : ''} ${this._isMobile && cardActive ? 'layout--mobile-entity-detail' : ''}"
             >
                 <section class="list-panel ${listActive ? 'mobile-active' : ''} ${loading ? 'busy' : ''}">
                     ${loading
@@ -2125,9 +2462,13 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                         ${items.length === 0 && !loading
                             ? this._renderEmpty()
                             : html`
-                                <div class="cards-grid">
-                                    ${items.map((entity) => this._renderEntityCard(entity))}
-                                </div>
+                                ${this._viewMode === 'table'
+                                    ? this._renderEntitiesTable(items)
+                                    : html`
+                                        <div class="cards-grid">
+                                            ${items.map((entity) => this._renderEntityCard(entity))}
+                                        </div>
+                                    `}
                                 ${loadingMore
                                     ? html`<div class="loading-more">${this.t('loading', {}, 'common')}</div>`
                                     : nothing}
@@ -2136,25 +2477,42 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                     </div>
                 </section>
 
-                ${this._isWideDesktopSplit || this._currentEntityId
+                ${mobileDetailOpen
                     ? html`
-                <aside
-                    class="detail-panel ${this._isWideDesktopSplit && !this._currentEntityId ? 'detail-panel--collapsed' : ''} ${cardActive ? 'mobile-active' : ''}"
-                    aria-hidden=${this._isWideDesktopSplit && !this._currentEntityId ? 'true' : 'false'}
-                >
-                    ${this._currentEntityId
-                        ? html`
+                        <aside
+                            class="detail-panel ${cardActive ? 'mobile-active' : ''}"
+                        >
+                            <crm-entity-detail-page
+                                embedded
+                                .itemId=${this._currentEntityId}
+                                @embedded-entity-removed=${this._onEmbeddedEntityRemoved}
+                            ></crm-entity-detail-page>
+                        </aside>
+                    `
+                    : nothing}
+            </div>
+
+            ${desktopDetailOpen
+                ? html`
+                    <button
+                        class="detail-backdrop"
+                        type="button"
+                        title=${this.t('close', {}, 'common')}
+                        aria-label=${this.t('close', {}, 'common')}
+                        @click=${this._closeEntityDetail}
+                    ></button>
+                    <aside
+                        class="detail-panel detail-panel--overlay"
+                        @click=${(e) => e.stopPropagation()}
+                    >
                         <crm-entity-detail-page
                             embedded
                             .itemId=${this._currentEntityId}
                             @embedded-entity-removed=${this._onEmbeddedEntityRemoved}
                         ></crm-entity-detail-page>
-                    `
-                        : nothing}
-                </aside>
-                    `
-                    : nothing}
-            </div>
+                    </aside>
+                `
+                : nothing}
         `;
     }
 }

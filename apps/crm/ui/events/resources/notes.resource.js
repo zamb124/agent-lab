@@ -63,6 +63,29 @@ export const notesListResource = createCursorList({
     errorToastKey: 'crm:toast.notes_list.failed',
 });
 
+export const noteLatestRangeOp = createAsyncOp({
+    name: 'crm/note_latest_range',
+    silent: true,
+    restMirror: { method: 'POST', path: '/crm/api/v1/entities/query' },
+    request: async ({ payload }) => {
+        const body = {
+            entity_type: 'note',
+            limit: 50,
+        };
+        if (payload && typeof payload.namespace === 'string' && payload.namespace.length > 0) {
+            body.namespace = payload.namespace;
+        }
+        if (payload && typeof payload.entity_subtype === 'string' && payload.entity_subtype.length > 0) {
+            body.entity_subtype = payload.entity_subtype;
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: '/crm/api/v1/entities/query',
+            body,
+        });
+    },
+});
+
 /** PATCH body: expected_version, remove_*, patch_entities, patch_relationships?, add_entities?, add_relationships?. */
 export const noteAnalysisDraftSaveOp = createAsyncOp({
     name: 'crm/note_analysis_draft_save',

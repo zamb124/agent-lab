@@ -5,15 +5,13 @@
  * `STORAGE_LOAD_REQUESTED` для всех ключей CRM. На `STORAGE_LOADED` от storage
  * effect'а — гидратирует соответствующий slice через action.
  *
- * На действия фабрик (`crm/graph_ui/panels_updated`, `crm/graph_view/*_updated`,
- * `crm/daily_notes_ui/range_updated`) — диспатчит `STORAGE_PERSIST_REQUESTED`
+ * На действия фабрик (`crm/graph_ui/panels_updated`, `crm/graph_view/*_updated`) —
+ * диспатчит `STORAGE_PERSIST_REQUESTED`
  * с актуальным значением из slice.
  *
  * Ключи в localStorage:
  *   crm.graph_ui.panels        — { search, timeline, legend, meta }
  *   crm.graph_view.state      — { viewMode, maxDepth, displayDepth, searchInput }
- *   crm.daily_notes.range      — { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
- *
  * Никаких fallback: если ключа нет — гидратация не происходит, slice остаётся
  * в `extraInitial`.
  */
@@ -23,10 +21,7 @@ import { CoreEvents } from '@platform/lib/events/index.js';
 const KEYS = Object.freeze({
     graphPanels: 'crm.graph_ui.panels',
     graphViewState: 'crm.graph_view.state',
-    dailyNotesRange: 'crm.daily_notes.range',
 });
-
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const HYDRATION_ACTIONS = Object.freeze({
     [KEYS.graphPanels]: (value) => {
@@ -36,12 +31,6 @@ const HYDRATION_ACTIONS = Object.freeze({
     [KEYS.graphViewState]: (value) => {
         if (!value || typeof value !== 'object') return null;
         return { type: 'crm/graph_view/hydrated', payload: value };
-    },
-    [KEYS.dailyNotesRange]: (value) => {
-        if (!value || typeof value !== 'object') return null;
-        if (typeof value.from !== 'string' || typeof value.to !== 'string') return null;
-        if (!ISO_DATE_RE.test(value.from) || !ISO_DATE_RE.test(value.to)) return null;
-        return { type: 'crm/daily_notes_ui/range_hydrated', payload: { from: value.from, to: value.to } };
     },
 });
 
@@ -112,13 +101,6 @@ const PERSIST_TRIGGERS = Object.freeze({
                 searchInput: { ...slice.searchInput },
             },
         };
-    },
-    'crm/daily_notes_ui/range_updated': (event, getState) => {
-        const slice = getState().crmDailyNotesUi;
-        if (!slice || !slice.range || typeof slice.range !== 'object') {
-            return { key: KEYS.dailyNotesRange, value: null };
-        }
-        return { key: KEYS.dailyNotesRange, value: { from: slice.range.from, to: slice.range.to } };
     },
 });
 

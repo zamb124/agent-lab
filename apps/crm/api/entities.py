@@ -795,11 +795,17 @@ async def get_period_summary(
             notification=Notification(
                 type=NotificationType.SYSTEM,
                 title=t("crm.notifications.period_summary_range_clamped_title"),
+                title_i18n_key="crm:notifications.period_summary_range_clamped_title",
                 message=t(
                     "crm.notifications.period_summary_range_clamped_message",
                     max_days=max_d,
                     requested_days=req_d,
                 ),
+                message_i18n_key="crm:notifications.period_summary_range_clamped_message",
+                message_i18n_vars={
+                    "max_days": max_d,
+                    "requested_days": req_d,
+                },
                 service="crm",
                 data={
                     "event": "crm.period_summary.range_clamped",
@@ -809,6 +815,8 @@ async def get_period_summary(
                     "effective_date_to": summary["date_to"],
                     "period_summary_max_days": max_d,
                     "requested_period_days": req_d,
+                    "max_days": max_d,
+                    "requested_days": req_d,
                 },
             ),
         )

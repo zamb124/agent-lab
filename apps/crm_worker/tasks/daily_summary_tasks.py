@@ -134,9 +134,14 @@ async def _notify_daily_summary_updated(
             user_id=user_id,
             notification=Notification(
                 type=NotificationType.CRM_DAILY_SUMMARY_UPDATED,
-                title="Daily Summary обновлен",
+                title="Daily Summary обновлён",
+                title_i18n_key="crm:notifications.daily_summary_updated_title",
                 message=f"Обновлена сводка за {date_str}",
+                message_i18n_key="crm:notifications.daily_summary_updated_message",
+                message_i18n_vars={"date": date_str},
                 service="crm",
+                action_url="/crm/notes",
+                action_label_i18n_key="crm:notifications.open_crm",
                 data=notification_data,
             ),
         )

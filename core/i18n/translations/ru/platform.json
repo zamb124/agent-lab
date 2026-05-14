@@ -2,7 +2,8 @@
     "notifications": {
         "title": "Уведомления",
         "dismiss_all": "Очистить все",
-        "empty": "Уведомлений пока нет"
+        "empty": "Уведомлений пока нет",
+        "open": "Открыть"
     },
     "audio_player": {
         "transcribe_aria": "Расшифровать",
