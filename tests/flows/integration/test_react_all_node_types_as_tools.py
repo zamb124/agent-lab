@@ -153,7 +153,7 @@ async def execute(args, state):
             "tool_id": "append_item",
             "type": "code",
             "description": "Добавляет в список",
-            "args_schema": {"item": {"type": "string"}},
+            "args_schema": {"item": {"type": "integer"}},
             "input_mapping": {"item": "@state:item"},
             "code": """
 async def execute(args, state):
