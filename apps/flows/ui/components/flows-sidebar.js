@@ -1,5 +1,5 @@
 /**
- * FlowsSidebar — оболочка `platform-service-sidebar` + футер; каталог flow’ов —
+ * FlowsSidebar — оболочка `platform-service-sidebar`; каталог flow’ов —
  * единый компонент `<flows-catalog-list>` (тот же, что на мобильной главной /flows).
  */
 
@@ -13,25 +13,7 @@ import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-notification-manager.js';
 import '@platform/lib/components/platform-deployment-version.js';
 import './flows-catalog-list.js';
-import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
-
-const OPERATOR_ROLES = new Set(['admin', 'owner']);
-
-function userCanManageOperator(user, activeCompanyId) {
-    if (!user || typeof user !== 'object' || typeof activeCompanyId !== 'string') return false;
-    const direct = isPlainObject(user.companies) ? user.companies : null;
-    const rawCompanies = isPlainObject(user.raw) && isPlainObject(user.raw.companies) ? user.raw.companies : null;
-    const companies = direct !== null ? direct : rawCompanies;
-    if (!companies) return false;
-    const entry = companies[activeCompanyId];
-    if (!entry) return false;
-    const list = Array.isArray(entry) ? entry : [entry];
-    for (const r of list) {
-        if (typeof r !== 'string') continue;
-        if (OPERATOR_ROLES.has(r.trim().toLowerCase())) return true;
-    }
-    return false;
-}
+import { isPlainObject } from '../_helpers/flows-resolvers.js';
 
 export class FlowsSidebar extends PlatformElement {
     static properties = {
@@ -56,33 +38,46 @@ export class FlowsSidebar extends PlatformElement {
                 flex: 1;
                 min-height: 0;
             }
-            .footer-links {
-                display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2);
-                margin-bottom: var(--space-3);
-            }
-            .footer-link {
-                display: flex; align-items: center; gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border-radius: var(--radius-lg);
-                font-size: var(--text-sm);
+            .home-link {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                width: calc(100% - var(--space-4));
+                margin: var(--space-2) var(--space-2) var(--space-3);
+                padding: var(--space-3);
+                border-radius: var(--radius-md);
+                border: 1px solid transparent;
+                background: transparent;
                 color: var(--text-secondary);
-                background: var(--glass-solid-subtle);
-                border: none;
-                text-decoration: none;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                font: inherit;
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                text-align: left;
+                box-sizing: border-box;
+                transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
             }
-            .footer-link:hover {
-                background: var(--glass-solid-medium);
+            .home-link:hover {
                 color: var(--text-primary);
+                background: var(--glass-solid-medium);
+                border-color: var(--glass-border-subtle);
             }
-            platform-service-sidebar[collapsed] .footer-links {
-                display: flex; flex-direction: column; align-items: center;
+            .home-link[active] {
+                color: var(--accent);
+                background: var(--accent-subtle);
+                border-color: var(--accent);
             }
-            platform-service-sidebar[collapsed] .footer-link {
-                width: 36px; height: 36px; padding: 0; justify-content: center;
+            .home-link platform-icon {
+                flex-shrink: 0;
             }
-            platform-service-sidebar[collapsed] .footer-link span {
+            platform-service-sidebar[collapsed] .home-link {
+                justify-content: center;
+                width: 40px;
+                height: 40px;
+                margin-inline: auto;
+                padding: 0;
+            }
+            platform-service-sidebar[collapsed] .home-link span {
                 display: none;
             }
         `,
@@ -92,18 +87,10 @@ export class FlowsSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._currentFlowSel = this.select((s) => {
-            const params = isPlainObject(s.router) && isPlainObject(s.router.params) ? s.router.params : {};
-            return typeof params.flowId === 'string' ? params.flowId : null;
-        });
         this._routeKeySel = this.select((s) => {
             const r = isPlainObject(s.router) && typeof s.router.routeKey === 'string' ? s.router.routeKey : '';
             return r;
         });
-        this._authSel = this.select((s) => ({
-            user: isPlainObject(s.auth) && isPlainObject(s.auth.user) ? s.auth.user : null,
-            companyId: isPlainObject(s.auth) && typeof s.auth.activeCompanyId === 'string' ? s.auth.activeCompanyId : null,
-        }));
     }
 
     _shell() {
@@ -118,32 +105,9 @@ export class FlowsSidebar extends PlatformElement {
         this._shell()?.closeMobile();
     }
 
-    _openSessions() {
-        const flowId = this._currentFlowSel.value;
-        this.openModal('flows.sessions', { flowId: asString(flowId) });
-    }
-
-    _openMcp() {
-        this.openModal('flows.mcp_servers', {});
-    }
-
-    _openVariables() {
-        const flowId = this._currentFlowSel.value;
-        const routeKey = this._routeKeySel.value;
-        const inFlowEditor = routeKey === 'flow_editor' || routeKey === 'flow_editor_branch';
-        if (inFlowEditor && typeof flowId === 'string' && flowId.length > 0) {
-            this.openModal('flows.variables', { scope: 'flow', flowId });
-            return;
-        }
-        this.openModal('flows.variables', { scope: 'company' });
-    }
-
-    _openIntegrations() {
-        this.openModal('flows.integrations', {});
-    }
-
-    _openOperator() {
-        this.navigate('operator', {});
+    _openHome() {
+        this.navigate('list', {});
+        this.closeMobile();
     }
 
     _onCatalogDismissMobile() {
@@ -151,8 +115,7 @@ export class FlowsSidebar extends PlatformElement {
     }
 
     render() {
-        const auth = this._authSel.value;
-        const operatorAllowed = userCanManageOperator(auth.user, auth.companyId);
+        const routeKey = this._routeKeySel.value;
 
         return html`
             <platform-service-sidebar
@@ -164,38 +127,22 @@ export class FlowsSidebar extends PlatformElement {
                 @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
                 @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
             >
+                <button
+                    type="button"
+                    class="home-link"
+                    ?active=${routeKey === 'list'}
+                    title=${this.t('flows_sidebar.home_title')}
+                    @click=${this._openHome}
+                >
+                    <platform-icon name="apps" size="18"></platform-icon>
+                    <span>${this.t('flows_sidebar.home')}</span>
+                </button>
                 <flows-catalog-list
                     mode="sidebar"
                     ?collapsedSidebar=${this.collapsed}
                     @flows-catalog-dismiss-mobile=${this._onCatalogDismissMobile}
                 ></flows-catalog-list>
                 <div slot="footer">
-                    <div class="footer-links">
-                        ${operatorAllowed
-                            ? html`
-                                <button type="button" class="footer-link" @click=${this._openOperator}>
-                                    <platform-icon name="users" size="16"></platform-icon>
-                                    <span>${this.t('flows_sidebar.footer_operator_tasks')}</span>
-                                </button>
-                            `
-                            : ''}
-                        <button type="button" class="footer-link" @click=${this._openSessions}>
-                            <platform-icon name="chat" size="16"></platform-icon>
-                            <span>${this.t('flows_sidebar.footer_sessions')}</span>
-                        </button>
-                        <button type="button" class="footer-link" @click=${this._openMcp}>
-                            <platform-icon name="cloud" size="16"></platform-icon>
-                            <span>${this.t('flows_sidebar.footer_mcp')}</span>
-                        </button>
-                        <button type="button" class="footer-link" @click=${this._openVariables}>
-                            <platform-icon name="key" size="16"></platform-icon>
-                            <span>${this.t('flows_sidebar.footer_vars')}</span>
-                        </button>
-                        <button type="button" class="footer-link" @click=${this._openIntegrations}>
-                            <platform-icon name="link" size="16"></platform-icon>
-                            <span>${this.t('flows_sidebar.footer_integrations')}</span>
-                        </button>
-                    </div>
                     <platform-user block>
                         <platform-notification-manager slot="user-toolbar"></platform-notification-manager>
                     </platform-user>

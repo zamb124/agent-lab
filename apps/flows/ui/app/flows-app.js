@@ -205,6 +205,9 @@ export class FlowsApp extends PlatformApp {
                 min-height: 0;
                 height: 100%;
             }
+            flows-home-page {
+                min-width: 0;
+            }
             @media (max-width: 767px) {
                 .main {
                     padding: 0;
@@ -267,7 +270,10 @@ export class FlowsApp extends PlatformApp {
 
     connectedCallback() {
         super.connectedCallback();
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        if (typeof window.matchMedia !== 'function') {
             return;
         }
         this._flowsMql = window.matchMedia('(max-width: 767px)');
@@ -375,11 +381,8 @@ export class FlowsApp extends PlatformApp {
                         <platform-island
                             padding=${this._flowsMobile ? 'none' : 'md'}
                             ?safe-bottom=${this._flowsMobile}
-                            ?content-no-scroll=${this._flowsMobile}
                         >
-                            ${this._flowsMobile
-                                ? html`<flows-catalog-list mode="page"></flows-catalog-list>`
-                                : html`<flows-empty-state></flows-empty-state>`}
+                            <flows-home-page></flows-home-page>
                         </platform-island>
                     </div>
                     ${this._renderLara()}

@@ -25,7 +25,7 @@ import './app/flows-app.js';
 
 // Страницы
 import './pages/flows-list-page.js';
-import './pages/flows-empty-state.js';
+import './pages/flows-home-page.js';
 import './pages/chat-page.js';
 import './pages/flow-editor-page.js';
 import './pages/operator-page.js';

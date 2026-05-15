@@ -6,10 +6,19 @@
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
+const toolItemUrl = (id) => `/flows/api/v1/tools/${encodeURIComponent(id)}`;
+
 export const toolsResource = createResourceCollection({
     name: 'flows/tools',
-    baseUrl: '/flows/api/v1/tools',
+    baseUrl: '/flows/api/v1/tools/',
     idField: 'tool_id',
+    buildItemUrl: toolItemUrl,
+    restMirror: {
+        list: { method: 'GET', path: '/flows/api/v1/tools/' },
+        get: { method: 'GET', path: '/flows/api/v1/tools/:tool_id' },
+        create: { method: 'POST', path: '/flows/api/v1/tools/' },
+        remove: { method: 'DELETE', path: '/flows/api/v1/tools/:tool_id' },
+    },
     operations: ['list', 'get', 'create', 'remove'],
     toastKeys: {
         create: 'flows:toast.tool_created',

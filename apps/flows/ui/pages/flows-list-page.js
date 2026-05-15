@@ -1,7 +1,6 @@
 /**
  * FlowsListPage — обёртка над `<flows-sidebar>`. Используется как левая
- * колонка для маршрутов flow_chat / list. На отдельном «маршруте списка»
- * рендерится вместе с `<flows-empty-state>`.
+ * колонка для маршрутов flow_chat / list.
  */
 
 import { html, css } from 'lit';
