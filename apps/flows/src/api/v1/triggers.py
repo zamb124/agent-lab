@@ -321,6 +321,8 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
     await container.flow_repository.set(flow_config)
 
     updated_trigger = flow_config.triggers.get(request.trigger_id)
+    if updated_trigger is None:
+        raise RuntimeError(f"Trigger '{request.trigger_id}' missing after sync")
 
     logger.info(f"Trigger created: flow_id={flow_id}, trigger={request.trigger_id}")
 
@@ -395,6 +397,8 @@ async def update_trigger(
     await container.flow_repository.set(flow_config)
 
     updated_trigger = flow_config.triggers.get(trigger_id)
+    if updated_trigger is None:
+        raise RuntimeError(f"Trigger '{trigger_id}' missing after sync")
 
     logger.info(f"Trigger updated: flow_id={flow_id}, trigger={trigger_id}")
 
@@ -570,7 +574,7 @@ async def telegram_webhook(
     if trigger.type != TriggerType.TELEGRAM:
         raise HTTPException(status_code=400, detail="Not a Telegram trigger")
 
-    telegram_handler = TelegramTriggerHandler(base_url="")
+    telegram_handler = TelegramTriggerHandler(base_url="", container=container)
 
     if not trigger.config.get("_secret_token"):
         logger.warning(

@@ -5,16 +5,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import cast
 from zoneinfo import ZoneInfo
 
 from croniter import CroniterBadCronError, croniter
 
+from apps.crm.integrations.registry import IntegrationRegistry
 from apps.crm.scheduled_integration_constants import (
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
 )
 from core.clients.scheduler_client import SchedulerClient
+from core.db.repositories.namespace_repository import NamespaceRepository
 from core.integrations.models import IntegrationProvider
+from core.integrations.oauth_service import OAuthService
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleType
 
@@ -33,7 +36,7 @@ def validate_cron_for_timezone(cron: str, timezone_name: str) -> None:
         raise ValueError(f"Неизвестная timezone: {timezone_name}") from exc
     base = datetime.now(zi)
     try:
-        croniter(raw, base)
+        _ = croniter(raw, base)
     except CroniterBadCronError as exc:
         raise ValueError(f"Некорректное выражение cron: {exc}") from exc
 
@@ -42,15 +45,15 @@ class IntegrationAutoSyncService:
     def __init__(
         self,
         *,
-        namespace_repository: Any,
-        integration_registry: Any,
-        oauth_service: Any,
+        namespace_repository: NamespaceRepository,
+        integration_registry: IntegrationRegistry,
+        oauth_service: OAuthService,
         scheduler_client: SchedulerClient,
     ) -> None:
-        self._namespace_repository = namespace_repository
-        self._integration_registry = integration_registry
-        self._oauth_service = oauth_service
-        self._scheduler_client = scheduler_client
+        self._namespace_repository: NamespaceRepository = namespace_repository
+        self._integration_registry: IntegrationRegistry = integration_registry
+        self._oauth_service: OAuthService = oauth_service
+        self._scheduler_client: SchedulerClient = scheduler_client
 
     async def _assert_token_for_integration(
         self,
@@ -94,7 +97,7 @@ class IntegrationAutoSyncService:
         if not pid:
             raise ValueError("provider_id обязателен")
 
-        self._integration_registry.get(pid)
+        _ = self._integration_registry.get(pid)
 
         existing = await self._namespace_repository.get(ns_raw)
         if existing is None or existing.company_id != company_id:
@@ -103,22 +106,20 @@ class IntegrationAutoSyncService:
         crm = existing.crm_settings
         if crm is None:
             crm = NamespaceCRMSettings()
-        integ = dict(crm.integrations)
+        integ = cast(dict[str, dict[str, object]], crm.integrations.copy())
         raw_block = integ.get(pid)
-        block: dict[str, Any] = (
-            dict(raw_block) if isinstance(raw_block, dict) else {}
-        )
+        block: dict[str, object] = dict(raw_block) if raw_block is not None else {}
 
         tz = (auto_sync_timezone or "UTC").strip()
         if not auto_sync_enabled:
             sid = block.get("auto_sync_schedule_task_id")
             if isinstance(sid, str) and sid.strip():
-                await self._scheduler_client.cancel_schedule(sid.strip())
+                _ = await self._scheduler_client.cancel_schedule(sid.strip())
             block["auto_sync_enabled"] = False
             block["auto_sync_schedule_task_id"] = None
             integ[pid] = block
             existing.crm_settings = crm.model_copy(update={"integrations": integ})
-            await self._namespace_repository.set(existing)
+            _ = await self._namespace_repository.set(existing)
             return existing
 
         cron_raw = auto_sync_cron if isinstance(auto_sync_cron, str) else ""
@@ -148,11 +149,7 @@ class IntegrationAutoSyncService:
         old_sid = block.get("auto_sync_schedule_task_id")
 
         old_cron_s = old_cron.strip() if isinstance(old_cron, str) else ""
-        old_tz_s = (
-            old_tz.strip()
-            if isinstance(old_tz, str) and old_tz.strip()
-            else "UTC"
-        )
+        old_tz_s = old_tz.strip() if isinstance(old_tz, str) and old_tz.strip() else "UTC"
 
         need_new_schedule = (
             not isinstance(old_sid, str)
@@ -163,7 +160,7 @@ class IntegrationAutoSyncService:
         )
 
         if need_new_schedule and isinstance(old_sid, str) and old_sid.strip():
-            await self._scheduler_client.cancel_schedule(old_sid.strip())
+            _ = await self._scheduler_client.cancel_schedule(old_sid.strip())
 
         new_schedule_id: str
         if need_new_schedule:
@@ -192,7 +189,7 @@ class IntegrationAutoSyncService:
         block["auto_sync_schedule_task_id"] = new_schedule_id
         integ[pid] = block
         existing.crm_settings = crm.model_copy(update={"integrations": integ})
-        await self._namespace_repository.set(existing)
+        _ = await self._namespace_repository.set(existing)
         return existing
 
     async def apply_auto_note_ai_analyze(
@@ -210,7 +207,7 @@ class IntegrationAutoSyncService:
         if not pid:
             raise ValueError("provider_id обязателен")
 
-        self._integration_registry.get(pid)
+        _ = self._integration_registry.get(pid)
 
         existing = await self._namespace_repository.get(ns_raw)
         if existing is None or existing.company_id != company_id:
@@ -219,13 +216,11 @@ class IntegrationAutoSyncService:
         crm = existing.crm_settings
         if crm is None:
             crm = NamespaceCRMSettings()
-        integ = dict(crm.integrations)
+        integ = cast(dict[str, dict[str, object]], crm.integrations.copy())
         raw_block = integ.get(pid)
-        block: dict[str, Any] = (
-            dict(raw_block) if isinstance(raw_block, dict) else {}
-        )
+        block: dict[str, object] = dict(raw_block) if raw_block is not None else {}
         block["auto_note_ai_analyze"] = bool(auto_note_ai_analyze)
         integ[pid] = block
         existing.crm_settings = crm.model_copy(update={"integrations": integ})
-        await self._namespace_repository.set(existing)
+        _ = await self._namespace_repository.set(existing)
         return existing

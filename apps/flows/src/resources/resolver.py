@@ -10,6 +10,7 @@ ResourceResolver - резолвинг ресурсов flow.
 
 from typing import Any, Dict, Optional
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.db import ResourceRepository
 from apps.flows.src.models import (
     ResourceDefinition,
@@ -20,12 +21,10 @@ from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
 )
-from apps.flows.src.resources.providers import (
-    BaseResourceProvider,
-    CodeResourceProvider,
-    FilesResourceProvider,
-    LLMResourceProvider,
-)
+from apps.flows.src.resources.providers.base import BaseResourceProvider
+from apps.flows.src.resources.providers.code import CodeResourceProvider
+from apps.flows.src.resources.providers.files import FilesResourceProvider
+from apps.flows.src.resources.providers.llm import LLMResourceProvider
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -41,13 +40,13 @@ class ResourceResolver:
     def __init__(
         self,
         repository: ResourceRepository,
-        container: Any = None,
+        container: FlowRuntimeContainer,
     ):
         self.repository = repository
-        self._container = container
+        self.container = container
 
         self._providers: Dict[ResourceType, BaseResourceProvider] = {
-            ResourceType.CODE: CodeResourceProvider(),
+            ResourceType.CODE: CodeResourceProvider(container),
             ResourceType.LLM: LLMResourceProvider(container),
             ResourceType.FILES: FilesResourceProvider(container),
         }

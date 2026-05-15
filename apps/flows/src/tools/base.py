@@ -373,10 +373,12 @@ class CodeTool(BaseTool):
         container = self.container
         if container is None:
             raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to execute inline code")
-        SafeEval = container.safe_eval_class
-        evaluator = SafeEval(variables=variables, resources=resources)
-
-        result = await evaluator.execute_tool(self._code, full_args, state)
+        runner = container.get_code_runner(
+            language="python",
+            resources=resources,
+            variables=variables,
+        )
+        result = await runner.execute_tool(self._code, full_args, state)
 
         return result
 

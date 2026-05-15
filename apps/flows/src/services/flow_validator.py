@@ -12,9 +12,8 @@ FlowValidator - валидация структуры и ссылок во flow.
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
-from apps.flows.src.runtime.flow import Flow
 from core.logging import get_logger
 from core.urn import extract_id
 
@@ -89,10 +88,12 @@ class FlowValidator:
         flow_repository=None,
         tool_repository=None,
         node_repository=None,
+        flow_builder: Callable[[Dict[str, Any]], Awaitable[Any]] | None = None,
     ):
         self.flow_repository = flow_repository
         self.tool_repository = tool_repository
         self.node_repository = node_repository
+        self.flow_builder = flow_builder
 
     async def validate(
         self,
@@ -686,6 +687,8 @@ class FlowValidator:
         result: FlowValidationResult,
     ):
         """Попытка собрать Flow из конфигурации."""
+        if self.flow_builder is None:
+            raise RuntimeError("FlowValidator requires flow_builder for executable validation")
         try:
             config = {
                 "id": flow_id or "validation_test",
@@ -695,7 +698,7 @@ class FlowValidator:
                 "edges": edges,
             }
 
-            await Flow.from_config(config)
+            await self.flow_builder(config)
 
         except Exception as e:
             result.add_error(
@@ -703,4 +706,3 @@ class FlowValidator:
                 message=f"Ошибка сборки Flow: {str(e)}",
                 details={"exception": type(e).__name__},
             )
-

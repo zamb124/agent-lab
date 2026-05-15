@@ -4,7 +4,6 @@
 Расширяет BaseSettings добавляя специфичные для CRM поля.
 """
 
-
 from pydantic import Field
 
 from core.config import BaseSettings
@@ -20,20 +19,16 @@ class CRMSettings(BaseSettings):
     """
 
     rag_namespace_prefix: str = Field(
-        default="crm_",
-        description="Префикс namespace для CRM сущностей в RAG"
+        default="crm_", description="Префикс namespace для CRM сущностей в RAG"
     )
     max_entities_per_company: int = Field(
-        default=10000,
-        description="Максимальное количество сущностей на компанию"
+        default=10000, description="Максимальное количество сущностей на компанию"
     )
     max_notes_per_company: int = Field(
-        default=50000,
-        description="Максимальное количество заметок на компанию"
+        default=50000, description="Максимальное количество заметок на компанию"
     )
     max_tasks_per_company: int = Field(
-        default=10000,
-        description="Максимальное количество задач на компанию"
+        default=10000, description="Максимальное количество задач на компанию"
     )
     dedup_rag_max_concurrent_searches: int = Field(
         default=16,
@@ -115,7 +110,7 @@ def get_crm_settings() -> CRMSettings:
         from core.config.loader import load_merged_config
 
         merged_config = load_merged_config(service_name="crm", silent=True)
-        _crm_settings = CRMSettings(**merged_config)
+        _crm_settings = CRMSettings.model_validate(merged_config)
         core_set_settings(_crm_settings)
 
     return _crm_settings
@@ -125,4 +120,3 @@ def reset_crm_settings():
     """Сбрасывает настройки (для тестов)"""
     global _crm_settings
     _crm_settings = None
-

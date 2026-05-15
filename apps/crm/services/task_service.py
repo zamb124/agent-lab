@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta, UTC
-from typing import TYPE_CHECKING, Literal
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Literal, cast
+
+from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.db.models import CRMTask
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.task_repository import TaskRepository
@@ -20,12 +22,12 @@ from apps.crm.models.api import (
     TaskCreatedEntitiesResponse,
 )
 from apps.crm.services.crm_task_ws_broadcast import broadcast_crm_task_updated_for_user
-from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     store_pending_import_text,
 )
+from apps.crm.types import JsonObject
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
@@ -47,6 +49,71 @@ if TYPE_CHECKING:
 KnowledgeImportMode = Literal["notes_only", "graph"]
 NamespaceIntegrationJobKind = Literal["entities", "custom_fields"]
 
+
+def _task_data_str_list(data: JsonObject, key: str) -> list[str]:
+    raw = data.get(key)
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f"task data field {key!r} must be list[str]")
+    raw_items = cast(list[object], raw)
+    out: list[str] = []
+    for item in raw_items:
+        if not isinstance(item, str):
+            raise ValueError(f"task data field {key!r} must contain only strings")
+        out.append(item)
+    return out
+
+
+def _task_data_optional_str(data: JsonObject, key: str) -> str | None:
+    raw = data.get(key)
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ValueError(f"task data field {key!r} must be str")
+    return raw
+
+
+def _task_data_required_str(data: JsonObject, key: str) -> str:
+    value = _task_data_optional_str(data, key)
+    if value is None or not value.strip():
+        raise ValueError(f"Нет {key} в данных задачи для перезапуска")
+    return value
+
+
+def _task_data_int(data: JsonObject, key: str, default: int) -> int:
+    raw = data.get(key)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        raise ValueError(f"task data field {key!r} must be int")
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str):
+        return int(raw)
+    raise ValueError(f"task data field {key!r} must be int")
+
+
+def _task_data_bool(data: JsonObject, key: str, default: bool) -> bool:
+    raw = data.get(key)
+    if raw is None:
+        return default
+    if not isinstance(raw, bool):
+        raise ValueError(f"task data field {key!r} must be bool")
+    return raw
+
+
+def _task_data_import_mode(
+    data: JsonObject, key: str, default: KnowledgeImportMode
+) -> KnowledgeImportMode:
+    raw = data.get(key, default)
+    if raw == "notes_only":
+        return "notes_only"
+    if raw == "graph":
+        return "graph"
+    raise ValueError(f"task data field {key!r} must be notes_only or graph")
+
+
 class ActiveTaskExistsError(ValueError):
     """Бросается при попытке стартовать задачу, для которой уже есть активная (pending/running)."""
 
@@ -58,12 +125,12 @@ class ActiveTaskExistsError(ValueError):
         dedup: dict[str, str] | None = None,
     ) -> None:
         super().__init__(
-            f"Задача типа '{task_type}' уже выполняется (task_id={existing_task_id}). "
-            "Дождитесь завершения или отмените текущую задачу."
+            f"Задача типа '{task_type}' уже выполняется (task_id={existing_task_id}). Дождитесь завершения или отмените текущую задачу."
         )
-        self.task_type = task_type
-        self.existing_task_id = existing_task_id
-        self.dedup = dict(dedup) if dedup else {}
+        self.task_type: str = task_type
+        self.existing_task_id: str = existing_task_id
+        self.dedup: dict[str, str] = dict(dedup) if dedup else {}
+
 
 def _normalize_import_file_ids(
     source_file_id: str | None,
@@ -88,6 +155,7 @@ def _normalize_import_file_ids(
             out.append(s)
     return out
 
+
 class TaskService:
     def __init__(
         self,
@@ -97,11 +165,11 @@ class TaskService:
         file_repository: FileRepository,
         company_repository: CompanyRepository,
     ) -> None:
-        self._task_repo = task_repo
-        self._entity_service = entity_service
-        self._relationship_repo = relationship_repo
-        self._file_repository = file_repository
-        self._company_repository = company_repository
+        self._task_repo: TaskRepository = task_repo
+        self._entity_service: EntityService = entity_service
+        self._relationship_repo: RelationshipRepository = relationship_repo
+        self._file_repository: FileRepository = file_repository
+        self._company_repository: CompanyRepository = company_repository
 
     def _get_company_id(self) -> str:
         ctx = get_context()
@@ -166,8 +234,6 @@ class TaskService:
         split_by_headings: bool,
         chunk_max_chars: int,
     ) -> CRMTask:
-        if mode not in ("notes_only", "graph"):
-            raise ValueError(f"Неизвестный mode: {mode}")
         file_ids = _normalize_import_file_ids(source_file_id, source_file_ids)
         text_raw = source_text if source_text is not None else ""
         if len(text_raw) > MAX_SOURCE_TEXT_INLINE_CHARS:
@@ -181,10 +247,10 @@ class TaskService:
             raise ValueError("Укажите непустой текст или хотя бы один файл")
         if len(file_ids) > MAX_SOURCE_FILES_PER_IMPORT:
             raise ValueError(f"Не больше {MAX_SOURCE_FILES_PER_IMPORT} файлов за один импорт")
-        validate_chunk_max_chars(chunk_max_chars)
+        _ = validate_chunk_max_chars(chunk_max_chars)
 
         ns = namespace.strip()
-        await self._entity_service._ensure_namespace_exists(ns)
+        await self._entity_service.ensure_namespace_exists(ns)
         await self._assert_no_active_task("knowledge_import", {}, ns)
 
         task_id = str(uuid.uuid4())
@@ -209,7 +275,9 @@ class TaskService:
                 "source_text_sha256": sha,
                 "split_by_headings": split_by_headings,
                 "chunk_max_chars": chunk_max_chars,
-                "extract_entity_types": list(extract_entity_types) if extract_entity_types else None,
+                "extract_entity_types": list(extract_entity_types)
+                if extract_entity_types
+                else None,
                 "notes_created_count": 0,
                 "entities_created_count": 0,
                 "relationships_created_count": 0,
@@ -221,7 +289,7 @@ class TaskService:
             },
         )
         try:
-            await self._task_repo.create(row)
+            _ = await self._task_repo.create(row)
         except Exception:
             if has_text:
                 await delete_pending_import_text(task_id)
@@ -283,9 +351,7 @@ class TaskService:
         pid = provider_id.strip()
         if not pid:
             raise ValueError("provider_id обязателен")
-        if job not in ("entities", "custom_fields"):
-            raise ValueError(f"Неизвестный job интеграции: {job}")
-        await self._entity_service._ensure_namespace_exists(ns)
+        await self._entity_service.ensure_namespace_exists(ns)
         await self._assert_no_active_task(
             "namespace_integration_job",
             {"provider_id": pid, "job": job},
@@ -303,7 +369,7 @@ class TaskService:
             user_id=self._get_user_id(),
             data={"provider_id": pid, "job": job, "stats": {}},
         )
-        await self._task_repo.create(row)
+        _ = await self._task_repo.create(row)
 
         from apps.crm_worker.tasks.namespace_integration_tasks import (
             run_namespace_integration_job,
@@ -370,8 +436,7 @@ class TaskService:
         if missing_attachment_ids:
             missing_str = ", ".join(missing_attachment_ids)
             raise ValueError(
-                "Запуск анализа невозможен: у заметки есть вложения без метаданных файла "
-                f"в shared storage ({missing_str})."
+                f"Запуск анализа невозможен: у заметки есть вложения без метаданных файла в shared storage ({missing_str})."
             )
 
         await self._assert_no_active_task("note_analyze", {"note_id": note_id}, namespace)
@@ -394,7 +459,7 @@ class TaskService:
                 "result_relationships_count": None,
             },
         )
-        await self._task_repo.create(row)
+        _ = await self._task_repo.create(row)
 
         from apps.crm_worker.tasks.analysis_tasks import process_note_task
 
@@ -465,7 +530,7 @@ class TaskService:
                 "note_name": note.name or "",
             },
         )
-        await self._task_repo.create(row)
+        _ = await self._task_repo.create(row)
 
         from apps.crm_worker.tasks.draft_repair_tasks import repair_note_analysis_draft_task
 
@@ -545,7 +610,7 @@ class TaskService:
                 "expected_updated_at_iso": expected_updated_at_iso,
             },
         )
-        await self._task_repo.create(row)
+        _ = await self._task_repo.create(row)
 
         from apps.crm_worker.tasks.note_markdown_tasks import (
             format_note_description_markdown_task,
@@ -619,9 +684,7 @@ class TaskService:
         note_id: str | None = None,
     ) -> int:
         ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
-        return await self._task_repo.count_for_namespace(
-            ns, task_type=task_type, note_id=note_id
-        )
+        return await self._task_repo.count_for_namespace(ns, task_type=task_type, note_id=note_id)
 
     async def request_cancel(self, task_id: str) -> CRMTask:
         row = await self._task_repo.get(task_id)
@@ -670,9 +733,11 @@ class TaskService:
         if not rows:
             return 0
         for row in rows:
-            if row.task_type in ("note_analyze", "note_analysis_draft_repair") and row.status == "failed":
-                note_payload = row.data if isinstance(row.data, dict) else {}
-                raw_note = note_payload.get("note_id")
+            if (
+                row.task_type in ("note_analyze", "note_analysis_draft_repair")
+                and row.status == "failed"
+            ):
+                raw_note = row.data.get("note_id")
                 note_id = raw_note if isinstance(raw_note, str) and raw_note else None
                 if note_id:
                     company_row = await self._company_repository.get(row.company_id)
@@ -716,16 +781,16 @@ class TaskService:
             raise ValueError("Задача уже откачена")
         if row.status == "running":
             raise ValueError("Дождитесь завершения или отмените задачу перед откатом")
-        created_entity_ids = list(row.data.get("created_entity_ids") or [])
-        created_relationship_ids = list(row.data.get("created_relationship_ids") or [])
+        created_entity_ids = _task_data_str_list(row.data, "created_entity_ids")
+        created_relationship_ids = _task_data_str_list(row.data, "created_relationship_ids")
         if not created_entity_ids and not created_relationship_ids:
             raise ValueError("Нет созданных сущностей или связей для отката")
 
         for rid in reversed(created_relationship_ids):
-            await self._relationship_repo.delete_by_relationship_id(rid)
+            _ = await self._relationship_repo.delete_by_relationship_id(rid)
 
         for eid in reversed(created_entity_ids):
-            await self._entity_service.delete_entity(eid)
+            _ = await self._entity_service.delete_entity(eid)
 
         await self._task_repo.patch_progress(
             task_id,
@@ -750,8 +815,8 @@ class TaskService:
             raise ValueError(
                 f"Список созданных сущностей доступен для статусов completed, failed, cancelled; сейчас {row.status}"
             )
-        raw_ids = list(row.data.get("created_entity_ids") or [])
-        rel_n = len(row.data.get("created_relationship_ids") or [])
+        raw_ids = _task_data_str_list(row.data, "created_entity_ids")
+        rel_n = len(_task_data_str_list(row.data, "created_relationship_ids"))
         if len(raw_ids) == 0 and rel_n == 0:
             raise ValueError("У задачи нет созданных сущностей или связей")
 
@@ -772,8 +837,8 @@ class TaskService:
             task_id=row.task_id,
             namespace=row.namespace,
             status=row.status,
-            review_completed_at=row.data.get("review_completed_at"),
-            relationships_created_count=int(row.data.get("relationships_created_count") or 0),
+            review_completed_at=_task_data_optional_str(row.data, "review_completed_at"),
+            relationships_created_count=_task_data_int(row.data, "relationships_created_count", 0),
             entities=items,
             missing_entity_ids=missing,
         )
@@ -792,8 +857,8 @@ class TaskService:
             raise ValueError(
                 f"Подтверждение доступно для статусов completed, failed, cancelled; сейчас {row.status}"
             )
-        ent_n = len(row.data.get("created_entity_ids") or [])
-        rel_n = len(row.data.get("created_relationship_ids") or [])
+        ent_n = len(_task_data_str_list(row.data, "created_entity_ids"))
+        rel_n = len(_task_data_str_list(row.data, "created_relationship_ids"))
         if ent_n == 0 and rel_n == 0:
             raise ValueError("Нет созданных сущностей или связей для подтверждения просмотра")
         now = datetime.now(UTC)
@@ -829,7 +894,7 @@ class TaskService:
             user_id=self._get_user_id(),
             data={"date_str": date_str, "reason": reason},
         )
-        await self._task_repo.create(row)
+        _ = await self._task_repo.create(row)
 
         from apps.crm_worker.tasks.daily_summary_tasks import rebuild_daily_summary_task
 
@@ -849,16 +914,21 @@ class TaskService:
             taskiq_id = str(task.task_id)
         except Exception as exc:
             await self._task_repo.patch_progress(
-                task_id, row.company_id,
-                status="failed", stage="failed",
+                task_id,
+                row.company_id,
+                status="failed",
+                stage="failed",
                 error_message=str(exc),
                 completed_at=datetime.now(UTC),
             )
             raise
 
         await self._task_repo.patch_progress(
-            task_id, row.company_id,
-            status="running", stage="summarizing_day", progress_pct=10,
+            task_id,
+            row.company_id,
+            status="running",
+            stage="summarizing_day",
+            progress_pct=10,
             started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
@@ -892,7 +962,7 @@ class TaskService:
             user_id=self._get_user_id(),
             data={"date_from": date_from, "date_to": date_to, "reason": reason},
         )
-        await self._task_repo.create(row)
+        _ = await self._task_repo.create(row)
 
         from apps.crm_worker.tasks.daily_summary_tasks import rebuild_period_summary_task
 
@@ -913,16 +983,21 @@ class TaskService:
             taskiq_id = str(task.task_id)
         except Exception as exc:
             await self._task_repo.patch_progress(
-                task_id, row.company_id,
-                status="failed", stage="failed",
+                task_id,
+                row.company_id,
+                status="failed",
+                stage="failed",
                 error_message=str(exc),
                 completed_at=datetime.now(UTC),
             )
             raise
 
         await self._task_repo.patch_progress(
-            task_id, row.company_id,
-            status="running", stage="summarizing_day", progress_pct=10,
+            task_id,
+            row.company_id,
+            status="running",
+            stage="summarizing_day",
+            progress_pct=10,
             started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
@@ -964,45 +1039,43 @@ class TaskService:
         data = old.data
         return await self.start_knowledge_import(
             namespace=old.namespace,
-            mode=data.get("mode", "notes_only"),
-            source_file_id=data.get("source_file_id"),
-            source_file_ids=data.get("source_file_ids") or None,
+            mode=_task_data_import_mode(data, "mode", "notes_only"),
+            source_file_id=_task_data_optional_str(data, "source_file_id"),
+            source_file_ids=_task_data_str_list(data, "source_file_ids") or None,
             source_text=None,
-            extract_entity_types=data.get("extract_entity_types"),
-            split_by_headings=bool(data.get("split_by_headings", False)),
-            chunk_max_chars=int(data.get("chunk_max_chars") or 50_000),
+            extract_entity_types=_task_data_str_list(data, "extract_entity_types") or None,
+            split_by_headings=_task_data_bool(data, "split_by_headings", False),
+            chunk_max_chars=_task_data_int(data, "chunk_max_chars", 50_000),
         )
 
     async def _retry_note_analyze(self, old: CRMTask) -> CRMTask:
         data = old.data
-        note_id = data.get("note_id")
-        if not note_id:
-            raise ValueError("Нет note_id в данных задачи для перезапуска")
+        note_id = _task_data_required_str(data, "note_id")
         note = await self._entity_service.get_entity(note_id)
         if note is None:
             raise ValueError(f"Заметка не найдена: {note_id}")
-        config_payload = data.get("config_payload") or {}
+        config_payload = data.get("config_payload")
+        if config_payload is None:
+            config_payload = {}
+        elif not isinstance(config_payload, dict):
+            raise ValueError("task data field 'config_payload' must be object")
         config = NoteProcessingConfig.model_validate(config_payload)
         return await self.start_note_analyze(
             note_id=note_id,
             note_name=note.name or "",
             namespace=old.namespace,
-            mode=data.get("mode", "analyze"),
+            mode=_task_data_required_str(data, "mode"),
             config=config,
         )
 
     async def _retry_note_analysis_draft_repair(self, old: CRMTask) -> CRMTask:
         data = old.data
-        note_id = data.get("note_id")
-        if not note_id:
-            raise ValueError("Нет note_id в данных задачи для перезапуска")
+        note_id = _task_data_required_str(data, "note_id")
         return await self.start_note_analysis_draft_repair(note_id=note_id)
 
     async def _retry_note_markdown_format(self, old: CRMTask) -> CRMTask:
         data = old.data
-        note_id = data.get("note_id")
-        if not note_id:
-            raise ValueError("Нет note_id в данных задачи для перезапуска")
+        note_id = _task_data_required_str(data, "note_id")
         note = await self._entity_service.get_entity(note_id)
         if note is None:
             raise ValueError(f"Заметка не найдена: {note_id}")
@@ -1013,9 +1086,7 @@ class TaskService:
 
     async def _retry_daily_summary(self, old: CRMTask) -> CRMTask:
         data = old.data
-        date_str = data.get("date_str")
-        if not date_str:
-            raise ValueError("Нет date_str в данных задачи для перезапуска")
+        date_str = _task_data_required_str(data, "date_str")
         return await self.start_daily_summary(
             namespace=old.namespace,
             date_str=date_str,
@@ -1024,10 +1095,8 @@ class TaskService:
 
     async def _retry_period_summary(self, old: CRMTask) -> CRMTask:
         data = old.data
-        date_from = data.get("date_from")
-        date_to = data.get("date_to")
-        if not date_from or not date_to:
-            raise ValueError("Нет date_from/date_to в данных задачи для перезапуска")
+        date_from = _task_data_required_str(data, "date_from")
+        date_to = _task_data_required_str(data, "date_to")
         return await self.start_period_summary(
             namespace=old.namespace,
             date_from=date_from,

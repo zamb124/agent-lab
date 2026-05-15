@@ -5,9 +5,11 @@ API единого журнала задач CRM (crm_tasks).
 """
 
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
+from apps.crm.db.models import CRMTask
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
     StartDailySummaryRequest,
@@ -24,8 +26,12 @@ from core.pagination import OffsetPage
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
-def _to_response(row) -> TaskResponse:
+def _to_response(row: CRMTask) -> TaskResponse:
     return TaskResponse.model_validate(row)
+
+
+def to_task_response(row: CRMTask) -> TaskResponse:
+    return _to_response(row)
 
 
 def _active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
@@ -38,6 +44,10 @@ def _active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
     if exc.dedup:
         detail["dedup"] = exc.dedup
     return HTTPException(status_code=409, detail=detail)
+
+
+def active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
+    return _active_task_conflict(exc)
 
 
 @router.post("/knowledge-import", status_code=202, response_model=TaskResponse)
@@ -81,7 +91,9 @@ async def start_note_analyze(
     user_id = ctx.user.user_id if ctx and ctx.user else None
     company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
     if not user_id or not company_id:
-        raise HTTPException(status_code=500, detail="Контекст пользователя или компании отсутствует")
+        raise HTTPException(
+            status_code=500, detail="Контекст пользователя или компании отсутствует"
+        )
     if not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -113,17 +125,27 @@ async def start_note_analyze(
 @router.get("", response_model=OffsetPage[TaskResponse])
 async def list_tasks(
     container: ContainerDep,
-    namespace: str | None = Query(None, description="Фильтр по пространству; пусто = все пространства компании"),
-    task_type: str | None = Query(None, description="Фильтр по типу задачи"),
-    note_id: str | None = Query(None, description="Фильтр по note_id внутри data (только note_analyze)"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    namespace: Annotated[
+        str | None,
+        Query(description="Фильтр по пространству; пусто = все пространства компании"),
+    ] = None,
+    task_type: Annotated[str | None, Query(description="Фильтр по типу задачи")] = None,
+    note_id: Annotated[
+        str | None,
+        Query(description="Фильтр по note_id внутри data (только note_analyze)"),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[TaskResponse]:
     rows, total = await asyncio.gather(
-        container.task_service.list_tasks(namespace, task_type=task_type, note_id=note_id, limit=limit, offset=offset),
+        container.task_service.list_tasks(
+            namespace, task_type=task_type, note_id=note_id, limit=limit, offset=offset
+        ),
         container.task_service.count_tasks(namespace, task_type=task_type, note_id=note_id),
     )
-    return OffsetPage[TaskResponse](items=[_to_response(r) for r in rows], total=total, limit=limit, offset=offset)
+    return OffsetPage[TaskResponse](
+        items=[_to_response(r) for r in rows], total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -234,6 +256,7 @@ async def structured_knowledge_import_not_implemented(
     _body: StructuredKnowledgeImportRequest,
     container: ContainerDep,
 ) -> None:
+    _ = container
     raise HTTPException(
         status_code=501,
         detail="Структурированный импорт (bulk без LLM) в этой версии не реализован.",

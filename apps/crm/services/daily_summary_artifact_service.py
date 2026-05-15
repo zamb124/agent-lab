@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Mapping
+from typing import cast
 
 from botocore.exceptions import ClientError
 
+from apps.crm.types import JsonObject
 from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
 
@@ -50,13 +52,13 @@ class DailySummaryArtifactService:
         company_id: str,
         namespace: str | None,
         date_str: str,
-        payload: dict[str, Any],
+        payload: Mapping[str, object],
     ) -> None:
         key = self.daily_object_key(company_id, namespace, date_str)
-        body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+        body = json.dumps(dict(payload), ensure_ascii=False, default=str).encode("utf-8")
         client = S3ClientFactory.create_default_client()
         try:
-            await client.upload_bytes(
+            _ = await client.upload_bytes(
                 data=body,
                 key=key,
                 content_type="application/json; charset=utf-8",
@@ -70,22 +72,25 @@ class DailySummaryArtifactService:
         company_id: str,
         namespace: str | None,
         date_str: str,
-    ) -> dict[str, Any] | None:
+    ) -> JsonObject | None:
         key = self.daily_object_key(company_id, namespace, date_str)
         client = S3ClientFactory.create_default_client()
         try:
             raw = await client.download_bytes(key=key)
         except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code", "")
+            response = cast(dict[str, object], exc.response)
+            error = response.get("Error")
+            error_data = cast(dict[str, object], error) if isinstance(error, dict) else {}
+            code = str(error_data.get("Code", ""))
             if code in ("404", "NoSuchKey", "NotFound", "NoSuchBucket"):
                 return None
             raise
         finally:
             await client.close()
-        data = json.loads(raw.decode("utf-8"))
+        data = cast(object, json.loads(raw.decode("utf-8")))
         if not isinstance(data, dict):
             raise ValueError("Daily summary S3 payload must be a JSON object")
-        return data
+        return cast(JsonObject, data)
 
     async def put_period_payload(
         self,
@@ -94,13 +99,13 @@ class DailySummaryArtifactService:
         namespace: str | None,
         date_from: str,
         date_to: str,
-        payload: dict[str, Any],
+        payload: Mapping[str, object],
     ) -> None:
         key = self.period_object_key(company_id, namespace, date_from, date_to)
-        body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+        body = json.dumps(dict(payload), ensure_ascii=False, default=str).encode("utf-8")
         client = S3ClientFactory.create_default_client()
         try:
-            await client.upload_bytes(
+            _ = await client.upload_bytes(
                 data=body,
                 key=key,
                 content_type="application/json; charset=utf-8",
@@ -115,19 +120,22 @@ class DailySummaryArtifactService:
         namespace: str | None,
         date_from: str,
         date_to: str,
-    ) -> dict[str, Any] | None:
+    ) -> JsonObject | None:
         key = self.period_object_key(company_id, namespace, date_from, date_to)
         client = S3ClientFactory.create_default_client()
         try:
             raw = await client.download_bytes(key=key)
         except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code", "")
+            response = cast(dict[str, object], exc.response)
+            error = response.get("Error")
+            error_data = cast(dict[str, object], error) if isinstance(error, dict) else {}
+            code = str(error_data.get("Code", ""))
             if code in ("404", "NoSuchKey", "NotFound", "NoSuchBucket"):
                 return None
             raise
         finally:
             await client.close()
-        data = json.loads(raw.decode("utf-8"))
+        data = cast(object, json.loads(raw.decode("utf-8")))
         if not isinstance(data, dict):
             raise ValueError("Period summary S3 payload must be a JSON object")
-        return data
+        return cast(JsonObject, data)

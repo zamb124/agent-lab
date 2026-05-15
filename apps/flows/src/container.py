@@ -89,7 +89,7 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def resource_resolver(self):
-        from apps.flows.src.resources import ResourceResolver
+        from apps.flows.src.resources.resolver import ResourceResolver
         return ResourceResolver(
             repository=self.resource_repository,
             container=self,
@@ -161,11 +161,6 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
-    def run_inline_code(self):
-        from apps.flows.src.tasks.eval_task import run_inline_code
-        return run_inline_code
-
-    @lazy
     def node_registry(self):
         from apps.flows.src.registry.nodes import create_default_node_registry
         return create_default_node_registry()
@@ -183,11 +178,6 @@ class FlowContainer(BaseContainer):
         return GraphCompiler()
 
     @lazy
-    def safe_eval_class(self):
-        from apps.flows.src.eval.safe_eval import SafeEval
-        return SafeEval
-
-    @lazy
     def base_tool_class(self):
         from apps.flows.src.tools.base import BaseTool
         return BaseTool
@@ -202,6 +192,7 @@ class FlowContainer(BaseContainer):
         self,
         language: str = "python",
         resources: dict[str, object] | None = None,
+        variables: dict[str, object] | None = None,
     ):
         """Возвращает runner для указанного языка."""
         from core.context import get_context
@@ -211,6 +202,7 @@ class FlowContainer(BaseContainer):
             from apps.flows.src.runners.python import PythonCodeRunner
             return PythonCodeRunner(
                 context=context,
+                variables=variables,
                 resources=resources,
                 base_tool_class=self.base_tool_class,
             )
@@ -270,13 +262,13 @@ class FlowContainer(BaseContainer):
     def trigger_registry(self):
         from apps.flows.config import get_settings
         from apps.flows.src.models import TriggerType
-        from apps.flows.src.triggers import TriggerRegistry
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+        from apps.flows.src.triggers.registry import TriggerRegistry
 
         settings = get_settings()
         base_url = settings.server.get_flows_webhook_public_base_url()
 
-        registry = TriggerRegistry(base_url=base_url)
+        registry = TriggerRegistry(base_url=base_url, container=self)
 
         # Регистрируем handlers
         registry.register_handler(TriggerType.TELEGRAM, TelegramTriggerHandler)

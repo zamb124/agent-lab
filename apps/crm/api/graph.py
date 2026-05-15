@@ -7,6 +7,7 @@ Endpoints:
 """
 
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -82,24 +83,34 @@ async def get_overview_graph(
 async def get_influence_graph(
     entity_id: str,
     container: ContainerDep,
-    max_depth: int = Query(3, ge=1, le=5, description="Максимальная глубина обхода"),
-    relationship_types: str | None = Query(None, description="Comma-separated типы связей"),
-    created_at_from: datetime | None = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: datetime | None = Query(None, description="Фильтр created_at <= value"),
-    namespace: str | None = Query(
-        None,
-        description=(
-            "Namespace пространства данных. При непустом значении используется и для "
-            "лимита сущностей, и как фильтр Relationship.namespace при обходе."
+    max_depth: Annotated[int, Query(ge=1, le=5, description="Максимальная глубина обхода")] = 3,
+    relationship_types: Annotated[
+        str | None, Query(description="Comma-separated типы связей")
+    ] = None,
+    created_at_from: Annotated[
+        datetime | None, Query(description="Фильтр created_at >= value")
+    ] = None,
+    created_at_to: Annotated[
+        datetime | None, Query(description="Фильтр created_at <= value")
+    ] = None,
+    namespace: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Namespace пространства данных. При непустом значении используется и для "
+                "лимита сущностей, и как фильтр Relationship.namespace при обходе."
+            ),
         ),
-    ),
-    include_all_namespaces: bool = Query(
-        False,
-        description=(
-            "Если true и задан namespace — обход берёт связи всех Relationship.namespace "
-            "(оставлено для редких отладочных вызовов)."
+    ] = None,
+    include_all_namespaces: Annotated[
+        bool,
+        Query(
+            description=(
+                "Если true и задан namespace — обход берёт связи всех Relationship.namespace "
+                "(оставлено для редких отладочных вызовов)."
+            ),
         ),
-    ),
+    ] = False,
 ):
     """
     Построение графа влияния от entity.
@@ -152,23 +163,31 @@ async def get_influence_graph(
 async def get_related_entities(
     entity_id: str,
     container: ContainerDep,
-    direction: str = Query("both", pattern="^(incoming|outgoing|both)$"),
-    relationship_type: str | None = Query(None),
-    created_at_from: datetime | None = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: datetime | None = Query(None, description="Фильтр created_at <= value"),
-    namespace: str | None = Query(
-        None,
-        description=(
-            "Namespace пространства данных. При непустом значении используется и для "
-            "лимита сущностей, и как фильтр Relationship.namespace."
+    direction: Annotated[str, Query(pattern="^(incoming|outgoing|both)$")] = "both",
+    relationship_type: Annotated[str | None, Query()] = None,
+    created_at_from: Annotated[
+        datetime | None, Query(description="Фильтр created_at >= value")
+    ] = None,
+    created_at_to: Annotated[
+        datetime | None, Query(description="Фильтр created_at <= value")
+    ] = None,
+    namespace: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Namespace пространства данных. При непустом значении используется и для "
+                "лимита сущностей, и как фильтр Relationship.namespace."
+            ),
         ),
-    ),
-    include_all_namespaces: bool = Query(
-        False,
-        description=(
-            "Если true и задан namespace — берутся связи всех Relationship.namespace."
+    ] = None,
+    include_all_namespaces: Annotated[
+        bool,
+        Query(
+            description=(
+                "Если true и задан namespace — берутся связи всех Relationship.namespace."
+            ),
         ),
-    ),
+    ] = False,
 ):
     """
     Получить прямо связанные entities (1 уровень).

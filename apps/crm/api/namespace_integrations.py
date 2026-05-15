@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
-from apps.crm.api.tasks import _active_task_conflict, _to_response
+from apps.crm.api.tasks import active_task_conflict, to_task_response
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import TaskResponse
 from apps.crm.services.task_service import ActiveTaskExistsError
@@ -70,7 +71,7 @@ class _AuthenticatedContext:
 
 def _auth_context_or_401() -> _AuthenticatedContext:
     ctx = get_context()
-    if ctx is None or ctx.user is None or ctx.active_company is None:
+    if ctx is None or ctx.active_company is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     return _AuthenticatedContext(
         user_id=ctx.user.user_id,
@@ -131,24 +132,27 @@ async def integration_authorize_url(
     namespace_name: str,
     provider: str,
     container: ContainerDep,
-    subdomain: str | None = Query(
-        default=None,
-        min_length=1,
-        description="Поддомен аккаунта (для amocrm — без .amocrm.ru)",
-    ),
-    amocrm_subdomain: str | None = Query(
-        default=None,
-        min_length=1,
-        description="Устаревшее имя параметра; используйте subdomain",
-    ),
-    return_path: str = Query(
-        default="/crm/spaces",
-        description="Путь на платформе после OAuth (внутри origin)",
-    ),
-    return_origin: str | None = Query(
-        default=None,
-        description="Origin вкладки для редиректа после OAuth (тот же кластер, что platform_public_base_url)",
-    ),
+    subdomain: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            description="Поддомен аккаунта (для amocrm — без .amocrm.ru)",
+        ),
+    ] = None,
+    amocrm_subdomain: Annotated[
+        str | None,
+        Query(min_length=1, description="Устаревшее имя параметра; используйте subdomain"),
+    ] = None,
+    return_path: Annotated[
+        str,
+        Query(description="Путь на платформе после OAuth (внутри origin)"),
+    ] = "/crm/spaces",
+    return_origin: Annotated[
+        str | None,
+        Query(
+            description="Origin вкладки для редиректа после OAuth (тот же кластер, что platform_public_base_url)"
+        ),
+    ] = None,
 ) -> AuthorizeResponse:
     if not return_path.startswith("/") or return_path.startswith("//"):
         raise HTTPException(status_code=422, detail="return_path must be a single-segment path")
@@ -162,7 +166,11 @@ async def integration_authorize_url(
     except KeyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
-        ro = return_origin.strip() if isinstance(return_origin, str) and return_origin.strip() else None
+        ro = (
+            return_origin.strip()
+            if isinstance(return_origin, str) and return_origin.strip()
+            else None
+        )
         oauth_ui_locale = resolve_oauth_integration_locale(
             request.headers.get("accept-language"),
             language_cookie=request.cookies.get("language"),
@@ -203,7 +211,7 @@ async def integration_auto_sync_patch(
     if existing_ns is None or existing_ns.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     try:
-        await container.integration_auto_sync_service.apply_integration_auto_sync(
+        _ = await container.integration_auto_sync_service.apply_integration_auto_sync(
             company_id=ctx.company_id,
             acting_user_id=ctx.user_id,
             namespace_name=ns_name,
@@ -247,7 +255,7 @@ async def integration_auto_note_ai_analyze_patch(
     if existing_ns is None or existing_ns.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     try:
-        await container.integration_auto_sync_service.apply_auto_note_ai_analyze(
+        _ = await container.integration_auto_sync_service.apply_auto_note_ai_analyze(
             company_id=ctx.company_id,
             namespace_name=ns_name,
             provider_id=provider.strip(),
@@ -273,7 +281,7 @@ async def integration_sync(
     container: ContainerDep,
     response: Response,
 ) -> SyncStatsResponse | TaskResponse:
-    _auth_context_or_401()
+    _ = _auth_context_or_401()
     if not namespace_name.strip():
         raise HTTPException(status_code=422, detail="namespace_name required")
     try:
@@ -289,11 +297,11 @@ async def integration_sync(
                 job="entities",
             )
         except ActiveTaskExistsError as exc:
-            raise _active_task_conflict(exc) from exc
+            raise active_task_conflict(exc) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         response.status_code = 202
-        return _to_response(row)
+        return to_task_response(row)
     try:
         stats = await connector.sync_entities(ns)
     except ValueError as exc:
@@ -309,7 +317,7 @@ async def integration_custom_fields_sync(
     container: ContainerDep,
     response: Response,
 ) -> SyncStatsResponse | TaskResponse:
-    _auth_context_or_401()
+    _ = _auth_context_or_401()
     if not namespace_name.strip():
         raise HTTPException(status_code=422, detail="namespace_name required")
     try:
@@ -325,11 +333,11 @@ async def integration_custom_fields_sync(
                 job="custom_fields",
             )
         except ActiveTaskExistsError as exc:
-            raise _active_task_conflict(exc) from exc
+            raise active_task_conflict(exc) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         response.status_code = 202
-        return _to_response(row)
+        return to_task_response(row)
     try:
         stats = await connector.sync_custom_field_catalog(ns)
     except ValueError as exc:

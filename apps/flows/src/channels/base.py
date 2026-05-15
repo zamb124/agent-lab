@@ -464,7 +464,7 @@ class BaseChannel(ABC):
         trigger = cfg.triggers.get(trigger_id)
         if trigger is None:
             return
-        from apps.flows.src.triggers.executor import OutputActionExecutor
+        from apps.flows.src.triggers.output_actions import OutputActionExecutor
         from apps.flows.src.triggers.trigger_type_contract import (
             effective_output_actions_for_trigger,
         )
@@ -484,7 +484,7 @@ class BaseChannel(ABC):
                     msg = "metadata.triggers[trigger_id] must contain 'payload' as dict"
                     raise ValueError(msg)
         state_dict = state.model_dump(mode="json")
-        executor = OutputActionExecutor()
+        executor = OutputActionExecutor(container=self.container)
         await executor.execute(
             output_actions=actions,
             state=state_dict,
@@ -1080,6 +1080,7 @@ class BaseChannel(ABC):
             flow_repository=container.flow_repository,
             tool_repository=container.tool_repository,
             node_repository=container.node_repository,
+            flow_builder=container.flow_factory.create_validation_flow,
         )
         entry = effective["entry"]
         if entry is None:
@@ -1209,6 +1210,7 @@ class BaseChannel(ABC):
             flow_repository=container.flow_repository,
             tool_repository=container.tool_repository,
             node_repository=container.node_repository,
+            flow_builder=container.flow_factory.create_validation_flow,
         )
         entry = effective["entry"]
         if entry is None:

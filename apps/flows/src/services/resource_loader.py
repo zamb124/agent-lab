@@ -5,16 +5,21 @@ ResourceLoader - универсальный загрузчик ресурсов.
 Единая точка входа для всех ресурсов через Registry.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig
-from apps.flows.src.registry.nodes import NodeRegistry
-from apps.flows.src.runtime.nodes import BaseNode
-from apps.flows.src.tools.base import BaseTool
-from apps.flows.src.tools.registry import ToolRegistry
 from core.errors import ResourceNotFoundError
 from core.logging import get_logger
 from core.urn import extract_id
+
+if TYPE_CHECKING:
+    from apps.flows.src.registry.nodes import NodeRegistry
+    from apps.flows.src.runtime.nodes import BaseNode
+    from apps.flows.src.tools.base import BaseTool
+    from apps.flows.src.tools.registry import ToolRegistry
 
 logger = get_logger(__name__)
 
@@ -124,7 +129,7 @@ class ResourceLoader:
             "args_schema": config.args_schema,
         })
 
-    async def _instantiate_node(self, node_class: type, config: NodeConfig) -> BaseNode:
+    async def _instantiate_node(self, node_class: type[Any], config: NodeConfig) -> BaseNode:
         """
         Создаёт экземпляр ноды из класса и конфига.
 

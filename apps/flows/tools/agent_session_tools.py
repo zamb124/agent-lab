@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.eval.platform_services import get_operator_handoff_service
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools import tool
@@ -101,12 +100,6 @@ class FinalAnswerArgs(BaseModel):
     )
 
 
-class FinishArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    answer: str = Field(..., min_length=1, description="Финальный текст, который увидит пользователь.")
-
-
 @tool(
     name="reason",
     description="Запиши свои рассуждения перед принятием решения. Опиши: что наблюдаешь, анализ ситуации, план действий, следующий шаг.",
@@ -159,6 +152,8 @@ async def hitl_operator_task(
     *,
     state: "ExecutionState",
 ) -> str:
+    from apps.flows.src.eval.platform_services import get_operator_handoff_service
+
     mode = HandoffMode(handoff_mode)
     handoff = get_operator_handoff_service()
     cid, op_task_id = await handoff.register_handoff(
@@ -226,14 +221,3 @@ async def final_answer(
         "confidence": confidence,
         "sources": sources or [],
     }
-
-
-@tool(
-    name="finish",
-    description="Завершает выполнение и возвращает финальный ответ пользователю",
-    tags=["misc"],
-    react_role=ReactToolRole.EXIT,
-    args_schema=FinishArgs,
-)
-async def finish(answer: str, *, state: "ExecutionState") -> str:
-    return answer

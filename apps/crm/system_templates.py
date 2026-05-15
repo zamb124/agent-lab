@@ -51,7 +51,7 @@ Reseed обновляет только системные строки в БД (
 правит пользователь руками в UI.
 """
 
-from typing import Any
+from typing import NotRequired, TypedDict
 
 from apps.crm.constants_graph import (
     CALL_ENTITY_TYPE_ID,
@@ -59,6 +59,55 @@ from apps.crm.constants_graph import (
     NOTE_ROOT_ENTITY_TYPE_ID,
     TASK_ROOT_ENTITY_TYPE_ID,
 )
+
+FieldSpec = dict[str, object]
+
+
+class EntityTypeTemplate(TypedDict):
+    type_id: str
+    name: str
+    description: str
+    parent_type_id: NotRequired[str | None]
+    prompt: NotRequired[str | None]
+    required_fields: NotRequired[dict[str, object]]
+    optional_fields: NotRequired[dict[str, object]]
+    icon: NotRequired[str | None]
+    color: NotRequired[str | None]
+    is_system: NotRequired[bool]
+    is_event: NotRequired[bool]
+    check_duplicates: NotRequired[bool]
+    weight_coefficient: NotRequired[float]
+    namespace_ids: NotRequired[list[str]]
+    is_context_anchor: NotRequired[bool]
+    is_voice_target: NotRequired[bool]
+    extractable: NotRequired[bool]
+
+
+class NamespaceTemplateTypeSpec(EntityTypeTemplate, total=False):
+    namespace_ids: list[str]
+
+
+class RelationshipTypeTemplate(TypedDict):
+    type_id: str
+    name: str
+    description: str
+    prompt: NotRequired[str | None]
+    is_system: NotRequired[bool]
+    is_directed: NotRequired[bool]
+    inverse_type_id: NotRequired[str | None]
+    icon: NotRequired[str | None]
+    color: NotRequired[str | None]
+    weight_default: NotRequired[float]
+
+
+class NamespaceTemplateSeed(TypedDict):
+    template_id: str
+    name: str
+    description: str
+    icon: str
+    types: list[NamespaceTemplateTypeSpec]
+    crm_settings: NotRequired[dict[str, object]]
+
 
 # ----------------------------------------------------------------------
 # Helpers для построения единообразных полей
@@ -70,7 +119,7 @@ def _enum_field(
     label: str,
     description: str,
     values_with_desc: list[tuple[str, str]],
-) -> dict[str, Any]:
+) -> FieldSpec:
     """
     Поле типа enum с расшифровкой каждого значения в `description`.
 
@@ -92,35 +141,35 @@ def _enum_field(
     }
 
 
-def _string_field(*, label: str, description: str) -> dict[str, Any]:
+def _string_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "string", "label": label, "description": description}
 
 
-def _text_field(*, label: str, description: str) -> dict[str, Any]:
+def _text_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "text", "label": label, "description": description}
 
 
-def _date_field(*, label: str, description: str) -> dict[str, Any]:
+def _date_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "date", "label": label, "description": description}
 
 
-def _datetime_field(*, label: str, description: str) -> dict[str, Any]:
+def _datetime_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "datetime", "label": label, "description": description}
 
 
-def _number_field(*, label: str, description: str) -> dict[str, Any]:
+def _number_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "number", "label": label, "description": description}
 
 
-def _integer_field(*, label: str, description: str) -> dict[str, Any]:
+def _integer_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "integer", "label": label, "description": description}
 
 
-def _boolean_field(*, label: str, description: str) -> dict[str, Any]:
+def _boolean_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "boolean", "label": label, "description": description}
 
 
-def _array_field(*, label: str, description: str) -> dict[str, Any]:
+def _array_field(*, label: str, description: str) -> FieldSpec:
     return {"type": "array", "label": label, "description": description}
 
 
@@ -145,7 +194,7 @@ _EFFORT_VALUES: list[tuple[str, str]] = [
 ]
 
 
-SYSTEM_ENTITY_TYPE_TEMPLATES: list[dict[str, Any]] = [
+SYSTEM_ENTITY_TYPE_TEMPLATES: list[EntityTypeTemplate] = [
     {
         "type_id": NOTE_ROOT_ENTITY_TYPE_ID,
         "parent_type_id": None,
@@ -538,11 +587,8 @@ REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS: frozenset[str] = frozenset(
 )
 
 
-NamespaceTemplateTypeSpec = dict[str, Any]
-
-
 def _namespace_template_row_from_system_spec(
-    spec: NamespaceTemplateTypeSpec,
+    spec: EntityTypeTemplate,
 ) -> NamespaceTemplateTypeSpec:
     parent = spec.get("parent_type_id")
     return {
@@ -581,7 +627,7 @@ NAMESPACE_TEMPLATE_CORE_NOTE_TASK: list[NamespaceTemplateTypeSpec] = (
 
 
 def _ensure_namespace_template_seeds_contain_core_note_task(
-    seeds: list[dict[str, Any]],
+    seeds: list[NamespaceTemplateSeed],
 ) -> None:
     """
     В каждом сиде гарантирует:
@@ -593,14 +639,12 @@ def _ensure_namespace_template_seeds_contain_core_note_task(
     core = NAMESPACE_TEMPLATE_CORE_NOTE_TASK
     system_by_id = {item["type_id"]: item for item in SYSTEM_ENTITY_TYPE_TEMPLATES}
     for seed in seeds:
-        types_list = seed.get("types")
-        if not isinstance(types_list, list):
-            raise ValueError(f"namespace template seed {seed.get('template_id')} must have types: list")
-        present = {t.get("type_id") for t in types_list if isinstance(t, dict)}
+        types_list = seed["types"]
+        present = {item["type_id"] for item in types_list}
         for row in core:
             tid = row["type_id"]
             if tid not in present:
-                types_list.append(dict(row))
+                types_list.append(row.copy())
                 present.add(tid)
 
         # Резолв транзитивных parent_type_id → подтянуть их definition из ядра.
@@ -616,9 +660,7 @@ def _ensure_namespace_template_seeds_contain_core_note_task(
             parent_spec = system_by_id.get(parent_id)
             if parent_spec is None:
                 raise ValueError(
-                    f"namespace template seed {seed.get('template_id')!r}: "
-                    f"parent_type_id={parent_id!r} ссылается на тип, отсутствующий "
-                    "и в seed, и в SYSTEM_ENTITY_TYPE_TEMPLATES"
+                    f"namespace template seed {seed['template_id']!r}: parent_type_id={parent_id!r} ссылается на тип, отсутствующий и в seed, и в SYSTEM_ENTITY_TYPE_TEMPLATES"
                 )
             types_list.append(_namespace_template_row_from_system_spec(parent_spec))
             present.add(parent_id)
@@ -639,7 +681,7 @@ _HEALTH_VALUES: list[tuple[str, str]] = [
 ]
 
 
-COMMON_NAMESPACE_ANCHOR_TYPES: list[dict[str, Any]] = [
+COMMON_NAMESPACE_ANCHOR_TYPES: list[NamespaceTemplateTypeSpec] = [
     {
         "type_id": "topic",
         "name": "Тема",
@@ -811,7 +853,7 @@ COMMON_NAMESPACE_ANCHOR_TYPES: list[dict[str, Any]] = [
 # ----------------------------------------------------------------------
 
 
-SYSTEM_RELATIONSHIP_TYPE_TEMPLATES: list[dict[str, Any]] = [
+SYSTEM_RELATIONSHIP_TYPE_TEMPLATES: list[RelationshipTypeTemplate] = [
     {
         "type_id": "mentions",
         "name": "Упоминает",
@@ -1133,7 +1175,7 @@ SYSTEM_RELATIONSHIP_TYPE_TEMPLATES: list[dict[str, Any]] = [
 # ----------------------------------------------------------------------
 
 
-def _account_tier_field() -> dict[str, Any]:
+def _account_tier_field() -> FieldSpec:
     return _enum_field(
         label="Категория клиента",
         description="Стратегическая значимость для бизнеса",
@@ -1146,7 +1188,7 @@ def _account_tier_field() -> dict[str, Any]:
     )
 
 
-def _currency_field() -> dict[str, Any]:
+def _currency_field() -> FieldSpec:
     return _enum_field(
         label="Валюта",
         description="Валюта суммы",
@@ -1167,7 +1209,7 @@ def _currency_field() -> dict[str, Any]:
 # ----------------------------------------------------------------------
 
 
-_SEED_SALES = {
+_SEED_SALES: NamespaceTemplateSeed = {
     "template_id": "sales",
     "name": "B2B-продажи",
     "description": (
@@ -1507,7 +1549,7 @@ _SEED_SALES = {
 # ----------------------------------------------------------------------
 
 
-_SEED_AGILE = {
+_SEED_AGILE: NamespaceTemplateSeed = {
     "template_id": "agile_project",
     "name": "Agile-проект",
     "description": (
@@ -1621,8 +1663,7 @@ _SEED_AGILE = {
             "type_id": "release",
             "name": "Релиз",
             "description": (
-                "Инкремент продукта, выпущенный в прод. Якорь для "
-                "changelog-заметок и постмортемов."
+                "Инкремент продукта, выпущенный в прод. Якорь для changelog-заметок и постмортемов."
             ),
             "prompt": (
                 "Извлекай релиз по версии и дате выпуска.\n"
@@ -1944,7 +1985,7 @@ _SEED_AGILE = {
 # ----------------------------------------------------------------------
 
 
-_SEED_DEVELOPMENT = {
+_SEED_DEVELOPMENT: NamespaceTemplateSeed = {
     "template_id": "development",
     "name": "Команда разработки",
     "description": (
@@ -1976,8 +2017,14 @@ _SEED_DEVELOPMENT = {
                     label="Серьёзность (SEV)",
                     description="Уровень инцидента по SLA",
                     values_with_desc=[
-                        ("SEV1", "критично: полный простой/массовая потеря данных, эскалация немедленно"),
-                        ("SEV2", "серьёзно: ломается ключевой сценарий или большая часть пользователей"),
+                        (
+                            "SEV1",
+                            "критично: полный простой/массовая потеря данных, эскалация немедленно",
+                        ),
+                        (
+                            "SEV2",
+                            "серьёзно: ломается ключевой сценарий или большая часть пользователей",
+                        ),
                         ("SEV3", "ограниченное влияние на часть пользователей"),
                         ("SEV4", "косметика / неудобство, действий по часам не требует"),
                     ],
@@ -2277,7 +2324,7 @@ _SEED_DEVELOPMENT = {
 # ----------------------------------------------------------------------
 
 
-_SEED_HR = {
+_SEED_HR: NamespaceTemplateSeed = {
     "template_id": "hr",
     "name": "HR-команда",
     "description": (
@@ -2476,8 +2523,7 @@ _SEED_HR = {
             "type_id": "offer",
             "name": "Офер",
             "description": (
-                "Оформленное предложение работы кандидату со ставкой, "
-                "стартовой датой и статусом."
+                "Оформленное предложение работы кандидату со ставкой, стартовой датой и статусом."
             ),
             "prompt": (
                 "Извлекай отправленный кандидату офер с компенсацией и "
@@ -2582,8 +2628,7 @@ _SEED_HR = {
             "type_id": "performance_review",
             "name": "Performance review",
             "description": (
-                "Обзор производительности сотрудника за период с "
-                "оценкой и обратной связью."
+                "Обзор производительности сотрудника за период с оценкой и обратной связью."
             ),
             "prompt": (
                 "Извлекай состоявшееся ревью с периодом, оценкой и "
@@ -2697,7 +2742,7 @@ _SEED_HR = {
 # ----------------------------------------------------------------------
 
 
-_SEED_MARKETING = {
+_SEED_MARKETING: NamespaceTemplateSeed = {
     "template_id": "marketing",
     "name": "Маркетинг",
     "description": (
@@ -3027,7 +3072,7 @@ _SEED_MARKETING = {
 # ----------------------------------------------------------------------
 
 
-_SEED_SUPPORT = {
+_SEED_SUPPORT: NamespaceTemplateSeed = {
     "template_id": "support",
     "name": "Клиентская поддержка",
     "description": (
@@ -3353,7 +3398,7 @@ _SEED_SUPPORT = {
 # ----------------------------------------------------------------------
 
 
-_SEED_PRODUCT = {
+_SEED_PRODUCT: NamespaceTemplateSeed = {
     "template_id": "product_management",
     "name": "Продукт-менеджмент",
     "description": (
@@ -3613,8 +3658,7 @@ _SEED_PRODUCT = {
             "type_id": "okr_objective",
             "name": "OKR Objective",
             "description": (
-                "Цель в формате OKR на период (квартал/полугодие). "
-                "Контейнер для key_result."
+                "Цель в формате OKR на период (квартал/полугодие). Контейнер для key_result."
             ),
             "prompt": (
                 "Извлекай objective с явным владельцем и периодом.\n"
@@ -3656,8 +3700,7 @@ _SEED_PRODUCT = {
             "type_id": "key_result",
             "name": "Key Result",
             "description": (
-                "Измеримый key result для objective: метрика, целевое "
-                "значение, текущий прогресс."
+                "Измеримый key result для objective: метрика, целевое значение, текущий прогресс."
             ),
             "prompt": (
                 "Извлекай KR как метрику с целевым значением и единицей.\n"
@@ -3751,7 +3794,7 @@ _SEED_PRODUCT = {
 # ----------------------------------------------------------------------
 
 
-_SEED_RECRUITING = {
+_SEED_RECRUITING: NamespaceTemplateSeed = {
     "template_id": "recruiting",
     "name": "Кадровое агентство",
     "description": (
@@ -3974,8 +4017,7 @@ _SEED_RECRUITING = {
             "type_id": "placement",
             "name": "Placement",
             "description": (
-                "Успешное трудоустройство кандидата клиенту: дата выхода, "
-                "fee, гарантийный период."
+                "Успешное трудоустройство кандидата клиенту: дата выхода, fee, гарантийный период."
             ),
             "prompt": (
                 "Извлекай placement по факту выхода кандидата к клиенту.\n"
@@ -4063,7 +4105,7 @@ _SEED_RECRUITING = {
 # ----------------------------------------------------------------------
 
 
-_SEED_REAL_ESTATE = {
+_SEED_REAL_ESTATE: NamespaceTemplateSeed = {
     "template_id": "real_estate",
     "name": "Недвижимость",
     "description": (
@@ -4216,10 +4258,7 @@ _SEED_REAL_ESTATE = {
             "type_id": "viewing",
             "parent_type_id": MEETING_ENTITY_TYPE_ID,
             "name": "Показ",
-            "description": (
-                "Запланированный/состоявшийся показ объекта лиду. "
-                "Подтип встречи."
-            ),
+            "description": ("Запланированный/состоявшийся показ объекта лиду. Подтип встречи."),
             "prompt": (
                 "Извлекай показ по упоминанию визита лида на объект.\n"
                 "Примеры: «Показ на Ленина 5 завтра 18:00 для семьи "
@@ -4256,9 +4295,7 @@ _SEED_REAL_ESTATE = {
         {
             "type_id": "owner",
             "name": "Собственник",
-            "description": (
-                "Собственник или представитель собственника объекта."
-            ),
+            "description": ("Собственник или представитель собственника объекта."),
             "prompt": (
                 "Извлекай собственника по упоминанию владельца объекта "
                 "или его представителя.\n"
@@ -4292,10 +4329,7 @@ _SEED_REAL_ESTATE = {
         {
             "type_id": "agent",
             "name": "Агент",
-            "description": (
-                "Агент со стороны другой стороны сделки или партнёр "
-                "(co-broking)."
-            ),
+            "description": ("Агент со стороны другой стороны сделки или партнёр (co-broking)."),
             "prompt": (
                 "Извлекай агента, представляющего другую сторону сделки "
                 "или партнёра по co-broking.\n"
@@ -4365,7 +4399,7 @@ _SEED_REAL_ESTATE = {
 # ----------------------------------------------------------------------
 
 
-_SEED_LEGAL = {
+_SEED_LEGAL: NamespaceTemplateSeed = {
     "template_id": "legal",
     "name": "Юридическая практика",
     "description": (
@@ -4706,7 +4740,7 @@ _SEED_LEGAL = {
 # ----------------------------------------------------------------------
 
 
-_SEED_FINANCE = {
+_SEED_FINANCE: NamespaceTemplateSeed = {
     "template_id": "finance",
     "name": "Финансы",
     "description": (
@@ -4859,8 +4893,7 @@ _SEED_FINANCE = {
             "type_id": "vendor",
             "name": "Поставщик",
             "description": (
-                "Поставщик товаров/услуг: реквизиты, контакт-менеджер, "
-                "история счетов."
+                "Поставщик товаров/услуг: реквизиты, контакт-менеджер, история счетов."
             ),
             "prompt": (
                 "Извлекай поставщика по упоминанию вендора с типом услуг.\n"
@@ -4899,8 +4932,7 @@ _SEED_FINANCE = {
             "type_id": "budget",
             "name": "Бюджет",
             "description": (
-                "Утверждённый бюджет на период по категории/проекту: "
-                "лимит, потрачено, остаток."
+                "Утверждённый бюджет на период по категории/проекту: лимит, потрачено, остаток."
             ),
             "prompt": (
                 "Извлекай бюджет с периодом, категорией и лимитом.\n"
@@ -4943,10 +4975,7 @@ _SEED_FINANCE = {
         {
             "type_id": "transaction",
             "name": "Транзакция",
-            "description": (
-                "Финансовая операция: платёж, поступление, движение "
-                "между счетами."
-            ),
+            "description": ("Финансовая операция: платёж, поступление, движение между счетами."),
             "prompt": (
                 "Извлекай транзакцию по упоминанию факта движения денег.\n"
                 "Примеры: «Поступление 50k ₽ от Acme 12 марта» → "
@@ -5036,7 +5065,7 @@ _SEED_FINANCE = {
 # ----------------------------------------------------------------------
 
 
-_SEED_EDUCATION = {
+_SEED_EDUCATION: NamespaceTemplateSeed = {
     "template_id": "education",
     "name": "Образование",
     "description": (
@@ -5118,8 +5147,7 @@ _SEED_EDUCATION = {
             "parent_type_id": MEETING_ENTITY_TYPE_ID,
             "name": "Урок",
             "description": (
-                "Учебная единица в курсе: лекция, семинар, мастер-класс. "
-                "Подтип встречи."
+                "Учебная единица в курсе: лекция, семинар, мастер-класс. Подтип встречи."
             ),
             "prompt": (
                 "Извлекай урок по упоминанию занятия с темой и форматом.\n"
@@ -5224,9 +5252,7 @@ _SEED_EDUCATION = {
         {
             "type_id": "student",
             "name": "Студент",
-            "description": (
-                "Учащийся на курсе с привязкой к когорте."
-            ),
+            "description": ("Учащийся на курсе с привязкой к когорте."),
             "prompt": (
                 "Извлекай студента, если в тексте есть имя учащегося с "
                 "контекстом обучения.\n"
@@ -5264,8 +5290,7 @@ _SEED_EDUCATION = {
             "type_id": "instructor",
             "name": "Преподаватель",
             "description": (
-                "Преподаватель / ментор курса: специализация, "
-                "распределение по урокам."
+                "Преподаватель / ментор курса: специализация, распределение по урокам."
             ),
             "prompt": (
                 "Извлекай преподавателя по упоминанию ведущего/ментора "
@@ -5352,9 +5377,7 @@ _SEED_EDUCATION = {
         {
             "type_id": "enrollment",
             "name": "Зачисление",
-            "description": (
-                "Факт записи студента в когорту со статусом прохождения."
-            ),
+            "description": ("Факт записи студента в когорту со статусом прохождения."),
             "prompt": (
                 "Извлекай зачисление по упоминанию записи студента в "
                 "когорту со статусом.\n"
@@ -5430,7 +5453,7 @@ _SEED_EDUCATION = {
 # ----------------------------------------------------------------------
 
 
-NAMESPACE_TEMPLATE_SEEDS: list[dict[str, Any]] = [
+NAMESPACE_TEMPLATE_SEEDS: list[NamespaceTemplateSeed] = [
     _SEED_SALES,
     _SEED_AGILE,
     _SEED_DEVELOPMENT,

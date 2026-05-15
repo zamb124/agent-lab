@@ -4,8 +4,8 @@
 Уникальность строки: (company_id, namespace, type_id).
 """
 
-from datetime import datetime, UTC
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -53,9 +53,13 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def get_parent_type_id_map_for_namespace(
-        self, namespace: str
-    ) -> dict[str, str | None]:
+    async def list_for_company_id(self, company_id: str) -> list[EntityType]:
+        async with self._db.session() as session:
+            stmt = select(EntityType).where(EntityType.company_id == company_id)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def get_parent_type_id_map_for_namespace(self, namespace: str) -> dict[str, str | None]:
         """type_id -> parent_type_id в рамках одного namespace."""
         company_id = self._get_company_id()
         async with self._db.session() as session:

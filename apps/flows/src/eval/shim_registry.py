@@ -8,10 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Tuple
-
-if TYPE_CHECKING:
-    from apps.flows.src.eval.namespace import PythonNamespaceBuilder
+from typing import Any, Callable, Tuple
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,16 +20,16 @@ class InlineShimSpec:
 
     name: str
     forbid_submodule_imports: bool
-    factory: Callable[["PythonNamespaceBuilder"], Any]
+    factory: Callable[[Any], Any]
 
 
-def _httpx_factory(_builder: PythonNamespaceBuilder) -> Any:
+def _httpx_factory(_builder: Any) -> Any:
     from apps.flows.src.eval.wrappers import HttpxModule
 
     return HttpxModule()
 
 
-def _llm_factory(_builder: PythonNamespaceBuilder) -> Any:
+def _llm_factory(_builder: Any) -> Any:
     from apps.flows.src.eval.wrappers import SafeLLMClient
 
     return SafeLLMClient()
@@ -56,6 +53,6 @@ def get_inline_shim(name: str) -> InlineShimSpec | None:
     return inline_shim_map().get(name)
 
 
-def apply_inline_shims(builder: PythonNamespaceBuilder, namespace: dict[str, Any]) -> None:
+def apply_inline_shims(builder: Any, namespace: dict[str, Any]) -> None:
     for spec in INLINE_SHIMS:
         namespace[spec.name] = spec.factory(builder)

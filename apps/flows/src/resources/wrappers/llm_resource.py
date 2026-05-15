@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from a2a.utils.message import get_message_text
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.runtime.llm_byok import is_llm_byok_resource
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm.config import LLMCallConfig, ReasoningEffort
@@ -19,15 +20,13 @@ from core.tracing.operation_span import traced_operation
 logger = get_logger(__name__)
 
 
-async def _require_balance_for_llm_resource() -> None:
-    from apps.flows.src.container import get_container
-
+async def _require_balance_for_llm_resource(container: FlowRuntimeContainer) -> None:
     actx = get_context()
     if actx is None or actx.active_company is None:
         raise ValueError("Контекст с active_company обязателен для LLMResource")
     if actx.user is None or not str(actx.user.user_id).strip():
         raise ValueError("Контекст с user обязателен для LLMResource (биллинг и уведомления)")
-    await get_container().billing_service.require_balance_for_billable_operation(
+    await container.billing_service.require_balance_for_billable_operation(
         actx.active_company.company_id,
         str(actx.user.user_id).strip(),
         operation_code=BALANCE_BLOCK_OPERATION_LLM,
@@ -65,7 +64,10 @@ class LLMResource:
         folder_id: Optional[str] = None,
         extra_request_body: Optional[Dict[str, Any]] = None,
         extra_request_headers: Optional[Dict[str, str]] = None,
+        *,
+        container: FlowRuntimeContainer,
     ):
+        self.container = container
         self.provider = provider
         self.model = model
         self.fallback_models = list(fallback_models or [])
@@ -135,7 +137,7 @@ class LLMResource:
         """
         client = self._get_client()
         if not is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
-            await _require_balance_for_llm_resource()
+            await _require_balance_for_llm_resource(self.container)
 
         br_name = self._billing_resource_name()
         async with traced_operation(
@@ -174,7 +176,7 @@ class LLMResource:
         """
         client = self._get_client()
         if not is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
-            await _require_balance_for_llm_resource()
+            await _require_balance_for_llm_resource(self.container)
 
         br_name = self._billing_resource_name()
         async with traced_operation(
@@ -221,7 +223,7 @@ class LLMResource:
         """
         client = self._get_client()
         if not is_llm_byok_resource(api_key=self.api_key, base_url=self.base_url):
-            await _require_balance_for_llm_resource()
+            await _require_balance_for_llm_resource(self.container)
 
         br_name = self._billing_resource_name()
         async with traced_operation(

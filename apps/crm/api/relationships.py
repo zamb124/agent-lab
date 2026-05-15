@@ -4,7 +4,8 @@ API для работы со связями (relationships).
 
 import asyncio
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
@@ -31,10 +32,12 @@ router = APIRouter(prefix="/relationships", tags=["Relationships"])
 @router.get("", response_model=CursorPage[RelationshipResponse])
 async def list_relationships(
     container: ContainerDep,
-    entity_id: str | None = Query(None, description="Фильтр по entity (source или target)"),
-    namespace: str | None = Query(None, description="Фильтр по namespace"),
-    cursor: str | None = Query(None, description="Cursor для следующей страницы"),
-    limit: int = Query(200, ge=1, le=1000, description="Размер страницы"),
+    entity_id: Annotated[
+        str | None, Query(description="Фильтр по entity (source или target)")
+    ] = None,
+    namespace: Annotated[str | None, Query(description="Фильтр по namespace")] = None,
+    cursor: Annotated[str | None, Query(description="Cursor для следующей страницы")] = None,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Размер страницы")] = 200,
 ):
     """Связи с cursor-пагинацией. Без entity_id возвращает все связи компании постранично."""
     repo = container.relationship_repository
@@ -86,7 +89,9 @@ async def create_relationship(
         raise HTTPException(status_code=401, detail="Not authenticated")
     company_id = context.active_company.company_id
 
-    all_types = await container.relationship_type_repository.get_all_for_company(include_system=True)
+    all_types = await container.relationship_type_repository.get_all_for_company(
+        include_system=True
+    )
     valid_type_ids = {t.type_id for t in all_types}
     if data.relationship_type not in valid_type_ids:
         raise HTTPException(
@@ -105,11 +110,11 @@ async def create_relationship(
         attributes=data.attributes or {},
         company_id=company_id,
         created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC)
+        updated_at=datetime.now(UTC),
     )
 
     try:
-        await container.relationship_repository.create(relationship)
+        _ = await container.relationship_repository.create(relationship)
     except IntegrityError as exc:
         if "uq_relationships_unique_edge" in str(exc):
             raise HTTPException(status_code=409, detail="Relationship already exists")
@@ -132,8 +137,8 @@ async def delete_relationship(
 @router.get("/types/", response_model=OffsetPage[RelationshipTypeResponse])
 async def list_relationship_types(
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[RelationshipTypeResponse]:
     repo = container.relationship_type_repository
     types, total = await asyncio.gather(
@@ -168,31 +173,39 @@ async def create_relationship_type(
         is_system=False,
     )
 
-    await container.relationship_type_repository.create_custom_type(rel_type)
+    _ = await container.relationship_type_repository.create_custom_type(rel_type)
     return rel_type
 
 
 @router.get("/path/", response_model=ShortestPathResponse)
 async def find_shortest_path(
     container: ContainerDep,
-    from_entity_id: str = Query(..., alias="from", description="ID начальной entity"),
-    to_entity_id: str = Query(..., alias="to", description="ID конечной entity"),
-    max_depth: int = Query(10, ge=1, le=20, description="Максимальная глубина поиска"),
-    created_at_from: datetime | None = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: datetime | None = Query(None, description="Фильтр created_at <= value"),
-    namespace: str | None = Query(
-        None,
-        description=(
-            "Namespace пространства данных. При непустом значении используется и для "
-            "лимита сущностей, и как фильтр Relationship.namespace при обходе."
+    from_entity_id: Annotated[str, Query(alias="from", description="ID начальной entity")],
+    to_entity_id: Annotated[str, Query(alias="to", description="ID конечной entity")],
+    max_depth: Annotated[int, Query(ge=1, le=20, description="Максимальная глубина поиска")] = 10,
+    created_at_from: Annotated[
+        datetime | None, Query(description="Фильтр created_at >= value")
+    ] = None,
+    created_at_to: Annotated[
+        datetime | None, Query(description="Фильтр created_at <= value")
+    ] = None,
+    namespace: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Namespace пространства данных. При непустом значении используется и для "
+                "лимита сущностей, и как фильтр Relationship.namespace при обходе."
+            ),
         ),
-    ),
-    include_all_namespaces: bool = Query(
-        False,
-        description=(
-            "Если true и задан namespace — обход берёт связи всех Relationship.namespace."
+    ] = None,
+    include_all_namespaces: Annotated[
+        bool,
+        Query(
+            description=(
+                "Если true и задан namespace — обход берёт связи всех Relationship.namespace."
+            ),
         ),
-    ),
+    ] = False,
 ):
     """
     Кратчайший путь между entities с учетом весов.

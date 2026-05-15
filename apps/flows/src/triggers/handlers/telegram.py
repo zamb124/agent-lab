@@ -11,6 +11,7 @@ import secrets
 from typing import Any, Dict, List, Optional
 
 from apps.flows.config import get_settings as flows_get_settings
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
@@ -52,8 +53,8 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
     trigger_type = TriggerType.TELEGRAM
 
-    def __init__(self, base_url: str):
-        super().__init__(base_url)
+    def __init__(self, base_url: str, *, container: FlowRuntimeContainer):
+        super().__init__(base_url, container=container)
         self._executor = TriggerExecutor()
 
     async def register(
@@ -230,10 +231,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         2. Валидирует (allowed_users, commands)
         3. Запускает агента
         """
-        from apps.flows.src.container import get_container
-
-        container = get_container()
-        flow_config = await container.flow_repository.get(flow_id)
+        flow_config = await self.container.flow_repository.get(flow_id)
 
         if not flow_config:
             raise TriggerValidationError(f"Flow not found: {flow_id}")
@@ -398,14 +396,12 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
     async def _resolve_variable(self, var_ref: str, flow_id: str, branch_id: str) -> str:
         """Резолвит @var:key через тот же словарь, что у runtime flow (см. FlowFactory)."""
-        from apps.flows.src.container import get_container
         from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
         from core.variables.resolver import VariableResolutionError
 
-        container = get_container()
         try:
             return await resolve_at_var_for_flow(
-                container,
+                self.container,
                 flow_id,
                 var_ref,
                 branch_id=branch_id,

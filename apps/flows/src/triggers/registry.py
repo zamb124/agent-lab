@@ -9,6 +9,7 @@ TriggerRegistry - управление регистрацией триггеро
 
 from typing import Dict, Optional, Type
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.triggers.handlers.base import BaseTriggerHandler
 from core.logging import get_logger
@@ -47,12 +48,13 @@ class TriggerRegistry:
     - Получение handler по типу триггера
     """
 
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, container: FlowRuntimeContainer):
         """
         Args:
             base_url: Базовый URL сервиса для webhook URLs
         """
         self.base_url = base_url
+        self.container = container
         self._handlers: Dict[TriggerType, BaseTriggerHandler] = {}
 
     def register_handler(
@@ -67,7 +69,7 @@ class TriggerRegistry:
             trigger_type: Тип триггера
             handler_class: Класс handler
         """
-        handler = handler_class(self.base_url)
+        handler = handler_class(self.base_url, container=self.container)
         self._handlers[trigger_type] = handler
         logger.info(f"Registered trigger handler: {trigger_type.value}")
 

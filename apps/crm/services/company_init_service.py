@@ -6,10 +6,7 @@
 """
 
 import uuid
-from datetime import datetime, UTC
-from typing import Any
-
-from sqlalchemy import select
+from datetime import UTC, datetime
 
 from apps.crm.constants_graph import (
     BELONGS_TO_RELATIONSHIP_TYPE,
@@ -30,6 +27,7 @@ from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_SEEDS,
     SYSTEM_ENTITY_TYPE_TEMPLATES,
     SYSTEM_RELATIONSHIP_TYPE_TEMPLATES,
+    EntityTypeTemplate,
 )
 from core.db.repositories.company_repository import CompanyRepository
 from core.logging import get_logger
@@ -58,14 +56,14 @@ class CompanyInitService:
         company_repo: CompanyRepository,
         relationship_repo: RelationshipRepository,
         company_mapping_repo: CompanyMappingRepository,
-    ):
-        self._entity_type_repo = entity_type_repo
-        self._relationship_type_repo = relationship_type_repo
-        self._namespace_template_repo = namespace_template_repo
-        self._entity_repo = entity_repo
-        self._company_repo = company_repo
-        self._relationship_repo = relationship_repo
-        self._company_mapping_repo = company_mapping_repo
+    ) -> None:
+        self._entity_type_repo: EntityTypeRepository = entity_type_repo
+        self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
+        self._namespace_template_repo: NamespaceTemplateRepository = namespace_template_repo
+        self._entity_repo: EntityRepository = entity_repo
+        self._company_repo: CompanyRepository = company_repo
+        self._relationship_repo: RelationshipRepository = relationship_repo
+        self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
 
     async def initialize_company(self, company_id: str) -> dict[str, int | bool]:
         """
@@ -82,22 +80,21 @@ class CompanyInitService:
         entity_types_created = await self._init_entity_types(company_id)
         relationship_types_created = await self._init_relationship_types(company_id)
         templates_created = await self._init_namespace_templates(company_id)
-        await self._ensure_company_entity(company_id)
-        await self._ensure_namespace_entity(company_id, "default")
+        _ = await self._ensure_company_entity(company_id)
+        _ = await self._ensure_namespace_entity(company_id, "default")
         await self._ensure_default_organization_entity(company_id)
 
         logger.info(
-            f"Company {company_id} initialized: "
-            f"{entity_types_created} entity types, "
-            f"{relationship_types_created} relationship types, "
-            f"{templates_created} namespace templates"
+            f"Company {company_id} initialized: {entity_types_created} entity types, {relationship_types_created} relationship types, {templates_created} namespace templates"
         )
 
         return {
             "entity_types": entity_types_created,
             "relationship_types": relationship_types_created,
             "namespace_templates": templates_created,
-            "already_initialized": entity_types_created == 0 and relationship_types_created == 0 and templates_created == 0
+            "already_initialized": entity_types_created == 0
+            and relationship_types_created == 0
+            and templates_created == 0,
         }
 
     async def _init_entity_types(self, company_id: str) -> int:
@@ -107,7 +104,7 @@ class CompanyInitService:
         existing_types = await self._check_existing_types(company_id)
         existing_by_key = {(item.namespace, item.type_id): item for item in existing_types}
 
-        entity_type_seed_specs: tuple[dict[str, Any], ...] = (
+        entity_type_seed_specs: tuple[EntityTypeTemplate, ...] = (
             *SYSTEM_ENTITY_TYPE_TEMPLATES,
             *COMMON_NAMESPACE_ANCHOR_TYPES,
         )
@@ -136,7 +133,7 @@ class CompanyInitService:
                     extractable=template.get("extractable", True),
                     created_at=datetime.now(UTC),
                 )
-                await self._entity_type_repo.create(entity_type)
+                _ = await self._entity_type_repo.create(entity_type)
                 created_count += 1
                 continue
             await self._entity_type_repo.update_metadata(
@@ -172,20 +169,20 @@ class CompanyInitService:
             existing = existing_by_id.get(template["type_id"])
             if existing is None:
                 rel_type = RelationshipType(
-                    type_id=template['type_id'],
+                    type_id=template["type_id"],
                     company_id=company_id,
-                    name=template['name'],
-                    description=template.get('description'),
-                    prompt=template.get('prompt'),
-                    is_directed=template.get('is_directed', True),
-                    inverse_type_id=template.get('inverse_type_id'),
-                    icon=template.get('icon'),
-                    color=template.get('color'),
+                    name=template["name"],
+                    description=template.get("description"),
+                    prompt=template.get("prompt"),
+                    is_directed=template.get("is_directed", True),
+                    inverse_type_id=template.get("inverse_type_id"),
+                    icon=template.get("icon"),
+                    color=template.get("color"),
                     is_system=True,
-                    weight_default=template.get('weight_default', 1.0),
-                    created_at=datetime.now(UTC)
+                    weight_default=template.get("weight_default", 1.0),
+                    created_at=datetime.now(UTC),
                 )
-                await self._relationship_type_repo.update(rel_type)
+                _ = await self._relationship_type_repo.update(rel_type)
                 created_count += 1
                 continue
             existing.name = template["name"]
@@ -197,7 +194,7 @@ class CompanyInitService:
             existing.color = template.get("color")
             existing.is_system = True
             existing.weight_default = template.get("weight_default", 1.0)
-            await self._relationship_type_repo.update(existing)
+            _ = await self._relationship_type_repo.update(existing)
 
         return created_count
 
@@ -205,12 +202,9 @@ class CompanyInitService:
         created_count = 0
         for seed in NAMESPACE_TEMPLATE_SEEDS:
             seed_crm_settings = seed.get("crm_settings")
-            if seed_crm_settings is not None and not isinstance(seed_crm_settings, dict):
-                raise ValueError(
-                    f"namespace template seed {seed.get('template_id')!r}: "
-                    "crm_settings must be a dict"
-                )
-            existing = await self._namespace_template_repo.get_by_template_id(seed["template_id"], company_id=company_id)
+            existing = await self._namespace_template_repo.get_by_template_id(
+                seed["template_id"], company_id=company_id
+            )
             if existing is None:
                 existing = await self._namespace_template_repo.create_template(
                     template_id=seed["template_id"],
@@ -231,7 +225,7 @@ class CompanyInitService:
                 existing = await self._namespace_template_repo.update(existing)
 
             for item in seed["types"]:
-                await self._namespace_template_repo.upsert_type(
+                _ = await self._namespace_template_repo.upsert_type(
                     template_key=existing.template_key,
                     type_id=item["type_id"],
                     parent_type_id=item.get("parent_type_id"),
@@ -256,7 +250,7 @@ class CompanyInitService:
                 company_id=company_id,
             )
             if retired_row is not None:
-                await self._namespace_template_repo.delete_template_with_types(
+                _ = await self._namespace_template_repo.delete_template_with_types(
                     retired_row.template_key,
                 )
 
@@ -272,20 +266,10 @@ class CompanyInitService:
         Returns:
             Список существующих типов компании
         """
-        async with self._entity_type_repo._db.session() as session:
-            stmt = select(EntityType).where(
-                EntityType.company_id == company_id
-            )
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
+        return await self._entity_type_repo.list_for_company_id(company_id)
 
     async def _check_existing_relationship_types(self, company_id: str) -> list[RelationshipType]:
-        async with self._relationship_type_repo._db.session() as session:
-            stmt = select(RelationshipType).where(
-                RelationshipType.company_id == company_id,
-            )
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
+        return await self._relationship_type_repo.list_for_company_id(company_id)
 
     async def _ensure_company_entity(self, company_id: str) -> str:
         """Идемпотентно создает CRM-сущность для компании-тенанта."""
@@ -312,7 +296,7 @@ class CompanyInitService:
             tags=[],
             user_id=company.owner_user_id or company_id,
         )
-        await self._entity_repo.create(entity)
+        _ = await self._entity_repo.create(entity)
         logger.info(f"Created company entity {entity.entity_id} for company {company_id}")
         return entity.entity_id
 
@@ -343,7 +327,7 @@ class CompanyInitService:
             tags=[],
             user_id=company_id,
         )
-        await self._entity_repo.create(entity)
+        _ = await self._entity_repo.create(entity)
 
         rel = Relationship(
             relationship_id=str(uuid.uuid4()),
@@ -353,10 +337,13 @@ class CompanyInitService:
             target_entity_id=company_entity_id,
             relationship_type=BELONGS_TO_RELATIONSHIP_TYPE,
         )
-        await self._relationship_repo.create(rel)
+        _ = await self._relationship_repo.create(rel)
 
         logger.info(f"Created namespace entity {entity.entity_id} for namespace {namespace_name}")
         return entity.entity_id
+
+    async def ensure_namespace_entity(self, company_id: str, namespace_name: str) -> str:
+        return await self._ensure_namespace_entity(company_id, namespace_name)
 
     async def _ensure_default_organization_entity(self, company_id: str) -> None:
         """Организация по умолчанию для графа CRM и company_mapping (is_owner)."""
@@ -376,7 +363,7 @@ class CompanyInitService:
                 entity_id=entities[0].entity_id,
                 is_owner=True,
             )
-            await self._company_mapping_repo.create(mapping)
+            _ = await self._company_mapping_repo.create(mapping)
             return
 
         company = await self._company_repo.get(company_id)
@@ -393,13 +380,13 @@ class CompanyInitService:
             tags=[],
             user_id=company.owner_user_id if company.owner_user_id else company_id,
         )
-        await self._entity_repo.create(entity)
+        _ = await self._entity_repo.create(entity)
         mapping = CompanyMapping(
             company_id=company_id,
             entity_id=entity.entity_id,
             is_owner=True,
         )
-        await self._company_mapping_repo.create(mapping)
+        _ = await self._company_mapping_repo.create(mapping)
         logger.info(
             f"Created default organization entity {entity.entity_id} for company {company_id}"
         )

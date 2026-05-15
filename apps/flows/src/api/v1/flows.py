@@ -665,6 +665,7 @@ async def validate_flow(
         flow_repository=container.flow_repository,
         tool_repository=container.tool_repository,
         node_repository=container.node_repository,
+        flow_builder=container.flow_factory.create_validation_flow,
     )
 
     result = await validator.validate(
@@ -886,6 +887,7 @@ async def create_flow(
         flow_repository=container.flow_repository,
         tool_repository=container.tool_repository,
         node_repository=container.node_repository,
+        flow_builder=container.flow_factory.create_validation_flow,
     )
     validation_result = await validator.validate(
         nodes=nodes,
@@ -1015,10 +1017,10 @@ async def get_flow(
 
         evaluation_dict = None
         if flow_cfg.evaluation:
-            if hasattr(flow_cfg.evaluation, "model_dump"):
-                evaluation_dict = flow_cfg.evaluation.model_dump()
-            else:
-                evaluation_dict = flow_cfg.evaluation
+            evaluation_dict = {
+                test_case_id: test_case.model_dump()
+                for test_case_id, test_case in flow_cfg.evaluation.items()
+            }
 
         branches_response = {}
         if flow_cfg.branches:

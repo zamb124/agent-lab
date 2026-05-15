@@ -8,13 +8,13 @@
 from .agent_session_tools import (
     ask_user,
     final_answer,
-    finish,
     hitl_operator_task,
     reason,
     self_check,
 )
 from .docx_template import fill_docx_template
 from .files import create_file, read_file
+from .finish_tool import finish
 from .format_text_markdown import format_text_markdown
 from .google_docs import (
     gdocs_append_text,

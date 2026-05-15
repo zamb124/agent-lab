@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, UTC
-from typing import Any
+from datetime import UTC, datetime
+from typing import cast
 
 from apps.crm.constants_graph import (
     BELONGS_TO_RELATIONSHIP_TYPE,
@@ -22,6 +22,7 @@ from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
+from core.models.identity_models import User
 
 logger = get_logger(__name__)
 
@@ -38,10 +39,32 @@ class UserPersonService:
         user_repository: UserRepository,
         relationship_repo: RelationshipRepository,
     ) -> None:
-        self._entity_repo = entity_repo
-        self._entity_type_repo = entity_type_repo
-        self._user_repository = user_repository
-        self._relationship_repo = relationship_repo
+        self._entity_repo: EntityRepository = entity_repo
+        self._entity_type_repo: EntityTypeRepository = entity_type_repo
+        self._user_repository: UserRepository = user_repository
+        self._relationship_repo: RelationshipRepository = relationship_repo
+
+    @staticmethod
+    def _crm_attrs(user: User) -> dict[str, object]:
+        raw = cast(object, user.attrs.get("crm"))
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            raise ValueError("user.attrs['crm'] must be an object")
+        return dict(cast(dict[str, object], raw))
+
+    @staticmethod
+    def _string_map(raw: object, field_name: str) -> dict[str, str]:
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            raise ValueError(f"user.attrs['crm'][{field_name!r}] must be an object")
+        out: dict[str, str] = {}
+        for key, value in cast(dict[object, object], raw).items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise ValueError(f"user.attrs['crm'][{field_name!r}] must be dict[str, str]")
+            out[key] = value
+        return out
 
     async def get_or_create_person_entity_id(
         self,
@@ -52,15 +75,18 @@ class UserPersonService:
         if user is None:
             raise ValueError(f"User not found: {user_id}")
 
-        crm_block: dict[str, Any] = dict(user.attrs.get("crm") or {})
-        by_company: dict[str, str] = dict(crm_block.get("person_entity_by_company") or {})
+        crm_block = self._crm_attrs(user)
+        by_company = self._string_map(
+            crm_block.get("person_entity_by_company"),
+            "person_entity_by_company",
+        )
         existing_id = by_company.get(company_id)
         if existing_id:
             existing = await self._entity_repo.get(existing_id)
             if existing is not None and existing.company_id == company_id:
                 if existing.entity_type == CONTACT_ENTITY_TYPE:
                     existing.entity_type = MEMBER_ENTITY_TYPE
-                    await self._entity_repo.update(existing)
+                    _ = await self._entity_repo.update(existing)
                     logger.info(f"Migrated entity {existing_id} from contact to member")
                 await self._sync_person_fields_from_user(existing, user)
                 return existing_id
@@ -73,7 +99,7 @@ class UserPersonService:
             raise ValueError("Тип сущности member не найден для компании (инициализация CRM?)")
 
         display = self._display_name_from_user(user)
-        attributes: dict[str, Any] = {
+        attributes: dict[str, object] = {
             PLATFORM_USER_ID_ATTR: user_id,
         }
         if user.first_name:
@@ -93,7 +119,7 @@ class UserPersonService:
             company_id=company_id,
             namespace=USER_PERSON_NAMESPACE,
         )
-        await self._entity_repo.create(entity)
+        _ = await self._entity_repo.create(entity)
         await self._ensure_member_belongs_to_company(entity.entity_id, company_id)
 
         by_company[company_id] = entity.entity_id
@@ -102,7 +128,7 @@ class UserPersonService:
         merged_attrs["crm"] = crm_block
         user.attrs = merged_attrs
         user.updated_at = datetime.now(UTC)
-        await self._user_repository.set(user)
+        _ = await self._user_repository.set(user)
 
         logger.info(f"Created member entity {entity.entity_id} for user {user_id}")
         return entity.entity_id
@@ -116,15 +142,18 @@ class UserPersonService:
         user = await self._user_repository.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
-        crm_block: dict[str, Any] = dict(user.attrs.get("crm") or {})
-        last_map: dict[str, str] = dict(crm_block.get("last_voice_entity_id_by_namespace") or {})
+        crm_block = self._crm_attrs(user)
+        last_map = self._string_map(
+            crm_block.get("last_voice_entity_id_by_namespace"),
+            "last_voice_entity_id_by_namespace",
+        )
         last_map[namespace] = voice_entity_id
         crm_block["last_voice_entity_id_by_namespace"] = last_map
         merged = dict(user.attrs)
         merged["crm"] = crm_block
         user.attrs = merged
         user.updated_at = datetime.now(UTC)
-        await self._user_repository.set(user)
+        _ = await self._user_repository.set(user)
 
     async def format_user_profile_for_ai(self, user_id: str) -> str:
         user = await self._user_repository.get(user_id)
@@ -152,8 +181,11 @@ class UserPersonService:
         user = await self._user_repository.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
-        crm_block: dict[str, Any] = dict(user.attrs.get("crm") or {})
-        last_map: dict[str, str] = dict(crm_block.get("last_voice_entity_id_by_namespace") or {})
+        crm_block = self._crm_attrs(user)
+        last_map = self._string_map(
+            crm_block.get("last_voice_entity_id_by_namespace"),
+            "last_voice_entity_id_by_namespace",
+        )
         eid = last_map.get(namespace)
         if not eid:
             return None
@@ -170,7 +202,7 @@ class UserPersonService:
         return eid
 
     @staticmethod
-    def _display_name_from_user(user: Any) -> str:
+    def _display_name_from_user(user: User) -> str:
         parts: list[str] = []
         if user.first_name and user.first_name.strip():
             parts.append(user.first_name.strip())
@@ -212,9 +244,9 @@ class UserPersonService:
             target_entity_id=company_entities[0].entity_id,
             relationship_type=BELONGS_TO_RELATIONSHIP_TYPE,
         )
-        await self._relationship_repo.create(rel)
+        _ = await self._relationship_repo.create(rel)
 
-    async def _sync_person_fields_from_user(self, entity: CRMEntity, user: Any) -> None:
+    async def _sync_person_fields_from_user(self, entity: CRMEntity, user: User) -> None:
         next_name = self._display_name_from_user(user)
         attrs = dict(entity.attributes)
         attrs[PLATFORM_USER_ID_ATTR] = user.user_id
@@ -222,11 +254,13 @@ class UserPersonService:
             attrs["first_name"] = user.first_name
         if user.last_name:
             attrs["last_name"] = user.last_name
-        changed = entity.name != next_name or entity.description != user.bio or attrs != entity.attributes
+        changed = (
+            entity.name != next_name or entity.description != user.bio or attrs != entity.attributes
+        )
         if not changed:
             return
         entity.name = next_name
         entity.description = user.bio
         entity.attributes = attrs
         entity.updated_at = datetime.now(UTC)
-        await self._entity_repo.update(entity)
+        _ = await self._entity_repo.update(entity)

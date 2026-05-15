@@ -35,6 +35,7 @@ from a2a.utils.message import get_message_text, new_agent_text_message
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import PreparedTaskParams
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.files import (
     extract_incoming_a2a_files,
     format_a2a_files_content,
@@ -97,6 +98,7 @@ async def _build_task_from_events(
     context_id: str,
     input_message: Message,
     flow_id: str,
+    container: FlowRuntimeContainer,
 ) -> Task:
     """
     Строит Task из накопленных событий.
@@ -177,9 +179,6 @@ async def _build_task_from_events(
         )
 
     # Загружаем существующую историю из state для multi-turn сценариев
-    from apps.flows.src.container import get_container
-
-    container = get_container()
     session_id = f"{flow_id}:{context_id}"
     state = await container.state_manager.get_state(session_id)
     existing_history = state.get("messages", []) if state else []
@@ -256,9 +255,6 @@ class A2AChannel(BaseChannel):
             logger.warning("Cannot send_to_user: no context available")
             return
 
-        from apps.flows.src.container import get_container
-
-        container = get_container()
         task_id = self.context.metadata.get("task_id", "")
         context_id = self.context.metadata.get("context_id", "")
         session_id = self._generate_session_id(context_id)
@@ -270,7 +266,7 @@ class A2AChannel(BaseChannel):
             user_id=self.context.user.user_id if self.context.user else "system",
             user_groups=self._get_user_groups_from_context(self.context)
         )
-        emitter = Emitter(container.redis_client, exec_state)
+        emitter = Emitter(self.container.redis_client, exec_state)
         await emitter.emit_text(content, append=False, last_chunk=True)
 
     async def _handle_takeover_user_reply(
@@ -282,10 +278,7 @@ class A2AChannel(BaseChannel):
         Маршрутизирует текст пользователя в dialog_log без запуска flow.
         Возвращает status-update input-required (задача остаётся в ожидании оператора).
         """
-        from apps.flows.src.container import get_container
-
-        container = get_container()
-        svc = container.operator_handoff_service
+        svc = self.container.operator_handoff_service
         if self.context is None or self.context.active_company is None:
             raise ValueError("A2A takeover reply requires active_company in context")
 
@@ -342,14 +335,11 @@ class A2AChannel(BaseChannel):
         company_id = self.context.active_company.company_id
         user_id = self.context.user.user_id if self.context.user else None
         prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
-        from apps.flows.src.container import get_container
-
-        container = get_container()
         files_data: List[Dict[str, Any]] = []
 
         for inc in incoming:
             if inc.data is not None:
-                item = await container.file_processor.persist_uploaded_file_as_state_files_item(
+                item = await self.container.file_processor.persist_uploaded_file_as_state_files_item(
                     data=inc.data,
                     original_name=inc.name,
                     content_type=inc.mime_type,
@@ -388,10 +378,8 @@ class A2AChannel(BaseChannel):
             raise ValueError(
                 "Авто-STT входящих audio-вложений требует active_company в контексте запроса"
             )
-        from apps.flows.src.container import get_container
-
         return await transcribe_incoming_audio_files(
-            container=get_container(),
+            container=self.container,
             files_data=files_data,
             company_id=self.context.active_company.company_id,
         )
@@ -456,6 +444,7 @@ class A2AChannel(BaseChannel):
                 context_id=params.message.context_id or str(uuid.uuid4()),
                 input_message=params.message,
                 flow_id=self.flow_id,
+                container=self.container,
             )
 
         # Обычный режим
@@ -474,17 +463,14 @@ class A2AChannel(BaseChannel):
                 context_id=prepared.context_id,
                 input_message=prepared.message,
                 flow_id=self.flow_id,
+                container=self.container,
             )
-
-        from apps.flows.src.container import get_container
-
-        container = get_container()
 
         # Таймаут короче для тестов
         from core.config.testing import is_testing
         timeout = 30.0 if is_testing() else 300.0
 
-        subscriber = EventSubscriber(container.redis_client)
+        subscriber = EventSubscriber(self.container.redis_client)
         ready_event = asyncio.Event()
 
         async def collect_with_subscription():
@@ -509,6 +495,7 @@ class A2AChannel(BaseChannel):
             context_id=prepared.context_id,
             input_message=prepared.message,
             flow_id=self.flow_id,
+            container=self.container,
         )
 
     async def _run_evaluation(
@@ -523,15 +510,12 @@ class A2AChannel(BaseChannel):
         A2A канал только конвертирует события сервиса в A2A формат.
         Вся логика тестирования в EvaluationService.
         """
-        from apps.flows.src.container import get_container
-
-        container = get_container()
         test_case_id = eval_metadata["test_case_id"]
 
         branch_id = _branch_id_from_message_metadata(params.metadata)
         context_id = params.message.context_id or str(uuid.uuid4())
 
-        service = container.evaluation_service
+        service = self.container.evaluation_service
 
         try:
             async for event in service.run_test_stream(
@@ -680,11 +664,7 @@ class A2AChannel(BaseChannel):
             return
 
         logger.info(f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis...")
-        from apps.flows.src.container import get_container
-
-        container = get_container()
-
-        subscriber = EventSubscriber(container.redis_client)
+        subscriber = EventSubscriber(self.container.redis_client)
         event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         ready_event = asyncio.Event()
 
@@ -722,10 +702,7 @@ class A2AChannel(BaseChannel):
         """Отмена задачи. Ставит Redis-ключ для остановки воркера на следующем такте."""
         logger.info(f"Cancel task: {params.id}")
 
-        from apps.flows.src.container import get_container
-
-        container = get_container()
-        await container.redis_client.set(f"cancel:{params.id}", "1", ttl=CANCEL_KEY_TTL)
+        await self.container.redis_client.set(f"cancel:{params.id}", "1", ttl=CANCEL_KEY_TTL)
 
         task = await self._cancel_task_in_state(params.id)
 

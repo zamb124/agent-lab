@@ -6,18 +6,25 @@
 
 from __future__ import annotations
 
-from typing import Any
 from collections.abc import Sequence
+from typing import cast
 
 from core.models.identity_models import BoardStage, NamespaceCRMSettings, TaskBoardPreset
 
 TASK_ENTITY_TYPE = "task"
+type TaskBoardEditorRow = dict[str, object]
+
+
+def _object_attr(value: object, name: str) -> object:
+    return cast(object, getattr(value, name, None))
 
 
 def task_board_key(entity_type: str, entity_subtype: str | None) -> str:
     et = (entity_type or "").strip()
     if et != TASK_ENTITY_TYPE:
-        raise ValueError(f"task_board_key: ожидался entity_type={TASK_ENTITY_TYPE!r}, получено {et!r}")
+        raise ValueError(
+            f"task_board_key: ожидался entity_type={TASK_ENTITY_TYPE!r}, получено {et!r}"
+        )
     sub = (entity_subtype or "").strip()
     if sub:
         return f"{TASK_ENTITY_TYPE}:{sub}"
@@ -56,26 +63,26 @@ def resolve_allowed_task_status_ids(
 def build_task_board_editor_boards(
     *,
     allowed_type_ids: Sequence[str],
-    entity_types: Sequence[Any],
+    entity_types: Sequence[object],
     crm: NamespaceCRMSettings,
-) -> list[dict[str, Any]]:
+) -> list[TaskBoardEditorRow]:
     """
     Подготовка данных для UI редактора стадий: только через сервер.
 
     entity_types: объекты с полями type_id, name, parent_type_id (как ORM EntityType).
     """
     allowed = set(allowed_type_ids)
-    by_id: dict[str, Any] = {}
+    by_id: dict[str, object] = {}
     for t in entity_types:
-        tid = getattr(t, "type_id", None)
+        tid = _object_attr(t, "type_id")
         if isinstance(tid, str) and tid:
             by_id[tid] = t
 
-    boards: list[dict[str, Any]] = []
+    boards: list[TaskBoardEditorRow] = []
     if "task" in allowed:
         key = task_board_key(TASK_ENTITY_TYPE, None)
         meta = by_id.get("task")
-        title = getattr(meta, "name", None) if meta is not None else None
+        title = _object_attr(meta, "name") if meta is not None else None
         label = title if isinstance(title, str) and title.strip() else "task"
         stages = resolve_task_board_stages(crm, key)
         boards.append(
@@ -91,11 +98,11 @@ def build_task_board_editor_boards(
         if tid == "task":
             continue
         meta = by_id.get(tid)
-        parent = getattr(meta, "parent_type_id", None) if meta is not None else None
+        parent = _object_attr(meta, "parent_type_id") if meta is not None else None
         if parent != TASK_ENTITY_TYPE:
             continue
         key = task_board_key(TASK_ENTITY_TYPE, tid)
-        title = getattr(meta, "name", None) if meta is not None else None
+        title = _object_attr(meta, "name") if meta is not None else None
         label = title if isinstance(title, str) and title.strip() else tid
         stages = resolve_task_board_stages(crm, key)
         boards.append(
@@ -110,17 +117,15 @@ def build_task_board_editor_boards(
 
 
 def parse_task_board_presets_from_payload(
-    raw: dict[str, Any],
+    raw: dict[str, object],
 ) -> dict[str, TaskBoardPreset]:
     """Разбор сохранённого тела PUT без смягчения: невалидные ключи — исключение."""
     out: dict[str, TaskBoardPreset] = {}
     for raw_key, raw_val in raw.items():
-        if not isinstance(raw_key, str):
-            raise ValueError("pipeline_stage_presets: ключи должны быть строками")
         key = raw_key.strip()
         if not key:
             raise ValueError("pipeline_stage_presets: пустой ключ")
         if not isinstance(raw_val, dict):
             raise ValueError(f"pipeline_stage_presets[{key!r}]: ожидался объект")
-        out[key] = TaskBoardPreset.model_validate(raw_val)
+        out[key] = TaskBoardPreset.model_validate(cast(dict[str, object], raw_val))
     return out

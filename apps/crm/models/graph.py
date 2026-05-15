@@ -4,9 +4,9 @@
 Используются для построения и представления графов связей между entities.
 """
 
-from typing import Any
-
 from pydantic import BaseModel, Field
+
+from apps.crm.types import JsonObject
 
 
 class GraphNode(BaseModel):
@@ -15,18 +15,15 @@ class GraphNode(BaseModel):
 
     Представляет entity с информацией о доступе и глубине в графе.
     """
+
     entity_id: str = Field(description="ID entity")
     entity_type: str = Field(description="Тип entity или 'hidden' если нет доступа")
     name: str = Field(description="Название entity или 'Hidden'")
     level: int = Field(description="Глубина от корневого узла (0 для root)")
     access: bool = Field(description="Есть ли полный доступ к entity")
-    created_at: str | None = Field(
-        default=None,
-        description="Время создания entity (ISO8601)"
-    )
-    attributes: dict[str, Any] | None = Field(
-        default=None,
-        description="Атрибуты entity (только если access=True)"
+    created_at: str | None = Field(default=None, description="Время создания entity (ISO8601)")
+    attributes: JsonObject | None = Field(
+        default=None, description="Атрибуты entity (только если access=True)"
     )
 
 
@@ -36,6 +33,7 @@ class GraphEdge(BaseModel):
 
     Представляет relationship между двумя entities.
     """
+
     edge_id: str = Field(description="ID relationship")
     source_id: str = Field(description="ID источника")
     target_id: str = Field(description="ID цели")
@@ -43,10 +41,7 @@ class GraphEdge(BaseModel):
     weight: float = Field(description="Вес ребра")
     confidence: float = Field(description="Уверенность в корректности связи (модель / источник)")
     is_directed: bool = Field(description="Направленное ли ребро")
-    attributes: dict[str, Any] | None = Field(
-        default=None,
-        description="Дополнительные атрибуты связи"
-    )
+    attributes: JsonObject | None = Field(default=None, description="Дополнительные атрибуты связи")
 
 
 class InfluenceGraphResponse(BaseModel):
@@ -55,6 +50,7 @@ class InfluenceGraphResponse(BaseModel):
 
     Содержит все узлы и ребра в пределах max_depth.
     """
+
     root_entity_id: str = Field(description="ID корневой entity")
     max_depth: int = Field(description="Максимальная глубина обхода")
     nodes: list[GraphNode] = Field(description="Узлы графа")
@@ -69,6 +65,7 @@ class ShortestPathResponse(BaseModel):
 
     Использует weighted алгоритм Dijkstra.
     """
+
     from_entity_id: str = Field(description="Начальная entity")
     to_entity_id: str = Field(description="Конечная entity")
     path: list[str] = Field(description="Список entity_id в пути")
@@ -87,14 +84,8 @@ class RelatedEntitiesResponse(BaseModel):
 
     Разделяет по направлению: incoming, outgoing, undirected.
     """
-    entity_id: str = Field(description="ID центральной entity")
-    incoming: list[GraphNode] = Field(
-        description="Entities которые ссылаются на текущую"
-    )
-    outgoing: list[GraphNode] = Field(
-        description="Entities на которые ссылается текущая"
-    )
-    undirected: list[GraphNode] = Field(
-        description="Симметричные связи (is_directed=False)"
-    )
 
+    entity_id: str = Field(description="ID центральной entity")
+    incoming: list[GraphNode] = Field(description="Entities которые ссылаются на текущую")
+    outgoing: list[GraphNode] = Field(description="Entities на которые ссылается текущая")
+    undirected: list[GraphNode] = Field(description="Симметричные связи (is_directed=False)")

@@ -66,11 +66,19 @@ def _speech_response_format(value: str | None) -> SpeechResponseFormat | None:
     return cast(SpeechResponseFormat, value)
 
 
-def get_code_runner(language: str = "python", resources: dict[str, Any] | None = None) -> Any:
+def get_code_runner(
+    language: str = "python",
+    resources: dict[str, Any] | None = None,
+    variables: dict[str, Any] | None = None,
+) -> Any:
     """PythonCodeRunner (или runner для `language`) без доступа к `FlowContainer` из namespace."""
     from apps.flows.src.container import get_container
 
-    return get_container().get_code_runner(language=language, resources=resources)
+    return get_container().get_code_runner(
+        language=language,
+        resources=resources,
+        variables=variables,
+    )
 
 
 _text_transform_service: "TextTransformService | None" = None

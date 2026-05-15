@@ -23,21 +23,7 @@ from a2a.types import (
     TextPart,
 )
 
-import apps.flows.tools as flows_tools
 from apps.flows.src.eval.import_policy import safe_inline_import
-from apps.flows.src.eval.platform_services import (
-    call_mcp_tool,
-    get_file_bytes,
-    get_google_oauth_token,
-    get_lara_facade,
-    get_mcp_client,
-    get_oauth_service,
-    get_operator_handoff_service,
-    get_schedule_service,
-    get_text_transform_service,
-    synthesize_speech,
-    transcribe_audio,
-)
 from apps.flows.src.eval.sandbox_codegen_namespace import register_sandbox_codegen_namespace
 from apps.flows.src.eval.shim_registry import apply_inline_shims
 from apps.flows.src.eval.state_utils import (
@@ -70,7 +56,8 @@ from apps.flows.src.eval.wrappers import (
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.decorator import tool
-from apps.flows.tools.scheduling import _extract_ids_from_state
+from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
+from apps.flows.tools.scheduling_ids import extract_ids_from_state
 from core.clients.google_docs_client import GoogleDocsClient
 from core.clients.pravo import PravoClient, PravoClientError
 from core.clients.rag_client import RagClient
@@ -231,21 +218,22 @@ class PythonNamespaceBuilder:
         namespace["PravoClient"] = PravoClient
         namespace["PravoClientError"] = PravoClientError
         namespace["get_context"] = get_context
-        namespace["get_operator_handoff_service"] = get_operator_handoff_service
-        namespace["get_schedule_service"] = get_schedule_service
-        namespace["get_oauth_service"] = get_oauth_service
-        namespace["get_file_bytes"] = get_file_bytes
-        namespace["get_mcp_client"] = get_mcp_client
-        namespace["call_mcp_tool"] = call_mcp_tool
-        namespace["transcribe_audio"] = transcribe_audio
-        namespace["synthesize_speech"] = synthesize_speech
+        platform_services = importlib.import_module("apps.flows.src.eval.platform_services")
+        namespace["get_operator_handoff_service"] = platform_services.get_operator_handoff_service
+        namespace["get_schedule_service"] = platform_services.get_schedule_service
+        namespace["get_oauth_service"] = platform_services.get_oauth_service
+        namespace["get_file_bytes"] = platform_services.get_file_bytes
+        namespace["get_mcp_client"] = platform_services.get_mcp_client
+        namespace["call_mcp_tool"] = platform_services.call_mcp_tool
+        namespace["transcribe_audio"] = platform_services.transcribe_audio
+        namespace["synthesize_speech"] = platform_services.synthesize_speech
         namespace["Search"] = Search
         namespace["Describe"] = Describe
         namespace["DuckDuckGoBrowserSearch"] = DuckDuckGoBrowserSearch
         namespace["BrowserSnapshotDescribe"] = BrowserSnapshotDescribe
-        namespace["get_google_oauth_token"] = get_google_oauth_token
-        namespace["get_lara_facade"] = get_lara_facade
-        namespace["get_text_transform_service"] = get_text_transform_service
+        namespace["get_google_oauth_token"] = platform_services.get_google_oauth_token
+        namespace["get_lara_facade"] = platform_services.get_lara_facade
+        namespace["get_text_transform_service"] = platform_services.get_text_transform_service
         namespace["GoogleDocsClient"] = GoogleDocsClient
         namespace["quote"] = quote
         namespace["_require_context_namespace"] = _inline_require_context_namespace
@@ -253,7 +241,7 @@ class PythonNamespaceBuilder:
 
         namespace["datetime"] = stdlib_datetime.datetime
         namespace["ContentType"] = ContentType
-        namespace["_extract_ids_from_state"] = _extract_ids_from_state
+        namespace["_extract_ids_from_state"] = extract_ids_from_state
 
         namespace["FileWriter"] = FileWriter
         namespace["FileWriteError"] = FileWriteError
@@ -262,8 +250,8 @@ class PythonNamespaceBuilder:
         namespace["BaseTool"] = self.base_tool_class
         namespace["tool"] = tool
 
-        for _tool_name in flows_tools.__all__:
-            namespace[_tool_name] = getattr(flows_tools, _tool_name)
+        for module_name, attr_name in BUILTIN_TOOL_SPECS:
+            namespace[attr_name] = getattr(importlib.import_module(module_name), attr_name)
         namespace["ask_user_tool"] = namespace["ask_user"]
         namespace["ask_user"] = ask_user
 

@@ -17,7 +17,8 @@ import uuid
 from datetime import date
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
-from apps.flows.src.eval import compile_function
+from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
+
 from apps.flows.src.models import NodeConfig, TestCaseConfig
 from apps.flows.src.models.flow_config import (
     CheckConfig,
@@ -26,10 +27,15 @@ from apps.flows.src.models.flow_config import (
     InputType,
     TestTurn,
 )
-from apps.flows.src.tasks.llm_tasks import invoke_llm
+from core.billing import get_billing_service
+from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.clients.llm import get_llm
 from core.context import get_context
 from core.logging import get_logger
+from core.models.billing_models import UsageType
 from core.state import ExecutionState
+from core.tracing import attributes as trace_attributes
+from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
 
@@ -295,7 +301,8 @@ class TestRunner:
             return input_config.value, None
 
         if input_config.type == InputType.INLINE_CODE:
-            fn = compile_function(input_config.value, "generate")
+            runner = self._flow_factory.container.get_code_runner(language="python")
+            fn = runner.compiler.compile(input_config.value, "generate")
             sig = inspect.signature(fn)
             if inspect.iscoroutinefunction(fn):
                 if len(sig.parameters) == 0:
@@ -326,7 +333,8 @@ class TestRunner:
             return {"result": 10.0 if result else 0.0}
 
         if check_config.type == CheckType.INLINE_CODE:
-            fn = compile_function(check_config.value, "check")
+            runner = self._flow_factory.container.get_code_runner(language="python")
+            fn = runner.compiler.compile(check_config.value, "check")
             if inspect.iscoroutinefunction(fn):
                 result = await fn(state_dict, response)
             else:
@@ -533,25 +541,17 @@ class TestRunner:
         request_ctx = get_context()
         if request_ctx is None:
             raise ValueError(
-                "Для invoke_llm в worker нужен Context запроса (user, active_company). "
+                "Для evaluation LLM нужен Context запроса (user, active_company). "
                 "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
             )
-        context_data = request_ctx.to_dict()
-
-        task = await invoke_llm.kiq(
+        result = await self._invoke_evaluation_llm(
             messages=llm_messages,
             tools=tools_for_llm,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
-            context_data=context_data,
         )
 
-        result = await task.wait_result()
-
-        if result.is_err:
-            raise RuntimeError(f"LLM task failed: {result.error}")
-
-        return result.return_value.get("content", "").strip()
+        return result.get("content", "").strip()
 
     async def _judge_dialog(
         self,
@@ -580,25 +580,17 @@ class TestRunner:
         request_ctx = get_context()
         if request_ctx is None:
             raise ValueError(
-                "Для invoke_llm в worker нужен Context запроса (user, active_company). "
+                "Для evaluation LLM нужен Context запроса (user, active_company). "
                 "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
             )
-        context_data = request_ctx.to_dict()
-
-        task = await invoke_llm.kiq(
+        result = await self._invoke_evaluation_llm(
             messages=[{"role": "user", "content": system_message}],
             tools=None,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
-            context_data=context_data,
         )
 
-        result = await task.wait_result()
-
-        if result.is_err:
-            raise RuntimeError(f"Judge LLM task failed: {result.error}")
-
-        response_text = result.return_value.get("content", "")
+        response_text = result.get("content", "")
 
         start = response_text.find("{")
         end = response_text.rfind("}") + 1
@@ -614,6 +606,88 @@ class TestRunner:
             return scores, feedback, passed
 
         raise ValueError(f"Judge response is not valid JSON: {response_text}")
+
+    async def _invoke_evaluation_llm(
+        self,
+        *,
+        messages: List[Dict[str, str]],
+        tools: Optional[List[Dict[str, Any]]],
+        task_id: str,
+        context_id: str,
+    ) -> Dict[str, Any]:
+        actx = get_context()
+        if actx is None or actx.active_company is None:
+            raise ValueError("Контекст с active_company обязателен для evaluation LLM")
+        if actx.user is None or not str(actx.user.user_id).strip():
+            raise ValueError("Контекст с user обязателен для evaluation LLM")
+
+        uid = str(actx.user.user_id).strip()
+        await get_billing_service().require_balance_for_billable_operation(
+            actx.active_company.company_id,
+            uid,
+            operation_code=BALANCE_BLOCK_OPERATION_LLM,
+            notification_service="flows",
+        )
+
+        trace_extra = {
+            trace_attributes.ATTR_USER_ID: uid,
+            trace_attributes.ATTR_TENANT_COMPANY_ID: actx.active_company.company_id,
+        }
+        llm = get_llm()
+        async with traced_operation(
+            "flows.evaluation.llm",
+            event_type="llm.invoke",
+            operation_category="llm",
+            billing_usage_type=UsageType.LLM_REQUEST.value,
+            billing_resource_name="llm:default",
+            billing_quantity=1,
+            billing_pending_settlement=True,
+            extra_attributes=trace_extra,
+        ) as span:
+            content_parts: list[str] = []
+            reasoning_parts: list[str] = []
+            tool_calls = None
+            input_tokens = 0
+            output_tokens = 0
+
+            async for event in llm.stream(
+                messages=messages,
+                tools=tools or [],
+                task_id=task_id,
+                context_id=context_id,
+            ):
+                if isinstance(event, TaskArtifactUpdateEvent):
+                    artifact_name = event.artifact.name
+                    if event.artifact.parts:
+                        for part in event.artifact.parts:
+                            if isinstance(part.root, TextPart):
+                                text = part.root.text
+                                if artifact_name == "reasoning":
+                                    reasoning_parts.append(text)
+                                else:
+                                    content_parts.append(text)
+                    continue
+                if isinstance(event, TaskStatusUpdateEvent):
+                    if event.status.message and event.status.message.metadata:
+                        tc = event.status.message.metadata.get("tool_calls")
+                        if tc:
+                            tool_calls = tc
+                        usage = event.status.message.metadata.get("usage")
+                        if usage:
+                            input_tokens = usage.get("input_tokens", 0)
+                            output_tokens = usage.get("output_tokens", 0)
+
+            total_tokens = input_tokens + output_tokens
+            if total_tokens > 0:
+                span.set_attribute(trace_attributes.ATTR_BILLING_QUANTITY, total_tokens)
+                span.set_attribute(trace_attributes.ATTR_LLM_INPUT_TOKENS, input_tokens)
+                span.set_attribute(trace_attributes.ATTR_LLM_OUTPUT_TOKENS, output_tokens)
+
+            return {
+                "content": "".join(content_parts),
+                "reasoning": "".join(reasoning_parts) if reasoning_parts else None,
+                "tool_calls": tool_calls,
+            }
 
     async def _get_judge_config(
         self, check_config: CheckConfig, execution_state: Optional[ExecutionState] = None

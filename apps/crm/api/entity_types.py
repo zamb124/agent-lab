@@ -3,6 +3,7 @@ API для работы с типами entities.
 """
 
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
 
 class UpdatePublicFieldsRequest(BaseModel):
     """Запрос на обновление публичных полей"""
+
     public_fields: list[str]
 
 
@@ -28,7 +30,7 @@ async def _parent_maps_for_types(
     repo: EntityTypeRepository,
     types: list[EntityType],
 ) -> dict[str, dict[str, str | None]]:
-    namespaces = {t.namespace for t in types if isinstance(t.namespace, str) and t.namespace.strip()}
+    namespaces = {t.namespace for t in types if t.namespace.strip()}
     out: dict[str, dict[str, str | None]] = {}
     for ns in sorted(namespaces):
         out[ns] = await repo.get_parent_type_id_map_for_namespace(ns)
@@ -51,7 +53,9 @@ async def _backfill_missing_colors(
         assigned_color = assign_color_from_palette(used_colors)
         used_colors.add(assigned_color)
         await repo.update_color(
-            entity_type.type_id, entity_type.namespace, assigned_color,
+            entity_type.type_id,
+            entity_type.namespace,
+            assigned_color,
         )
         updated = True
     return updated
@@ -83,10 +87,7 @@ async def _list_entity_types_offset_page(
             offset=offset,
         )
         parent_maps = await _parent_maps_for_types(repo, types)
-    items = [
-        _entity_type_to_response(t, parent_maps[t.namespace])
-        for t in types
-    ]
+    items = [_entity_type_to_response(t, parent_maps[t.namespace]) for t in types]
     return OffsetPage[EntityTypeResponse](
         items=items,
         total=total,
@@ -130,9 +131,9 @@ def _entity_type_to_response(
 @router.get("", response_model=OffsetPage[EntityTypeResponse])
 async def list_entity_types(
     container: ContainerDep,
-    namespace: str | None = Query(default=None, description="Фильтр по пространству"),
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    namespace: Annotated[str | None, Query(description="Фильтр по пространству")] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[EntityTypeResponse]:
     return await _list_entity_types_offset_page(
         container.entity_type_repository,
@@ -146,8 +147,8 @@ async def list_entity_types(
 async def list_entity_types_by_namespace(
     namespace: str,
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[EntityTypeResponse]:
     normalized_namespace = namespace.strip()
     if not normalized_namespace:
@@ -164,7 +165,7 @@ async def list_entity_types_by_namespace(
 async def get_entity_type(
     type_id: str,
     container: ContainerDep,
-    namespace: str = Query(..., description="Пространство строки типа"),
+    namespace: Annotated[str, Query(description="Пространство строки типа")],
 ):
     repo = container.entity_type_repository
     ns = namespace.strip()
@@ -204,8 +205,7 @@ async def create_entity_type(
 
     existing_types = await repo.load_all_entity_types_for_company()
     used_colors = {
-        et.color for et in existing_types
-        if isinstance(et.color, str) and et.color.strip()
+        et.color for et in existing_types if isinstance(et.color, str) and et.color.strip()
     }
     resolved_color = data.color
     if not resolved_color or not resolved_color.strip():
@@ -231,7 +231,7 @@ async def create_entity_type(
         auto_resolve_suggests=data.auto_resolve_suggests,
     )
 
-    await repo.create_custom_type(entity_type, company_id)
+    _ = await repo.create_custom_type(entity_type, company_id)
     parent_map = await repo.get_parent_type_id_map_for_namespace(ns)
     refreshed = await repo.get_by_type_id(data.type_id, namespace=ns)
     if not refreshed:
@@ -244,7 +244,7 @@ async def update_entity_type(
     type_id: str,
     data: EntityTypeUpdate,
     container: ContainerDep,
-    namespace: str = Query(..., description="Пространство строки типа"),
+    namespace: Annotated[str, Query(description="Пространство строки типа")],
 ):
     repo = container.entity_type_repository
     ns = namespace.strip()
@@ -298,7 +298,7 @@ async def update_public_fields(
     type_id: str,
     data: UpdatePublicFieldsRequest,
     container: ContainerDep,
-    namespace: str = Query(..., description="Пространство строки типа"),
+    namespace: Annotated[str, Query(description="Пространство строки типа")],
 ):
     repo = container.entity_type_repository
     ns = namespace.strip()

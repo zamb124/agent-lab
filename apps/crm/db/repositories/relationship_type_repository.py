@@ -4,7 +4,6 @@
 ВСЕ типы с company_id (ОБЯЗАТЕЛЬНО)!
 """
 
-
 from sqlalchemy import and_, func, select
 
 from apps.crm.db.base import BaseCRMRepository
@@ -42,6 +41,12 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def list_for_company_id(self, company_id: str) -> list[RelationshipType]:
+        async with self._db.session() as session:
+            stmt = select(RelationshipType).where(RelationshipType.company_id == company_id)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     async def count_all_for_company(
         self,
         include_system: bool = True,
@@ -55,9 +60,7 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
             result = await session.execute(stmt)
             return result.scalar() or 0
 
-    async def get_with_prompts(
-        self
-    ) -> list[RelationshipType]:
+    async def get_with_prompts(self) -> list[RelationshipType]:
         """
         Типы связей с заполненным prompt для AI-анализа.
 
@@ -67,16 +70,12 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(RelationshipType).where(
-                RelationshipType.company_id == company_id,
-                RelationshipType.prompt.is_not(None)
+                RelationshipType.company_id == company_id, RelationshipType.prompt.is_not(None)
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def create_custom_type(
-        self,
-        type_data: RelationshipType
-    ) -> RelationshipType:
+    async def create_custom_type(self, type_data: RelationshipType) -> RelationshipType:
         """
         Создает кастомный тип связи для компании.
 

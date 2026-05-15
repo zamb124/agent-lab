@@ -11,30 +11,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.eval.platform_services import get_schedule_service
 from apps.flows.src.tools import tool
+from apps.flows.tools.scheduling_ids import extract_ids_from_state
 from core.scheduler.models import ContentType
 from core.state import ExecutionState
 
 
 def _extract_ids_from_state(state: ExecutionState) -> Tuple[str, str, str]:
-    """
-    Извлекает flow_id, session_id, user_id из state.
-
-    session_id ОБЯЗАТЕЛЕН и ВСЕГДА в формате 'flow_id:context_id'.
-    Валидация формата происходит в ExecutionState.
-    """
-    session_id = state.session_id
-    if not session_id:
-        raise ValueError("session_id is required in state for scheduling tools")
-
-    if ":" not in session_id:
-        raise ValueError(
-            f"session_id must be in format 'flow_id:context_id', got: '{session_id}'"
-        )
-
-    flow_id = session_id.split(":")[0]
-    user_id = state.user_id or ""
-
-    return flow_id, session_id, user_id
+    return extract_ids_from_state(state)
 
 
 class _ScheduledTaskContentArgs(BaseModel):

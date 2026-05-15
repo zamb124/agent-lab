@@ -4,9 +4,10 @@ LLMResourceProvider - провайдер для llm ресурсов.
 
 from typing import Any, Dict
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import LLMResourceConfig, ResourceDefinition
 from apps.flows.src.resources.providers.base import BaseResourceProvider
-from apps.flows.src.resources.wrappers import LLMResource
+from apps.flows.src.resources.wrappers.llm_resource import LLMResource
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,8 +20,8 @@ class LLMResourceProvider(BaseResourceProvider):
     Создаёт LLMResource для генерации текста.
     """
 
-    def __init__(self, container: Any = None):
-        self._container = container
+    def __init__(self, container: FlowRuntimeContainer):
+        self.container = container
 
     async def resolve(
         self,
@@ -64,4 +65,5 @@ class LLMResourceProvider(BaseResourceProvider):
             folder_id=config.folder_id,
             extra_request_body=config.extra_request_body,
             extra_request_headers=config.extra_request_headers,
+            container=self.container,
         )

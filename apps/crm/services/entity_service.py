@@ -5,6 +5,8 @@
 Включает AI анализ с составными промптами и каскадное удаление через Saga.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import re
@@ -12,8 +14,8 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable
-from datetime import date, datetime, timedelta, UTC
-from typing import TYPE_CHECKING, Any, Literal
+from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, NotRequired, Protocol, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -48,6 +50,7 @@ from apps.crm.models.api import (
     DraftEntityPatch,
     EntityMergeRequest,
 )
+from apps.crm.types import JsonObject
 from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_summary_ws_broadcast import (
@@ -87,6 +90,32 @@ from core.utils.chunked_async import map_reduce_tree, run_chunked_map  # noqa: E
 if TYPE_CHECKING:
     from apps.crm.services.access_control_service import AccessControlService
     from core.db.repositories.company_repository import CompanyRepository
+
+
+class NoteMarkdownFormatScheduler(Protocol):
+    def __call__(
+        self,
+        *,
+        note_id: str,
+        company_id: str,
+        namespace: str,
+        expected_updated_at_iso: str,
+    ) -> Awaitable[bool]: ...
+
+
+class EntityTypePromptField(TypedDict):
+    name: str
+    label: str
+    required: bool
+    description: NotRequired[str]
+    type: NotRequired[str]
+    values: NotRequired[list[object]]
+
+
+def _as_json_object(value: object) -> JsonObject | None:
+    if isinstance(value, dict):
+        return cast(JsonObject, value)
+    return None
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
 
@@ -149,7 +178,7 @@ def _clamp_period_dates_for_summary(
     return tail[0], tail[-1], True
 
 
-def _canonical_json(obj: Any) -> str:
+def _canonical_json(obj: object) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
 
 
@@ -180,6 +209,7 @@ class ApplyAnalysisDraftEntityFailuresError(Exception):
         """
         failures: (draft_entity_id, name, entity_type, сообщение об ошибке)
         """
+        self.failures: list[tuple[str, str | None, str | None, str]]
         self.failures = failures
         parts = [
             f"draft_entity_id={did} name={name!r} type={etype!r}: {msg}"
@@ -192,37 +222,39 @@ class SchemaValidationError(ValueError):
     """Атрибуты сущности не соответствуют required_fields / типам из EntityType."""
 
     def __init__(self, field_errors: list[dict[str, str]]) -> None:
+        self.field_errors: list[dict[str, str]]
         self.field_errors = field_errors
         parts = [f"{e['field']}: {e['error']}" for e in field_errors]
         super().__init__("Schema validation failed: " + ", ".join(parts))
 
 
-def _extract_entity_type_fields(entity_type) -> list[dict[str, Any]]:
+def _extract_entity_type_fields(entity_type: EntityType) -> list[EntityTypePromptField]:
     """Собирает список полей сущности с описанием для передачи в LLM."""
-    result: list[dict[str, Any]] = []
-    schemas: list[tuple[dict[str, Any], bool]] = [
+    result: list[EntityTypePromptField] = []
+    schemas: list[tuple[JsonObject, bool]] = [
         (entity_type.required_fields or {}, True),
         (entity_type.optional_fields or {}, False),
     ]
     for schema, required in schemas:
-        if not isinstance(schema, dict):
-            continue
-        for name, defn in schema.items():
-            if not isinstance(defn, dict):
+        for name, raw_defn in schema.items():
+            defn = _as_json_object(raw_defn)
+            if defn is None:
                 continue
-            field: dict[str, Any] = {
+            label_raw = defn.get("label")
+            field: EntityTypePromptField = {
                 "name": name,
-                "label": defn.get("label", name),
+                "label": label_raw if isinstance(label_raw, str) and label_raw.strip() else name,
                 "required": required,
             }
             description = defn.get("description")
-            if description:
+            if isinstance(description, str) and description.strip():
                 field["description"] = description
             json_type = defn.get("type")
             if isinstance(json_type, str) and json_type.strip():
                 field["type"] = json_type.strip()
-            if defn.get("type") == "enum" and isinstance(defn.get("values"), list):
-                field["values"] = defn["values"]
+            values = defn.get("values")
+            if json_type == "enum" and isinstance(values, list):
+                field["values"] = cast(list[object], values)
             result.append(field)
     return result
 
@@ -230,18 +262,18 @@ def _extract_entity_type_fields(entity_type) -> list[dict[str, Any]]:
 class _AnalyzePipelineState(BaseModel):
     """Промежуточное состояние analyze до выдачи draft-id связям (только сервис)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     note: AIExtractedEntity | None = None
     entities: list[AIExtractedEntity] = Field(default_factory=list)
     relationships_extracted: list[AIAnalyzeRelationshipExtracted] = Field(default_factory=list)
-    attachment_summaries: list[dict[str, Any]] = Field(default_factory=list)
+    attachment_summaries: list[JsonObject] = Field(default_factory=list)
 
 
 _DRAFT_ONLY_ENTITY_ATTR_KEYS: frozenset[str] = frozenset({"platform_ai_draft_task_completed"})
 
 
-def _strip_draft_only_entity_attrs(attrs: dict[str, Any] | None) -> dict[str, Any]:
+def _strip_draft_only_entity_attrs(attrs: JsonObject | None) -> JsonObject:
     out = dict(attrs or {})
     for k in _DRAFT_ONLY_ENTITY_ATTR_KEYS:
         out.pop(k, None)
@@ -277,25 +309,29 @@ class EntityService:
         company_repo: "CompanyRepository",
         access_control: "AccessControlService",
         task_repository: TaskRepository | None = None,
-        note_markdown_format_scheduler: Callable[..., Awaitable[bool]] | None = None,
-    ):
-        self._entity_repo = entity_repo
-        self._entity_type_repo = entity_type_repo
-        self._relationship_type_repo = relationship_type_repo
-        self._relationship_repo = relationship_repo
-        self._namespace_repo = namespace_repo
-        self._attachment_service = attachment_service
-        self._a2a_client = a2a_client
-        self._daily_summary_cache_service = daily_summary_cache_service
-        self._daily_summary_artifact_service = daily_summary_artifact_service
-        self._user_person_service = user_person_service
-        self._access_grant_repo = access_grant_repo
-        self._access_request_repo = access_request_repo
-        self._company_mapping_repo = company_mapping_repo
-        self._company_repo = company_repo
-        self._access_control = access_control
-        self._task_repository = task_repository
-        self._note_markdown_format_scheduler = note_markdown_format_scheduler
+        note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = None,
+    ) -> None:
+        self._entity_repo: EntityRepository = entity_repo
+        self._entity_type_repo: EntityTypeRepository = entity_type_repo
+        self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
+        self._relationship_repo: RelationshipRepository = relationship_repo
+        self._namespace_repo: NamespaceRepository = namespace_repo
+        self._attachment_service: AttachmentService = attachment_service
+        self._a2a_client: A2AClient = a2a_client
+        self._daily_summary_cache_service: DailySummaryCacheService = daily_summary_cache_service
+        self._daily_summary_artifact_service: DailySummaryArtifactService = (
+            daily_summary_artifact_service
+        )
+        self._user_person_service: UserPersonService = user_person_service
+        self._access_grant_repo: AccessGrantRepository = access_grant_repo
+        self._access_request_repo: AccessRequestRepository = access_request_repo
+        self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
+        self._company_repo: CompanyRepository = company_repo
+        self._access_control: AccessControlService = access_control
+        self._task_repository: TaskRepository | None = task_repository
+        self._note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = (
+            note_markdown_format_scheduler
+        )
 
     def _get_company_id(self) -> str:
         context = get_context()
@@ -348,10 +384,13 @@ class EntityService:
                 description="Основное пространство",
                 is_default=True,
             )
-            await self._namespace_repo.set(default_namespace)
+            _ = await self._namespace_repo.set(default_namespace)
             existing_namespace = await self._namespace_repo.get(namespace)
         if existing_namespace is None:
             raise ValueError(f"Namespace not found: {namespace}")
+
+    async def ensure_namespace_exists(self, namespace: str) -> None:
+        await self._ensure_namespace_exists(namespace)
 
     async def _ensure_entity_type_allowed_in_namespace(
         self,
@@ -383,7 +422,7 @@ class EntityService:
     async def _validate_entity_attributes(
         self,
         entity_type: str,
-        attributes: dict[str, Any],
+        attributes: JsonObject,
         namespace: str,
         entity_subtype: str | None = None,
     ) -> None:
@@ -403,14 +442,11 @@ class EntityService:
         required = entity_type_model.required_fields or {}
         optional = entity_type_model.optional_fields or {}
 
-        def _field_spec(field_name: str) -> dict[str, Any] | None:
-            req = required.get(field_name)
-            if isinstance(req, dict):
+        def _field_spec(field_name: str) -> JsonObject | None:
+            req = _as_json_object(required.get(field_name))
+            if req is not None:
                 return req
-            opt = optional.get(field_name)
-            if isinstance(opt, dict):
-                return opt
-            return None
+            return _as_json_object(optional.get(field_name))
 
         for attr_key in list(attributes.keys()):
             val = attributes.get(attr_key)
@@ -431,12 +467,13 @@ class EntityService:
             return
 
         errors: list[dict[str, str]] = []
-        for field_name, field_spec in required.items():
+        for field_name, raw_field_spec in required.items():
             if field_name not in attributes or attributes[field_name] is None:
                 errors.append({"field": field_name, "error": "required"})
                 continue
-            expected_type = field_spec.get("type") if isinstance(field_spec, dict) else None
-            if expected_type:
+            field_spec = _as_json_object(raw_field_spec)
+            expected_type = field_spec.get("type") if field_spec is not None else None
+            if isinstance(expected_type, str) and expected_type:
                 value = attributes[field_name]
                 type_valid = self._check_field_type(value, expected_type)
                 if not type_valid:
@@ -450,7 +487,7 @@ class EntityService:
         *,
         namespace: str,
         entity_subtype: str | None,
-        attributes: dict[str, Any],
+        attributes: JsonObject,
     ) -> None:
         crm = await self._load_namespace_crm_settings(namespace)
         key = task_board_key("task", entity_subtype)
@@ -484,7 +521,7 @@ class EntityService:
         return None
 
     @staticmethod
-    def _coerce_attribute_value_for_schema(value: Any, expected_type: str) -> Any:
+    def _coerce_attribute_value_for_schema(value: object, expected_type: str) -> object:
         """Приводит значение к JSON-типу поля там, где это однозначно (числа из строк)."""
         if expected_type == "integer":
             if isinstance(value, bool):
@@ -517,8 +554,8 @@ class EntityService:
         return value
 
     @staticmethod
-    def _check_field_type(value: Any, expected_type: str) -> bool:
-        type_map = {
+    def _check_field_type(value: object, expected_type: str) -> bool:
+        type_map: dict[str, type[object] | tuple[type[object], ...]] = {
             "string": str,
             "integer": int,
             "number": (int, float),
@@ -586,18 +623,19 @@ class EntityService:
     @staticmethod
     def _collect_entity_type_field_specs(
         entity_type_model: EntityType,
-    ) -> dict[str, dict[str, Any]]:
-        field_specs: dict[str, dict[str, Any]] = {}
+    ) -> dict[str, JsonObject]:
+        field_specs: dict[str, JsonObject] = {}
         required_fields = entity_type_model.required_fields or {}
         optional_fields = entity_type_model.optional_fields or {}
-        for field_name, spec in {**required_fields, **optional_fields}.items():
-            if isinstance(spec, dict):
+        for field_name, raw_spec in {**required_fields, **optional_fields}.items():
+            spec = _as_json_object(raw_spec)
+            if spec is not None:
                 field_specs[field_name] = spec
         return field_specs
 
     @staticmethod
-    def _validate_filter_value_type(field_type: str, operator: str, value: Any) -> None:
-        def _validate_scalar(candidate: Any) -> None:
+    def _validate_filter_value_type(field_type: str, operator: str, value: object) -> None:
+        def _validate_scalar(candidate: object) -> None:
             if field_type in {"string", "text", "enum"}:
                 if not isinstance(candidate, str):
                     raise ValueError(f"Filter value must be string for field type {field_type}")
@@ -617,12 +655,12 @@ class EntityService:
             if field_type == "date":
                 if not isinstance(candidate, str):
                     raise ValueError("Date filter value must be ISO date string")
-                date.fromisoformat(candidate)
+                _ = date.fromisoformat(candidate)
                 return
             if field_type == "datetime":
                 if not isinstance(candidate, str):
                     raise ValueError("Datetime filter value must be ISO datetime string")
-                datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+                _ = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
                 return
             if field_type == "array":
                 if not isinstance(candidate, (str, int, float, bool)):
@@ -640,7 +678,7 @@ class EntityService:
         if operator in {"$in", "$nin"}:
             if not isinstance(value, list) or len(value) == 0:
                 raise ValueError(f"{operator} requires non-empty array value")
-            for item in value:
+            for item in cast(list[object], value):
                 _validate_scalar(item)
             return
 
@@ -657,13 +695,13 @@ class EntityService:
         namespace: str,
         entity_type: str | None,
         entity_subtype: str | None,
-        filters: dict[str, Any] | None,
+        filters: JsonObject | None,
     ) -> dict[str, str]:
         if filters is None:
             return {}
 
         system_field_types = self._build_system_field_types()
-        field_specs: dict[str, dict[str, Any]] = {}
+        field_specs: dict[str, JsonObject] = {}
         type_id = entity_subtype or entity_type
         if type_id is not None:
             entity_type_model = await self._entity_type_repo.get_by_type_id(
@@ -694,19 +732,35 @@ class EntityService:
                 raise ValueError(f"Field '{attr_name}' has invalid schema type")
             return field_type
 
-        def _validate_node(node: dict[str, Any]) -> None:
-            if "$and" in node:
-                for child in node["$and"]:
+        def _validate_node(node: JsonObject) -> None:
+            and_children = node.get("$and")
+            if and_children is not None:
+                if not isinstance(and_children, list):
+                    raise ValueError("$and must be an array")
+                for raw_child in cast(list[object], and_children):
+                    child = _as_json_object(raw_child)
+                    if child is None:
+                        raise ValueError("$and children must be objects")
                     _validate_node(child)
                 return
-            if "$or" in node:
-                for child in node["$or"]:
+            or_children = node.get("$or")
+            if or_children is not None:
+                if not isinstance(or_children, list):
+                    raise ValueError("$or must be an array")
+                for raw_child in cast(list[object], or_children):
+                    child = _as_json_object(raw_child)
+                    if child is None:
+                        raise ValueError("$or children must be objects")
                     _validate_node(child)
                 return
 
-            field_name = node["field"]
-            operator = node["op"]
-            value = node["value"]
+            field_name = node.get("field")
+            if not isinstance(field_name, str):
+                raise ValueError("Filter leaf field must be a string")
+            operator = node.get("op")
+            if not isinstance(operator, str):
+                raise ValueError("Filter leaf op must be a string")
+            value = node.get("value")
             field_type = _resolve_field_type(field_name)
             allowed_ops = operator_matrix.get(field_type, {"$eq", "$ne"})
             if operator not in allowed_ops:
@@ -808,7 +862,7 @@ class EntityService:
             return context_entity_id
         settings = await self._load_namespace_crm_settings(namespace)
         anchor = settings.default_context_entity_id
-        if anchor is None or (isinstance(anchor, str) and anchor.strip() == ""):
+        if anchor is None or anchor.strip() == "":
             return None
         await self._validate_context_target(anchor, company_id)
         return anchor
@@ -823,7 +877,7 @@ class EntityService:
         resolved_context_id: str | None,
     ) -> None:
         company_id = self._get_company_id()
-        await self._relationship_repo.delete_outgoing_by_source_and_types(
+        _ = await self._relationship_repo.delete_outgoing_by_source_and_types(
             note_id,
             [NOTE_VOICE_RELATIONSHIP_TYPE, IN_CONTEXT_RELATIONSHIP_TYPE],
         )
@@ -842,7 +896,7 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            await self._relationship_repo.create(voice_row)
+            _ = await self._relationship_repo.create(voice_row)
             await self._user_person_service.record_last_voice_entity(
                 user_id, namespace, resolved_voice_id
             )
@@ -860,7 +914,7 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            await self._relationship_repo.create(ctx_row)
+            _ = await self._relationship_repo.create(ctx_row)
 
     async def apply_imported_note_graph_links(
         self,
@@ -951,7 +1005,7 @@ class EntityService:
     async def _list_notes_for_date(
         self, date_str: str, namespace: str | None = None
     ) -> list[CRMEntity]:
-        query_filters: dict[str, Any] = {
+        query_filters: JsonObject = {
             "field": "note_date",
             "op": "$eq",
             "value": date_str,
@@ -974,12 +1028,10 @@ class EntityService:
         return entities
 
     @staticmethod
-    def _build_source_version(notes: list[CRMEntity]) -> dict[str, Any]:
+    def _build_source_version(notes: list[CRMEntity]) -> JsonObject:
         notes_count = len(notes)
         max_updated_at: str | None = None
         for note in notes:
-            if note.updated_at is None:
-                continue
             note_updated_iso = note.updated_at.isoformat()
             if max_updated_at is None or note_updated_iso > max_updated_at:
                 max_updated_at = note_updated_iso
@@ -992,7 +1044,7 @@ class EntityService:
         self,
         date_str: str,
         namespace: str | None = None,
-    ) -> tuple[list[CRMEntity], dict[str, Any]]:
+    ) -> tuple[list[CRMEntity], JsonObject]:
         notes = await self._list_notes_for_date(date_str=date_str, namespace=namespace)
         source_version = self._build_source_version(notes)
         return notes, source_version
@@ -1003,25 +1055,30 @@ class EntityService:
         name: str,
         description: str | None = None,
         entity_subtype: str | None = None,
-        attributes: dict[str, Any] | None = None,
+        attributes: JsonObject | None = None,
         tags: list[str] | None = None,
         voice_entity_id: str | None = None,
         context_entity_id: str | None = None,
         voice_entity_in_payload: bool = False,
         context_entity_in_payload: bool = False,
-        **kwargs,
+        **kwargs: object,
     ) -> CRMEntity:
         """Создает новую entity"""
 
         # user_id ОБЯЗАТЕЛЕН - берем из kwargs или из контекста
-        user_id = kwargs.pop("user_id", None)
-        if not user_id:
+        user_id_raw = kwargs.pop("user_id", None)
+        if isinstance(user_id_raw, str) and user_id_raw.strip():
+            user_id = user_id_raw
+        else:
             context = get_context()
             if not context or not context.user:
                 raise ValueError("user_id is required (no user in context)")
             user_id = context.user.user_id
 
-        namespace = self._resolve_namespace_for_write(kwargs.get("namespace"))
+        namespace_raw = kwargs.get("namespace")
+        if namespace_raw is not None and not isinstance(namespace_raw, str):
+            raise ValueError("namespace must be a string or null")
+        namespace = self._resolve_namespace_for_write(namespace_raw)
         kwargs["namespace"] = namespace
         await self._ensure_namespace_exists(namespace)
 
@@ -1039,7 +1096,7 @@ class EntityService:
             entity_subtype=entity_subtype,
         )
         if entity_type == "task":
-            base_attrs = dict(attributes or {})
+            base_attrs: JsonObject = dict(attributes or {})
             crm = await self._load_namespace_crm_settings(namespace)
             bkey = task_board_key("task", entity_subtype)
             stages = resolve_task_board_stages(crm, bkey)
@@ -1101,13 +1158,13 @@ class EntityService:
                 )
             entity.description = merged_desc
 
-        await self._entity_repo.create(entity)
+        _ = await self._entity_repo.create(entity)
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
 
         if attachment_text_merged:
             if self._note_markdown_format_scheduler is None:
                 raise ValueError("note_markdown_format_scheduler is required")
-            await self._note_markdown_format_scheduler(
+            _ = await self._note_markdown_format_scheduler(
                 note_id=entity.entity_id,
                 company_id=entity.company_id,
                 namespace=entity.namespace,
@@ -1138,7 +1195,7 @@ class EntityService:
             )
 
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID and entity.note_date is not None:
-            await self.enqueue_daily_summary_rebuild(
+            _ = await self.enqueue_daily_summary_rebuild(
                 date_str=entity.note_date.isoformat(),
                 namespace=entity.namespace,
             )
@@ -1168,6 +1225,60 @@ class EntityService:
     async def list_entities_by_ids_ordered(self, entity_ids: list[str]) -> list[CRMEntity]:
         """Сущности по списку id в заданном порядке; отсутствующие id пропускаются."""
         return await self._entity_repo.list_by_entity_ids_ordered(entity_ids)
+
+    @staticmethod
+    def _entity_merge_scalar_value(entity: CRMEntity, key: str) -> object:
+        match key:
+            case "name":
+                return entity.name
+            case "description":
+                return entity.description
+            case "status":
+                return entity.status
+            case "entity_subtype":
+                return entity.entity_subtype
+            case "priority":
+                return entity.priority
+            case "note_date":
+                return entity.note_date
+            case "due_date":
+                return entity.due_date
+            case _:
+                raise ValueError(f"Unsupported merge scalar key: {key}")
+
+    @staticmethod
+    def _set_entity_merge_scalar_value(entity: CRMEntity, key: str, value: object) -> None:
+        match key:
+            case "name":
+                if not isinstance(value, str):
+                    raise ValueError("name must be a string")
+                entity.name = value
+            case "description":
+                if value is not None and not isinstance(value, str):
+                    raise ValueError("description must be a string or null")
+                entity.description = value
+            case "status":
+                if not isinstance(value, str):
+                    raise ValueError("status must be a string")
+                entity.status = value
+            case "entity_subtype":
+                if value is not None and not isinstance(value, str):
+                    raise ValueError("entity_subtype must be a string or null")
+                entity.entity_subtype = value
+            case "priority":
+                if value is not None and not isinstance(value, str):
+                    raise ValueError("priority must be a string or null")
+                entity.priority = value
+            case "note_date":
+                if value is not None and not isinstance(value, date):
+                    raise ValueError("note_date must be a date or null")
+                entity.note_date = value
+            case "due_date":
+                if value is not None and not isinstance(value, date):
+                    raise ValueError("due_date must be a date or null")
+                entity.due_date = value
+            case _:
+                raise ValueError(f"Unsupported merge scalar key: {key}")
 
     async def merge_entities(self, body: EntityMergeRequest) -> tuple[CRMEntity, str]:
         """
@@ -1213,10 +1324,10 @@ class EntityService:
         attr_choices = dict(body.attribute_choices)
 
         conflict_scalar_keys: set[str] = set()
-        merged_scalars: dict[str, Any] = {}
+        merged_scalars: dict[str, object] = {}
         for key in _MERGE_SCALAR_KEYS:
-            av = getattr(survivor, key)
-            bv = getattr(source, key)
+            av = self._entity_merge_scalar_value(survivor, key)
+            bv = self._entity_merge_scalar_value(source, key)
             if _canonical_json(av) == _canonical_json(bv):
                 merged_scalars[key] = av
             else:
@@ -1241,7 +1352,7 @@ class EntityService:
         sb = dict(source.attributes or {})
         all_attr_keys = set(sa.keys()) | set(sb.keys())
         conflict_attr_keys: set[str] = set()
-        merged_attrs: dict[str, Any] = {}
+        merged_attrs: JsonObject = {}
         for k in sorted(all_attr_keys):
             a_has = k in sa
             b_has = k in sb
@@ -1266,47 +1377,55 @@ class EntityService:
                 "Лишние ключи в attribute_choices (нет конфликта): " + ", ".join(sorted(extra_attr))
             )
 
-        def _union_str_lists(a: object, b: object) -> list[str]:
-            if a is not None and not isinstance(a, list):
-                raise ValueError("Ожидался список строк")
-            if b is not None and not isinstance(b, list):
+        def _coerce_str_list(value: object | None) -> list[str]:
+            if value is None:
+                return []
+            if not isinstance(value, list):
                 raise ValueError("Ожидался список строк")
             merged: list[str] = []
-            for value in [*(a or []), *(b or [])]:
-                if not isinstance(value, str):
+            for item in cast(list[object], value):
+                if not isinstance(item, str):
                     raise ValueError("Ожидался список строк")
-                merged.append(value)
+                merged.append(item)
+            return merged
+
+        def _union_str_lists(a: object | None, b: object | None) -> list[str]:
+            merged: list[str] = []
+            merged.extend(_coerce_str_list(a))
+            merged.extend(_coerce_str_list(b))
             return list(dict.fromkeys(merged))
 
         merged_tags = _union_str_lists(survivor.tags, source.tags)
         merged_assignees = _union_str_lists(survivor.assignees, source.assignees)
         merged_attachments = _union_str_lists(survivor.attachment_ids, source.attachment_ids)
 
-        await self._relationship_repo.rewrite_entity_id(company_id, source_id, survivor_id)
-        await self._relationship_repo.deduplicate_relationships_for_entity(survivor_id)
+        _ = await self._relationship_repo.rewrite_entity_id(company_id, source_id, survivor_id)
+        _ = await self._relationship_repo.deduplicate_relationships_for_entity(survivor_id)
 
-        await self._entity_repo.rewrite_source_entity_id_references(
+        _ = await self._entity_repo.rewrite_source_entity_id_references(
             company_id, source_id, survivor_id
         )
 
-        await self._access_grant_repo.remap_entity_resource_id(company_id, source_id, survivor_id)
-        await self._access_grant_repo.deduplicate_entity_grants(company_id, survivor_id)
+        _ = await self._access_grant_repo.remap_entity_resource_id(company_id, source_id, survivor_id)
+        _ = await self._access_grant_repo.deduplicate_entity_grants(company_id, survivor_id)
 
-        await self._access_request_repo.remap_entity_resource_id(company_id, source_id, survivor_id)
-        await self._access_request_repo.deduplicate_pending_entity_requests(survivor_id)
+        _ = await self._access_request_repo.remap_entity_resource_id(
+            company_id, source_id, survivor_id
+        )
+        _ = await self._access_request_repo.deduplicate_pending_entity_requests(survivor_id)
 
         source_fresh = await self._entity_repo.get(source_id)
         if source_fresh is None:
             raise ValueError("Сущность source пропала до завершения слияния")
         source_fresh.attachment_ids = []
         source_fresh.updated_at = datetime.now(UTC)
-        await self._entity_repo.update(source_fresh)
+        _ = await self._entity_repo.update(source_fresh)
 
         surv = await self._entity_repo.get(survivor_id)
         if surv is None:
             raise ValueError("Сущность survivor не найдена после переноса связей")
         for key in _MERGE_SCALAR_KEYS:
-            setattr(surv, key, merged_scalars[key])
+            self._set_entity_merge_scalar_value(surv, key, merged_scalars[key])
         surv.tags = merged_tags
         surv.assignees = merged_assignees
         surv.attributes = merged_attrs
@@ -1318,9 +1437,9 @@ class EntityService:
             namespace=surv.namespace,
             entity_subtype=surv.entity_subtype,
         )
-        await self._entity_repo.update(surv)
+        _ = await self._entity_repo.update(surv)
 
-        await self._delete_entity_with_saga(source_id)
+        _ = await self._delete_entity_with_saga(source_id)
 
         out = await self._entity_repo.get(survivor_id)
         if out is None:
@@ -1330,7 +1449,7 @@ class EntityService:
     async def update_entity(
         self,
         entity_id: str,
-        updates: dict[str, Any],
+        updates: JsonObject,
         voice_entity_id: str | None = None,
         voice_entity_in_payload: bool = False,
         context_entity_id: str | None = None,
@@ -1347,10 +1466,13 @@ class EntityService:
         is_note = entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
         old_attachment_ids = list(entity.attachment_ids or []) if is_note else []
 
-        next_namespace = self._resolve_namespace_for_write(
-            updates["namespace"] if "namespace" in updates else entity.namespace
+        next_namespace_raw = updates["namespace"] if "namespace" in updates else entity.namespace
+        if next_namespace_raw is not None and not isinstance(next_namespace_raw, str):
+            raise ValueError("namespace must be a string or null")
+        next_namespace = self._resolve_namespace_for_write(next_namespace_raw)
+        next_entity_type_raw = (
+            updates["entity_type"] if "entity_type" in updates else entity.entity_type
         )
-        next_entity_type_raw = updates["entity_type"] if "entity_type" in updates else entity.entity_type
         if not isinstance(next_entity_type_raw, str) or not next_entity_type_raw.strip():
             raise ValueError("entity_type is required")
         next_entity_type = next_entity_type_raw
@@ -1366,7 +1488,15 @@ class EntityService:
             namespace=next_namespace,
             entity_subtype=next_entity_subtype,
         )
-        merged_attributes = {**(entity.attributes or {}), **(updates.get("attributes") or {})}
+        update_attributes_raw = updates.get("attributes")
+        if update_attributes_raw is None:
+            update_attributes: JsonObject = {}
+        else:
+            parsed_update_attributes = _as_json_object(update_attributes_raw)
+            if parsed_update_attributes is None:
+                raise ValueError("attributes must be an object or null")
+            update_attributes = parsed_update_attributes
+        merged_attributes: JsonObject = {**(entity.attributes or {}), **update_attributes}
         if next_entity_type == "task":
             await self._validate_task_entity_board_status(
                 namespace=next_namespace,
@@ -1413,7 +1543,7 @@ class EntityService:
             entity.description = merged_desc
 
         entity.updated_at = datetime.now(UTC)
-        await self._entity_repo.update(entity)
+        _ = await self._entity_repo.update(entity)
 
         logger.info(f"Updated entity: {entity_id}")
 
@@ -1502,7 +1632,7 @@ class EntityService:
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 100,
         cursor: str | None = None,
@@ -1574,7 +1704,7 @@ class EntityService:
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Возвращает границы timeline по created_at."""
         (
             min_created_at,
@@ -1703,7 +1833,7 @@ class EntityService:
     async def get_exclusive_related_entities_for_note(
         self,
         note_entity_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[JsonObject]:
         """Возвращает список сущностей, которые будут удалены каскадно вместе с заметкой."""
         exclusive_entity_ids = await self._collect_exclusive_related_entities_for_note(
             note_entity_id
@@ -1739,23 +1869,23 @@ class EntityService:
             nonlocal deleted_relationships
             relationships = await self._relationship_repo.get_by_entity(entity_id)
             deleted_relationships = relationships.copy()
-            await self._relationship_repo.delete_by_entity(entity_id)
+            _ = await self._relationship_repo.delete_by_entity(entity_id)
 
         async def restore_relationships() -> None:
             for relationship in deleted_relationships:
-                await self._relationship_repo.create(relationship)
+                _ = await self._relationship_repo.create(relationship)
 
         async def delete_attachments() -> None:
-            await self._attachment_service.delete_all_attachments(entity_id)
+            _ = await self._attachment_service.delete_all_attachments(entity_id)
 
         async def restore_attachments() -> None:
             pass
 
         async def delete_entity_from_db() -> None:
-            await self._entity_repo.delete(entity_id)
+            _ = await self._entity_repo.delete(entity_id)
 
         async def restore_entity_to_db() -> None:
-            await self._entity_repo.create(entity)
+            _ = await self._entity_repo.create(entity)
 
         saga.add_step(
             SagaStep(
@@ -1779,7 +1909,7 @@ class EntityService:
             )
         )
 
-        await saga.execute()
+        _ = await saga.execute()
         return entity
 
     async def delete_entity(
@@ -1809,21 +1939,21 @@ class EntityService:
                         f"Skip already deleted exclusive entity for note {entity_id}: {related_entity_id}"
                     )
                     continue
-                await self._delete_entity_with_saga(related_entity_id)
+                _ = await self._delete_entity_with_saga(related_entity_id)
                 logger.info(
                     f"Deleted exclusive related entity for note {entity_id}: {related_entity_id}"
                 )
 
-            await self._delete_entity_with_saga(entity_id)
+            _ = await self._delete_entity_with_saga(entity_id)
             logger.info(
                 f"Successfully deleted note {entity_id} with {len(exclusive_related_entity_ids)} exclusive entities"
             )
         else:
-            await self._delete_entity_with_saga(entity_id)
+            _ = await self._delete_entity_with_saga(entity_id)
             logger.info(f"Successfully deleted entity: {entity_id} (cascade)")
 
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID and entity.note_date is not None:
-            await self.enqueue_daily_summary_rebuild(
+            _ = await self.enqueue_daily_summary_rebuild(
                 date_str=entity.note_date.isoformat(),
                 namespace=entity.namespace,
             )
@@ -1848,7 +1978,7 @@ class EntityService:
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float]]:
@@ -1877,7 +2007,7 @@ class EntityService:
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float, str]]:
@@ -1906,7 +2036,7 @@ class EntityService:
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float]]:
@@ -1932,7 +2062,7 @@ class EntityService:
     async def aggregate_facets(
         self,
         namespace: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Фасетная агрегация: по entity_type, status, месяц создания."""
         return await self._entity_repo.aggregate_facets(namespace=namespace)
 
@@ -2141,10 +2271,7 @@ class EntityService:
             return
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
             return
-        if isinstance(error_message, str):
-            msg = error_message.strip()
-        else:
-            msg = str(error_message).strip()
+        msg = error_message.strip()
         if not msg:
             msg = "Неизвестная ошибка"
         if len(msg) > _AI_NOTE_ANALYSIS_ERROR_MAX_LEN:
@@ -2155,8 +2282,6 @@ class EntityService:
         if apply_failures:
             cleaned: list[dict[str, str]] = []
             for row in apply_failures:
-                if not isinstance(row, dict):
-                    continue
                 cleaned.append(
                     {
                         "draft_entity_id": str(row.get("draft_entity_id", "")),
@@ -2221,7 +2346,9 @@ class EntityService:
         for p in patches:
             did = p.draft_entity_id
             if did in seen_ids:
-                raise ValueError(f"draft_repair: дубликат draft_entity_id в patch_entities: {did!r}")
+                raise ValueError(
+                    f"draft_repair: дубликат draft_entity_id в patch_entities: {did!r}"
+                )
             seen_ids.add(did)
             ent = by_id.get(did)
             if ent is None:
@@ -2267,7 +2394,9 @@ class EntityService:
 
         ns_for_types = self._normalize_namespace(note.namespace) or (note.namespace or "default")
 
-        entity_rows = await self._entity_type_repo.load_all_entity_types_for_company(namespace=ns_for_types)
+        entity_rows = await self._entity_type_repo.load_all_entity_types_for_company(
+            namespace=ns_for_types
+        )
         rel_rows = await self._load_all_relationship_types_for_company()
         parent_map = await self._entity_type_repo.get_parent_type_id_map_for_namespace(ns_for_types)
 
@@ -2347,7 +2476,11 @@ class EntityService:
             raise ValueError(f"Невалидный ответ flow draft_repair: {exc}") from exc
 
         if not flow_result.patch_entities:
-            notes = flow_result.repair_notes.strip() if isinstance(flow_result.repair_notes, str) else ""
+            notes = (
+                flow_result.repair_notes.strip()
+                if isinstance(flow_result.repair_notes, str)
+                else ""
+            )
             if notes:
                 raise ValueError(notes)
             raise ValueError("Модель не вернула patch_entities для исправления черновика")
@@ -2447,9 +2580,7 @@ class EntityService:
 
         ns_for_types = self._normalize_namespace(note.namespace) or (note.namespace or "default")
 
-        existing_entity_ids: set[str] = {
-            e.draft_entity_id for e in entities if e.draft_entity_id
-        }
+        existing_entity_ids: set[str] = {e.draft_entity_id for e in entities if e.draft_entity_id}
         if draft.note is not None and draft.note.draft_entity_id:
             existing_entity_ids.add(draft.note.draft_entity_id)
         existing_entity_ids.update(draft.known_entity_id_map.keys())
@@ -2461,7 +2592,9 @@ class EntityService:
             if not did:
                 raise ValueError("add_entities: отсутствует draft_entity_id")
             if did in existing_entity_ids or did in seen_new_ent:
-                raise ValueError(f"add_entities: draft_entity_id уже занят или повторяется: {did!r}")
+                raise ValueError(
+                    f"add_entities: draft_entity_id уже занят или повторяется: {did!r}"
+                )
             seen_new_ent.add(did)
             await self._resolve_storage_type_for_note_family(
                 ent.entity_type,
@@ -2580,8 +2713,7 @@ class EntityService:
                 rels[idx] = rel.model_copy(update=ru)
 
         rel_tuple_seen: set[tuple[str, str, str]] = {
-            (r.source_draft_entity_id, r.target_draft_entity_id, r.relationship_type)
-            for r in rels
+            (r.source_draft_entity_id, r.target_draft_entity_id, r.relationship_type) for r in rels
         }
         existing_rel_ids: set[str] = {r.draft_relationship_id for r in rels}
 
@@ -2612,7 +2744,9 @@ class EntityService:
                     f"target={tup[1]!r} type={tup[2]!r}"
                 )
             if rel.relationship_type not in valid_rel_type_ids:
-                raise ValueError(f"add_relationships: неизвестный тип связи: {rel.relationship_type}")
+                raise ValueError(
+                    f"add_relationships: неизвестный тип связи: {rel.relationship_type}"
+                )
             if rel.source_draft_entity_id not in existing_entity_ids:
                 raise ValueError(
                     f"add_relationships: неизвестный source_draft_entity_id: "
@@ -3235,11 +3369,11 @@ class EntityService:
                     prompt_parts.append("  Поля attributes:")
                     for field in fields:
                         req_mark = " [обязательное]" if field["required"] else ""
-                        desc_part = f": {field['description']}" if field.get("description") else ""
+                        field_description = field.get("description")
+                        desc_part = f": {field_description}" if field_description else ""
+                        field_values = field.get("values")
                         values_part = (
-                            f" Допустимые значения: {field['values']}"
-                            if field.get("values")
-                            else ""
+                            f" Допустимые значения: {field_values}" if field_values else ""
                         )
                         prompt_parts.append(
                             f"  - `{field['name']}` ({field['label']}){req_mark}{desc_part}{values_part}"
@@ -4169,8 +4303,10 @@ class EntityService:
 
             # Для участников платформы дополнительно пробуем first_name и last_name
             if entity.entity_type == "member":
-                first = (attrs.get("first_name") or "").strip()
-                last = (attrs.get("last_name") or "").strip()
+                raw_first = attrs.get("first_name")
+                raw_last = attrs.get("last_name")
+                first = raw_first.strip() if isinstance(raw_first, str) else ""
+                last = raw_last.strip() if isinstance(raw_last, str) else ""
                 if first and first != entity.name and first not in aliases:
                     aliases.append(first)
                 if last and last != entity.name and last not in aliases:

@@ -9,7 +9,7 @@ Triggers module - точки входа для запуска агентов.
 - redis: Redis Pub/Sub
 """
 
-from apps.flows.src.triggers.executor import OutputActionExecutor, TriggerExecutor
+from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
     BaseTriggerHandler,
     TriggerRegistrationError,
@@ -17,6 +17,7 @@ from apps.flows.src.triggers.handlers.base import (
 )
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.input_mapper import InputMapper
+from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.registry import TriggerRegistry
 
 __all__ = [

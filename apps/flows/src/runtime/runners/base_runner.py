@@ -63,7 +63,7 @@ class BaseLlmNodeRunner(ABC):
             return
 
         if exit_tool_name == "finish":
-            from apps.flows.tools import finish
+            from apps.flows.tools.finish_tool import finish
             self.tools.append(finish)
             self.auto_exit_tool_added = True
             logger.info(f"[node:{self.node_config.name}] finish tool auto-injected for explicit mode")

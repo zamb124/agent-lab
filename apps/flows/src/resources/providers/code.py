@@ -4,9 +4,10 @@ CodeResourceProvider - провайдер для code ресурсов.
 
 from typing import Any, Dict
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import CodeResourceConfig, ResourceDefinition
 from apps.flows.src.resources.providers.base import BaseResourceProvider
-from apps.flows.src.resources.wrappers import CodeModule
+from apps.flows.src.resources.wrappers.code_module import CodeModule
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -18,6 +19,9 @@ class CodeResourceProvider(BaseResourceProvider):
 
     Компилирует inline код и создаёт CodeModule с функциями/классами.
     """
+
+    def __init__(self, container: FlowRuntimeContainer):
+        self.container = container
 
     async def resolve(
         self,
@@ -42,13 +46,11 @@ class CodeResourceProvider(BaseResourceProvider):
             raise ValueError(f"Code resource only supports Python, got: {language}")
 
         # Компилируем код
-        from apps.flows.src.container import get_container
-        from apps.flows.src.eval.namespace import PythonNamespaceBuilder
-
-        namespace_builder = PythonNamespaceBuilder(
+        runner = self.container.get_code_runner(
+            language="python",
             variables=variables,
-            base_tool_class=get_container().base_tool_class,
         )
+        namespace_builder = runner.namespace_builder
         namespace = namespace_builder.build()
 
         try:

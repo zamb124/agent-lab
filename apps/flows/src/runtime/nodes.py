@@ -447,23 +447,6 @@ class BaseNode(ABC):
 
         return new_state
 
-    def as_tool(
-        self, name: Optional[str] = None, description: Optional[str] = None
-    ) -> Any:
-        """
-        Превращает ноду в tool (тот же NodeAsToolWrapper, что и в ToolRegistry).
-        """
-        from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
-
-        return NodeAsToolWrapper.from_base_node(
-            self,
-            tool_name=name or f"{self.node_id}_tool",
-            tool_description=description
-            or self.description
-            or f"Вызов ноды {self.node_id}",
-        )
-
-
 class LlmNode(BaseNode):
     """
     LLM нода (ReAct цикл + tools).

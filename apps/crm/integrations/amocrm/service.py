@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import date, datetime, UTC
+from datetime import UTC, date, datetime
 from typing import Any
 
 from apps.crm.constants_graph import BELONGS_TO_RELATIONSHIP_TYPE
@@ -59,14 +59,14 @@ class AmoCRMIntegrationService:
         task_service: TaskService,
         integration_external_author: IntegrationExternalAuthorService,
     ) -> None:
-        self._oauth = oauth_service
-        self._entity_repo = entity_repository
-        self._entity_type_repo = entity_type_repository
-        self._relationship_repo = relationship_repository
-        self._entity_service = entity_service
-        self._namespace_repo = namespace_repository
-        self._task_service = task_service
-        self._integration_author = integration_external_author
+        self._oauth: OAuthService = oauth_service
+        self._entity_repo: EntityRepository = entity_repository
+        self._entity_type_repo: EntityTypeRepository = entity_type_repository
+        self._relationship_repo: RelationshipRepository = relationship_repository
+        self._entity_service: EntityService = entity_service
+        self._namespace_repo: NamespaceRepository = namespace_repository
+        self._task_service: TaskService = task_service
+        self._integration_author: IntegrationExternalAuthorService = integration_external_author
 
     def _service_key(self, namespace_name: str) -> str:
         return f"amocrm:{namespace_name}"
@@ -113,7 +113,7 @@ class AmoCRMIntegrationService:
         if not isinstance(sub_raw, str) or not sub_raw.strip():
             raise ValueError("В credential нет amocrm_subdomain")
         access = cred.access_token
-        if not isinstance(access, str) or not access:
+        if not access:
             raise ValueError("Пустой access_token AmoCRM")
         return access, sub_raw.strip()
 
@@ -132,7 +132,7 @@ class AmoCRMIntegrationService:
             )
         if response.status_code == 429:
             raise RuntimeError("AmoCRM rate limit (429), повторите позже")
-        response.raise_for_status()
+        _ = response.raise_for_status()
         if response.status_code == 204:
             return {}
         if not response.content.strip():
@@ -232,7 +232,7 @@ class AmoCRMIntegrationService:
             confidence=1.0,
             attributes={},
         )
-        await self._relationship_repo.create(rel)
+        _ = await self._relationship_repo.create(rel)
         return True
 
     @staticmethod
@@ -393,7 +393,7 @@ class AmoCRMIntegrationService:
         )
         if created and auto_note_ai_analyze:
             try:
-                await self._task_service.start_note_analyze(
+                _ = await self._task_service.start_note_analyze(
                     note_id=ent.entity_id,
                     note_name=ent.name,
                     namespace=namespace,
@@ -592,11 +592,7 @@ class AmoCRMIntegrationService:
 
                 stats["tasks"] = stats.get("tasks", 0) + 1
                 count += 1
-                if (
-                    on_batch is not None
-                    and count > 0
-                    and count % AMO_PROGRESS_BATCH == 0
-                ):
+                if on_batch is not None and count > 0 and count % AMO_PROGRESS_BATCH == 0:
                     await on_batch(count)
             url = self._next_page_url(payload)
 
@@ -629,11 +625,7 @@ class AmoCRMIntegrationService:
                     account_key,
                 )
                 count += 1
-                if (
-                    on_batch is not None
-                    and count > 0
-                    and count % AMO_PROGRESS_BATCH == 0
-                ):
+                if on_batch is not None and count > 0 and count % AMO_PROGRESS_BATCH == 0:
                     await on_batch(count)
             url = self._next_page_url(payload)
         return count
@@ -689,7 +681,7 @@ class AmoCRMIntegrationService:
         users_list_cached = (users_payload_prefetch.get("_embedded") or {}).get("users")
         if not isinstance(users_list_cached, list):
             users_list_cached = []
-        self._amo_users_directory_from_api(users_list_cached)
+        _ = self._amo_users_directory_from_api(users_list_cached)
 
         if on_progress is not None:
             await on_progress("contacts", 0)

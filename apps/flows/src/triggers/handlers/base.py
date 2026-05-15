@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict
 
 from apps.flows.config import get_settings
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import TriggerConfig, TriggerType
 from core.logging import get_logger
 
@@ -27,12 +28,13 @@ class BaseTriggerHandler(ABC):
 
     trigger_type: TriggerType
 
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, container: FlowRuntimeContainer):
         """
         Args:
             base_url: Базовый URL сервиса для формирования webhook URL
         """
         self.base_url = base_url
+        self.container = container
 
     @abstractmethod
     async def register(

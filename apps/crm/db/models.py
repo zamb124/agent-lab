@@ -11,8 +11,8 @@ SQLAlchemy модели для CRM Service.
 - access_requests: Запросы на доступ
 """
 
-from datetime import date, datetime, UTC
-from typing import Any
+from datetime import UTC, date, datetime
+from typing import override
 
 from sqlalchemy import (
     Boolean,
@@ -30,6 +30,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
+from apps.crm.types import JsonObject
 from core.db.models import Base
 
 
@@ -41,7 +42,7 @@ class CRMEntity(Base):
     Семантический поиск через JOIN с vector_documents (shared_db).
     """
 
-    __tablename__ = "crm_entities"
+    __tablename__: str = "crm_entities"
 
     entity_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -55,7 +56,7 @@ class CRMEntity(Base):
     status: Mapped[str] = mapped_column(String(50), default="active", nullable=False)
 
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
-    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    attributes: Mapped[JsonObject] = mapped_column(JSONB, default=dict)
 
     priority: Mapped[str | None] = mapped_column(String(50), nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -82,7 +83,7 @@ class CRMEntity(Base):
 
     search_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         Index("ix_crm_entities_company_type", "company_id", "entity_type"),
         Index("ix_crm_entities_company_ns_type", "company_id", "namespace", "entity_type"),
         Index("ix_crm_entities_company_status", "company_id", "status"),
@@ -110,6 +111,7 @@ class CRMEntity(Base):
             return f"{self.entity_type}:{self.entity_subtype}"
         return self.entity_type
 
+    @override
     def __repr__(self) -> str:
         return f"<CRMEntity(entity_id='{self.entity_id}', type='{self.full_type}', company='{self.company_id}')>"
 
@@ -131,7 +133,7 @@ class EntityType(Base):
     - organization (бизнес-тип, parent=None)
     """
 
-    __tablename__ = "entity_types"
+    __tablename__: str = "entity_types"
 
     company_id: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
     namespace: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
@@ -146,8 +148,8 @@ class EntityType(Base):
         Text, nullable=True, comment="Промпт для AI извлечения этого типа"
     )
 
-    required_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    optional_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    required_fields: Mapped[JsonObject] = mapped_column(JSONB, default=dict)
+    optional_fields: Mapped[JsonObject] = mapped_column(JSONB, default=dict)
 
     icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -198,12 +200,13 @@ class EntityType(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         Index("idx_entity_types_parent", "parent_type_id"),
         Index("idx_entity_types_system", "is_system"),
         Index("ix_entity_types_company_ns", "company_id", "namespace"),
     )
 
+    @override
     def __repr__(self) -> str:
         return (
             f"<EntityType(type_id='{self.type_id}', namespace='{self.namespace}', "
@@ -225,7 +228,7 @@ class RelationshipType(Base):
     - manages: кастомная связь с обратной (inverse_type_id)
     """
 
-    __tablename__ = "relationship_types"
+    __tablename__: str = "relationship_types"
 
     type_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(
@@ -258,8 +261,9 @@ class RelationshipType(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    __table_args__ = (Index("idx_relationship_types_system", "is_system"),)
+    __table_args__: tuple[object, ...] = (Index("idx_relationship_types_system", "is_system"),)
 
+    @override
     def __repr__(self) -> str:
         return f"<RelationshipType(type_id='{self.type_id}', name='{self.name}', company='{self.company_id}')>"
 
@@ -275,7 +279,7 @@ class Relationship(Base):
     namespace - изоляция связей по пространствам.
     """
 
-    __tablename__ = "relationships"
+    __tablename__: str = "relationships"
 
     relationship_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -301,7 +305,7 @@ class Relationship(Base):
         default=1.0,
         server_default=text("1.0"),
     )
-    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    attributes: Mapped[JsonObject] = mapped_column(JSONB, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
@@ -312,7 +316,7 @@ class Relationship(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         UniqueConstraint(
             "company_id",
             "namespace",
@@ -327,6 +331,7 @@ class Relationship(Base):
         Index("idx_relationships_namespace", "company_id", "namespace"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<Relationship(id='{self.relationship_id}', type='{self.relationship_type}')>"
 
@@ -339,7 +344,7 @@ class CompanyMapping(Base):
     для компании пользователя с is_owner=True.
     """
 
-    __tablename__ = "company_mapping"
+    __tablename__: str = "company_mapping"
 
     company_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     entity_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -348,6 +353,7 @@ class CompanyMapping(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<CompanyMapping(company_id='{self.company_id}', entity_id='{self.entity_id}')>"
 
@@ -366,7 +372,7 @@ class AccessGrant(Base):
     - company (вся компания)
     """
 
-    __tablename__ = "access_grants"
+    __tablename__: str = "access_grants"
 
     grant_id: Mapped[str] = mapped_column(String(100), primary_key=True)
 
@@ -416,13 +422,14 @@ class AccessGrant(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         Index("idx_grants_resource", "resource_type", "resource_id", "company_id"),
         Index("idx_grants_target_user", "target_user_id"),
         Index("idx_grants_target_company", "target_company_id"),
         Index("idx_grants_token", "access_token"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<AccessGrant(grant_id='{self.grant_id}', type='{self.grant_type}', resource='{self.resource_type}:{self.resource_id}')>"
 
@@ -434,7 +441,7 @@ class AccessRequest(Base):
     Статусы: pending, approved, rejected
     """
 
-    __tablename__ = "access_requests"
+    __tablename__: str = "access_requests"
 
     request_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -462,11 +469,12 @@ class AccessRequest(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         Index("idx_access_requests_owner_status", "owner_id", "status"),
         Index("idx_access_requests_resource", "resource_type", "resource_id"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<AccessRequest(request_id='{self.request_id}', status='{self.status}')>"
 
@@ -474,7 +482,7 @@ class AccessRequest(Base):
 class NamespaceTemplate(Base):
     """Шаблон namespace (редактируемый в БД)."""
 
-    __tablename__ = "namespace_templates"
+    __tablename__: str = "namespace_templates"
 
     template_key: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -494,13 +502,14 @@ class NamespaceTemplate(Base):
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
-    crm_settings: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    crm_settings: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         UniqueConstraint("company_id", "template_id", name="uq_namespace_template_company"),
         Index("idx_namespace_template_company_system", "company_id", "is_system"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<NamespaceTemplate(template_id='{self.template_id}', company='{self.company_id}')>"
 
@@ -508,7 +517,7 @@ class NamespaceTemplate(Base):
 class NamespaceTemplateType(Base):
     """Тип сущности внутри шаблона namespace."""
 
-    __tablename__ = "namespace_template_types"
+    __tablename__: str = "namespace_template_types"
 
     entry_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     template_key: Mapped[str] = mapped_column(
@@ -521,8 +530,8 @@ class NamespaceTemplateType(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
-    required_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
-    optional_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    required_fields: Mapped[JsonObject] = mapped_column(JSONB, default=dict, nullable=False)
+    optional_fields: Mapped[JsonObject] = mapped_column(JSONB, default=dict, nullable=False)
     icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_event: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -554,17 +563,15 @@ class NamespaceTemplateType(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         UniqueConstraint("template_key", "type_id", name="uq_namespace_template_type"),
         Index("idx_namespace_template_type_template", "template_key"),
     )
 
     def namespace_ids_list(self) -> list[str]:
-        raw = self.namespace_ids
-        if raw is None:
-            return []
-        return list(raw)
+        return list(self.namespace_ids)
 
+    @override
     def __repr__(self) -> str:
         return (
             f"<NamespaceTemplateType(template_key='{self.template_key}', type_id='{self.type_id}')>"
@@ -583,7 +590,7 @@ class CRMTask(Base):
       | 'reembed_stale_documents_tick'
     """
 
-    __tablename__ = "crm_tasks"
+    __tablename__: str = "crm_tasks"
 
     task_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     task_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -593,7 +600,7 @@ class CRMTask(Base):
     progress_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    data: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
 
     taskiq_task_id: Mapped[str | None] = mapped_column(String(220), nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -616,8 +623,11 @@ class CRMTask(Base):
         nullable=False,
     )
 
-    __table_args__ = (Index("ix_crm_tasks_company_ns_status", "company_id", "namespace", "status"),)
+    __table_args__: tuple[object, ...] = (
+        Index("ix_crm_tasks_company_ns_status", "company_id", "namespace", "status"),
+    )
 
+    @override
     def __repr__(self) -> str:
         return f"<CRMTask(task_id='{self.task_id}', task_type='{self.task_type}', status='{self.status}')>"
 
@@ -628,7 +638,7 @@ class CRMSuggest(Base):
     Создается фоновыми процессами.
     """
 
-    __tablename__ = "crm_suggests"
+    __tablename__: str = "crm_suggests"
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -651,7 +661,7 @@ class CRMSuggest(Base):
         nullable=False,
         comment="ID связанных сущностей: дубли или исходная заметка",
     )
-    payload: Mapped[dict[str, Any]] = mapped_column(
+    payload: Mapped[JsonObject] = mapped_column(
         JSONB,
         default=dict,
         nullable=False,
@@ -670,9 +680,10 @@ class CRMSuggest(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: tuple[object, ...] = (
         Index("ix_crm_suggests_company_ns_status", "company_id", "namespace", "status"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<CRMSuggest(id='{self.id}', type='{self.suggest_type}', status='{self.status}')>"

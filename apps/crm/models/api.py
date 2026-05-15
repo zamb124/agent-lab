@@ -3,9 +3,11 @@ Pydantic модели для API endpoints.
 """
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from apps.crm.types import JsonObject, JsonValue
 
 SemanticTextIndexStatus = Literal["absent", "pending_embedding", "ready"]
 
@@ -20,7 +22,7 @@ class EntityCreate(BaseModel):
     namespace: str = Field(default="default", description="Namespace для изоляции")
     name: str
     description: str | None = None
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
     tags: list[str] | None = None
     attachment_ids: list[str] | None = None
     user_id: str | None = None
@@ -46,7 +48,7 @@ class EntityUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     status: str | None = None
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
     tags: list[str] | None = None
     attachment_ids: list[str] | None = None
 
@@ -65,7 +67,7 @@ class EntityUpdate(BaseModel):
 class EntityResponse(BaseModel):
     """Response с entity"""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     entity_id: str
     company_id: str
@@ -75,7 +77,7 @@ class EntityResponse(BaseModel):
     name: str
     description: str | None
     status: str
-    attributes: dict[str, Any]
+    attributes: JsonObject
     tags: list[str]
     attachment_ids: list[str]
 
@@ -87,7 +89,7 @@ class EntityResponse(BaseModel):
     user_id: str | None
     source_entity_id: str | None
     source_company_id: str | None
-    external_relationships: list[dict[str, Any]] = []
+    external_relationships: list[JsonObject] = []
     relevance: float = Field(
         description="Значение CRMEntity.relevance в БД; на ранжирование результатов поиска не влияет.",
     )
@@ -115,13 +117,13 @@ class EntityResponse(BaseModel):
 class EntitySearchFilterNode(BaseModel):
     """DSL-узел фильтра поиска сущностей."""
 
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True, extra="forbid")
 
     and_nodes: list["EntitySearchFilterNode"] | None = Field(default=None, alias="$and")
     or_nodes: list["EntitySearchFilterNode"] | None = Field(default=None, alias="$or")
     field: str | None = None
     op: str | None = None
-    value: Any | None = None
+    value: JsonValue | None = None
 
     @model_validator(mode="after")
     def validate_shape(self) -> "EntitySearchFilterNode":
@@ -150,13 +152,13 @@ class EntitySearchFilterNode(BaseModel):
         return self
 
 
-EntitySearchFilterNode.model_rebuild()
+_ = EntitySearchFilterNode.model_rebuild()
 
 
 class EntitySearchQueryRequest(BaseModel):
     """POST-контракт поиска/листинга сущностей через DSL-фильтры."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     query: str | None = None
     search_mode: Literal["text", "semantic", "hybrid"] = Field(
@@ -179,7 +181,7 @@ class BulkCreateRequest(BaseModel):
 
 class BulkUpdateItem(BaseModel):
     entity_id: str
-    updates: dict[str, Any]
+    updates: JsonObject
 
 
 class BulkUpdateRequest(BaseModel):
@@ -259,8 +261,8 @@ class EntityTypeCreate(BaseModel):
     name: str
     description: str | None = None
     prompt: str | None = None
-    required_fields: dict[str, Any] | None = None
-    optional_fields: dict[str, Any] | None = None
+    required_fields: JsonObject | None = None
+    optional_fields: JsonObject | None = None
     icon: str | None = None
     color: str | None = None
     is_event: bool = False
@@ -277,8 +279,8 @@ class EntityTypeUpdate(BaseModel):
     description: str | None = None
     parent_type_id: str | None = None
     prompt: str | None = None
-    required_fields: dict[str, Any] | None = None
-    optional_fields: dict[str, Any] | None = None
+    required_fields: JsonObject | None = None
+    optional_fields: JsonObject | None = None
     icon: str | None = None
     color: str | None = None
     is_context_anchor: bool | None = None
@@ -289,7 +291,7 @@ class EntityTypeUpdate(BaseModel):
 class EntityTypeResponse(BaseModel):
     """Response с типом сущности"""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     type_id: str
     company_id: str
@@ -298,8 +300,8 @@ class EntityTypeResponse(BaseModel):
     name: str
     description: str | None
     prompt: str | None
-    required_fields: dict[str, Any]
-    optional_fields: dict[str, Any]
+    required_fields: JsonObject
+    optional_fields: JsonObject
     public_fields: list[str]
     icon: str | None
     color: str | None
@@ -333,7 +335,7 @@ class RelationshipTypeCreate(BaseModel):
 class RelationshipTypeResponse(BaseModel):
     """Response с типом связи"""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     type_id: str
     company_id: str
@@ -366,13 +368,13 @@ class RelationshipCreate(BaseModel):
         le=1.0,
         description="Достоверность связи (например из AI); не участвует в ранжировании поиска сущностей и не входит в стоимость кратчайшего пути.",
     )
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
 
 
 class RelationshipResponse(BaseModel):
     """Response со связью"""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     relationship_id: str
     company_id: str
@@ -386,7 +388,7 @@ class RelationshipResponse(BaseModel):
     confidence: float = Field(
         description="Достоверность связи; на длину пути и на поиск сущностей не влияет.",
     )
-    attributes: dict[str, Any]
+    attributes: JsonObject
     created_at: datetime
     updated_at: datetime
 
@@ -522,8 +524,8 @@ class NamespaceTemplateTypeUpsertRequest(BaseModel):
     name: str
     description: str | None = None
     prompt: str | None = None
-    required_fields: dict[str, Any] = Field(default_factory=dict)
-    optional_fields: dict[str, Any] = Field(default_factory=dict)
+    required_fields: JsonObject = Field(default_factory=dict)
+    optional_fields: JsonObject = Field(default_factory=dict)
     icon: str | None = None
     color: str | None = None
     is_event: bool = False
@@ -540,8 +542,8 @@ class NamespaceTemplateTypeResponse(BaseModel):
     name: str
     description: str | None = None
     prompt: str | None = None
-    required_fields: dict[str, Any]
-    optional_fields: dict[str, Any]
+    required_fields: JsonObject
+    optional_fields: JsonObject
     icon: str | None = None
     color: str | None = None
     is_event: bool
@@ -585,14 +587,14 @@ class NamespaceTemplateSchemaOptionsResponse(BaseModel):
     field_types: list[NamespaceTemplateSchemaFieldType]
     enum_sets: list[NamespaceTemplateSchemaEnumSet]
     operators: list[NamespaceTemplateSchemaOperator]
-    defaults: dict[str, Any] = Field(default_factory=dict)
+    defaults: JsonObject = Field(default_factory=dict)
     validation_limits: dict[str, int] = Field(default_factory=dict)
 
 
 class AIExtractedEntity(BaseModel):
     """Entity извлеченная AI (без БД полей)"""
 
-    model_config = {"extra": "allow"}  # Разрешаем дополнительные поля от AI
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
 
     draft_entity_id: str | None = Field(
         default=None,
@@ -602,7 +604,7 @@ class AIExtractedEntity(BaseModel):
     name: str
     entity_subtype: str | None = None
     description: str | None = None
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
     note_date: str | None = None
     confidence: float | None = None
     # Поля для tasks
@@ -623,7 +625,7 @@ class AIAnalyzeRelationshipExtracted(BaseModel):
     Только текстовые концы; после ответа CRM превращает в AIAnalysisRelationshipDraft.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
 
     source_type: str
     source_name: str
@@ -632,7 +634,7 @@ class AIAnalyzeRelationshipExtracted(BaseModel):
     relationship_type: str
     weight: float
     confidence: float = Field(ge=0.0, le=1.0)
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
 
 
 class AIAnalysisRelationshipDraft(BaseModel):
@@ -647,7 +649,7 @@ class AIAnalysisRelationshipDraft(BaseModel):
     relationship_type: str
     weight: float = 1.0
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
 
 
 class AIAnalyzeResponse(BaseModel):
@@ -662,7 +664,7 @@ class AIAnalyzeResponse(BaseModel):
     relationships: list[AIAnalysisRelationshipDraft] = Field(
         default_factory=list, description="Связи черновика (только draft-id концов)"
     )
-    attachment_summaries: list[dict[str, Any]] = Field(
+    attachment_summaries: list[JsonObject] = Field(
         default_factory=list,
         description="Резюме по каждому вложению [{filename, summary}]",
     )
@@ -691,7 +693,7 @@ class DraftEntityPatch(BaseModel):
     entity_type: str | None = None
     name: str | None = None
     description: str | None = None
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
     entity_subtype: str | None = None
     note_date: str | None = None
     due_date: str | None = None
@@ -703,7 +705,7 @@ class DraftRelationshipPatch(BaseModel):
     draft_relationship_id: str
     weight: float | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
-    attributes: dict[str, Any] | None = None
+    attributes: JsonObject | None = None
 
 
 class AIAnalysisDraftPatchRequest(BaseModel):
@@ -725,7 +727,7 @@ class AIAnalysisDraftApplyResult(BaseModel):
 class AIAnalysisDraftRepairFlowResult(BaseModel):
     """Structured output ветки CRM flow draft_repair."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     patch_entities: list[DraftEntityPatch] = Field(default_factory=list)
     repair_notes: str | None = None
@@ -790,7 +792,7 @@ class DeduplicateResult(BaseModel):
     action: Literal["merge", "create"]
     existing_entity_id: str | None = None
     existing_entity_name: str | None = None
-    merged_attributes: dict[str, Any] | None = None
+    merged_attributes: JsonObject | None = None
     merged_description: str | None = None
 
 
@@ -841,7 +843,7 @@ class KnowledgeImportStartRequest(BaseModel):
 
 
 class KnowledgeImportResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     import_id: str
     company_id: str
@@ -864,7 +866,7 @@ class KnowledgeImportResponse(BaseModel):
     attachment_document_ids: list[str] = Field(default_factory=list)
     cancel_requested: bool = False
     error_message: str | None = None
-    chunk_errors: list[dict[str, Any]] | None = None
+    chunk_errors: list[JsonObject] | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     review_completed_at: datetime | None = None
@@ -894,8 +896,8 @@ class StructuredKnowledgeImportRequest(BaseModel):
     """Запрос структурированного импорта (массовое создание без LLM)."""
 
     namespace: str
-    entities: list[dict[str, Any]] = Field(default_factory=list)
-    relationships: list[dict[str, Any]] = Field(default_factory=list)
+    entities: list[JsonObject] = Field(default_factory=list)
+    relationships: list[JsonObject] = Field(default_factory=list)
 
 
 # ── Unified task models ────────────────────────────────────────────────────────
@@ -912,7 +914,7 @@ class NoteMarkdownFormatQueuedResponse(BaseModel):
 class TaskResponse(BaseModel):
     """Ответ с данными задачи из crm_tasks."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     task_id: str
     task_type: str
@@ -920,7 +922,7 @@ class TaskResponse(BaseModel):
     stage: str
     progress_pct: int = 0
     error_message: str | None = None
-    data: dict[str, Any] = Field(default_factory=dict)
+    data: JsonObject = Field(default_factory=dict)
     taskiq_task_id: str | None = None
     cancel_requested: bool = False
     company_id: str

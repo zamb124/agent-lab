@@ -10,7 +10,7 @@ from apps.flows.src.db import FlowRepository
 from apps.flows.src.models import BranchConfig, FlowConfig
 from apps.flows.src.models.enums import MergeMode
 from apps.flows.src.models.flow_config import Edge, FlowVariableConfig
-from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.bundle_node_repair import repair_effective_nodes_from_bundle
 from apps.flows.src.utils.merge import deep_merge
 from apps.flows.src.variables import VariablesService
@@ -218,6 +218,10 @@ class FlowFactory:
         config_dict["edges"] = edges
 
         return await Flow.from_config(config_dict, container=self.container)
+
+    async def create_validation_flow(self, config: Dict[str, Any]) -> Flow:
+        """Создаёт transient Flow из уже собранного inline config для валидатора."""
+        return await Flow.from_config(config, container=self.container)
 
     def _apply_branch(self, config: FlowConfig, branch_id: str) -> EffectiveFlowConfig:
         """

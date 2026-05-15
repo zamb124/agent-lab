@@ -1,6 +1,6 @@
 """Сервис для CRUD шаблонов namespace и их применения."""
 
-from typing import Any
+from typing import ClassVar, TypedDict
 
 from apps.crm.constants_graph import (
     ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE,
@@ -8,7 +8,7 @@ from apps.crm.constants_graph import (
     NOTE_ROOT_ENTITY_TYPE_ID,
     TASK_ROOT_ENTITY_TYPE_ID,
 )
-from apps.crm.db.models import EntityType
+from apps.crm.db.models import EntityType, NamespaceTemplateType
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
@@ -22,8 +22,22 @@ from core.db.repositories.namespace_repository import NamespaceRepository
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 
 
+class NamespaceEditability(TypedDict):
+    namespace: str
+    has_entities: bool
+    entity_count: int
+    used_type_ids: list[str]
+    current_allowed_type_ids: list[str]
+    can_update_allowed_types: bool
+    can_add_types: bool
+    locked_type_ids: list[str]
+    removable_type_ids: list[str]
+    all_spaces_type_ids: list[str]
+    lock_reason: str | None
+
+
 class NamespaceTemplateService:
-    _PAGE_LIMIT = 200
+    _PAGE_LIMIT: ClassVar[int] = 200
 
     def __init__(
         self,
@@ -33,11 +47,11 @@ class NamespaceTemplateService:
         entity_repo: EntityRepository,
         company_init_service: CompanyInitService,
     ) -> None:
-        self._template_repo = template_repo
-        self._entity_type_repo = entity_type_repo
-        self._namespace_repo = namespace_repo
-        self._entity_repo = entity_repo
-        self._company_init_service = company_init_service
+        self._template_repo: NamespaceTemplateRepository = template_repo
+        self._entity_type_repo: EntityTypeRepository = entity_type_repo
+        self._namespace_repo: NamespaceRepository = namespace_repo
+        self._entity_repo: EntityRepository = entity_repo
+        self._company_init_service: CompanyInitService = company_init_service
 
     @staticmethod
     def _get_company_id() -> str:
@@ -67,11 +81,11 @@ class NamespaceTemplateService:
         present = {t.type_id for t in existing}
         for row in NAMESPACE_TEMPLATE_CORE_NOTE_TASK:
             tid = row["type_id"]
-            if not isinstance(tid, str) or len(tid) == 0:
+            if len(tid) == 0:
                 raise ValueError("NAMESPACE_TEMPLATE_CORE_NOTE_TASK: type_id required")
             if tid in present:
                 continue
-            await self._template_repo.upsert_type(
+            _ = await self._template_repo.upsert_type(
                 template_key=template_key,
                 type_id=tid,
                 parent_type_id=row.get("parent_type_id"),
@@ -93,8 +107,7 @@ class NamespaceTemplateService:
         missing = REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS - final_ids
         if missing:
             raise ValueError(
-                "Шаблон пространства обязан содержать типы note и task; "
-                f"в шаблоне отсутствуют: {', '.join(sorted(missing))}"
+                f"Шаблон пространства обязан содержать типы note и task; в шаблоне отсутствуют: {', '.join(sorted(missing))}"
             )
 
     async def _materialize_entity_type_row(
@@ -102,7 +115,7 @@ class NamespaceTemplateService:
         *,
         company_id: str,
         target_namespace: str,
-        item: Any,
+        item: NamespaceTemplateType,
         is_system: bool,
     ) -> EntityType:
         row = await self._entity_type_repo.get_by_type_id(
@@ -157,8 +170,7 @@ class NamespaceTemplateService:
         )
         if refreshed is None:
             raise ValueError(
-                f"EntityType {item.type_id!r} не найден после update_metadata "
-                f"в пространстве {target_namespace!r}"
+                f"EntityType {item.type_id!r} не найден после update_metadata в пространстве {target_namespace!r}"
             )
         return refreshed
 
@@ -172,11 +184,13 @@ class NamespaceTemplateService:
         company_id = self._get_company_id()
         for tid in (NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID):
             row = await self._entity_type_repo.get_by_type_id(
-                tid, namespace=name, company_id=company_id,
+                tid,
+                namespace=name,
+                company_id=company_id,
             )
             if row is not None:
                 continue
-            await self._entity_type_repo.clone_entity_type_between_namespaces(
+            _ = await self._entity_type_repo.clone_entity_type_between_namespaces(
                 tid,
                 source_namespace="default",
                 target_namespace=name,
@@ -207,10 +221,9 @@ class NamespaceTemplateService:
                 break
         if source_ns is None:
             raise ValueError(
-                f"Тип сущности {type_id!r} не найден ни в одном пространстве компании. "
-                "Добавьте тип в каталоге или через шаблон пространства."
+                f"Тип сущности {type_id!r} не найден ни в одном пространстве компании. Добавьте тип в каталоге или через шаблон пространства."
             )
-        await self._entity_type_repo.clone_entity_type_between_namespaces(
+        _ = await self._entity_type_repo.clone_entity_type_between_namespaces(
             type_id,
             source_namespace=source_ns,
             target_namespace=target_namespace,
@@ -227,11 +240,13 @@ class NamespaceTemplateService:
             return
         for tid in sorted(ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE):
             existing = await self._entity_type_repo.get_by_type_id(
-                tid, namespace=target_namespace, company_id=company_id,
+                tid,
+                namespace=target_namespace,
+                company_id=company_id,
             )
             if existing is not None:
                 continue
-            await self._entity_type_repo.clone_entity_type_between_namespaces(
+            _ = await self._entity_type_repo.clone_entity_type_between_namespaces(
                 tid,
                 source_namespace="default",
                 target_namespace=target_namespace,
@@ -272,13 +287,13 @@ class NamespaceTemplateService:
             description=namespace_description,
             is_default=False,
         )
-        raw_tpl_crm = getattr(template, "crm_settings", None)
-        if raw_tpl_crm is not None and isinstance(raw_tpl_crm, dict) and len(raw_tpl_crm) > 0:
+        raw_tpl_crm = template.crm_settings
+        if raw_tpl_crm is not None and len(raw_tpl_crm) > 0:
             namespace.crm_settings = NamespaceCRMSettings.model_validate(raw_tpl_crm)
-        await self._namespace_repo.set(namespace)
+        _ = await self._namespace_repo.set(namespace)
 
         for item in template_types:
-            await self._materialize_entity_type_row(
+            _ = await self._materialize_entity_type_row(
                 company_id=company_id,
                 target_namespace=namespace_name,
                 item=item,
@@ -291,13 +306,16 @@ class NamespaceTemplateService:
             target_namespace=namespace_name,
         )
 
-        await self._company_init_service._ensure_namespace_entity(company_id, namespace_name)
+        _ = await self._company_init_service.ensure_namespace_entity(company_id, namespace_name)
 
         return namespace
 
-    async def get_namespace_editability(self, namespace_name: str) -> dict[str, Any]:
+    async def get_namespace_editability(self, namespace_name: str) -> NamespaceEditability:
         types_here = await self._entity_type_repo.get_all_for_company(
-            namespace=namespace_name, include_system=True, limit=10_000, offset=0,
+            namespace=namespace_name,
+            include_system=True,
+            limit=10_000,
+            offset=0,
         )
         current_allowed_type_ids = sorted({t.type_id for t in types_here})
 
@@ -377,7 +395,7 @@ class NamespaceTemplateService:
                         TASK_ROOT_ENTITY_TYPE_ID,
                     }:
                         continue
-                    await self._entity_type_repo.delete_entity_type_scoped(
+                    _ = await self._entity_type_repo.delete_entity_type_scoped(
                         type_id,
                         namespace=namespace_name,
                         company_id=company_id,
@@ -385,6 +403,6 @@ class NamespaceTemplateService:
 
         if description_is_set:
             namespace.description = description
-            await self._namespace_repo.set(namespace)
+            _ = await self._namespace_repo.set(namespace)
 
         return namespace

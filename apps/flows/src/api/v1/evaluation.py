@@ -80,7 +80,11 @@ async def get_evaluation_summary(
         avg_duration = sum(r.duration_ms for r in results) // total
 
     avg_score = None
-    total_scores = [r.get_total_score() for r in results if r.get_total_score() is not None]
+    total_scores: list[float] = []
+    for result in results:
+        score = result.get_total_score()
+        if score is not None:
+            total_scores.append(score)
     if total_scores:
         avg_score = sum(total_scores) / len(total_scores)
 

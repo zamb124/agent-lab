@@ -8,8 +8,9 @@
 import base64
 import json
 from collections.abc import Set as AbstractSet
-from datetime import date, datetime, UTC
-from typing import Any, ClassVar
+from datetime import UTC, date, datetime
+from typing import Any, ClassVar, override
+from typing import cast as type_cast
 
 from sqlalchemy import (
     Boolean,
@@ -55,18 +56,21 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     Семантика -- ``RAGRepository`` (загрузка текста и поиск через in-process провайдер ``RAG_IN_PROCESS_PROVIDER_ID``).
     """
 
-    def __init__(self, db: CRMDatabase, rag_repository: RAGRepository):
+    def __init__(self, db: CRMDatabase, rag_repository: RAGRepository) -> None:
         super().__init__(db=db)
-        self._rag = rag_repository
+        self._rag: RAGRepository = rag_repository
 
     @property
+    @override
     def model_class(self) -> type[CRMEntity]:
         return CRMEntity
 
     @property
+    @override
     def id_field(self) -> str:
         return "entity_id"
 
+    @override
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
@@ -94,10 +98,13 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if key in self._SKIP_SEARCH_ATTRIBUTE_KEYS:
                 continue
             if key == "attachment_summaries" and isinstance(value, list):
-                for item in value:
+                for item in type_cast(list[object], value):
                     if isinstance(item, dict):
-                        filename = item.get("filename", "")
-                        summary = item.get("summary", "")
+                        item_dict = type_cast(dict[str, object], item)
+                        raw_filename = item_dict.get("filename", "")
+                        raw_summary = item_dict.get("summary", "")
+                        filename = raw_filename if isinstance(raw_filename, str) else ""
+                        summary = raw_summary if isinstance(raw_summary, str) else ""
                         if summary:
                             label = f"Вложение {filename}: " if filename else ""
                             parts.append(f"{label}{summary}")
@@ -118,7 +125,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
         return "\n".join(parts)
 
-    def _rag_chunk_metadata(self, entity: CRMEntity) -> dict[str, Any]:
+    def _rag_chunk_metadata(self, entity: CRMEntity) -> dict[str, object]:
         return {
             "document_id": entity.entity_id,
             "company_id": entity.company_id,
@@ -154,7 +161,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         return result
 
     @staticmethod
-    def _parse_datetime_filter_value(value: Any) -> datetime:
+    def _parse_datetime_filter_value(value: object) -> datetime:
         if isinstance(value, datetime):
             parsed_value = value
         elif isinstance(value, str):
@@ -214,6 +221,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     # -- CRUD --
 
+    @override
     async def create(self, entity: CRMEntity) -> CRMEntity:
         """Создает entity в crm_entities + ставит индексацию search_text в сервисе rag (воркер)."""
         async with self._db.session() as session:
@@ -224,7 +232,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         search_text = self._build_search_text(entity)
         rag_namespace = entity.namespace or "default"
         try:
-            await self._rag.upload_text(
+            _ = await self._rag.upload_text(
                 namespace_id=rag_namespace,
                 text=search_text,
                 document_name=entity.entity_id,
@@ -238,6 +246,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
         return entity
 
+    @override
     async def get(self, entity_id: str) -> CRMEntity | None:
         """Получает entity по ID."""
         async with self._db.session() as session:
@@ -275,6 +284,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    @override
     async def update(self, entity: CRMEntity) -> CRMEntity:
         """Обновляет entity в crm_entities + переиндексирует через сервис rag."""
         async with self._db.session() as session:
@@ -284,9 +294,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
         rag_namespace = entity.namespace or "default"
         try:
-            await self._rag.delete_document(rag_namespace, entity.entity_id)
+            _ = await self._rag.delete_document(rag_namespace, entity.entity_id)
             search_text = self._build_search_text(entity)
-            await self._rag.upload_text(
+            _ = await self._rag.upload_text(
                 namespace_id=rag_namespace,
                 text=search_text,
                 document_name=entity.entity_id,
@@ -300,6 +310,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         logger.info(f"Updated entity: {entity.entity_id}, type={entity.full_type}")
         return merged
 
+    @override
     async def delete(self, entity_id: str) -> bool:
         """Удаляет entity из crm_entities + индекс в сервисе rag."""
         async with self._db.session() as session:
@@ -313,7 +324,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             deleted = get_rowcount(result) > 0
 
         if deleted:
-            await self._rag.delete_document(rag_namespace, entity_id)
+            _ = await self._rag.delete_document(rag_namespace, entity_id)
             logger.info(f"Deleted entity: {entity_id}")
 
         return deleted

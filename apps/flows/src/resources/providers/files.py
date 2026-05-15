@@ -4,9 +4,10 @@ FilesResourceProvider - провайдер для files ресурсов.
 
 from typing import Any, Dict
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import FilesResourceConfig, ResourceDefinition
 from apps.flows.src.resources.providers.base import BaseResourceProvider
-from apps.flows.src.resources.wrappers import FilesResource
+from apps.flows.src.resources.wrappers.files_resource import FilesResource
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,8 +20,8 @@ class FilesResourceProvider(BaseResourceProvider):
     Создаёт FilesResource для работы с S3/MinIO.
     """
 
-    def __init__(self, container: Any = None):
-        self._container = container
+    def __init__(self, container: FlowRuntimeContainer):
+        self.container = container
 
     async def resolve(
         self,
@@ -52,5 +53,5 @@ class FilesResourceProvider(BaseResourceProvider):
             access_key_id=config.access_key_id,
             secret_access_key=config.secret_access_key,
             region=config.region,
-            container=self._container,
+            container=self.container,
         )

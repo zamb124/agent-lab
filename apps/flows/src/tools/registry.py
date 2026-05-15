@@ -7,6 +7,7 @@ Zero-Guess Architecture:
 - Нет ToolFactory - логика перенесена сюда
 """
 
+import importlib
 from typing import Any, Dict, List, Optional, Union
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -18,6 +19,7 @@ from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.base import BaseTool, CodeTool
 from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 from apps.flows.src.tools.mcp_wrapper import MCPTool
+from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -111,90 +113,9 @@ class ToolRegistry:
         if self._initialized:
             return
 
-        from apps.flows.tools import (
-            ask_user,
-            calculator,
-            cancel_scheduled_task,
-            create_file,
-            crm_analyze_note_text,
-            crm_create_entity,
-            crm_create_note,
-            crm_create_note_and_analyze,
-            crm_create_relationship,
-            crm_daily_summary,
-            crm_get_entity,
-            crm_list_entity_types,
-            crm_search_entities,
-            fill_docx_template,
-            final_answer,
-            finish,
-            format_text_markdown,
-            gdocs_append_text,
-            gdocs_create_document,
-            gdocs_delete_range,
-            gdocs_find_replace,
-            gdocs_insert_text,
-            gdocs_read_document,
-            gdocs_share_document,
-            hitl_operator_task,
-            list_scheduled_tasks,
-            pravo_catalog_search,
-            pravo_document_rag_search,
-            push_embed_blocks,
-            rag_add_text,
-            rag_create_namespace,
-            rag_search,
-            read_file,
-            reason,
-            sandbox_codegen,
-            schedule_cron_task,
-            schedule_interval_task,
-            schedule_one_time_task,
-            self_check,
-            summarize_text,
-        )
-
         builtin_tools = [
-            calculator,
-            create_file,
-            sandbox_codegen,
-            gdocs_append_text,
-            gdocs_create_document,
-            gdocs_delete_range,
-            gdocs_find_replace,
-            gdocs_insert_text,
-            gdocs_read_document,
-            gdocs_share_document,
-            format_text_markdown,
-            pravo_catalog_search,
-            pravo_document_rag_search,
-            rag_add_text,
-            rag_create_namespace,
-            rag_search,
-            crm_analyze_note_text,
-            crm_create_entity,
-            crm_create_note,
-            crm_create_note_and_analyze,
-            crm_create_relationship,
-            crm_daily_summary,
-            crm_get_entity,
-            crm_list_entity_types,
-            crm_search_entities,
-            fill_docx_template,
-            final_answer,
-            finish,
-            push_embed_blocks,
-            read_file,
-            reason,
-            self_check,
-            ask_user,
-            summarize_text,
-            hitl_operator_task,
-            schedule_cron_task,
-            schedule_interval_task,
-            schedule_one_time_task,
-            list_scheduled_tasks,
-            cancel_scheduled_task,
+            getattr(importlib.import_module(module_name), attr_name)
+            for module_name, attr_name in BUILTIN_TOOL_SPECS
         ]
 
         for tool in builtin_tools:
@@ -438,8 +359,6 @@ class ToolRegistry:
         Returns:
             MCPTool
         """
-        from apps.flows.src.container import get_container
-
         tool_id = config.get("tool_id", "mcp_tool")
         mcp_server_id = config.get("mcp_server_id")
         mcp_tool_name = config.get("mcp_tool_name")
@@ -448,9 +367,10 @@ class ToolRegistry:
             raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_server_id'")
         if not mcp_tool_name:
             raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_tool_name'")
+        if self.container is None:
+            raise RuntimeError("ToolRegistry requires FlowRuntimeContainer for MCP tools")
 
-        container = get_container()
-        server_config = await container.mcp_server_repository.get(mcp_server_id)
+        server_config = await self.container.mcp_server_repository.get(mcp_server_id)
 
         if not server_config:
             raise ValueError(f"MCP server '{mcp_server_id}' not found")
