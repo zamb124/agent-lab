@@ -38,6 +38,8 @@ def _analyzed_note() -> SimpleNamespace:
 
 
 def _build_service() -> EntityService:
+    entity_repo = AsyncMock()
+    entity_repo.list_by_entity_ids_ordered = AsyncMock(return_value=[])
     entity_type_repo = AsyncMock()
     entity_type_repo.get_by_type_id = AsyncMock(
         return_value=SimpleNamespace(
@@ -53,11 +55,13 @@ def _build_service() -> EntityService:
     artifact_service.get_daily_payload = AsyncMock(return_value=None)
     artifact_service.put_period_payload = AsyncMock()
     artifact_service.get_period_payload = AsyncMock(return_value=None)
+    relationship_repo = AsyncMock()
+    relationship_repo.get_neighbors = AsyncMock(return_value={})
     return EntityService(
-        entity_repo=AsyncMock(),
+        entity_repo=entity_repo,
         entity_type_repo=entity_type_repo,
         relationship_type_repo=AsyncMock(),
-        relationship_repo=AsyncMock(),
+        relationship_repo=relationship_repo,
         namespace_repo=namespace_repo,
         attachment_service=AsyncMock(),
         a2a_client=AsyncMock(),
@@ -216,6 +220,7 @@ async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss():
             "date": "2026-03-28",
             "summary": "from s3",
             "entities": ["Acme"],
+            "entity_links": [],
             "source_version": ver,
             "generated_at": "2026-03-28T12:00:00+00:00",
         }
@@ -227,6 +232,7 @@ async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss():
 
     assert payload["summary"] == "from s3"
     assert payload["entities"] == ["Acme"]
+    assert payload["entity_links"] == []
     assert payload["revalidating"] is False
     service.enqueue_daily_summary_rebuild.assert_not_awaited()
     service._daily_summary_cache_service.set_state.assert_awaited()
@@ -400,6 +406,86 @@ async def test_compute_daily_summary_uses_structured_data_summary():
 
     assert payload["summary"] == "Structured summary from artifact"
     assert payload["entities"] == ["Yandex", "Sber"]
+
+
+@pytest.mark.asyncio
+async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph():
+    _set_test_context()
+    service = _build_service()
+    entity_id = "11111111-1111-1111-1111-111111111111"
+    note = SimpleNamespace(
+        entity_id="n-1",
+        updated_at=None,
+        name="n1",
+        entity_subtype=None,
+        description="Обсудили Yandex",
+        tags=[],
+        attributes={"ai_analysis_applied_at": "2026-01-01T00:00:00+00:00"},
+    )
+    service._collect_notes_and_source_version = AsyncMock(
+        return_value=([note], {"notes_count": 1, "max_updated_at": None})
+    )
+    service._relationship_repo.get_neighbors = AsyncMock(
+        return_value={
+            "n-1": [
+                SimpleNamespace(
+                    source_entity_id="n-1",
+                    target_entity_id=entity_id,
+                    relationship_type="mentions",
+                )
+            ]
+        }
+    )
+    service._entity_repo.list_by_entity_ids_ordered = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                entity_id=entity_id,
+                name="Yandex",
+                entity_type="company",
+                entity_subtype=None,
+                namespace="sales",
+                attributes={},
+            )
+        ]
+    )
+    service._a2a_client.send_task = AsyncMock(
+        return_value={
+            "response": "",
+            "raw": {
+                "result": {
+                    "artifacts": [
+                        {
+                            "parts": [
+                                {
+                                    "kind": "data",
+                                    "data": {
+                                        "summary": "Договорились с Yandex о следующей встрече",
+                                        "entities": ["Yandex"],
+                                    },
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+        }
+    )
+
+    payload = await service.compute_daily_summary(date_str="2026-03-28", namespace="sales")
+
+    assert payload["summary"] == (
+        "Договорились с "
+        f"[@Yandex](entity:{entity_id})"
+        " о следующей встрече"
+    )
+    assert payload["entity_links"] == [
+        {
+            "entity_id": entity_id,
+            "name": "Yandex",
+            "entity_type": "company",
+            "namespace": "sales",
+        }
+    ]
 
 
 @pytest.mark.asyncio

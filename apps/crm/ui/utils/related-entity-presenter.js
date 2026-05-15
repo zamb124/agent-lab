@@ -61,18 +61,27 @@ export function normalizeCatalogIconName(iconName) {
     return 'folder';
 }
 
-function iconFromEntityTypesRow(typeId, rows) {
+function iconFromEntityTypesRow(typeId, rows, namespace) {
     if (typeof typeId !== 'string' || typeId.length === 0 || !Array.isArray(rows)) {
         return null;
     }
+    let firstMatch = null;
     for (const row of rows) {
         if (typeof row !== 'object' || row === null) continue;
         if (row.type_id !== typeId) continue;
+        if (firstMatch === null) firstMatch = row;
+        if (typeof namespace === 'string' && namespace.length > 0 && row.namespace !== namespace) continue;
         const ic = row.icon;
         if (typeof ic === 'string' && ic.trim().length > 0) {
             return normalizeCatalogIconName(ic.trim());
         }
         return null;
+    }
+    if (firstMatch !== null) {
+        const ic = firstMatch.icon;
+        if (typeof ic === 'string' && ic.trim().length > 0) {
+            return normalizeCatalogIconName(ic.trim());
+        }
     }
     return null;
 }
@@ -86,16 +95,17 @@ export function entityDisplayIconName(entity, entityTypeRows) {
         return 'folder';
     }
     const rows = Array.isArray(entityTypeRows) ? entityTypeRows : [];
+    const namespace = typeof entity.namespace === 'string' ? entity.namespace.trim() : '';
     const sub = typeof entity.entity_subtype === 'string' ? entity.entity_subtype.trim() : '';
     if (sub.length > 0) {
-        const fromSub = iconFromEntityTypesRow(sub, rows);
+        const fromSub = iconFromEntityTypesRow(sub, rows, namespace);
         if (fromSub !== null) {
             return fromSub;
         }
     }
     const root = typeof entity.entity_type === 'string' ? entity.entity_type.trim() : '';
     if (root.length > 0) {
-        const fromRoot = iconFromEntityTypesRow(root, rows);
+        const fromRoot = iconFromEntityTypesRow(root, rows, namespace);
         if (fromRoot !== null) {
             return fromRoot;
         }

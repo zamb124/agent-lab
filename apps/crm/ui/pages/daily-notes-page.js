@@ -45,12 +45,14 @@ import '@platform/lib/components/layout/page-header.js';
 import {
     buildSummaryEntityLookupFromNoteBuckets,
     entityDisplayIconName,
+    normalizeSummaryEntityLabelKey,
     resolveSummaryChipEntity,
     summaryChipUnresolvedIconName,
 } from '../utils/related-entity-presenter.js';
 import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
 
 const ENTITY_TYPES_RESOURCE = 'crm/entity_types';
+const SUMMARY_ENTITY_TOKEN_RE = /\[(@?[^\]]+)\]\(entity:([^)]+)\)/gi;
 
 function _formatIsoDate(d) {
     const y = d.getFullYear();
@@ -522,14 +524,16 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 height: 32px;
                 border-radius: var(--radius-full);
                 border: none;
-                background: var(--crm-summary-title-gradient);
-                color: var(--text-inverse);
+                background: transparent;
+                color: var(--accent-secondary);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
                 margin-top: 2px;
+                padding: 0;
             }
+            .summary-refresh-btn:hover { color: var(--accent); }
             .summary-refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
             .summary-refresh-icon.spinning {
                 animation: summary-spin 0.9s linear infinite;
@@ -551,6 +555,20 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 min-height: 0;
                 overflow-y: auto;
                 overflow-x: hidden;
+            }
+            .summary-inline-entity {
+                display: inline;
+                border: 0;
+                background: transparent;
+                color: var(--crm-selected-text);
+                font: inherit;
+                padding: 0;
+                cursor: pointer;
+                text-decoration: none;
+            }
+            .summary-inline-entity:hover {
+                text-decoration: underline;
+                text-underline-offset: 0.12em;
             }
             .summary-tags {
                 display: flex;
@@ -1051,6 +1069,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             this._periodSummary.applyWsPatch({
                 summary: typeof st.summary === 'string' ? st.summary : '',
                 entities: Array.isArray(st.entities) ? st.entities : [],
+                entity_links: Array.isArray(st.entity_links) ? st.entity_links : [],
                 revalidating: false,
                 generated_at: typeof st.generated_at === 'string' ? st.generated_at : new Date().toISOString(),
             });
@@ -1061,6 +1080,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this._dailySummary.applyWsPatch({
             summary: typeof st.summary === 'string' ? st.summary : '',
             entities: Array.isArray(st.entities) ? st.entities : [],
+            entity_links: Array.isArray(st.entity_links) ? st.entity_links : [],
             revalidating: false,
             generated_at: typeof st.generated_at === 'string' ? st.generated_at : new Date().toISOString(),
         });
@@ -1332,6 +1352,19 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         return r.entities.filter((e) => typeof e === 'string' && e.trim().length > 0);
     }
 
+    _summaryEntityLinks() {
+        const r = this._summaryResult();
+        if (!r || !Array.isArray(r.entity_links)) return [];
+        return r.entity_links.filter((item) => (
+            item
+            && typeof item === 'object'
+            && typeof item.entity_id === 'string'
+            && item.entity_id.length > 0
+            && typeof item.name === 'string'
+            && item.name.length > 0
+        ));
+    }
+
     _summaryText() {
         const r = this._summaryResult();
         return r && typeof r.summary === 'string' ? r.summary : '';
@@ -1354,7 +1387,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
     _summaryPanelTitle() {
         if (this._isPeriod()) {
-            return this.t('daily_notes_page.summary_panel_title_period', { from: this._dailyNotesUi.value.range.from, to: this._dailyNotesUi.value.range.to });
+            return this.t('daily_notes_page.summary_panel_title_period');
         }
         return this.t('daily_notes_page.summary_panel_title_daily');
     }
@@ -1374,7 +1407,17 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
     }
 
     _buildEntityLookupMap() {
-        return buildSummaryEntityLookupFromNoteBuckets(this._noteEntitiesByNoteId);
+        const map = new Map();
+        for (const entity of this._summaryEntityLinks()) {
+            const key = normalizeSummaryEntityLabelKey(entity.name);
+            if (!key || map.has(key)) continue;
+            map.set(key, entity);
+        }
+        const noteMap = buildSummaryEntityLookupFromNoteBuckets(this._noteEntitiesByNoteId);
+        for (const [key, entity] of noteMap.entries()) {
+            if (!map.has(key)) map.set(key, entity);
+        }
+        return map;
     }
 
     _entityTypeItems() {
@@ -1387,10 +1430,11 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
     _loadEntityTypesCatalog() {
         const ns = this._currentNamespace();
-        if (typeof ns !== 'string' || ns.length === 0) {
-            return;
+        const payload = { limit: 200, offset: 0 };
+        if (typeof ns === 'string' && ns.length > 0) {
+            payload.namespace = ns;
         }
-        this._entityTypes.load({ namespace: ns, limit: 200, offset: 0 });
+        this._entityTypes.load(payload);
     }
 
     _getEntityTagIcon(entity) {
@@ -1486,6 +1530,41 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
         this.navigate('entity', { itemId: entity.entity_id });
     }
 
+    _openEntityId(entityId, event) {
+        if (event) event.stopPropagation();
+        if (typeof entityId !== 'string' || entityId.length === 0) {
+            throw new Error('CRMDailyNotesPage._openEntityId: entityId required');
+        }
+        this.navigate('entity', { itemId: entityId });
+    }
+
+    _renderSummaryText(summaryText) {
+        if (typeof summaryText !== 'string' || summaryText.length === 0) return '';
+        const parts = [];
+        let lastIndex = 0;
+        const re = new RegExp(SUMMARY_ENTITY_TOKEN_RE.source, 'gi');
+        let match;
+        while ((match = re.exec(summaryText)) !== null) {
+            const [full, rawLabel, entityId] = match;
+            if (match.index > lastIndex) {
+                parts.push(summaryText.slice(lastIndex, match.index));
+            }
+            const label = rawLabel.startsWith('@') ? rawLabel : `@${rawLabel}`;
+            parts.push(html`
+                <button
+                    class="summary-inline-entity"
+                    type="button"
+                    @click=${(e) => this._openEntityId(entityId, e)}
+                >${label}</button>
+            `);
+            lastIndex = match.index + full.length;
+        }
+        if (lastIndex < summaryText.length) {
+            parts.push(summaryText.slice(lastIndex));
+        }
+        return parts;
+    }
+
     _renderSummary() {
         const tags = this._summaryEntities();
         const lookup = this._buildEntityLookupMap();
@@ -1514,7 +1593,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 </button>
             </div>
             <div class="summary-meta">${this._summaryMetaLine()}</div>
-            <p class="summary-text">${summaryText}</p>
+            <p class="summary-text">${this._renderSummaryText(summaryText)}</p>
             <div class="summary-tags">
                 ${tags.map((tag, i) => {
                     const tone = SUMMARY_CHIP_TONES[i % SUMMARY_CHIP_TONES.length];

@@ -939,7 +939,7 @@
     },
     "daily_notes_page": {
         "summary_panel_title_daily": "Daily summary",
-        "summary_panel_title_period": "Summary for {{from}} — {{to}}",
+        "summary_panel_title_period": "Period summary",
         "summary_rebuild_tooltip": "Rebuild summary (AI)",
         "summary_fab_open": "Open period summary",
         "summary_entity_open": "Open entity card",

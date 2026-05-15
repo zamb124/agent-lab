@@ -3764,10 +3764,13 @@ class EntityService:
     def _extract_entities_from_text_mentions(self, text: str) -> list[str]:
         if not text:
             return []
-        mention_matches = re.findall(r"@([^\s,.;:!?(){}\[\]]+)", text)
+        link_re = re.compile(r"\[(@?[^\]]+)\]\(entity:[^)]+\)", re.IGNORECASE)
+        link_matches = link_re.findall(text)
+        text_without_links = link_re.sub(" ", text)
+        mention_matches = re.findall(r"@([^\s,.;:!?(){}\[\]]+)", text_without_links)
         entities: list[str] = []
         seen: set[str] = set()
-        for mention in mention_matches:
+        for mention in [*link_matches, *mention_matches]:
             normalized = self._normalize_entity_name(mention)
             if normalized is None:
                 continue
@@ -3777,6 +3780,210 @@ class EntityService:
             seen.add(key)
             entities.append(normalized)
         return entities
+
+    _SUMMARY_ENTITY_TOKEN_SPLIT_RE = re.compile(
+        r"(\[@[^\]]+\]\(entity:[^)]+\))",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _summary_link_entry_from_entity(entity: Any) -> Optional[dict[str, Any]]:
+        entity_id = getattr(entity, "entity_id", None)
+        name = getattr(entity, "name", None)
+        if not isinstance(entity_id, str) or not entity_id.strip():
+            return None
+        if not isinstance(name, str) or not name.strip():
+            return None
+        entity_type = getattr(entity, "entity_type", None)
+        if entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
+            return None
+        entry: dict[str, Any] = {
+            "entity_id": entity_id.strip(),
+            "name": name.strip(),
+        }
+        for attr in ("entity_type", "entity_subtype", "namespace"):
+            value = getattr(entity, attr, None)
+            if isinstance(value, str) and value.strip():
+                entry[attr] = value.strip()
+
+        attrs = getattr(entity, "attributes", None)
+        aliases: list[str] = []
+        if isinstance(attrs, dict):
+            raw_aliases = attrs.get("aliases")
+            if isinstance(raw_aliases, list):
+                for alias in raw_aliases:
+                    if isinstance(alias, str) and alias.strip() and alias.strip() != entry["name"]:
+                        aliases.append(alias.strip())
+            if entity_type == "member":
+                for key in ("first_name", "last_name"):
+                    value = attrs.get(key)
+                    if isinstance(value, str) and value.strip() and value.strip() != entry["name"]:
+                        aliases.append(value.strip())
+        if aliases:
+            entry["aliases"] = sorted(set(aliases), key=aliases.index)
+        return entry
+
+    @staticmethod
+    def _summary_entity_links_payload(link_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for entry in link_entries:
+            if not isinstance(entry, dict):
+                continue
+            entity_id = entry.get("entity_id")
+            name = entry.get("name")
+            if not isinstance(entity_id, str) or not entity_id.strip():
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            normalized_id = entity_id.strip()
+            if normalized_id in seen:
+                continue
+            seen.add(normalized_id)
+            payload: dict[str, Any] = {
+                "entity_id": normalized_id,
+                "name": name.strip(),
+            }
+            for key in ("entity_type", "entity_subtype", "namespace"):
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    payload[key] = value.strip()
+            out.append(payload)
+            if len(out) >= 32:
+                break
+        return out
+
+    @staticmethod
+    def _normalize_summary_entity_links(raw_links: Any) -> list[dict[str, Any]]:
+        if not isinstance(raw_links, list):
+            return []
+        normalized: list[dict[str, Any]] = []
+        for item in raw_links:
+            if not isinstance(item, dict):
+                continue
+            entity_id = item.get("entity_id")
+            name = item.get("name")
+            if not isinstance(entity_id, str) or not entity_id.strip():
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            entry: dict[str, Any] = {
+                "entity_id": entity_id.strip(),
+                "name": name.strip(),
+            }
+            for key in ("entity_type", "entity_subtype", "namespace"):
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    entry[key] = value.strip()
+            normalized.append(entry)
+        return EntityService._summary_entity_links_payload(normalized)
+
+    async def _summary_link_entries_for_notes(self, notes: list[CRMEntity]) -> list[dict[str, Any]]:
+        note_ids = [
+            getattr(note, "entity_id", "")
+            for note in notes
+            if isinstance(getattr(note, "entity_id", ""), str)
+            and getattr(note, "entity_id", "").strip()
+        ]
+        if not note_ids:
+            return []
+
+        entity_ids: list[str] = []
+        seen_ids: set[str] = set()
+
+        def append_entity_id(raw_id: Any) -> None:
+            if not isinstance(raw_id, str):
+                return
+            entity_id = raw_id.strip()
+            if not entity_id or entity_id in seen_ids or entity_id in note_ids:
+                return
+            seen_ids.add(entity_id)
+            entity_ids.append(entity_id)
+
+        relationships_by_note = await self._relationship_repo.get_neighbors(
+            note_ids,
+            relationship_types=list(_RESOLVED_NOTE_NEIGHBOR_REL_TYPES),
+        )
+        if isinstance(relationships_by_note, dict):
+            for note_id in note_ids:
+                rels = relationships_by_note.get(note_id)
+                if not isinstance(rels, list):
+                    continue
+                for rel in rels:
+                    source_id = getattr(rel, "source_entity_id", "")
+                    target_id = getattr(rel, "target_entity_id", "")
+                    append_entity_id(target_id if source_id == note_id else source_id)
+
+        for note in notes:
+            desc = getattr(note, "description", "")
+            if isinstance(desc, str):
+                for entity_id in self.extract_linked_entity_ids_from_description(desc):
+                    append_entity_id(entity_id)
+
+        if not entity_ids:
+            return []
+        rows = await self._entity_repo.list_by_entity_ids_ordered(
+            entity_ids,
+            company_id=self._get_company_id(),
+        )
+        if not isinstance(rows, list):
+            return []
+        entries: list[dict[str, Any]] = []
+        for row in rows:
+            entry = self._summary_link_entry_from_entity(row)
+            if entry is not None:
+                entries.append(entry)
+        return entries
+
+    def _enrich_summary_text_with_entity_links(
+        self,
+        summary_text: str,
+        link_entries: list[dict[str, Any]],
+    ) -> str:
+        if not isinstance(summary_text, str) or not summary_text:
+            return summary_text
+        entries: list[tuple[str, str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for entry in link_entries:
+            if not isinstance(entry, dict):
+                continue
+            entity_id = entry.get("entity_id")
+            canonical_name = entry.get("name")
+            if not isinstance(entity_id, str) or not entity_id.strip():
+                continue
+            if not isinstance(canonical_name, str) or not canonical_name.strip():
+                continue
+            canonical = canonical_name.strip()
+            if any(ch in canonical for ch in "[]()"):
+                continue
+            names = [canonical, *(entry.get("aliases") if isinstance(entry.get("aliases"), list) else [])]
+            for raw_name in names:
+                if not isinstance(raw_name, str) or not raw_name.strip():
+                    continue
+                match_name = raw_name.strip()
+                if match_name.startswith("@"):
+                    match_name = match_name[1:].strip()
+                if not match_name or any(ch in match_name for ch in "[]()"):
+                    continue
+                key = (entity_id.strip(), match_name.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                entries.append((match_name, canonical, entity_id.strip()))
+
+        entries.sort(key=lambda item: len(item[0]), reverse=True)
+        text = summary_text
+        for match_name, canonical_name, entity_id in entries:
+            replacement = f"[@{canonical_name}](entity:{entity_id})"
+            pattern = re.compile(
+                rf"(?<!\w)@?{re.escape(match_name)}(?!\w)",
+                re.IGNORECASE,
+            )
+            segments = self._SUMMARY_ENTITY_TOKEN_SPLIT_RE.split(text)
+            for idx in range(0, len(segments), 2):
+                segments[idx] = pattern.sub(replacement, segments[idx])
+            text = "".join(segments)
+        return text
 
     # Соответствует формату [@Name](entity:UUID) в description заметки
     _MENTION_TOKEN_RE = re.compile(
@@ -4265,6 +4472,7 @@ class EntityService:
                 "namespace": self._normalize_namespace(namespace),
                 "summary": f"За {date_str} заметок не найдено.",
                 "entities": [],
+                "entity_links": [],
                 "entities_count": 0,
                 "source_version": source_version,
             }
@@ -4279,6 +4487,7 @@ class EntityService:
                     f"(ожидается поле ai_analysis_applied_at после подтверждения черновика)."
                 ),
                 "entities": [],
+                "entity_links": [],
                 "entities_count": len(notes),
                 "source_version": source_version,
             }
@@ -4288,6 +4497,7 @@ class EntityService:
         max_conc = crm_settings.daily_summary_map_reduce_max_concurrent
         cards = [self._note_to_summary_card(n) for n in analyzed_notes]
         input_entities = self._extract_entities_from_notes(analyzed_notes)
+        summary_link_entries = await self._summary_link_entries_for_notes(analyzed_notes)
 
         async def map_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             return await self._call_summarize_chunk_skill(batch, date_str, namespace)
@@ -4315,6 +4525,10 @@ class EntityService:
             fallback = self._compose_summary_fallback_from_structured(structured)
             if fallback.strip():
                 summary_text = fallback
+        summary_text = self._enrich_summary_text_with_entity_links(
+            summary_text,
+            summary_link_entries,
+        )
         summary_entities = self._extract_string_list_from_payload(structured, "entities")
         if not summary_entities and isinstance(structured, dict):
             parsed = structured
@@ -4329,6 +4543,7 @@ class EntityService:
             "namespace": self._normalize_namespace(namespace),
             "summary": summary_text,
             "entities": summary_entities[:8],
+            "entity_links": self._summary_entity_links_payload(summary_link_entries),
             "entities_count": len(notes),
             "source_version": source_version,
         }
@@ -4505,15 +4720,20 @@ class EntityService:
             if (
                 not force_rebuild
                 and cached_state is not None
+                and "entity_links" in cached_state
                 and _canonical_json(cached_state.get("source_version"))
                 == _canonical_json(current_version)
             ):
                 normalized_entities = self._normalize_summary_entity_list(
                     cached_state.get("entities")
                 )
+                normalized_links = self._normalize_summary_entity_links(
+                    cached_state.get("entity_links")
+                )
                 return {
                     **cached_state,
                     "entities": normalized_entities,
+                    "entity_links": normalized_links,
                     "source_version": current_version,
                     "revalidating": False,
                     "stale": False,
@@ -4524,9 +4744,11 @@ class EntityService:
                 company_id=company_id,
             )
             normalized_entities = self._normalize_summary_entity_list(fresh.get("entities"))
+            normalized_links = self._normalize_summary_entity_links(fresh.get("entity_links"))
             return {
                 **fresh,
                 "entities": normalized_entities,
+                "entity_links": normalized_links,
                 "source_version": current_version,
                 "revalidating": False,
                 "stale": False,
@@ -4565,6 +4787,7 @@ class EntityService:
                 "namespace": self._normalize_namespace(namespace),
                 "summary": "",
                 "entities": [],
+                "entity_links": [],
                 "entities_count": 0,
                 "generated_at": None,
                 "source_version": current_version,
@@ -4574,8 +4797,13 @@ class EntityService:
 
         cached_version = cached_state.get("source_version")
         cached_stale = cached_state.get("stale") is True
-        is_stale = _canonical_json(cached_version) != _canonical_json(current_version)
+        cached_schema_stale = "entity_links" not in cached_state
+        is_stale = (
+            _canonical_json(cached_version) != _canonical_json(current_version)
+            or cached_schema_stale
+        )
         normalized_entities = self._normalize_summary_entity_list(cached_state.get("entities"))
+        normalized_links = self._normalize_summary_entity_links(cached_state.get("entity_links"))
 
         if is_stale and not is_revalidating:
             await self.enqueue_daily_summary_rebuild(date_str=date_str, namespace=namespace)
@@ -4584,6 +4812,7 @@ class EntityService:
         return {
             **cached_state,
             "entities": normalized_entities,
+            "entity_links": normalized_links,
             "source_version": current_version if is_stale else cached_version,
             "revalidating": is_revalidating,
             "stale": is_stale or force_rebuild or cached_stale or is_revalidating,
@@ -4610,8 +4839,10 @@ class EntityService:
             namespace=namespace,
             date_str=date_str,
         )
-        if cached is not None and _canonical_json(cached.get("source_version")) == _canonical_json(
-            ver
+        if (
+            cached is not None
+            and "entity_links" in cached
+            and _canonical_json(cached.get("source_version")) == _canonical_json(ver)
         ):
             return cached
 
@@ -4621,7 +4852,7 @@ class EntityService:
             namespace=namespace,
             current_version=ver,
         )
-        if hydrated is not None:
+        if hydrated is not None and "entity_links" in hydrated:
             return hydrated
 
         summary_core = await self.compute_daily_summary(date_str=date_str, namespace=namespace)
@@ -4655,17 +4886,21 @@ class EntityService:
         company_id = self._get_company_id()
         period_bundle = await self._collect_period_days_bundle(date_from, date_to, namespace)
         partials: List[Dict[str, Any]] = []
+        period_link_entries: list[dict[str, Any]] = []
         for d in days:
             day_payload = await self._ensure_daily_payload_for_period(
                 d,
                 namespace,
                 company_id=company_id,
             )
+            day_links = self._normalize_summary_entity_links(day_payload.get("entity_links"))
+            period_link_entries.extend(day_links)
             partials.append(
                 {
                     "date": d,
                     "summary": day_payload.get("summary", ""),
                     "entities": day_payload.get("entities", []),
+                    "entity_links": day_links,
                 }
             )
 
@@ -4687,6 +4922,10 @@ class EntityService:
             fallback = self._compose_summary_fallback_from_structured(structured)
             if fallback.strip():
                 summary_text = fallback
+        summary_text = self._enrich_summary_text_with_entity_links(
+            summary_text,
+            period_link_entries,
+        )
         summary_entities = self._extract_string_list_from_payload(structured, "entities")
         if not summary_entities:
             summary_entities = self._extract_entities_from_text_mentions(summary_text)
@@ -4704,6 +4943,7 @@ class EntityService:
             "namespace": self._normalize_namespace(namespace),
             "summary": summary_text,
             "entities": summary_entities[:12],
+            "entity_links": self._summary_entity_links_payload(period_link_entries),
             "source_version": period_bundle,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -4964,6 +5204,7 @@ class EntityService:
                 "namespace": self._normalize_namespace(namespace),
                 "summary": "",
                 "entities": [],
+                "entity_links": [],
                 "generated_at": None,
                 "source_version": current_bundle,
                 "revalidating": True,
@@ -4973,8 +5214,13 @@ class EntityService:
 
         cached_version = cached_state.get("source_version")
         cached_stale = cached_state.get("stale") is True
-        is_stale = _canonical_json(cached_version) != _canonical_json(current_bundle)
+        cached_schema_stale = "entity_links" not in cached_state
+        is_stale = (
+            _canonical_json(cached_version) != _canonical_json(current_bundle)
+            or cached_schema_stale
+        )
         normalized_entities = self._normalize_summary_entity_list(cached_state.get("entities"))
+        normalized_links = self._normalize_summary_entity_links(cached_state.get("entity_links"))
 
         if is_stale and not is_revalidating:
             await self.enqueue_period_summary_rebuild(
@@ -4987,6 +5233,7 @@ class EntityService:
         return {
             **cached_state,
             "entities": normalized_entities,
+            "entity_links": normalized_links,
             "source_version": current_bundle if is_stale else cached_version,
             "revalidating": is_revalidating,
             "stale": is_stale or force_rebuild or cached_stale or is_revalidating,

@@ -939,7 +939,7 @@
     },
     "daily_notes_page": {
         "summary_panel_title_daily": "Сводка за день",
-        "summary_panel_title_period": "Сводка за период {{from}} — {{to}}",
+        "summary_panel_title_period": "Сводка за период",
         "summary_rebuild_tooltip": "Пересчитать сводку (AI)",
         "summary_fab_open": "Открыть сводку за период",
         "summary_entity_open": "Открыть карточку сущности",
