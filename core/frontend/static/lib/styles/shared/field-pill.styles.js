@@ -113,6 +113,7 @@ export const fieldPillStyles = css`
     .form-group > label {
         display: block;
         font-size: var(--field-pill-label-size);
+        line-height: var(--field-pill-label-line, 1.1);
         font-weight: var(--field-pill-label-weight);
         text-transform: uppercase;
         letter-spacing: var(--field-pill-label-letter);

@@ -2,13 +2,17 @@
  * PlatformButton — унифицированная кнопка платформы
  * Варианты: primary (violet), accent (orange), secondary, danger, ghost
  */
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class PlatformButton extends PlatformElement {
     static styles = css`
         :host {
             display: inline-flex;
+        }
+
+        :host([icon-only]) {
+            flex: 0 0 auto;
         }
         
         button {
@@ -26,6 +30,34 @@ export class PlatformButton extends PlatformElement {
             cursor: pointer;
             transition: all var(--duration-fast, 0.15s) var(--easing-default, ease);
             white-space: nowrap;
+            box-sizing: border-box;
+        }
+
+        :host([density="compact"]) button {
+            padding: var(--btn-padding, 6px 14px);
+            font-size: var(--btn-font-size, var(--text-sm, 14px));
+        }
+
+        :host([density="dense"]) button {
+            padding: var(--btn-padding, 4px 10px);
+            font-size: var(--btn-font-size, var(--text-xs, 12px));
+        }
+
+        :host([icon-only]) button {
+            width: var(--platform-button-icon-size, 36px);
+            min-width: var(--platform-button-icon-size, 36px);
+            height: var(--platform-button-icon-size, 36px);
+            padding: 0;
+            border-radius: var(--platform-button-icon-radius, var(--radius-full, 999px));
+            line-height: 1;
+        }
+
+        :host([icon-only][density="compact"]) {
+            --platform-button-icon-size: 32px;
+        }
+
+        :host([icon-only][density="dense"]) {
+            --platform-button-icon-size: 28px;
         }
         
         button:disabled {
@@ -116,6 +148,14 @@ export class PlatformButton extends PlatformElement {
         disabled: { type: Boolean },
         loading: { type: Boolean },
         type: { type: String },
+        density: { type: String, reflect: true },
+        iconOnly: { type: Boolean, attribute: 'icon-only', reflect: true },
+        ariaLabel: { type: String, attribute: 'aria-label' },
+        primary: { type: Boolean, reflect: true },
+        accent: { type: Boolean, reflect: true },
+        secondary: { type: Boolean, reflect: true },
+        danger: { type: Boolean, reflect: true },
+        ghost: { type: Boolean, reflect: true },
     };
 
     constructor() {
@@ -124,13 +164,36 @@ export class PlatformButton extends PlatformElement {
         this.disabled = false;
         this.loading = false;
         this.type = 'button';
+        this.density = 'default';
+        this.iconOnly = false;
+        this.ariaLabel = '';
+        this.primary = false;
+        this.accent = false;
+        this.secondary = false;
+        this.danger = false;
+        this.ghost = false;
+    }
+
+    _effectiveVariant() {
+        if (this.danger) return 'danger';
+        if (this.accent) return 'accent';
+        if (this.secondary) return 'secondary';
+        if (this.ghost) return 'ghost';
+        if (this.primary) return 'primary';
+        return this.variant;
     }
 
     render() {
+        const label =
+            typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
+                ? this.ariaLabel
+                : (typeof this.title === 'string' && this.title.length > 0 ? this.title : '');
         return html`
             <button 
                 type="${this.type}"
-                class="${this.variant}"
+                class="${this._effectiveVariant()}"
+                aria-label=${label.length > 0 ? label : nothing}
+                title=${label.length > 0 ? label : nothing}
                 ?disabled=${this.disabled || this.loading}
             >
                 ${this.loading ? html`<span>...</span>` : ''}

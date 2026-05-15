@@ -29,6 +29,22 @@ describe('platform-button', () => {
         const el = await fixture(html`<platform-button variant="danger">x</platform-button>`);
         expect(el.shadowRoot.querySelector('button.danger')).to.exist;
     });
+
+    it('boolean danger тоже выбирает danger-вариант', async () => {
+        const el = await fixture(html`<platform-button danger>x</platform-button>`);
+        expect(el.shadowRoot.querySelector('button.danger')).to.exist;
+    });
+
+    it('icon-only прокидывает accessible label во внутреннюю кнопку', async () => {
+        const el = await fixture(html`
+            <platform-button icon-only aria-label="Apply">
+                <span>ok</span>
+            </platform-button>
+        `);
+        const button = el.shadowRoot.querySelector('button');
+        expect(button.getAttribute('aria-label')).to.equal('Apply');
+        expect(button.getAttribute('title')).to.equal('Apply');
+    });
 });
 
 describe('platform-switch', () => {

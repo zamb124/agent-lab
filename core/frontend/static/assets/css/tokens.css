@@ -309,6 +309,7 @@
     --field-pill-label-color: var(--text-secondary);
     --field-pill-label-size: 11px;
     --field-pill-label-weight: 600;
+    --field-pill-label-line: 1.1;
     --field-pill-label-letter: 0.04em;
 
     --field-pill-input-color: var(--text-primary);

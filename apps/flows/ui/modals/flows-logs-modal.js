@@ -157,6 +157,8 @@ function _traceIdFromSessionLokiEntries(entries) {
 export class FlowsLogsModal extends PlatformModal {
     static modalKind = 'flows.logs';
     static i18nNamespace = 'flows';
+    static pollIntervalMs = 3000;
+    static pollMaxAttempts = 20;
 
     static properties = {
         ...PlatformModal.properties,
@@ -164,6 +166,8 @@ export class FlowsLogsModal extends PlatformModal {
         traceId: { type: String },
         taskId: { type: String },
         _mode: { type: String, state: true },
+        _pollAttempt: { type: Number, state: true },
+        _pollExhausted: { type: Boolean, state: true },
     };
 
     static styles = [
@@ -186,9 +190,13 @@ export class FlowsLogsModal extends PlatformModal {
             .logs-loading {
                 flex: 1;
                 display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
+                gap: var(--space-3);
                 min-height: 240px;
+                color: var(--text-tertiary);
+                font-size: var(--text-sm);
             }
             .logs-toolbar {
                 display: flex;
@@ -252,7 +260,9 @@ export class FlowsLogsModal extends PlatformModal {
         this.taskId = '';
         this._mode = 'session';
         this._lastLogsLoadKey = '';
-        this._sessionTraceLookupKey = '';
+        this._pollAttempt = 0;
+        this._pollExhausted = false;
+        this._pollTimer = null;
         this._byTrace = this.useOp('flows/logs_by_trace');
         this._bySession = this.useOp('flows/logs_by_session');
         this._byTaskTraces = this.useOp('flows/traces_by_task');
@@ -314,11 +324,14 @@ export class FlowsLogsModal extends PlatformModal {
     }
 
     _logsLoadKey() {
+        const taskId = typeof this.taskId === 'string' ? this.taskId : '';
+        const sessionId = typeof this.sessionId === 'string' ? this.sessionId : '';
+        const traceId = typeof this.traceId === 'string' ? this.traceId : '';
         if (this._mode === 'trace') {
-            return `trace|${this._effectiveTraceId()}`;
+            return `trace|${this._effectiveTraceId()}|task|${taskId}|session|${sessionId}|prop|${traceId}`;
         }
-        if (typeof this.sessionId === 'string' && this.sessionId.length > 0) {
-            return `session|${this.sessionId}`;
+        if (sessionId.length > 0) {
+            return `session|${sessionId}|task|${taskId}`;
         }
         return 'noop|';
     }
@@ -330,51 +343,24 @@ export class FlowsLogsModal extends PlatformModal {
         if (this._effectiveTraceId().length > 0) {
             return false;
         }
-        if (typeof this.sessionId !== 'string' || this.sessionId.length === 0) {
+        const hasSession = typeof this.sessionId === 'string' && this.sessionId.length > 0;
+        const hasTask = typeof this.taskId === 'string' && this.taskId.length > 0;
+        if (!hasSession && !hasTask) {
             return false;
         }
         return this._byTaskTraces.busy || this._bySessionTraces.busy;
     }
 
-    _syncSessionTraceLookup() {
-        if (!this.open) {
-            return;
-        }
-        if (typeof this.traceId === 'string' && this.traceId.length > 0) {
-            return;
-        }
-        const sid = typeof this.sessionId === 'string' ? this.sessionId : '';
-        if (sid.length === 0) {
-            return;
-        }
-        if (this._traceIdFromTaskOp().length > 0) {
-            return;
-        }
-        const tid = typeof this.taskId === 'string' ? this.taskId : '';
-        if (tid.length > 0 && this._byTaskTraces.busy) {
-            return;
-        }
-        const key = `${sid}\t${tid}`;
-        if (this._sessionTraceLookupKey === key) {
-            return;
-        }
-        if (this._bySessionTraces.busy) {
-            return;
-        }
-        this._sessionTraceLookupKey = key;
-        void this._bySessionTraces.run({ session_id: sid });
-    }
-
     updated(changed) {
         super.updated?.(changed);
 
-        if (changed.has('open') && this.open) {
-            this._lastLogsLoadKey = '';
-            this._sessionTraceLookupKey = '';
+        if (changed.has('open') && !this.open) {
+            this._clearPollTimer();
+            return;
         }
 
-        if (changed.has('sessionId') || changed.has('taskId') || changed.has('traceId')) {
-            this._sessionTraceLookupKey = '';
+        if (changed.has('open') && this.open) {
+            this._lastLogsLoadKey = '';
         }
 
         if (changed.has('sessionId') || changed.has('traceId')) {
@@ -385,46 +371,206 @@ export class FlowsLogsModal extends PlatformModal {
             }
         }
 
-        if (
-            (changed.has('taskId') || changed.has('traceId') || changed.has('sessionId'))
-            && typeof this.taskId === 'string'
-            && this.taskId.length > 0
-            && (typeof this.traceId !== 'string' || this.traceId.length === 0)
-        ) {
-            void this._byTaskTraces.run({ task_id: this.taskId });
-        }
-
-        this._syncSessionTraceLookup();
-
         const key = this._logsLoadKey();
         if (this._lastLogsLoadKey !== key) {
             this._lastLogsLoadKey = key;
-            this._load();
+            this._restartPolling();
+            return;
+        }
+        this._syncPollingAfterRender();
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._clearPollTimer();
+    }
+
+    _clearPollTimer() {
+        if (this._pollTimer !== null) {
+            clearTimeout(this._pollTimer);
+            this._pollTimer = null;
         }
     }
 
     _load() {
+        const runs = [];
         if (this._mode === 'trace') {
             const tid = this._effectiveTraceId();
             if (tid.length > 0) {
-                void this._byTrace.run({ trace_id: tid });
+                runs.push(this._byTrace.run({ trace_id: tid }));
             }
-            return;
+            return runs;
         }
         if (typeof this.sessionId === 'string' && this.sessionId.length > 0) {
-            void this._bySession.run({ session_id: this.sessionId });
+            runs.push(this._bySession.run({ session_id: this.sessionId }));
         }
+        return runs;
+    }
+
+    _loadTraceResolutionForPoll() {
+        if (typeof this.traceId === 'string' && this.traceId.length > 0) {
+            return [];
+        }
+        if (this._effectiveTraceId().length > 0) {
+            return [];
+        }
+        const runs = [];
+        const taskId = typeof this.taskId === 'string' ? this.taskId : '';
+        const sessionId = typeof this.sessionId === 'string' ? this.sessionId : '';
+        if (taskId.length > 0) {
+            runs.push(this._byTaskTraces.run({ task_id: taskId }));
+        }
+        if (sessionId.length > 0) {
+            runs.push(this._bySessionTraces.run({ session_id: sessionId }));
+        }
+        return runs;
     }
 
     _setMode(mode) {
         if (mode !== 'trace' && mode !== 'session') {
             throw new Error('flows-logs-modal: invalid mode');
         }
+        if (this._mode === mode) {
+            return;
+        }
         this._mode = mode;
     }
 
     _activeData() {
         return this._mode === 'trace' ? this._byTrace.lastResult : this._bySession.lastResult;
+    }
+
+    _activeEntries() {
+        const data = this._activeData();
+        if (data !== null && typeof data === 'object' && Array.isArray(data.entries)) {
+            return data.entries;
+        }
+        return [];
+    }
+
+    _hasLoadTarget() {
+        if (this._mode === 'trace') {
+            return this._effectiveTraceId().length > 0
+                || (typeof this.taskId === 'string' && this.taskId.length > 0)
+                || (typeof this.sessionId === 'string' && this.sessionId.length > 0);
+        }
+        return typeof this.sessionId === 'string' && this.sessionId.length > 0;
+    }
+
+    _busy() {
+        return this._byTrace.busy
+            || this._bySession.busy
+            || this._byTaskTraces.busy
+            || this._bySessionTraces.busy;
+    }
+
+    _restartPolling() {
+        this._clearPollTimer();
+        this._pollAttempt = 0;
+        this._pollExhausted = false;
+        this._loadForPoll();
+        this.requestUpdate();
+    }
+
+    _loadForPoll() {
+        this._clearPollTimer();
+        if (!this.open || !this._hasLoadTarget()) {
+            return;
+        }
+        if (this._activeEntries().length > 0) {
+            return;
+        }
+        if (this._busy()) {
+            this._scheduleNextPoll();
+            return;
+        }
+        if (this._pollAttempt >= this.constructor.pollMaxAttempts) {
+            this._pollExhausted = true;
+            this.requestUpdate();
+            return;
+        }
+        this._pollAttempt += 1;
+        this.requestUpdate();
+        const runs = [
+            ...this._loadTraceResolutionForPoll(),
+            ...this._load(),
+        ];
+        if (runs.length === 0) {
+            this._pollExhausted = true;
+            this.requestUpdate();
+            return;
+        }
+        Promise.all(runs)
+            .catch(() => null)
+            .finally(() => this._loadLogsAfterTraceResolution());
+    }
+
+    _loadLogsAfterTraceResolution() {
+        if (!this.open) {
+            this._clearPollTimer();
+            return;
+        }
+        const key = this._logsLoadKey();
+        if (this._lastLogsLoadKey !== key) {
+            this._lastLogsLoadKey = key;
+            const runs = this._load();
+            if (runs.length > 0) {
+                Promise.all(runs)
+                    .catch(() => null)
+                    .finally(() => this._syncPollingAfterRender());
+                return;
+            }
+        }
+        this._syncPollingAfterRender();
+    }
+
+    _scheduleNextPoll() {
+        if (!this.open || this._pollTimer !== null) {
+            return;
+        }
+        if (!this._hasLoadTarget() || this._pollExhausted || this._activeEntries().length > 0) {
+            return;
+        }
+        if (this._pollAttempt >= this.constructor.pollMaxAttempts) {
+            this._pollExhausted = true;
+            this.requestUpdate();
+            return;
+        }
+        this._pollTimer = setTimeout(() => {
+            this._pollTimer = null;
+            this._loadForPoll();
+        }, this.constructor.pollIntervalMs);
+        this.requestUpdate();
+    }
+
+    _syncPollingAfterRender() {
+        if (!this.open) {
+            this._clearPollTimer();
+            return;
+        }
+        if (this._activeEntries().length > 0) {
+            this._clearPollTimer();
+            return;
+        }
+        if (this._busy()) {
+            return;
+        }
+        this._scheduleNextPoll();
+    }
+
+    _manualReload() {
+        this._lastLogsLoadKey = '';
+        this._restartPolling();
+    }
+
+    _waitingForLogs(entries, busy, resolving) {
+        if (entries.length > 0 || !this._hasLoadTarget()) {
+            return false;
+        }
+        if (busy || resolving) {
+            return true;
+        }
+        return !this._pollExhausted && this._pollAttempt < this.constructor.pollMaxAttempts;
     }
 
     /** @param {CustomEvent<{ text: string }>} e */
@@ -456,7 +602,7 @@ export class FlowsLogsModal extends PlatformModal {
                 title=${this.t('logs_modal.reload')}
                 aria-label=${this.t('logs_modal.reload')}
                 ?disabled=${busy}
-                @click=${() => this._load()}
+                @click=${() => this._manualReload()}
             >
                 ${busy
                     ? html`<glass-spinner size="14"></glass-spinner>`
@@ -467,13 +613,14 @@ export class FlowsLogsModal extends PlatformModal {
 
     renderBody() {
         const data = this._activeData();
-        const entries = Array.isArray(data?.entries) ? data.entries : [];
+        const entries = this._activeEntries();
         const count = typeof data?.count === 'number' ? data.count : entries.length;
         const listBusy = this._byTrace.busy || this._bySession.busy;
         const hasSession = typeof this.sessionId === 'string' && this.sessionId.length > 0;
         const effTrace = this._effectiveTraceId();
         const hasTrace = effTrace.length > 0;
         const resolving = this._traceResolutionBusy();
+        const waiting = this._waitingForLogs(entries, listBusy, resolving);
         const traceTitle = hasTrace
             ? ''
             : resolving
@@ -514,8 +661,13 @@ export class FlowsLogsModal extends PlatformModal {
                         : nothing}
                 </div>
                 <div class="logs-main">
-                    ${listBusy && entries.length === 0
-                        ? html`<div class="logs-loading"><glass-spinner></glass-spinner></div>`
+                    ${waiting
+                        ? html`
+                              <div class="logs-loading">
+                                  <glass-spinner></glass-spinner>
+                                  <div>${this.t('logs_modal.waiting')}</div>
+                              </div>
+                          `
                         : html`
                               <platform-log-viewer
                                   .entries=${entries}

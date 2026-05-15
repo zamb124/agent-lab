@@ -10,6 +10,7 @@ import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-trace-viewer.js';
+import '@platform/lib/components/platform-span-attributes-viewer.js';
 import '@platform/lib/components/fields/platform-field.js';
 
 const FACETS = Object.freeze([
@@ -404,37 +405,9 @@ export class FrontendTracingPage extends PlatformPage {
         if (typeof span !== 'object' || span === null) {
             throw new Error('frontend-tracing-page: span must be an object');
         }
-        const s = /** @type {Record<string, unknown>} */ (span);
-        const sid = typeof s.span_id === 'string' ? s.span_id : '';
-        const tid = typeof s.trace_id === 'string' ? s.trace_id : '';
-        const op = typeof s.operation_name === 'string' ? s.operation_name : '';
-        const dur = typeof s.duration_ms === 'number' ? `${s.duration_ms} ms` : '';
-        const st = typeof s.status === 'string' ? s.status : '';
-        const rawAttrs = s.attributes;
-        const attrs =
-            typeof rawAttrs === 'object' && rawAttrs !== null && !Array.isArray(rawAttrs)
-                ? rawAttrs
-                : {};
-        const json = JSON.stringify(attrs, null, 2);
         return html`
             <div class="drawer-detail">
-                <h4>${this.t('trace_viewer.detail_title', undefined, 'platform')}</h4>
-                <dl>
-                    <dt>span_id</dt>
-                    <dd>${sid}</dd>
-                    <dt>trace_id</dt>
-                    <dd>${tid}</dd>
-                    <dt>operation</dt>
-                    <dd>${op}</dd>
-                    <dt>duration</dt>
-                    <dd>${dur}</dd>
-                    <dt>status</dt>
-                    <dd>${st}</dd>
-                </dl>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1);">
-                    ${this.t('trace_viewer.detail_attributes', undefined, 'platform')}
-                </div>
-                <pre>${json}</pre>
+                <platform-span-attributes-viewer .span=${span}></platform-span-attributes-viewer>
             </div>
         `;
     }

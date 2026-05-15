@@ -729,6 +729,7 @@
   },
   "tracing_modal": {
     "title": "Trace",
+    "waiting": "Trace is still indexing…",
     "empty": "No traces found"
   },
   "logs_modal": {
@@ -739,6 +740,7 @@
     "tab_trace_disabled_hint": "Run the assistant once (current task) or open logs with an explicit trace ID",
     "count": "{{count}} entries",
     "reload": "Refresh",
+    "waiting": "Logs are still indexing…",
     "empty": "No log entries found",
     "toast_copied": "Entry copied",
     "toast_copy_failed": "Failed to copy"

@@ -12,6 +12,7 @@
  *   - placeholder: string (опц.)
  *   - showToolbar: boolean (шапка: полноэкран, подсказка про сохранение)
  *   - headerOnly: boolean — только шапка (слот + Save/Fullscreen), без CodeMirror (для соседнего контента под шапкой)
+ *   - lineWrapping: boolean — принудительно переносить длинные строки; для JSON включено автоматически.
  *   - slot `toolbar-start` — светлый DOM слева в шапке (вкладки «Код»/«Схема» и т.п.).
  *   - completionContext: object (опц.) — query для `flows/code_completions` (`language`, `perspective`, `include_runtime_namespace_extras`).
  *   - completionVariableKeys: string[] (опц.) — ключи `variables` / `state.variables` для автодополнения.
@@ -75,6 +76,7 @@ export class FlowsCodeEditor extends PlatformElement {
         headerOnly: { type: Boolean, reflect: true, attribute: 'header-only' },
         fillParent: { type: Boolean, reflect: true, attribute: 'fill-parent' },
         fullscreen: { type: Boolean, reflect: true, attribute: 'fullscreen' },
+        lineWrapping: { type: Boolean, reflect: true, attribute: 'line-wrapping' },
         completionContext: { type: Object, attribute: false },
         completionVariableKeys: { type: Array, attribute: false },
     };
@@ -85,7 +87,10 @@ export class FlowsCodeEditor extends PlatformElement {
             :host {
                 display: block;
                 width: 100%;
+                max-width: 100%;
+                min-width: 0;
                 min-height: 120px;
+                box-sizing: border-box;
                 border-radius: var(--radius-md);
                 overflow: hidden;
                 border: 1px solid var(--glass-border-subtle);
@@ -105,10 +110,13 @@ export class FlowsCodeEditor extends PlatformElement {
                 right: 0;
                 bottom: 0;
                 left: 0;
+                width: 100vw;
+                height: 100vh;
                 min-height: 100vh;
                 margin: 0;
                 box-sizing: border-box;
                 padding: var(--space-3);
+                overflow: hidden;
                 background: var(--bg-primary, var(--glass-solid-elevated));
             }
             :host([fullscreen]) .editor-root {
@@ -207,18 +215,33 @@ export class FlowsCodeEditor extends PlatformElement {
                 display: flex;
                 flex-direction: column;
                 min-height: 120px;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
             }
             #cm-wrap {
                 flex: 1 1 auto;
                 min-height: 120px;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             #cm-host {
                 height: 100%;
                 min-height: 120px;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             .cm-editor {
                 height: 100%;
                 min-height: 120px;
+                min-width: 0;
+                max-width: 100%;
+                width: 100%;
+                box-sizing: border-box;
                 font-size: var(--text-sm);
                 background: transparent;
             }
@@ -227,9 +250,18 @@ export class FlowsCodeEditor extends PlatformElement {
             }
             .cm-content {
                 padding: var(--space-2) var(--space-3);
+                min-width: 0;
+                overflow-wrap: anywhere;
             }
             .cm-scroller {
+                min-width: 0;
+                max-width: 100%;
+                width: 100%;
+                box-sizing: border-box;
                 overflow: auto;
+            }
+            .cm-line {
+                overflow-wrap: anywhere;
             }
         `,
     ];
@@ -244,6 +276,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this.headerOnly = false;
         this.fillParent = false;
         this.fullscreen = false;
+        this.lineWrapping = false;
         this.completionContext = null;
         this.completionVariableKeys = [];
         this._editorView = null;
@@ -251,6 +284,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this._readonlyCompartment = null;
         this._languageCompartment = null;
         this._themeCompartment = null;
+        this._wrappingCompartment = null;
         this._completionsOp = this.useOp('flows/code_completions');
         this._themeSel = this.select((s) => (isPlainObject(s.theme) && s.theme.mode === 'light' ? 'light' : 'dark'));
         this._lastTheme = undefined;
@@ -340,6 +374,11 @@ export class FlowsCodeEditor extends PlatformElement {
                 effects: this._languageCompartment.reconfigure(this._buildLanguageExtension()),
             });
         }
+        if ((changed.has('language') || changed.has('lineWrapping')) && this._wrappingCompartment) {
+            this._editorView.dispatch({
+                effects: this._wrappingCompartment.reconfigure(this._buildWrappingExtension()),
+            });
+        }
     }
 
     _toggleFullscreen() {
@@ -380,6 +419,7 @@ export class FlowsCodeEditor extends PlatformElement {
         this._readonlyCompartment = new cm.Compartment();
         this._languageCompartment = new cm.Compartment();
         this._themeCompartment = new cm.Compartment();
+        this._wrappingCompartment = new cm.Compartment();
         this._lastTheme = this._themeSel.value;
         const fourSpaces = '    ';
         const keymapForTab = [
@@ -410,6 +450,7 @@ export class FlowsCodeEditor extends PlatformElement {
             this._readonlyCompartment.of(cm.EditorState.readOnly.of(this.readonly)),
             this._languageCompartment.of(this._buildLanguageExtension()),
             this._themeCompartment.of(this._buildThemeExtension()),
+            this._wrappingCompartment.of(this._buildWrappingExtension()),
             cm.EditorState.tabSize.of(4),
             cm.autocompletion({ override: [(ctx) => this._completionSource(ctx)] }),
             cm.keymap.of(keymapForTab),
@@ -472,6 +513,17 @@ export class FlowsCodeEditor extends PlatformElement {
             return this._cm.oneDark ? this._cm.oneDark : [];
         }
         return this._cm.syntaxHighlighting(this._cm.defaultHighlightStyle, { fallback: true });
+    }
+
+    _buildWrappingExtension() {
+        if (!this._cm) {
+            return [];
+        }
+        const lang = typeof this.language === 'string' ? this.language : '';
+        if (this.lineWrapping || lang === 'json') {
+            return this._cm.EditorView.lineWrapping;
+        }
+        return [];
     }
 
     async _completionSource(ctx) {

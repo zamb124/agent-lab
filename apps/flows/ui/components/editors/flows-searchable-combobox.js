@@ -31,9 +31,11 @@ export class FlowsSearchableCombobox extends PlatformElement {
     static properties = {
         value: { type: String },
         options: { type: Array },
+        label: { type: String },
         placeholder: { type: String },
         emptyLabel: { type: String },
         ariaLabel: { type: String },
+        compact: { type: Boolean, reflect: true },
         _open: { type: Boolean, state: true },
         _input: { type: String, state: true },
         _editing: { type: Boolean, state: true },
@@ -51,19 +53,95 @@ export class FlowsSearchableCombobox extends PlatformElement {
                 width: 100%;
                 min-width: 0;
             }
+            .combo-field {
+                width: 100%;
+                box-sizing: border-box;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: var(--field-pill-gap, 4px);
+                padding: var(--field-pill-padding-y, 8px) var(--field-pill-padding-x, 12px);
+                border-radius: var(--field-pill-radius, var(--radius-lg, 12px));
+                border: 1px solid var(--field-pill-border, var(--border-default));
+                background: var(--field-pill-bg, var(--glass-solid-subtle));
+            }
+            .combo-field.plain {
+                display: block;
+                padding: 0;
+                border: none;
+                border-radius: 0;
+                background: transparent;
+            }
+            :host([compact]) .combo-field:not(.plain) {
+                --field-pill-gap: var(--field-pill-compact-gap, 4px);
+                --field-pill-padding-y: var(--field-pill-compact-padding-y, 6px);
+                --field-pill-padding-x: var(--field-pill-compact-padding-x, 12px);
+                --field-pill-radius: var(--field-pill-compact-radius, var(--radius-md, 8px));
+                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm, 14px));
+                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium, 500));
+                --field-pill-number-spin-height: 34px;
+                gap: var(--field-pill-gap);
+                padding: var(--field-pill-padding-y) var(--field-pill-padding-x);
+                border-radius: var(--field-pill-radius);
+            }
+            .combo-field:focus-within {
+                border-color: var(--accent);
+                box-shadow: var(--focus-ring);
+            }
+            .combo-field.plain:focus-within {
+                border-color: transparent;
+                box-shadow: none;
+            }
+            .combo-label {
+                display: block;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: var(--field-pill-label-size, var(--text-xs, 12px));
+                line-height: var(--field-pill-label-line, 1.1);
+                font-weight: var(--field-pill-label-weight, var(--font-semibold, 600));
+                text-transform: uppercase;
+                letter-spacing: var(--field-pill-label-letter, 0.04em);
+                color: var(--field-pill-label-color, var(--text-tertiary));
+            }
             input {
                 width: 100%;
                 box-sizing: border-box;
+                min-width: 0;
+                min-height: var(--field-pill-number-spin-height, 38px);
+                padding: 0;
+                border: none;
+                border-radius: 0;
+                background: transparent;
+                color: var(--field-pill-input-color, var(--text-primary));
+                font: inherit;
+                font-size: var(--field-pill-input-size, var(--text-sm, 14px));
+                font-weight: var(--field-pill-input-weight, var(--font-medium, 500));
+                line-height: var(--field-pill-input-line, 1.35);
+                outline: none;
+            }
+            :host([compact]) input {
+                min-height: var(--field-pill-number-spin-height);
+            }
+            .combo-field.plain input {
                 min-height: var(--input-height, 40px);
                 padding: var(--space-2) var(--space-3);
                 border-radius: var(--radius-md);
                 border: 1px solid var(--border-default);
                 background: var(--glass-solid-subtle);
                 color: var(--text-primary);
-                font: inherit;
-                outline: none;
+                font-size: inherit;
+                font-weight: inherit;
+            }
+            input::placeholder {
+                color: var(--text-disabled);
+                font-weight: var(--font-normal, 400);
             }
             input:focus {
+                outline: none;
+            }
+            .combo-field.plain input:focus {
                 border-color: var(--accent);
                 box-shadow: var(--focus-ring);
             }
@@ -104,9 +182,11 @@ export class FlowsSearchableCombobox extends PlatformElement {
         super();
         this.value = '';
         this.options = Object.freeze([]);
+        this.label = '';
         this.placeholder = '';
         this.emptyLabel = '';
         this.ariaLabel = '';
+        this.compact = false;
         this._open = false;
         this._input = '';
         this._editing = false;
@@ -315,6 +395,7 @@ export class FlowsSearchableCombobox extends PlatformElement {
     }
 
     render() {
+        const hasLabel = typeof this.label === 'string' && this.label.length > 0;
         const aria = typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
             ? this.ariaLabel
             : this.placeholder;
@@ -324,17 +405,20 @@ export class FlowsSearchableCombobox extends PlatformElement {
                 : (typeof this.placeholder === 'string' && this.placeholder.length > 0 ? this.placeholder : '');
         return html`
             <div class="root">
-                <input
-                    data-canon="combobox"
-                    type="text"
-                    .value=${this._input}
-                    placeholder=${this.placeholder}
-                    aria-label=${aria}
-                    title=${tip.length > 0 ? tip : nothing}
-                    @focus=${this._onFocus}
-                    @input=${this._onInput}
-                    @blur=${this._onBlur}
-                />
+                <div class="combo-field ${hasLabel ? '' : 'plain'}">
+                    ${hasLabel ? html`<span class="combo-label">${this.label}</span>` : nothing}
+                    <input
+                        data-canon="combobox"
+                        type="text"
+                        .value=${this._input}
+                        placeholder=${this.placeholder}
+                        aria-label=${aria}
+                        title=${tip.length > 0 ? tip : nothing}
+                        @focus=${this._onFocus}
+                        @input=${this._onInput}
+                        @blur=${this._onBlur}
+                    />
+                </div>
                 ${this._listItems()}
             </div>
         `;

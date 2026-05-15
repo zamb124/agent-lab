@@ -201,11 +201,20 @@ export class PlatformDatePicker extends PlatformElement {
             }
 
             .trigger.with-label {
-                min-height: var(--platform-date-picker-labeled-height, 62px);
-                border: 1px solid var(--platform-date-picker-labeled-border, var(--border-subtle));
-                background: var(--platform-date-picker-labeled-bg, var(--glass-solid-subtle));
-                border-radius: var(--radius-full);
-                padding: var(--platform-date-picker-labeled-padding, var(--space-2) var(--space-4));
+                min-height: var(
+                    --platform-date-picker-labeled-height,
+                    calc(
+                        2px + var(--field-pill-padding-y, 14px) +
+                        var(--field-pill-padding-y, 14px) +
+                        var(--platform-date-picker-label-line-height, 12px) +
+                        var(--field-pill-gap, 8px) +
+                        var(--field-pill-number-spin-height, 40px)
+                    )
+                );
+                border: 1px solid var(--platform-date-picker-labeled-border, var(--field-pill-border, var(--border-subtle)));
+                background: var(--platform-date-picker-labeled-bg, var(--field-pill-bg, var(--glass-solid-subtle)));
+                border-radius: var(--platform-date-picker-labeled-radius, var(--field-pill-radius, var(--radius-lg)));
+                padding: var(--platform-date-picker-labeled-padding, var(--field-pill-padding-y, var(--space-2)) var(--field-pill-padding-x, var(--space-4)));
             }
 
             :host([embedded]) .trigger {
@@ -241,16 +250,28 @@ export class PlatformDatePicker extends PlatformElement {
             }
 
             :host([compact]) .trigger.with-label {
-                min-height: 44px;
-                padding: var(--space-1) var(--space-3);
-            }
-
-            :host([compact]) .trigger-label {
-                font-size: 10px;
-            }
-
-            :host([compact]) .trigger-value {
-                font-size: var(--text-sm);
+                --field-pill-padding-y: var(--field-pill-compact-padding-y, 6px);
+                --field-pill-padding-x: var(--field-pill-compact-padding-x, 12px);
+                --field-pill-radius: var(--field-pill-compact-radius, var(--radius-md));
+                --field-pill-gap: var(--field-pill-compact-gap, 4px);
+                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm));
+                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium));
+                --field-pill-number-spin-height: 34px;
+                min-height: var(
+                    --platform-date-picker-labeled-height,
+                    calc(
+                        2px + var(--field-pill-padding-y, 6px) +
+                        var(--field-pill-padding-y, 6px) +
+                        var(--platform-date-picker-label-line-height, 12px) +
+                        var(--field-pill-gap, 4px) +
+                        var(--field-pill-number-spin-height, 34px)
+                    )
+                );
+                padding: var(
+                    --platform-date-picker-labeled-padding,
+                    var(--field-pill-padding-y, 6px) var(--field-pill-padding-x, 12px)
+                );
+                border-radius: var(--platform-date-picker-labeled-radius, var(--field-pill-radius, var(--radius-md)));
             }
 
             .trigger:focus-visible {
@@ -287,26 +308,32 @@ export class PlatformDatePicker extends PlatformElement {
                 flex-direction: column;
                 align-items: flex-start;
                 justify-content: center;
-                gap: 2px;
+                gap: var(--field-pill-gap, 8px);
                 overflow: visible;
             }
 
             .trigger-label {
-                font-size: var(--platform-date-picker-label-size, var(--text-sm));
-                line-height: 1;
-                color: var(--text-tertiary);
-                font-weight: var(--font-normal);
+                font-size: var(--platform-date-picker-label-size, var(--field-pill-label-size, var(--text-xs)));
+                line-height: var(--field-pill-label-line, 1.1);
+                color: var(--field-pill-label-color, var(--text-tertiary));
+                font-weight: var(--field-pill-label-weight, var(--font-semibold));
+                text-transform: uppercase;
+                letter-spacing: var(--field-pill-label-letter, 0.04em);
             }
 
             .trigger-value {
-                font-size: var(--platform-date-picker-value-size, var(--text-2xl));
-                line-height: 1.05;
-                color: var(--text-primary);
-                font-weight: var(--font-medium);
+                min-height: var(--field-pill-number-spin-height, 40px);
+                display: inline-flex;
+                align-items: center;
+                font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size, var(--text-sm)));
+                line-height: var(--field-pill-input-line, 1.35);
+                color: var(--field-pill-input-color, var(--text-primary));
+                font-weight: var(--field-pill-input-weight, var(--font-medium));
             }
 
             .trigger-value.placeholder {
-                color: var(--text-tertiary);
+                color: var(--text-disabled, var(--text-tertiary));
+                font-weight: var(--font-normal, 400);
             }
 
             .trigger-placeholder {

@@ -1,6 +1,8 @@
 /**
  * Открывает встроенную панель Lara (crm-app: platform-lara-assistant, toggle-event-name="crm-lara-open").
  */
+import { dispatchEmbedChatWindowToggle } from '@platform/lib/embed-chat/embed-chat-window-toggle.js';
+
 export function openCrmLaraAssistant() {
-    window.dispatchEvent(new CustomEvent('crm-lara-open', { detail: { open: true } }));
+    dispatchEmbedChatWindowToggle('crm-lara-open', { open: true });
 }

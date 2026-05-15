@@ -170,6 +170,7 @@ export class PlatformNotificationManager extends PlatformElement {
             permission: s.pwa.pushPermission,
             registered: s.pwa.pushRegistered,
         }));
+        this._i18nSelect = this.select((s) => s.i18n);
         this._portal = null;
         this._onClickOutside = this._onClickOutside.bind(this);
         this._onReposition = this._onReposition.bind(this);
@@ -288,7 +289,7 @@ export class PlatformNotificationManager extends PlatformElement {
     _translateKey(raw, vars) {
         const parsed = this._splitQualifiedKey(raw);
         if (!parsed) return '';
-        const state = this.bus.getState().i18n;
+        const state = this._i18nSelect.value;
         return translate(state, parsed.key, vars || undefined, parsed.namespace);
     }
 
