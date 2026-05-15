@@ -84,8 +84,8 @@ export class FlowsRawJsonModal extends PlatformModal {
         return html`
             <div class="raw-json-body">
                 <flows-code-editor
-                    ?fillParent=${true}
-                    ?showToolbar=${false}
+                    .fillParent=${true}
+                    .showToolbar=${false}
                     language="json"
                     readonly
                     .value=${json}

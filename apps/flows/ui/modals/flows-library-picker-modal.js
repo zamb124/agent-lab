@@ -242,6 +242,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._toolCategoryTab = 'all';
         this._toolsAll = this.useOp('flows/tools_all');
         this._codeTemplates = this.useOp('flows/code_templates');
+        this._codeParseSignature = this.useOp('flows/code_parse_signature');
     }
 
     _isCodeNodeTemplates() {
@@ -543,17 +544,37 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         });
     }
 
-    _commitTemplate(t) {
+    _templateArgsSchema(t, parsed) {
+        if (isPlainObject(t.args_schema)) {
+            return t.args_schema;
+        }
+        if (isPlainObject(parsed) && parsed.success === true && isPlainObject(parsed.args_schema)) {
+            return parsed.args_schema;
+        }
+        return {};
+    }
+
+    async _commitTemplate(t) {
         if (!isPlainObject(t) || typeof t.code !== 'string' || t.code.length === 0) {
             return;
         }
         const fn = this.onCommit;
+        const parsed = isPlainObject(t.args_schema)
+            ? null
+            : await this._codeParseSignature.run({
+                code: t.code,
+                func_name: 'execute',
+            });
         this.close();
         if (typeof fn === 'function') {
             const cfg = {
                 code: t.code,
                 language: typeof t.language === 'string' && t.language.length > 0 ? t.language : 'python',
             };
+            const argsSchema = this._templateArgsSchema(t, parsed);
+            if (Object.keys(argsSchema).length > 0) {
+                cfg.args_schema = argsSchema;
+            }
             const nodeName = typeof t.name === 'string' && t.name.length > 0
                 ? t.name
                 : (typeof t.id === 'string' ? t.id : 'code');

@@ -486,6 +486,7 @@ def _parse_function_signature(code: str, func_name: Optional[str] = None) -> Dic
                         "type": json_type,
                         "python_type": type_str,
                         "required": not has_default,
+                        "has_default": has_default,
                         "default": default_value,
                     }
 
@@ -515,8 +516,9 @@ async def parse_signature(container: ContainerDep, request: ParseSignatureReques
             schema_item = {
                 "type": param_info["type"],
                 "description": f"Параметр {param_name}",
+                "required": bool(param_info["required"]),
             }
-            if param_info["default"] is not None:
+            if param_info.get("has_default"):
                 schema_item["default"] = param_info["default"]
             args_schema[param_name] = schema_item
 
