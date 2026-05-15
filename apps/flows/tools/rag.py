@@ -12,6 +12,8 @@ from apps.flows.src.tools import tool
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 
+JsonDict = dict[str, Any]
+
 _RAG_CREATE_NAMESPACE_DESCRIPTION = """
 Регистрирует новое пространство имён (namespace) для документов RAG в текущей компании.
 
@@ -141,7 +143,7 @@ class RagSearchArgs(BaseModel):
 async def rag_create_namespace(
     name: str,
     description: Optional[str] = None,
-) -> dict:
+) -> JsonDict:
     client = RagClient()
     try:
         raw = await client.create_namespace(name, description)
@@ -163,7 +165,7 @@ async def rag_add_text(
     document_name: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
     document_id: Optional[str] = None,
-) -> dict:
+) -> JsonDict:
     merged_meta: Dict[str, Any] = dict(metadata) if metadata is not None else {}
     if "collection_id" in merged_meta and merged_meta["collection_id"] != collection_id:
         raise ValueError(
@@ -201,7 +203,7 @@ async def rag_search(
     per_channel_top_k: Optional[int] = None,
     rerank: Optional[bool] = None,
     retrieval: Optional[bool] = None,
-) -> dict:
+) -> JsonDict:
     merged_filters: Dict[str, Any] = dict(filters) if filters is not None else {}
     if "collection_id" in merged_filters and merged_filters["collection_id"] != collection_id:
         raise ValueError(

@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
@@ -27,11 +27,11 @@ logger = get_logger(__name__)
 async def broadcast_crm_daily_summary_updated(
     *,
     company_id: str,
-    namespace: Optional[str],
+    namespace: str | None,
     date_str: str,
-    state: Dict[str, Any],
-    company_repository: "CompanyRepository",
-    access_grant_repository: "AccessGrantRepository",
+    state: dict[str, Any],
+    company_repository: CompanyRepository,
+    access_grant_repository: AccessGrantRepository,
 ) -> None:
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
     recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(
@@ -63,12 +63,12 @@ async def broadcast_crm_daily_summary_updated(
 async def broadcast_crm_period_summary_updated(
     *,
     company_id: str,
-    namespace: Optional[str],
+    namespace: str | None,
     date_from: str,
     date_to: str,
-    state: Dict[str, Any],
-    company_repository: "CompanyRepository",
-    access_grant_repository: "AccessGrantRepository",
+    state: dict[str, Any],
+    company_repository: CompanyRepository,
+    access_grant_repository: AccessGrantRepository,
 ) -> None:
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
     recipient_user_ids = await resolve_user_ids_for_namespace_broadcast(

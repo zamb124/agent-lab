@@ -4,7 +4,6 @@ Pydantic модели для запросов на доступ.
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,7 +34,7 @@ class AccessRequestCreate(BaseModel):
         title="ID ресурса",
         description="ID заметки или сущности"
     )
-    message: Optional[str] = Field(
+    message: str | None = Field(
         default=None,
         max_length=1000,
         title="Сообщение",
@@ -76,12 +75,12 @@ class AccessRequestResponse(BaseModel):
     owner_id: str = Field(title="ID владельца")
     resource_type: str = Field(title="Тип ресурса")
     resource_id: str = Field(title="ID ресурса")
-    message: Optional[str] = Field(default=None, title="Сообщение")
+    message: str | None = Field(default=None, title="Сообщение")
     status: str = Field(title="Статус")
     created_at: datetime = Field(title="Дата создания")
     updated_at: datetime = Field(title="Дата обновления")
 
     # Дополнительные поля для UI
-    requester_name: Optional[str] = Field(default=None, title="Имя запрашивающего")
-    resource_title: Optional[str] = Field(default=None, title="Название ресурса")
+    requester_name: str | None = Field(default=None, title="Имя запрашивающего")
+    resource_title: str | None = Field(default=None, title="Название ресурса")
 

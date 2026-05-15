@@ -6,11 +6,12 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import LLMConfig, NodeConfig, ToolReference
-from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.models import NodeConfig, ToolReference
+from apps.flows.src.models.enums import NodeType, ReactToolRole
+from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.tool_reference import CallParameter
 from core.logging import get_logger
 from core.pagination import OffsetPage
@@ -18,6 +19,7 @@ from core.pagination import OffsetPage
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["nodes"])
+JsonDict = dict[str, Any]
 
 
 class NodeLLMOverrideRequest(BaseModel):
@@ -36,10 +38,10 @@ class NodeCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
     prompt: Optional[str] = None
-    tools: List[Any] = []  # str для обычных tools, dict для inline tools
+    tools: List[Any] = Field(default_factory=list)  # str для обычных tools, dict для inline tools
     llm: Optional[NodeLLMOverrideRequest] = None
-    variables: Dict[str, Any] = {}
-    tags: List[str] = []
+    variables: Dict[str, Any] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
 
 
 class NodeResponse(BaseModel):
@@ -52,15 +54,15 @@ class NodeResponse(BaseModel):
     prompt: Optional[str]
     tools: List[Any]  # str для обычных tools, dict для inline tools
     llm: Optional[Dict[str, Any]]
-    variables: Dict[str, Any] = {}
-    tags: List[str] = []
+    variables: Dict[str, Any] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
     source: str = "manual"
 
 
 def _tool_ref_to_response(tool_ref: ToolReference) -> Any:
     """Конвертирует ToolReference в формат для ответа."""
     if tool_ref.code:
-        result = {
+        result: JsonDict = {
             "tool_id": tool_ref.tool_id,
             "description": tool_ref.description,
             "code": tool_ref.code,
@@ -78,7 +80,7 @@ def _tool_ref_to_response(tool_ref: ToolReference) -> Any:
 
 def _convert_inline_tool(tool_data: Dict[str, Any]) -> ToolReference:
     """Конвертирует inline tool dict в ToolReference."""
-    args_schema = {}
+    args_schema: dict[str, CallParameter] = {}
     if "args_schema" in tool_data:
         for k, v in tool_data["args_schema"].items():
             args_schema[k] = CallParameter(
@@ -145,18 +147,18 @@ async def create_node(request: NodeCreateRequest, container: ContainerDep) -> No
                     raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
             tools.append(ToolReference(tool_id=tool_ref))
 
-    llm_config = None
+    llm_config: NodeLLMOverride | None = None
     if request.llm:
-        llm_config = LLMConfig(**request.llm.model_dump())
+        llm_config = NodeLLMOverride(**request.llm.model_dump())
 
     node_config = NodeConfig(
         node_id=request.node_id,
-        type=request.type,
+        type=NodeType(request.type),
         name=request.name,
-        description=request.description,
+        description=request.description or "",
         prompt=request.prompt,
         tools=tools,
-        llm_config=llm_config,
+        llm=llm_config,
         local_variables=request.variables,
         tags=request.tags,
         source="api",
@@ -199,18 +201,18 @@ async def update_node(
                         raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
             tools.append(ToolReference(tool_id=tool_ref))
 
-    llm_config = None
+    llm_config: NodeLLMOverride | None = None
     if request.llm:
-        llm_config = LLMConfig(**request.llm.model_dump())
+        llm_config = NodeLLMOverride(**request.llm.model_dump())
 
     node_config = NodeConfig(
         node_id=node_id,
-        type=request.type,
+        type=NodeType(request.type),
         name=request.name,
-        description=request.description,
+        description=request.description or "",
         prompt=request.prompt,
         tools=tools,
-        llm_config=llm_config,
+        llm=llm_config,
         local_variables=request.variables,
         tags=request.tags,
         source=source,
@@ -222,7 +224,7 @@ async def update_node(
 
 
 @router.delete("/{node_id}")
-async def delete_node(node_id: str, container: ContainerDep) -> dict:
+async def delete_node(node_id: str, container: ContainerDep) -> dict[str, str]:
     """Удаляет ноду"""
     deleted = await container.node_repository.delete(node_id)
     if not deleted:

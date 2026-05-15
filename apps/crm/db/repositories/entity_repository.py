@@ -7,8 +7,9 @@
 
 import base64
 import json
-from datetime import date, datetime, timezone
-from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
+from collections.abc import Set as AbstractSet
+from datetime import date, datetime, UTC
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     Boolean,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     cast,
     delete,
     func,
+    literal,
     or_,
     select,
     tuple_,
@@ -58,7 +60,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         self._rag = rag_repository
 
     @property
-    def model_class(self) -> Type[CRMEntity]:
+    def model_class(self) -> type[CRMEntity]:
         return CRMEntity
 
     @property
@@ -116,7 +118,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
         return "\n".join(parts)
 
-    def _rag_chunk_metadata(self, entity: CRMEntity) -> Dict[str, Any]:
+    def _rag_chunk_metadata(self, entity: CRMEntity) -> dict[str, Any]:
         return {
             "document_id": entity.entity_id,
             "company_id": entity.company_id,
@@ -126,8 +128,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     async def batch_semantic_text_index_status(
         self,
-        entities: List[CRMEntity],
-    ) -> Dict[str, Optional[SemanticTextIndexStatus]]:
+        entities: list[CRMEntity],
+    ) -> dict[str, SemanticTextIndexStatus | None]:
         """
         Статус семантического индекса основного текста (document_id = entity_id).
 
@@ -138,12 +140,12 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         provider = self._rag.provider
         if not isinstance(provider, PgVectorProvider):
             return {e.entity_id: None for e in entities}
-        triples: List[Tuple[str, str, str]] = []
+        triples: list[tuple[str, str, str]] = []
         for e in entities:
             ns = (e.namespace or "default").strip()
             triples.append((ns, str(e.entity_id).strip(), str(e.company_id).strip()))
         triple_status = await provider.batch_document_semantic_index_status(triples)
-        result: Dict[str, Optional[SemanticTextIndexStatus]] = {}
+        result: dict[str, SemanticTextIndexStatus | None] = {}
         for e in entities:
             ns = (e.namespace or "default").strip()
             key = (ns, str(e.entity_id).strip(), str(e.company_id).strip())
@@ -160,7 +162,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         else:
             raise ValueError("Unsupported datetime filter value type")
         if parsed_value.tzinfo is None:
-            return parsed_value.replace(tzinfo=timezone.utc)
+            return parsed_value.replace(tzinfo=UTC)
         return parsed_value
 
     async def find_by_attribute(
@@ -168,8 +170,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_type: str,
         attribute_key: str,
         attribute_value: str,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
+        company_id: str | None = None,
+    ) -> list[CRMEntity]:
         """Поиск сущностей по типу и значению в attributes (jsonb)."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -189,7 +191,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_type: str,
         source_id: str,
         record_id: str,
-    ) -> List[CRMEntity]:
+    ) -> list[CRMEntity]:
         """Поиск по attributes.external_refs[source_id].record_id в пределах company и namespace."""
         cid = company_id
         ns = namespace
@@ -236,7 +238,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         logger.info(f"Created entity: {entity.entity_id}, type={entity.full_type}")
         return entity
 
-    async def get(self, entity_id: str) -> Optional[CRMEntity]:
+    async def get(self, entity_id: str) -> CRMEntity | None:
         """Получает entity по ID."""
         async with self._db.session() as session:
             stmt = select(CRMEntity).where(CRMEntity.entity_id == entity_id)
@@ -245,10 +247,10 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     async def list_by_entity_ids_ordered(
         self,
-        entity_ids: List[str],
+        entity_ids: list[str],
         *,
-        company_id: Optional[str] = None,
-    ) -> List[CRMEntity]:
+        company_id: str | None = None,
+    ) -> list[CRMEntity]:
         cid = company_id or self._get_company_id()
         normalized = [str(eid).strip() for eid in entity_ids if str(eid).strip()]
         if not normalized:
@@ -345,27 +347,27 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         return base64.urlsafe_b64encode(payload.encode()).decode()
 
     @staticmethod
-    def decode_cursor(cursor: str) -> Tuple[datetime, str]:
+    def decode_cursor(cursor: str) -> tuple[datetime, str]:
         payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
         ts = datetime.fromisoformat(payload["ts"])
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         return ts, payload["id"]
 
     async def list_by_cursor(
         self,
-        entity_type: Optional[str] = None,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        filter_field_types: Optional[Dict[str, str]] = None,
+        entity_type: str | None = None,
+        entity_subtype: str | None = None,
+        namespace: str | None = None,
+        filters: dict[str, Any] | None = None,
+        filter_field_types: dict[str, str] | None = None,
         limit: int = 100,
-        company_id: Optional[str] = None,
-        cursor: Optional[str] = None,
+        company_id: str | None = None,
+        cursor: str | None = None,
         *,
         list_note_family: bool = False,
-        note_family_legacy_entity_types: Optional[List[str]] = None,
-    ) -> Tuple[List[CRMEntity], Optional[str], bool]:
+        note_family_legacy_entity_types: list[str] | None = None,
+    ) -> tuple[list[CRMEntity], str | None, bool]:
         """
         Entities c SQL-фильтрами и cursor-пагинацией.
 
@@ -401,7 +403,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if cursor:
                 cursor_ts, cursor_id = self.decode_cursor(cursor)
                 stmt = stmt.where(
-                    tuple_(CRMEntity.created_at, CRMEntity.entity_id) < tuple_(cursor_ts, cursor_id)
+                    tuple_(CRMEntity.created_at, CRMEntity.entity_id)
+                    < tuple_(literal(cursor_ts), literal(cursor_id))
                 )
 
             stmt = stmt.order_by(
@@ -424,12 +427,12 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     async def count_all(
         self,
-        entity_type: Optional[str] = None,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        filter_field_types: Optional[Dict[str, str]] = None,
-        company_id: Optional[str] = None,
+        entity_type: str | None = None,
+        entity_subtype: str | None = None,
+        namespace: str | None = None,
+        filters: dict[str, Any] | None = None,
+        filter_field_types: dict[str, str] | None = None,
+        company_id: str | None = None,
     ) -> int:
         """Считает entities с теми же условиями, что и list_by_cursor (без лимита)."""
         cid = company_id or self._get_company_id()
@@ -457,7 +460,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         self,
         namespace: str,
         *,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> int:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -479,7 +482,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         namespace: str,
         *,
         limit: int,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> list[CRMEntity]:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -500,11 +503,11 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     async def get_created_at_bounds(
         self,
-        entity_type: Optional[str] = None,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        company_id: Optional[str] = None,
-    ) -> Tuple[Optional[Any], Optional[Any], int]:
+        entity_type: str | None = None,
+        entity_subtype: str | None = None,
+        namespace: str | None = None,
+        company_id: str | None = None,
+    ) -> tuple[Any | None, Any | None, int]:
         """Возвращает min/max created_at и количество сущностей."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -534,15 +537,15 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     def _apply_filter_tree(
         self,
         stmt,
-        filters: Dict[str, Any],
-        field_types: Optional[Dict[str, str]],
+        filters: dict[str, Any],
+        field_types: dict[str, str] | None,
     ):
         if not field_types:
             raise ValueError("field_types are required when filters are provided")
         expression = self._build_filter_expression(filters, field_types)
         return stmt.where(expression)
 
-    def _build_filter_expression(self, node: Dict[str, Any], field_types: Dict[str, str]):
+    def _build_filter_expression(self, node: dict[str, Any], field_types: dict[str, str]):
         if "$and" in node:
             and_nodes = node["$and"]
             return and_(*[self._build_filter_expression(item, field_types) for item in and_nodes])
@@ -657,8 +660,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     async def count_by_namespace(
         self,
         namespace: str,
-        company_id: Optional[str] = None,
-        exclude_entity_types: Optional[set[str]] = None,
+        company_id: str | None = None,
+        exclude_entity_types: AbstractSet[str] | None = None,
     ) -> int:
         """Считает количество сущностей в namespace."""
         if not namespace:
@@ -681,9 +684,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     async def list_used_entity_types_by_namespace(
         self,
         namespace: str,
-        company_id: Optional[str] = None,
-        exclude_entity_types: Optional[set[str]] = None,
-    ) -> List[str]:
+        company_id: str | None = None,
+        exclude_entity_types: AbstractSet[str] | None = None,
+    ) -> list[str]:
         """Возвращает список типов сущностей, используемых в namespace."""
         if not namespace:
             raise ValueError("Namespace is required")
@@ -711,14 +714,14 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     async def search_with_similarity(
         self,
         query: str,
-        entity_type: Optional[str] = None,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        filter_field_types: Optional[Dict[str, str]] = None,
+        entity_type: str | None = None,
+        entity_subtype: str | None = None,
+        namespace: str | None = None,
+        filters: dict[str, Any] | None = None,
+        filter_field_types: dict[str, str] | None = None,
         limit: int = 10,
-        company_id: Optional[str] = None,
-    ) -> List[Tuple[CRMEntity, float]]:
+        company_id: str | None = None,
+    ) -> list[tuple[CRMEntity, float]]:
         """
         Семантический поиск entities с возвратом similarity (0.0-1.0)
         через RAG index + выборку сущностей из CRM БД.
@@ -741,7 +744,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 "platform.crm.namespace": resolved_namespace,
             },
         ) as search_span:
-            search_filters: Dict[str, Any] = {"company_id": cid}
+            search_filters: dict[str, Any] = {"company_id": cid}
             if entity_type:
                 search_filters["entity_type"] = entity_type
 
@@ -767,8 +770,8 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 search_span.set_attribute("platform.crm.search_hits_raw", 0)
                 return []
 
-            resolved_order: List[str] = []
-            score_by_resolved: Dict[str, float] = {}
+            resolved_order: list[str] = []
+            score_by_resolved: dict[str, float] = {}
             for item in search_results:
                 entity_id = item.document_id
                 if entity_id not in score_by_resolved:
@@ -796,7 +799,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 matched_entities = list(result.scalars().all())
 
             entities_by_id = {entity.entity_id: entity for entity in matched_entities}
-            scored_entities: List[Tuple[CRMEntity, float]] = []
+            scored_entities: list[tuple[CRMEntity, float]] = []
             for document_id in ordered_entity_ids:
                 entity = entities_by_id.get(document_id)
                 if entity is None:
@@ -816,14 +819,14 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     async def hybrid_search(
         self,
         query: str,
-        entity_type: Optional[str] = None,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        filter_field_types: Optional[Dict[str, str]] = None,
+        entity_type: str | None = None,
+        entity_subtype: str | None = None,
+        namespace: str | None = None,
+        filters: dict[str, Any] | None = None,
+        filter_field_types: dict[str, str] | None = None,
         limit: int = 10,
-        company_id: Optional[str] = None,
-    ) -> List[Tuple[CRMEntity, float, str]]:
+        company_id: str | None = None,
+    ) -> list[tuple[CRMEntity, float, str]]:
         """
         Гибридный поиск: RRF (Reciprocal Rank Fusion) по tsvector FTS + pgvector semantic.
         Возвращает (entity, rrf_score, match_type).
@@ -853,20 +856,20 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             company_id,
         )
 
-        fts_ranks: Dict[str, int] = {}
-        fts_map: Dict[str, CRMEntity] = {}
+        fts_ranks: dict[str, int] = {}
+        fts_map: dict[str, CRMEntity] = {}
         for rank, (entity, _) in enumerate(fts_entities, start=1):
             fts_ranks[entity.entity_id] = rank
             fts_map[entity.entity_id] = entity
 
-        sem_ranks: Dict[str, int] = {}
-        sem_map: Dict[str, CRMEntity] = {}
+        sem_ranks: dict[str, int] = {}
+        sem_map: dict[str, CRMEntity] = {}
         for rank, (entity, _) in enumerate(semantic_entities, start=1):
             sem_ranks[entity.entity_id] = rank
             sem_map[entity.entity_id] = entity
 
         all_ids = set(fts_ranks.keys()) | set(sem_ranks.keys())
-        scored: List[Tuple[str, float, str]] = []
+        scored: list[tuple[str, float, str]] = []
         for eid in all_ids:
             rrf_score = 0.0
             in_fts = eid in fts_ranks
@@ -881,7 +884,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         scored.sort(key=lambda x: x[1], reverse=True)
         entity_pool = {**fts_map, **sem_map}
 
-        results: List[Tuple[CRMEntity, float, str]] = []
+        results: list[tuple[CRMEntity, float, str]] = []
         for eid, rrf_score, match_type in scored[:limit]:
             entity = entity_pool[eid]
             normalized_score = min(1.0, rrf_score / rrf_max)
@@ -891,14 +894,14 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
     async def fts_search_ranked(
         self,
         query: str,
-        entity_type: Optional[str] = None,
-        entity_subtype: Optional[str] = None,
-        namespace: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        filter_field_types: Optional[Dict[str, str]] = None,
+        entity_type: str | None = None,
+        entity_subtype: str | None = None,
+        namespace: str | None = None,
+        filters: dict[str, Any] | None = None,
+        filter_field_types: dict[str, str] | None = None,
         limit: int = 30,
-        company_id: Optional[str] = None,
-    ) -> List[Tuple[CRMEntity, float]]:
+        company_id: str | None = None,
+    ) -> list[tuple[CRMEntity, float]]:
         """FTS поиск с ts_rank, отсортированный по релевантности."""
         cid = company_id or self._get_company_id()
         tsquery = func.plainto_tsquery("simple", query)
@@ -930,9 +933,9 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     async def aggregate_facets(
         self,
-        namespace: Optional[str] = None,
-        company_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        namespace: str | None = None,
+        company_id: str | None = None,
+    ) -> dict[str, Any]:
         """Фасетная агрегация: по entity_type, status, месяц создания."""
         cid = company_id or self._get_company_id()
         month_expr = func.to_char(CRMEntity.created_at, "YYYY-MM").label("month")

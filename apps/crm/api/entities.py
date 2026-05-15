@@ -4,7 +4,7 @@ API для работы с entities.
 Единый endpoint для всех типов entities.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from starlette.responses import Response
@@ -46,6 +46,13 @@ from core.pagination import CursorPage
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
+
+
+def _auth_user_company_or_401() -> tuple[str, str]:
+    ctx = get_context()
+    if ctx is None or ctx.user is None or ctx.active_company is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return ctx.user.user_id, ctx.active_company.company_id
 
 
 async def _single_entity_response(
@@ -117,7 +124,7 @@ async def bulk_create_entities(
     if len(body.items) > 200:
         raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
 
-    created_entities: List[CRMEntity] = []
+    created_entities: list[CRMEntity] = []
     errors = []
     for idx, item in enumerate(body.items):
         try:
@@ -154,7 +161,7 @@ async def bulk_update_entities(
     if len(body.items) > 200:
         raise HTTPException(status_code=422, detail="Maximum 200 items per batch")
 
-    updated_entities: List[CRMEntity] = []
+    updated_entities: list[CRMEntity] = []
     errors = []
     for idx, item in enumerate(body.items):
         try:
@@ -205,9 +212,7 @@ async def merge_entities(
     if source is None:
         raise HTTPException(status_code=404, detail="Source entity not found")
 
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not user_id or not await container.access_control_service.can_write_entity(survivor, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     if not user_id or not await container.access_control_service.can_write_entity(source, user_id, company_id):
@@ -236,7 +241,7 @@ async def merge_entities(
 @router.get("/aggregate")
 async def aggregate_entities(
     container: ContainerDep,
-    namespace: Optional[str] = Query(None),
+    namespace: str | None = Query(None),
 ):
     """Фасетная агрегация: количество по типам, статусам, месяцам создания."""
     facets = await container.entity_service.aggregate_facets(namespace=namespace)
@@ -353,10 +358,10 @@ _EXPORT_MAX_ROWS = 10000
 async def export_entities(
     container: ContainerDep,
     format: str = Query("json", description="csv | json"),
-    entity_type: Optional[str] = Query(None),
-    entity_subtype: Optional[str] = Query(None),
-    namespace: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    entity_type: str | None = Query(None),
+    entity_subtype: str | None = Query(None),
+    namespace: str | None = Query(None),
+    status: str | None = Query(None),
     limit: int = Query(5000, le=_EXPORT_MAX_ROWS),
 ):
     """Streaming export сущностей постраничными чанками (не материализует весь список в памяти)."""
@@ -367,7 +372,7 @@ async def export_entities(
     from fastapi.responses import StreamingResponse
 
     filters_arg = None
-    filter_field_types: Dict[str, str] = {}
+    filter_field_types: dict[str, str] = {}
     if status:
         filters_arg = {"field": "status", "op": "$eq", "value": status}
         filter_field_types = await container.entity_service.resolve_filter_field_types(
@@ -386,7 +391,7 @@ async def export_entities(
             yield header_buf.getvalue()
 
             remaining = limit
-            cursor: Optional[str] = None
+            cursor: str | None = None
             while remaining > 0:
                 page_size = min(_EXPORT_PAGE_SIZE, remaining)
                 batch, cursor, has_more = await container.entity_service.list_entities(
@@ -420,7 +425,7 @@ async def export_entities(
         yield "[\n"
         first = True
         remaining = limit
-        cursor: Optional[str] = None
+        cursor: str | None = None
         while remaining > 0:
             page_size = min(_EXPORT_PAGE_SIZE, remaining)
             batch, cursor, has_more = await container.entity_service.list_entities(
@@ -478,9 +483,9 @@ async def query_entities(
 @router.get("/timeline/bounds", response_model=EntityTimelineBoundsResponse)
 async def get_entities_timeline_bounds(
     container: ContainerDep,
-    entity_type: Optional[str] = Query(None),
-    entity_subtype: Optional[str] = Query(None),
-    namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
+    entity_type: str | None = Query(None),
+    entity_subtype: str | None = Query(None),
+    namespace: str | None = Query(None, description="Фильтр по namespace"),
 ):
     """Получить границы timeline по created_at."""
     bounds = await container.entity_service.get_timeline_bounds(
@@ -500,9 +505,7 @@ async def patch_note_analysis_draft(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     try:
@@ -522,9 +525,7 @@ async def delete_note_analysis_draft(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     try:
@@ -543,9 +544,7 @@ async def delete_note_analysis_error(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
     await container.entity_service.clear_note_analysis_error(note_id)
@@ -565,12 +564,9 @@ async def queue_note_analysis_draft_repair(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
-
     raw_attrs = note.attributes or {}
     if not isinstance(raw_attrs.get("ai_analysis_draft"), dict):
         raise HTTPException(status_code=422, detail="У заметки нет черновика ai_analysis_draft")
@@ -584,9 +580,10 @@ async def queue_note_analysis_draft_repair(
             detail="Нет сохранённой ошибки применения черновика",
         )
 
-    auth_token = ctx.auth_token if ctx else None
-    if not auth_token:
+    ctx = get_context()
+    if ctx is None or not ctx.auth_token:
         raise HTTPException(status_code=401, detail="Authorization required")
+    auth_token = ctx.auth_token
 
     namespace = note.namespace or "default"
 
@@ -630,9 +627,7 @@ async def request_note_markdown_format(
     note = await container.entity_service.get_entity(note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Entity not found")
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not user_id or not await container.access_control_service.can_write_entity(note, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -663,9 +658,7 @@ async def get_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
 
     if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -690,9 +683,7 @@ async def update_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
 
     if not user_id or not await container.access_control_service.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -728,9 +719,7 @@ async def delete_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
 
     if not user_id or not await container.access_control_service.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -751,7 +740,7 @@ async def list_entities(
 
 @router.post("/daily-summary")
 async def get_daily_summary(
-    request: Dict[str, Any],
+    request: dict[str, Any],
     container: ContainerDep,
 ):
     """Получить AI саммари заметок за день"""
@@ -770,7 +759,7 @@ async def get_daily_summary(
 
 @router.post("/period-summary")
 async def get_period_summary(
-    request: Dict[str, Any],
+    request: dict[str, Any],
     container: ContainerDep,
 ):
     """Сводка заметок за диапазон дат (merge дневных сводок)."""
@@ -827,7 +816,7 @@ async def get_period_summary(
 async def get_entity_cards_bulk(
     body: BulkCardsRequest,
     container: ContainerDep,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Batch-загрузка карточек для списка entity_id за один запрос."""
     return await container.entity_service.get_bulk_entity_cards(body.entity_ids)
 
@@ -885,7 +874,7 @@ async def voice_input(
     }
 
 
-@router.post("/search/mentions", response_model=Dict)
+@router.post("/search/mentions", response_model=dict)
 async def search_mentions(
     request: SearchMentionsRequest,
     container: ContainerDep,
@@ -921,9 +910,7 @@ async def get_entity_relationships(
     entity = await container.entity_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not await container.access_control_service.can_read_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -959,9 +946,7 @@ async def get_exclusive_related_entities(
     if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
         raise HTTPException(status_code=400, detail="Only notes have exclusive related entities")
 
-    ctx = get_context()
-    user_id = ctx.user.user_id if ctx and ctx.user else None
-    company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
+    user_id, company_id = _auth_user_company_or_401()
     if not await container.access_control_service.can_write_entity(entity, user_id, company_id):
         raise HTTPException(status_code=403, detail="Access denied")
 

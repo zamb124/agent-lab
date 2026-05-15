@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, List, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from sqlalchemy import func, select, update
 
@@ -31,24 +31,24 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
             raise ValueError("Нет активной компании в контексте")
         return context.active_company.company_id
 
-    async def create(self, row: CRMTask) -> CRMTask:
+    async def create(self, entity: CRMTask) -> CRMTask:
         async with self._db.session() as session:
-            session.add(row)
+            session.add(entity)
             await session.commit()
-            await session.refresh(row)
-        return row
+            await session.refresh(entity)
+        return entity
 
-    async def get(self, task_id: str, *, company_id: Optional[str] = None) -> Optional[CRMTask]:
+    async def get(self, entity_id: str, *, company_id: str | None = None) -> CRMTask | None:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMTask).where(
-                CRMTask.task_id == task_id,
+                CRMTask.task_id == entity_id,
                 CRMTask.company_id == cid,
             )
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_for_worker(self, task_id: str, company_id: str) -> Optional[CRMTask]:
+    async def get_for_worker(self, task_id: str, company_id: str) -> CRMTask | None:
         async with self._db.session() as session:
             stmt = select(CRMTask).where(
                 CRMTask.task_id == task_id,
@@ -62,17 +62,17 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         task_id: str,
         company_id: str,
         *,
-        status: Optional[str] = None,
-        stage: Optional[str] = None,
-        progress_pct: Optional[int] = None,
-        error_message: Optional[str] = None,
-        data_patch: Optional[dict[str, Any]] = None,
-        cancel_requested: Optional[bool] = None,
-        taskiq_task_id: Optional[str] = None,
-        started_at: Optional[datetime] = None,
-        completed_at: Optional[datetime] = None,
+        status: str | None = None,
+        stage: str | None = None,
+        progress_pct: int | None = None,
+        error_message: str | None = None,
+        data_patch: dict[str, Any] | None = None,
+        cancel_requested: bool | None = None,
+        taskiq_task_id: str | None = None,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
     ) -> None:
-        values: dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
+        values: dict[str, Any] = {"updated_at": datetime.now(UTC)}
         if status is not None:
             values["status"] = status
         if stage is not None:
@@ -129,7 +129,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
             )
             result = await session.execute(stmt)
             rows = list(result.scalars().all())
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for row in rows:
                 row.status = "cancelled"
                 row.stage = "cancelled"
@@ -157,7 +157,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
             )
             result = await session.execute(stmt)
             rows = list(result.scalars().all())
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             msg_failed = (
                 "Задача прервана: нет активности воркера (перезапуск сервиса или сбой процесса)."
             )
@@ -182,14 +182,14 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
 
     async def list_for_namespace(
         self,
-        namespace: Optional[str],
+        namespace: str | None,
         *,
-        task_type: Optional[str] = None,
-        note_id: Optional[str] = None,
+        task_type: str | None = None,
+        note_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-        company_id: Optional[str] = None,
-    ) -> List[CRMTask]:
+        company_id: str | None = None,
+    ) -> list[CRMTask]:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMTask).where(CRMTask.company_id == cid)
@@ -205,11 +205,11 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
 
     async def count_for_namespace(
         self,
-        namespace: Optional[str],
+        namespace: str | None,
         *,
-        task_type: Optional[str] = None,
-        note_id: Optional[str] = None,
-        company_id: Optional[str] = None,
+        task_type: str | None = None,
+        note_id: str | None = None,
+        company_id: str | None = None,
     ) -> int:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -229,7 +229,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         data_key_values: dict[str, str],
         namespace: str,
         company_id: str,
-    ) -> Optional[CRMTask]:
+    ) -> CRMTask | None:
         """Найти активную (pending/running) задачу по типу и значениям JSONB-полей data."""
         async with self._db.session() as session:
             stmt = select(CRMTask).where(
@@ -248,8 +248,8 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         self,
         namespace: str,
         *,
-        task_type: Optional[str] = None,
-        company_id: Optional[str] = None,
+        task_type: str | None = None,
+        company_id: str | None = None,
     ) -> int:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -270,7 +270,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         self,
         namespace: str,
         *,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> int:
         """Только knowledge_import задачи ожидающие ревью.
 

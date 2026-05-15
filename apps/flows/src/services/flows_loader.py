@@ -337,6 +337,9 @@ class FlowsLoader:
             return
 
         for raw_node in nodes_list:
+            if not isinstance(raw_node, dict):
+                logger.warning(f"Нода должна быть объектом в {nodes_path}")
+                continue
             node_id = raw_node.get("id")
             if not node_id:
                 logger.warning(f"Нода без id в {nodes_path}")
@@ -365,10 +368,10 @@ class FlowsLoader:
                 node_id=node_id,
                 type=node_type,
                 name=raw_node.get("name", node_id),
-                description=raw_node.get("description"),
+                description=str(raw_node.get("description") or ""),
                 prompt=raw_node.get("prompt", ""),
                 tools=tools,
-                llm_override=llm_override,
+                llm=llm_override,
                 code=raw_node.get("code"),
                 files=raw_node.get("files", []),
                 local_variables=raw_node.get("variables", {}),
@@ -599,7 +602,7 @@ class FlowsLoader:
             raise ValueError(f"Node '{ref_node_id}' not found in nodes.json")
 
         # Базовые данные из nodes.json
-        merged = {
+        merged: Dict[str, Any] = {
             "type": cached_node.type,
             "name": cached_node.name,
             "description": cached_node.description,
@@ -610,18 +613,18 @@ class FlowsLoader:
 
         # Tools из cached_node (exclude_none чтобы не было code=None)
         if cached_node.tools:
-            merged["tools"] = [
-                t.model_dump(exclude_none=True) if hasattr(t, "model_dump") else t
-                for t in cached_node.tools
-            ]
+            merged["tools"] = [t.model_dump(exclude_none=True) for t in cached_node.tools]
 
         # Переопределения из flow.json имеют приоритет
         for key, value in node_config.items():
             if value is not None and key != "node_id":
                 if key == "tools" and value:
                     merged["tools"] = value
-                elif key == "llm" and value:
-                    merged["llm"] = {**merged.get("llm", {}), **value}
+                elif key == "llm" and isinstance(value, dict):
+                    base_llm = merged.get("llm")
+                    if not isinstance(base_llm, dict):
+                        base_llm = {}
+                    merged["llm"] = {**base_llm, **value}
                 else:
                     merged[key] = value
 
@@ -886,7 +889,7 @@ class FlowsLoader:
         """
         Конвертирует NodeConfig в inline tool и рекурсивно инлайнит его tools.
         """
-        result = {
+        result: Dict[str, Any] = {
             "tool_id": node_config.node_id,
             "type": node_config.type,
             "name": node_config.name,
@@ -901,12 +904,9 @@ class FlowsLoader:
             result["code"] = node_config.code
 
         # Собираем tools для инлайнинга
-        tools_list = []
+        tools_list: List[Dict[str, Any]] = []
         if node_config.tools:
-            tools_list = [
-                t.model_dump(exclude_none=True) if hasattr(t, "model_dump") else t
-                for t in node_config.tools
-            ]
+            tools_list = [t.model_dump(exclude_none=True) for t in node_config.tools]
 
         # Рекурсивно инлайним tools
         if tools_list:

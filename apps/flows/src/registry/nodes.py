@@ -5,24 +5,14 @@ NodeRegistry - реестр типов нод.
 Zero-Guess: все типы нод регистрируются явно при startup.
 """
 
-from typing import Dict, Type
+from typing import Any, Dict
 
 from apps.flows.src.models.enums import NodeType
-from apps.flows.src.runtime.nodes import (
-    ChannelNode,
-    CodeNode,
-    ExternalAPINode,
-    FlowNode,
-    HitlNode,
-    LlmNode,
-    MCPNode,
-    RemoteFlowNode,
-    ResourceNode,
-)
+from apps.flows.src.runtime.nodes import BaseNode, RUNTIME_NODE_CLASSES
 from core.registry.base import ResourceRegistry
 
 
-class NodeRegistry(ResourceRegistry):
+class NodeRegistry(ResourceRegistry[type[BaseNode]]):
     """
     Реестр классов нод по типам.
 
@@ -40,7 +30,16 @@ class NodeRegistry(ResourceRegistry):
         >>> node_class = registry.get(NodeType.LLM_NODE)
     """
 
-    def register(self, node_type: NodeType, node_class: Type, metadata: Dict = None) -> None:
+    @staticmethod
+    def _node_key(node_type: str | NodeType) -> str:
+        return node_type.value if isinstance(node_type, NodeType) else node_type
+
+    def register(
+        self,
+        key: str | NodeType,
+        resource: type[BaseNode],
+        metadata: Dict[str, Any] | None = None,
+    ) -> None:
         """
         Регистрирует класс ноды.
 
@@ -52,9 +51,9 @@ class NodeRegistry(ResourceRegistry):
         Raises:
             ResourceAlreadyExistsError: Если тип уже зарегистрирован
         """
-        super().register(node_type.value, node_class, metadata)
+        super().register(self._node_key(key), resource, metadata or {})
 
-    def get(self, node_type: NodeType) -> Type:
+    def get(self, key: str | NodeType) -> type[BaseNode]:
         """
         Получает класс ноды по типу.
 
@@ -67,7 +66,7 @@ class NodeRegistry(ResourceRegistry):
         Raises:
             ResourceNotFoundError: Если тип не зарегистрирован
         """
-        return super().get(node_type.value)
+        return super().get(self._node_key(key))
 
     def has_type(self, node_type: NodeType) -> bool:
         """
@@ -93,15 +92,19 @@ def create_default_node_registry() -> NodeRegistry:
     """
     registry = NodeRegistry()
 
-    registry.register(NodeType.LLM_NODE, LlmNode, {"description": "LLM агент с ReAct циклом"})
-    registry.register(NodeType.CODE, CodeNode, {"description": "Выполнение кода"})
-    registry.register(NodeType.FLOW, FlowNode, {"description": "Вложенный flow"})
-    registry.register(NodeType.REMOTE_FLOW, RemoteFlowNode, {"description": "Внешний A2A flow"})
-    registry.register(NodeType.EXTERNAL_API, ExternalAPINode, {"description": "HTTP API вызов"})
-    registry.register(NodeType.MCP, MCPNode, {"description": "MCP tool"})
-    registry.register(NodeType.CHANNEL, ChannelNode, {"description": "Отправка в канал (Telegram, Email, Webhook)"})
-    registry.register(NodeType.HITL_NODE, HitlNode, {"description": "Оператор очереди (пауза до специалиста)"})
-    registry.register(NodeType.RESOURCE, ResourceNode, {"description": "Нода-ресурс на графе (pass-through)"})
+    descriptions = {
+        NodeType.LLM_NODE: "LLM агент с ReAct циклом",
+        NodeType.CODE: "Выполнение кода",
+        NodeType.FLOW: "Вложенный flow",
+        NodeType.REMOTE_FLOW: "Внешний A2A flow",
+        NodeType.EXTERNAL_API: "HTTP API вызов",
+        NodeType.MCP: "MCP tool",
+        NodeType.CHANNEL: "Отправка в канал (Telegram, Email, Webhook)",
+        NodeType.HITL_NODE: "Оператор очереди (пауза до специалиста)",
+        NodeType.RESOURCE: "Нода-ресурс на графе (pass-through)",
+    }
+    for node_type, node_class in RUNTIME_NODE_CLASSES.items():
+        registry.register(node_type, node_class, {"description": descriptions[node_type]})
 
     return registry
 

@@ -2,8 +2,8 @@
 Сервис проверки доступа через AccessGrants.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from datetime import datetime, UTC
+from typing import Any
 
 from apps.crm.db.models import AccessGrant, CRMEntity
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
@@ -28,8 +28,8 @@ class AccessControlService:
     async def can_read_entity(
         self,
         entity: CRMEntity,
-        user_id: Optional[str],
-        company_id: Optional[str]
+        user_id: str | None,
+        company_id: str | None
     ) -> bool:
         """Проверка доступа к entity"""
 
@@ -101,9 +101,9 @@ class AccessControlService:
     async def filter_fields(
         self,
         entity: CRMEntity,
-        user_id: Optional[str],
-        company_id: Optional[str]
-    ) -> Union[CRMEntity, Dict[str, Any]]:
+        user_id: str | None,
+        company_id: str | None
+    ) -> CRMEntity | dict[str, Any]:
         """Возвращает полную entity при полном доступе или dict с публичными полями."""
 
         # Проверяем ПОЛНЫЙ доступ (owner, same company+namespace, grants с ролью)
@@ -119,7 +119,7 @@ class AccessControlService:
         for grant in entity_grants + namespace_grants:
             if grant.grant_type == "public":
                 # Expired?
-                if grant.expires_at and grant.expires_at < datetime.now(timezone.utc):
+                if grant.expires_at and grant.expires_at < datetime.now(UTC):
                     continue
                 return await self._filter_public_fields(entity)
 
@@ -128,7 +128,7 @@ class AccessControlService:
     async def _filter_public_fields(
         self,
         entity: CRMEntity
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Фильтрация по EntityType.public_fields"""
 
         entity_type = await self._entity_type_repo.get_by_type_id(
@@ -155,8 +155,8 @@ class AccessControlService:
     async def _has_full_access(
         self,
         entity: CRMEntity,
-        user_id: Optional[str],
-        company_id: Optional[str]
+        user_id: str | None,
+        company_id: str | None
     ) -> bool:
         """Проверка ПОЛНОГО доступа (без учета публичных грантов)"""
 
@@ -188,13 +188,13 @@ class AccessControlService:
     async def _check_grant(
         self,
         grant: AccessGrant,
-        user_id: Optional[str],
-        company_id: Optional[str]
+        user_id: str | None,
+        company_id: str | None
     ) -> bool:
         """Проверить конкретный grant"""
 
         # Expired?
-        if grant.expires_at and grant.expires_at < datetime.now(timezone.utc):
+        if grant.expires_at and grant.expires_at < datetime.now(UTC):
             return False
 
         # Public
@@ -224,7 +224,7 @@ class AccessControlService:
                 return None
         return value
 
-    def _set_nested_value(self, obj: Dict, path: str, value: Any):
+    def _set_nested_value(self, obj: dict[str, Any], path: str, value: Any):
         """Установить значение по пути"""
         keys = path.split(".")
         for key in keys[:-1]:
@@ -235,12 +235,12 @@ class AccessControlService:
 
     async def batch_filter_readable(
         self,
-        entities: List[CRMEntity],
-        user_id: Optional[str],
-        company_id: Optional[str],
+        entities: list[CRMEntity],
+        user_id: str | None,
+        company_id: str | None,
         *,
-        query_namespace: Optional[str] = None,
-    ) -> List[CRMEntity]:
+        query_namespace: str | None = None,
+    ) -> list[CRMEntity]:
         """
         Batch фильтрация сущностей по правам доступа с проставлением access_level.
         Один SQL-запрос для всех грантов вместо 2*N запросов.
@@ -251,10 +251,10 @@ class AccessControlService:
             return []
 
         user_ns = await self._get_request_namespace() if user_id else None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
-        needs_grant_check: List[CRMEntity] = []
-        readable: List[CRMEntity] = []
+        needs_grant_check: list[CRMEntity] = []
+        readable: list[CRMEntity] = []
 
         qns = (query_namespace or "").strip()
         for entity in entities:
@@ -286,7 +286,7 @@ class AccessControlService:
         if not needs_grant_check:
             return readable
 
-        resource_keys: List[tuple[str, str]] = []
+        resource_keys: list[tuple[str, str]] = []
         for entity in needs_grant_check:
             resource_keys.append(("entity", entity.entity_id))
             resource_keys.append(("namespace", entity.namespace))
@@ -309,12 +309,12 @@ class AccessControlService:
 
     def _resolve_access_level(
         self,
-        entity_grants: List[AccessGrant],
-        namespace_grants: List[AccessGrant],
-        user_id: Optional[str],
-        company_id: Optional[str],
+        entity_grants: list[AccessGrant],
+        namespace_grants: list[AccessGrant],
+        user_id: str | None,
+        company_id: str | None,
         now: datetime,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Определяет уровень доступа: shared > public > None."""
         for grant in entity_grants:
             if not self._check_grant_sync(grant, user_id, company_id, now):
@@ -335,8 +335,8 @@ class AccessControlService:
     def _check_grant_sync(
         self,
         grant: AccessGrant,
-        user_id: Optional[str],
-        company_id: Optional[str],
+        user_id: str | None,
+        company_id: str | None,
         now: datetime,
     ) -> bool:
         """Синхронная проверка гранта (для batch-операций)."""
@@ -350,7 +350,7 @@ class AccessControlService:
             return company_id == grant.target_company_id
         return False
 
-    async def _get_request_namespace(self) -> Optional[str]:
+    async def _get_request_namespace(self) -> str | None:
         """
         Namespace текущего запроса из Context (в т.ч. X-Platform-Namespace, воркер задаёт из задачи).
 
@@ -363,4 +363,3 @@ class AccessControlService:
         if not raw:
             return None
         return raw
-

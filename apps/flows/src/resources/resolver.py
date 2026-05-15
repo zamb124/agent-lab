@@ -117,6 +117,10 @@ class ResourceResolver:
             Wrapper объект
         """
         if ref.is_inline:
+            if ref.type is None:
+                raise ValueError(f"Inline resource '{resource_id}' requires type")
+            if ref.config is None:
+                raise ValueError(f"Inline resource '{resource_id}' requires config")
             definition = ResourceDefinition(
                 resource_id=resource_id,
                 type=ref.type,
@@ -125,6 +129,8 @@ class ResourceResolver:
                 config=ref.config,
             )
         else:
+            if ref.resource_id is None:
+                raise ValueError(f"Shared resource reference '{resource_id}' requires resource_id")
             definition = await self.repository.get(ref.resource_id)
             if definition is None:
                 raise ValueError(

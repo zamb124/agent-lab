@@ -8,11 +8,15 @@ legacy Dict[str, CallParameter] или готовый dict в ToolReference.para
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Mapping, Optional, Protocol, Type
 
 from pydantic import BaseModel
 
-from apps.flows.src.models.tool_reference import CallParameter
+
+class CallParameterLike(Protocol):
+    type: str
+    description: str
+    required: bool
 
 
 def validate_tool_args_against_parameters_schema(
@@ -62,7 +66,7 @@ def pydantic_model_to_parameters_schema(model: Type[BaseModel]) -> Dict[str, Any
 
 
 def call_parameters_to_parameters_schema(
-    args_schema: Dict[str, CallParameter],
+    args_schema: Mapping[str, CallParameterLike],
 ) -> Dict[str, Any]:
     """Собирает JSON Schema из legacy CallParameter (только type, description, required)."""
     properties: Dict[str, Any] = {}
@@ -81,7 +85,7 @@ def call_parameters_to_parameters_schema(
 def resolve_tool_parameters_schema(
     *,
     parameters_schema: Optional[Dict[str, Any]],
-    args_schema: Optional[Dict[str, CallParameter]],
+    args_schema: Optional[Mapping[str, CallParameterLike]],
 ) -> Dict[str, Any]:
     """
     Итоговая схема для LLM: приоритет у parameters_schema, иначе сборка из args_schema.

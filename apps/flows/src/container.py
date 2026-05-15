@@ -173,7 +173,7 @@ class FlowContainer(BaseContainer):
     @lazy
     def tool_registry(self):
         from apps.flows.src.tools.registry import ToolRegistry
-        registry = ToolRegistry()
+        registry = ToolRegistry(container=self)
         registry.register_builtin_tools()
         return registry
 
@@ -181,11 +181,6 @@ class FlowContainer(BaseContainer):
     def graph_compiler(self):
         from core.compiler import GraphCompiler
         return GraphCompiler()
-
-    @lazy
-    def llm_node_class(self):
-        from apps.flows.src.runtime.nodes import LlmNode
-        return LlmNode
 
     @lazy
     def safe_eval_class(self):
@@ -268,6 +263,7 @@ class FlowContainer(BaseContainer):
             flow_repository=self.flow_repository,
             variables_service=self.variables_service,
             graph_compiler=self.graph_compiler,
+            container=self,
         )
 
     @lazy
@@ -289,7 +285,7 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def channel_registry(self):
-        from apps.flows.src.channels import create_default_channel_registry
+        from apps.flows.src.channels.registry import create_default_channel_registry
         return create_default_channel_registry()
 
     @lazy
@@ -306,7 +302,7 @@ class FlowContainer(BaseContainer):
 
     def get_channel(self, name: str, flow_id: str):
         from apps.flows.src.channels.factory import get_channel
-        return get_channel(name, flow_id)
+        return get_channel(name, flow_id, container=self)
 
 
 _container: Optional[FlowContainer] = None

@@ -78,9 +78,9 @@ class FlowRepository(BaseRepository[FlowConfig]):
         logger.info(f"Flow '{flow_id}' saved as version {new_version}")
         return True
 
-    async def get(self, flow_id: str) -> Optional[FlowConfig]:
+    async def get(self, entity_id: str) -> Optional[FlowConfig]:
         """Получает последнюю версию агента."""
-        return await self.get_latest(flow_id)
+        return await self.get_latest(entity_id)
 
     async def get_latest(self, flow_id: str) -> Optional[FlowConfig]:
         """
@@ -187,11 +187,12 @@ class FlowRepository(BaseRepository[FlowConfig]):
 
         return items
 
-    async def delete(self, flow_id: str) -> bool:
+    async def delete(self, entity_id: str) -> bool:
         """
         Удаляет flow со всеми версиями из обеих таблиц.
         Возвращает False если запись не существовала.
         """
+        flow_id = entity_id
         current = await self.get(flow_id)
 
         versions = await self.list_versions(flow_id)

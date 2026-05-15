@@ -41,7 +41,7 @@ class MCPServerCreateRequest(BaseModel):
         default=MCPTransportType.HTTP,
         description="Тип транспорта"
     )
-    headers: dict = Field(default_factory=dict, description="HTTP headers")
+    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP headers")
     description: Optional[str] = Field(default=None, description="Описание")
 
 
@@ -51,7 +51,7 @@ class MCPServerUpdateRequest(BaseModel):
     name: Optional[str] = None
     url: Optional[str] = None
     transport_type: Optional[str] = None
-    headers: Optional[dict] = None
+    headers: Optional[Dict[str, str]] = None
     is_active: Optional[bool] = None
     description: Optional[str] = None
 
@@ -63,7 +63,7 @@ class MCPServerResponse(BaseModel):
     name: str
     url: str
     transport_type: str
-    headers: dict
+    headers: Dict[str, str]
     is_active: bool
     cached_tools: List[str]
     last_sync_at: Optional[datetime]
@@ -75,7 +75,7 @@ class MCPToolResponse(BaseModel):
 
     name: str
     description: Optional[str]
-    input_schema: Optional[dict]
+    input_schema: Optional[Dict[str, Any]]
 
 
 class MCPSyncResponse(BaseModel):
@@ -198,7 +198,7 @@ async def update_server(
 async def delete_server(
     server_id: str,
     container: ContainerDep,
-) -> dict:
+) -> Dict[str, str]:
     """Удаляет MCP сервер."""
     server = await container.mcp_server_repository.get(server_id)
     if not server:

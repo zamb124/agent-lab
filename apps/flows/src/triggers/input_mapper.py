@@ -11,6 +11,8 @@ import copy
 import re
 from typing import Any, Dict
 
+PathPart = str | int
+
 
 class InputMapper:
     """
@@ -92,7 +94,7 @@ class InputMapper:
         if not path:
             return data
 
-        current = data
+        current: Any = data
         parts = self._parse_path(path)
 
         for part in parts:
@@ -112,8 +114,8 @@ class InputMapper:
 
         return current
 
-    def _parse_path(self, path: str) -> list:
-        parts: list = []
+    def _parse_path(self, path: str) -> list[PathPart]:
+        parts: list[PathPart] = []
         pattern = re.compile(r"(\w+)|\[(\d+)\]")
 
         for match in pattern.finditer(path):

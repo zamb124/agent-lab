@@ -5,14 +5,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
     from core.db.repositories import CompanyRepository
 
 
-def normalize_namespace_for_broadcast(namespace: Optional[str]) -> str:
+def normalize_namespace_for_broadcast(namespace: str | None) -> str:
     if namespace is None:
         return "all"
     if namespace.strip() == "":
@@ -22,10 +22,10 @@ def normalize_namespace_for_broadcast(namespace: Optional[str]) -> str:
 
 async def resolve_user_ids_for_namespace_broadcast(
     company_id: str,
-    namespace: Optional[str],
+    namespace: str | None,
     *,
-    company_repository: "CompanyRepository",
-    access_grant_repository: "AccessGrantRepository",
+    company_repository: CompanyRepository,
+    access_grant_repository: AccessGrantRepository,
 ) -> list[str]:
     company = await company_repository.get(company_id)
     if company is None:

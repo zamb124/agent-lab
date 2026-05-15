@@ -83,7 +83,7 @@ class ChannelRegistry:
             channel_type = ChannelType(channel_type)
         return channel_type in self._handlers
 
-    def list_channels(self) -> list:
+    def list_channels(self) -> list[str]:
         """Возвращает список зарегистрированных каналов."""
         return [ct.value for ct in self._handlers.keys()]
 

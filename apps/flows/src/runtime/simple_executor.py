@@ -34,12 +34,14 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
                 name=node_name,
                 description=node_description,
                 prompt=prompt,
-                llm_override=NodeLLMOverride(model=model, temperature=0.2),
+                llm=NodeLLMOverride(model=model, temperature=0.2),
             )
             self.runner = LlmNodeRunner(config, tools, None, prompt, llm_node=None)
             self.agent_skills = agent_skills
 
         async def execute(self, context: RequestContext, event_queue: EventQueue):
+            if context.task_id is None or context.context_id is None:
+                raise ValueError("RequestContext.task_id and context_id are required")
             session_id = f"{node_id}:{context.context_id}"
             state = ExecutionState(
                 task_id=context.task_id,
@@ -102,3 +104,9 @@ class SimpleLlmNodeExecutor(AgentExecutor, metaclass=SimpleLlmNodeExecutorMeta):
     description = ""
     model = "gpt-4o"
     agent_skills = []
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        raise NotImplementedError
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        raise NotImplementedError

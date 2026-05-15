@@ -17,7 +17,21 @@
 """
 
 import functools
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Union, get_args
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    overload,
+)
 
 from fastapi import APIRouter
 
@@ -29,8 +43,45 @@ if TYPE_CHECKING:
     from core.db.base_repository import BaseRepository
 
 _UNSET = object()
+_LazyT = TypeVar("_LazyT")
 
-def lazy(func: Callable) -> property:
+
+class _LazyProperty(Generic[_LazyT]):
+    def __init__(self, func: Callable[[Any], _LazyT]) -> None:
+        functools.update_wrapper(self, func)
+        self._func = func
+        self._attr_name = f"_cached_{func.__name__}"
+
+    @overload
+    def __get__(
+        self,
+        instance: None,
+        owner: type[Any] | None = None,
+    ) -> "_LazyProperty[_LazyT]": ...
+
+    @overload
+    def __get__(
+        self,
+        instance: Any,
+        owner: type[Any] | None = None,
+    ) -> _LazyT: ...
+
+    def __get__(
+        self,
+        instance: Any | None,
+        owner: type[Any] | None = None,
+    ) -> "_LazyProperty[_LazyT] | _LazyT":
+        if instance is None:
+            return self
+        cached = getattr(instance, self._attr_name, _UNSET)
+        if cached is _UNSET:
+            cached = self._func(instance)
+            setattr(instance, self._attr_name, cached)
+            logger.debug(f"{self._func.__name__} инициализирован")
+        return cast(_LazyT, cached)
+
+
+def lazy(func: Callable[[Any], _LazyT]) -> _LazyProperty[_LazyT]:
     """
     Декоратор для ленивой инициализации сервисов с кэшированием.
 
@@ -43,19 +94,7 @@ def lazy(func: Callable) -> property:
                 from my_module import MyService
                 return MyService(repo=self.repository)
     """
-    attr_name = f'_cached_{func.__name__}'
-
-    @property
-    @functools.wraps(func)
-    def wrapper(self):
-        cached = getattr(self, attr_name, _UNSET)
-        if cached is _UNSET:
-            cached = func(self)
-            setattr(self, attr_name, cached)
-            logger.debug(f"{func.__name__} инициализирован")
-        return cached
-
-    return wrapper
+    return _LazyProperty(func)
 
 class BaseContainer:
     """

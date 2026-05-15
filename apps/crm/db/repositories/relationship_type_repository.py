@@ -4,7 +4,6 @@
 ВСЕ типы с company_id (ОБЯЗАТЕЛЬНО)!
 """
 
-from typing import List
 
 from sqlalchemy import and_, func, select
 
@@ -38,7 +37,7 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
         async with self._db.session() as session:
             cond = [RelationshipType.company_id == company_id]
             if not include_system:
-                cond.append(not RelationshipType.is_system)
+                cond.append(RelationshipType.is_system.is_(False))
             stmt = select(RelationshipType).where(and_(*cond)).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return list(result.scalars().all())
@@ -51,14 +50,14 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
         async with self._db.session() as session:
             cond = [RelationshipType.company_id == company_id]
             if not include_system:
-                cond.append(not RelationshipType.is_system)
+                cond.append(RelationshipType.is_system.is_(False))
             stmt = select(func.count()).select_from(RelationshipType).where(and_(*cond))
             result = await session.execute(stmt)
             return result.scalar() or 0
 
     async def get_with_prompts(
         self
-    ) -> List[RelationshipType]:
+    ) -> list[RelationshipType]:
         """
         Типы связей с заполненным prompt для AI-анализа.
 
@@ -89,4 +88,3 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
         company_id = self._get_company_id()
         type_data.company_id = company_id
         return await self.create(type_data)
-

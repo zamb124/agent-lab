@@ -177,7 +177,7 @@ async def update_resource(
 async def delete_resource(
     resource_id: str,
     container: ContainerDep,
-) -> dict:
+) -> dict[str, str]:
     """Удалить ресурс"""
     deleted = await container.resource_repository.delete(resource_id)
     if not deleted:

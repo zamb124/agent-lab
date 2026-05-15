@@ -365,7 +365,7 @@ class OperatorTasks(Base):
     interrupt_snapshot: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
     claimed_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
     resolution_payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
-    dialog_log: Mapped[Optional[list]] = mapped_column(JSONB, default=None)
+    dialog_log: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSONB, default=None)
     context_data_snapshot: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -379,4 +379,3 @@ class OperatorTasks(Base):
 
     def __repr__(self) -> str:
         return f"<OperatorTasks(id='{self.id}', status='{self.status}')>"
-

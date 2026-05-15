@@ -22,9 +22,6 @@ _MSG_IMPORT_PLATFORM_FORBIDDEN = (
 
 _BRIDGE_DENYLIST: frozenset[str] = frozenset({"datetime", "__builtins__", "__name__", "__doc__"})
 
-_default_namespace_keys_cache: frozenset[str] | None = None
-
-
 def _bridge_denied(root: str) -> bool:
     if root in _BRIDGE_DENYLIST:
         return True
@@ -42,14 +39,7 @@ def filtered_namespace_import_roots(namespace: Mapping[str, Any]) -> frozenset[s
 
 
 def get_default_namespace_import_roots() -> frozenset[str]:
-    global _default_namespace_keys_cache
-    if _default_namespace_keys_cache is None:
-        from apps.flows.src.eval.namespace import PythonNamespaceBuilder
-
-        _default_namespace_keys_cache = filtered_namespace_import_roots(
-            PythonNamespaceBuilder().build()
-        )
-    return _default_namespace_keys_cache
+    return frozenset()
 
 
 def assert_module_import_allowed(
@@ -105,12 +95,13 @@ def safe_inline_import(
     name: str,
     globals: object = None,
     locals: object = None,
-    fromlist: tuple = (),
+    fromlist: tuple[Any, ...] = (),
     level: int = 0,
 ):
     if level != 0:
         raise SafeEvalError("Relative imports are not allowed in inline code")
-    g = globals if isinstance(globals, dict) else None
+    g: Mapping[str, object] | None = globals if isinstance(globals, dict) else None
+    local_mapping: Mapping[str, object] | None = locals if isinstance(locals, dict) else None
     ns_keys = (
         filtered_namespace_import_roots(g)
         if g is not None
@@ -130,4 +121,4 @@ def safe_inline_import(
     assert_module_import_allowed(name, namespace_keys=ns_keys)
     import builtins as b
 
-    return b.__import__(name, globals, locals, fromlist, level)
+    return b.__import__(name, g, local_mapping, fromlist, level)

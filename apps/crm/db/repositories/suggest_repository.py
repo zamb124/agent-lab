@@ -1,4 +1,3 @@
-from typing import Optional
 
 from sqlalchemy import func, select, update
 
@@ -25,14 +24,14 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
 
     async def get(
         self,
-        suggest_id: str,
+        entity_id: str,
         *,
-        namespace: Optional[str] = None,
-    ) -> Optional[CRMSuggest]:
+        namespace: str | None = None,
+    ) -> CRMSuggest | None:
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMSuggest).where(
-                CRMSuggest.id == suggest_id,
+                CRMSuggest.id == entity_id,
                 CRMSuggest.company_id == company_id,
             )
             if namespace is not None:
@@ -43,10 +42,10 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
     async def list_suggests(
         self,
         namespace: str,
-        status: Optional[str] = "pending",
+        status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
-    ) -> OffsetPage:
+    ) -> OffsetPage[CRMSuggest]:
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMSuggest).where(
@@ -77,8 +76,8 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
         suggest_id: str,
         new_status: str,
         *,
-        namespace: Optional[str] = None,
-    ) -> Optional[CRMSuggest]:
+        namespace: str | None = None,
+    ) -> CRMSuggest | None:
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = (
@@ -100,7 +99,7 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
         suggest_type: str,
         target_entity_ids: list[str],
         statuses: set[str],
-    ) -> Optional[CRMSuggest]:
+    ) -> CRMSuggest | None:
         company_id = self._get_company_id()
         normalized_target_ids = sorted({item.strip() for item in target_entity_ids if item.strip()})
         if not normalized_target_ids:

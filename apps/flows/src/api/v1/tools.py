@@ -3,10 +3,10 @@ API endpoints для tools.
 """
 
 import asyncio
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import CallParameter, ToolReference
@@ -18,6 +18,7 @@ from core.pagination import OffsetPage
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["tools"])
+JsonDict = dict[str, Any]
 
 
 class ToolCreateRequest(BaseModel):
@@ -27,8 +28,8 @@ class ToolCreateRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     code: Optional[str] = None
-    args_schema: Optional[dict] = None
-    parameters_schema: Optional[dict] = None
+    args_schema: Optional[JsonDict] = None
+    parameters_schema: Optional[JsonDict] = None
     tags: Optional[List[str]] = None
     react_role: Optional[str] = None
 
@@ -40,9 +41,9 @@ class ToolResponse(BaseModel):
     title: Optional[str]
     description: Optional[str]
     code: Optional[str] = None
-    args_schema: Optional[dict] = None
-    parameters_schema: Optional[dict] = None
-    tags: List[str] = []
+    args_schema: Optional[JsonDict] = None
+    parameters_schema: Optional[JsonDict] = None
+    tags: List[str] = Field(default_factory=list)
     permission: Optional[str | List[str]] = None
     item_type: str = "tool"  # tool или flow (запись из репозитория flows)
     react_role: Optional[str] = None
@@ -140,11 +141,11 @@ async def list_all_tools_and_flows(
 class DraftParametersSchemaRequest(BaseModel):
     """Черновик JSON Schema для LLM из legacy args_schema (CallParameter)."""
 
-    args_schema: dict
+    args_schema: JsonDict
 
 
 class DraftParametersSchemaResponse(BaseModel):
-    parameters_schema: dict
+    parameters_schema: JsonDict
 
 
 @router.post(
@@ -271,7 +272,7 @@ async def create_tool(
 @router.delete("/{tool_id}")
 async def delete_tool(
     tool_id: str, container: ContainerDep
-) -> dict:
+) -> dict[str, str]:
     """Удаляет tool"""
     deleted = await container.tool_repository.delete(tool_id)
     if not deleted:

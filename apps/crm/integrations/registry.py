@@ -4,16 +4,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from apps.crm.integrations.amocrm.connector import AmoCRMConnector
 from apps.crm.integrations.protocol import NamespaceIntegrationConnector
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
-
-if TYPE_CHECKING:
-    from apps.crm.container import CRMContainer
 
 _CRM_UI_ROOT = Path(__file__).resolve().parents[1] / "ui"
 
@@ -23,12 +20,11 @@ def _integration_svg_path(provider_id: str) -> Path:
 
 
 class IntegrationRegistry:
-    def __init__(self, container: CRMContainer) -> None:
-        self._container = container
+    def __init__(self, connectors: Iterable[NamespaceIntegrationConnector]) -> None:
         self._by_id: dict[str, NamespaceIntegrationConnector] = {}
         self._by_provider: dict[IntegrationProvider, NamespaceIntegrationConnector] = {}
-        amo = AmoCRMConnector(container)
-        self._register(amo)
+        for connector in connectors:
+            self._register(connector)
 
     def _register(self, connector: NamespaceIntegrationConnector) -> None:
         icon = _integration_svg_path(connector.provider_id)

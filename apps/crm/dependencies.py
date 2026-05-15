@@ -9,7 +9,7 @@ from fastapi import Depends
 from apps.crm.container import CRMContainer, get_crm_container
 from core.context import get_context
 
-_initialized_companies: set = set()
+_initialized_companies: set[str] = set()
 
 
 async def get_container() -> CRMContainer:

@@ -2,7 +2,7 @@
 Типы для каналов коммуникации.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from a2a.types import Message
 
@@ -18,9 +18,9 @@ class PreparedTaskParams:
         content: str,
         branch_id: str,
         is_resume: bool,
-        files_data: List[Dict],
+        files_data: List[Dict[str, Any]],
         message: Optional[Message],
-        metadata: Optional[Dict],
+        metadata: Optional[Dict[str, Any]],
         user_id: Optional[str] = None,
         is_takeover_user_reply: bool = False,
         takeover_operator_task_id: Optional[str] = None,
@@ -37,4 +37,3 @@ class PreparedTaskParams:
         self.user_id = user_id or context_id
         self.is_takeover_user_reply = is_takeover_user_reply
         self.takeover_operator_task_id = takeover_operator_task_id
-

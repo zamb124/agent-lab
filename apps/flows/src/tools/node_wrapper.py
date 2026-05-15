@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from pydantic import Field, create_model
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.mock import get_mock_for_flow
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType
@@ -113,13 +114,16 @@ class NodeAsToolWrapper(BaseTool):
     def __init__(
         self,
         node_config: Union[NodeConfig, Dict[str, Any]],
-        tool_registry: Optional[Any] = None
+        tool_registry: Optional[Any] = None,
+        *,
+        container: FlowRuntimeContainer | None = None,
     ):
         if isinstance(node_config, dict):
             self._raw_config = node_config
             node_type = node_config.get("type")
             if not node_type:
                 raise ValueError(f"Node config requires 'type' field: {node_config}")
+            typed_node_type = node_type if isinstance(node_type, NodeType) else NodeType(str(node_type))
             node_id = node_config.get("tool_id") or node_config.get("node_id")
             if not node_id:
                 raise ValueError(f"Node config requires 'tool_id' or 'node_id' field: {node_config}")
@@ -136,8 +140,8 @@ class NodeAsToolWrapper(BaseTool):
             self.node_config = NodeConfig(
                 node_id=node_id,
                 name=node_config.get("name", node_id),
-                type=node_type,
-                description=node_config.get("description"),
+                type=typed_node_type,
+                description=str(node_config.get("description") or ""),
                 prompt=node_config.get("prompt"),
                 tools=node_config.get("tools", []),
                 code=node_config.get("code"),
@@ -153,6 +157,7 @@ class NodeAsToolWrapper(BaseTool):
         self.tags = self.node_config.tags or [self.node_config.type]
         self._node: Optional["BaseNode"] = None
         self._bound_node: Optional["BaseNode"] = None
+        self.container = container
 
         self.args_schema = _build_pydantic_schema(self._args_schema_dict)
 
@@ -188,6 +193,7 @@ class NodeAsToolWrapper(BaseTool):
             }
         wrapper = cls(merged)
         wrapper._bound_node = node
+        wrapper.container = node.container
         wrapper.name = sanitize_tool_name(merged["name"])
         return wrapper
 
@@ -219,7 +225,11 @@ class NodeAsToolWrapper(BaseTool):
                     "react": self.node_config.react.model_dump() if self.node_config.react else None,
                 }
 
-            self._node = await create_node(self.node_config.node_id, node_dict)
+            self._node = await create_node(
+                self.node_config.node_id,
+                node_dict,
+                container=self.container,
+            )
 
         return self._node
 
@@ -246,7 +256,7 @@ class NodeAsToolWrapper(BaseTool):
         for key, value in args.items():
             setattr(state, key, value)
 
-        result = await node.run(state)
+        result = await node._run_internal(state)
         return self._extract_response(result)
 
     async def _run_llm_node(
@@ -270,13 +280,14 @@ class NodeAsToolWrapper(BaseTool):
             nested_state.content = parent_state.content
             # Передаем оставшийся путь interrupt (без первого элемента)
             nested_state.interrupt_path = list(parent_state.interrupt_path[1:])
-            logger.info(f"[wrapper:{node_id}] resume with answer='{parent_state.content[:50]}...'")
+            content_preview = (parent_state.content or "")[:50]
+            logger.info(f"[wrapper:{node_id}] resume with answer='{content_preview}...'")
         else:
             # Первый вызов: создаем новый state для субагента
             nested_state = self._create_nested_state(parent_state, args)
 
         try:
-            result = await node.run(nested_state)
+            result = await node._run_internal(nested_state)
 
             # Успешное завершение - копируем результат в родительский state
             self._copy_result_to_parent(nested_state, parent_state)

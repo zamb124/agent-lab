@@ -19,7 +19,7 @@ notification-center, второй — про обновление доменно
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
@@ -56,11 +56,11 @@ async def broadcast_crm_note_event(
     company_id: str,
     namespace: str,
     note_id: str,
-    note_date_iso: Optional[str],
+    note_date_iso: str | None,
     action: CrmNoteWsAction,
     *,
-    company_repository: "CompanyRepository",
-    access_grant_repository: "AccessGrantRepository",
+    company_repository: CompanyRepository,
+    access_grant_repository: AccessGrantRepository,
     skip_notification_center: bool = False,
     markdown_format: MarkdownFormatProgressPayload | None = None,
     draft_repair: DraftRepairProgressPayload | None = None,

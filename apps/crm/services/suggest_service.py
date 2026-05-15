@@ -1,12 +1,12 @@
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from apps.crm.db.models import CRMEntity, CRMSuggest
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.suggest_repository import SuggestRepository
-from apps.crm.models.api import EntityMergeRequest
+from apps.crm.models.api import EntityMergeRequest, MergeSide
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.note_processing_service import NoteProcessingService
 from core.pagination import OffsetPage
@@ -43,13 +43,13 @@ class SuggestService:
     async def list_suggests(
         self,
         namespace: str,
-        status: Optional[str] = "pending",
+        status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
-    ) -> OffsetPage:
+    ) -> OffsetPage[CRMSuggest]:
         return await self._repository.list_suggests(namespace, status, limit, offset)
 
-    async def get_suggest(self, suggest_id: str, *, namespace: str) -> Optional[CRMSuggest]:
+    async def get_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest | None:
         return await self._repository.get(suggest_id, namespace=namespace)
 
     async def resolve_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest:
@@ -256,7 +256,7 @@ class SuggestService:
         target_entity_ids: list[str],
         payload: dict[str, Any],
     ) -> CRMSuggest:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         suggest = CRMSuggest(
             id=f"sug_{uuid.uuid4().hex}",
             company_id=company_id,
@@ -279,7 +279,8 @@ class SuggestService:
 
     @staticmethod
     def _pair_key(left_entity_id: str, right_entity_id: str) -> tuple[str, str]:
-        return tuple(sorted((left_entity_id, right_entity_id)))
+        left, right = sorted((left_entity_id, right_entity_id))
+        return left, right
 
     @staticmethod
     def _build_merge_request(left: CRMEntity, right: CRMEntity) -> EntityMergeRequest:
@@ -287,7 +288,7 @@ class SuggestService:
             (left, right),
             key=lambda item: (item.created_at, item.entity_id),
         )
-        scalar_choices: dict[str, str] = {}
+        scalar_choices: dict[str, MergeSide] = {}
         for key in _SUGGEST_MERGE_SCALAR_KEYS:
             survivor_value = getattr(survivor, key)
             source_value = getattr(source, key)
@@ -296,7 +297,7 @@ class SuggestService:
 
         survivor_attrs = dict(survivor.attributes or {})
         source_attrs = dict(source.attributes or {})
-        attribute_choices: dict[str, str] = {}
+        attribute_choices: dict[str, MergeSide] = {}
         for key in sorted(set(survivor_attrs) & set(source_attrs)):
             if survivor_attrs[key] != source_attrs[key]:
                 attribute_choices[key] = "survivor"

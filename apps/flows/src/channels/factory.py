@@ -11,7 +11,7 @@ ChannelT = TypeVar("ChannelT", bound="ChannelClass")
 class ChannelClass(Protocol):
     name: str
 
-    def __call__(self, flow_id: str, context: Any = None) -> Any: ...
+    def __call__(self, flow_id: str, context: Any = None, *, container: Any) -> Any: ...
 
 _CHANNEL_REGISTRY: dict[str, str] = {
     "a2a": "apps.flows.src.channels.a2a:A2AChannel",
@@ -35,7 +35,7 @@ def register_channel(channel_class: type[ChannelT]) -> type[ChannelT]:
     return channel_class
 
 
-def get_channel(name: str, flow_id: str, context: Any = None) -> Any:
+def get_channel(name: str, flow_id: str, context: Any = None, *, container: Any) -> Any:
     """
     Получить канал по имени.
 
@@ -54,4 +54,4 @@ def get_channel(name: str, flow_id: str, context: Any = None) -> Any:
         raise ValueError(f"Unknown channel: {name}. Available: {list(_CHANNEL_REGISTRY.keys())}")
 
     channel_class = _load_channel_class(_CHANNEL_REGISTRY[name])
-    return channel_class(flow_id, context=context)
+    return channel_class(flow_id, context=context, container=container)

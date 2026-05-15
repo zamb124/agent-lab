@@ -293,7 +293,7 @@ class ScheduleService:
                 )
             )
         filtered = []
-        for item in tasks:
+        for item in tasks.items:
             item_session = item.payload.get("session_id")
             if item_session == session_id:
                 filtered.append(self._map_task(item))
@@ -346,4 +346,3 @@ class ScheduleService:
     async def mark_executed(self, task_id: str) -> bool:
         """Помечает задачу как выполненную."""
         raise NotImplementedError("mark_executed is not supported in scheduler API mode")
-

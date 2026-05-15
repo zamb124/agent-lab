@@ -43,7 +43,7 @@ class BaseCodeRunner(ABC):
     async def execute_tool(
         self,
         code: str,
-        args: dict,
+        args: dict[str, Any],
         state: Optional['ExecutionState'] = None,
     ) -> Any:
         """

@@ -25,8 +25,8 @@ def dict_to_config(data: Dict[str, Any]) -> TaskPushNotificationConfig:
         )
 
     return TaskPushNotificationConfig(
-        taskId=data["taskId"],
-        pushNotificationConfig=PushNotificationConfig(
+        task_id=data["taskId"],
+        push_notification_config=PushNotificationConfig(
             id=push_data.get("id"),
             url=push_data["url"],
             token=push_data.get("token"),

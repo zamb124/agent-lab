@@ -5,7 +5,8 @@ Saga Pattern для каскадных операций через PostgreSQL (c
 """
 
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, List, Optional
+from typing import Any
+from collections.abc import Awaitable, Callable
 
 from core.logging import get_logger
 
@@ -25,8 +26,8 @@ class SagaStep:
         executed: Флаг выполнения
     """
     name: str
-    execute_fn: Optional[Callable[[], Awaitable[Any]]]
-    compensate_fn: Optional[Callable[[], Awaitable[Any]]]
+    execute_fn: Callable[[], Awaitable[Any]] | None
+    compensate_fn: Callable[[], Awaitable[Any]] | None
     data: Any = None
     executed: bool = False
 
@@ -44,7 +45,7 @@ class EntityDeletionSaga:
     """
 
     def __init__(self):
-        self._steps: List[SagaStep] = []
+        self._steps: list[SagaStep] = []
 
     def add_step(self, step: SagaStep):
         """Добавляет шаг в Saga"""

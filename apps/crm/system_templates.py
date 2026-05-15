@@ -538,7 +538,12 @@ REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS: frozenset[str] = frozenset(
 )
 
 
-def _namespace_template_row_from_system_spec(spec: dict) -> dict:
+NamespaceTemplateTypeSpec = dict[str, Any]
+
+
+def _namespace_template_row_from_system_spec(
+    spec: NamespaceTemplateTypeSpec,
+) -> NamespaceTemplateTypeSpec:
     parent = spec.get("parent_type_id")
     return {
         "type_id": spec["type_id"],
@@ -559,9 +564,9 @@ def _namespace_template_row_from_system_spec(spec: dict) -> dict:
     }
 
 
-def _build_namespace_template_core_note_task_rows() -> list[dict]:
+def _build_namespace_template_core_note_task_rows() -> list[NamespaceTemplateTypeSpec]:
     by_id = {item["type_id"]: item for item in SYSTEM_ENTITY_TYPE_TEMPLATES}
-    rows: list[dict] = []
+    rows: list[NamespaceTemplateTypeSpec] = []
     for tid in sorted(REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS):
         spec = by_id.get(tid)
         if spec is None:
@@ -570,10 +575,14 @@ def _build_namespace_template_core_note_task_rows() -> list[dict]:
     return rows
 
 
-NAMESPACE_TEMPLATE_CORE_NOTE_TASK: list[dict] = _build_namespace_template_core_note_task_rows()
+NAMESPACE_TEMPLATE_CORE_NOTE_TASK: list[NamespaceTemplateTypeSpec] = (
+    _build_namespace_template_core_note_task_rows()
+)
 
 
-def _ensure_namespace_template_seeds_contain_core_note_task(seeds: list) -> None:
+def _ensure_namespace_template_seeds_contain_core_note_task(
+    seeds: list[dict[str, Any]],
+) -> None:
     """
     В каждом сиде гарантирует:
     - типы note и task (платформенный инвариант);

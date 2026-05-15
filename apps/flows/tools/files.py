@@ -15,6 +15,9 @@ from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.files.writer import FileWriteError, FileWriter
+from core.state import ExecutionState
+
+JsonDict = dict[str, Any]
 
 _CREATE_FILE_TOOL_DESCRIPTION = """
 Создаёт файл в хранилище платформы и возвращает ссылку на скачивание.
@@ -60,8 +63,8 @@ file_size, checksum (если есть), is_public.
 """.strip()
 
 
-def _read_file_mock(args: dict, state: Any = None) -> dict:
-    def _pick(entries, name):
+def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
+    def _pick(entries: List[JsonDict], name: Any) -> Optional[JsonDict]:
         if not entries:
             return None
         if not name:
@@ -165,8 +168,9 @@ async def read_file(
     file_name: Optional[str] = None,
     include_asset_bytes: bool = False,
     vision_prompt: Optional[str] = None,
-    state: Optional[dict] = None,
-) -> dict:
+    *,
+    state: ExecutionState,
+) -> JsonDict:
     def _pick_file(files_list: List[Dict[str, Any]], name: Optional[str]) -> Optional[Dict[str, Any]]:
         if not files_list:
             return None
@@ -181,8 +185,7 @@ async def read_file(
                 return f
         return None
 
-    state = state or {}
-    files = state.get("files", [])
+    files = state.files
     if not files:
         return {"success": False, "error": "Нет файлов для чтения"}
 
@@ -206,7 +209,7 @@ async def read_file(
     return {"success": True, **result.model_dump(mode="json")}
 
 
-def _create_file_mock(args: dict, state: Any = None) -> dict:
+def _create_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {
         "success": True,
         "file_id": "file_mockcreate01",
@@ -231,8 +234,9 @@ async def create_file(
     content: str,
     original_name: str,
     content_mode: Literal["auto", "markdown", "base64", "raw"] = "auto",
-    state: Optional[dict] = None,
-) -> dict:
+    *,
+    state: ExecutionState,
+) -> JsonDict:
     """Создаёт файл в хранилище. Подробное описание и примеры JSON — в description tool (см. _CREATE_FILE_TOOL_DESCRIPTION)."""
     writer = FileWriter()
     try:

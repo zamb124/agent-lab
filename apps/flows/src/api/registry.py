@@ -61,7 +61,7 @@ def build_branch_info(branch_id: str, branch: BranchConfig) -> Dict[str, Any]:
 
 
 def build_flow_card(
-    config: FlowConfig, base_url: str = "", branches: Dict[str, BranchConfig] = None
+    config: FlowConfig, base_url: str = "", branches: Optional[Dict[str, BranchConfig]] = None
 ) -> Dict[str, Any]:
     """
     Собирает AgentCard из FlowConfig.
@@ -218,7 +218,12 @@ async def sync_models(container: ContainerDep, provider: Optional[str] = None) -
         return {"providers": results, "total": sum(results.values())}
 
 
-def _add_subflows_recursive(lines: list, parent_id: str, subflows: list, depth: int = 0) -> None:
+def _add_subflows_recursive(
+    lines: list[str],
+    parent_id: str,
+    subflows: list[Dict[str, Any]],
+    depth: int = 0,
+) -> None:
     """Рекурсивно добавляет вложенные flow (как tools) и их tools в Mermaid."""
     if depth > 3:
         return

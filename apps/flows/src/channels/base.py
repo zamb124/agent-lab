@@ -33,7 +33,7 @@ from a2a.utils.message import new_agent_text_message
 
 from apps.flows.config import get_settings
 from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
-from apps.flows.src.container import get_container
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.enums import MergeMode, NodeType
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
@@ -62,7 +62,6 @@ from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
 
 logger = get_logger(__name__)
-
 
 def effective_stream_task_id_for_session(
     params_task_id: str,
@@ -107,11 +106,17 @@ class BaseChannel(ABC):
     name: str  # Имя канала: "a2a", "telegram", "whatsapp"
 
     def __init__(
-        self, flow_id: str, context: Optional[Context] = None, flow_config: Optional[Any] = None
+        self,
+        flow_id: str,
+        context: Optional[Context] = None,
+        flow_config: Optional[Any] = None,
+        *,
+        container: FlowRuntimeContainer,
     ):
         self.flow_id = flow_id
         self.context = context or get_context()
         self._flow_config = flow_config
+        self.container = container
 
     # === Универсальный метод отправки сообщения ===
 
@@ -191,7 +196,7 @@ class BaseChannel(ABC):
         if "target_branch_id" not in normalized and "branch_id" in normalized:
             normalized["target_branch_id"] = normalized["branch_id"]
 
-        container = get_container()
+        container = self.container
         resolved: Dict[str, Any] = {}
         for key, value in normalized.items():
             raw_value = value["value"] if isinstance(value, dict) and "value" in value else value
@@ -222,7 +227,7 @@ class BaseChannel(ABC):
         if not config.auth.permissions_enabled:
             return
 
-        container = get_container()
+        container = self.container
         flow_config = await container.flow_repository.get(self.flow_id)
 
         if flow_config is None:
@@ -252,12 +257,12 @@ class BaseChannel(ABC):
 
     async def _get_state(self, session_id: str) -> Optional[ExecutionState]:
         """Получает state из StateManager."""
-        container = get_container()
+        container = self.container
         return await container.state_manager.get_state(session_id)
 
     async def _save_state(self, session_id: str, state: ExecutionState) -> None:
         """Сохраняет state в StateManager."""
-        container = get_container()
+        container = self.container
         await container.state_manager.save_state(session_id, state)
 
     async def _resolve_session_id_for_a2a_lookup(self, lookup_id: str) -> Optional[str]:
@@ -271,7 +276,7 @@ class BaseChannel(ABC):
         if st is not None and (st.context_id == lookup_id or st.task_id == lookup_id):
             return direct
 
-        container = get_container()
+        container = self.container
         return await container.state_manager.resolve_session_id_by_flow_and_identifier(
             self.flow_id, lookup_id
         )
@@ -283,7 +288,7 @@ class BaseChannel(ABC):
         """
         from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 
-        container = get_container()
+        container = self.container
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             return None
@@ -453,7 +458,7 @@ class BaseChannel(ABC):
             return
         cfg = flow_config
         if cfg is None:
-            cfg = await get_container().flow_repository.get(self.flow_id)
+            cfg = await self.container.flow_repository.get(self.flow_id)
         if cfg is None:
             return
         trigger = cfg.triggers.get(trigger_id)
@@ -501,7 +506,7 @@ class BaseChannel(ABC):
             raise ValueError("BaseChannel.process_task requires Context")
         ctx = self.context
 
-        container = get_container()
+        container = self.container
 
         # Context должен быть установлен в middleware и передан через context_data
         # Обновляем только специфичные для задачи поля
@@ -516,7 +521,7 @@ class BaseChannel(ABC):
         bind_log_context(**{LOG_SESSION_AGENT: params.session_id})
 
         # Загружаем state для определения task_id, resume и закреплённой версии flow
-        container = get_container()
+        container = self.container
         saved_state = await container.state_manager.get_state(params.session_id)
 
         effective_task_id = effective_stream_task_id_for_session(params.task_id, saved_state)
@@ -721,11 +726,8 @@ class BaseChannel(ABC):
                 node_id = state.breakpoint_hit
                 logger.info(f"Breakpoint hit at node '{node_id}'")
 
-                node_type = (
-                    runtime_flow.nodes.get(node_id).config.get("type", "unknown")
-                    if runtime_flow.nodes.get(node_id)
-                    else "unknown"
-                )
+                breakpoint_node = runtime_flow.nodes.get(node_id)
+                node_type = breakpoint_node.config.get("type", "unknown") if breakpoint_node else "unknown"
                 await emitter.emit_breakpoint(node_id, node_type, state.breakpoint_state or {})
 
                 await self._save_state(params.session_id, state)
@@ -948,7 +950,7 @@ class BaseChannel(ABC):
 
     async def list_branches(self) -> List[Dict[str, Any]]:
         """Получить список веток (branches)."""
-        container = get_container()
+        container = self.container
         branches_map = await container.flow_factory.get_branches(self.flow_id)
         return [
             {
@@ -962,7 +964,7 @@ class BaseChannel(ABC):
 
     async def get_branch(self, branch_id: str) -> Optional[Dict[str, Any]]:
         """Получить ветку по ID."""
-        container = get_container()
+        container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             return None
@@ -1005,7 +1007,7 @@ class BaseChannel(ABC):
 
     async def create_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Создать новую ветку (branch)."""
-        container = get_container()
+        container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
@@ -1079,13 +1081,16 @@ class BaseChannel(ABC):
             tool_repository=container.tool_repository,
             node_repository=container.node_repository,
         )
+        entry = effective["entry"]
+        if entry is None:
+            raise ValueError(f"Flow '{self.flow_id}' has no entry")
         validation_result = await validator.validate(
             nodes=effective["nodes"],
             edges=[
                 {"from": e.from_node, "to": e.to_node, "condition": e.condition}
                 for e in effective["edges"]
             ],
-            entry=effective["entry"],
+            entry=entry,
             variables=effective["variables"],
             flow_id=self.flow_id,
         )
@@ -1110,7 +1115,7 @@ class BaseChannel(ABC):
 
     async def update_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Обновить существующую ветку (branch)."""
-        container = get_container()
+        container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
@@ -1205,13 +1210,16 @@ class BaseChannel(ABC):
             tool_repository=container.tool_repository,
             node_repository=container.node_repository,
         )
+        entry = effective["entry"]
+        if entry is None:
+            raise ValueError(f"Flow '{self.flow_id}' has no entry")
         validation_result = await validator.validate(
             nodes=effective["nodes"],
             edges=[
                 {"from": e.from_node, "to": e.to_node, "condition": e.condition}
                 for e in effective["edges"]
             ],
-            entry=effective["entry"],
+            entry=entry,
             variables=effective["variables"],
             flow_id=self.flow_id,
         )
@@ -1236,7 +1244,7 @@ class BaseChannel(ABC):
 
     async def delete_branch(self, branch_id: str) -> Dict[str, Any]:
         """Удалить ветку (branch)."""
-        container = get_container()
+        container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
@@ -1257,7 +1265,7 @@ class BaseChannel(ABC):
 
     async def get_branch_tools(self, branch_id: str) -> List[Dict[str, Any]]:
         """Получить список tools для ветки."""
-        container = get_container()
+        container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             return []
@@ -1267,7 +1275,7 @@ class BaseChannel(ABC):
         real_edges = [
             e
             for e in effective["edges"]
-            if (e.to_node if hasattr(e, "to_node") else e.get("to")) is not None
+            if e.to_node is not None
         ]
         is_graph_flow = len(real_edges) > 0
 
@@ -1421,9 +1429,9 @@ class BaseChannel(ABC):
                 )
 
             for edge in effective["edges"]:
-                from_node = edge.from_node if hasattr(edge, "from_node") else edge.get("from")
-                to_node = edge.to_node if hasattr(edge, "to_node") else edge.get("to")
-                condition = edge.condition if hasattr(edge, "condition") else edge.get("condition")
+                from_node = edge.from_node
+                to_node = edge.to_node
+                condition = edge.condition
 
                 edge_name = f"{from_node} -> {to_node or 'end'}"
                 description = f"Переход от '{from_node}' к '{to_node or 'конец'}'"
@@ -1449,7 +1457,7 @@ class BaseChannel(ABC):
 
     async def get_branch_schema(self) -> Dict[str, Any]:
         """Получить JSON Schema для создания ветки."""
-        container = get_container()
+        container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
@@ -1467,7 +1475,7 @@ class BaseChannel(ABC):
 
     async def get_agent_card(self, base_url: str) -> Dict[str, Any]:
         """Собрать AgentCard (A2A) для этого flow_id."""
-        container = get_container()
+        container = self.container
         config = self._flow_config or await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")

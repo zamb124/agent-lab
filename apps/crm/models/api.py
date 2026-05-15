@@ -3,7 +3,7 @@ Pydantic модели для API endpoints.
 """
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -16,50 +16,50 @@ class EntityCreate(BaseModel):
     """Создание entity"""
 
     entity_type: str
-    entity_subtype: Optional[str] = None
+    entity_subtype: str | None = None
     namespace: str = Field(default="default", description="Namespace для изоляции")
     name: str
-    description: Optional[str] = None
-    attributes: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
-    attachment_ids: Optional[List[str]] = None
-    user_id: Optional[str] = None
+    description: str | None = None
+    attributes: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    attachment_ids: list[str] | None = None
+    user_id: str | None = None
 
-    voice_entity_id: Optional[str] = Field(
+    voice_entity_id: str | None = Field(
         default=None,
         description="Сущность-голос (обычно contact); null в JSON — без голоса при переданном поле",
     )
-    context_entity_id: Optional[str] = Field(
+    context_entity_id: str | None = Field(
         default=None,
         description="Якорь контекста; null — без привязки",
     )
 
-    note_date: Optional[date] = None
-    due_date: Optional[date] = None
-    priority: Optional[str] = None
-    assignees: List[str] = Field(default_factory=list)
+    note_date: date | None = None
+    due_date: date | None = None
+    priority: str | None = None
+    assignees: list[str] = Field(default_factory=list)
 
 
 class EntityUpdate(BaseModel):
     """Обновление entity"""
 
-    name: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[str] = None
-    attributes: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
-    attachment_ids: Optional[List[str]] = None
+    name: str | None = None
+    description: str | None = None
+    status: str | None = None
+    attributes: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    attachment_ids: list[str] | None = None
 
-    voice_entity_id: Optional[str] = None
-    context_entity_id: Optional[str] = None
+    voice_entity_id: str | None = None
+    context_entity_id: str | None = None
 
-    entity_type: Optional[str] = None
-    entity_subtype: Optional[str] = None
+    entity_type: str | None = None
+    entity_subtype: str | None = None
 
-    note_date: Optional[date] = None
-    due_date: Optional[date] = None
-    priority: Optional[str] = None
-    assignees: Optional[List[str]] = Field(default=None)
+    note_date: date | None = None
+    due_date: date | None = None
+    priority: str | None = None
+    assignees: list[str] | None = Field(default=None)
 
 
 class EntityResponse(BaseModel):
@@ -71,36 +71,36 @@ class EntityResponse(BaseModel):
     company_id: str
     namespace: str
     entity_type: str
-    entity_subtype: Optional[str]
+    entity_subtype: str | None
     name: str
-    description: Optional[str]
+    description: str | None
     status: str
-    attributes: Dict[str, Any]
-    tags: List[str]
-    attachment_ids: List[str]
+    attributes: dict[str, Any]
+    tags: list[str]
+    attachment_ids: list[str]
 
-    note_date: Optional[date]
-    due_date: Optional[date]
-    priority: Optional[str]
-    assignees: List[str]
+    note_date: date | None
+    due_date: date | None
+    priority: str | None
+    assignees: list[str]
 
-    user_id: Optional[str]
-    source_entity_id: Optional[str]
-    source_company_id: Optional[str]
-    external_relationships: List[Dict[str, Any]] = []
+    user_id: str | None
+    source_entity_id: str | None
+    source_company_id: str | None
+    external_relationships: list[dict[str, Any]] = []
     relevance: float = Field(
         description="Значение CRMEntity.relevance в БД; на ранжирование результатов поиска не влияет.",
     )
-    access_level: Optional[str] = None
-    score: Optional[float] = Field(
+    access_level: str | None = None
+    score: float | None = Field(
         default=None,
         description="Релевантность из пайплайна поиска (semantic / text / hybrid), если запрос — поиск. Не смешивается с relevance сущности и не зависит от весов рёбер графа.",
     )
-    match_type: Optional[str] = Field(
+    match_type: str | None = Field(
         default=None,
         description="Источник совпадения в гибридном поиске, когда применимо.",
     )
-    semantic_text_index_status: Optional[SemanticTextIndexStatus] = Field(
+    semantic_text_index_status: SemanticTextIndexStatus | None = Field(
         default=None,
         description=(
             "Семантический индекс основного текста сущности (pgvector, document_id = entity_id). "
@@ -117,11 +117,11 @@ class EntitySearchFilterNode(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    and_nodes: Optional[List["EntitySearchFilterNode"]] = Field(default=None, alias="$and")
-    or_nodes: Optional[List["EntitySearchFilterNode"]] = Field(default=None, alias="$or")
-    field: Optional[str] = None
-    op: Optional[str] = None
-    value: Optional[Any] = None
+    and_nodes: list["EntitySearchFilterNode"] | None = Field(default=None, alias="$and")
+    or_nodes: list["EntitySearchFilterNode"] | None = Field(default=None, alias="$or")
+    field: str | None = None
+    op: str | None = None
+    value: Any | None = None
 
     @model_validator(mode="after")
     def validate_shape(self) -> "EntitySearchFilterNode":
@@ -158,70 +158,70 @@ class EntitySearchQueryRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    query: Optional[str] = None
+    query: str | None = None
     search_mode: Literal["text", "semantic", "hybrid"] = Field(
         default="hybrid",
         description="Режим поиска: только текст (FTS), только semantic (вектор), hybrid (RRF). Рёбра графа ранжирование не меняют.",
     )
-    entity_type: Optional[str] = None
-    entity_subtype: Optional[str] = None
-    namespace: Optional[str] = None
-    filters: Optional[EntitySearchFilterNode] = None
-    cursor: Optional[str] = None
+    entity_type: str | None = None
+    entity_subtype: str | None = None
+    namespace: str | None = None
+    filters: EntitySearchFilterNode | None = None
+    cursor: str | None = None
     limit: int = Field(default=100, ge=1, le=1000)
 
 
 class BulkCreateRequest(BaseModel):
     """Batch создание сущностей (до 200)."""
 
-    items: List["EntityCreate"]
+    items: list["EntityCreate"]
 
 
 class BulkUpdateItem(BaseModel):
     entity_id: str
-    updates: Dict[str, Any]
+    updates: dict[str, Any]
 
 
 class BulkUpdateRequest(BaseModel):
-    items: List[BulkUpdateItem]
+    items: list[BulkUpdateItem]
 
 
 class BulkDeleteRequest(BaseModel):
-    entity_ids: List[str]
+    entity_ids: list[str]
 
 
 class BulkErrorItem(BaseModel):
     index: int
-    entity_id: Optional[str] = None
+    entity_id: str | None = None
     error: str
 
 
 class BulkCreateResponse(BaseModel):
-    created: List[EntityResponse]
-    errors: List[BulkErrorItem]
+    created: list[EntityResponse]
+    errors: list[BulkErrorItem]
 
 
 class BulkUpdateResponse(BaseModel):
-    updated: List[EntityResponse]
-    errors: List[BulkErrorItem]
+    updated: list[EntityResponse]
+    errors: list[BulkErrorItem]
 
 
 class BulkDeleteResponse(BaseModel):
-    deleted: List[str]
-    errors: List[BulkErrorItem]
+    deleted: list[str]
+    errors: list[BulkErrorItem]
 
 
 class BulkCardsRequest(BaseModel):
     """Batch загрузка карточек по списку entity_id."""
 
-    entity_ids: List[str]
+    entity_ids: list[str]
 
 
 class EntityTimelineBoundsResponse(BaseModel):
     """Границы timeline по created_at."""
 
-    min_created_at: Optional[datetime]
-    max_created_at: Optional[datetime]
+    min_created_at: datetime | None
+    max_created_at: datetime | None
     total_entities: int
 
 
@@ -233,11 +233,11 @@ class EntityMergeRequest(BaseModel):
 
     survivor_entity_id: str
     source_entity_id: str
-    scalar_choices: Dict[str, MergeSide] = Field(
+    scalar_choices: dict[str, MergeSide] = Field(
         default_factory=dict,
         description="Для каждого конфликтного скаляра: survivor | source",
     )
-    attribute_choices: Dict[str, MergeSide] = Field(
+    attribute_choices: dict[str, MergeSide] = Field(
         default_factory=dict,
         description="Для каждого конфликтного ключа attributes",
     )
@@ -255,14 +255,14 @@ class EntityTypeCreate(BaseModel):
 
     type_id: str
     namespace: str = Field(default="default", min_length=1)
-    parent_type_id: Optional[str] = None
+    parent_type_id: str | None = None
     name: str
-    description: Optional[str] = None
-    prompt: Optional[str] = None
-    required_fields: Optional[Dict[str, Any]] = None
-    optional_fields: Optional[Dict[str, Any]] = None
-    icon: Optional[str] = None
-    color: Optional[str] = None
+    description: str | None = None
+    prompt: str | None = None
+    required_fields: dict[str, Any] | None = None
+    optional_fields: dict[str, Any] | None = None
+    icon: str | None = None
+    color: str | None = None
     is_event: bool = False
     check_duplicates: bool = True
     is_context_anchor: bool = False
@@ -273,17 +273,17 @@ class EntityTypeCreate(BaseModel):
 class EntityTypeUpdate(BaseModel):
     """Обновление типа сущности"""
 
-    name: Optional[str] = None
-    description: Optional[str] = None
-    parent_type_id: Optional[str] = None
-    prompt: Optional[str] = None
-    required_fields: Optional[Dict[str, Any]] = None
-    optional_fields: Optional[Dict[str, Any]] = None
-    icon: Optional[str] = None
-    color: Optional[str] = None
-    is_context_anchor: Optional[bool] = None
-    is_voice_target: Optional[bool] = None
-    auto_resolve_suggests: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    parent_type_id: str | None = None
+    prompt: str | None = None
+    required_fields: dict[str, Any] | None = None
+    optional_fields: dict[str, Any] | None = None
+    icon: str | None = None
+    color: str | None = None
+    is_context_anchor: bool | None = None
+    is_voice_target: bool | None = None
+    auto_resolve_suggests: bool | None = None
 
 
 class EntityTypeResponse(BaseModel):
@@ -294,15 +294,15 @@ class EntityTypeResponse(BaseModel):
     type_id: str
     company_id: str
     namespace: str
-    parent_type_id: Optional[str]
+    parent_type_id: str | None
     name: str
-    description: Optional[str]
-    prompt: Optional[str]
-    required_fields: Dict[str, Any]
-    optional_fields: Dict[str, Any]
-    public_fields: List[str]
-    icon: Optional[str]
-    color: Optional[str]
+    description: str | None
+    prompt: str | None
+    required_fields: dict[str, Any]
+    optional_fields: dict[str, Any]
+    public_fields: list[str]
+    icon: str | None
+    color: str | None
     is_system: bool
     is_event: bool
     check_duplicates: bool
@@ -313,7 +313,7 @@ class EntityTypeResponse(BaseModel):
     extractable: bool
     created_at: datetime
     list_entity_type: str
-    list_entity_subtype: Optional[str] = None
+    list_entity_subtype: str | None = None
 
 
 class RelationshipTypeCreate(BaseModel):
@@ -321,12 +321,12 @@ class RelationshipTypeCreate(BaseModel):
 
     type_id: str
     name: str
-    description: Optional[str] = None
-    prompt: Optional[str] = None
+    description: str | None = None
+    prompt: str | None = None
     is_directed: bool = True
-    inverse_type_id: Optional[str] = None
-    icon: Optional[str] = None
-    color: Optional[str] = None
+    inverse_type_id: str | None = None
+    icon: str | None = None
+    color: str | None = None
     weight_default: float = 1.0
 
 
@@ -338,12 +338,12 @@ class RelationshipTypeResponse(BaseModel):
     type_id: str
     company_id: str
     name: str
-    description: Optional[str]
-    prompt: Optional[str]
+    description: str | None
+    prompt: str | None
     is_directed: bool
-    inverse_type_id: Optional[str]
-    icon: Optional[str]
-    color: Optional[str]
+    inverse_type_id: str | None
+    icon: str | None
+    color: str | None
     is_system: bool
     weight_default: float
     created_at: datetime
@@ -366,7 +366,7 @@ class RelationshipCreate(BaseModel):
         le=1.0,
         description="Достоверность связи (например из AI); не участвует в ранжировании поиска сущностей и не входит в стоимость кратчайшего пути.",
     )
-    attributes: Optional[Dict[str, Any]] = None
+    attributes: dict[str, Any] | None = None
 
 
 class RelationshipResponse(BaseModel):
@@ -386,7 +386,7 @@ class RelationshipResponse(BaseModel):
     confidence: float = Field(
         description="Достоверность связи; на длину пути и на поиск сущностей не влияет.",
     )
-    attributes: Dict[str, Any]
+    attributes: dict[str, Any]
     created_at: datetime
     updated_at: datetime
 
@@ -395,23 +395,23 @@ class SearchMentionsRequest(BaseModel):
     """Запрос на поиск упоминаний в тексте"""
 
     text: str = Field(description="Текст для поиска упоминаний")
-    namespace: Optional[str] = Field(None, description="Namespace для ограничения поиска")
+    namespace: str | None = Field(None, description="Namespace для ограничения поиска")
 
 
 class AIAnalyzeRequest(BaseModel):
     """Запрос на AI анализ текста"""
 
     text: str = Field(description="Текст для анализа")
-    extract_entity_types: Optional[List[str]] = Field(
+    extract_entity_types: list[str] | None = Field(
         default=None, description="Типы для извлечения (None = все)"
     )
-    extract_relationship_types: Optional[List[str]] = Field(
+    extract_relationship_types: list[str] | None = Field(
         default=None, description="Типы связей для извлечения (None = все кроме linked)"
     )
-    mentioned_entity_ids: Optional[List[str]] = Field(
+    mentioned_entity_ids: list[str] | None = Field(
         default=None, description="ID entities, упомянутых через @"
     )
-    namespace: Optional[str] = Field(
+    namespace: str | None = Field(
         default=None, description="Namespace для ограничения типов и дедупликации"
     )
 
@@ -420,7 +420,7 @@ class NamespaceCreateRequest(BaseModel):
     """Создание namespace из шаблона."""
 
     name: str = Field(..., description="Имя namespace")
-    description: Optional[str] = Field(default=None, description="Описание namespace")
+    description: str | None = Field(default=None, description="Описание namespace")
     template_id: str = Field(
         ...,
         description="ID шаблона: sales | development | hr | ...",
@@ -439,25 +439,25 @@ class NamespaceResponse(BaseModel):
 
     name: str
     company_id: str
-    description: Optional[str] = None
+    description: str | None = None
     is_default: bool = False
-    crm_settings: Optional[NamespaceCRMSettings] = None
-    integration_badges: List[NamespaceIntegrationBadge] = Field(default_factory=list)
+    crm_settings: NamespaceCRMSettings | None = None
+    integration_badges: list[NamespaceIntegrationBadge] = Field(default_factory=list)
 
 
 class NamespaceUpdateRequest(BaseModel):
     """Обновление существующего namespace."""
 
-    description: Optional[str] = None
-    allowed_type_ids: Optional[List[str]] = None
-    crm_settings: Optional[NamespaceCRMSettings] = None
+    description: str | None = None
+    allowed_type_ids: list[str] | None = None
+    crm_settings: NamespaceCRMSettings | None = None
 
 
 class TaskBoardStagesApiResponse(BaseModel):
     """Стадии доски задач для namespace и текущего фильтра подтипа."""
 
     board_key: str
-    stages: List[BoardStage]
+    stages: list[BoardStage]
 
 
 class TaskBoardEditorBoardResponse(BaseModel):
@@ -465,14 +465,14 @@ class TaskBoardEditorBoardResponse(BaseModel):
 
     board_key: str
     label: str
-    stages: List[BoardStage]
+    stages: list[BoardStage]
     uses_custom_preset: bool
 
 
 class TaskBoardEditorStateResponse(BaseModel):
     """Сводка досок задач для экрана настройки namespace."""
 
-    boards: List[TaskBoardEditorBoardResponse]
+    boards: list[TaskBoardEditorBoardResponse]
 
 
 class NamespaceEditabilityResponse(BaseModel):
@@ -481,14 +481,14 @@ class NamespaceEditabilityResponse(BaseModel):
     namespace: str
     has_entities: bool
     entity_count: int
-    used_type_ids: List[str]
-    current_allowed_type_ids: List[str]
+    used_type_ids: list[str]
+    current_allowed_type_ids: list[str]
     can_update_allowed_types: bool
     can_add_types: bool
-    locked_type_ids: List[str]
-    removable_type_ids: List[str]
-    all_spaces_type_ids: List[str]
-    lock_reason: Optional[str] = None
+    locked_type_ids: list[str]
+    removable_type_ids: list[str]
+    all_spaces_type_ids: list[str]
+    lock_reason: str | None = None
 
 
 class NamespaceTemplateResponse(BaseModel):
@@ -496,58 +496,58 @@ class NamespaceTemplateResponse(BaseModel):
 
     template_id: str
     name: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
+    description: str | None = None
+    icon: str | None = None
     is_system: bool = False
-    entity_type_ids: List[str]
+    entity_type_ids: list[str]
 
 
 class NamespaceTemplateCreateRequest(BaseModel):
     template_id: str
     name: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
+    description: str | None = None
+    icon: str | None = None
 
 
 class NamespaceTemplateUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    crm_settings: Optional[NamespaceCRMSettings] = None
+    name: str | None = None
+    description: str | None = None
+    icon: str | None = None
+    crm_settings: NamespaceCRMSettings | None = None
 
 
 class NamespaceTemplateTypeUpsertRequest(BaseModel):
     type_id: str
-    parent_type_id: Optional[str] = None
+    parent_type_id: str | None = None
     name: str
-    description: Optional[str] = None
-    prompt: Optional[str] = None
-    required_fields: Dict[str, Any] = Field(default_factory=dict)
-    optional_fields: Dict[str, Any] = Field(default_factory=dict)
-    icon: Optional[str] = None
-    color: Optional[str] = None
+    description: str | None = None
+    prompt: str | None = None
+    required_fields: dict[str, Any] = Field(default_factory=dict)
+    optional_fields: dict[str, Any] = Field(default_factory=dict)
+    icon: str | None = None
+    color: str | None = None
     is_event: bool = False
     check_duplicates: bool = True
     weight_coefficient: float = 1.0
-    namespace_ids: List[str] = Field(default_factory=list)
+    namespace_ids: list[str] = Field(default_factory=list)
     is_context_anchor: bool = False
     is_voice_target: bool = False
 
 
 class NamespaceTemplateTypeResponse(BaseModel):
     type_id: str
-    parent_type_id: Optional[str] = None
+    parent_type_id: str | None = None
     name: str
-    description: Optional[str] = None
-    prompt: Optional[str] = None
-    required_fields: Dict[str, Any]
-    optional_fields: Dict[str, Any]
-    icon: Optional[str] = None
-    color: Optional[str] = None
+    description: str | None = None
+    prompt: str | None = None
+    required_fields: dict[str, Any]
+    optional_fields: dict[str, Any]
+    icon: str | None = None
+    color: str | None = None
     is_event: bool
     check_duplicates: bool
     weight_coefficient: float
-    namespace_ids: List[str]
+    namespace_ids: list[str]
     is_context_anchor: bool
     is_voice_target: bool
 
@@ -555,12 +555,12 @@ class NamespaceTemplateTypeResponse(BaseModel):
 class NamespaceTemplateDetailsResponse(BaseModel):
     template_id: str
     name: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
+    description: str | None = None
+    icon: str | None = None
     is_system: bool
-    types: List[NamespaceTemplateTypeResponse]
-    entity_type_ids: List[str]
-    crm_settings: Optional[NamespaceCRMSettings] = None
+    types: list[NamespaceTemplateTypeResponse]
+    entity_type_ids: list[str]
+    crm_settings: NamespaceCRMSettings | None = None
 
 
 class NamespaceTemplateSchemaFieldType(BaseModel):
@@ -573,7 +573,7 @@ class NamespaceTemplateSchemaFieldType(BaseModel):
 class NamespaceTemplateSchemaEnumSet(BaseModel):
     enum_set_id: str
     label: str
-    values: List[str]
+    values: list[str]
 
 
 class NamespaceTemplateSchemaOperator(BaseModel):
@@ -582,11 +582,11 @@ class NamespaceTemplateSchemaOperator(BaseModel):
 
 
 class NamespaceTemplateSchemaOptionsResponse(BaseModel):
-    field_types: List[NamespaceTemplateSchemaFieldType]
-    enum_sets: List[NamespaceTemplateSchemaEnumSet]
-    operators: List[NamespaceTemplateSchemaOperator]
-    defaults: Dict[str, Any] = Field(default_factory=dict)
-    validation_limits: Dict[str, int] = Field(default_factory=dict)
+    field_types: list[NamespaceTemplateSchemaFieldType]
+    enum_sets: list[NamespaceTemplateSchemaEnumSet]
+    operators: list[NamespaceTemplateSchemaOperator]
+    defaults: dict[str, Any] = Field(default_factory=dict)
+    validation_limits: dict[str, int] = Field(default_factory=dict)
 
 
 class AIExtractedEntity(BaseModel):
@@ -594,27 +594,27 @@ class AIExtractedEntity(BaseModel):
 
     model_config = {"extra": "allow"}  # Разрешаем дополнительные поля от AI
 
-    draft_entity_id: Optional[str] = Field(
+    draft_entity_id: str | None = Field(
         default=None,
         description="Стабильный id строки черновика; выставляет только CRM после analyze",
     )
     entity_type: str
     name: str
-    entity_subtype: Optional[str] = None
-    description: Optional[str] = None
-    attributes: Optional[Dict[str, Any]] = None
-    note_date: Optional[str] = None
-    confidence: Optional[float] = None
+    entity_subtype: str | None = None
+    description: str | None = None
+    attributes: dict[str, Any] | None = None
+    note_date: str | None = None
+    confidence: float | None = None
     # Поля для tasks
-    due_date: Optional[str] = None
-    priority: Optional[str] = None
-    assignees: Optional[List[str]] = None
+    due_date: str | None = None
+    priority: str | None = None
+    assignees: list[str] | None = None
 
     # Поля дедупликации (заполняются после проверки)
-    dedup_action: Optional[Literal["create", "merge"]] = None
-    dedup_existing_id: Optional[str] = None
-    dedup_existing_name: Optional[str] = None
-    dedup_confidence: Optional[float] = None
+    dedup_action: Literal["create", "merge"] | None = None
+    dedup_existing_id: str | None = None
+    dedup_existing_name: str | None = None
+    dedup_confidence: float | None = None
 
 
 class AIAnalyzeRelationshipExtracted(BaseModel):
@@ -632,7 +632,7 @@ class AIAnalyzeRelationshipExtracted(BaseModel):
     relationship_type: str
     weight: float
     confidence: float = Field(ge=0.0, le=1.0)
-    attributes: Optional[Dict[str, Any]] = None
+    attributes: dict[str, Any] | None = None
 
 
 class AIAnalysisRelationshipDraft(BaseModel):
@@ -647,26 +647,26 @@ class AIAnalysisRelationshipDraft(BaseModel):
     relationship_type: str
     weight: float = 1.0
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    attributes: Optional[Dict[str, Any]] = None
+    attributes: dict[str, Any] | None = None
 
 
 class AIAnalyzeResponse(BaseModel):
     """Результат AI анализа"""
 
-    note: Optional[AIExtractedEntity] = Field(
+    note: AIExtractedEntity | None = Field(
         default=None, description="Извлеченная заметка с подтипом"
     )
-    entities: List[AIExtractedEntity] = Field(
+    entities: list[AIExtractedEntity] = Field(
         default_factory=list, description="Извлеченные entities"
     )
-    relationships: List[AIAnalysisRelationshipDraft] = Field(
+    relationships: list[AIAnalysisRelationshipDraft] = Field(
         default_factory=list, description="Связи черновика (только draft-id концов)"
     )
-    attachment_summaries: List[Dict[str, Any]] = Field(
+    attachment_summaries: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Резюме по каждому вложению [{filename, summary}]",
     )
-    known_entity_id_map: Dict[str, str] = Field(
+    known_entity_id_map: dict[str, str] = Field(
         default_factory=dict,
         description="draft_entity_id → real entity_id для known entities (member, company)",
     )
@@ -677,10 +677,10 @@ class AIAnalysisDraftStored(BaseModel):
 
     draft_version: int
     updated_at: str
-    note: Optional[AIExtractedEntity] = None
-    entities: List[AIExtractedEntity] = Field(default_factory=list)
-    relationships: List[AIAnalysisRelationshipDraft] = Field(default_factory=list)
-    known_entity_id_map: Dict[str, str] = Field(
+    note: AIExtractedEntity | None = None
+    entities: list[AIExtractedEntity] = Field(default_factory=list)
+    relationships: list[AIAnalysisRelationshipDraft] = Field(default_factory=list)
+    known_entity_id_map: dict[str, str] = Field(
         default_factory=dict,
         description="draft_entity_id → real entity_id для known entities (member, company); не отображаются в UI",
     )
@@ -688,38 +688,38 @@ class AIAnalysisDraftStored(BaseModel):
 
 class DraftEntityPatch(BaseModel):
     draft_entity_id: str
-    entity_type: Optional[str] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    attributes: Optional[Dict[str, Any]] = None
-    entity_subtype: Optional[str] = None
-    note_date: Optional[str] = None
-    due_date: Optional[str] = None
-    priority: Optional[str] = None
-    assignees: Optional[List[str]] = None
+    entity_type: str | None = None
+    name: str | None = None
+    description: str | None = None
+    attributes: dict[str, Any] | None = None
+    entity_subtype: str | None = None
+    note_date: str | None = None
+    due_date: str | None = None
+    priority: str | None = None
+    assignees: list[str] | None = None
 
 
 class DraftRelationshipPatch(BaseModel):
     draft_relationship_id: str
-    weight: Optional[float] = None
-    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    attributes: Optional[Dict[str, Any]] = None
+    weight: float | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    attributes: dict[str, Any] | None = None
 
 
 class AIAnalysisDraftPatchRequest(BaseModel):
     expected_version: int
-    remove_entity_draft_ids: List[str] = Field(default_factory=list)
-    remove_relationship_draft_ids: List[str] = Field(default_factory=list)
-    patch_entities: List[DraftEntityPatch] = Field(default_factory=list)
-    patch_relationships: List[DraftRelationshipPatch] = Field(default_factory=list)
-    add_entities: List[AIExtractedEntity] = Field(default_factory=list)
-    add_relationships: List[AIAnalysisRelationshipDraft] = Field(default_factory=list)
+    remove_entity_draft_ids: list[str] = Field(default_factory=list)
+    remove_relationship_draft_ids: list[str] = Field(default_factory=list)
+    patch_entities: list[DraftEntityPatch] = Field(default_factory=list)
+    patch_relationships: list[DraftRelationshipPatch] = Field(default_factory=list)
+    add_entities: list[AIExtractedEntity] = Field(default_factory=list)
+    add_relationships: list[AIAnalysisRelationshipDraft] = Field(default_factory=list)
 
 
 class AIAnalysisDraftApplyResult(BaseModel):
-    created_entity_ids: List[str] = Field(default_factory=list)
-    updated_entity_ids: List[str] = Field(default_factory=list)
-    created_relationship_ids: List[str] = Field(default_factory=list)
+    created_entity_ids: list[str] = Field(default_factory=list)
+    updated_entity_ids: list[str] = Field(default_factory=list)
+    created_relationship_ids: list[str] = Field(default_factory=list)
 
 
 class AIAnalysisDraftRepairFlowResult(BaseModel):
@@ -727,8 +727,8 @@ class AIAnalysisDraftRepairFlowResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    patch_entities: List[DraftEntityPatch] = Field(default_factory=list)
-    repair_notes: Optional[str] = None
+    patch_entities: list[DraftEntityPatch] = Field(default_factory=list)
+    repair_notes: str | None = None
 
 
 class NoteAnalysisDraftRepairQueuedResponse(BaseModel):
@@ -742,15 +742,15 @@ class NoteAnalysisDraftRepairQueuedResponse(BaseModel):
 class NoteProcessingConfig(BaseModel):
     """Конфигурация конвейера обработки заметки (analyze + apply)."""
 
-    extract_entity_types: Optional[List[str]] = Field(
+    extract_entity_types: list[str] | None = Field(
         default=None,
         description="Типы сущностей для извлечения (None = все типы namespace)",
     )
-    extract_relationship_types: Optional[List[str]] = Field(
+    extract_relationship_types: list[str] | None = Field(
         default=None,
         description="Типы связей для извлечения (None = все с prompt)",
     )
-    mentioned_entity_ids: Optional[List[str]] = Field(
+    mentioned_entity_ids: list[str] | None = Field(
         default=None,
         description="ID entities, упомянутых через @",
     )
@@ -776,9 +776,9 @@ class NoteProcessingResult(BaseModel):
     """Результат полного конвейера обработки заметки (analyze + apply)."""
 
     note_id: str
-    created_entity_ids: List[str] = Field(default_factory=list)
-    updated_entity_ids: List[str] = Field(default_factory=list)
-    created_relationship_ids: List[str] = Field(default_factory=list)
+    created_entity_ids: list[str] = Field(default_factory=list)
+    updated_entity_ids: list[str] = Field(default_factory=list)
+    created_relationship_ids: list[str] = Field(default_factory=list)
 
 
 class DeduplicateResult(BaseModel):
@@ -788,10 +788,10 @@ class DeduplicateResult(BaseModel):
     confidence: float
     reason: str
     action: Literal["merge", "create"]
-    existing_entity_id: Optional[str] = None
-    existing_entity_name: Optional[str] = None
-    merged_attributes: Optional[Dict[str, Any]] = None
-    merged_description: Optional[str] = None
+    existing_entity_id: str | None = None
+    existing_entity_name: str | None = None
+    merged_attributes: dict[str, Any] | None = None
+    merged_description: str | None = None
 
 
 class LaraWorkspaceSummaryResponse(BaseModel):
@@ -821,18 +821,18 @@ class KnowledgeImportStartRequest(BaseModel):
         ...,
         description="Только заметки или нарезка + analyze/apply по каждому чанку",
     )
-    source_file_id: Optional[str] = Field(
+    source_file_id: str | None = Field(
         default=None, description="Один file_id в shared files (legacy)"
     )
-    source_file_ids: Optional[List[str]] = Field(
+    source_file_ids: list[str] | None = Field(
         default=None,
         description="Несколько file_id; можно вместе с source_text",
     )
-    source_text: Optional[str] = Field(
+    source_text: str | None = Field(
         default=None,
         description="Текст из мастера (лимит см. CRM knowledge import)",
     )
-    extract_entity_types: Optional[List[str]] = Field(
+    extract_entity_types: list[str] | None = Field(
         default=None,
         description="Для mode=graph: типы сущностей (None = все типы пространства)",
     )
@@ -849,25 +849,25 @@ class KnowledgeImportResponse(BaseModel):
     user_id: str
     mode: str
     status: str
-    extract_entity_types: Optional[List[str]] = None
-    source_file_id: Optional[str] = None
-    source_file_ids: Optional[List[str]] = None
-    source_text_sha256: Optional[str] = None
+    extract_entity_types: list[str] | None = None
+    source_file_id: str | None = None
+    source_file_ids: list[str] | None = None
+    source_text_sha256: str | None = None
     split_by_headings: bool = False
     chunk_max_chars: int = 50_000
-    taskiq_task_id: Optional[str] = None
+    taskiq_task_id: str | None = None
     notes_created_count: int = 0
     entities_created_count: int = 0
     relationships_created_count: int = 0
-    created_entity_ids: List[str] = Field(default_factory=list)
-    created_relationship_ids: List[str] = Field(default_factory=list)
-    attachment_document_ids: List[str] = Field(default_factory=list)
+    created_entity_ids: list[str] = Field(default_factory=list)
+    created_relationship_ids: list[str] = Field(default_factory=list)
+    attachment_document_ids: list[str] = Field(default_factory=list)
     cancel_requested: bool = False
-    error_message: Optional[str] = None
-    chunk_errors: Optional[List[Dict[str, Any]]] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    review_completed_at: Optional[datetime] = None
+    error_message: str | None = None
+    chunk_errors: list[dict[str, Any]] | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    review_completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -876,7 +876,7 @@ class KnowledgeImportCreatedEntityItem(BaseModel):
     entity_id: str
     name: str
     entity_type: str
-    entity_subtype: Optional[str] = None
+    entity_subtype: str | None = None
     status: str
 
 
@@ -884,18 +884,18 @@ class KnowledgeImportCreatedEntitiesResponse(BaseModel):
     import_id: str
     namespace: str
     status: str
-    review_completed_at: Optional[datetime] = None
+    review_completed_at: datetime | None = None
     relationships_created_count: int = 0
-    entities: List[KnowledgeImportCreatedEntityItem] = Field(default_factory=list)
-    missing_entity_ids: List[str] = Field(default_factory=list)
+    entities: list[KnowledgeImportCreatedEntityItem] = Field(default_factory=list)
+    missing_entity_ids: list[str] = Field(default_factory=list)
 
 
 class StructuredKnowledgeImportRequest(BaseModel):
     """Запрос структурированного импорта (массовое создание без LLM)."""
 
     namespace: str
-    entities: List[Dict[str, Any]] = Field(default_factory=list)
-    relationships: List[Dict[str, Any]] = Field(default_factory=list)
+    entities: list[dict[str, Any]] = Field(default_factory=list)
+    relationships: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # ── Unified task models ────────────────────────────────────────────────────────
@@ -919,15 +919,15 @@ class TaskResponse(BaseModel):
     status: str
     stage: str
     progress_pct: int = 0
-    error_message: Optional[str] = None
-    data: Dict[str, Any] = Field(default_factory=dict)
-    taskiq_task_id: Optional[str] = None
+    error_message: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+    taskiq_task_id: str | None = None
     cancel_requested: bool = False
     company_id: str
     namespace: str
     user_id: str
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -937,10 +937,10 @@ class StartKnowledgeImportRequest(BaseModel):
 
     namespace: str = Field(..., description="Пространство назначения")
     mode: Literal["notes_only", "graph"] = Field(...)
-    source_file_id: Optional[str] = Field(default=None)
-    source_file_ids: Optional[List[str]] = Field(default=None)
-    source_text: Optional[str] = Field(default=None)
-    extract_entity_types: Optional[List[str]] = Field(default=None)
+    source_file_id: str | None = Field(default=None)
+    source_file_ids: list[str] | None = Field(default=None)
+    source_text: str | None = Field(default=None)
+    extract_entity_types: list[str] | None = Field(default=None)
     split_by_headings: bool = Field(default=False)
     chunk_max_chars: int = Field(default=50_000, ge=2000, le=500_000)
 
@@ -953,9 +953,9 @@ class StartNoteAnalyzeRequest(BaseModel):
     include_attachments: bool = Field(default=True)
     attachment_chars_limit_per_file: int = Field(default=40_000, ge=5_000)
     check_duplicates: bool = Field(default=True)
-    extract_entity_types: Optional[List[str]] = Field(default=None)
-    extract_relationship_types: Optional[List[str]] = Field(default=None)
-    mentioned_entity_ids: Optional[List[str]] = Field(default=None)
+    extract_entity_types: list[str] | None = Field(default=None)
+    extract_relationship_types: list[str] | None = Field(default=None)
+    mentioned_entity_ids: list[str] | None = Field(default=None)
 
 
 class TaskCreatedEntitiesResponse(BaseModel):
@@ -964,10 +964,10 @@ class TaskCreatedEntitiesResponse(BaseModel):
     task_id: str
     namespace: str
     status: str
-    review_completed_at: Optional[str] = None
+    review_completed_at: str | None = None
     relationships_created_count: int = 0
-    entities: List[KnowledgeImportCreatedEntityItem] = Field(default_factory=list)
-    missing_entity_ids: List[str] = Field(default_factory=list)
+    entities: list[KnowledgeImportCreatedEntityItem] = Field(default_factory=list)
+    missing_entity_ids: list[str] = Field(default_factory=list)
 
 
 class StartDailySummaryRequest(BaseModel):

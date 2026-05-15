@@ -4,7 +4,7 @@ Chat API - веб-интерфейс для SSE чата с агентами.
 
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -74,7 +74,7 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
 
     # Получаем список веток
     context = get_context()
-    channel = A2AChannel(flow_id, context=context)
+    channel = A2AChannel(flow_id, context=context, container=container)
     branches_list = await channel.list_branches()
 
     # Получаем email пользователя из контекста или request.state
@@ -112,7 +112,7 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
     return HTMLResponse(content=html_content)
 
 
-def _get_embedded_template(flow_id: str, base_url: str, branches: List[dict]) -> str:
+def _get_embedded_template(flow_id: str, base_url: str, branches: List[dict[str, Any]]) -> str:
     """Возвращает встроенный HTML шаблон если файл не найден."""
     branches_json = json.dumps(branches)
     return f"""<!DOCTYPE html>
@@ -137,4 +137,3 @@ def _get_embedded_template(flow_id: str, base_url: str, branches: List[dict]) ->
     <script src="/static/chat.js"></script>
 </body>
 </html>"""
-

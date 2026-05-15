@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -59,6 +59,6 @@ def external_ref_now(
     return ExternalRef(
         record_id=record_id,
         account_key=account_key,
-        last_seen_at=datetime.now(timezone.utc),
+        last_seen_at=datetime.now(UTC),
         raw_version=raw_version,
     )

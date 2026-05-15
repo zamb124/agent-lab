@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
 
 NOTE_ATTACHMENT_TEXT_MAX_CHARS = 100_000
 
@@ -50,10 +49,10 @@ def strip_auto_merged_attachment_blocks_from_note_description(description: str) 
 
 
 def merge_attachment_extracted_into_description(
-    current: Optional[str],
+    current: str | None,
     display_name: str,
     extracted: str,
-) -> Optional[str]:
+) -> str | None:
     safe_name = display_name.strip() if isinstance(display_name, str) else ""
     if not safe_name:
         safe_name = "file"

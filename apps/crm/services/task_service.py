@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, List, Literal, Optional
-
-from apps.crm.container import get_crm_container
+from datetime import datetime, timedelta, UTC
+from typing import TYPE_CHECKING, Literal
 from apps.crm.db.models import CRMTask
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.db.repositories.task_repository import TaskRepository
@@ -43,6 +41,7 @@ ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 STALE_CRM_TASK_INACTIVITY = timedelta(minutes=10)
 
 if TYPE_CHECKING:
+    from core.db.repositories.company_repository import CompanyRepository
     from core.files.file_repository import FileRepository
 
 KnowledgeImportMode = Literal["notes_only", "graph"]
@@ -67,11 +66,11 @@ class ActiveTaskExistsError(ValueError):
         self.dedup = dict(dedup) if dedup else {}
 
 def _normalize_import_file_ids(
-    source_file_id: Optional[str],
-    source_file_ids: Optional[List[str]],
-) -> List[str]:
+    source_file_id: str | None,
+    source_file_ids: list[str] | None,
+) -> list[str]:
     legacy = str(source_file_id).strip() if source_file_id else ""
-    from_list: List[str] = []
+    from_list: list[str] = []
     if source_file_ids:
         for x in source_file_ids:
             s = str(x).strip()
@@ -82,7 +81,7 @@ def _normalize_import_file_ids(
             raise ValueError("Нельзя одновременно передавать source_file_id и source_file_ids")
         return [legacy]
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for s in from_list:
         if s not in seen:
             seen.add(s)
@@ -95,12 +94,14 @@ class TaskService:
         task_repo: TaskRepository,
         entity_service: EntityService,
         relationship_repo: RelationshipRepository,
-        file_repository: "FileRepository",
+        file_repository: FileRepository,
+        company_repository: CompanyRepository,
     ) -> None:
         self._task_repo = task_repo
         self._entity_service = entity_service
         self._relationship_repo = relationship_repo
         self._file_repository = file_repository
+        self._company_repository = company_repository
 
     def _get_company_id(self) -> str:
         ctx = get_context()
@@ -115,7 +116,7 @@ class TaskService:
         return ctx.user.user_id
 
     @staticmethod
-    def _normalize_task_namespace(namespace: Optional[str]) -> str:
+    def _normalize_task_namespace(namespace: str | None) -> str:
         if namespace is None:
             return ALL_NAMESPACES_TASK_KEY
         normalized = namespace.strip()
@@ -124,13 +125,13 @@ class TaskService:
         return normalized
 
     @staticmethod
-    def _namespace_for_worker(task_namespace: str) -> Optional[str]:
+    def _namespace_for_worker(task_namespace: str) -> str | None:
         if task_namespace == ALL_NAMESPACES_TASK_KEY:
             return None
         return task_namespace
 
     @staticmethod
-    def _auth_token_from_context() -> Optional[str]:
+    def _auth_token_from_context() -> str | None:
         ctx = get_context()
         return ctx.auth_token if ctx else None
 
@@ -158,10 +159,10 @@ class TaskService:
         *,
         namespace: str,
         mode: KnowledgeImportMode,
-        source_file_id: Optional[str],
-        source_file_ids: Optional[List[str]],
-        source_text: Optional[str],
-        extract_entity_types: Optional[List[str]],
+        source_file_id: str | None,
+        source_file_ids: list[str] | None,
+        source_text: str | None,
+        extract_entity_types: list[str] | None,
         split_by_headings: bool,
         chunk_max_chars: int,
     ) -> CRMTask:
@@ -187,7 +188,7 @@ class TaskService:
         await self._assert_no_active_task("knowledge_import", {}, ns)
 
         task_id = str(uuid.uuid4())
-        sha: Optional[str] = None
+        sha: str | None = None
         if has_text:
             sha = hashlib.sha256(text_raw.encode("utf-8")).hexdigest()
             await store_pending_import_text(task_id, text_raw)
@@ -246,7 +247,7 @@ class TaskService:
                 status="failed",
                 stage="failed",
                 progress_pct=0,
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
                 error_message=str(exc),
             )
             if has_text:
@@ -259,13 +260,13 @@ class TaskService:
             status="running",
             stage="reading_source",
             progress_pct=10,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
         row.status = "running"
         row.stage = "reading_source"
         row.progress_pct = 10
-        row.started_at = datetime.now(timezone.utc)
+        row.started_at = datetime.now(UTC)
         row.taskiq_task_id = taskiq_id
         return row
 
@@ -326,7 +327,7 @@ class TaskService:
                 status="failed",
                 stage="failed",
                 progress_pct=0,
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
                 error_message=str(exc),
             )
             raise
@@ -337,13 +338,13 @@ class TaskService:
             status="running",
             stage="running",
             progress_pct=0,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
         row.status = "running"
         row.stage = "running"
         row.progress_pct = 0
-        row.started_at = datetime.now(timezone.utc)
+        row.started_at = datetime.now(UTC)
         row.taskiq_task_id = taskiq_id
         return row
 
@@ -420,7 +421,7 @@ class TaskService:
                 status="failed",
                 stage="failed",
                 error_message=str(exc),
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
             )
             raise
 
@@ -429,11 +430,11 @@ class TaskService:
             row.company_id,
             status="running",
             stage="pending",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
         row.status = "running"
-        row.started_at = datetime.now(timezone.utc)
+        row.started_at = datetime.now(UTC)
         row.taskiq_task_id = taskiq_id
         return row
 
@@ -469,14 +470,15 @@ class TaskService:
         from apps.crm_worker.tasks.draft_repair_tasks import repair_note_analysis_draft_task
 
         ctx = get_context()
-        if ctx is None:
+        if ctx is None or ctx.auth_token is None:
             raise ValueError("Для старта починки черновика нужен контекст запроса")
+        auth_token = ctx.auth_token
         try:
             task = await repair_note_analysis_draft_task.kiq(
                 note_id=note_id,
                 company_id=row.company_id,
                 namespace=namespace,
-                auth_token=ctx.auth_token,
+                auth_token=auth_token,
                 user_id=row.user_id,
                 interface_language=ctx.language.value,
                 task_id=task_id,
@@ -489,7 +491,7 @@ class TaskService:
                 status="failed",
                 stage="failed",
                 error_message=str(exc),
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
             )
             raise
 
@@ -498,12 +500,12 @@ class TaskService:
             row.company_id,
             status="running",
             stage="draft_repair",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
         row.status = "running"
         row.stage = "draft_repair"
-        row.started_at = datetime.now(timezone.utc)
+        row.started_at = datetime.now(UTC)
         row.taskiq_task_id = taskiq_id
         return row
 
@@ -550,14 +552,15 @@ class TaskService:
         )
 
         ctx = get_context()
-        if ctx is None:
+        if ctx is None or ctx.auth_token is None:
             raise ValueError("Для старта форматирования заметки нужен контекст запроса")
+        auth_token = ctx.auth_token
         try:
             task = await format_note_description_markdown_task.kiq(
                 note_id=note_id,
                 company_id=row.company_id,
                 namespace=ns,
-                auth_token=ctx.auth_token,
+                auth_token=auth_token,
                 user_id=row.user_id,
                 interface_language=ctx.language.value,
                 expected_updated_at_iso=expected_updated_at_iso,
@@ -571,7 +574,7 @@ class TaskService:
                 status="failed",
                 stage="failed",
                 error_message=str(exc),
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
             )
             raise
 
@@ -580,29 +583,29 @@ class TaskService:
             row.company_id,
             status="running",
             stage="format_markdown",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
         row.status = "running"
         row.stage = "format_markdown"
-        row.started_at = datetime.now(timezone.utc)
+        row.started_at = datetime.now(UTC)
         row.taskiq_task_id = taskiq_id
         return row
 
     # ── Common ────────────────────────────────────────────────────────────────
 
-    async def get_task(self, task_id: str) -> Optional[CRMTask]:
+    async def get_task(self, task_id: str) -> CRMTask | None:
         return await self._task_repo.get(task_id)
 
     async def list_tasks(
         self,
-        namespace: Optional[str],
+        namespace: str | None,
         *,
-        task_type: Optional[str] = None,
-        note_id: Optional[str] = None,
+        task_type: str | None = None,
+        note_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[CRMTask]:
+    ) -> list[CRMTask]:
         ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
         return await self._task_repo.list_for_namespace(
             ns, task_type=task_type, note_id=note_id, limit=limit, offset=offset
@@ -610,10 +613,10 @@ class TaskService:
 
     async def count_tasks(
         self,
-        namespace: Optional[str],
+        namespace: str | None,
         *,
-        task_type: Optional[str] = None,
-        note_id: Optional[str] = None,
+        task_type: str | None = None,
+        note_id: str | None = None,
     ) -> int:
         ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
         return await self._task_repo.count_for_namespace(
@@ -630,7 +633,7 @@ class TaskService:
             raise ValueError(f"Задача в статусе {row.status}, отмена недоступна")
 
         if row.cancel_requested and row.status in ("pending", "running"):
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             pct = int(row.progress_pct)
             await self._task_repo.patch_progress(
                 task_id,
@@ -660,20 +663,19 @@ class TaskService:
 
         Вызывается при старте процесса ``crm_worker`` (до reclaim Redis) и HTTP-сервиса ``crm``.
         """
-        cutoff = datetime.now(timezone.utc) - STALE_CRM_TASK_INACTIVITY
+        cutoff = datetime.now(UTC) - STALE_CRM_TASK_INACTIVITY
         cancel_rows = await self._task_repo.reconcile_cancel_requested_active_tasks()
         stale_rows = await self._task_repo.reconcile_stale_active_tasks_older_than(cutoff=cutoff)
         rows = cancel_rows + stale_rows
         if not rows:
             return 0
-        container = get_crm_container()
         for row in rows:
             if row.task_type in ("note_analyze", "note_analysis_draft_repair") and row.status == "failed":
                 note_payload = row.data if isinstance(row.data, dict) else {}
                 raw_note = note_payload.get("note_id")
                 note_id = raw_note if isinstance(raw_note, str) and raw_note else None
                 if note_id:
-                    company_row = await container.company_repository.get(row.company_id)
+                    company_row = await self._company_repository.get(row.company_id)
                     if company_row is None:
                         logger.warning(
                             "crm.reconcile_stale_task.company_missing task_id=%s company_id=%s",
@@ -729,10 +731,10 @@ class TaskService:
             task_id,
             row.company_id,
             status="rolled_back",
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
         row.status = "rolled_back"
-        row.completed_at = datetime.now(timezone.utc)
+        row.completed_at = datetime.now(UTC)
         logger.info("task rolled_back task_id=%s", task_id)
         return row
 
@@ -794,7 +796,7 @@ class TaskService:
         rel_n = len(row.data.get("created_relationship_ids") or [])
         if ent_n == 0 and rel_n == 0:
             raise ValueError("Нет созданных сущностей или связей для подтверждения просмотра")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await self._task_repo.patch_progress(
             task_id,
             row.company_id,
@@ -808,7 +810,7 @@ class TaskService:
     async def start_daily_summary(
         self,
         *,
-        namespace: Optional[str],
+        namespace: str | None,
         date_str: str,
         reason: str = "manual",
     ) -> CRMTask:
@@ -850,25 +852,25 @@ class TaskService:
                 task_id, row.company_id,
                 status="failed", stage="failed",
                 error_message=str(exc),
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
             )
             raise
 
         await self._task_repo.patch_progress(
             task_id, row.company_id,
             status="running", stage="summarizing_day", progress_pct=10,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
         row.status = "running"
-        row.started_at = datetime.now(timezone.utc)
+        row.started_at = datetime.now(UTC)
         row.taskiq_task_id = taskiq_id
         return row
 
     async def start_period_summary(
         self,
         *,
-        namespace: Optional[str],
+        namespace: str | None,
         date_from: str,
         date_to: str,
         reason: str = "manual",
@@ -914,18 +916,18 @@ class TaskService:
                 task_id, row.company_id,
                 status="failed", stage="failed",
                 error_message=str(exc),
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
             )
             raise
 
         await self._task_repo.patch_progress(
             task_id, row.company_id,
             status="running", stage="summarizing_day", progress_pct=10,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             taskiq_task_id=taskiq_id,
         )
         row.status = "running"
-        row.started_at = datetime.now(timezone.utc)
+        row.started_at = datetime.now(UTC)
         row.taskiq_task_id = taskiq_id
         return row
 

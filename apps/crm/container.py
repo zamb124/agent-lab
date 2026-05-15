@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 CRMContainer - DI контейнер для CRM сервиса.
 
@@ -5,10 +7,40 @@ CRMContainer - DI контейнер для CRM сервиса.
 Добавляет CRM-специфичные репозитории и сервисы.
 """
 
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from core.container import BaseContainer, lazy
 from core.logging import get_logger
+
+if TYPE_CHECKING:
+    from apps.crm.db.base import CRMDatabase
+    from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
+    from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
+    from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
+    from apps.crm.db.repositories.entity_repository import EntityRepository
+    from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
+    from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
+    from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+    from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
+    from apps.crm.db.repositories.suggest_repository import SuggestRepository
+    from apps.crm.db.repositories.task_repository import TaskRepository
+    from apps.crm.integrations.registry import IntegrationRegistry
+    from apps.crm.services.access_control_service import AccessControlService
+    from apps.crm.services.access_grant_service import AccessGrantService
+    from apps.crm.services.access_request_service import AccessRequestService
+    from apps.crm.services.attachment_service import AttachmentService
+    from apps.crm.services.company_init_service import CompanyInitService
+    from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
+    from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
+    from apps.crm.services.entity_service import EntityService
+    from apps.crm.services.graph_service import GraphService
+    from apps.crm.services.integration_auto_sync_service import IntegrationAutoSyncService
+    from apps.crm.services.lara_workspace_service import LaraWorkspaceService
+    from apps.crm.services.namespace_template_service import NamespaceTemplateService
+    from apps.crm.services.note_processing_service import NoteProcessingService
+    from apps.crm.services.suggest_service import SuggestService
+    from apps.crm.services.task_service import TaskService
+    from apps.crm.services.user_person_service import UserPersonService
 
 logger = get_logger(__name__)
 
@@ -30,14 +62,14 @@ class CRMContainer(BaseContainer):
         notes = await container.note_repository.get_by_date(company_id, date.today())
     """
 
-    def __init__(self, db_url: str, shared_db_url: Optional[str] = None):
+    def __init__(self, db_url: str, shared_db_url: str | None = None):
         super().__init__(db_url=db_url, shared_db_url=shared_db_url)
         self._crm_db_url = db_url
 
     # === CRM Database ===
 
     @lazy
-    def crm_db(self):
+    def crm_db(self) -> CRMDatabase:
         from apps.crm.db.base import CRMDatabase
 
         return CRMDatabase(self._crm_db_url)
@@ -45,25 +77,25 @@ class CRMContainer(BaseContainer):
     # === Репозитории (crm_db - реляционные) ===
 
     @lazy
-    def entity_type_repository(self):
+    def entity_type_repository(self) -> EntityTypeRepository:
         from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 
         return EntityTypeRepository(db=self.crm_db)
 
     @lazy
-    def relationship_type_repository(self):
+    def relationship_type_repository(self) -> RelationshipTypeRepository:
         from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
 
         return RelationshipTypeRepository(db=self.crm_db)
 
     @lazy
-    def relationship_repository(self):
+    def relationship_repository(self) -> RelationshipRepository:
         from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 
         return RelationshipRepository(db=self.crm_db)
 
     @lazy
-    def namespace_template_repository(self):
+    def namespace_template_repository(self) -> NamespaceTemplateRepository:
         from apps.crm.db.repositories.namespace_template_repository import (
             NamespaceTemplateRepository,
         )
@@ -71,31 +103,31 @@ class CRMContainer(BaseContainer):
         return NamespaceTemplateRepository(db=self.crm_db)
 
     @lazy
-    def entity_repository(self):
+    def entity_repository(self) -> EntityRepository:
         from apps.crm.db.repositories.entity_repository import EntityRepository
 
         return EntityRepository(db=self.crm_db, rag_repository=self.rag_repository)
 
     @lazy
-    def company_mapping_repository(self):
+    def company_mapping_repository(self) -> CompanyMappingRepository:
         from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
 
         return CompanyMappingRepository(db=self.crm_db)
 
     @lazy
-    def access_request_repository(self):
+    def access_request_repository(self) -> AccessRequestRepository:
         from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 
         return AccessRequestRepository(db=self.crm_db)
 
     @lazy
-    def access_grant_repository(self):
+    def access_grant_repository(self) -> AccessGrantRepository:
         from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 
         return AccessGrantRepository(db=self.crm_db)
 
     @lazy
-    def suggest_repository(self):
+    def suggest_repository(self) -> SuggestRepository:
         from apps.crm.db.repositories.suggest_repository import SuggestRepository
 
         return SuggestRepository(db=self.crm_db)
@@ -103,7 +135,7 @@ class CRMContainer(BaseContainer):
     # === Сервисы ===
 
     @lazy
-    def attachment_service(self):
+    def attachment_service(self) -> AttachmentService:
         from apps.crm.services.attachment_service import AttachmentService
 
         return AttachmentService(
@@ -111,10 +143,11 @@ class CRMContainer(BaseContainer):
             access_grant_repository=self.access_grant_repository,
             company_repository=self.company_repository,
             file_repository=self.file_repository,
+            note_markdown_format_scheduler=self.schedule_note_markdown_format,
         )
 
     @lazy
-    def daily_summary_cache_service(self):
+    def daily_summary_cache_service(self) -> DailySummaryCacheService:
         from apps.crm.services.daily_summary_cache_service import DailySummaryCacheService
         from core.config import get_settings
 
@@ -122,13 +155,13 @@ class CRMContainer(BaseContainer):
         return DailySummaryCacheService(redis_url=settings.database.redis_url)
 
     @lazy
-    def daily_summary_artifact_service(self):
+    def daily_summary_artifact_service(self) -> DailySummaryArtifactService:
         from apps.crm.services.daily_summary_artifact_service import DailySummaryArtifactService
 
         return DailySummaryArtifactService()
 
     @lazy
-    def company_init_service(self):
+    def company_init_service(self) -> CompanyInitService:
         from apps.crm.services.company_init_service import CompanyInitService
 
         return CompanyInitService(
@@ -142,7 +175,7 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def namespace_template_service(self):
+    def namespace_template_service(self) -> NamespaceTemplateService:
         from apps.crm.services.namespace_template_service import NamespaceTemplateService
 
         return NamespaceTemplateService(
@@ -154,7 +187,7 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def user_person_service(self):
+    def user_person_service(self) -> UserPersonService:
         from apps.crm.services.user_person_service import UserPersonService
 
         return UserPersonService(
@@ -165,7 +198,7 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def suggest_service(self):
+    def suggest_service(self) -> SuggestService:
         from apps.crm.services.suggest_service import SuggestService
 
         return SuggestService(
@@ -177,7 +210,7 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def entity_service(self):
+    def entity_service(self) -> EntityService:
         from apps.crm.services.entity_service import EntityService
         from core.clients.a2a_client import A2AClient
 
@@ -198,10 +231,11 @@ class CRMContainer(BaseContainer):
             company_repo=self.company_repository,
             access_control=self.access_control_service,
             task_repository=self.task_repository,
+            note_markdown_format_scheduler=self.schedule_note_markdown_format,
         )
 
     @lazy
-    def access_control_service(self):
+    def access_control_service(self) -> AccessControlService:
         from apps.crm.services.access_control_service import AccessControlService
 
         return AccessControlService(
@@ -209,7 +243,7 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def access_grant_service(self):
+    def access_grant_service(self) -> AccessGrantService:
         from apps.crm.services.access_grant_service import AccessGrantService
 
         return AccessGrantService(
@@ -217,7 +251,7 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def access_request_service(self):
+    def access_request_service(self) -> AccessRequestService:
         from apps.crm.services.access_request_service import AccessRequestService
 
         return AccessRequestService(
@@ -227,7 +261,7 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def graph_service(self):
+    def graph_service(self) -> GraphService:
         from apps.crm.services.graph_service import GraphService
 
         return GraphService(
@@ -238,19 +272,19 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def note_processing_service(self):
+    def note_processing_service(self) -> NoteProcessingService:
         from apps.crm.services.note_processing_service import NoteProcessingService
 
         return NoteProcessingService(entity_service=self.entity_service)
 
     @lazy
-    def task_repository(self):
+    def task_repository(self) -> TaskRepository:
         from apps.crm.db.repositories.task_repository import TaskRepository
 
         return TaskRepository(db=self.crm_db)
 
     @lazy
-    def task_service(self):
+    def task_service(self) -> TaskService:
         from apps.crm.services.task_service import TaskService
 
         return TaskService(
@@ -258,10 +292,32 @@ class CRMContainer(BaseContainer):
             entity_service=self.entity_service,
             relationship_repo=self.relationship_repository,
             file_repository=self.file_repository,
+            company_repository=self.company_repository,
+        )
+
+    async def schedule_note_markdown_format(
+        self,
+        *,
+        note_id: str,
+        company_id: str,
+        namespace: str,
+        expected_updated_at_iso: str,
+    ) -> bool:
+        from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
+
+        return await schedule_note_markdown_format(
+            task_service=self.task_service,
+            entity_repository=self.entity_repository,
+            company_repository=self.company_repository,
+            access_grant_repository=self.access_grant_repository,
+            note_id=note_id,
+            company_id=company_id,
+            namespace=namespace,
+            expected_updated_at_iso=expected_updated_at_iso,
         )
 
     @lazy
-    def lara_workspace_service(self):
+    def lara_workspace_service(self) -> LaraWorkspaceService:
         from apps.crm.services.lara_workspace_service import LaraWorkspaceService
 
         return LaraWorkspaceService(
@@ -270,13 +326,28 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def integration_registry(self):
+    def integration_registry(self) -> IntegrationRegistry:
+        from apps.crm.integrations.amocrm.connector import AmoCRMConnector
         from apps.crm.integrations.registry import IntegrationRegistry
 
-        return IntegrationRegistry(self)
+        return IntegrationRegistry(
+            [
+                AmoCRMConnector(
+                    oauth_service=self.oauth_service,
+                    entity_repository=self.entity_repository,
+                    entity_type_repository=self.entity_type_repository,
+                    relationship_repository=self.relationship_repository,
+                    entity_service=self.entity_service,
+                    namespace_repository=self.namespace_repository,
+                    task_service=self.task_service,
+                    integration_external_author=self.integration_external_author_service,
+                    namespace_template_service=self.namespace_template_service,
+                )
+            ]
+        )
 
     @lazy
-    def integration_auto_sync_service(self):
+    def integration_auto_sync_service(self) -> IntegrationAutoSyncService:
         from apps.crm.services.integration_auto_sync_service import IntegrationAutoSyncService
 
         return IntegrationAutoSyncService(
@@ -289,7 +360,7 @@ class CRMContainer(BaseContainer):
 
 # === Глобальный контейнер ===
 
-_crm_container: Optional[CRMContainer] = None
+_crm_container: CRMContainer | None = None
 
 
 def get_crm_container() -> CRMContainer:

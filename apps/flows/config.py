@@ -4,14 +4,14 @@
 Расширяет BaseSettings полями, специфичными для flows и runtime.
 """
 
-from typing import Dict, List, Optional, Self
+from typing import Any, Dict, List, Optional, Self
 
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
 from core.config.models import LLMConfig, S3Config
-from core.config.models import PushConfig as CorePushConfig
+from core.config.models import PushConfig
 
 FLOWS_PUBLIC_API_PREFIX = "/flows/api/v1"
 
@@ -41,21 +41,13 @@ class ExternalFlowsConfig(BaseModel):
     )
 
 
-class PushConfig(CorePushConfig):
+def _default_push_config() -> PushConfig:
     """Push: VAPID и APNs; дефолты VAPID для локальной разработки flows."""
-
-    enabled: bool = Field(default=True, description="Включить push уведомления")
-    vapid_public_key: str = Field(
-        default="BJBAqLwOEE7A7gIDCXW7vzmEwh23-ug6-1qpiuotzwROEDX_ZiVUk2BO3_eINDqXxBvxG2uRfukXVVBse167BAM",
-        description="VAPID публичный ключ (URL-safe Base64)",
-    )
-    vapid_private_key: str = Field(
-        default="n6oh3YpjV9APhmtdZ-p18P4YGLtBRLATLbprkXWAldA",
-        description="VAPID приватный ключ (URL-safe Base64)",
-    )
-    vapid_email: str = Field(
-        default="admin@platform.local",
-        description="Контакт для VAPID sub claim (без префикса mailto:)",
+    return PushConfig(
+        enabled=True,
+        vapid_public_key="BJBAqLwOEE7A7gIDCXW7vzmEwh23-ug6-1qpiuotzwROEDX_ZiVUk2BO3_eINDqXxBvxG2uRfukXVVBse167BAM",
+        vapid_private_key="n6oh3YpjV9APhmtdZ-p18P4YGLtBRLATLbprkXWAldA",
+        vapid_email="admin@platform.local",
     )
 
 
@@ -67,16 +59,16 @@ class MockConfig(BaseModel):
         default_factory=lambda: ["admin", "developers"],
         description="Группы с правом использования mock через request metadata"
     )
-    llm: Optional[dict] = Field(
+    llm: Optional[dict[str, Any]] = Field(
         default=None, description="Mock конфигурация для LLM (default_response или очередь)"
     )
-    tools: dict = Field(
+    tools: dict[str, Any] = Field(
         default_factory=dict, description="Mock ответы для tools по имени"
     )
-    flows: dict = Field(
+    flows: dict[str, Any] = Field(
         default_factory=dict, description="Mock ответы для flows по ID"
     )
-    nodes: dict = Field(
+    nodes: dict[str, Any] = Field(
         default_factory=dict, description="Mock данные для nodes по ID"
     )
 
@@ -96,7 +88,7 @@ class FlowSettings(BaseSettings):
     s3: S3Config = Field(default_factory=S3Config)
     external_flows: ExternalFlowsConfig = Field(default_factory=ExternalFlowsConfig)
     mock: MockConfig = Field(default_factory=MockConfig)
-    push: PushConfig = Field(default_factory=PushConfig)
+    push: PushConfig = Field(default_factory=_default_push_config)
 
     cors_allow_origins: List[str] = Field(
         default_factory=list,
@@ -228,5 +220,4 @@ class _SettingsProxy:
 
 
 settings = _SettingsProxy()
-
 

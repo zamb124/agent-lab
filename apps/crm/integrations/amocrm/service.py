@@ -7,8 +7,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import date, datetime, timezone
-from typing import Any, Optional
+from datetime import date, datetime, UTC
+from typing import Any
 
 from apps.crm.constants_graph import BELONGS_TO_RELATIONSHIP_TYPE
 from apps.crm.db.models import CRMEntity, Relationship
@@ -315,21 +315,21 @@ class AmoCRMIntegrationService:
         Без распознанной даты ежедневник (фильтр по note_date) не покажет заметку.
         """
         if isinstance(created, (int, float)):
-            return datetime.fromtimestamp(int(created), tz=timezone.utc).date()
+            return datetime.fromtimestamp(int(created), tz=UTC).date()
         if isinstance(created, str):
             s = created.strip()
             if not s:
                 return fallback
             if s.isdigit():
-                return datetime.fromtimestamp(int(s), tz=timezone.utc).date()
+                return datetime.fromtimestamp(int(s), tz=UTC).date()
             normalized = s.replace("Z", "+00:00") if s.endswith("Z") else s
             try:
                 dt = datetime.fromisoformat(normalized)
             except ValueError:
                 return fallback
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc).date()
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(UTC).date()
         return fallback
 
     async def _upsert_amocrm_note_if_text(
@@ -359,7 +359,7 @@ class AmoCRMIntegrationService:
         parent_ts = parent_entity.created_at
         if parent_ts is None:
             raise ValueError("parent_entity.created_at обязателен для импорта примечания AmoCRM")
-        fallback_date = parent_ts.astimezone(timezone.utc).date()
+        fallback_date = parent_ts.astimezone(UTC).date()
         note_date = self._note_date_from_amo_created_at(
             raw.get("created_at"),
             fallback=fallback_date,
@@ -460,7 +460,7 @@ class AmoCRMIntegrationService:
         iv = int(ts)
         if iv <= 0:
             return None
-        return datetime.fromtimestamp(iv, tz=timezone.utc).date()
+        return datetime.fromtimestamp(iv, tz=UTC).date()
 
     async def _import_tasks(
         self,
@@ -472,7 +472,7 @@ class AmoCRMIntegrationService:
         account_key: str,
         stats: dict[str, int],
         sync_user_id: str,
-        on_batch: Optional[Callable[[int], Awaitable[None]]] = None,
+        on_batch: Callable[[int], Awaitable[None]] | None = None,
     ) -> None:
         url: str | None = f"{base}/api/v4/tasks?limit=250"
         count = 0
@@ -612,7 +612,7 @@ class AmoCRMIntegrationService:
         access_token: str,
         account_key: str,
         map_item: Any,
-        on_batch: Optional[Callable[[int], Awaitable[None]]] = None,
+        on_batch: Callable[[int], Awaitable[None]] | None = None,
     ) -> int:
         count = 0
         url: str | None = first_url
@@ -657,7 +657,7 @@ class AmoCRMIntegrationService:
         self,
         namespace_name: str,
         *,
-        on_progress: Optional[AmoProgressFn] = None,
+        on_progress: AmoProgressFn | None = None,
     ) -> dict[str, int]:
         ctx = get_context()
         if ctx is None or ctx.user is None or ctx.active_company is None:
@@ -1016,7 +1016,7 @@ class AmoCRMIntegrationService:
         self,
         namespace_name: str,
         *,
-        on_progress: Optional[AmoProgressFn] = None,
+        on_progress: AmoProgressFn | None = None,
     ) -> dict[str, int]:
         """
         Подмешивает в optional_fields канонических типов сущностей (lead, contact, organization) поля amo_cf_<field_id> по справочнику custom_fields.

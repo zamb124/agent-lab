@@ -170,7 +170,7 @@ class MCPClient:
             MCPClientError: При ошибке вызова
         """
         request_id = self._next_request_id()
-        payload = {
+        payload: dict[str, Any] = {
             "jsonrpc": "2.0",
             "id": request_id,
             "method": method,

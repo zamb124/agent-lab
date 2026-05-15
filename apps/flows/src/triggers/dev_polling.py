@@ -138,7 +138,7 @@ class TelegramDevPolling:
     def __init__(self):
         self.bots: Dict[str, TelegramPollingBot] = {}
         self.running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: Optional[asyncio.Task[None]] = None
         self._scan_interval = 10  # секунд между сканированиями
 
     async def _get_telegram_triggers(self) -> List[Dict[str, Any]]:
@@ -154,7 +154,7 @@ class TelegramDevPolling:
         subdomains = await self._get_all_subdomains(container)
         logger.info(f"Scanning subdomains: {subdomains}")
 
-        dev_user = User(user_id="system", email="system@dev.local", name="System")
+        dev_user = User(user_id="system", name="System")
 
         for subdomain in subdomains:
             logger.info(f"Processing subdomain: {subdomain}")
@@ -376,7 +376,7 @@ class TelegramDevPolling:
 
         logger.info("Telegram Dev Polling stopped")
 
-    def start(self) -> asyncio.Task:
+    def start(self) -> asyncio.Task[None]:
         """Запускает polling в background."""
         self._task = asyncio.create_task(self.run())
         return self._task

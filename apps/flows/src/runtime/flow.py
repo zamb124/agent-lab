@@ -21,7 +21,7 @@ import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
-from apps.flows.src.container import get_container
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.runtime.exceptions import (
     BreakpointInterrupt,
@@ -31,6 +31,7 @@ from apps.flows.src.runtime.exceptions import (
 from apps.flows.src.state.cancellation import check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
+from apps.flows.src.streaming.memory import InMemoryEmitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from core.errors import (
     FlowInfiniteLoopError,
@@ -50,7 +51,6 @@ from .nodes import BaseNode, create_node
 logger = get_logger(__name__)
 
 MAX_FUNCTION_CALLS = 5
-
 
 class Flow:
     """
@@ -77,6 +77,7 @@ class Flow:
         tags: Optional[List[str]] = None,
         variables: Optional[Dict[str, Any]] = None,
         config: Optional[Dict[str, Any]] = None,
+        container: FlowRuntimeContainer | None = None,
     ):
         self.flow_id = flow_id
         self.name = name
@@ -86,6 +87,11 @@ class Flow:
         self.tags = tags or []
         self.variables = variables or {}
         self.config = config or {}  # Полный inline FlowConfig
+        self.container = container
+        if self.container is not None:
+            for node in nodes.values():
+                if node.container is None:
+                    node.container = self.container
 
         # Нормализуем edges в единый формат (список словарей)
         self.edges = self._normalize_edges(edges)
@@ -100,11 +106,11 @@ class Flow:
 
         self._join_required = self._build_join_required_predecessors()
 
-    async def _emit_pending_ui_events(self, emitter: Emitter, state: ExecutionState) -> None:
+    async def _emit_pending_ui_events(self, emitter: Emitter | InMemoryEmitter, state: ExecutionState) -> None:
         await emit_pending_ui_events(emitter=emitter, state=state)
 
     async def _emit_edge_condition_error_artifact(
-        self, emitter: Emitter, ece: EdgeConditionError
+        self, emitter: Emitter | InMemoryEmitter, ece: EdgeConditionError
     ) -> None:
         await emitter.emit_edge_error(
             ece.edge_index,
@@ -279,8 +285,11 @@ class Flow:
         iterations = 0
         max_graph_iterations = get_graph_max_iterations()
 
-        container = get_container()
-        emitter = Emitter(container.redis_client, state)
+        emitter: Emitter | InMemoryEmitter
+        if self.container is None:
+            emitter = InMemoryEmitter(state)
+        else:
+            emitter = Emitter(self.container.redis_client, state)
 
         trace_ctx = None
         if is_tracing_enabled():
@@ -323,7 +332,7 @@ class Flow:
                     async with tracer.node_span(node_id, node_type, trace_ctx):
                         await emitter.emit_node_start(node_id, node_type)
                         try:
-                            result_state = await self.nodes[node_id].run.kiq(run_state)
+                            result_state = await self.nodes[node_id]._run_internal(run_state)
                         except (FlowInterrupt, BreakpointInterrupt):
                             raise
                         except Exception as exc:
@@ -573,7 +582,7 @@ class Flow:
         state: ExecutionState,
         node_id: str,
         node_type: str,
-        emitter: Emitter,
+        emitter: Emitter | InMemoryEmitter,
     ) -> bool:
         """
         Проверяет breakpoint и останавливает выполнение если активен.
@@ -805,6 +814,8 @@ class Flow:
         cls,
         config: Dict[str, Any],
         variables: Optional[Dict[str, Any]] = None,
+        *,
+        container: FlowRuntimeContainer | None = None,
     ) -> "Flow":
         """
         Создаёт flow из FlowConfig.
@@ -822,7 +833,7 @@ class Flow:
         nodes = {}
         nodes_config = config.get("nodes", {})
         for node_id, node_config in nodes_config.items():
-            nodes[node_id] = await create_node(node_id, node_config)
+            nodes[node_id] = await create_node(node_id, node_config, container=container)
 
         # variables: параметр > config["resolved_variables"] > config["variables"]
         resolved_variables = (
@@ -831,8 +842,12 @@ class Flow:
             or config.get("variables", {})
         )
 
+        raw_flow_id = flow_id
+        if not isinstance(raw_flow_id, str) or not raw_flow_id.strip():
+            raise ValueError("Flow.from_config requires non-empty flow_id")
+
         return cls(
-            flow_id=flow_id,
+            flow_id=raw_flow_id,
             name=config.get("name", ""),
             entry=config.get("entry", "main"),
             nodes=nodes,
@@ -841,4 +856,5 @@ class Flow:
             tags=config.get("tags", []),
             variables=resolved_variables,
             config=config,
+            container=container,
         )

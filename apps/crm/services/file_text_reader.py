@@ -5,9 +5,10 @@
 from __future__ import annotations
 
 from core.files.reader.service import FileReader, _read_stored_file_by_id
+from core.files.reader.models import ReadPage
 
 
-def _join_pages(pages: list) -> str:
+def _join_pages(pages: list[ReadPage]) -> str:
     parts: list[str] = []
     for page in pages:
         chunk = (page.text or "").strip()

@@ -43,9 +43,9 @@ if TYPE_CHECKING:
 
 from apps.flows.config import get_settings  # noqa: E402
 from apps.flows.src.clients.external_api_client import ExternalAPIClient  # noqa: E402
-from apps.flows.src.container import get_container  # noqa: E402
+from apps.flows.src.container_contracts import FlowRuntimeContainer  # noqa: E402
 from apps.flows.src.mock import get_mock_for_tool  # noqa: E402
-from apps.flows.src.models.external_api import ExternalAPIConfig  # noqa: E402
+from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod  # noqa: E402
 from core.auth import permission_checker  # noqa: E402
 from core.logging import get_logger  # noqa: E402
 
@@ -306,6 +306,7 @@ class CodeTool(BaseTool):
         tags: Optional[List[str]] = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
         resources: Optional[Dict[str, Any]] = None,
+        container: FlowRuntimeContainer | None = None,
     ):
         self.name = tool_id
         self.description = description or f"Code tool: {tool_id}"
@@ -314,6 +315,7 @@ class CodeTool(BaseTool):
         self.react_role = react_role
         self._code = code
         self._resources_config = resources or {}
+        self.container = container
 
         if parameters_schema is not None:
             if not isinstance(parameters_schema, dict):
@@ -368,7 +370,10 @@ class CodeTool(BaseTool):
         # Резолвим resources из конфига tool
         resources = await self._resolve_resources(state)
 
-        SafeEval = get_container().safe_eval_class
+        container = self.container
+        if container is None:
+            raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to execute inline code")
+        SafeEval = container.safe_eval_class
         evaluator = SafeEval(variables=variables, resources=resources)
 
         result = await evaluator.execute_tool(self._code, full_args, state)
@@ -382,8 +387,12 @@ class CodeTool(BaseTool):
 
         result = dict(args)
         properties = self._parameters.get("properties", {})
+        if not isinstance(properties, dict):
+            return result
 
         for prop_name, prop_schema in properties.items():
+            if not isinstance(prop_schema, dict):
+                continue
             if prop_name not in result and "default" in prop_schema:
                 result[prop_name] = prop_schema["default"]
 
@@ -395,7 +404,9 @@ class CodeTool(BaseTool):
 
         Единообразно с нодами — иерархия flow > skill > tool.
         """
-        container = get_container()
+        container = self.container
+        if container is None:
+            raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to resolve resources")
 
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
@@ -465,7 +476,7 @@ class ExternalAPITool(BaseTool):
             name=self.name,
             description=self.description,
             url=self._url,
-            method=self._method,
+            method=HTTPMethod(self._method),
             headers=self._headers,
             body_template=self._body_template,
             timeout=self._timeout,

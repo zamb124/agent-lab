@@ -141,6 +141,8 @@ class FlowDiscoveryService:
         ext_cfg = await self._repository.get(flow_id)
         if ext_cfg is None or ext_cfg.type != FlowType.EXTERNAL:
             return False
+        if ext_cfg.url is None:
+            return False
 
         try:
             card_payload = await self._fetch_agent_card(ext_cfg.url, ext_cfg.headers)

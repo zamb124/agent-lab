@@ -6,7 +6,6 @@ Shared color palette for CRM entity types.
 Синхронизирована с core/frontend/static/lib/utils/color-palette.js.
 """
 
-from typing import Set
 
 ENTITY_COLOR_PALETTE = [
     '#a2affb',
@@ -26,7 +25,7 @@ ENTITY_COLOR_PALETTE = [
 ]
 
 
-def assign_color_from_palette(used_colors: Set[str]) -> str:
+def assign_color_from_palette(used_colors: set[str]) -> str:
     """Назначает первый свободный цвет из палитры, либо первый если все заняты."""
     normalized_used = {color.strip().lower() for color in used_colors if isinstance(color, str)}
     for palette_color in ENTITY_COLOR_PALETTE:

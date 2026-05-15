@@ -45,7 +45,7 @@ class SafeEval:
     def _build_namespace(self) -> Dict[str, Any]:
         return self._runner.namespace_builder.build()
 
-    def _compile(self, code: str, func_name: str, auto_find: bool = True) -> Callable:
+    def _compile(self, code: str, func_name: str, auto_find: bool = True) -> Callable[..., Any]:
         return self._runner.compiler.compile(code, func_name, auto_find=auto_find)
 
     async def execute_node(self, code: str, state: "ExecutionState") -> Any:
@@ -66,7 +66,7 @@ def compile_function(
     base_tool_class: Optional[type] = None,
     *,
     strip_platform_imports: bool = True,
-) -> Callable:
+) -> Callable[..., Any]:
     """Компилирует код и возвращает функцию."""
     namespace_builder = PythonNamespaceBuilder(
         context=context,

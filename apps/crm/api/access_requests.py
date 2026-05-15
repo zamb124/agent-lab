@@ -5,7 +5,6 @@ User Story: Запрос доступа к чужим entities с указани
 """
 
 import asyncio
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -90,7 +89,7 @@ async def update_access_request(
 @router.get("", response_model=OffsetPage[AccessRequestResponse])
 async def list_pending_requests(
     container: ContainerDep,
-    status: Optional[str] = Query(None),
+    status: str | None = Query(None),
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[AccessRequestResponse]:

@@ -6,14 +6,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 from core.models.identity_models import BoardStage, NamespaceCRMSettings, TaskBoardPreset
 
 TASK_ENTITY_TYPE = "task"
 
 
-def task_board_key(entity_type: str, entity_subtype: Optional[str]) -> str:
+def task_board_key(entity_type: str, entity_subtype: str | None) -> str:
     et = (entity_type or "").strip()
     if et != TASK_ENTITY_TYPE:
         raise ValueError(f"task_board_key: ожидался entity_type={TASK_ENTITY_TYPE!r}, получено {et!r}")

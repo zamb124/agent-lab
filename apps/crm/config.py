@@ -4,7 +4,6 @@
 Расширяет BaseSettings добавляя специфичные для CRM поля.
 """
 
-from typing import Optional
 
 from pydantic import Field
 
@@ -100,7 +99,7 @@ class CRMSettings(BaseSettings):
     )
 
 
-_crm_settings: Optional[CRMSettings] = None
+_crm_settings: CRMSettings | None = None
 
 
 def get_crm_settings() -> CRMSettings:

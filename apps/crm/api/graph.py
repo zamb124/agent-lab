@@ -7,7 +7,6 @@ Endpoints:
 """
 
 from datetime import datetime
-from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -23,12 +22,12 @@ router = APIRouter(prefix="/entities", tags=["Graph"])
 
 
 class OverviewGraphRequest(BaseModel):
-    entity_ids: List[str] = Field(description="Список seed entity ID")
+    entity_ids: list[str] = Field(description="Список seed entity ID")
     max_depth: int = Field(default=3, ge=1, le=5)
-    relationship_types: Optional[str] = Field(default=None, description="Comma-separated типы связей")
-    created_at_from: Optional[datetime] = None
-    created_at_to: Optional[datetime] = None
-    namespace: Optional[str] = Field(
+    relationship_types: str | None = Field(default=None, description="Comma-separated типы связей")
+    created_at_from: datetime | None = None
+    created_at_to: datetime | None = None
+    namespace: str | None = Field(
         default=None,
         description=(
             "Namespace пространства данных. При непустом значении используется и для "
@@ -84,10 +83,10 @@ async def get_influence_graph(
     entity_id: str,
     container: ContainerDep,
     max_depth: int = Query(3, ge=1, le=5, description="Максимальная глубина обхода"),
-    relationship_types: Optional[str] = Query(None, description="Comma-separated типы связей"),
-    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    namespace: Optional[str] = Query(
+    relationship_types: str | None = Query(None, description="Comma-separated типы связей"),
+    created_at_from: datetime | None = Query(None, description="Фильтр created_at >= value"),
+    created_at_to: datetime | None = Query(None, description="Фильтр created_at <= value"),
+    namespace: str | None = Query(
         None,
         description=(
             "Namespace пространства данных. При непустом значении используется и для "
@@ -154,10 +153,10 @@ async def get_related_entities(
     entity_id: str,
     container: ContainerDep,
     direction: str = Query("both", pattern="^(incoming|outgoing|both)$"),
-    relationship_type: Optional[str] = Query(None),
-    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    namespace: Optional[str] = Query(
+    relationship_type: str | None = Query(None),
+    created_at_from: datetime | None = Query(None, description="Фильтр created_at >= value"),
+    created_at_to: datetime | None = Query(None, description="Фильтр created_at <= value"),
+    namespace: str | None = Query(
         None,
         description=(
             "Namespace пространства данных. При непустом значении используется и для "

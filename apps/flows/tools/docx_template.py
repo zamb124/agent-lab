@@ -11,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from apps.flows.src.tools import tool
 from core.files import DocxTemplater
 from core.files.models import FileResponse
+from core.state import ExecutionState
+
+JsonDict = dict[str, Any]
 
 _FILL_DOCX_DESCRIPTION = """
 Заполняет шаблон Word (.docx) с плейсхолдерами Jinja2 (docxtpl: {{ var }}, вложенные {{ a.b }}, {% if %}…{% else %}…{% endif %}, {% for x in items %}…{% endfor %}, фильтры {{ name|upper }} и т.д.).
@@ -40,7 +43,7 @@ _FILL_DOCX_DESCRIPTION = """
 """.strip()
 
 
-def _fill_docx_mock(args: dict, state: Any = None) -> dict:
+def _fill_docx_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {
         "success": True,
         "file_id": "file_mockdocx01",
@@ -108,8 +111,9 @@ async def fill_docx_template(
     output_original_name: str,
     file_name: Optional[str] = None,
     strict: bool = False,
-    state: Optional[dict] = None,
-) -> dict:
+    *,
+    state: ExecutionState,
+) -> JsonDict:
     def _normalize_file_name(value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
@@ -118,7 +122,7 @@ async def fill_docx_template(
             return None
         return normalized.strip("`'\"")
 
-    def _pick_file(entries, name):
+    def _pick_file(entries: list[JsonDict], name: Optional[str]) -> Optional[JsonDict]:
         if not entries:
             return None
         normalized_name = _normalize_file_name(name)
@@ -133,8 +137,7 @@ async def fill_docx_template(
                 return f
         return None
 
-    state = state or {}
-    files = state.get("files", [])
+    files = state.files
     if not files:
         if file_name:
             return {

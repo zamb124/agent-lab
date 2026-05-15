@@ -5,10 +5,11 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from apps.flows.src.runtime.nodes import LlmNode
 from core.logging import get_logger
+from core.state import ExecutionState
 
 logger = get_logger(__name__)
 
@@ -26,33 +27,31 @@ class CustomFlowWithLogging(LlmNode):
     name = "custom_flow_with_logging"
     description = "Нода с расширенным логированием и метриками"
 
-    async def ainvoke(
-        self, input_data: Dict[str, Any], state: Optional[Dict[str, Any]] = None
+    async def _run_impl(
+        self, state: ExecutionState, inputs: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Выполняет ноду с логированием до и после."""
-        if state is None:
-            state = {"messages": [], "interrupts": []}
-
         start_time = datetime.now()
         logger.info(f"[{self.node_id}] Начало выполнения: {start_time.isoformat()}")
 
-        if "__custom_metadata__" not in state:
-            state["__custom_metadata__"] = {}
+        metadata_raw = state.variables.get("__custom_metadata__")
+        metadata: Dict[str, Any] = metadata_raw if isinstance(metadata_raw, dict) else {}
+        state.variables["__custom_metadata__"] = metadata
 
-        state["__custom_metadata__"]["start_time"] = start_time.isoformat()
-        state["__custom_metadata__"]["llm_node_class"] = self.__class__.__name__
+        metadata["start_time"] = start_time.isoformat()
+        metadata["llm_node_class"] = self.__class__.__name__
 
-        state = await super().ainvoke(input_data, state)
+        result = await super()._run_impl(state, inputs)
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
         logger.info(f"[{self.node_id}] Завершение: {end_time.isoformat()}, длительность: {duration:.2f}s")
 
-        state["__custom_metadata__"]["end_time"] = end_time.isoformat()
-        state["__custom_metadata__"]["duration_seconds"] = duration
+        metadata["end_time"] = end_time.isoformat()
+        metadata["duration_seconds"] = duration
 
-        return state
+        return result if isinstance(result, dict) else {"result": result}
 
 
 class CustomFlowWithPreprocessing(LlmNode):
@@ -67,22 +66,20 @@ class CustomFlowWithPreprocessing(LlmNode):
     name = "custom_flow_with_preprocessing"
     description = "Нода с предобработкой входных данных"
 
-    async def ainvoke(
-        self, input_data: Dict[str, Any], state: Optional[Dict[str, Any]] = None
+    async def _run_impl(
+        self, state: ExecutionState, inputs: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Выполняет ноду с предобработкой."""
-        if state is None:
-            state = {"messages": [], "interrupts": []}
-
-        original_content = input_data.get("content", "")
+        original_content = str(inputs.get("content", ""))
         processed_content = self._preprocess(original_content)
 
         logger.info(f"[{self.node_id}] Предобработка: '{original_content[:50]}' -> '{processed_content[:50]}'")
 
-        input_data["content"] = processed_content
-        state["__original_content__"] = original_content
+        inputs["content"] = processed_content
+        state.variables["__original_content__"] = original_content
 
-        return await super().ainvoke(input_data, state)
+        result = await super()._run_impl(state, inputs)
+        return result if isinstance(result, dict) else {"result": result}
 
     def _preprocess(self, content: str) -> str:
         """Нормализация текста и контекст времени."""

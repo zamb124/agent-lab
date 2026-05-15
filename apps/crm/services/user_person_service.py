@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from apps.crm.constants_graph import (
     BELONGS_TO_RELATIONSHIP_TYPE,
@@ -52,8 +52,8 @@ class UserPersonService:
         if user is None:
             raise ValueError(f"User not found: {user_id}")
 
-        crm_block: Dict[str, Any] = dict(user.attrs.get("crm") or {})
-        by_company: Dict[str, str] = dict(crm_block.get("person_entity_by_company") or {})
+        crm_block: dict[str, Any] = dict(user.attrs.get("crm") or {})
+        by_company: dict[str, str] = dict(crm_block.get("person_entity_by_company") or {})
         existing_id = by_company.get(company_id)
         if existing_id:
             existing = await self._entity_repo.get(existing_id)
@@ -73,7 +73,7 @@ class UserPersonService:
             raise ValueError("Тип сущности member не найден для компании (инициализация CRM?)")
 
         display = self._display_name_from_user(user)
-        attributes: Dict[str, Any] = {
+        attributes: dict[str, Any] = {
             PLATFORM_USER_ID_ATTR: user_id,
         }
         if user.first_name:
@@ -101,7 +101,7 @@ class UserPersonService:
         merged_attrs = dict(user.attrs)
         merged_attrs["crm"] = crm_block
         user.attrs = merged_attrs
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(UTC)
         await self._user_repository.set(user)
 
         logger.info(f"Created member entity {entity.entity_id} for user {user_id}")
@@ -116,14 +116,14 @@ class UserPersonService:
         user = await self._user_repository.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
-        crm_block: Dict[str, Any] = dict(user.attrs.get("crm") or {})
-        last_map: Dict[str, str] = dict(crm_block.get("last_voice_entity_id_by_namespace") or {})
+        crm_block: dict[str, Any] = dict(user.attrs.get("crm") or {})
+        last_map: dict[str, str] = dict(crm_block.get("last_voice_entity_id_by_namespace") or {})
         last_map[namespace] = voice_entity_id
         crm_block["last_voice_entity_id_by_namespace"] = last_map
         merged = dict(user.attrs)
         merged["crm"] = crm_block
         user.attrs = merged
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(UTC)
         await self._user_repository.set(user)
 
     async def format_user_profile_for_ai(self, user_id: str) -> str:
@@ -148,12 +148,12 @@ class UserPersonService:
         user_id: str,
         company_id: str,
         namespace: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         user = await self._user_repository.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
-        crm_block: Dict[str, Any] = dict(user.attrs.get("crm") or {})
-        last_map: Dict[str, str] = dict(crm_block.get("last_voice_entity_id_by_namespace") or {})
+        crm_block: dict[str, Any] = dict(user.attrs.get("crm") or {})
+        last_map: dict[str, str] = dict(crm_block.get("last_voice_entity_id_by_namespace") or {})
         eid = last_map.get(namespace)
         if not eid:
             return None
@@ -228,5 +228,5 @@ class UserPersonService:
         entity.name = next_name
         entity.description = user.bio
         entity.attributes = attrs
-        entity.updated_at = datetime.now(timezone.utc)
+        entity.updated_at = datetime.now(UTC)
         await self._entity_repo.update(entity)

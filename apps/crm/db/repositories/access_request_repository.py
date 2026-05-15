@@ -2,7 +2,6 @@
 Репозиторий для запросов на доступ.
 """
 
-from typing import List, Optional, Type
 
 from sqlalchemy import delete, func, select, update
 
@@ -20,7 +19,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
         super().__init__(db)
 
     @property
-    def model_class(self) -> Type[AccessRequest]:
+    def model_class(self) -> type[AccessRequest]:
         return AccessRequest
 
     @property
@@ -55,7 +54,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
         """Оставляет один pending-запрос на (requester, entity), остальные удаляет."""
         pending = await self._fetch_pending_entity_requests(entity_id)
         seen: set[tuple[str, str]] = set()
-        to_delete: List[str] = []
+        to_delete: list[str] = []
         for r in pending:
             key = (r.requester_id, r.resource_id)
             if key not in seen:
@@ -69,7 +68,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
                 await session.execute(delete(AccessRequest).where(AccessRequest.request_id == rid))
             await session.commit()
 
-    async def _fetch_pending_entity_requests(self, entity_id: str) -> List[AccessRequest]:
+    async def _fetch_pending_entity_requests(self, entity_id: str) -> list[AccessRequest]:
         async with self._db.session() as session:
             stmt = (
                 select(AccessRequest)
@@ -83,20 +82,20 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def create(self, request: AccessRequest) -> AccessRequest:
+    async def create(self, entity: AccessRequest) -> AccessRequest:
         """Создает запрос на доступ"""
         async with self._db.session() as session:
-            session.add(request)
+            session.add(entity)
             await session.commit()
-            await session.refresh(request)
-            return request
+            await session.refresh(entity)
+            return entity
 
     async def list_by_company(
         self,
         company_id: str,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[AccessRequest]:
+    ) -> list[AccessRequest]:
         async with self._db.session() as session:
             stmt = (
                 select(AccessRequest)
@@ -114,7 +113,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
         status: str,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[AccessRequest]:
+    ) -> list[AccessRequest]:
         async with self._db.session() as session:
             stmt = (
                 select(AccessRequest)
@@ -129,7 +128,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
     async def count_by_company(
         self,
         company_id: str,
-        status: Optional[str] = None,
+        status: str | None = None,
     ) -> int:
         async with self._db.session() as session:
             stmt = (

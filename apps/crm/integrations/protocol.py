@@ -20,12 +20,15 @@ class NamespaceIntegrationConnector(Protocol):
 
     def worker_short_label(self) -> str:
         """Подпись провайдера в уведомлениях и логах воркера (не technical id)."""
+        ...
 
     def entities_sync_runs_in_worker(self) -> bool:
         """True — POST .../sync ставит TaskIQ-задачу; False — синхронный ответ HTTP."""
+        ...
 
     def custom_fields_sync_runs_in_worker(self) -> bool:
         """True — POST .../custom_fields/sync ставит задачу; False — синхронный HTTP."""
+        ...
 
     async def build_authorize_url(
         self,

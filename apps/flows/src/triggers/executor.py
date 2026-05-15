@@ -80,19 +80,22 @@ class TriggerExecutor:
 
         # Получаем существующий context или создаем минимальный
         existing_context = get_context()
+        existing_user = existing_context.user if existing_context and existing_context.user else None
+        existing_company = existing_context.active_company if existing_context else None
+        existing_metadata = existing_context.metadata if existing_context else {}
 
-            # Используем данные из существующего context
+        # Используем данные из существующего context
         context = Context(
-            user=existing_context.user or User(
+            user=existing_user or User(
                 user_id=effective_user_id,
                 name=f"Trigger:{trigger_type}"
             ),
-            active_company=existing_context.active_company,
+            active_company=existing_company,
             session_id=session_id,
             flow_id=flow_id,
             channel=f"trigger:{trigger_type}",
             metadata={
-                **(existing_context.metadata or {}),
+                **(existing_metadata or {}),
                 "trigger_id": trigger_id,
                 "trigger_type": trigger_type,
                 **(metadata or {}),
@@ -141,12 +144,15 @@ class TriggerExecutor:
         if trigger_type == "telegram":
             cq = payload.get("callback_query")
             if isinstance(cq, dict) and cq:
-                from_user = cq.get("from") if isinstance(cq.get("from"), dict) else {}
+                from_user_raw = cq.get("from")
+                from_user = from_user_raw if isinstance(from_user_raw, dict) else {}
                 uid = from_user.get("id")
                 if uid is not None:
                     return f"tg:{uid}"
-            message = payload.get("message", {})
-            from_user = message.get("from", {})
+            message_raw = payload.get("message")
+            message = message_raw if isinstance(message_raw, dict) else {}
+            from_user_raw = message.get("from")
+            from_user = from_user_raw if isinstance(from_user_raw, dict) else {}
             user_id = from_user.get("id")
             if user_id is not None:
                 return f"tg:{user_id}"

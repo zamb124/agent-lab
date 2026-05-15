@@ -31,15 +31,17 @@ async def execute_node(
     Returns:
         Сериализованный ExecutionState
     """
+    from apps.flows.src.container import get_container
     from apps.flows.src.runtime.nodes import create_node
     from core.state import ExecutionState
 
+    container = get_container()
     state = ExecutionState.model_validate(state_dict)
-    node = await create_node(node_id, node_config)
+    node = await create_node(node_id, node_config, container=container)
 
     logger.debug(f"Executing node {node_id} (type={node_config.get('type', 'unknown')})")
 
     # Вызываем напрямую, не через .kiq() чтобы избежать рекурсии
-    result_state = await node.run(state)
+    result_state = await node._run_internal(state)
 
     return result_state.model_dump(exclude_none=False)

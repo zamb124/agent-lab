@@ -319,9 +319,12 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
         cq = payload.get("callback_query")
         if isinstance(cq, dict) and cq:
-            from_user = cq.get("from") if isinstance(cq.get("from"), dict) else {}
-            msg = cq.get("message") if isinstance(cq.get("message"), dict) else {}
-            chat = msg.get("chat") if isinstance(msg.get("chat"), dict) else {}
+            from_user_raw = cq.get("from")
+            from_user: Dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
+            msg_raw = cq.get("message")
+            msg: Dict[str, Any] = msg_raw if isinstance(msg_raw, dict) else {}
+            chat_raw = msg.get("chat")
+            chat: Dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
             user_id = from_user.get("id")
             chat_id = chat.get("id")
             data = cq.get("data")
@@ -348,8 +351,10 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 "Telegram update must contain non-empty message or callback_query"
             )
 
-        from_user = message.get("from") if isinstance(message.get("from"), dict) else {}
-        chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
+        from_user_raw = message.get("from")
+        from_user: Dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
+        chat_raw = message.get("chat")
+        chat: Dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
         text_raw = message.get("text", "")
         text = text_raw if isinstance(text_raw, str) else ""
 

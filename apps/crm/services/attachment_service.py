@@ -4,8 +4,9 @@
 Работает для ВСЕХ entities (любого типа).
 """
 
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List
+from datetime import datetime, UTC
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
@@ -40,12 +41,14 @@ class AttachmentService:
         access_grant_repository: "AccessGrantRepository",
         company_repository: "CompanyRepository",
         file_repository: "FileRepository",
+        note_markdown_format_scheduler: Callable[..., Awaitable[bool]],
     ):
         self._rag = RagClient()
         self._entity_repo = entity_repository
         self._access_grant_repo = access_grant_repository
         self._company_repo = company_repository
         self._file_repo = file_repository
+        self._note_markdown_format_scheduler = note_markdown_format_scheduler
 
     def _get_company_id(self) -> str:
         context = get_context()
@@ -59,9 +62,11 @@ class AttachmentService:
         file_data: bytes,
         filename: str,
 
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Загружает attachment для entity"""
         context = get_context()
+        if context is None:
+            raise ValueError("Нет контекста запроса")
         company_id = self._get_company_id()
         namespace_name = context.active_namespace
 
@@ -112,7 +117,7 @@ class AttachmentService:
                 raw_text,
             )
 
-        entity.updated_at = datetime.now(timezone.utc)
+        entity.updated_at = datetime.now(UTC)
         merged = await self._entity_repo.update(entity)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = merged.note_date.isoformat() if merged.note_date is not None else None
@@ -131,11 +136,7 @@ class AttachmentService:
             entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID
             and attachment_had_extractable_text
         ):
-            from apps.crm.services.note_markdown_format_schedule import (
-                schedule_note_markdown_format,
-            )
-
-            markdown_format_queued = await schedule_note_markdown_format(
+            markdown_format_queued = await self._note_markdown_format_scheduler(
                 note_id=entity_id,
                 company_id=company_id,
                 namespace=namespace,
@@ -163,6 +164,8 @@ class AttachmentService:
     ) -> bool:
         """Удаляет attachment entity"""
         context = get_context()
+        if context is None:
+            raise ValueError("Нет контекста запроса")
         namespace_name = context.active_namespace
 
         entity = await self._entity_repo.get(entity_id)
@@ -174,7 +177,7 @@ class AttachmentService:
         await self._rag.delete_namespace_document(namespace_name, document_id)
 
         entity.attachment_ids.remove(document_id)
-        entity.updated_at = datetime.now(timezone.utc)
+        entity.updated_at = datetime.now(UTC)
         await self._entity_repo.update(entity)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
@@ -195,7 +198,7 @@ class AttachmentService:
         self,
         entity_id: str,
 
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Получает список attachments entity"""
         entity = await self._entity_repo.get(entity_id)
 

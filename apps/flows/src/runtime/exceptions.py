@@ -20,7 +20,7 @@ class FlowInterrupt(Exception):
         question: str | None = None,
         *,
         body: InterruptBody | None = None,
-        tool_call: dict | None = None,
+        tool_call: dict[str, Any] | None = None,
         flow_id: str = "",
         correlation_id: UUID | None = None,
     ):

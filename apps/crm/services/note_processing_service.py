@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
 
 from apps.crm.models.api import (
     AIAnalysisDraftApplyResult,
@@ -35,7 +35,7 @@ class NoteProcessingService:
         *,
         include_attachments: bool = True,
         attachment_chars_limit: int = 40_000,
-        progress_cb: Optional[ProgressCb] = None,
+        progress_cb: ProgressCb | None = None,
     ) -> str:
         """Собрать текст из description + текстового содержимого вложений.
 
@@ -90,7 +90,7 @@ class NoteProcessingService:
         note_id: str,
         config: NoteProcessingConfig,
         *,
-        progress_cb: Optional[ProgressCb] = None,
+        progress_cb: ProgressCb | None = None,
     ) -> AIAnalyzeResponse:
         """Шаг 1: AI-анализ текста заметки, сохранение черновика."""
         note = await self._entity_service.get_entity(note_id)
@@ -126,7 +126,7 @@ class NoteProcessingService:
         self,
         note_id: str,
         *,
-        progress_cb: Optional[ProgressCb] = None,
+        progress_cb: ProgressCb | None = None,
     ) -> AIAnalysisDraftApplyResult:
         """Шаг 2: применение черновика анализа (создание entities + relationships)."""
         result = await self._entity_service.apply_analysis_draft(note_id)
@@ -150,7 +150,7 @@ class NoteProcessingService:
         note_id: str,
         config: NoteProcessingConfig,
         *,
-        progress_cb: Optional[ProgressCb] = None,
+        progress_cb: ProgressCb | None = None,
     ) -> NoteProcessingResult:
         """Полный конвейер: analyze + apply."""
         await self.analyze(note_id, config, progress_cb=progress_cb)

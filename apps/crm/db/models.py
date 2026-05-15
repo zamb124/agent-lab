@@ -11,8 +11,8 @@ SQLAlchemy модели для CRM Service.
 - access_requests: Запросы на доступ
 """
 
-from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, UTC
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -48,39 +48,39 @@ class CRMEntity(Base):
     namespace: Mapped[str] = mapped_column(String(100), default="default", nullable=False)
 
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    entity_subtype: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    entity_subtype: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     name: Mapped[str] = mapped_column(String(500), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="active", nullable=False)
 
-    tags: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
-    attributes: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
-    priority: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    note_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    assignees: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+    priority: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    note_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    assignees: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
 
-    attachment_ids: Mapped[List[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+    attachment_ids: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
 
     user_id: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    source_entity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    source_company_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_entity_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_company_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     relevance: Mapped[float] = mapped_column(Float, default=1.0)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
-    search_vector: Mapped[Optional[str]] = mapped_column(TSVECTOR, nullable=True)
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
 
     __table_args__ = (
         Index("ix_crm_entities_company_type", "company_id", "entity_type"),
@@ -137,20 +137,20 @@ class EntityType(Base):
     namespace: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
     type_id: Mapped[str] = mapped_column(String(100), primary_key=True, nullable=False)
 
-    parent_type_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    parent_type_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    prompt: Mapped[Optional[str]] = mapped_column(
+    prompt: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="Промпт для AI извлечения этого типа"
     )
 
-    required_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
-    optional_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    required_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    optional_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
-    icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     is_system: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Создан из системного шаблона (но с company_id!)"
@@ -160,7 +160,7 @@ class EntityType(Base):
     weight_coefficient: Mapped[float] = mapped_column(Float, default=1.0)
 
     # Публичные поля для этого типа
-    public_fields: Mapped[List[str]] = mapped_column(
+    public_fields: Mapped[list[str]] = mapped_column(
         JSONB,
         default=["name", "entity_type", "tags"],
         nullable=False,
@@ -195,7 +195,7 @@ class EntityType(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     __table_args__ = (
@@ -233,21 +233,21 @@ class RelationshipType(Base):
     )
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    prompt: Mapped[Optional[str]] = mapped_column(
+    prompt: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="Промпт для AI извлечения этой связи"
     )
 
     is_directed: Mapped[bool] = mapped_column(
         Boolean, default=True, comment="Направленная (A→B) или симметричная (A↔B)"
     )
-    inverse_type_id: Mapped[Optional[str]] = mapped_column(
+    inverse_type_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True, comment="ID обратной связи (manages ↔ reports_to)"
     )
 
-    icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     is_system: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Создан из системного шаблона"
@@ -255,7 +255,7 @@ class RelationshipType(Base):
     weight_default: Mapped[float] = mapped_column(Float, default=1.0)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     __table_args__ = (Index("idx_relationship_types_system", "is_system"),)
@@ -301,15 +301,15 @@ class Relationship(Base):
         default=1.0,
         server_default=text("1.0"),
     )
-    attributes: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (
@@ -345,7 +345,7 @@ class CompanyMapping(Base):
     entity_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     is_owner: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
     def __repr__(self) -> str:
@@ -388,12 +388,12 @@ class AccessGrant(Base):
     )
 
     # Для grant_type="user"
-    target_user_id: Mapped[Optional[str]] = mapped_column(
+    target_user_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True, index=True, comment="User ID (может быть из любой компании)"
     )
 
     # Для grant_type="company"
-    target_company_id: Mapped[Optional[str]] = mapped_column(
+    target_company_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True, index=True, comment="Company ID"
     )
 
@@ -403,17 +403,17 @@ class AccessGrant(Base):
     )
 
     # Опционально: временный доступ
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
+    expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, comment="Срок действия (опционально)"
     )
 
     # Опционально: токен для анонимного доступа
-    access_token: Mapped[Optional[str]] = mapped_column(
+    access_token: Mapped[str | None] = mapped_column(
         String(100), nullable=True, unique=True, comment="Токен для шаринга по ссылке"
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     __table_args__ = (
@@ -443,7 +443,7 @@ class AccessRequest(Base):
     owner_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
 
     # Deep copy опции
@@ -451,14 +451,14 @@ class AccessRequest(Base):
     max_depth: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     # Результат
-    created_entity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_entity_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -480,21 +480,21 @@ class NamespaceTemplate(Base):
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     template_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
-    crm_settings: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    crm_settings: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("company_id", "template_id", name="uq_namespace_template_company"),
@@ -517,18 +517,18 @@ class NamespaceTemplateType(Base):
         index=True,
     )
     type_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    parent_type_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    parent_type_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    required_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
-    optional_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
-    icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    required_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    optional_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_event: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     check_duplicates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     weight_coefficient: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
-    namespace_ids: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    namespace_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
     is_context_anchor: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -544,13 +544,13 @@ class NamespaceTemplateType(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -592,27 +592,27 @@ class CRMTask(Base):
     stage: Mapped[str] = mapped_column(String(64), nullable=False, default="pending")
     progress_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
-    taskiq_task_id: Mapped[Optional[str]] = mapped_column(String(220), nullable=True)
+    taskiq_task_id: Mapped[str | None] = mapped_column(String(220), nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     namespace: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -645,13 +645,13 @@ class CRMSuggest(Base):
         comment="'pending', 'resolved', 'dismissed', 'auto_resolved'",
     )
 
-    target_entity_ids: Mapped[List[str]] = mapped_column(
+    target_entity_ids: Mapped[list[str]] = mapped_column(
         JSONB,
         default=list,
         nullable=False,
         comment="ID связанных сущностей: дубли или исходная заметка",
     )
-    payload: Mapped[Dict[str, Any]] = mapped_column(
+    payload: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         default=dict,
         nullable=False,
@@ -660,13 +660,13 @@ class CRMSuggest(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 

@@ -154,7 +154,7 @@ async def create_variable(
 @router.delete("/{key}")
 async def delete_variable(
     key: str, container: ContainerDep
-) -> dict:
+) -> dict[str, str]:
     """Удаляет переменную
 
     Нельзя удалить системную переменную (current_date, current_time, etc.)

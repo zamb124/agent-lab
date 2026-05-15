@@ -345,12 +345,7 @@ class LLMModelsService:
                 offset=0,
             )
         )
-        if isinstance(schedules, list):
-            schedule_items = schedules
-        elif hasattr(schedules, "items"):
-            schedule_items = list(schedules.items)
-        else:
-            raise TypeError(f"Unexpected scheduler response type: {type(schedules)!r}")
+        schedule_items = list(schedules.items)
         return [task for task in schedule_items if self._is_compatible_background_schedule(task, interval)]
 
     async def _list_openrouter_free_schedules(self, interval: int) -> list[PlatformScheduledTask]:
@@ -362,12 +357,7 @@ class LLMModelsService:
                 offset=0,
             )
         )
-        if isinstance(schedules, list):
-            schedule_items = schedules
-        elif hasattr(schedules, "items"):
-            schedule_items = list(schedules.items)
-        else:
-            raise TypeError(f"Unexpected scheduler response type: {type(schedules)!r}")
+        schedule_items = list(schedules.items)
         return [
             task
             for task in schedule_items

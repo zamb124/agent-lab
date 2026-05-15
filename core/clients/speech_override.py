@@ -41,6 +41,9 @@ VADProviderName = Literal["litserve", "silero_local", "mock"]
 SpeechResponseFormat = Literal["wav", "mp3", "ogg", "pcm", "lpcm"]
 """Допустимые форматы аудио ответа TTS."""
 
+SpeechOverrideProviderName = SpeechProviderName | VADProviderName
+"""Провайдер, допустимый в общем SpeechOverride для STT/TTS/VAD."""
+
 
 class SpeechOverride(BaseModel):
     """Per-call/per-process переопределение настроек речи.
@@ -54,7 +57,7 @@ class SpeechOverride(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: SpeechProviderName | None = Field(
+    provider: SpeechOverrideProviderName | None = Field(
         default=None,
         description=(
             "Имя провайдера речи. Для VAD дополнительно допустим "
@@ -132,6 +135,7 @@ _rebuild_with_pronunciation_rule()
 
 __all__ = [
     "SpeechOverride",
+    "SpeechOverrideProviderName",
     "SpeechProviderName",
     "VADProviderName",
     "SpeechResponseFormat",

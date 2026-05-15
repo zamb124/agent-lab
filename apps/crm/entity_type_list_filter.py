@@ -10,15 +10,15 @@ parent_by_type_id: для каждого type_id из строк типов ко
 Ссылки на системные корни ``note``/``task`` разрешаются даже если строка корня отсутствует в таблице (частичный справочник).
 """
 
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID
 
 
 def resolve_list_entity_query_pair(
     leaf_type_id: str,
-    parent_by_type_id: Mapping[str, Optional[str]],
-) -> tuple[str, Optional[str]]:
+    parent_by_type_id: Mapping[str, str | None],
+) -> tuple[str, str | None]:
     if not leaf_type_id:
         raise ValueError("leaf_type_id must be non-empty")
     if leaf_type_id not in parent_by_type_id:
@@ -30,7 +30,7 @@ def resolve_list_entity_query_pair(
         return (TASK_ROOT_ENTITY_TYPE_ID, None)
 
     seen: set[str] = set()
-    cur: Optional[str] = leaf_type_id
+    cur: str | None = leaf_type_id
     while cur is not None:
         if cur in seen:
             raise ValueError(f"cycle in entity type parent chain near {cur}")

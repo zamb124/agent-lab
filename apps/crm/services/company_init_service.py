@@ -6,8 +6,8 @@
 """
 
 import uuid
-from datetime import datetime, timezone
-from typing import List
+from datetime import datetime, UTC
+from typing import Any
 
 from sqlalchemy import select
 
@@ -67,7 +67,7 @@ class CompanyInitService:
         self._relationship_repo = relationship_repo
         self._company_mapping_repo = company_mapping_repo
 
-    async def initialize_company(self, company_id: str) -> dict:
+    async def initialize_company(self, company_id: str) -> dict[str, int | bool]:
         """
         Инициализирует компанию: копирует системные типы с company_id.
 
@@ -107,7 +107,7 @@ class CompanyInitService:
         existing_types = await self._check_existing_types(company_id)
         existing_by_key = {(item.namespace, item.type_id): item for item in existing_types}
 
-        entity_type_seed_specs: tuple[dict, ...] = (
+        entity_type_seed_specs: tuple[dict[str, Any], ...] = (
             *SYSTEM_ENTITY_TYPE_TEMPLATES,
             *COMMON_NAMESPACE_ANCHOR_TYPES,
         )
@@ -134,7 +134,7 @@ class CompanyInitService:
                     is_context_anchor=template.get("is_context_anchor", False),
                     is_voice_target=template.get("is_voice_target", False),
                     extractable=template.get("extractable", True),
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 )
                 await self._entity_type_repo.create(entity_type)
                 created_count += 1
@@ -183,7 +183,7 @@ class CompanyInitService:
                     color=template.get('color'),
                     is_system=True,
                     weight_default=template.get('weight_default', 1.0),
-                    created_at=datetime.now(timezone.utc)
+                    created_at=datetime.now(UTC)
                 )
                 await self._relationship_type_repo.update(rel_type)
                 created_count += 1
@@ -262,7 +262,7 @@ class CompanyInitService:
 
         return created_count
 
-    async def _check_existing_types(self, company_id: str) -> List[EntityType]:
+    async def _check_existing_types(self, company_id: str) -> list[EntityType]:
         """
         Проверяет существующие типы для компании (прямой запрос к БД).
 
@@ -279,7 +279,7 @@ class CompanyInitService:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def _check_existing_relationship_types(self, company_id: str) -> List[RelationshipType]:
+    async def _check_existing_relationship_types(self, company_id: str) -> list[RelationshipType]:
         async with self._relationship_type_repo._db.session() as session:
             stmt = select(RelationshipType).where(
                 RelationshipType.company_id == company_id,

@@ -9,6 +9,7 @@ Zero-Guess Architecture:
 
 from typing import Any, Dict, List, Optional, Union
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.models import ToolReference
 from apps.flows.src.models.enums import CodeMode, NodeType, ReactToolRole
@@ -79,9 +80,10 @@ class ToolRegistry:
     - Получения tools по имени
     """
 
-    def __init__(self):
+    def __init__(self, *, container: FlowRuntimeContainer | None = None):
         self._tools: Dict[str, BaseTool] = {}
         self._initialized = False
+        self.container = container
 
     def register(self, tool: BaseTool) -> None:
         """Регистрирует tool в процессном реестре (builtin, MCPTool и т.д.)."""
@@ -268,9 +270,9 @@ class ToolRegistry:
             if builtin_tool is not None:
                 return builtin_tool
 
-            from apps.flows.src.container import get_container
-
-            container = get_container()
+            container = self.container
+            if container is None:
+                raise RuntimeError(f"Tool '{tid}' requires FlowContainer to load tool template")
             stored = await container.tool_repository.get(tid)
             if stored is None:
                 raise ValueError(
@@ -416,6 +418,7 @@ class ToolRegistry:
             parameters_schema=resolved_schema,
             react_role=react_role,
             resources=resources,
+            container=self.container,
         )
         return tool
 
@@ -508,5 +511,6 @@ class ToolRegistry:
 
         return NodeAsToolWrapper(
             node_config=config,
-            tool_registry=self
+            tool_registry=self,
+            container=self.container,
         )

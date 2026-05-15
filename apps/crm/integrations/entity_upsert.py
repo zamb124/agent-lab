@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
-from typing import Any, Optional
+from datetime import date, datetime, UTC
+from typing import Any
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.db.models import CRMEntity
@@ -28,9 +28,9 @@ async def upsert_canonical_by_external_ref(
     patch_attributes: dict[str, Any],
     account_key: str | None = None,
     raw_version: str | None = None,
-    description: Optional[str] = None,
-    note_date: Optional[date] = None,
-    due_date: Optional[date] = None,
+    description: str | None = None,
+    note_date: date | None = None,
+    due_date: date | None = None,
 ) -> tuple[CRMEntity, bool]:
     rid = str(record_id).strip()
     if not rid:
@@ -61,13 +61,13 @@ async def upsert_canonical_by_external_ref(
         ent.name = name
         ent.attributes = merged_attrs
         ent.namespace = namespace
-        ent.updated_at = datetime.now(timezone.utc)
+        ent.updated_at = datetime.now(UTC)
         if description is not None:
             ent.description = description
         if note_date is not None:
             ent.note_date = note_date
         elif entity_type == NOTE_ROOT_ENTITY_TYPE_ID and ent.note_date is None:
-            ent.note_date = datetime.now(timezone.utc).date()
+            ent.note_date = datetime.now(UTC).date()
         if due_date is not None:
             ent.due_date = due_date
         updated = await entity_repo.update(ent)
@@ -78,7 +78,7 @@ async def upsert_canonical_by_external_ref(
         initial_attrs[key] = value
     effective_note_date = note_date
     if entity_type == NOTE_ROOT_ENTITY_TYPE_ID and effective_note_date is None:
-        effective_note_date = datetime.now(timezone.utc).date()
+        effective_note_date = datetime.now(UTC).date()
     ent = CRMEntity(
         entity_id=uuid.uuid4().hex,
         company_id=company_id,

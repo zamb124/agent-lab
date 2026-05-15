@@ -281,7 +281,7 @@ class OperatorRepository:
             )
             if task is None:
                 raise ValueError(f"Задача {task_id!r} не найдена")
-            log: list = list(task.dialog_log) if task.dialog_log else []
+            log: list[dict[str, Any]] = list(task.dialog_log) if task.dialog_log else []
             log.append(entry)
             await session.execute(
                 update(OperatorTasks)

@@ -850,7 +850,7 @@ async def _execute_node(
         if tools:
             node_config = {**node_config, "tools": await _inline_tools_list(tools, container)}
 
-    node = await create_node("test_node", node_config)
+    node = await create_node("test_node", node_config, container=container)
     state = ExecutionState.model_validate(state_data)
-    result_state = await node.run(state)
+    result_state = await node._run_internal(state)
     return result_state.model_dump(exclude_none=False)

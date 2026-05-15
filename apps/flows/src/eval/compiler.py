@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from apps.flows.src.eval.import_policy import (
     filtered_namespace_import_roots,
@@ -93,7 +93,7 @@ class PythonCompiler:
         ns_keys = filtered_namespace_import_roots(namespace)
         _validate_code(code, ns_keys)
 
-    def compile(self, code: str, func_name: str = "run", auto_find: bool = True) -> Callable:
+    def compile(self, code: str, func_name: str = "run", auto_find: bool = True) -> Callable[..., Any]:
         """
         Компилирует код и возвращает функцию.
 
@@ -130,7 +130,7 @@ class PythonCompiler:
 
         return namespace[func_name]
 
-    def compile_tool(self, code: str) -> tuple[Callable | type, bool]:
+    def compile_tool(self, code: str) -> tuple[Callable[..., Any] | type, bool]:
         """
         Компилирует код tool и возвращает функцию или класс.
 

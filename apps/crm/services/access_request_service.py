@@ -3,8 +3,7 @@
 """
 
 import uuid
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import datetime, UTC
 
 from apps.crm.db.models import AccessRequest, CRMEntity, Relationship
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
@@ -34,7 +33,7 @@ class AccessRequestService:
         entity_id: str,
         requester_user_id: str,
         requester_company_id: str,
-        message: Optional[str] = None,
+        message: str | None = None,
         include_dependencies: bool = False,
         max_depth: int = 1
     ) -> AccessRequest:
@@ -58,8 +57,8 @@ class AccessRequestService:
             status="pending",
             include_dependencies=include_dependencies,
             max_depth=max_depth,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC)
         )
 
         await self._request_repo.create(request)
@@ -130,7 +129,7 @@ class AccessRequestService:
         # Обновляем запрос
         request.status = "approved"
         request.created_entity_id = copy.entity_id
-        request.updated_at = datetime.now(timezone.utc)
+        request.updated_at = datetime.now(UTC)
         await self._request_repo.update(request)
 
         logger.info(f"Access request {request_id} approved, created entity {copy.entity_id}")
@@ -214,7 +213,7 @@ class AccessRequestService:
         target_user_id: str,
         max_depth: int,
         _current_depth: int = 0,
-        _copied_map: Optional[Dict[str, str]] = None
+        _copied_map: dict[str, str] | None = None
     ) -> CRMEntity:
         """Deep copy - рекурсивное копирование с relationships"""
 
@@ -297,7 +296,7 @@ class AccessRequestService:
         self,
         request_id: str,
         owner_user_id: str,
-        reason: Optional[str] = None
+        reason: str | None = None
     ) -> bool:
         """Отклонить запрос"""
 
@@ -309,7 +308,7 @@ class AccessRequestService:
             raise PermissionError("Only owner can reject")
 
         request.status = "rejected"
-        request.updated_at = datetime.now(timezone.utc)
+        request.updated_at = datetime.now(UTC)
         await self._request_repo.update(request)
 
         logger.info(f"Access request {request_id} rejected by {owner_user_id}")
@@ -337,21 +336,21 @@ class AccessRequestService:
 
         return True
 
-    async def get(self, request_id: str) -> Optional[AccessRequest]:
+    async def get(self, request_id: str) -> AccessRequest | None:
         """Получить запрос по ID"""
         return await self._request_repo.get(request_id)
 
-    async def get_request(self, request_id: str) -> Optional[AccessRequest]:
+    async def get_request(self, request_id: str) -> AccessRequest | None:
         """Алиас для get"""
         return await self.get(request_id)
 
     async def list_requests(
         self,
         company_id: str,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[AccessRequest]:
+    ) -> list[AccessRequest]:
         if status:
             return await self._request_repo.list_by_company_and_status(company_id, status, limit=limit, offset=offset)
         return await self._request_repo.list_by_company(company_id, limit=limit, offset=offset)
@@ -359,7 +358,7 @@ class AccessRequestService:
     async def count_requests(
         self,
         company_id: str,
-        status: Optional[str] = None,
+        status: str | None = None,
     ) -> int:
         return await self._request_repo.count_by_company(company_id, status=status)
 

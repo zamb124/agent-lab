@@ -3,7 +3,6 @@
 Работает с SQLAlchemy напрямую.
 """
 
-from typing import Optional, Type
 
 from sqlalchemy import select
 
@@ -26,14 +25,14 @@ class CompanyMappingRepository(BaseCRMRepository[CompanyMapping]):
         super().__init__(db)
 
     @property
-    def model_class(self) -> Type[CompanyMapping]:
+    def model_class(self) -> type[CompanyMapping]:
         return CompanyMapping
 
     @property
     def id_field(self) -> str:
         return "company_id"
 
-    async def get_by_entity(self, entity_id: str) -> Optional[CompanyMapping]:
+    async def get_by_entity(self, entity_id: str) -> CompanyMapping | None:
         """Получает mapping по entity_id"""
         async with self._db.session() as session:
             stmt = select(CompanyMapping).where(

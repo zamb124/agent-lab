@@ -46,7 +46,7 @@ class PythonCodeRunner(BaseCodeRunner):
         )
         self.compiler = PythonCompiler(namespace_builder=self.namespace_builder)
 
-    def _snapshot_frozen_if_state(self, state: Optional["ExecutionState"]) -> Optional[dict]:
+    def _snapshot_frozen_if_state(self, state: Optional["ExecutionState"]) -> Optional[dict[str, Any]]:
         from core.state import ExecutionState as ES
 
         if state is None or not isinstance(state, ES):
@@ -54,7 +54,7 @@ class PythonCodeRunner(BaseCodeRunner):
         return snapshot_frozen_fields(state)
 
     def _assert_frozen_if_needed(
-        self, state: Optional["ExecutionState"], snap: Optional[dict]
+        self, state: Optional["ExecutionState"], snap: Optional[dict[str, Any]]
     ) -> None:
         from core.state import ExecutionState as ES
 
@@ -92,7 +92,7 @@ class PythonCodeRunner(BaseCodeRunner):
     async def execute_tool(
         self,
         code: str,
-        args: dict,
+        args: dict[str, Any],
         state: Optional['ExecutionState'] = None,
     ) -> Any:
         """
@@ -127,7 +127,7 @@ class PythonCodeRunner(BaseCodeRunner):
                 params = list(sig.parameters.keys())
 
                 if params and params[0] == "args":
-                    call_kwargs = {"args": args}
+                    call_kwargs: Dict[str, Any] = {"args": args}
                     if "state" in params:
                         call_kwargs["state"] = state
                     if inspect.iscoroutinefunction(func):

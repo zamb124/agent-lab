@@ -19,6 +19,8 @@ from core.clients.pravo import (
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 
+JsonDict = dict[str, Any]
+
 _PRAVO_CATALOG_SEARCH_DESCRIPTION = """
 Поиск нормативных актов на ips.pravo.gov.ru через HTTP API POST /api/ips/legislation/search.json
 (аналог гибридного поиска в веб-интерфейсе).
@@ -132,7 +134,7 @@ async def _run_rag_search(
     tags=["law", "rag", "knowledge", "external"],
     args_schema=PravoCatalogSearchArgs,
 )
-async def pravo_catalog_search(keyword: str, page: int = 1) -> dict:
+async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonDict:
     try:
         hits = await PravoClient().search_catalog(keyword=keyword, page=page)
     except PravoClientError as exc:
@@ -170,7 +172,7 @@ async def pravo_document_rag_search(
     query: str,
     limit: int = 5,
     force_refresh: bool = False,
-) -> dict:
+) -> JsonDict:
     pravo_client = PravoClient()
     try:
         doc_hash = PravoClient.extract_legislation_document_hash(document_ref)

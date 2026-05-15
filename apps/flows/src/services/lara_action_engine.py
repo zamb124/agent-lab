@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import UTC, datetime
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Protocol
 from uuid import uuid4
 
 from core.logging import get_logger
@@ -21,10 +21,20 @@ _APPLY_CONTENTION_POLL_SEC = 0.025
 _APPLY_CONTENTION_MAX_POLLS = 80
 
 
+class LaraActionRedisClient(Protocol):
+    async def get(self, key: str) -> str | None: ...
+
+    async def set(self, key: str, value: str, ttl: int | None = None) -> bool: ...
+
+    async def set_nx(self, key: str, value: str, ttl_seconds: int) -> bool: ...
+
+    async def delete(self, *keys: str) -> int: ...
+
+
 class LaraActionEngine:
     """Серверный движок действий Lara c pending-actions в Redis."""
 
-    def __init__(self, redis_client: Any, ttl_seconds: int = 3600):
+    def __init__(self, redis_client: LaraActionRedisClient, ttl_seconds: int = 3600):
         self._redis = redis_client
         self._ttl_seconds = ttl_seconds
 
@@ -166,10 +176,7 @@ class LaraActionEngine:
         apply_fn: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
     ) -> dict[str, Any]:
         lock_key = self._apply_lock_key(company_id, pending_action_id)
-        nx = getattr(self._redis, "set_nx", None)
-        if not callable(nx):
-            raise RuntimeError("Redis client must support set_nx for Lara apply_action")
-        lock_ok = await nx(lock_key, "1", _APPLY_LOCK_TTL_SECONDS)
+        lock_ok = await self._redis.set_nx(lock_key, "1", _APPLY_LOCK_TTL_SECONDS)
         if not lock_ok:
             return await self._wait_apply_or_raise_contention(
                 company_id=company_id,

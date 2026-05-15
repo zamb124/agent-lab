@@ -4,8 +4,7 @@ API для работы со связями (relationships).
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
@@ -32,9 +31,9 @@ router = APIRouter(prefix="/relationships", tags=["Relationships"])
 @router.get("", response_model=CursorPage[RelationshipResponse])
 async def list_relationships(
     container: ContainerDep,
-    entity_id: Optional[str] = Query(None, description="Фильтр по entity (source или target)"),
-    namespace: Optional[str] = Query(None, description="Фильтр по namespace"),
-    cursor: Optional[str] = Query(None, description="Cursor для следующей страницы"),
+    entity_id: str | None = Query(None, description="Фильтр по entity (source или target)"),
+    namespace: str | None = Query(None, description="Фильтр по namespace"),
+    cursor: str | None = Query(None, description="Cursor для следующей страницы"),
     limit: int = Query(200, ge=1, le=1000, description="Размер страницы"),
 ):
     """Связи с cursor-пагинацией. Без entity_id возвращает все связи компании постранично."""
@@ -48,7 +47,7 @@ async def list_relationships(
         if namespace is not None:
             relationships = [r for r in relationships if r.namespace == namespace]
         return CursorPage[RelationshipResponse](
-            items=relationships,
+            items=[RelationshipResponse.model_validate(row) for row in relationships],
             next_cursor=None,
             has_more=False,
         )
@@ -57,7 +56,7 @@ async def list_relationships(
     if namespace is not None:
         batch = [r for r in batch if r.namespace == namespace]
     return CursorPage[RelationshipResponse](
-        items=batch,
+        items=[RelationshipResponse.model_validate(row) for row in batch],
         next_cursor=next_cursor,
         has_more=has_more,
     )
@@ -83,6 +82,8 @@ async def create_relationship(
     """Создать новую связь"""
 
     context = get_context()
+    if context is None or context.active_company is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     company_id = context.active_company.company_id
 
     all_types = await container.relationship_type_repository.get_all_for_company(include_system=True)
@@ -103,8 +104,8 @@ async def create_relationship(
         confidence=data.confidence,
         attributes=data.attributes or {},
         company_id=company_id,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc)
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC)
     )
 
     try:
@@ -139,7 +140,12 @@ async def list_relationship_types(
         repo.get_all_for_company(include_system=True, limit=limit, offset=offset),
         repo.count_all_for_company(include_system=True),
     )
-    return OffsetPage[RelationshipTypeResponse](items=types, total=total, limit=limit, offset=offset)
+    return OffsetPage[RelationshipTypeResponse](
+        items=[RelationshipTypeResponse.model_validate(row) for row in types],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/types/", response_model=RelationshipTypeResponse)
@@ -172,9 +178,9 @@ async def find_shortest_path(
     from_entity_id: str = Query(..., alias="from", description="ID начальной entity"),
     to_entity_id: str = Query(..., alias="to", description="ID конечной entity"),
     max_depth: int = Query(10, ge=1, le=20, description="Максимальная глубина поиска"),
-    created_at_from: Optional[datetime] = Query(None, description="Фильтр created_at >= value"),
-    created_at_to: Optional[datetime] = Query(None, description="Фильтр created_at <= value"),
-    namespace: Optional[str] = Query(
+    created_at_from: datetime | None = Query(None, description="Фильтр created_at >= value"),
+    created_at_to: datetime | None = Query(None, description="Фильтр created_at <= value"),
+    namespace: str | None = Query(
         None,
         description=(
             "Namespace пространства данных. При непустом значении используется и для "

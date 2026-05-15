@@ -48,7 +48,7 @@ def _parse_mode_for_plain_send(config: Dict[str, Any]) -> Optional[str]:
     return str(raw)
 
 
-def get_telegram_api_base(config: Dict[str, Any] = None) -> str:
+def get_telegram_api_base(config: Optional[Dict[str, Any]] = None) -> str:
     """
     Возвращает базовый URL для Telegram API.
 
@@ -242,7 +242,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
             response = await _telegram_post(url, timeout=60.0, data=data, files=files)
         else:
-            payload = {
+            payload: Dict[str, Any] = {
                 "chat_id": recipient,
                 "photo": photo,
             }
@@ -288,7 +288,7 @@ class TelegramChannelHandler(BaseChannelHandler):
         if isinstance(document, bytes):
             fname = filename or "document"
             files = {"document": (fname, document, "application/octet-stream")}
-            data = {"chat_id": recipient}
+            data: Dict[str, Any] = {"chat_id": recipient}
 
             if caption:
                 data["caption"] = caption
@@ -299,7 +299,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
             response = await _telegram_post(url, timeout=120.0, data=data, files=files)
         else:
-            payload = {
+            payload: Dict[str, Any] = {
                 "chat_id": recipient,
                 "document": document,
             }

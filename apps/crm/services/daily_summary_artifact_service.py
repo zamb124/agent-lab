@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from botocore.exceptions import ClientError
 
@@ -21,7 +21,7 @@ class DailySummaryArtifactService:
     """Чтение/запись JSON-снимков сводок в дефолтный bucket S3."""
 
     @staticmethod
-    def _normalize_namespace(namespace: Optional[str]) -> str:
+    def _normalize_namespace(namespace: str | None) -> str:
         if namespace is None:
             return "all"
         if namespace.strip() == "":
@@ -29,7 +29,7 @@ class DailySummaryArtifactService:
         return namespace
 
     @classmethod
-    def daily_object_key(cls, company_id: str, namespace: Optional[str], date_str: str) -> str:
+    def daily_object_key(cls, company_id: str, namespace: str | None, date_str: str) -> str:
         ns = cls._normalize_namespace(namespace)
         return f"crm/daily_summary/v{_SCHEMA_VERSION}/{company_id}/{ns}/{date_str}.json"
 
@@ -37,7 +37,7 @@ class DailySummaryArtifactService:
     def period_object_key(
         cls,
         company_id: str,
-        namespace: Optional[str],
+        namespace: str | None,
         date_from: str,
         date_to: str,
     ) -> str:
@@ -48,7 +48,7 @@ class DailySummaryArtifactService:
         self,
         *,
         company_id: str,
-        namespace: Optional[str],
+        namespace: str | None,
         date_str: str,
         payload: dict[str, Any],
     ) -> None:
@@ -68,9 +68,9 @@ class DailySummaryArtifactService:
         self,
         *,
         company_id: str,
-        namespace: Optional[str],
+        namespace: str | None,
         date_str: str,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         key = self.daily_object_key(company_id, namespace, date_str)
         client = S3ClientFactory.create_default_client()
         try:
@@ -91,7 +91,7 @@ class DailySummaryArtifactService:
         self,
         *,
         company_id: str,
-        namespace: Optional[str],
+        namespace: str | None,
         date_from: str,
         date_to: str,
         payload: dict[str, Any],
@@ -112,10 +112,10 @@ class DailySummaryArtifactService:
         self,
         *,
         company_id: str,
-        namespace: Optional[str],
+        namespace: str | None,
         date_from: str,
         date_to: str,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         key = self.period_object_key(company_id, namespace, date_from, date_to)
         client = S3ClientFactory.create_default_client()
         try:

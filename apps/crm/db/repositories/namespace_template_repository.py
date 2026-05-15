@@ -1,6 +1,5 @@
 """Репозиторий шаблонов namespace и их типов."""
 
-from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select
@@ -21,7 +20,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
 
     async def list_for_company(
         self,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
         *,
         limit: int = 200,
         offset: int = 0,
@@ -37,7 +36,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def count_all(self, company_id: Optional[str] = None) -> int:
+    async def count_all(self, company_id: str | None = None) -> int:
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(func.count()).where(NamespaceTemplate.company_id == effective_company_id)
@@ -48,8 +47,8 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             return int(value)
 
     async def get_by_template_id(
-        self, template_id: str, company_id: Optional[str] = None
-    ) -> Optional[NamespaceTemplate]:
+        self, template_id: str, company_id: str | None = None
+    ) -> NamespaceTemplate | None:
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(NamespaceTemplate).where(
@@ -63,11 +62,11 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         self,
         template_id: str,
         name: str,
-        description: Optional[str],
-        icon: Optional[str] = None,
-        company_id: Optional[str] = None,
+        description: str | None,
+        icon: str | None = None,
+        company_id: str | None = None,
         is_system: bool = False,
-        crm_settings: Optional[dict[str, object]] = None,
+        crm_settings: dict[str, object] | None = None,
     ) -> NamespaceTemplate:
         template = NamespaceTemplate(
             template_key=str(uuid4()),
@@ -89,7 +88,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def get_type(self, template_key: str, type_id: str) -> Optional[NamespaceTemplateType]:
+    async def get_type(self, template_key: str, type_id: str) -> NamespaceTemplateType | None:
         async with self._db.session() as session:
             stmt = select(NamespaceTemplateType).where(
                 NamespaceTemplateType.template_key == template_key,
@@ -102,14 +101,14 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         self,
         template_key: str,
         type_id: str,
-        parent_type_id: Optional[str],
+        parent_type_id: str | None,
         name: str,
-        description: Optional[str],
-        prompt: Optional[str],
+        description: str | None,
+        prompt: str | None,
         required_fields: dict[str, object],
         optional_fields: dict[str, object],
-        icon: Optional[str],
-        color: Optional[str],
+        icon: str | None,
+        color: str | None,
         is_event: bool,
         check_duplicates: bool,
         weight_coefficient: float,

@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
+
+from core.clients.speech_override import SpeechProviderName, SpeechResponseFormat
 
 if TYPE_CHECKING:
     from apps.flows.src.clients.mcp_client import MCPClient
@@ -44,7 +46,27 @@ def get_lara_facade() -> "LaraFacade":
     return get_container().lara_facade
 
 
-def get_code_runner(language: str = "python", resources: dict | None = None) -> Any:
+_SPEECH_PROVIDERS = frozenset({"litserve", "cloud_ru", "yandex", "sber", "mock"})
+_SPEECH_RESPONSE_FORMATS = frozenset({"wav", "mp3", "ogg", "pcm", "lpcm"})
+
+
+def _speech_provider(value: str | None) -> SpeechProviderName | None:
+    if value is None:
+        return None
+    if value not in _SPEECH_PROVIDERS:
+        raise ValueError(f"Unknown speech provider: {value}")
+    return cast(SpeechProviderName, value)
+
+
+def _speech_response_format(value: str | None) -> SpeechResponseFormat | None:
+    if value is None:
+        return None
+    if value not in _SPEECH_RESPONSE_FORMATS:
+        raise ValueError(f"Unknown speech response format: {value}")
+    return cast(SpeechResponseFormat, value)
+
+
+def get_code_runner(language: str = "python", resources: dict[str, Any] | None = None) -> Any:
     """PythonCodeRunner (или runner для `language`) без доступа к `FlowContainer` из namespace."""
     from apps.flows.src.container import get_container
 
@@ -175,7 +197,7 @@ async def transcribe_audio(
     )
 
     override = SpeechOverride(
-        provider=provider,
+        provider=_speech_provider(provider),
         model=model,
         language=language,
     )
@@ -273,11 +295,11 @@ async def synthesize_speech(
     )
 
     override = SpeechOverride(
-        provider=provider,
+        provider=_speech_provider(provider),
         model=model,
         voice=voice,
         language=language,
-        response_format=response_format,  # type: ignore[arg-type]
+        response_format=_speech_response_format(response_format),
     )
     _, tts_flow, _ = load_flow_speech_layers_from_context_metadata(
         ctx.metadata if ctx else None

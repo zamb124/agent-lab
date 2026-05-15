@@ -92,7 +92,7 @@ async def list_sessions(
 async def delete_session(
     container: ContainerDep,
     session_id: str = Path(..., description="ID сессии для удаления"),
-) -> dict:
+) -> dict[str, bool | str]:
     """
     Удаляет сессию по ID.
 
@@ -107,4 +107,3 @@ async def delete_session(
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"success": True, "session_id": session_id}
-

@@ -1,6 +1,6 @@
 """Сервис для CRUD шаблонов namespace и их применения."""
 
-from typing import Any, Optional
+from typing import Any
 
 from apps.crm.constants_graph import (
     ENTITY_TYPES_CLONED_INTO_NEW_NAMESPACE,
@@ -38,6 +38,13 @@ class NamespaceTemplateService:
         self._namespace_repo = namespace_repo
         self._entity_repo = entity_repo
         self._company_init_service = company_init_service
+
+    @staticmethod
+    def _get_company_id() -> str:
+        context = get_context()
+        if context is None or context.active_company is None:
+            raise ValueError("Нет активной компании в контексте")
+        return context.active_company.company_id
 
     async def _load_company_types(self) -> list[EntityType]:
         items: list[EntityType] = []
@@ -162,8 +169,7 @@ class NamespaceTemplateService:
         name = namespace_name.strip()
         if not name:
             raise ValueError("namespace_name is required")
-        context = get_context()
-        company_id = context.active_company.company_id
+        company_id = self._get_company_id()
         for tid in (NOTE_ROOT_ENTITY_TYPE_ID, TASK_ROOT_ENTITY_TYPE_ID):
             row = await self._entity_type_repo.get_by_type_id(
                 tid, namespace=name, company_id=company_id,
@@ -190,7 +196,7 @@ class NamespaceTemplateService:
         )
         if row is not None:
             return
-        source_ns: Optional[str] = None
+        source_ns: str | None = None
         for item in await self._load_company_types():
             if item.company_id != company_id:
                 continue
@@ -241,11 +247,10 @@ class NamespaceTemplateService:
     async def create_namespace_from_template(
         self,
         namespace_name: str,
-        namespace_description: Optional[str],
+        namespace_description: str | None,
         template_id: str,
     ) -> Namespace:
-        context = get_context()
-        company_id = context.active_company.company_id
+        company_id = self._get_company_id()
 
         existing_namespace = await self._namespace_repo.get(namespace_name)
         if existing_namespace:
@@ -337,15 +342,14 @@ class NamespaceTemplateService:
         self,
         namespace_name: str,
         description_is_set: bool,
-        description: Optional[str],
-        allowed_type_ids: Optional[list[str]],
+        description: str | None,
+        allowed_type_ids: list[str] | None,
     ) -> Namespace:
         namespace = await self._namespace_repo.get(namespace_name)
         if namespace is None:
             raise RuntimeError(f"Namespace {namespace_name} not found")
 
-        context = get_context()
-        company_id = context.active_company.company_id
+        company_id = self._get_company_id()
 
         if allowed_type_ids is not None:
             editability = await self.get_namespace_editability(namespace_name)

@@ -3,7 +3,6 @@
 """
 
 import uuid
-from typing import List, Optional
 
 from apps.crm.db.models import AccessGrant
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
@@ -224,15 +223,15 @@ class AccessGrantService:
         self,
         resource_type: str,
         resource_id: str,
-        resource_company_id: Optional[str] = None,
-    ) -> List[AccessGrant]:
+        resource_company_id: str | None = None,
+    ) -> list[AccessGrant]:
         return await self._grant_repo.find_by_resource(resource_type, resource_id, resource_company_id)
 
     async def count_grants(
         self,
         resource_type: str,
         resource_id: str,
-        resource_company_id: Optional[str] = None,
+        resource_company_id: str | None = None,
     ) -> int:
         return await self._grant_repo.count_by_resource(resource_type, resource_id, resource_company_id)
 

@@ -3,7 +3,6 @@ API для работы с типами entities.
 """
 
 import asyncio
-from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -22,22 +21,22 @@ router = APIRouter(prefix="/entity-types", tags=["EntityTypes"])
 
 class UpdatePublicFieldsRequest(BaseModel):
     """Запрос на обновление публичных полей"""
-    public_fields: List[str]
+    public_fields: list[str]
 
 
 async def _parent_maps_for_types(
     repo: EntityTypeRepository,
-    types: List[EntityType],
-) -> dict[str, dict[str, Optional[str]]]:
+    types: list[EntityType],
+) -> dict[str, dict[str, str | None]]:
     namespaces = {t.namespace for t in types if isinstance(t.namespace, str) and t.namespace.strip()}
-    out: dict[str, dict[str, Optional[str]]] = {}
+    out: dict[str, dict[str, str | None]] = {}
     for ns in sorted(namespaces):
         out[ns] = await repo.get_parent_type_id_map_for_namespace(ns)
     return out
 
 
 async def _backfill_missing_colors(
-    types: List[EntityType],
+    types: list[EntityType],
     repo: EntityTypeRepository,
 ) -> bool:
     used_colors = {
@@ -61,7 +60,7 @@ async def _backfill_missing_colors(
 async def _list_entity_types_offset_page(
     repo: EntityTypeRepository,
     *,
-    namespace: Optional[str],
+    namespace: str | None,
     limit: int,
     offset: int,
 ) -> OffsetPage[EntityTypeResponse]:
@@ -98,7 +97,7 @@ async def _list_entity_types_offset_page(
 
 def _entity_type_to_response(
     entity: EntityType,
-    parent_map: dict[str, Optional[str]],
+    parent_map: dict[str, str | None],
 ) -> EntityTypeResponse:
     lt, ls = resolve_list_entity_query_pair(entity.type_id, parent_map)
     return EntityTypeResponse(
@@ -131,7 +130,7 @@ def _entity_type_to_response(
 @router.get("", response_model=OffsetPage[EntityTypeResponse])
 async def list_entity_types(
     container: ContainerDep,
-    namespace: Optional[str] = Query(default=None, description="Фильтр по пространству"),
+    namespace: str | None = Query(default=None, description="Фильтр по пространству"),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[EntityTypeResponse]:
@@ -189,6 +188,8 @@ async def create_entity_type(
 ):
     repo = container.entity_type_repository
     context = get_context()
+    if context is None or context.active_company is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     company_id = context.active_company.company_id
     ns = data.namespace.strip()
     if not ns:
@@ -253,7 +254,7 @@ async def update_entity_type(
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
 
-    fields: dict = {}
+    fields: dict[str, object] = {}
     if data.name is not None:
         fields["name"] = data.name
     if data.description is not None:
@@ -277,12 +278,13 @@ async def update_entity_type(
     if data.auto_resolve_suggests is not None:
         fields["auto_resolve_suggests"] = data.auto_resolve_suggests
 
-    resolved_color = fields.get("color") or entity_type.color
+    raw_color = fields.get("color")
+    resolved_color = raw_color if isinstance(raw_color, str) else entity_type.color
     if not resolved_color or not resolved_color.strip():
         fields["color"] = assign_color_from_palette(set())
 
     if fields:
-        await repo.update_metadata(type_id, namespace=ns, **fields)
+        await repo.update_metadata_fields(type_id, namespace=ns, fields=fields)
 
     entity_type = await repo.get_by_type_id(type_id, namespace=ns)
     if not entity_type:

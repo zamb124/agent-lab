@@ -1,7 +1,6 @@
 """API для управления namespaces и их шаблонами в CRM."""
 
 import asyncio
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -475,7 +474,7 @@ async def create_namespace(
 async def get_namespace_task_board_stages(
     namespace_name: str,
     container: ContainerDep,
-    entity_subtype: Optional[str] = Query(None),
+    entity_subtype: str | None = Query(None),
 ) -> TaskBoardStagesApiResponse:
     normalized_namespace_name = namespace_name.strip()
     if not normalized_namespace_name:

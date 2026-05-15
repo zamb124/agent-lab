@@ -7,7 +7,6 @@
 
 import base64
 import json as _json
-from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import delete, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
@@ -31,7 +30,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
     def id_field(self) -> str:
         return "relationship_id"
 
-    async def get_by_entity(self, entity_id: str) -> List[Relationship]:
+    async def get_by_entity(self, entity_id: str) -> list[Relationship]:
         """Получает все связи сущности (source и target)"""
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -49,8 +48,8 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         self,
         entity_id: str,
         cross_company: bool = False,
-        relationship_namespace: Optional[str] = None,
-    ) -> List[Relationship]:
+        relationship_namespace: str | None = None,
+    ) -> list[Relationship]:
         """
         Получает relationships для graph traversal.
 
@@ -88,8 +87,8 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         target_id: str,
         rel_type: str,
         *,
-        namespace: Optional[str] = None,
-    ) -> Optional[Relationship]:
+        namespace: str | None = None,
+    ) -> Relationship | None:
         """Находит связь по (company, source, target, type); при namespace задан — с тем же пространством."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -135,7 +134,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
     async def delete_outgoing_by_source_and_types(
         self,
         source_entity_id: str,
-        relationship_types: List[str],
+        relationship_types: list[str],
     ) -> int:
         """Удаляет исходящие связи от source с указанными типами."""
         if not relationship_types:
@@ -170,8 +169,8 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             return count
 
     async def get_outgoing(
-        self, source_entity_id: str, relationship_type: Optional[str] = None
-    ) -> List[Relationship]:
+        self, source_entity_id: str, relationship_type: str | None = None
+    ) -> list[Relationship]:
         """Получает исходящие связи от сущности"""
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -188,11 +187,11 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
 
     async def get_neighbors(
         self,
-        entity_ids: List[str],
-        relationship_types: Optional[List[str]] = None,
+        entity_ids: list[str],
+        relationship_types: list[str] | None = None,
         cross_company: bool = False,
-        relationship_namespace: Optional[str] = None,
-    ) -> Dict[str, List[Relationship]]:
+        relationship_namespace: str | None = None,
+    ) -> dict[str, list[Relationship]]:
         """
         Batch получение соседей для списка entities.
 
@@ -232,7 +231,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             result = await session.execute(stmt)
             relationships = list(result.scalars().all())
 
-            neighbors_map: Dict[str, List[Relationship]] = {eid: [] for eid in entity_ids}
+            neighbors_map: dict[str, list[Relationship]] = {eid: [] for eid in entity_ids}
             for rel in relationships:
                 if rel.source_entity_id in entity_ids:
                     neighbors_map[rel.source_entity_id].append(rel)
@@ -247,8 +246,8 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
     async def get_all_for_graph(
         self,
         limit: int = 1000,
-        cursor: Optional[str] = None,
-    ) -> Tuple[List[Relationship], Optional[str], bool]:
+        cursor: str | None = None,
+    ) -> tuple[list[Relationship], str | None, bool]:
         """
         Relationships компании с cursor-пагинацией для безопасного обхода.
 
@@ -277,7 +276,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         has_more = len(rows) > limit
         relationships = rows[:limit]
 
-        next_cursor: Optional[str] = None
+        next_cursor: str | None = None
         if has_more and relationships:
             last = relationships[-1]
             payload = _json.dumps({"ts": last.created_at.isoformat(), "id": last.relationship_id})
@@ -347,7 +346,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             await self.delete_by_relationship_id(r.relationship_id)
 
         rels = await self.get_by_entity(entity_id)
-        groups: Dict[tuple[str, str, str, str], List[Relationship]] = {}
+        groups: dict[tuple[str, str, str, str], list[Relationship]] = {}
         for r in rels:
             key = (
                 r.namespace,

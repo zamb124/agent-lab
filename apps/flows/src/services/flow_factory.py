@@ -5,7 +5,7 @@ FlowFactory - создание flow из БД.
 import copy
 from typing import Any, Dict, List, Optional, TypedDict
 
-from apps.flows.src.container import get_container
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.db import FlowRepository
 from apps.flows.src.models import BranchConfig, FlowConfig
 from apps.flows.src.models.enums import MergeMode
@@ -19,7 +19,6 @@ from core.logging import get_logger
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
-
 
 class EffectiveFlowConfig(TypedDict):
     entry: str | None
@@ -36,10 +35,12 @@ class FlowFactory:
         flow_repository: FlowRepository,
         variables_service: VariablesService,
         graph_compiler: GraphCompiler,
+        container: FlowRuntimeContainer,
     ):
         self.flow_repository = flow_repository
         self.variables_service = variables_service
         self.compiler = graph_compiler
+        self.container = container
 
     @staticmethod
     def _resource_map_to_plain(ref_map: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -55,6 +56,15 @@ class FlowFactory:
                     f"resource '{key}': ожидается ResourceReference или dict, получен {type(value)}"
                 )
         return out
+
+    @staticmethod
+    def _tools_from_nodes(config: FlowConfig) -> list[Any]:
+        tools: list[Any] = []
+        for node_config in (config.nodes or {}).values():
+            node_tools = node_config.get("tools", [])
+            if isinstance(node_tools, list):
+                tools.extend(node_tools)
+        return tools
 
     async def get_flow_config_snapshot(
         self, flow_id: str, config_version: Optional[str] = None
@@ -207,7 +217,7 @@ class FlowFactory:
         config_dict["nodes"] = effective["nodes"]
         config_dict["edges"] = edges
 
-        return await Flow.from_config(config_dict)
+        return await Flow.from_config(config_dict, container=self.container)
 
     def _apply_branch(self, config: FlowConfig, branch_id: str) -> EffectiveFlowConfig:
         """
@@ -418,8 +428,6 @@ class FlowFactory:
         if max_depth <= 0:
             return [], []
 
-        container = get_container()
-
         tools = []
         subflows = []
 
@@ -436,12 +444,12 @@ class FlowFactory:
             if tool_id in visited:
                 continue
 
-            nested_flow_config = await container.flow_repository.get(tool_id)
+            nested_flow_config = await self.flow_repository.get(tool_id)
 
             if nested_flow_config:
                 visited.add(tool_id)
 
-                sub_tools_list = nested_flow_config.tools if nested_flow_config.tools else []
+                sub_tools_list = self._tools_from_nodes(nested_flow_config)
                 sub_tools, sub_subflows = await self._get_flow_structure(
                     sub_tools_list, max_depth=max_depth - 1, visited=visited
                 )
@@ -511,12 +519,10 @@ class FlowFactory:
                 tools_list = node_config.get("tools", [])
 
                 if node_config.get("flow_id"):
-                    container = get_container()
-                    flow_config = await container.flow_repository.get(node_config["flow_id"])
+                    flow_config = await self.flow_repository.get(node_config["flow_id"])
                     if flow_config:
                         node_info["name"] = flow_config.name
-                        if flow_config.tools:
-                            tools_list = flow_config.tools
+                        tools_list = self._tools_from_nodes(flow_config)
 
                 tools, nested_flows = await self._get_flow_structure(tools_list, max_depth=3)
                 node_info["tools"] = tools

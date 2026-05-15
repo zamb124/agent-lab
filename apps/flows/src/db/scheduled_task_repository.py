@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -130,7 +130,7 @@ class ScheduledTaskRepository:
     ) -> bool:
         """Обновляет статус задачи."""
         async with self._storage._get_session() as session:
-            values = {"status": status.value}
+            values: dict[str, Any] = {"status": status.value}
 
             if executed_at:
                 values["executed_at"] = executed_at

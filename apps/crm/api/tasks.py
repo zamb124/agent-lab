@@ -5,7 +5,6 @@ API единого журнала задач CRM (crm_tasks).
 """
 
 import asyncio
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -30,7 +29,7 @@ def _to_response(row) -> TaskResponse:
 
 
 def _active_task_conflict(exc: ActiveTaskExistsError) -> HTTPException:
-    detail: dict = {
+    detail: dict[str, object] = {
         "code": "active_task_exists",
         "message": str(exc),
         "task_type": exc.task_type,
@@ -114,9 +113,9 @@ async def start_note_analyze(
 @router.get("", response_model=OffsetPage[TaskResponse])
 async def list_tasks(
     container: ContainerDep,
-    namespace: Optional[str] = Query(None, description="Фильтр по пространству; пусто = все пространства компании"),
-    task_type: Optional[str] = Query(None, description="Фильтр по типу задачи"),
-    note_id: Optional[str] = Query(None, description="Фильтр по note_id внутри data (только note_analyze)"),
+    namespace: str | None = Query(None, description="Фильтр по пространству; пусто = все пространства компании"),
+    task_type: str | None = Query(None, description="Фильтр по типу задачи"),
+    note_id: str | None = Query(None, description="Фильтр по note_id внутри data (только note_analyze)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[TaskResponse]:

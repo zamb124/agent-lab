@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,7 +51,7 @@ async def summarize_text(
     instruction: Optional[str] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
-    state: Optional[dict] = None,
+    state: Optional[dict[str, Any]] = None,
 ) -> dict[str, str]:
     del state
     svc = get_text_transform_service()

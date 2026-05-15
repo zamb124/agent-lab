@@ -9,7 +9,7 @@ CRM использует реляционную БД для:
 """
 
 from abc import ABC, abstractmethod
-from typing import Generic, List, Optional, Type, TypeVar
+from typing import Generic, Optional, TypeVar
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -44,7 +44,7 @@ class CRMDatabase:
         )
 
     @classmethod
-    def get_instance(cls, db_url: Optional[str] = None) -> "CRMDatabase":
+    def get_instance(cls, db_url: str | None = None) -> "CRMDatabase":
         """Singleton для CRM database"""
         if cls._instance is None:
             if db_url is None:
@@ -86,11 +86,13 @@ class BaseCRMRepository(ABC, Generic[T]):
         Middleware гарантирует наличие контекста.
         """
         context = get_context()
+        if context is None or context.active_company is None:
+            raise ValueError("Нет активной компании в контексте")
         return context.active_company.company_id
 
     @property
     @abstractmethod
-    def model_class(self) -> Type[T]:
+    def model_class(self) -> type[T]:
         """Класс SQLAlchemy модели"""
         pass
 
@@ -104,14 +106,14 @@ class BaseCRMRepository(ABC, Generic[T]):
         """Получает колонку ID"""
         return getattr(self.model_class, self.id_field)
 
-    async def get(self, entity_id: str) -> Optional[T]:
+    async def get(self, entity_id: str) -> T | None:
         """Получает запись по ID"""
         async with self._db.session() as session:
             stmt = select(self.model_class).where(self._get_id_column() == entity_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_many(self, entity_ids: List[str]) -> List[T]:
+    async def get_many(self, entity_ids: list[str]) -> list[T]:
         """Получает несколько записей по списку ID"""
         if not entity_ids:
             return []

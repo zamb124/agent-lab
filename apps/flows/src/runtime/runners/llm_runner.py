@@ -19,7 +19,7 @@ from a2a.types import (
     TextPart,
 )
 
-from apps.flows.src.container import get_container
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import ReactLoopMode
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.runtime.a2a_messages import (
@@ -80,7 +80,6 @@ from .base_runner import BaseLlmNodeRunner
 
 logger = get_logger(__name__)
 
-
 def _get_trace_ctx_from_state() -> Optional[TraceContext]:
     """Получает TraceContext из ContextVar worker'а."""
     trace_data = get_current_trace_context()
@@ -106,6 +105,25 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     MAX_ITERATIONS = 10
     MAX_STREAM_IDLE_RETRIES = 4  # При idle timeout 10с — макс 50с ожидания (5 попыток × 10с)
+
+    def __init__(
+        self,
+        node_config,
+        tools: List[Any],
+        llm,
+        prompt: str,
+        llm_node=None,
+        *,
+        container: FlowRuntimeContainer | None = None,
+    ):
+        super().__init__(
+            node_config=node_config,
+            tools=tools,
+            llm=llm,
+            prompt=prompt,
+            llm_node=llm_node,
+        )
+        self.container = container
 
     def _resolve_tool_by_call_name(self, call_name: str):
         """Резолвит tool по имени вызова, включая API-совместимую санитизацию."""
@@ -178,7 +196,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         context_id = state.context_id
 
         if emitter is None:
-            container = get_container()
+            container = self.container
+            if container is None:
+                raise RuntimeError("LlmNodeRunner requires FlowContainer to create default emitter")
             emitter = Emitter(container.redis_client, state)
 
         user_content = input_data.get("content", "")
@@ -388,7 +408,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             raise ValueError("Контекст с active_company обязателен для LLM-ноды")
         if actx.user is None or not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
-        container = get_container()
+        container = self.container
+        if container is None:
+            raise RuntimeError("LlmNodeRunner requires FlowContainer for billing")
         override = self.node_config.llm_override if self.node_config else None
         allow_platform_paid_fallback = True
         byok_override = is_llm_byok_override(override)

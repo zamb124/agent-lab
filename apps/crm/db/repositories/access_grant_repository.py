@@ -2,7 +2,6 @@
 Репозиторий для AccessGrants.
 """
 
-from typing import Dict, List, Optional, Tuple, Type
 
 from sqlalchemy import and_, delete, func, or_, select, update
 
@@ -18,7 +17,7 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
         super().__init__(db)
 
     @property
-    def model_class(self) -> Type[AccessGrant]:
+    def model_class(self) -> type[AccessGrant]:
         return AccessGrant
 
     @property
@@ -26,8 +25,8 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
         return "grant_id"
 
     async def find_by_resource(
-        self, resource_type: str, resource_id: str, resource_company_id: Optional[str] = None
-    ) -> List[AccessGrant]:
+        self, resource_type: str, resource_id: str, resource_company_id: str | None = None
+    ) -> list[AccessGrant]:
         """
         Найти все grants для ресурса.
 
@@ -52,7 +51,7 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
         self,
         resource_type: str,
         resource_id: str,
-        resource_company_id: Optional[str] = None,
+        resource_company_id: str | None = None,
     ) -> int:
         async with self._db.session() as session:
             stmt = (
@@ -94,8 +93,8 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
         один ключ (grant_type, target_user_id, target_company_id, role).
         """
         grants = await self.find_by_resource("entity", entity_id, resource_company_id=company_id)
-        seen: dict[Tuple[str, Optional[str], Optional[str], str], str] = {}
-        to_delete: List[str] = []
+        seen: dict[tuple[str, str | None, str | None, str], str] = {}
+        to_delete: list[str] = []
         for g in grants:
             if g.company_id != company_id:
                 continue
@@ -114,7 +113,7 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
     async def find_by_resources_batch(
         self,
         resource_keys: list[tuple[str, str]],
-    ) -> Dict[tuple[str, str], list[AccessGrant]]:
+    ) -> dict[tuple[str, str], list[AccessGrant]]:
         """
         Batch загрузка грантов для набора (resource_type, resource_id).
         Возвращает dict {(resource_type, resource_id): [grants]}.
@@ -133,7 +132,7 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
             result = await session.execute(stmt)
             grants = list(result.scalars().all())
 
-        grants_map: Dict[tuple[str, str], list[AccessGrant]] = {k: [] for k in resource_keys}
+        grants_map: dict[tuple[str, str], list[AccessGrant]] = {k: [] for k in resource_keys}
         for grant in grants:
             key = (grant.resource_type, grant.resource_id)
             if key in grants_map:

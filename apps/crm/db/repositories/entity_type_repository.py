@@ -4,8 +4,9 @@
 Уникальность строки: (company_id, namespace, type_id).
 """
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from collections.abc import Mapping
+from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy import update as sa_update
@@ -32,7 +33,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     async def get_all_for_company(
         self,
         include_system: bool = True,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
         *,
         limit: int = 200,
         offset: int = 0,
@@ -54,7 +55,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
 
     async def get_parent_type_id_map_for_namespace(
         self, namespace: str
-    ) -> dict[str, Optional[str]]:
+    ) -> dict[str, str | None]:
         """type_id -> parent_type_id в рамках одного namespace."""
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -68,7 +69,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
 
     async def count_all_for_company(
         self,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
     ) -> int:
         company_id = self._get_company_id()
         async with self._db.session() as session:
@@ -85,7 +86,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     async def load_all_entity_types_for_company(
         self,
         *,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
         page_limit: int = 200,
     ) -> list[EntityType]:
         if page_limit < 1:
@@ -110,8 +111,8 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         type_id: str,
         *,
         namespace: str,
-        company_id: Optional[str] = None,
-    ) -> Optional[EntityType]:
+        company_id: str | None = None,
+    ) -> EntityType | None:
         effective_company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(EntityType).where(
@@ -139,6 +140,21 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         company_id: str | None = None,
         **fields: object,
     ) -> None:
+        await self.update_metadata_fields(
+            type_id,
+            namespace=namespace,
+            company_id=company_id,
+            fields=fields,
+        )
+
+    async def update_metadata_fields(
+        self,
+        type_id: str,
+        *,
+        namespace: str,
+        company_id: str | None = None,
+        fields: Mapping[str, object],
+    ) -> None:
         company_id = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = (
@@ -148,7 +164,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                     EntityType.company_id == company_id,
                     EntityType.namespace == namespace,
                 )
-                .values(**fields)
+                .values(**dict(fields))
             )
             await session.execute(stmt)
             await session.commit()
@@ -254,7 +270,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             extractable=src.extractable,
             is_voice_target=src.is_voice_target,
             auto_resolve_suggests=src.auto_resolve_suggests,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         return await self.create(clone)
 

@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
@@ -60,11 +62,20 @@ class IntegrationsListResponse(BaseModel):
     items: list[IntegrationManifestItem]
 
 
-def _auth_context_or_401():
+@dataclass(frozen=True)
+class _AuthenticatedContext:
+    user_id: str
+    company_id: str
+
+
+def _auth_context_or_401() -> _AuthenticatedContext:
     ctx = get_context()
     if ctx is None or ctx.user is None or ctx.active_company is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    return ctx
+    return _AuthenticatedContext(
+        user_id=ctx.user.user_id,
+        company_id=ctx.active_company.company_id,
+    )
 
 
 def _resolve_subdomain(
@@ -98,13 +109,13 @@ async def list_namespace_integrations(
         raise HTTPException(status_code=422, detail="namespace_name required")
     ns_name = namespace_name.strip()
     existing = await container.namespace_repository.get(ns_name)
-    if existing is None or existing.company_id != ctx.active_company.company_id:
+    if existing is None or existing.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     crm = existing.crm_settings
     rows = await container.integration_registry.build_manifest(
         namespace_name=ns_name,
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
+        company_id=ctx.company_id,
+        user_id=ctx.user_id,
         crm_settings=crm,
     )
     items = [IntegrationManifestItem.model_validate(r) for r in rows]
@@ -160,8 +171,8 @@ async def integration_authorize_url(
             namespace_name=namespace_name.strip(),
             subdomain=sub,
             return_path=return_path,
-            company_id=ctx.active_company.company_id,
-            user_id=ctx.user.user_id,
+            company_id=ctx.company_id,
+            user_id=ctx.user_id,
             return_origin=ro,
             oauth_ui_locale=oauth_ui_locale,
         )
@@ -189,12 +200,12 @@ async def integration_auto_sync_patch(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     ns_name = namespace_name.strip()
     existing_ns = await container.namespace_repository.get(ns_name)
-    if existing_ns is None or existing_ns.company_id != ctx.active_company.company_id:
+    if existing_ns is None or existing_ns.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     try:
         await container.integration_auto_sync_service.apply_integration_auto_sync(
-            company_id=ctx.active_company.company_id,
-            acting_user_id=ctx.user.user_id,
+            company_id=ctx.company_id,
+            acting_user_id=ctx.user_id,
             namespace_name=ns_name,
             provider_id=provider.strip(),
             auto_sync_enabled=body.auto_sync_enabled,
@@ -207,8 +218,8 @@ async def integration_auto_sync_patch(
     crm = refreshed.crm_settings if refreshed is not None else None
     row = await connector.manifest_item(
         namespace_name=ns_name,
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
+        company_id=ctx.company_id,
+        user_id=ctx.user_id,
         crm_settings=crm,
     )
     return IntegrationManifestItem.model_validate(row)
@@ -233,11 +244,11 @@ async def integration_auto_note_ai_analyze_patch(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     ns_name = namespace_name.strip()
     existing_ns = await container.namespace_repository.get(ns_name)
-    if existing_ns is None or existing_ns.company_id != ctx.active_company.company_id:
+    if existing_ns is None or existing_ns.company_id != ctx.company_id:
         raise HTTPException(status_code=404, detail="namespace not found")
     try:
         await container.integration_auto_sync_service.apply_auto_note_ai_analyze(
-            company_id=ctx.active_company.company_id,
+            company_id=ctx.company_id,
             namespace_name=ns_name,
             provider_id=provider.strip(),
             auto_note_ai_analyze=body.auto_note_ai_analyze,
@@ -248,8 +259,8 @@ async def integration_auto_note_ai_analyze_patch(
     crm = refreshed.crm_settings if refreshed is not None else None
     row = await connector.manifest_item(
         namespace_name=ns_name,
-        company_id=ctx.active_company.company_id,
-        user_id=ctx.user.user_id,
+        company_id=ctx.company_id,
+        user_id=ctx.user_id,
         crm_settings=crm,
     )
     return IntegrationManifestItem.model_validate(row)

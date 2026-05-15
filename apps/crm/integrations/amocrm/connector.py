@@ -21,7 +21,15 @@ from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
 
 if TYPE_CHECKING:
-    from apps.crm.container import CRMContainer
+    from apps.crm.db.repositories.entity_repository import EntityRepository
+    from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
+    from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+    from apps.crm.services.entity_service import EntityService
+    from apps.crm.services.namespace_template_service import NamespaceTemplateService
+    from apps.crm.services.task_service import TaskService
+    from core.db.repositories.namespace_repository import NamespaceRepository
+    from core.identity.integration_external_author import IntegrationExternalAuthorService
+    from core.integrations.oauth_service import OAuthService
 
 
 class AmoCRMConnector:
@@ -37,17 +45,32 @@ class AmoCRMConnector:
     def custom_fields_sync_runs_in_worker(self) -> bool:
         return True
 
-    def __init__(self, container: CRMContainer) -> None:
-        self._container = container
+    def __init__(
+        self,
+        *,
+        oauth_service: OAuthService,
+        entity_repository: EntityRepository,
+        entity_type_repository: EntityTypeRepository,
+        relationship_repository: RelationshipRepository,
+        entity_service: EntityService,
+        namespace_repository: NamespaceRepository,
+        task_service: TaskService,
+        integration_external_author: IntegrationExternalAuthorService,
+        namespace_template_service: NamespaceTemplateService,
+    ) -> None:
+        self._oauth_service = oauth_service
+        self._entity_type_repository = entity_type_repository
+        self._namespace_repository = namespace_repository
+        self._namespace_template_service = namespace_template_service
         self._service = AmoCRMIntegrationService(
-            oauth_service=container.oauth_service,
-            entity_repository=container.entity_repository,
-            entity_type_repository=container.entity_type_repository,
-            relationship_repository=container.relationship_repository,
-            entity_service=container.entity_service,
-            namespace_repository=container.namespace_repository,
-            task_service=container.task_service,
-            integration_external_author=container.integration_external_author_service,
+            oauth_service=oauth_service,
+            entity_repository=entity_repository,
+            entity_type_repository=entity_type_repository,
+            relationship_repository=relationship_repository,
+            entity_service=entity_service,
+            namespace_repository=namespace_repository,
+            task_service=task_service,
+            integration_external_author=integration_external_author,
         )
 
     async def build_authorize_url(
@@ -62,7 +85,7 @@ class AmoCRMConnector:
         oauth_ui_locale: OAuthErrorLocale | None = None,
     ) -> str:
         service = f"amocrm:{namespace_name.strip()}"
-        return await self._container.oauth_service.build_auth_url(
+        return await self._oauth_service.build_auth_url(
             provider=IntegrationProvider.AMOCRM,
             service=service,
             scopes=[],
@@ -86,7 +109,7 @@ class AmoCRMConnector:
         namespace_name: str,
         company_id: str,
     ) -> None:
-        repo = self._container.entity_type_repository
+        repo = self._entity_type_repository
         ns = namespace_name.strip()
         if not ns:
             raise ValueError("namespace_name обязателен")
@@ -155,7 +178,7 @@ class AmoCRMConnector:
                     company_id=company_id,
                     extra=extra,
                 )
-        await self._container.namespace_template_service.ensure_core_workspace_types_linked_to_namespace(ns)
+        await self._namespace_template_service.ensure_core_workspace_types_linked_to_namespace(ns)
 
     async def on_credential_saved(self, credential: IntegrationCredential) -> None:
         if credential.provider != IntegrationProvider.AMOCRM:
@@ -169,7 +192,7 @@ class AmoCRMConnector:
         if not isinstance(sub, str) or not sub.strip():
             return
         sub = sub.strip()
-        existing = await self._container.namespace_repository.get(namespace_name)
+        existing = await self._namespace_repository.get(namespace_name)
         if existing is None or existing.company_id != credential.company_id:
             return
         await self.ensure_namespace_ready(
@@ -187,7 +210,7 @@ class AmoCRMConnector:
         amo["subdomain"] = sub
         integ["amocrm"] = amo
         existing.crm_settings = base.model_copy(update={"integrations": integ})
-        await self._container.namespace_repository.set(existing)
+        await self._namespace_repository.set(existing)
 
     async def manifest_item(
         self,
@@ -204,7 +227,7 @@ class AmoCRMConnector:
                 raw = block.get("subdomain")
                 if isinstance(raw, str) and raw.strip():
                     display = raw.strip()
-        cred = await self._container.oauth_service.get_valid_token(
+        cred = await self._oauth_service.get_valid_token(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider.AMOCRM,
